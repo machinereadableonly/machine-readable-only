@@ -1,0 +1,96 @@
+// Reference renderer: the exact SVG the Solidity Renderer must reproduce.
+// Kept in one place so Phase 0 can diff on-chain output against it byte for byte.
+import { frameCells, BLOCK, THICK, LOCAL, DAY_CELLS } from "./frame-geometry.mjs";
+
+export const QUIET = 4;
+export const GAP = 1;           // between the day frame and the year rings
+
+// Streak tiers, darkened from the spec palette so every one clears the 4.5:1
+// contrast a scanner needs. Measured against white: 5.02, 5.77, 6.17, 6.05, 5.88.
+export const TIERS = [
+  { min: 100, colour: "#c8102e" },
+  { min: 30,  colour: "#bd2242" },
+  { min: 7,   colour: "#a83a55" },
+  { min: 3,   colour: "#8e5566" },
+  { min: 0,   colour: "#6f6f6f" },
+];
+export const NOISE = "#767676";   // uncontrolled modules, 4.54 against white
+export const GHOST = "#f4eef0";   // frame cells not yet earned
+export const FIELD = "#ffffff";
+
+export const tierColour = streak => TIERS.find(t => streak >= t.min).colour;
+export const canvasFor = years => BLOCK + 2 * (THICK + GAP + years);
+
+const FRAME = frameCells();
+
+// Same-colour horizontal runs merged into one path each. This is what keeps the
+// image inside budget: one rect per cell measured 70,298 bytes, this form 4,986.
+function pathFor(set, canvas) {
+  let d = "";
+  for (let y = 0; y < canvas; y++) {
+    let x = 0;
+    while (x < canvas) {
+      if (!set.has(y * canvas + x)) { x++; continue; }
+      let w = 1;
+      while (x + w < canvas && set.has(y * canvas + x + w)) w++;
+      d += `M${x} ${y}h${w}v1h-${w}z`;
+      x += w;
+    }
+  }
+  return d;
+}
+
+/**
+ * @param modules  the code's module bits, row major, size*size
+ * @param want     the heart target bits, same shape, used to split heart from noise
+ * @param state    { level, streak, years, marks }
+ */
+export function renderSvg(modules, want, size, state) {
+  const { level = 0, streak = 0, years = 0, marks = [] } = state;
+  const canvas = canvasFor(years);
+  const frameOff = years + GAP;          // where the 49-grid frame starts
+  const blockOff = frameOff + THICK;     // where the 45-cell block starts
+  const codeOff = blockOff + QUIET;      // where the modules start
+
+  const colour = tierColour(streak);
+  const gold = marks.includes("crown") ? "#b8860b" : null;
+  const ghost = marks.includes("vein") ? "#e3ccd3" : GHOST;
+  const field = marks.includes("halo") ? "#fbeff2" : FIELD;
+
+  const lit = new Set(), dim = new Set(), noise = new Set(), rings = new Set();
+
+  // Day frame. The 11 surplus cells light only when the heart is whole.
+  const whole = level >= DAY_CELLS;
+  FRAME.forEach(([x, y], i) => {
+    const p = (y + frameOff) * canvas + (x + frameOff);
+    ((whole || i < level) ? lit : dim).add(p);
+  });
+  // One outline ring per completed year, outermost first.
+  for (let k = 0; k < years; k++) {
+    const a = k, b = canvas - 1 - k;
+    for (let t = a; t <= b; t++) {
+      rings.add(a * canvas + t); rings.add(b * canvas + t);
+      rings.add(t * canvas + a); rings.add(t * canvas + b);
+    }
+  }
+  // Code modules, split so the heart separates from the uncontrolled noise.
+  const heart = new Set();
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      if (!modules[j * size + i]) continue;
+      const p = (codeOff + j) * canvas + (codeOff + i);
+      (want[j * size + i] ? heart : noise).add(p);
+    }
+  }
+
+  const groups = [];
+  if (dim.size) groups.push([ghost, dim]);
+  if (noise.size) groups.push([NOISE, noise]);
+  const frameColour = gold ?? colour;
+  const framed = new Set([...lit, ...rings]);
+  if (framed.size) groups.push([frameColour, framed]);
+  if (heart.size) groups.push([colour, heart]);
+
+  const body = groups.map(([c, s]) => `<path fill="${c}" d="${pathFor(s, canvas)}"/>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${canvas} ${canvas}" shape-rendering="crispEdges"><rect width="${canvas}" height="${canvas}" fill="${field}"/>${body}</svg>`;
+}
