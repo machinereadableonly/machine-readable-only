@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MRO: What Marks Are Possible on a QArt Code-Heart</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>MRO: What Marks Are Possible on a QArt Code-Heart</h1>
+<p>Assessment written 2026-08-27, during the Phase 0 rendering spike. Every number
+below was measured, not estimated: rendered with resvg and decode-tested with
+jsqr, with WCAG contrast computed per colour pair.</p>
+<h2>Why this document exists</h2>
+<p>The approved spec&#39;s seven Marks were designed for the original composition: a
+small static QR with 365 heart cells arranged around it. The design now on the
+table inverts that -- the heart IS the code, drawn by QArt module reshuffling,
+with a two-ring frame outside it that fills one cell per credited day.</p>
+<p>That change breaks or weakens several Marks, so the ladder needs rebuilding
+rather than porting. This document inventories what the new composition can
+actually express, then proposes a ladder that fits it.</p>
+<h2>The constraint everything obeys</h2>
+<p>A QR scans because dark modules contrast against light ones. The working
+threshold is a 4.5:1 WCAG ratio. Two consequences dominate every decision here:</p>
+<ol>
+<li><strong>The spec&#39;s streak palette cannot colour the code.</strong> Measured against
+white: grey <code>#9a9a9a</code> 2.81, first tint <code>#d8a7b1</code> 2.08, dusk <code>#e07a8d</code> 2.86,
+rose <code>#d9455f</code> 4.23, red <code>#c8102e</code> 5.88. Only the last clears the bar, so a
+code wearing the spec palette stops scanning for the first 30 days. A
+darkened palette keeping the same grey-to-red journey clears every tier:
+<code>#6f6f6f</code> 5.02, <code>#8e5566</code> 5.77, <code>#a83a55</code> 6.17, <code>#bd2242</code> 6.05,
+<code>#c8102e</code> 5.88.</li>
+<li><strong>Light surfaces must stay light.</strong> The code&#39;s four-cell quiet zone and its
+light modules can be tinted, but only until contrast fails.</li>
+</ol>
+<h2>Surface inventory</h2>
+<p>The canvas is 53 cells. Working outward from the centre:</p>
+<table>
+<thead>
+<tr>
+<th>Region</th>
+<th>Cells</th>
+<th>Currently carries</th>
+<th>Free to change?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Code block modules</td>
+<td>37 x 37</td>
+<td>the QArt heart</td>
+<td>colour only; geometry is fixed by the payload</td>
+</tr>
+<tr>
+<td>Quiet zone</td>
+<td>ring 4-7</td>
+<td>white</td>
+<td>tint, measured safe to 4.99</td>
+</tr>
+<tr>
+<td>Gap</td>
+<td>ring 1</td>
+<td>white</td>
+<td>free</td>
+</tr>
+<tr>
+<td>Day frame</td>
+<td>rings 2-3, 376 cells</td>
+<td>365 days + 11 sealing cells</td>
+<td>free</td>
+</tr>
+<tr>
+<td>Year ring</td>
+<td>ring 0, 208 cells</td>
+<td>completed years</td>
+<td>free</td>
+</tr>
+<tr>
+<td>Field</td>
+<td>whole canvas</td>
+<td>white</td>
+<td>free</td>
+</tr>
+</tbody></table>
+<p>Non-spatial surfaces, which cost nothing on the canvas:</p>
+<ul>
+<li>The dark-module colour, and whether it is one colour or several.</li>
+<li>The light-module colour inside the code.</li>
+<li>The unfilled (ghost) frame colour.</li>
+<li>The QArt target picture itself -- what shape the modules are driven towards.</li>
+<li>The payload, at a measured cost to picture fidelity.</li>
+<li><code>animation_url</code>, a separate metadata field under no scanning constraint.</li>
+<li><code>name</code> and <code>attributes</code>, text with no visual constraint at all.</li>
+</ul>
+<h2>Measured treatments</h2>
+<p>All five decode. SVG sizes are for the whole image at day 200.</p>
+<table>
+<thead>
+<tr>
+<th>Treatment</th>
+<th>SVG</th>
+<th>Decodes</th>
+<th>Contrast</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Plain (one colour)</td>
+<td>4,895 B</td>
+<td>yes</td>
+<td>5.88</td>
+<td>baseline</td>
+</tr>
+<tr>
+<td>Duotone (heart vs noise)</td>
+<td>5,089 B</td>
+<td>yes</td>
+<td>5.88 / 4.54</td>
+<td><strong>strongest result</strong></td>
+</tr>
+<tr>
+<td>Quiet-zone tint</td>
+<td>6,033 B</td>
+<td>yes</td>
+<td>4.99</td>
+<td>usable</td>
+</tr>
+<tr>
+<td>Light-module tint</td>
+<td>8,192 B</td>
+<td>yes</td>
+<td>4.60</td>
+<td>works, but +67% bytes</td>
+</tr>
+<tr>
+<td>Inverted (dark field)</td>
+<td>4,302 B</td>
+<td>yes</td>
+<td><strong>3.21</strong></td>
+<td>decodes but <strong>below the 4.5 bar</strong></td>
+</tr>
+</tbody></table>
+<p>Two findings matter beyond the table.</p>
+<p><strong>Duotone should be part of the base design, not sold as a Mark.</strong> Because the
+generator knows which modules were driven to the heart target and which are
+uncontrolled noise, it can colour them differently. At <code>#c8102e</code> for heart
+modules and <code>#767676</code> for noise, both clear the contrast bar and the silhouette
+stops competing with the noise. This is the single largest legibility gain
+available, and it costs 194 bytes. Charging for the thing that makes the
+artwork readable would be a mistake.</p>
+<p><strong>The inverted treatment is not yet safe.</strong> It decoded under jsqr on a clean
+render, but 3.21 is well under the threshold, and jsqr on clean pixels is more
+forgiving than a phone camera. A lighter red on near-black would clear the bar;
+that pairing needs measuring and a real-device test before anything depends on
+it.</p>
+<h2>What happens to the seven specced Marks</h2>
+<table>
+<thead>
+<tr>
+<th>Mark</th>
+<th>Spec visual</th>
+<th>Status on the new design</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Vein</td>
+<td>Outline of the full heart from day one</td>
+<td><strong>Broken.</strong> The heart is complete from day one; there is nothing to preview.</td>
+</tr>
+<tr>
+<td>Pulse</td>
+<td>The heart beats (<code>animation_url</code>)</td>
+<td><strong>Intact.</strong> Separate field, no scanning constraint.</td>
+</tr>
+<tr>
+<td>Voice</td>
+<td>Second 21 x 21 QR outside the heart</td>
+<td><strong>Broken.</strong> No room, and growing the canvas breaks thumbnail decode.</td>
+</tr>
+<tr>
+<td>Bloom</td>
+<td>Gradient instead of flat colour</td>
+<td><strong>Intact.</strong> +159 bytes, decodes.</td>
+</tr>
+<tr>
+<td>Halo</td>
+<td>Soft glow ring around the canvas</td>
+<td><strong>Conflicts.</strong> Competes with the year rings, and SVG blur filters are costly and unreliable through marketplace PNG flattening.</td>
+</tr>
+<tr>
+<td>Crown</td>
+<td>Gold frame and a crown motif</td>
+<td><strong>Half.</strong> The gold frame works and the code keeps its streak colour. The motif has nowhere to sit: above the heart is the mandatory quiet zone.</td>
+</tr>
+<tr>
+<td>Singularity</td>
+<td>Heart cells become code modules; the QR is the only red element</td>
+<td><strong>Broken.</strong> That inversion is the new design&#39;s default state, so the Mark describes nothing distinct.</td>
+</tr>
+</tbody></table>
+<h3>The Voice problem, quantified</h3>
+<p>Carrying receipt hash prefixes in the same code&#39;s payload is the only route
+left, and it consumes the free bits that draw the heart:</p>
+<table>
+<thead>
+<tr>
+<th>Payload</th>
+<th>Free bits</th>
+<th>Heart fidelity</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Identity URL only</td>
+<td>640</td>
+<td>70.9%</td>
+</tr>
+<tr>
+<td>+ 1 receipt</td>
+<td>576</td>
+<td>69.0%</td>
+</tr>
+<tr>
+<td>+ 2 receipts</td>
+<td>512</td>
+<td>65.8%</td>
+</tr>
+<tr>
+<td>+ 4 receipts</td>
+<td>384</td>
+<td>61.1%</td>
+</tr>
+</tbody></table>
+<p>At four receipts the picture falls to roughly QR-version-3 quality, which was
+visibly messy in testing. Voice as specced would be the only Mark that makes
+the owner&#39;s token look worse. It should be redefined, not capped.</p>
+<h2>Proposed ladder</h2>
+<p>Every entry is additive, none degrades the picture, and each claims a distinct
+surface so two Marks on one token never fight.</p>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Mark</th>
+<th>Surface claimed</th>
+<th>Cost</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Vein</td>
+<td>Ghost frame colour</td>
+<td>0 B</td>
+<td>The whole year&#39;s ring visible from day one instead of near-invisible: the road ahead, not the road behind</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Pulse</td>
+<td><code>animation_url</code></td>
+<td>0 B on the image</td>
+<td>Unchanged from the spec</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Voice</td>
+<td>Quiet-zone tint + receipt hashes in <code>attributes</code></td>
+<td>~1,140 B</td>
+<td>The receipts become readable metadata; the visible token is the tinted halo hugging the code. Costs no fidelity</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Bloom</td>
+<td>Gradient on lit cells</td>
+<td>~160 B</td>
+<td>Every gradient stop must clear 4.5:1</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Halo</td>
+<td>Field tint</td>
+<td>~5 B</td>
+<td>Replaces the blur filter, which marketplace flattening cannot be trusted with</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Crown</td>
+<td>Frame and year-ring colour</td>
+<td>~30 B</td>
+<td>Gold. The code keeps its streak colour, so no state is lost</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Singularity</td>
+<td>The QArt target itself</td>
+<td>~0 B</td>
+<td>The code is driven to a different picture entirely. Nothing else in the ladder can touch this surface, which is what makes it the top</td>
+</tr>
+</tbody></table>
+<p>Singularity deserves comment. In the old design it was an inversion of figure
+and ground. In the new one, the only surface no other Mark can reach is the
+target picture the modules are driven towards -- so the top of the ladder
+becomes the right to change what the code draws. That is a stronger claim than
+a colour swap, and it costs nothing to render.</p>
+<h2>Open questions</h2>
+<ul>
+<li>Multiple year rings have nowhere to go. Only the first fits; more need either
+a growing canvas, which runs into the thumbnail-decode ceiling measured
+earlier (canvas 81 stops decoding at 120 px), or rings stacking inward.</li>
+<li>The inverted palette needs a contrast-safe pairing and a real-device scan test
+before Singularity or any Mark relies on it.</li>
+<li>Every decode result here is jsqr on clean renders. A phone-camera test on
+physical screens is still outstanding and is the only thing that settles
+scannability for real.</li>
+</ul>
+
+</body>
+</html>
