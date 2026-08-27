@@ -10,7 +10,7 @@
 
 **Tech Stack:** Foundry 1.7.1 (forge, anvil, cast) on the VPS; Solidity 0.8.35, EVM `cancun` (matches base-200); OpenZeppelin Contracts v5.7.0 (git tag; npm `latest` is 5.6.1); Solady v0.1.26 (`DynamicBufferLib`, `LibString`, `Base64`); Node 24.14.1 via nvm with built-in `node:test`; npm `qrcode` 1.5.4, `@resvg/resvg-js` 2.6.2, `jsqr` 1.4.0, `viem` 2.56.0; Base Sepolia (chain 84532) and Base mainnet (8453) via Alchemy; OpenSea API v2.
 
-**Spec:** `docs/superpowers/specs/2026-08-27-machine-readable-only-design.md` (sections 7, 8, 13 and the rendering-risks subsection). Comparable-projects evidence: `docs/superpowers/2026-08-27-mro-comparable-projects.md`.
+**Spec:** `docs/specs/2026-08-27-machine-readable-only-design.md` (sections 7, 8, 13 and the rendering-risks subsection). Comparable-projects evidence: `docs/2026-08-27-mro-comparable-projects.md`.
 
 > **operator-manual steps in this plan** (after completing any of these, tell Claude so it can update memory):
 > - Task 1: put the Alchemy Base Sepolia and Base mainnet RPC URLs and the Etherscan V2 API key into `contracts/.env` via WinSCP (same keys base-200 uses).
@@ -215,7 +215,7 @@ Expected: `added N packages`, no `npm audit` critical findings. If `@resvg/resvg
 An agents-only NFT art piece on Base: agents prove they are programs with
 signed requests, pay 0.10 USDC to mint, and keep a fully on-chain heart alive
 with one check-in per UTC day. Spec and evidence live in the move-to-vps hub:
-`docs/superpowers/specs/2026-08-27-machine-readable-only-design.md`.
+`docs/specs/2026-08-27-machine-readable-only-design.md`.
 
 - **Role:** the MRO contracts, renderers, Warden, Clock and reference client
 - **Stack:** Foundry + Solidity 0.8.35 (contracts/), Node 24 (tools/, later warden/)
@@ -246,9 +246,9 @@ with one check-in per UTC day. Spec and evidence live in the move-to-vps hub:
 
 ## References
 
-- Spec: move-to-vps `docs/superpowers/specs/2026-08-27-machine-readable-only-design.md`
-- Comparables: move-to-vps `docs/superpowers/2026-08-27-mro-comparable-projects.md`
-- Phase 0 plan: move-to-vps `docs/superpowers/plans/2026-08-27-mro-phase0-rendering-spike.md`
+- Spec: move-to-vps `docs/specs/2026-08-27-machine-readable-only-design.md`
+- Comparables: move-to-vps `docs/2026-08-27-mro-comparable-projects.md`
+- Phase 0 plan: move-to-vps `docs/plans/2026-08-27-mro-phase0-rendering-spike.md`
 - Base docs: https://docs.base.org/base-chain/network-information/network-fees
 - OpenSea metadata: https://docs.opensea.io/docs/media-and-traits ; refresh: https://docs.opensea.io/docs/updating-metadata
 
@@ -2040,7 +2040,7 @@ Fill the OpenSea rows in `docs/phase0-results.md`, including the exact latency o
 ### Task 11: Go / no-go and spec amendment
 
 **Files:**
-- Modify: `docs/phase0-results.md`; in the hub repo, `docs/superpowers/specs/2026-08-27-machine-readable-only-design.md` (rendering-risks subsection and rollout step 0)
+- Modify: `docs/phase0-results.md`; in the hub repo, `docs/specs/2026-08-27-machine-readable-only-design.md` (rendering-risks subsection and rollout step 0)
 
 - [ ] **Step 1: Write the verdict at the top of `docs/phase0-results.md`**
 
@@ -2054,7 +2054,7 @@ Under it, the measured table with every cell filled, then "What surprised us" (t
 
 - [ ] **Step 2: Amend the spec in the hub repo**
 
-In `docs/superpowers/specs/2026-08-27-machine-readable-only-design.md`, rendering-risks subsection and rollout step 0: replace "Renderer set deployed to Base Sepolia behind a stub ERC-721" with "Renderer set deployed to Base Sepolia for gas, size and decode, and as a throwaway contract on Base mainnet for OpenSea display and refresh, because OpenSea discontinued testnet support in July 2025"; add the measured numbers in one line. Render the HTML with `node docs/render-md-to-html.js <spec>` on the PC and commit in the hub repo: `docs(specs): MRO Phase 0 results folded into the rendering section`.
+In `docs/specs/2026-08-27-machine-readable-only-design.md`, rendering-risks subsection and rollout step 0: replace "Renderer set deployed to Base Sepolia behind a stub ERC-721" with "Renderer set deployed to Base Sepolia for gas, size and decode, and as a throwaway contract on Base mainnet for OpenSea display and refresh, because OpenSea discontinued testnet support in July 2025"; add the measured numbers in one line. Render the HTML with `node docs/render-md-to-html.js <spec>` on the PC and commit in the hub repo: `docs(specs): MRO Phase 0 results folded into the rendering section`.
 
 - [ ] **Step 3: Update memory and commit the project**
 

@@ -1,27 +1,10 @@
-# Secrets -- never commit
-.env
-.env.*
-!.env.example
-*.key
-*.pem
-
-# Foundry
-cache/
-out/
-broadcast/
-!broadcast/**/dry-run/
-
-# Node
 node_modules/
-dist/
-.next/
-*.tsbuildinfo
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+tools/out/
+*.png
 
-# Logs and OS noise
-*.log
-npm-debug.log*
-.DS_Store
-Thumbs.db
-
-# Claude Code scratch
-.claude/settings.local.json
+# Real secret files, at any depth. The .example schema file stays tracked.
+.env
+!*.env.example
