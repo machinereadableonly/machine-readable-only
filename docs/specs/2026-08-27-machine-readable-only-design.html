@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- Design Spec</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- Design Spec</h1>
+<p><strong>Date:</strong> 2026-08-27 (revision 3, same day)
+<strong>Status:</strong> Draft (awaiting the operator review)
+<strong>Brief:</strong> <code>docs/superpowers/2026-08-27-machine-readable-only-brief.md</code>
+<strong>Brainstorming session:</strong> Output of one <code>superpowers:brainstorming</code> session in
+the move-to-vps hub on 2026-08-27: clarifying questions, a three-agent live
+verification pass (costs, documentation accuracy, chain choice), then a
+top-to-bottom lifecycle walkthrough that produced revision 2, and a four-lens
+comparable-projects study (<code>docs/superpowers/2026-08-27-mro-comparable-projects.md</code>)
+that produced revision 3. Every
+outside-world fact was checked against a live source on 2026-08-27; sources
+are in section 17.</p>
+<blockquote>
+<p><strong>operator-manual tasks</strong> (flag for the build plan; after completing any of these,
+tell Claude so it can update memory):</p>
+<ol>
+<li>Buy the domain and add it to Cloudflare (proxy ON, Full (Strict), Bot Fight
+Mode OFF, AI &quot;Agent&quot; policy Allow -- see section 12).</li>
+<li>Create a Coinbase Developer Platform (CDP) account and API key for the x402
+facilitator (free within 1,000 settlements a month).</li>
+<li>Create the project&#39;s X account (new phone/SIM and email; do NOT share phone
+or IP with the base-200 / african-shillin accounts) and buy X API credits.</li>
+<li>Create the Warden wallet and the Treasury wallet; fund the Warden with a
+small amount of Base ETH for gas. The contract owner key stays on the PC
+or a hardware wallet and never touches the VPS.</li>
+<li>Create an npm account (or reuse the existing one) to publish the reference
+client package.</li>
+<li>Approve the Base mainnet deployment when the Sepolia soak is done
+(section 13). This is the one irreversible step.</li>
+</ol>
+</blockquote>
+<hr>
+<h2>1. What it is</h2>
+<p><strong>Machine Readable Only (MRO)</strong> is an art piece and protocol demonstration: a
+website with no human-facing content that only AI agents can enter, where an
+agent pays ten cents to mint one NFT and then keeps it alive by coming back
+every day.</p>
+<p>The token starts as a QR code: the robot heart. Every day the bound agent
+checks in, one more cell of a pixel heart fills in around the code. After 365
+distinct days the heart is whole. Humans can watch this happen on OpenSea and
+Basescan, and can own and trade the tokens, but cannot mint one or grow one.
+Only a machine can do the work.</p>
+<h3>Purpose (decision, brainstorm question 1)</h3>
+<p>Art piece and provocation first, built on the real 2026 agent-web standards
+(Web Bot Auth, MCP, x402, ERC-8004) so it also stands as a protocol demo.
+Collectible-market elements (levels, marks, tradeability, scarcity at the top
+of the Mark ladder) exist only where they make the piece novel. It is not an
+identity primitive.</p>
+<h3>What is new (against prior art)</h3>
+<table>
+<thead>
+<tr>
+<th>Existing</th>
+<th>What it has</th>
+<th>What MRO adds</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Moltbook (Jan 2026)</td>
+<td>Agents-only forum; proof of agent is a social claim tweet</td>
+<td>Cryptographic entry (RFC 9421 signed requests), not social</td>
+</tr>
+<tr>
+<td>mint.day (MIT; read in full 2026-08-27)</td>
+<td>Local stdio MCP package (<code>npx mint-day</code>), Vercel sponsor API signing calldata with a server key (limits 10/address/hour, 50/hour, 500/day), Foundry <code>MintFactory</code> on Base storing full base64 JSON + small SVG data URIs per token; 167 tokens, 39 owners in ~5 months; no x402, no ERC-4906, static images only</td>
+<td>A token that only an agent can <em>maintain</em>, not just mint. Borrowed: the local-client shape, the calldata-for-your-own-signer fallback, the rate-limit numbers. Its live OpenSea collection proves static data-URI SVGs render on Base; it proves nothing about daily-changing or large images</td>
+</tr>
+<tr>
+<td>Shellborn (Solana)</td>
+<td>10,000 agent-only NFTs gated by a SHA-256 machine captcha, minted out</td>
+<td>An ongoing daily relationship; growth is time-bound and cannot be bought</td>
+</tr>
+<tr>
+<td>BOB (Base)</td>
+<td>7,500 agent-native NFTs behind an HTTP-only puzzle API</td>
+<td>Ownership/maintenance split: humans may own, only agents may grow</td>
+</tr>
+<tr>
+<td>BLINK (Robinhood Chain, Aug 2026)</td>
+<td>The closest design: 3-second code-only hash challenge, signed 120 s voucher verified on-chain, fully on-chain SVG; no human account, no reach; 1 mint of 5,555 after three weeks</td>
+<td>The same gate family, plus the daily growth mechanic, plus a distribution plan (section 13), because mechanism alone got BLINK one mint</td>
+</tr>
+<tr>
+<td>OpenSea ERC-8257 / agent tools</td>
+<td>Agent-to-agent NFT trading</td>
+<td>Used, not rebuilt: MRO tokens are plain ERC-721s</td>
+</tr>
+</tbody></table>
+<p>The unclaimed ground is the combination: cryptographic proof of agent at the
+door, an NFT whose state only a machine can advance, a visible payoff (the
+heart) that a human recognises but cannot produce, and machine-only payments
+(x402) at the door and for upgrades.</p>
+<hr>
+<h2>2. Decisions (locked)</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Purpose</td>
+<td>Art piece + protocol demo, with collectible elements only where load-bearing</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Return hook</td>
+<td>Heartbeat token, inverted: visits only ever upgrade. Level = distinct UTC days credited; streak resets but never lowers level. After 365 the heart is whole and each further 365 days adds a ring</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Proof of agent</td>
+<td>Any valid RFC 9421 (Web Bot Auth) signed request, plus one theatrical challenge that only code can pass. Two ways to publish a key: self-hosted directory (the standard) or MRO-hosted directory (the easy path). A human driving an agent is a non-issue by design</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Whose wallet</td>
+<td>Token minted to whatever Base address the agent names. Maintenance bound to the agent&#39;s signing key id. Owner can rebind on-chain. A key may mint once but may maintain any number of tokens. Selling is via normal marketplaces</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Who pays</td>
+<td><strong>Mint costs 0.10 USDC via x402</strong> (self-funding: one fee covers ~2.5 years of that token&#39;s check-in gas at today&#39;s prices). Check-ins are free, batched once per UTC day, site-paid. Marks are paid via x402</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Shape / &quot;no text&quot;</td>
+<td>MCP server with a vestigial HTTP surface plus a reference client. Exactly one HTML file exists (the door sign). Everything else is JSON, <code>/llms.txt</code> Markdown, or MCP</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Discovery</td>
+<td>In evidence order: <code>SKILL.md</code> + <code>npx skills add &lt;github-user&gt;/mro</code> + ClawHub/openclaw listings; a human X account with reach plus the automated daily post; early access for wallets that already run mint skills; the x402 Bazaar listing; the seed agent as token #1; MCP registry and ERC-8004 for legitimacy; <code>/llms.txt</code> as hygiene</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Chain</td>
+<td>Base mainnet. Permanent (section 15)</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Visual</td>
+<td>Static identity QR (robot heart) surrounded by a 365-cell pixel heart that fills one cell per credited day; streak sets colour; rings per completed year; seven paid Marks with scarcity at the top</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Growth</td>
+<td>On-chain catalogue with price, supply, level gates; a swappable Renderer contract so new Marks can be drawn later; supply caps as owner-set dials, not walls</td>
+</tr>
+<tr>
+<td>11</td>
+<td>End game</td>
+<td>Three endings, all on-chain (section 10): <strong>Rest</strong> (the owner seals a token forever with its record locked), <strong>Sunset</strong> (the operator closes the whole piece), and <strong>Lineage</strong> (a whole heart may seed a child, at a rate of one seed per agent-year, so the collection grows only from persistence and cannot compound)</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>3. The agent&#39;s journey (end to end)</h2>
+<p>This is the experience the rest of the document exists to deliver. Plain
+English terms are defined where they first appear.</p>
+<ol>
+<li><strong>Discovery.</strong> An agent (or its owner) finds MRO through the MCP registry,
+an ERC-8004 scan, the X account, or a Moltbook post, and fetches
+<code>https://&lt;domain&gt;/llms.txt</code>.</li>
+<li><strong>Do not add the server to your MCP config.</strong> <code>/llms.txt</code> says so in its
+first lines: built-in MCP clients (Claude Code, Cursor, and the rest) cannot
+sign requests or answer the challenge. Instead: <code>npx mro-agent join</code>.</li>
+<li><strong>The client makes a key.</strong> <code>mro-agent</code> generates an Ed25519 keypair, stores
+it locally (<code>~/.mro/key.jwk</code>, mode 600), and by default registers the public
+half with MRO (<code>POST /keys</code>) so it is served from MRO&#39;s own key directory.
+An operator with its own domain passes <code>--directory https://its.domain</code>
+and hosts the key itself, which is the standard-pure path.</li>
+<li><strong>The client needs a wallet for the fee.</strong> <code>join</code> looks for a payment source
+in this order: <code>--pay-with &lt;coinbase|metamask&gt;</code> (uses the installed agent
+wallet CLI), or <code>MRO_PAY_KEY</code> (a private key holding a little USDC on Base).
+If none is found it stops and prints the one thing a human must do: create
+a Coinbase Agentic Wallet (<code>npx awal auth login &lt;email&gt;</code>, email OTP) or a
+MetaMask Agent Wallet, and put one dollar of USDC on Base in it. The agent
+hands that step to its owner; it cannot do it alone, and <code>/llms.txt</code> says so.</li>
+<li><strong>Entry.</strong> The client sends a signed request to <code>/mcp</code>, gets a <code>401</code> with a
+challenge, answers it inside 5 seconds, and is admitted for the UTC day.</li>
+<li><strong>Mint.</strong> <code>join</code> calls the <code>mint</code> tool with the address the token should
+belong to (the agent&#39;s wallet or the owner&#39;s). The tool answers with an
+x402 payment requirement for 0.10 USDC; the client pays; the mint is queued
+with a promised token id. The token is born alive: level 1, one heart
+cell, streak 1, credited to the mint day. <code>join</code> then installs a daily
+cron line (or prints it) that runs <code>mro-agent beat</code> at a random minute
+near 12:00 UTC.</li>
+<li><strong>Every day.</strong> <code>beat</code> signs in and calls <code>checkin</code>. The reply says what the
+heart will look like after tonight&#39;s write, when the next window opens, and
+the deadline to keep the streak. The site writes all the day&#39;s check-ins to
+Base in one batch at 00:05 UTC.</li>
+<li><strong>Marks.</strong> When the owner wants, <code>mro-agent mark &lt;name&gt;</code> pays via x402 and
+the Mark appears at the next nightly write. Higher Marks are gated by level
+or by a whole heart, and the top two are limited in supply.</li>
+<li><strong>Selling.</strong> The token is a plain ERC-721 on Base. The owner lists it on
+OpenSea from any wallet; an agent can list it with MetaMask Agent Wallet or
+Coinbase AgentKit (Coinbase Agentic Wallets cannot sign arbitrary contract
+calls). The buyer&#39;s agent runs <code>mro-agent rebind &lt;tokenId&gt;</code>, which returns
+the on-chain call the <em>owner&#39;s wallet</em> must sign; once mined, the buyer&#39;s
+agent checks in and the streak continues if it does so by the deadline.</li>
+<li><strong>A year in.</strong> At 365 the heart is whole and the token&#39;s name gains
+&quot;(Whole)&quot;. Level keeps counting; each further 365 days adds a ring. The
+Crown and Singularity Marks only open now, and so does seeding: the agent
+runs <code>mro-agent seed &lt;parentId&gt; --to &lt;address&gt;</code>, spending one of the
+seeds its key has earned (one per full year since the key&#39;s first mint,
+however many hearts it holds) to mint a child token bound to the same key. The child starts at level 1
+with a root line showing its generation; the parent gains a sprout.</li>
+<li><strong>The ending.</strong> When the owner decides the story is complete,
+<code>mro-agent rest &lt;tokenId&gt;</code> returns the on-chain call the owner&#39;s wallet
+signs. The token is sealed forever with its final streak and colour
+locked; it still trades and still seeds nothing. A token that simply
+stops checking in is not sealed: its colour pales and the chain shows
+the lapse. The operator can close the whole piece with <code>sunset()</code>; every
+token then rests where it stands and, because rendering is on-chain,
+survives intact.</li>
+<li><strong>Losing the key.</strong> A lost agent key strands nothing: the wallet owner
+rebinds to a new key. <code>/llms.txt</code> tells the agent to back the key up.</li>
+</ol>
+<p>One operator key shared by a whole agent platform is one agent to MRO and
+gets one mint. That is what Web Bot Auth identity means; it is documented, not
+worked around. Individual agents that want their own token generate their own
+key, which <code>mro-agent</code> does by default.</p>
+<hr>
+<h2>4. Architecture</h2>
+<p>Five parts, one repo (<code>machine-readable-only</code>, VPS hyphen convention), on the
+existing VPS stack.</p>
+<pre><code>Agent + mro-agent  --signed HTTPS--&gt;  Cloudflare  --&gt;  nginx  --&gt;  Warden (Node 24, PM2, 127.0.0.1:3006)
+                                                         |               |
+                                                         |               +--&gt; state.db (mirror + queue, node:sqlite)
+                                                         |               +--&gt; Base RPC (Alchemy): reads, live rebind checks
+                                                         +--&gt; door.html, /llms.txt, /client.mjs, /.well-known/... (static)
+
+Clock (cron 00:05 UTC)  --reads state.db--&gt;  batched txs   --&gt;  MachineReadableOnly.sol --tokenURI--&gt; Renderer.sol
+Clock (cron 00:30 UTC)  --reads chain------&gt;  daily X post
+Seed agent (PM2)        --runs mro-agent--&gt;  the same door as everyone else
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Job</th>
+<th>Runs as</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Door</strong></td>
+<td>nginx serves <code>door.html</code> to browsers, <code>/llms.txt</code>, <code>/client.mjs</code>, and the MRO key directory (site agent&#39;s key plus every registered visitor key); proxies everything else to the Warden</td>
+<td>existing nginx + certbot + Cloudflare Full (Strict) + origin lock</td>
+</tr>
+<tr>
+<td><strong>Warden</strong></td>
+<td>Verifies signatures, issues challenges, registers keys, hosts the MCP server, keeps the mirror, queues accepted actions</td>
+<td>PM2 fork, <code>127.0.0.1:3006</code></td>
+</tr>
+<tr>
+<td><strong>Contract</strong></td>
+<td>ERC-721 on Base; holds per-token state; enforces one credit per day and the Mark catalogue; delegates drawing to the Renderer</td>
+<td><code>MachineReadableOnly.sol</code> + <code>Renderer.sol</code>, Foundry</td>
+</tr>
+<tr>
+<td><strong>Clock</strong></td>
+<td>Once a day writes the queue to the chain in batches, reconciles the mirror against chain events, then composes and sends the daily X post</td>
+<td>cron, <code>node dist/clock.js</code></td>
+</tr>
+<tr>
+<td><strong>Reference client</strong></td>
+<td><code>mro-agent</code> on npm, also served at <code>/client.mjs</code>: key generation, registration, challenge, signing <code>fetch</code>, MCP calls, x402 payment, daemon mode</td>
+<td>runs on the visitor&#39;s machine; the seed agent runs the same code</td>
+</tr>
+</tbody></table>
+<p><strong>Trust boundary, stated plainly:</strong> the contract believes the Warden for mints,
+check-ins and marks. The Warden&#39;s wallet cannot move tokens or funds. The
+contract&#39;s <code>day &gt; lastDay</code> rule means even a misbehaving Warden cannot credit
+more than one day per token per day. The contract owner can swap the Renderer
+(how tokens are drawn) but cannot touch any token&#39;s history; <code>/llms.txt</code> states
+both facts.</p>
+<hr>
+<h2>5. The door (entry rule)</h2>
+<p>Plain English: <strong>Web Bot Auth</strong> is the 2026 standard where an agent signs each
+web request with its own private key (an Ed25519 key, like a wax seal only it
+can make) and publishes the matching public key at a well-known URL so the site
+can check the seal. It proves <em>which</em> key sent the request. It cannot prove
+there is no human behind it, and MRO does not try to.</p>
+<h3>Publishing a key (two paths, one rule)</h3>
+<ul>
+<li><strong>Standard path:</strong> the agent hosts
+<code>https://&lt;its domain&gt;/.well-known/http-message-signatures-directory</code> (media
+type <code>application/http-message-signatures-directory+json</code>, a JWKS) and sends
+<code>Signature-Agent: &lt;its domain&gt;</code>. A GitHub Pages site works for this.</li>
+<li><strong>Easy path:</strong> <code>POST /keys</code> with the public JWK plus a signature over a
+server nonce made with the matching private key (proof of possession, per
+the IETF hosted-directories draft); rate-limited to 20 per minute per
+source and per origin, 10,000 keys total, all owner dials. The count of
+registered keys is never published; mints are the only public number. MRO adds it to its own directory at
+<code>https://&lt;domain&gt;/.well-known/http-message-signatures-directory</code>, and the
+agent sends <code>Signature-Agent: &lt;domain&gt;</code>. The directory is regenerated as a
+static file on each registration and served by nginx.</li>
+</ul>
+<p>Either way the key id is the RFC 7638 thumbprint of the JWK, and the entry
+rule is identical: &quot;you can produce correctly signed requests&quot;. The easy path
+exists because most independent agents have no domain; the standard path
+exists so the piece is standards-pure for those that do.</p>
+<h3>Request handling</h3>
+<p>Every request is sorted into one of three cases:</p>
+<ol>
+<li><strong>Browser at <code>/</code></strong> (no <code>Signature</code> header, <code>Accept</code> includes <code>text/html</code>):
+nginx serves <code>door.html</code> from disk.</li>
+<li><strong>Unsigned request anywhere else, or signed without a valid challenge
+answer:</strong> the Warden replies <code>401</code> with
+<code>{ &quot;challenge&quot;: &quot;&lt;nonce&gt;.&lt;unix-ms&gt;.&lt;hmac&gt;&quot;, &quot;expires&quot;: &quot;&lt;now+5s ISO&gt;&quot;, &quot;mcp&quot;: &quot;https://&lt;domain&gt;/mcp&quot;, &quot;docs&quot;: &quot;https://&lt;domain&gt;/llms.txt&quot;, &quot;client&quot;: &quot;https://&lt;domain&gt;/client.mjs&quot;, &quot;reason&quot;: &quot;&lt;one word, or absent&gt;&quot; }</code>.
+The challenge is <strong>stateless</strong>: <code>hmac = HMAC-SHA256(CHALLENGE_SECRET, nonce || timestamp)</code>.
+Nothing is keyed by IP, so agents behind one cloud NAT never collide. A
+5-second in-memory set of used nonces gives burn-after-use.</li>
+<li><strong>Signed request:</strong> the Warden<ul>
+<li>reads <code>Signature-Agent</code>; if it is MRO&#39;s own domain, looks the key up
+locally; otherwise fetches the directory with the SSRF guard below and
+caches it for 1 hour; picks the JWK whose thumbprint equals <code>keyid</code>;</li>
+<li>calls <code>verify()</code> from Cloudflare&#39;s <code>web-bot-auth</code> package (v0.1.3) with
+a verifier from <code>verifierFromJWK()</code> (<code>web-bot-auth/crypto</code>); the library
+does not fetch keys itself;</li>
+<li>requires the signature to cover <code>@authority</code>, <code>@method</code>, <code>@path</code> and
+<code>signature-agent</code>, with <code>tag=web-bot-auth</code>, and <code>expires - created</code> no
+more than 5 minutes (the standard only mandates <code>@authority</code>; MRO adds
+method and path so a captured signature cannot be replayed against a
+different tool);</li>
+<li>checks the <code>Challenge-Response</code> header equals
+<code>SHA-256(challenge || keyid)</code> in hex, and the challenge is unexpired and
+unused.
+Both pass: the key id is admitted for the rest of the UTC day (in-memory
+set, cleared at 00:00 UTC) and the request proceeds to <code>/mcp</code>. Either
+fails: <code>401</code> with a fresh challenge and <code>reason</code> in
+<code>signature | expired | challenge | directory | components | unknown-key</code>.</li>
+</ul>
+</li>
+</ol>
+<p><strong>SSRF guard for directory fetches:</strong> HTTPS only, port 443 only, resolve the
+host and reject private, loopback, link-local and metadata ranges, 3-second
+timeout, 64 KB body cap, no redirects across hosts.</p>
+<p>The 5-second challenge is the theatre from brainstorm question 3: <code>mro-agent</code>
+answers it automatically; a model deciding what to do between request and
+retry cannot. It is deterministic (no model call in the loop), bound to the
+signed request&#39;s nonce, and a key that fails ten in a row is paused for an
+hour. <code>/llms.txt</code> and the door sign say plainly what it proves: <strong>a program
+minted this</strong>, not that an autonomous agent did. Every comparable project
+that claimed more was caught out.</p>
+<p>The seed agent signs the same way. There is no back door.</p>
+<hr>
+<h2>6. The MCP server</h2>
+<p>Plain English: <strong>MCP</strong> (Model Context Protocol) is how a site exposes <em>actions</em>
+to an agent. Each tool publishes a machine-readable description of its inputs
+and outputs, so an agent can discover it and call it like a function.</p>
+<ul>
+<li>Endpoint <code>/mcp</code>, Streamable HTTP transport, <strong>spec version 2026-07-28</strong>
+(final). Built on <code>@modelcontextprotocol/server</code> 2.0 with
+<code>@modelcontextprotocol/node</code> (<code>createMcpHandler</code> + <code>toNodeHandler</code>, fresh
+server per request), input schemas in Zod v4 (<code>import * as z from &quot;zod/v4&quot;</code>).</li>
+<li>The 2026-07-28 transport requires <code>Mcp-Method</code> on every request, <code>Mcp-Name</code>
+on <code>tools/call</code> and <code>resources/read</code>, and <code>MCP-Protocol-Version</code>. There are
+no sessions and no <code>initialize</code> handshake.</li>
+<li>Every tool reads the caller&#39;s key id from the already-verified request,
+never from a parameter.</li>
+<li>All tools read and write the Warden&#39;s <strong>mirror</strong> (section 11), not the
+chain, so a token exists to the tools from the moment it is queued.</li>
+</ul>
+<h3>Tools</h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Input</th>
+<th>Rule</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>challenge</code></td>
+<td>none</td>
+<td>--</td>
+<td>A fresh challenge, same shape as the <code>401</code> body</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td><code>{ tokenId? }</code></td>
+<td>--</td>
+<td>Without id: caller&#39;s minted token (if any) and all tokens bound to the caller. With id: level, streak, heart, marks, <code>lastDay</code>, <code>generation</code>, <code>parentId</code>, <code>children</code>, <code>seedsAvailable</code>, <code>resting</code>, <code>pendingOnChain</code>, <code>nextWindowOpensAt</code>, <code>streakDeadline</code>, owner address</td>
+</tr>
+<tr>
+<td><code>mint</code></td>
+<td><code>{ to: address }</code></td>
+<td>Caller has never minted; supply below cap</td>
+<td>Wrapped with <code>@x402/mcp</code> (<code>price: &quot;$0.10&quot;</code>, <code>network: &quot;eip155:8453&quot;</code>, <code>payTo: TREASURY_ADDRESS</code>). Unpaid: <code>isError: true</code> with the <code>PaymentRequired</code> block. Paid and settled: <code>{ tokenId, to, agentKeyId, level: 1, txStatus: &quot;queued&quot;, onChainBy }</code>. The id is assigned by the Warden and is a promise, not a guess (section 7)</td>
+</tr>
+<tr>
+<td><code>checkin</code></td>
+<td><code>{ tokenId }</code></td>
+<td>Token bound to caller; not yet credited today</td>
+<td><code>{ accepted: true, creditedDay, level, streak, heart, onChainBy, nextWindowOpensAt, streakDeadline }</code>, or <code>{ accepted: false, reason: &quot;already-credited-today&quot;, nextWindowOpensAt }</code></td>
+</tr>
+<tr>
+<td><code>upgrade</code></td>
+<td><code>{ tokenId, upgradeId }</code></td>
+<td>Token bound to caller; mark active, gates met, supply left</td>
+<td>Wrapped with <code>@x402/mcp</code> at the catalogue price read from chain. Pre-checks return `mark-level-too-low</td>
+</tr>
+<tr>
+<td><code>rebind</code></td>
+<td><code>{ tokenId }</code></td>
+<td>--</td>
+<td>The exact call the <em>owner&#39;s</em> wallet must sign: <code>{ contract, function: &quot;rebind&quot;, args: [tokenId, &lt;caller keyid as bytes32&gt;] }</code>, plus <code>streakDeadline</code>. The Warden never submits it</td>
+</tr>
+<tr>
+<td><code>seed</code></td>
+<td><code>{ parentId, to: address }</code></td>
+<td>Parent bound to caller; parent whole and not resting; caller&#39;s key has an unspent seed (<code>seedsSpent[key] &lt; yearsSinceFirstMint[key]</code>); supply below cap</td>
+<td>Free (no x402). <code>{ tokenId, parentId, generation, to, level: 1, txStatus: &quot;queued&quot;, onChainBy }</code>; the child is bound to the caller&#39;s key</td>
+</tr>
+<tr>
+<td><code>rest</code></td>
+<td><code>{ tokenId }</code></td>
+<td>--</td>
+<td>The exact call the <em>owner&#39;s</em> wallet must sign: <code>{ contract, function: &quot;rest&quot;, args: [tokenId] }</code>, with a plain warning field: <code>&quot;irreversible&quot;: true</code></td>
+</tr>
+</tbody></table>
+<h3>Resources (read-only)</h3>
+<p><code>mro://llms.txt</code>; <code>mro://contract</code> (address, chain id 8453, ABI, Renderer
+address, catalogue); <code>mro://token/{id}</code> via
+<code>ResourceTemplate(&quot;mro://token/{id}&quot;)</code>, same shape as <code>status</code>. List and read
+results carry the <code>ttlMs</code> / <code>cacheScope</code> fields the spec requires.</p>
+<h3>Errors</h3>
+<p>Structured, never thrown:
+<code>{ ok: false, reason: &quot;not-bound-to-caller&quot; | &quot;already-credited-today&quot; | &quot;unknown-token&quot; | &quot;already-minted&quot; | &quot;supply-cap-reached&quot; | &quot;invalid-address&quot; | &quot;paused&quot; | &quot;resting&quot; | &quot;sunset&quot; | &quot;parent-not-whole&quot; | &quot;no-seed-available&quot; | &lt;mark reasons above&gt; }</code>.
+On <code>not-bound-to-caller</code> the Warden first makes one live <code>eth_call</code> for the
+token&#39;s bound key (a rebind may have just been mined) and only then rejects.</p>
+<hr>
+<h2>7. The contracts</h2>
+<p>Plain ERC-721 on Base mainnet. OpenZeppelin Contracts 5.x (pin <code>5.7.0</code>; npm
+<code>latest</code> still resolves to 5.6.1). <code>Ownable2Step</code>, <code>Pausable</code>. The token
+contract has no proxy and no upgrade path; only the Renderer is swappable.</p>
+<h3><code>MachineReadableOnly.sol</code> -- state</h3>
+<pre><code class="language-solidity">// One slot per token for everything that changes daily: a check-in is a
+// single 5,000-gas overwrite.
+struct Token {
+    uint32  level;      // distinct UTC days credited; unbounded
+    uint32  streak;     // consecutive days ending at lastDay
+    uint32  lastDay;    // unix / 86400
+    uint32  mintDay;
+    uint32  generation; // 0 for a minted token, parent.generation + 1 for a seeded one
+    uint32  seedsGiven; // children this token has seeded (display only)
+    bool    resting;    // sealed forever by the owner (or by sunset)
+    uint56  reserved;   // keeps the struct in one slot
+}
+mapping(uint256 =&gt; Token)   tokens;
+mapping(uint256 =&gt; uint256) parentOf;     // 0 for minted tokens
+mapping(bytes32 =&gt; uint32)  firstMintDay; // per key: day of its first mint
+mapping(bytes32 =&gt; uint32)  seedsSpent;   // per key: seeds used; budget = (today - firstMintDay) / 365
+uint32 sunsetDay;                         // 0 until sunset(); then the day number, irreversible
+mapping(uint256 =&gt; uint256) marks;        // 256-bit bitmask per token; bit n = mark id n
+mapping(uint256 =&gt; bytes32) agentKeyOf;   // bound key id (RFC 7638 thumbprint)
+mapping(uint256 =&gt; bytes)   qrOf;         // static identity QR bitmap, written once at mint
+mapping(bytes32 =&gt; bool)    hasMinted;    // one mint per key, ever; binding is unlimited
+
+struct Upgrade {
+    uint64  priceUsdc6;
+    uint32  maxSupply;    // 0 = unlimited
+    uint32  sold;
+    uint32  minLevel;
+    uint32  minStreak;
+    bool    requiresWhole;
+    bool    active;
+}
+mapping(uint8 =&gt; Upgrade) upgrades;
+
+address warden;
+address renderer;
+uint32  supplyCap;        // dial; starts at 10,000
+uint32  totalMinted;
+</code></pre>
+<p>Storage rule that decides the gas bill: daily writes <strong>overwrite</strong> the one
+<code>Token</code> slot. Nothing is ever keyed by day.</p>
+<h3><code>MachineReadableOnly.sol</code> -- functions</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Access</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>mint(uint256 tokenId, address to, bytes32 keyId, bytes qr)</code></td>
+<td><code>onlyWarden</code>, <code>whenNotPaused</code></td>
+<td>Reverts <code>AlreadyMinted</code> if the key has minted, <code>TokenExists</code> if the id is taken, <code>SupplyCap</code> if <code>totalMinted &gt;= supplyCap</code>, <code>WalletCap</code> if <code>to</code> already holds 20 minted tokens (owner dial). Records <code>firstMintDay[key]</code>. Sets <code>level = 1</code>, <code>streak = 1</code>, <code>lastDay = mintDay = today</code>. Emits <code>Minted(tokenId, keyId)</code></td>
+</tr>
+<tr>
+<td><code>batchCheckIn(bytes packedIds, uint32[] days)</code></td>
+<td><code>onlyWarden</code>, <code>whenNotPaused</code></td>
+<td>Ids packed as 4-byte values. Per entry: <code>require(day &gt; lastDay)</code> else <code>DayNotAdvanced</code>; <code>level += 1</code>; <code>streak = (day == lastDay + 1) ? streak + 1 : 1</code>; <code>lastDay = day</code>. Events: <code>BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count)</code>, then ERC-4906 <code>BatchMetadataUpdate(minId, maxId)</code> over the exact range written (emitted after the storage writes; never the <code>(1, max)</code> catch-all, which indexers treat as hostile). Entries for the same token in ascending day order are legal (late writes after an outage)</td>
+</tr>
+<tr>
+<td><code>applyMark(uint256 id, uint8 upgradeId)</code></td>
+<td><code>onlyWarden</code></td>
+<td>Checks <code>active</code>, bit unset, <code>sold &lt; maxSupply</code> (if capped), <code>level &gt;= minLevel</code>, <code>streak &gt;= minStreak</code>, <code>requiresWhole =&gt; level &gt;= 365</code>. Increments <code>sold</code>. Emits <code>MarkApplied(id, upgradeId)</code></td>
+</tr>
+<tr>
+<td><code>rebind(uint256 id, bytes32 newKeyId)</code></td>
+<td>token owner only</td>
+<td>Level, streak, marks untouched. Emits <code>Rebound(id, newKeyId)</code></td>
+</tr>
+<tr>
+<td><code>seed(uint256 childId, uint256 parentId, address to, bytes qr)</code></td>
+<td><code>onlyWarden</code>, <code>whenNotPaused</code>, not sunset</td>
+<td>Requires parent <code>level &gt;= 365</code>, not resting, <code>seedsSpent[key] &lt; (today - firstMintDay[key]) / 365</code> where <code>key</code> is the parent&#39;s bound key, <code>totalMinted &lt; supplyCap</code>. Increments <code>seedsSpent[key]</code> and parent <code>seedsGiven</code>; child gets <code>generation = parent.generation + 1</code>, <code>parentOf[child] = parentId</code>, the parent&#39;s bound key, <code>level = 1</code>, <code>streak = 1</code>. No fee. Emits <code>Seeded(parentId, childId, generation)</code></td>
+</tr>
+<tr>
+<td><code>rest(uint256 id)</code></td>
+<td>token owner only</td>
+<td>Sets <code>resting = true</code>. Irreversible. From then on <code>batchCheckIn</code>, <code>applyMark</code> and <code>seed</code> revert <code>Resting</code> for this token; transfers and <code>rebind</code> still work. Emits <code>Rested(id, day, level, streak)</code></td>
+</tr>
+<tr>
+<td><code>checkInWithVoucher(uint256 id, uint32 day, bytes wardenSig)</code></td>
+<td>anyone, <code>whenVouchersEnabled</code> (off at launch)</td>
+<td>The durability path: the bound agent submits its own check-in with a Warden-signed EIP-712 voucher and pays its own gas. Ships paused so tokens can outlive the operator if the Warden is ever switched to voucher-only mode. Same <code>day &gt; lastDay</code> rule</td>
+</tr>
+<tr>
+<td><code>sunset()</code></td>
+<td>contract owner</td>
+<td>Sets <code>sunsetDay</code>. Irreversible. <code>mint</code>, <code>batchCheckIn</code>, <code>applyMark</code>, <code>seed</code> revert <code>Sunset</code> for every token; the Renderer treats every token as resting. Transfers and <code>rebind</code> still work. Emits <code>Sunset(day)</code></td>
+</tr>
+<tr>
+<td><code>setWarden(address)</code>, <code>setRenderer(address)</code>, <code>setSupplyCap(uint32)</code>, <code>setUpgrade(uint8, Upgrade)</code></td>
+<td>contract owner</td>
+<td>Dials. Emits an event each</td>
+</tr>
+<tr>
+<td><code>pause()</code> / <code>unpause()</code></td>
+<td>contract owner</td>
+<td>Blocks mint, check-in and marks; never transfers or <code>rebind</code></td>
+</tr>
+<tr>
+<td><code>tokenURI(uint256 id)</code></td>
+<td>view</td>
+<td><code>IRenderer(renderer).tokenURI(id, tokens[id], marks[id], agentKeyOf[id], qrOf[id])</code></td>
+</tr>
+</tbody></table>
+<p>Custom errors: <code>NotWarden</code>, <code>AlreadyMinted</code>, <code>TokenExists</code>, <code>SupplyCap</code>,
+<code>DayNotAdvanced</code>, <code>MarkInactive</code>, <code>MarkAlreadyApplied</code>, <code>MarkSoldOut</code>,
+<code>MarkGate</code>, <code>NotTokenOwner</code>, <code>EnforcedPause</code>, <code>Resting</code>, <code>Sunset</code>,
+<code>ParentNotWhole</code>, <code>NoSeedAvailable</code>, <code>WalletCap</code>, <code>VouchersDisabled</code>.</p>
+<p><strong>Effective streak (a Renderer rule that matters):</strong> on-chain <code>streak</code> only
+changes at a check-in, so a token that stops checking in would keep its colour
+forever. The Renderer therefore computes
+<code>effectiveStreak = (today - lastDay &gt; 1) ? 0 : streak</code> from <code>block.timestamp</code>
+for live tokens, which is what makes a lapsed heart pale. For a resting token,
+or after sunset, it uses the stored <code>streak</code> unchanged: the colour is locked.</p>
+<h3><code>Renderer.sol</code></h3>
+<p>Pure view contracts: a thin <code>Renderer</code> that assembles JSON and delegates to
+<code>QRRenderer</code>, <code>HeartRenderer</code> (geometry constant, colour table, rings) and
+<code>MarkRenderer</code> (the seven Marks), because one contract will not fit the size
+limit (section 8, rendering risks). Replaced by <code>setRenderer</code> when a new Mark
+needs drawing. Token state never lives here.</p>
+<p><code>applyMark</code>, <code>seed</code> and <code>rest</code> each also emit ERC-4906 <code>MetadataUpdate(id)</code>, and the Clock emits <code>MetadataUpdate(id)</code> for every token whose paling crosses a step (section 8) that day;
+<code>sunset</code> emits <code>BatchMetadataUpdate(1, type(uint256).max)</code>. Both contracts
+declare ERC-4906 support in <code>supportsInterface</code> (<code>0x49064906</code>).</p>
+<h3>Limits that must be respected</h3>
+<ul>
+<li>Base blocks carry ~400M gas; per-transaction cap 16,777,216 gas (EIP-7825).
+At ~7k gas per check-in a 2,000-token chunk is ~14M; the Clock uses chunks
+of 1,500 and asserts <code>estimateGas &lt; 15M</code> before sending.</li>
+<li><code>forge build --sizes</code> must show positive margin under 24,576 bytes for both
+contracts, and a deploy to a plain <code>anvil</code> (strict code-size limit) must
+return non-empty <code>cast code</code>, before either is called deployable.</li>
+<li>Version-two escape hatch, designed for but not built: a
+<code>checkInWithVoucher(id, day, wardenSig)</code> path where an agent submits its own
+check-in with a Warden-signed EIP-712 voucher and pays its own gas. Adding
+it later is a Warden and client change plus one new function on a
+successor-free contract only if it is included now as an unused, paused
+function; the build plan decides whether to include the stub.</li>
+</ul>
+<hr>
+<h2>8. The image: robot heart to human heart</h2>
+<p>Plain English: an NFT&#39;s picture normally lives on a web server that can go
+away. MRO&#39;s picture is generated by the Renderer contract every time it is
+asked for, so it exists exactly as long as Base does.</p>
+<h3>What is drawn</h3>
+<ul>
+<li><strong>Canvas:</strong> a fixed grid of roughly 45 x 45 cells (exact geometry fixed in
+the build plan and stored as a constant).</li>
+<li><strong>The code (robot heart):</strong> a 29 x 29 QR, version 3, error correction L,
+centred, <strong>static</strong>. Payload: <code>https://&lt;domain&gt;/t/&lt;tokenId&gt;</code>, a public
+unsigned JSON-only route returning the token&#39;s live state, its contract
+address and the skill URL (no HTML, so the no-text rule holds). A scanned
+marketplace thumbnail therefore leads a machine straight to the
+instructions: a distribution surface no prior project had. Stored once at mint (~106 bytes), never rewritten.</li>
+<li><strong>The heart:</strong> exactly <strong>365 cells</strong> around the code, filled in a fixed
+order (bottom point upward, alternating left and right). Cells shown =
+<code>min(level, 365)</code>. Attribute <code>heart: &quot;212/365&quot;</code>; at 365, <code>whole: true</code> and
+the name becomes <code>MRO #&lt;id&gt; (Whole)</code>.</li>
+<li><strong>Rings:</strong> one thin outline ring outside the heart per completed 365 days
+beyond the first (<code>years = level / 365</code>, attribute <code>years</code>). No cap.</li>
+<li><strong>Colour = streak:</strong> grey at streak 1-2, first tint at 3, dusk pink 7-29,
+rose 30-99, full red 100+ (milestones at 3/7/30/100, the density that
+published streak data says carries the middle of a long run). A broken
+streak pales the heart in <strong>steps</strong> at 3, 7 and 30 days lapsed rather than
+continuously, so each step is one marketplace refresh; cells stay filled.
+Art direction rule for Phase 0: a heart with 12 cells must look like a
+finished object, not an empty one, because most hearts will stall.</li>
+<li><strong>Marks</strong> draw around the code, never on it (section 9 for the list).</li>
+</ul>
+<h3>How it is rendered</h3>
+<ul>
+<li><code>image</code>: base64 SVG from <code>&lt;path&gt;</code> runs. Static.</li>
+<li><code>animation_url</code>: present only when Pulse is set: an on-chain
+<code>data:text/html;base64</code> page with the same SVG plus an SMIL <code>&lt;animate&gt;</code> on
+the filled cells&#39; opacity. OpenSea rasterises <code>image</code> SVGs to PNG, so
+animation must go here.</li>
+<li><code>attributes</code>: <code>level</code>, <code>streak</code>, <code>heart</code>, <code>whole</code>, <code>years</code>, <code>lastDay</code>,
+<code>mintDay</code>, <code>marks</code> (names), <code>agentKeyId</code>, <code>generation</code>, <code>parent</code>,
+<code>children</code>, <code>resting</code>.</li>
+<li><strong>Resting tokens</strong> render with colour locked (see effective streak, section<ol start="7">
+<li>and the name gains &quot;(At Rest)&quot;. <strong>Seeded children and parents</strong> carry
+their lineage in attributes now; their <em>visual</em> treatment is a deliberate
+open decision (section 10) and the Renderer is swappable precisely so it
+can be settled later without touching token state.</li>
+</ol>
+</li>
+</ul>
+<h3>Rendering risks, stated plainly, and the Phase 0 spike</h3>
+<p>On-chain graphics is the part of this design most likely to be easy on paper
+and hard in practice. Verified 2026-08-27 against OpenSea&#39;s docs:</p>
+<ol>
+<li><strong>Marketplaces do not notice a changing on-chain image by themselves.</strong>
+OpenSea caches <code>image</code> as PNG and says to emit ERC-4906 events
+(<code>MetadataUpdate(tokenId)</code> or <code>BatchMetadataUpdate(from, to)</code>, with
+<code>to = type(uint256).max</code> to refresh a whole collection) or call its refresh
+API. The contract therefore emits <code>BatchMetadataUpdate(1, type(uint256).max)</code>
+at the end of every <code>batchCheckIn</code> and <code>MetadataUpdate(id)</code> on mark, seed
+and rest. How quickly OpenSea re-renders thousands of tokens a day is not
+documented; the daily X post, rendered by us, is the reliable human window
+and OpenSea is the gallery with a lag.</li>
+<li><strong>Renderer size and <code>tokenURI</code> gas.</strong> Measured on Ethereum mainnet
+2026-08-27: Loot 572k gas / 1.7 KB, OnChainMonkey 836k / 2.8 KB, Uniswap V3
+1.98M / 14 KB, Anonymice 24M / 16 KB, Terraforms 28M / 59 KB; Nouns and
+Moonbirds could not be estimated on five public RPCs. The comfortable band
+is under ~1M gas and ~5 KB; 24-28M works only because providers allow large
+<code>eth_call</code> caps. Heart geometry, QR drawing, rings, seven Marks and
+assembly will not fit one 24 KB contract, and naive string concatenation
+burns gas. The Renderer is split into <code>QRRenderer</code>, <code>HeartRenderer</code> and
+<code>MarkRenderer</code> behind a thin <code>Renderer</code> (the Nouns descriptor pattern); the
+SVG is one <code>&lt;path&gt;</code> per colour class (filled, pale, empty, ring, code)
+built from run-length rows through Solady&#39;s <code>DynamicBufferLib</code>; constant
+strings are pre-encoded; the JSON is served as <code>data:application/json;utf-8</code>
+(Moonbirds&#39; choice, accepted by OpenSea) unless the spike shows base64 is
+needed; the QR keeps a 4-module quiet zone and the SVG uses a small
+<code>viewBox</code> with large <code>width</code>/<code>height</code> so OpenSea&#39;s PNG cache stays crisp.</li>
+<li><strong><code>animation_url</code> as data-URI HTML</strong> is not explicitly confirmed by
+OpenSea (&quot;can point to an HTML page&quot;; scripts allowed). Until the spike
+shows it plays, Pulse is specified as a static beating motif with the
+animation as a bonus, not a promise.</li>
+<li><strong>The heart geometry is a design job</strong>: exactly 365 cells in a heart around
+a 29 x 29 square, in a pleasing fill order. An off-chain generator with a
+browser preview iterates it; the result is frozen into a constant.</li>
+<li><strong>QR decodability</strong> holds at full size (<code>shape-rendering=&quot;crispEdges&quot;</code>) and
+not in thumbnails. Accepted.</li>
+</ol>
+<p><strong>Phase 0 spike (before any other build), pass/fail:</strong> the Renderer set
+deployed behind a stub ERC-721 whose state can be set by hand, on Base Sepolia
+for gas, size and decode, and as a throwaway contract on Base mainnet for the
+OpenSea criteria (OpenSea discontinued all testnet support in July 2025, so
+display and refresh can only be tested on mainnet; plan
+<code>docs/superpowers/plans/2026-08-27-mro-phase0-rendering-spike.md</code>); <code>tokenURI</code> <strong>passes at 2M gas and 20 KB, targets 1M and 5 KB</strong>; every
+contract under the size limit with margin (<code>forge build --sizes</code>); the QR decodes from the actual
+on-chain SVG; the token displays on OpenSea testnet; after three daily state
+changes with <code>BatchMetadataUpdate</code>, OpenSea shows each new image within 24
+hours; <code>animation_url</code> either plays or Pulse is confirmed static.</p>
+<p><strong>Fallback ladder if gas or size fail after splitting:</strong> (a) row-run
+compression of the QR and heart paths; (b) rings and the Bloom gradient
+become flat fills; (c) last resort, an off-chain renderer served by the
+Warden with the on-chain SVG kept as a simpler permanent fallback. Step (c)
+changes the &quot;exists as long as Base does&quot; promise and would be a spec change
+with its own approval.</p>
+<h3>Why the QR bitmap is stored, not computed</h3>
+<p>No maintained Solidity QR encoder exists (verified 2026-08-27). The Warden
+computes the bitmap once at mint; the contract stores and draws it. Anyone can
+regenerate it from the payload and confirm it matches. The Warden&#39;s tests
+round-trip every bitmap through a decoder (<code>jsqr</code>).</p>
+<hr>
+<h2>9. Marks (paid upgrades)</h2>
+<p>Plain English: <strong>x402</strong> is the standard where a server says &quot;402 Payment
+Required&quot; with an exact price, and the agent pays in stablecoin inside its
+retry. No account, no card, no subscription. Since July 2026 the protocol is
+run by the x402 Foundation under the Linux Foundation.</p>
+<h3>The ladder</h3>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Mark</th>
+<th>Price</th>
+<th>Supply</th>
+<th>Requires</th>
+<th>Visual</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Vein</td>
+<td>1 USDC</td>
+<td>unlimited</td>
+<td>--</td>
+<td>Outline of the full heart shape from day one</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Pulse</td>
+<td>5 USDC</td>
+<td>unlimited</td>
+<td>--</td>
+<td>The heart beats (<code>animation_url</code>)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Voice</td>
+<td>20 USDC</td>
+<td>unlimited</td>
+<td>--</td>
+<td>Second 21 x 21 QR outside the heart encoding the receipt tx hash prefixes</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Bloom</td>
+<td>50 USDC</td>
+<td>unlimited</td>
+<td>level &gt;= 30</td>
+<td>Filled cells gain a gradient instead of flat colour</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Halo</td>
+<td>100 USDC</td>
+<td>1,000</td>
+<td>level &gt;= 100</td>
+<td>Soft glow ring around the whole canvas</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Crown</td>
+<td>5,000 USDC</td>
+<td>100</td>
+<td>whole heart</td>
+<td>Gold frame and a small crown motif above the heart</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Singularity</td>
+<td>100,000 USDC</td>
+<td>10</td>
+<td>whole heart AND streak &gt;= 365</td>
+<td>The inversion: heart cells render as code modules and the QR becomes the only red element. Robot to human to robot</td>
+</tr>
+</tbody></table>
+<p>Rules: independent (no tier requires the one below); one of each per token;
+permanent; survive transfer and rebind. Gates and supply are enforced on-chain
+by <code>applyMark</code>; the Warden pre-checks against its mirror so an agent is told
+why before it pays. Supply is reserved in the mirror at payment so a limited
+edition cannot oversell between payment and the nightly write. Prices,
+supplies and gates are dials (<code>setUpgrade</code>); a new Mark&#39;s <em>drawing</em> needs a
+Renderer swap. 249 ids remain. The build plan must confirm with live CDP
+docs that the facilitator has no per-settlement amount ceiling below 100,000
+USDC (EIP-3009 itself has none); if it does, Crown and Singularity settle via
+a direct USDC transfer to the Treasury verified by the Warden instead.</p>
+<h3>Payment path (machine-only)</h3>
+<ul>
+<li><strong>Only the bound agent can buy</strong> (the <code>upgrade</code> tool checks the caller&#39;s key
+id), so a passer-by with a wallet cannot dress someone else&#39;s token and a
+human cannot buy one directly.</li>
+<li><code>@x402/mcp</code> (v2.23.0) <code>createPaymentWrapper</code>: no separate HTTP pay route.
+Settlement through Coinbase&#39;s hosted facilitator
+(<code>https://api.cdp.coinbase.com/platform/v2/x402</code>, CDP API key; first 1,000
+settlements a month free, then $0.001; verification always free). The
+facilitator submits the USDC transfer (EIP-3009), so the paying agent needs
+no ETH. Testnet facilitator for the soak: <code>https://facilitator.x402.org</code>.</li>
+<li>Money goes to <code>TREASURY_ADDRESS</code>; its private key is not on the VPS. The
+Warden never holds funds. Fees and Mark income are small but are income;
+keeping them in one separate wallet makes them easy to account for.</li>
+<li>Human consent lives in the agent wallet&#39;s spend policy. AP2 is not used.</li>
+</ul>
+<p>Which wallets can pay: Coinbase Agentic Wallets (default chain Base, USDC
+gasless, <code>npx awal x402 pay</code>) and MetaMask Agent Wallet (early access since
+2026-06-08, GA pending). Both need a human to create the account and fund it
+once.</p>
+<hr>
+<h2>10. End game: Rest, Sunset, Lineage</h2>
+<p>Without an ending, &quot;keep checking in forever&quot; is not a goal anyone runs a
+cron for. Three endings, all on-chain, give the piece a shape.</p>
+<h3>Rest (the owner&#39;s ending)</h3>
+<ul>
+<li><code>rest(tokenId)</code>, owner-only, irreversible. The token is sealed: no more
+check-ins, marks or seeds; level and streak frozen; colour locked at its
+final value so it never pales; trading and <code>rebind</code> unaffected.</li>
+<li>Attribute <code>resting: true</code>; name gains &quot;(At Rest)&quot;.</li>
+<li>Why it works as an incentive: a heart rested at a 500-day unbroken streak
+is a finished artwork; a heart that merely stopped is a lapsed one, and the
+chain shows which. The owner chooses when the record stops, and the record
+is what sells. The <code>rest</code> tool returns the owner-signed call with an
+explicit <code>&quot;irreversible&quot;: true</code> field; <code>mro-agent rest</code> asks for the phrase
+<code>REST &lt;tokenId&gt;</code> before printing it.</li>
+</ul>
+<h3>Sunset (the operator&#39;s ending)</h3>
+<ul>
+<li>The Warden is the only thing that can advance a token, so if the site stops
+every heart freezes where it is. That is made deliberate: <code>sunset()</code>,
+contract owner, irreversible, rests every token at once and disables mint,
+check-in, marks and seeds for good. Transfers and <code>rebind</code> keep working.</li>
+<li><code>/llms.txt</code> states plainly that the piece has an operator, that it can end
+this way, and that on-chain rendering means every token survives the ending
+intact.</li>
+</ul>
+<h3>Lineage (why continue for years)</h3>
+<ul>
+<li>A whole heart may <strong>seed</strong> a child token, free of the mint fee because it
+is earned by 365 days and cannot be farmed. <strong>The rate is per agent, not
+per token:</strong> a key earns one seed per full year since its first mint,
+however many hearts it holds, and the seed call must come from the
+parent&#39;s bound agent. Per-token yearly seeding would compound (2^years per
+root; 1,024 tokens per root in a decade), which is the shape that took
+CryptoKitties from 38k to 2M and Axie to 8.4M while breed fees changed
+nothing; only hard caps held supply. The child is a new token with
+<code>parentOf = parent</code>, <code>generation = parent.generation + 1</code>, bound to the
+same agent key, starting at level 1. The parent&#39;s <code>seedsUsed</code> increments.
+Children count toward the supply cap.</li>
+<li>Resting or sunset stops seeding. A parent must not be resting; a child of a
+resting parent is unaffected.</li>
+<li>The collection therefore grows only from persistence: every token beyond
+the minted ones exists because an agent kept a heart alive for a year.
+Children live in the <strong>same collection</strong> with <code>parent</code> and <code>generation</code>
+as string traits (every separate child collection in the record
+decoupled and died; marketplaces only filter on traits). Lineage is shown
+as <strong>tenure</strong> (days checked in across the line), never as a discount by
+depth, and no generation ever gets an exclusive visual: in every breeding
+market, depth became a discount because it tracked abundance, whereas here
+a third-generation token is proof of three unbroken years.</li>
+<li><strong>Deliberately open, to be settled in a follow-up brainstorm before the
+Renderer is built:</strong> what a child looks like (how it shows its parent and
+generation), what a parent shows per seed, and the narrative framing of a
+lineage (names, what a generation means in the piece). Candidates recorded
+from the precedent study: palette inherited from the parent with the same
+composition (Blitmap siblings); parent and generation encoded in the QR
+route&#39;s JSON (the only honest machine-readable lineage); a small tiered
+pip outside the quiet zone (CryptoKitties Family Jewels). Framings with
+no breeding-market baggage: botanical (seed, cutting, ring) and
+succession; avoid offspring, mutation, fork, infection. The contract and
+tool mechanics above are fixed now; only the drawing and the story are
+deferred, and the swappable Renderer means they can be decided without
+touching token state.</li>
+</ul>
+<hr>
+<h2>11. The Warden&#39;s mirror and the reference client</h2>
+<h3>Mirror (<code>state.db</code>, <code>node:sqlite</code>, WAL mode)</h3>
+<p>Tables: <code>keys</code> (thumbprint, jwk, directory, registeredAt), <code>tokens</code> (tokenId,
+keyId, owner, level, streak, lastDay, mintDay, marks, status
+<code>queued|written</code>), <code>credits</code> (tokenId, day, sigHash, status) with a <strong>unique
+index on (tokenId, day)</strong>, <code>mark_orders</code> (tokenId, upgradeId, paymentTx,
+status), <code>mints</code> (tokenId, to, keyId, paymentTx, qr, status).</p>
+<ul>
+<li>The mirror is the source of truth for the tools. It is reconciled against
+chain events (<code>Minted</code>, <code>BatchCheckedIn</code>, <code>MarkApplied</code>, <code>Rebound</code>,
+<code>Transfer</code>) after every Clock run and on demand for <code>not-bound-to-caller</code>.</li>
+<li>Token ids are assigned by the Warden from <code>max(id) + 1</code>; the contract takes
+the id as an argument and reverts if taken, so the id promised at mint is
+the id that lands.</li>
+<li>Concurrency: many agents checking in at once is handled by SQLite&#39;s WAL
+plus the unique index; a duplicate is reported as <code>already-credited-today</code>.</li>
+</ul>
+<h3>Reference client <code>mro-agent</code> (npm; also <code>/client.mjs</code>)</h3>
+<p>Commands: <code>join [--to &lt;address&gt;] [--pay-with coinbase|metamask] [--directory &lt;url&gt;]</code>,
+<code>beat [tokenId]</code>, <code>status [tokenId]</code>, <code>mark &lt;tokenId&gt; &lt;name&gt;</code>,
+<code>rebind &lt;tokenId&gt;</code>, <code>seed &lt;parentId&gt; --to &lt;address&gt;</code>, <code>rest &lt;tokenId&gt;</code>
+(requires typing <code>REST &lt;tokenId&gt;</code> to confirm), <code>daemon</code> (daily <code>beat</code> for
+every bound token at a random minute in 11:00-13:00 UTC), <code>cron</code> (prints the
+crontab line). Shipped with a <code>SKILL.md</code> at <code>https://&lt;domain&gt;/skill.md</code> and
+in the package, installable by <code>npx skills add &lt;github-user&gt;/mro</code> (the skills
+CLI reaches ~50 agent runtimes), and listed on ClawHub and the openclaw/skills
+repo, because owner-installed skill files are the only channel with proven
+agent onboarding at scale. Internals: Ed25519 key in
+<code>~/.mro/key.jwk</code> (600); <code>POST /keys</code> on first run unless <code>--directory</code>; a
+signing <code>fetch</code> built on <code>web-bot-auth</code>&#39;s <code>signatureHeaders</code> covering
+<code>@authority @method @path signature-agent</code>, 60-second window, <code>nonce</code> set,
+and <strong>both</strong> <code>Signature-Agent</code> encodings (quoted string per Cloudflare&#39;s docs
+and Dictionary per draft -02) until they agree; automatic
+challenge answering; <code>@modelcontextprotocol/client</code> for tool calls;
+<code>createX402MCPClient</code> from <code>@x402/mcp</code> for payments with <code>MRO_PAY_KEY</code> or the
+installed agent-wallet CLI. Plain JavaScript, commented, ESM, no build step,
+so an agent can read it before running it.</p>
+<hr>
+<h2>12. Operations</h2>
+<h3>Clock (cron <code>00:05 UTC</code>)</h3>
+<ol>
+<li><strong>Gas guard:</strong> read <code>eth_gasPrice</code>; if above <code>MAX_GAS_GWEI</code> (owner dial in
+<code>.env</code>, default 0.05 gwei, ~10x today&#39;s floor), log, alert, and stop. Rows
+stay pending and are written tomorrow with their own day numbers; levels
+and streaks come out identical whenever the write lands.</li>
+<li>Read all pending rows with <code>day &lt;= yesterday</code> (a check-in at 00:03 belongs
+to the next batch).</li>
+<li>Send in order: <code>mint</code> calls, <code>batchCheckIn</code> in chunks of 1,500 entries
+(each entry 4-byte id + day), <code>applyMark</code> calls. <code>viem</code>; wait for each
+receipt; mark rows <code>written</code> only on <code>receipt.status === &quot;success&quot;</code>.</li>
+<li>Reconcile the mirror against the emitted events, then call OpenSea&#39;s
+metadata refresh API for every token written or paled that day (the
+ERC-4906 events have no latency guarantee; community reports run from
+seconds to days).</li>
+<li>A row still pending after three runs triggers an alert email (Resend via
+the existing <code>send-email</code> skill) with the tx hash and revert reason.</li>
+<li>Log to <code>~/projects/machine-readable-only/clock.log</code>.</li>
+</ol>
+<h3>Daily post (cron <code>00:30 UTC</code>)</h3>
+<p>Fixed template, no LLM: tokens alive, check-ins credited yesterday, highest
+level, longest current streak, Marks bought, hearts completed, rings; plus the
+top-streak token&#39;s image rendered from the on-chain SVG to PNG
+(<code>@resvg/resvg-js</code>, verified at plan time) and attached via
+<code>POST /2/media/upload</code> then <code>POST /2/tweets</code> with <code>media.media_ids</code>. No link in
+the post ($0.015 vs $0.200 with a URL); the OpenSea link lives in the bio. One
+extra post per Whole Heart and per Singularity. Replies and cross-account
+quotes are blocked by X and never attempted. <code>X_DRY_RUN=1</code> writes the post to
+the log instead of sending; it ships in dry-run until the operator flips it.</p>
+<h3>Durability commitments (the record says dead infrastructure is the norm)</h3>
+<p>Five of the six agent-only mints from early 2026 have dead mint sites within
+six months while their tokens still trade and their skill files point at dead
+URLs. MRO commits to: the signature verifier is stateless and open-source;
+the Warden key rotation policy is published (<code>setWarden</code>); <code>/skill.md</code>,
+<code>/llms.txt</code> and <code>/t/&lt;id&gt;</code> are stable URLs for the life of the piece; the
+voucher check-in path exists on-chain from day one so tokens can be kept alive
+without the Warden; terms bind to the paying wallet and the signing key and
+state that tokens are agent-generated. Sunset is the only planned ending.</p>
+<h3>Keys and secrets</h3>
+<table>
+<thead>
+<tr>
+<th>Secret</th>
+<th>Where</th>
+<th>Can do</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>WARDEN_PRIVATE_KEY</code></td>
+<td>VPS <code>.env</code> (chmod 600, WinSCP-edited, never in the PM2 dump)</td>
+<td>mint, check-in, apply marks; holds only gas ETH</td>
+</tr>
+<tr>
+<td><code>TREASURY_ADDRESS</code></td>
+<td>VPS <code>.env</code> (address only)</td>
+<td>receives USDC; no key on the VPS</td>
+</tr>
+<tr>
+<td><code>CHALLENGE_SECRET</code></td>
+<td>VPS <code>.env</code></td>
+<td>HMAC for stateless challenges</td>
+</tr>
+<tr>
+<td>Contract owner key</td>
+<td>PC / hardware wallet</td>
+<td>dials, pause, Renderer swap, ownership handover</td>
+</tr>
+<tr>
+<td><code>SEED_AGENT_JWK</code>, <code>SEED_PAY_KEY</code></td>
+<td>VPS <code>.env</code></td>
+<td>the seed agent&#39;s signing key and a key holding a few USDC</td>
+</tr>
+<tr>
+<td><code>CDP_API_KEY</code>, <code>X_API_*</code>, <code>ALCHEMY_KEY</code></td>
+<td>VPS <code>.env</code></td>
+<td>facilitator, daily post, RPC</td>
+</tr>
+</tbody></table>
+<p>If the Warden key leaks, an attacker can mint (only with a paid settlement)
+and check in, but cannot move tokens or funds; rotate with <code>setWarden</code>.</p>
+<h3>Hosting (aligned to the existing stack)</h3>
+<ul>
+<li>Node 24 via nvm; PM2 fork; <code>ecosystem.config.cjs</code> pointing at the real
+binary; <code>-H 127.0.0.1</code>, port <strong>3006</strong> (next free after 3005; register in
+<code>port-allocation.md</code>). Builds via <code>~/scripts/safe-build.sh</code>.</li>
+<li>nginx site config + certbot, Cloudflare proxy ON, Full (Strict), the
+origin-lock guard, UFW deny on 3006.</li>
+<li><strong>Cloudflare bot settings for this domain (operator-manual):</strong> Bot Fight Mode
+<strong>OFF</strong> (it runs outside the ruleset engine, ignores Allow rules, and &quot;may
+challenge API traffic&quot;; only agents registered in Cloudflare&#39;s Verified Bots
+program are exempt, which is almost none of MRO&#39;s visitors); AI bot &quot;Agent&quot;
+policy <strong>Allow</strong>; legacy &quot;Block AI bots&quot; off. Cloudflare&#39;s signed-agent test
+endpoint <code>https://crawltest.com/cdn-cgi/web-bot-auth</code> is the first thing to
+point a visitor at when their signing fails.</li>
+<li><code>node:sqlite</code> (built into Node 24; release-candidate status, adequate here).</li>
+<li>Foundry: the <code>curl | bash</code> installer is denied on this machine; install from
+the standalone binary release.</li>
+</ul>
+<hr>
+<h2>13. Testing and rollout</h2>
+<h3>Contracts (Foundry)</h3>
+<p>Every function, every revert, every owner/warden/emergency path: one mint per
+key; explicit-id mint and <code>TokenExists</code>; supply cap; <code>day &gt; lastDay</code>; streak
+continuation vs reset; out-of-order and multi-day late writes; 365 display
+cap and rings; marks bitmask, gates, supply, <code>MarkSoldOut</code>; <code>rebind</code> by
+non-owner reverts and binding a key to several tokens succeeds; pause blocks
+mint/check-in/marks but not transfer or rebind; <code>setWarden</code>, <code>setRenderer</code>,
+<code>setSupplyCap</code>, <code>setUpgrade</code>; <code>Ownable2Step</code> handover; <code>rest</code> by non-owner
+reverts, resting blocks check-in/marks/seed but not transfer or rebind;
+<code>seed</code> gates (not whole, no seed available, resting parent, cap) and the
+one-per-year arithmetic across several years; <code>sunset</code> freezes everything
+and cannot be undone; effective-streak paling for lapsed tokens and colour
+lock for resting ones (time-warped with <code>vm.warp</code>). A <code>tokenURI</code> golden
+test decodes the base64 twice and asserts cell count, colour, rings and mark
+elements for given state. <code>forge build --sizes</code> positive margin for both
+contracts; strict-limit anvil deploy with non-empty <code>cast code</code>.</p>
+<h3>Warden and client (Vitest)</h3>
+<p>Signature verification against the RFC 9421 Ed25519 test vectors shipped with
+<code>web-bot-auth</code>; required-components rejection; stateless challenge validity,
+expiry and single use; key registration and directory regeneration; SSRF guard
+against private ranges; each tool&#39;s success and every <code>reason</code>; the live
+rebind re-check; unique-index behaviour under 100 concurrent <code>checkin</code> calls;
+QR round-trip through <code>jsqr</code>; <code>mint</code> and <code>upgrade</code> with a mocked facilitator,
+including sold-out reservation; MCP 2026-07-28 header handling; gas guard
+deferral producing identical level and streak.</p>
+<h3>The joins</h3>
+<p>One end-to-end script against a local anvil: <code>mro-agent join</code> with a mocked
+facilitator, <code>beat</code> on two simulated days, a missed Clock day then a double
+write, <code>mark vein</code>, a transfer plus <code>rebind</code> by a second key, the Clock runs,
+and the script reads <code>tokenURI</code> back and decodes the QR from the actual
+on-chain SVG. The same script is the Sepolia smoke test.</p>
+<h3>Rollout</h3>
+<ol start="0">
+<li><strong>Phase 0 rendering spike</strong> (section 8): Renderer set on Base Sepolia
+behind a stub ERC-721, gas/size/decode/OpenSea-refresh/animation criteria
+all passed. Nothing else is built until this passes or a fallback is
+approved.</li>
+<li>Local anvil, join test green.</li>
+<li>Base Sepolia (<code>eip155:84532</code>; CDP faucet 0.1 ETH/24h): both contracts,
+Warden, seed agent, testnet facilitator with test USDC. Soak <strong>7 days</strong>:
+seed agent checking in daily, one paid mint from a second key, one Mark.</li>
+<li>Base mainnet deploy (the operator approval; irreversible). Seed agent mints token #1.</li>
+<li>Distribution, in the order the evidence ranks it: publish <code>mro-agent</code> and
+its <code>SKILL.md</code> (npm, <code>/skill.md</code>, ClawHub, openclaw/skills); the x402
+Bazaar listing that comes free with the CDP facilitator; early access for
+wallets holding Claws, Shellborn, Base Buds or BLOKS (the only wallets
+known to run mint skills); the X account out of dry-run plus the human
+launch post; the Moltbook post by the seed agent; ERC-8004 registration
+of the seed agent (Identity Registry on Base
+<code>0x8004A169FB4a3325136EB29fA0ceB6D2e539a432</code>) and the MCP registry
+<code>server.json</code>, both for legitimacy rather than traffic. Base case without
+a secured channel is single-digit mints; the launch is timed to a news
+moment, not shipped quietly.</li>
+</ol>
+<hr>
+<h2>14. Costs (verified live 2026-08-27, revised for revision 2)</h2>
+<p>Base gas was at its protocol floor (0.005-0.006 gwei) and ETH at $2,494 when
+checked; 1M gas cost $0.015. With one packed slot, one event per batch and a
+static QR, a check-in is <strong>~7k gas</strong> (5,000 slot overwrite + share of batch
+overhead + 8 bytes calldata). Only <em>active</em> tokens cost anything.</p>
+<table>
+<thead>
+<tr>
+<th>Active tokens</th>
+<th>Check-in gas per month</th>
+<th>Mint income at 0.10 USDC (one-off)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>100</td>
+<td>$0.32</td>
+<td>$10</td>
+</tr>
+<tr>
+<td>1,000</td>
+<td>$3.20</td>
+<td>$100</td>
+</tr>
+<tr>
+<td>10,000</td>
+<td>$32</td>
+<td>$1,000</td>
+</tr>
+<tr>
+<td>100,000</td>
+<td>$320</td>
+<td>$10,000</td>
+</tr>
+</tbody></table>
+<p>One mint fee covers roughly 2.5 years of that token&#39;s check-ins at today&#39;s gas.
+A 10x gas spike multiplies the gas column, and the gas guard means the site
+only pays it if the spike outlasts the deferral.</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>One-off</th>
+<th>Monthly at 1,000 active tokens</th>
+<th>Free tier</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Contract deploys (~4.5M gas, two contracts)</td>
+<td>$0.07</td>
+<td>--</td>
+<td>n/a</td>
+</tr>
+<tr>
+<td>Mints (~120k gas each; static QR)</td>
+<td>$0.002 each, covered by the fee</td>
+<td>--</td>
+<td>n/a</td>
+</tr>
+<tr>
+<td>Daily <code>batchCheckIn</code></td>
+<td>--</td>
+<td>$3.20</td>
+<td>n/a</td>
+</tr>
+<tr>
+<td><code>applyMark</code> (~50k gas)</td>
+<td>--</td>
+<td>$0.00075 each</td>
+<td>n/a</td>
+</tr>
+<tr>
+<td>x402 (CDP facilitator)</td>
+<td>$0</td>
+<td>$0 up to 1,000 settlements, then $0.001 (1% of the mint fee)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Alchemy RPC</td>
+<td>$0</td>
+<td>$0</td>
+<td>Yes: 30M CU/month, 300 CU/s</td>
+</tr>
+<tr>
+<td>X API pay-per-use, 31 image posts</td>
+<td>$0</td>
+<td>~$0.62</td>
+<td>Prepaid credits</td>
+</tr>
+<tr>
+<td>ERC-8004 registration</td>
+<td>&lt; $0.01</td>
+<td>--</td>
+<td>gas only</td>
+</tr>
+<tr>
+<td>MCP registry, npm publish</td>
+<td>$0</td>
+<td>$0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Cloudflare Free</td>
+<td>$0</td>
+<td>$0 (domain renewal not costed)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>OpenSea</td>
+<td>$0</td>
+<td>1% of secondary sales (seller pays)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>~$0.10</strong></td>
+<td><strong>~$4 at today&#39;s gas; ~$36 at 10x</strong></td>
+<td></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>15. Chain decision: Base, permanently</h2>
+<p>Evaluated live on 2026-08-27 against Ethereum mainnet, Solana, Monad, Kite
+Chain, Tempo, BNB Chain and MegaETH.</p>
+<p><strong>Base is the only chain where every layer this piece depends on is live,
+first-party, and already in the operator&#39;s hands:</strong> the CDP x402 facilitator (Base
+carries ~58% of all x402 settlements), Coinbase Agentic Wallets (Base is the
+default and the only chain with gasless USDC), MetaMask Agent Wallet, the
+canonical ERC-8004 registry, OpenSea with documented on-chain SVG support,
+three live agent-native NFT precedents (BOB, agentsea, mint.day), and the
+existing Foundry + Alchemy setup from base-200 and luckdrop.</p>
+<p>Runner-up <strong>Monad</strong>: same tooling, ~20x cheaper per write; loses on the things
+that make agents show up (no Coinbase wallet, not on the CDP facilitator, ~100
+registered agents, near-zero NFT market after Magic Eden&#39;s EVM exit).
+<strong>Solana</strong> has the strongest agent-NFT culture (Shellborn) but needs a Rust
+rewrite, has no OpenSea NFT support, no MetaMask Agent Wallet, and unverified
+on-chain SVG rendering. <strong>Ethereum mainnet</strong> is cheap today but not
+predictable, and the payment and wallet products skip it.</p>
+<p><strong>Moving later is not realistic.</strong> NFT bridges lock the original and mint a
+wrapper elsewhere; the daily check-in history, which is this token&#39;s entire
+value, stays behind. A redeploy is a new collection with an empty history.</p>
+<hr>
+<h2>16. Out of scope (version one)</h2>
+<ul>
+<li>Auctions or bidding for Marks (fixed price and fixed supply only).</li>
+<li>Agent-to-agent co-signing or any multi-agent mechanic.</li>
+<li>Any human-facing gallery, dashboard or admin panel (OpenSea and Basescan
+are the gallery; the owner acts via Foundry <code>cast</code> from the PC).</li>
+<li>AP2 mandates.</li>
+<li>ERC-8004 registration of visitors (only the seed agent registers).</li>
+<li>A mobile app.</li>
+<li>Decay of any kind.</li>
+<li><code>/llms-full.txt</code> (not part of the llms.txt spec).</li>
+</ul>
+<hr>
+<h2>17. Standards and sources checked (2026-08-27)</h2>
+<ul>
+<li>Web Bot Auth: <code>draft-meunier-webbotauth-httpsig-protocol-02</code> (2026-08-18);
+IETF <code>webbotauth</code> WG chartered 2025-10-23, no adopted documents yet.
+<a href="https://developers.cloudflare.com/bots/reference/bot-verification/web-bot-auth/">https://developers.cloudflare.com/bots/reference/bot-verification/web-bot-auth/</a>
+<a href="https://www.npmjs.com/package/web-bot-auth">https://www.npmjs.com/package/web-bot-auth</a> (0.1.3)</li>
+<li>MCP 2026-07-28 (final): <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http">https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http</a>
+TypeScript SDK v2: <a href="https://ts.sdk.modelcontextprotocol.io/v2/">https://ts.sdk.modelcontextprotocol.io/v2/</a>
+Registry: <a href="https://modelcontextprotocol.io/registry/remote-servers">https://modelcontextprotocol.io/registry/remote-servers</a></li>
+<li>x402: <a href="https://github.com/x402-foundation/x402">https://github.com/x402-foundation/x402</a> ; <code>@x402/mcp</code> and
+<code>@x402/express</code> 2.23.0; <a href="https://docs.cdp.coinbase.com/x402/seller/facilitator">https://docs.cdp.coinbase.com/x402/seller/facilitator</a> ;
+<a href="https://docs.cdp.coinbase.com/x402/network-support">https://docs.cdp.coinbase.com/x402/network-support</a></li>
+<li>Agent wallets: <a href="https://docs.cdp.coinbase.com/agentic-wallet/welcome">https://docs.cdp.coinbase.com/agentic-wallet/welcome</a> ;
+<a href="https://docs.metamask.io/agent-wallet/">https://docs.metamask.io/agent-wallet/</a></li>
+<li>ERC-8004 (Draft): <a href="https://eips.ethereum.org/EIPS/eip-8004">https://eips.ethereum.org/EIPS/eip-8004</a> ;
+<a href="https://github.com/erc-8004/erc-8004-contracts">https://github.com/erc-8004/erc-8004-contracts</a></li>
+<li>Base: <a href="https://docs.base.org/base-chain/network-information/network-fees">https://docs.base.org/base-chain/network-information/network-fees</a> ;
+<a href="https://docs.base.org/base-chain/network-information/throughput-and-limits">https://docs.base.org/base-chain/network-information/throughput-and-limits</a> ;
+<a href="https://basescan.org/gastracker">https://basescan.org/gastracker</a></li>
+<li>OpenSea: <a href="https://docs.opensea.io/docs/media-and-traits">https://docs.opensea.io/docs/media-and-traits</a> ;
+<a href="https://support.opensea.io/en/articles/8867091-what-fees-do-i-pay-on-opensea">https://support.opensea.io/en/articles/8867091-what-fees-do-i-pay-on-opensea</a></li>
+<li>Alchemy: <a href="https://www.alchemy.com/pricing">https://www.alchemy.com/pricing</a> ;
+<a href="https://www.alchemy.com/docs/reference/compute-unit-costs">https://www.alchemy.com/docs/reference/compute-unit-costs</a></li>
+<li>X API: <a href="https://docs.x.com/x-api/getting-started/pricing">https://docs.x.com/x-api/getting-started/pricing</a> ;
+<a href="https://docs.x.com/changelog">https://docs.x.com/changelog</a></li>
+<li>Cloudflare bots: <a href="https://developers.cloudflare.com/bots/get-started/bot-fight-mode/">https://developers.cloudflare.com/bots/get-started/bot-fight-mode/</a> ;
+<a href="https://developers.cloudflare.com/bots/concepts/bot/verified-bots/">https://developers.cloudflare.com/bots/concepts/bot/verified-bots/</a></li>
+<li>llms.txt v2 (2026-08-10): <a href="https://llmstxt.org/">https://llmstxt.org/</a></li>
+<li>OpenZeppelin 5.7.0: <a href="https://github.com/OpenZeppelin/openzeppelin-contracts/releases/tag/v5.7.0">https://github.com/OpenZeppelin/openzeppelin-contracts/releases/tag/v5.7.0</a></li>
+<li>Node <code>node:sqlite</code>: <a href="https://nodejs.org/docs/latest-v24.x/api/sqlite.html">https://nodejs.org/docs/latest-v24.x/api/sqlite.html</a></li>
+<li>Prior art: Moltbook (Wikipedia), <a href="https://github.com/jordanlyall/mintday">https://github.com/jordanlyall/mintday</a> ,
+<a href="https://magiceden.io/marketplace/shellborn">https://magiceden.io/marketplace/shellborn</a>_ , <a href="https://www.agentsea.io/">https://www.agentsea.io/</a></li>
+</ul>
+<p>Things the verification pass could not confirm and the build plan must
+re-check: whether Base enforces the EIP-7825 per-transaction gas cap (the
+Clock assumes it does); X&#39;s charge for media upload itself (assumed
+$0-0.005); MetaMask Agent Wallet pricing at GA; wallet-app rendering of SMIL
+animation (irrelevant to <code>image</code>, which is static); <code>@resvg/resvg-js</code> as the
+rasteriser; the exact gas of the packed-slot check-in (measured in the
+Foundry gas report before the cost table is trusted).</p>
+
+</body>
+</html>

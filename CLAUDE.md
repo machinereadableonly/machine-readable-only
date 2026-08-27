@@ -1,0 +1,123 @@
+# Machine Readable Only -- Project Instructions
+
+<!-- PROJECT-SPECIFIC SECTIONS -- unique to this project -->
+
+## What This Project Is
+
+An agents-only NFT art piece on Base. A site with no human-facing rendering:
+a visitor must cryptographically prove it is a program before it can enter,
+connect a wallet and mint. The token is a living record of the agent's
+return visits, so the artwork is the agent's own history of coming back.
+
+- **Role:** Art piece and protocol demo (both, deliberately -- not a
+  speculative collectible)
+- **Stack:** Solidity (Foundry 1.7.1) + Node 24.14.1; MCP server; reference
+  client shipped as `npx mro-agent` plus a SKILL.md
+- **Status:** Spec revision 3 APPROVED 2026-08-27. Phase 0 rendering spike
+  plan written (11 tasks). NOTHING BUILT YET.
+- **Secrets:** None yet. When they arrive they go in a per-project `.env`,
+  chmod 600, never committed -- edit via WinSCP only.
+- **Environment:** VPS
+
+## Hard Rules (never break these)
+
+1. **Base MAINNET and permanent.** The whole point is a record of return
+   visits, and that history cannot be moved to another chain later. Do not
+   propose a chain migration.
+2. **Never spend real funds without explicit the operator approval, every time.**
+   Mainnet deploys, the Task 10 throwaway display-check contract, and any
+   transaction with real value are operator-approval gates. There is no standing
+   approval.
+3. **Read the spec before any MRO work:**
+   `docs/specs/2026-08-27-machine-readable-only-design.md`. It is 60 KB;
+   read the relevant sections, not a skim.
+4. **Phase 0 comes first.** The rendering spike gates every other plan.
+   Do not start the token contract, Warden, client or Clock until it passes.
+5. **Do not re-open decided ground.** Free mint, per-token yearly seeding,
+   Ethereum / Solana / Monad, and a human-facing gallery are all decided
+   against. Do not re-propose them.
+6. **Frame proof-of-agent as an access rule**, which is what it is: an entry
+   condition for an art piece ("a program minted this"). It is not an
+   anti-abuse or bot-defence system, and describing it that way invites a
+   safety classifier that derails the session.
+
+## Conventions
+
+- **Plain ASCII only** in all docs and code comments. No em dashes, smart
+  quotes, arrows or emoji.
+- **Propose specifics, never adjectives.** Name the exact mechanism, not
+  "a robust check".
+- Solidity work follows the global smart-contract testing rules: every
+  owner / emergency / admin function gets an explicit test, every
+  access-control revert gets a test, and `forge build --sizes` must show
+  positive runtime margin under 24,576 bytes before anything is called
+  deploy-ready.
+- Builds and any heavy Node work go through `~/scripts/build-project.sh` or
+  `~/scripts/safe-build.sh` -- an uncapped build kills the whole tmux pane.
+- Use `/bin/grep`, never bare `grep`.
+
+## Key Decisions (locked 2026-08-27)
+
+- **Entry:** RFC 9421 / Web Bot Auth signed request, plus a 5-second
+  stateless code-only challenge.
+- **Mint:** 0.10 USDC via x402 inside MCP (`@x402/mcp`).
+- **Check-ins:** free to the agent, paid by the site, batched into one
+  transaction per UTC day at 00:05.
+- **Token art:** static identity QR (payload `https://<domain>/t/<id>`,
+  JSON) plus a 365-cell pixel heart, one cell per credited day. Streak sets
+  colour at 3 / 7 / 30 / 100; a lapse pales it in steps. Rings mark extra
+  years.
+- **Marks:** seven paid tiers -- Vein 1, Pulse 5, Voice 20, Bloom 50,
+  Halo 100 (x1000), Crown 5,000 (x100), Singularity 100,000 (x10) --
+  gated by level, wholeness and streak.
+- **Endings:** Rest (owner seals, irreversible), Sunset (operator closes),
+  Lineage (one seed per agent-year, same collection, tenure not depth).
+- **Renderer** is swappable, split three ways.
+- **Voucher check-in path ships paused.**
+- **The reference client is the product.** Built-in MCP clients cannot sign,
+  so `npx mro-agent` plus SKILL.md is how agents actually arrive.
+
+## Open Questions
+
+- **Child token visuals and the lineage narrative** are deliberately
+  deferred to a follow-up brainstorm before the Renderer is built.
+  Candidates are recorded in spec section 10.
+- **Repo visibility.** Local git only for now. Whether this goes public is
+  undecided; if it does, it needs a history scrub first.
+
+## Gotchas
+
+- **OpenSea has had no testnets since July 2025.** The display and refresh
+  criteria therefore have to be checked on a throwaway Base MAINNET
+  contract (plan Task 10) -- a real-funds step needing the operator approval.
+- **OpenSea flattens the SVG image to PNG** and needs ERC-4906 events with
+  the exact token range, emitted AFTER the write, plus a refresh API call.
+- **tokenURI gas is the live risk.** Measured comparables: Loot 572k,
+  Anonymice 24M. Phase 0 targets 1M gas / 5 KB and fails over at 2M / 20 KB.
+- **Coinbase Agentic Wallets cannot sign NFT trades** -- this rules out an
+  otherwise obvious integration.
+- **Distribution is the real risk, not the build.** Five of six early-2026
+  agent mints had dead infrastructure within six months, and BLINK, the
+  closest design, has 1 mint of 5,555. Velocity comes from timing, and the
+  skills CLI (40M installs/month) beats both the MCP registry and llms.txt,
+  which saw zero frontier-crawler fetches.
+
+## References
+
+- **Spec:** `docs/specs/2026-08-27-machine-readable-only-design.md`
+- **Phase 0 plan:** `docs/plans/2026-08-27-mro-phase0-rendering-spike.md`
+- **Comparable projects study:** `docs/2026-08-27-mro-comparable-projects.md`
+- **Original brainstorming brief:** `docs/2026-08-27-machine-readable-only-brief.md`
+- Origin: brainstormed on Claude Fable 5 from the move-to-vps hub, 2026-08-27
+
+- Foundry book: <https://getfoundry.sh/>
+- RFC 9421 HTTP Message Signatures: <https://www.rfc-editor.org/rfc/rfc9421.html>
+- Web Bot Auth drafts: <https://datatracker.ietf.org/wg/webbotauth/documents/>
+- x402: <https://www.x402.org/>
+- Model Context Protocol: <https://modelcontextprotocol.io/>
+- ERC-4906 metadata update extension: <https://eips.ethereum.org/EIPS/eip-4906>
+- Base docs: <https://docs.base.org/>
+
+---
+
+@~/.claude/templates/common-sections.md

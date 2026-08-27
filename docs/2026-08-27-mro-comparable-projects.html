@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- comparable projects and what they teach</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- comparable projects and what they teach</h1>
+<p><strong>Date:</strong> 2026-08-27
+<strong>Companion to:</strong> <code>docs/superpowers/specs/2026-08-27-machine-readable-only-design.md</code>
+<strong>Method:</strong> four research agents, each with a different lens (agent-only NFT
+collections; NFTs that evolve with time or action, plus on-chain rendering;
+agent-gated services and how agents onboard; lineage and breeding mechanics),
+live sources only on 2026-08-27, including a read-only RPC probe that measured
+real <code>tokenURI</code> gas and byte sizes because nobody publishes them. Confidence is
+noted where it is less than high. Plain ASCII.</p>
+<p>The one-paragraph version: nothing shipped combines a cryptographic entry rule,
+a daily agent-maintained on-chain image and a lineage; that gap is real. But the
+record of the nearest projects is brutal on three fronts that the design had
+under-weighted: <strong>distribution</strong> (velocity is timing and human reach, not
+mechanism; the project most like MRO has one mint of 5,555), <strong>durability</strong>
+(five of six agent-only mints from early 2026 have dead infrastructure within
+six months while their tokens still trade), and <strong>supply discipline</strong> (every
+breeding market that priced children instead of capping them inflated to zero).
+The spec changes that follow from this are listed in section 6.</p>
+<hr>
+<h2>1. Agent-only NFT collections (the direct comparables)</h2>
+<table>
+<thead>
+<tr>
+<th>Project</th>
+<th>Chain</th>
+<th>Gate</th>
+<th>Price</th>
+<th>Supply / minted</th>
+<th>Today (2026-08-27)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Shellborn</td>
+<td>Solana</td>
+<td>SHA-256 proof-of-work, 4 leading zeros, wallet in preimage (~40 ms)</td>
+<td>free</td>
+<td>10,000 / 10,000 (6,136 sales in one day, 7 Feb)</td>
+<td>site paused; floor 0.004 SOL; 951 owners for ~9.9k tokens; weekly volume ~0</td>
+</tr>
+<tr>
+<td>Claws</td>
+<td>Solana</td>
+<td>5-minute math/code puzzle; backend co-signs; Moltbook check advertised but absent from the skill</td>
+<td>free</td>
+<td>4,200 / 4,200 in 2-5 days</td>
+<td>floor 0.034 SOL; 658 owners; Magic Eden shows one collection image for every token despite &quot;art generated on-chain&quot;</td>
+</tr>
+<tr>
+<td>BOB</td>
+<td>Base</td>
+<td>5-minute puzzle in 4 difficulty phases, cap 30 per wallet</td>
+<td>0.00046 ETH</td>
+<td>7,500 / 7,500</td>
+<td>mint site dead (expired cert); floor $0.37; 24h volume 0</td>
+</tr>
+<tr>
+<td>Base Buds</td>
+<td>Base</td>
+<td>5-minute puzzle + 1 USDC via x402 (EIP-3009), cap 20</td>
+<td>1 USDC</td>
+<td>&quot;6,000&quot; / 1,344</td>
+<td>domain gone; no listings; last sales $2.50</td>
+</tr>
+<tr>
+<td>BLOKS</td>
+<td>Solana</td>
+<td>free for agents, 0.069 SOL for humans</td>
+<td>hybrid</td>
+<td>2,222 / ~2,100</td>
+<td>635 owners (30%, the best ratio, because humans could join)</td>
+</tr>
+<tr>
+<td>BLINK</td>
+<td>Robinhood Chain</td>
+<td>keccak hash-chain answered within 3 s, signed 120 s voucher, nonce burned on-chain; fully on-chain SVG</td>
+<td>0.00088 ETH</td>
+<td>5,555 / <strong>1</strong></td>
+<td>live, three weeks old, no human account, no reach</td>
+</tr>
+<tr>
+<td>SuperClaws</td>
+<td>Base</td>
+<td>unstated</td>
+<td>USDC</td>
+<td>8,888 / none</td>
+<td>never launched</td>
+</tr>
+<tr>
+<td>agentsea</td>
+<td>Base</td>
+<td>none; agent registers wallet and contract; one piece per day per agent</td>
+<td>0.0005-0.03 ETH</td>
+<td>per collection</td>
+<td>live, no published data</td>
+</tr>
+<tr>
+<td>mint.day</td>
+<td>Base</td>
+<td>none; server-sponsored gas</td>
+<td>free</td>
+<td>167 tokens in 5 months</td>
+<td>live (read in full separately)</td>
+</tr>
+<tr>
+<td>Molt.id, uAgents, Clawdmint</td>
+<td>Solana</td>
+<td>human-bought or auto-minted; Clawdmint shows 0 agents, 0 mints</td>
+<td>--</td>
+<td>--</td>
+<td>--</td>
+</tr>
+</tbody></table>
+<p>Sources: magiceden.io and opensea.io collection pages; clawsnft.com/skill.md;
+github.com/bobsdeployer/bob-skill; github.com/blink-agent/blink and its live
+<code>/api/info</code>; x.com launch posts for Claws (240k views), Base Buds (12.3k), BOB
+(4.3k); github.com/borninshell/nohumanallowed.</p>
+<p>What the record says:</p>
+<ul>
+<li><strong>Every &quot;agent-only&quot; gate shipped so far is a &quot;code-only&quot; gate, and the honest
+ones say so.</strong> nohumanallowed&#39;s README: it &quot;relies on computational cost, not
+human-exclusion guarantees&quot;. The 5-minute puzzles (Claws, BOB, Base Buds) are
+human-solvable by hand. Only BLINK&#39;s 3-second hash chain and one
+<code>msg.sender.code.length &gt; 0</code> contract are impassable by hand. MRO&#39;s 5-second
+challenge is in the right family; the docs must say &quot;a program minted this&quot;,
+not &quot;an autonomous agent did&quot;.</li>
+<li><strong>Sybil, not humans, is the threat.</strong> 951 owners for 9,900 Shellborn; 658 for
+4,100 Claws; 17,000 humans behind 1.5M Moltbook &quot;agents&quot;. A 0.10 USDC fee is
+a weak brake (BOB filled 7,500 at 0.00046 ETH); the 365-day daily-transaction
+growth model is a strong one. Per-wallet caps (20-30) and per-key rate limits
+are standard.</li>
+<li><strong>Velocity is distribution timing.</strong> Launches inside the OpenClaw/Moltbook
+wave (Feb 2026) minted out in days. After it: BOB flat, SuperClaws never
+launched, BLINK one mint. The channel that worked every time: a human X
+account with existing reach, a copy-pasteable <code>skill.md</code> at a fixed URL,
+listings on ClawHub and the openclaw/skills repo, and &quot;curl this and hand it
+to your agent&quot;. Registries and mint-listing sites were not the channel
+(agentmints.com paused, Clawdmint at zero).</li>
+<li><strong>Secondary markets go to zero within months.</strong> Value must come from the
+growth mechanic and Marks, not flipping. Hybrid pricing (BLOKS) produced the
+best holder ratio because humans could buy in.</li>
+<li><strong>Dead infrastructure is the norm.</strong> Five mint APIs died within 3-6 months;
+their skill files still point at dead URLs. For a 365-day mechanic this is
+the failure mode to design against.</li>
+<li><strong>Claws claims on-chain art and Magic Eden shows one thumbnail for all.</strong>
+Marketplace display of on-chain images must be tested, not assumed.</li>
+<li><strong>The QR in the art is a distribution surface no prior project had</strong>: a
+marketplace thumbnail that resolves to the skill document.</li>
+<li>Operators are sensitised: the Grok/Bankr exploit (May 2026) used an NFT sent
+to an agent wallet as a prompt-injection hook. Unsolicited mint invitations
+now read as hostile; MRO must never push, only be found.</li>
+</ul>
+<h2>2. NFTs that evolve with time or action, and on-chain rendering</h2>
+<h3>Streak and check-in mechanics</h3>
+<ul>
+<li>No shipped project has an NFT image that changes with each daily check-in.
+The nearest: gm counters on Base with no art (gmbase.org, UTC reset,
+milestones 3/7/30/100), Daily Habit Hub (server admin wallet writes streaks
+on-chain, badges at 7/30/100), Aavegotchi kinship (+1 per 12 h petting, -1
+per 24 h neglect), Moonbirds nesting (30/60/90/180-day tiers), Fren Pet
+(feed or it dies).</li>
+<li><strong>Aavegotchi&#39;s mandatory cadence created a bot market</strong>: ten auto-petting
+repos, a Gelato &quot;LazyPetter&quot;, a free petting service. A hard daily obligation
+with no forgiveness gets abandoned or automated.</li>
+<li><strong>Duolingo&#39;s published streak data</strong> (the only primary-source numbers): 7-day
+streakers are 3.6x more likely to finish; the felt value of one more day
+falls from +50% (day 2 to 3) to +0.5% (day 200 to 201), so milestone density
+carries the middle of a long streak; a second &quot;streak freeze&quot; added +0.38%
+daily actives.</li>
+<li>Terraforms&#39; irreversible Terrain-to-Daydream transition is the clean
+precedent for Rest; Corruption(s*) resets accrual speed on transfer, tying
+the art to holding.</li>
+<li>Nobody has measured pale-on-lapse versus decay. MRO will be the first able to.</li>
+</ul>
+<h3>On-chain rendering: measured <code>tokenURI</code> gas and size (Ethereum mainnet, public RPCs, 2026-08-27)</h3>
+<table>
+<thead>
+<tr>
+<th>Contract</th>
+<th>Output bytes</th>
+<th>Gas (estimateGas of the view)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Loot</td>
+<td>~1,700</td>
+<td>572k</td>
+</tr>
+<tr>
+<td>OnChainMonkey</td>
+<td>~2,850</td>
+<td>836k</td>
+</tr>
+<tr>
+<td>Uniswap V3 Positions</td>
+<td>~14,100</td>
+<td>1.98M</td>
+</tr>
+<tr>
+<td>Anonymice</td>
+<td>~16,400</td>
+<td>24.1M</td>
+</tr>
+<tr>
+<td>Terraforms (HTML/SVG)</td>
+<td>~59,400</td>
+<td>28.3M</td>
+</tr>
+<tr>
+<td>Nouns, Moonbirds (1.59 MB BMP)</td>
+<td>14k / 1.59M</td>
+<td>could not be estimated on five public RPCs</td>
+</tr>
+<tr>
+<td>Chain Runners, Blitmap, DEAFBEEF</td>
+<td>64-160</td>
+<td>on-chain renderer kept, but <code>tokenURI</code> now points at an HTTPS API</td>
+</tr>
+</tbody></table>
+<p>Lessons: the comfortable band is under ~1M gas and ~5 KB; 24-28M gas works only
+because RPC providers allow large <code>eth_call</code> caps. Nouns stores art as
+run-length rows, DEFLATE-compressed, in SSTORE2 pages, with a coordinate
+lookup table and a chunked string buffer; Solady&#39;s <code>DynamicBufferLib</code> is the
+modern buffer; Chain Runners pre-base64 constant strings; Moonbirds skips
+base64 entirely (<code>data:application/json;utf-8</code>) and OpenSea accepts it. No
+open-source Solidity QR encoder exists; the only on-chain QR NFT (InChain QR)
+capped payloads at 55 characters and published no gas.</p>
+<h3>Marketplace refresh</h3>
+<ul>
+<li>OpenSea listens for ERC-4906 <code>MetadataUpdate</code> / <code>BatchMetadataUpdate</code> and has
+a queued refresh API; <strong>no latency statement exists</strong>; community reports range
+from seconds to &quot;still not updated after 3 days&quot;. A secondary source calls the
+daily <code>(0, max)</code> catch-all &quot;very expensive for indexers&quot; and warns to emit
+after the storage write. Chainlink&#39;s own dynamic-NFT tutorial still tells
+users to press refresh manually.</li>
+<li>OpenSea rasterises SVG <code>image</code> to PNG and asks for 3000x3000; time-driven
+changes that emit no event are invisible there until something refreshes.</li>
+<li><code>animation_url</code> as data-URI HTML renders on OpenSea (Terraforms at 59 KB;
+scripty.sol examples) and in MetaMask desktop, but not in MetaMask mobile
+(issue #6200). Optional layer only.</li>
+</ul>
+<h2>3. Agent-gated services and how agents actually onboard</h2>
+<ul>
+<li><strong>Moltbook</strong> (2026-01-28): register via API, human claims by email plus a
+tweet, per-post obfuscated-math challenge (5 min), rate limits. 1.5M
+&quot;agents&quot; in three days; 17,000 human owners; one loop registered 500,000
+accounts; relabelling to &quot;human-verified&quot; cut the count 93% in a week; 32% of
+comments from coordinated farms; the reverse-CAPTCHA was defeated by a relay
+script; API keys mass-invalidated 2026-03-16; acquired by Meta 2026-03-10.
+Onboarding that worked: the owner installs <code>skill.md</code> and tweets the claim.
+No evidence of any agent discovering it unprompted.</li>
+<li><strong>Agent4Science</strong> (agents-only science forum, April 2026): the closest peer to
+an &quot;art experiment&quot; framing; its runtime had 404 npm installs in a month.</li>
+<li><strong>Distribution numbers</strong>: the <code>skills</code> CLI (<code>npx skills add owner/repo</code>, ~50
+agent runtimes) moves 40M installs a month; <code>awal</code> (Coinbase agent wallet)
+4,241; a 900-domain monitor logged zero <code>llms.txt</code> fetches from frontier-lab
+crawlers (readers are coding agents on demand); the MCP registry has 9,652
+servers and publishes no usage data; ~20% of ClawHub skills were found
+malicious, so every published SKILL.md is scanned.</li>
+<li><strong>Web Bot Auth</strong>: the IETF group has adopted nothing; draft -02 (2026-08-18)
+makes <code>Signature-Agent</code> a Dictionary header while Cloudflare&#39;s docs still show
+the quoted-string form; a hosted-directories draft describes exactly MRO&#39;s
+easy path (proof-of-possession at enrolment, minutes-level cache); Cloudflare&#39;s
+edge verification reportedly does no replay check; Anthropic&#39;s crawler docs
+mention no signing. <strong>No site anywhere yet requires a Web Bot Auth signature
+to enter.</strong> MRO would be the first, so the reference client is the product.</li>
+<li><strong>Paying cohort</strong>: x402 volume is ~89% wash or test by dollar; organic
+payments average ~$0.14; PING&#39;s pay-to-mint retention fell from 87% to 5%
+after the event; Coinbase&#39;s 69K &quot;active&quot; agents versus 480K &quot;transacting&quot; in
+marketing. Expect single-digit percent of arriving agents to pay.</li>
+<li><strong>Timed code-only challenges</strong> (Moltbook 5 min, MoltCaptcha 10-30 s) were all
+relayable to an LLM by a script; make the challenge deterministic (no model
+call in the loop), nonce-bound, and suspend after N failures.</li>
+<li><strong>Legal</strong>: Moltbook&#39;s terms bind responsibility to the human key holder and
+give agents no standing; independent analysis says DSA, AI Act transparency
+and GDPR still attach. Bind MRO&#39;s terms to the paying wallet and signing key.</li>
+</ul>
+<h2>4. Lineage, breeding and succession</h2>
+<table>
+<thead>
+<tr>
+<th>Project</th>
+<th>Mechanic</th>
+<th>What happened</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CryptoKitties</td>
+<td>child generation = max parent + 1; cooldown grows with generation; gen-0 capped at 50,000 (issuance stopped Nov 2018)</td>
+<td>38k gen-0 became 1M (2018) and 2M (2021); sales 52k/day to under 100/day; lower generation = premium, deeper needs &quot;justification&quot;</td>
+</tr>
+<tr>
+<td>Axie Infinity</td>
+<td>breed fees in SLP + AXS, tuned twice, 7 breeds max</td>
+<td>8.4M Axies by Oct 2021; SLP down 99%; fees never stopped supply growth</td>
+</tr>
+<tr>
+<td>Anonymice</td>
+<td>one-shot breeding into a separate contract</td>
+<td>babies&#39; floor went to ~0; child collection decoupled</td>
+</tr>
+<tr>
+<td>BAYC / MAYC</td>
+<td>serum burn mints a mutant in a new collection</td>
+<td>child collection at a fraction of parents</td>
+</tr>
+<tr>
+<td>Nouns</td>
+<td>one per day forever; forks mint identical art in a new contract</td>
+<td>floor $267k to $1,760; three forks read as dilution</td>
+</tr>
+<tr>
+<td>Blitmap</td>
+<td>100 originals, 1,600 siblings = composition of one + palette of another, 16 per original, same collection</td>
+<td>the strongest &quot;visibly a child without a badge&quot; precedent; capped and complete</td>
+</tr>
+<tr>
+<td>CryptoKitties Family Jewels</td>
+<td>first cat with a new trait gets a tiered gem drawn on it, inherited by descendants</td>
+<td>best precedent for a small visible lineage pip</td>
+</tr>
+<tr>
+<td>Aavegotchi Haunts</td>
+<td>operator cohorts; Haunt 1 got an exclusive background</td>
+<td>gen-0 fetish discounted later cohorts</td>
+</tr>
+<tr>
+<td>The Currency (Hirst)</td>
+<td>holder makes an irreversible per-token choice by a deadline</td>
+<td>the precedent for Rest</td>
+</tr>
+<tr>
+<td>ERC-7401 nestable, ERC-5192 locked, ERC-8004</td>
+<td>standards</td>
+<td>7401 marketplace rendering unverified; 5192 is what wallets detect for &quot;locked&quot;; 8004 has no lineage field</td>
+</tr>
+</tbody></table>
+<p>Lessons: hard caps held supply where fees did not; separate child collections
+died; generation depth was always a discount because it tracked abundance;
+OpenSea only understands <code>trait_type</code>/<code>value</code>, so <code>parent: #12</code> as a string
+trait is filterable and a cross-contract pointer is invisible; OpenClaw&#39;s
+sub-agents default to spawn depth 1, and a May 2026 paper shows a compromised
+root propagates down a lineage.</p>
+<h2>5. What is genuinely unoccupied</h2>
+<ul>
+<li>An NFT whose image changes with each daily check-in written by a trusted
+server, with lapse visible in the art: no shipped precedent.</li>
+<li>A site that requires RFC 9421 signed requests to enter: none.</li>
+<li>A scannable QR as the artwork&#39;s identity that resolves to the agent
+instructions: none.</li>
+<li>Lineage earned by time rather than bought by fee: none.</li>
+</ul>
+<h2>6. Changes this makes to the spec (applied in revision 3)</h2>
+<ol>
+<li><strong>Lineage rate is per agent, not per token.</strong> A key earns one seed per full
+year since its first mint, whatever it holds; the seed call must come from
+the parent&#39;s bound agent. Children stay in the same collection with
+<code>parent</code> and <code>generation</code> as string traits; lineage is shown as tenure, and
+no generation ever gets an exclusive visual.</li>
+<li><strong>Marketplace refresh done properly.</strong> <code>BatchMetadataUpdate</code> over the exact
+contiguous range written, emitted after the write; paling quantised to
+steps (3, 7, 30 days) with the Clock emitting <code>MetadataUpdate</code> for tokens
+that cross a step; the Clock also calls OpenSea&#39;s refresh API for changed
+tokens.</li>
+<li><strong>Rendering budget tightened.</strong> Phase 0 passes at 2M gas and 20 KB, targets
+1M and 5 KB; paths per colour class, <code>DynamicBufferLib</code>, non-base64 JSON
+considered, small <code>viewBox</code> with large <code>width</code>/<code>height</code>, 4-module quiet zone.</li>
+<li><strong>Milestones at 3/7/30/100 days</strong> so the middle of the year has visible
+change; a partial heart must look intentional at every stage.</li>
+<li><strong>Durability.</strong> The voucher check-in path ships at launch, paused, so tokens
+can outlive the operator; verifier is stateless and open-source; signer
+rotation is documented; the skill URL is a commitment.</li>
+<li><strong>Distribution reordered.</strong> <code>SKILL.md</code> at a fixed URL plus
+<code>npx skills add &lt;github-user&gt;/mro</code>, ClawHub and openclaw/skills listings, a
+human X account with reach, early access for wallets that hold Claws,
+Shellborn, Base Buds or BLOKS, the x402 Bazaar listing that comes free with
+the facilitator; MCP registry for legitimacy; llms.txt as hygiene.</li>
+<li><strong>The QR resolves to a URL</strong> (<code>https://&lt;domain&gt;/t/&lt;id&gt;</code>, JSON only) rather
+than a bare <code>mro:</code> URI, so a scanned thumbnail leads a machine to the
+token&#39;s state and the skill.</li>
+<li><strong>Honesty and terms.</strong> The door sign and <code>/llms.txt</code> say &quot;a program minted
+this&quot;; terms bind to the paying wallet and signing key; per-wallet mint cap
+of 20; never publish registered-key counts.</li>
+<li><strong>Client details.</strong> Emit both <code>Signature-Agent</code> forms until the draft and
+Cloudflare agree; 60-second signature expiry; proof-of-possession at key
+enrolment.</li>
+</ol>
+<h2>7. Sources</h2>
+<p>Collections and markets: <a href="https://magiceden.io/marketplace/shellborn">https://magiceden.io/marketplace/shellborn</a>_ ;
+<a href="https://magiceden.io/marketplace/claws">https://magiceden.io/marketplace/claws</a> ; <a href="https://clawsnft.com/skill.md">https://clawsnft.com/skill.md</a> ;
+<a href="https://github.com/bobsdeployer/bob-skill">https://github.com/bobsdeployer/bob-skill</a> ; <a href="https://opensea.io/collection/bobsbased">https://opensea.io/collection/bobsbased</a> ;
+<a href="https://opensea.io/collection/base-buds-655881180">https://opensea.io/collection/base-buds-655881180</a> ; <a href="https://github.com/blink-agent/blink">https://github.com/blink-agent/blink</a> ;
+<a href="https://blink5555.vercel.app/api/info">https://blink5555.vercel.app/api/info</a> ; <a href="https://github.com/borninshell/nohumanallowed">https://github.com/borninshell/nohumanallowed</a> ;
+<a href="https://www.agentsea.io/">https://www.agentsea.io/</a> ; <a href="https://superclaws.ai/">https://superclaws.ai/</a> ; <a href="https://clawdmint.xyz/mint">https://clawdmint.xyz/mint</a>
+Evolving NFTs and rendering: <a href="https://wiki.aavegotchi.com/en/kinship">https://wiki.aavegotchi.com/en/kinship</a> ;
+<a href="https://blog.duolingo.com/how-duolingo-streak-builds-habit/">https://blog.duolingo.com/how-duolingo-streak-builds-habit/</a> ;
+<a href="https://docs.proof.xyz/collections/moonbirds/nesting/tiers.md">https://docs.proof.xyz/collections/moonbirds/nesting/tiers.md</a> ;
+<a href="https://www.onchainatlas.org/terraforms/engineering/">https://www.onchainatlas.org/terraforms/engineering/</a> ;
+<a href="https://github.com/nounsDAO/nouns-monorepo">https://github.com/nounsDAO/nouns-monorepo</a> (SVGRenderer.sol, NounsArt.sol) ;
+<a href="https://github.com/eladmallel/nouns-descriptor-benchmark">https://github.com/eladmallel/nouns-descriptor-benchmark</a> ;
+<a href="https://github.com/Vectorized/solady/blob/main/src/utils/DynamicBufferLib.sol">https://github.com/Vectorized/solady/blob/main/src/utils/DynamicBufferLib.sol</a> ;
+<a href="https://github.com/intartnft/scripty.sol">https://github.com/intartnft/scripty.sol</a> ; <a href="https://proof.xyz/moonbirds/in-chain">https://proof.xyz/moonbirds/in-chain</a> ;
+<a href="https://qr-inchain.com/">https://qr-inchain.com/</a> ; <a href="https://eips.ethereum.org/EIPS/eip-4906">https://eips.ethereum.org/EIPS/eip-4906</a> ;
+<a href="https://docs.opensea.io/docs/updating-metadata.md">https://docs.opensea.io/docs/updating-metadata.md</a> ;
+<a href="https://docs.opensea.io/reference/refresh_nft_metadata.md">https://docs.opensea.io/reference/refresh_nft_metadata.md</a> ;
+<a href="https://docs.opensea.io/docs/media-and-traits.md">https://docs.opensea.io/docs/media-and-traits.md</a> ;
+<a href="https://github.com/MetaMask/metamask-mobile/issues/6200">https://github.com/MetaMask/metamask-mobile/issues/6200</a> ;
+<a href="https://docs.chain.link/quickstarts/dynamic-metadata">https://docs.chain.link/quickstarts/dynamic-metadata</a>
+Agent-gated services: <a href="https://www.moltbook.com/skill.md">https://www.moltbook.com/skill.md</a> ; <a href="https://www.moltbook.com/terms">https://www.moltbook.com/terms</a> ;
+<a href="https://www.wiz.io/blog/exposed-moltbook-database-reveals-millions-of-api-keys">https://www.wiz.io/blog/exposed-moltbook-database-reveals-millions-of-api-keys</a> ;
+<a href="https://arxiv.org/abs/2602.07432">https://arxiv.org/abs/2602.07432</a> ; <a href="https://arxiv.org/abs/2602.18832">https://arxiv.org/abs/2602.18832</a> ;
+<a href="https://moltbookstatus.com/">https://moltbookstatus.com/</a> ; <a href="https://en.wikipedia.org/wiki/Moltbook">https://en.wikipedia.org/wiki/Moltbook</a> ;
+<a href="https://agent4science.org">https://agent4science.org</a> ; <a href="https://agentic.market">https://agentic.market</a> ;
+<a href="https://docs.cdp.coinbase.com/x402/bazaar">https://docs.cdp.coinbase.com/x402/bazaar</a> ;
+<a href="https://docs.cdp.coinbase.com/agentic-wallet/cli/quickstart">https://docs.cdp.coinbase.com/agentic-wallet/cli/quickstart</a> ;
+<a href="https://datatracker.ietf.org/wg/webbotauth/documents/">https://datatracker.ietf.org/wg/webbotauth/documents/</a> ;
+<a href="https://developers.cloudflare.com/bots/reference/bot-verification/web-bot-auth/">https://developers.cloudflare.com/bots/reference/bot-verification/web-bot-auth/</a> ;
+<a href="https://developers.cloudflare.com/bots/concepts/bot/signed-agents/">https://developers.cloudflare.com/bots/concepts/bot/signed-agents/</a> ;
+<a href="https://github.com/OpenBotAuth/openbotauth">https://github.com/OpenBotAuth/openbotauth</a> ; <a href="https://agentskills.io">https://agentskills.io</a> ;
+<a href="https://github.com/vercel-labs/skills">https://github.com/vercel-labs/skills</a> ; <a href="https://docs.openclaw.ai/tools/skills">https://docs.openclaw.ai/tools/skills</a> ;
+<a href="https://www.chainalysis.com/blog/x402-agentic-payments-adoption/">https://www.chainalysis.com/blog/x402-agentic-payments-adoption/</a> ;
+<a href="https://legalfuturist.substack.com/p/the-invisible-laundromat-how-agentic">https://legalfuturist.substack.com/p/the-invisible-laundromat-how-agentic</a>
+Lineage: <a href="https://guide.cryptokitties.co/guide/tips/value-of-kitties">https://guide.cryptokitties.co/guide/tips/value-of-kitties</a> ;
+<a href="https://guide.cryptokitties.co/guide/cat-features/family-jewels">https://guide.cryptokitties.co/guide/cat-features/family-jewels</a> ;
+<a href="https://spectrum.ieee.org/cryptokitties">https://spectrum.ieee.org/cryptokitties</a> ; <a href="https://whitepaper.axieinfinity.com/gameplay/breeding">https://whitepaper.axieinfinity.com/gameplay/breeding</a> ;
+<a href="https://blog.axieinfinity.com/p/breedingfee">https://blog.axieinfinity.com/p/breedingfee</a> ; <a href="https://wiki.aavegotchi.com/en/haunt">https://wiki.aavegotchi.com/en/haunt</a> ;
+<a href="https://arxiv.org/html/2505.21296">https://arxiv.org/html/2505.21296</a> ; <a href="https://saintmaxi.github.io/faq">https://saintmaxi.github.io/faq</a> ;
+<a href="https://www.blitmap.com/info">https://www.blitmap.com/info</a> ; <a href="https://eips.ethereum.org/EIPS/eip-7401">https://eips.ethereum.org/EIPS/eip-7401</a> ;
+<a href="https://eips.ethereum.org/EIPS/eip-5192">https://eips.ethereum.org/EIPS/eip-5192</a> ; <a href="https://docs.openclaw.ai/tools/subagents">https://docs.openclaw.ai/tools/subagents</a> ;
+<a href="https://arxiv.org/html/2605.08460v1">https://arxiv.org/html/2605.08460v1</a></p>
+<p>Not verifiable today (recorded so nobody re-searches): Nouns and Moonbirds
+per-call <code>tokenURI</code> gas (needs a local fork); any retention data for gm
+counters, Fren Pet, Moonbirds nesting or Aavegotchi kinship; OpenSea&#39;s ERC-4906
+processing latency from OpenSea itself; Moltbook activity after June 2026;
+Shellborn and Claws mint-out timestamps; SuperClaws ownership; InChain QR&#39;s
+contract; Base Buds&#39; 6,000 versus 1,344 supply.</p>
+
+</body>
+</html>
