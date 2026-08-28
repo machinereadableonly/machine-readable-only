@@ -43,6 +43,47 @@ test("the token scans at every stage of its life", () => {
   }
 });
 
+test("the code is always dark ink on a light field, never inverted", () => {
+  // A light-on-dark code is not a QR code as the standard defines it, and the
+  // decoders that matter treat it that way. Measured 2026-08-28: an inverted
+  // render -- light heart on black -- was never even DETECTED by ZXing at any
+  // size, while jsqr read it happily, which is exactly the false confidence that
+  // let the binary-payload bug survive. Inverted is ruled out, and this test is
+  // what stops it coming back in through a Mark or a future palette edit.
+  for (const state of [
+    { level: 0, streak: 0, years: 0 },
+    { level: 200, streak: 45, years: 0 },
+    { level: 365, streak: 140, years: 1 },
+    { level: 365, streak: 140, years: 1, marks: ["vein"] },
+    { level: 365, streak: 140, years: 1, marks: ["halo"] },
+    { level: 365, streak: 140, years: 1, marks: ["crown"] },
+  ]) {
+    const svg = render(state);
+    // The field is the first rect: the ground everything else is painted on.
+    const field = svg.match(/<rect[^>]*fill="(#[0-9a-fA-F]{3,6})"/)[1];
+    const inks = [...svg.matchAll(/<path[^>]*fill="(#[0-9a-fA-F]{3,6})"/g)].map(m => m[1]);
+    assert.ok(inks.length > 0, "no ink at all");
+    for (const ink of inks) {
+      assert.ok(lum(ink) < lum(field),
+        `${JSON.stringify(state)}: ink ${ink} is lighter than the field ${field} -- `
+        + "that is an inverted code, which standard decoders reject");
+    }
+  }
+});
+
+test("the day-one heart is visible against the noise", () => {
+  // The heart and the noise used to be #6f6f6f and #767676: same hue, 1.11:1
+  // apart, so a new token showed no heart. Neither a shared hue nor a shared
+  // weight is acceptable on its own -- the two inks have to differ somehow.
+  const day1 = tierColour(0);
+  const sameHue = h => { const e = h.replace("#", "");
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(e.substr(i, 2), 16));
+    return Math.max(r, g, b) - Math.min(r, g, b) < 8; };   // near-neutral
+  assert.ok(!(sameHue(day1) && sameHue(NOISE)) || contrast(day1, NOISE) >= 2,
+    `day-one heart ${day1} and noise ${NOISE} are both neutral and only `
+    + `${contrast(day1, NOISE).toFixed(2)}:1 apart -- the heart will not read`);
+});
+
 test("the real image scans at every size a viewer might see it", () => {
   // Contrast against white is necessary but NOT sufficient: the noise tone clears
   // WCAG at 4.54 and a scanner's binarizer still has to cope with three inks at
@@ -85,7 +126,7 @@ test("canvas grows one ring per completed year", () => {
 });
 
 test("streak tiers map to the right colours", () => {
-  assert.equal(tierColour(0), "#6f6f6f");
+  assert.equal(tierColour(0), "#70575f");
   assert.equal(tierColour(3), "#8e5566");
   assert.equal(tierColour(7), "#a83a55");
   assert.equal(tierColour(30), "#bd2242");

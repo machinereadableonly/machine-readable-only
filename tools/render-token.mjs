@@ -6,14 +6,23 @@ export const QUIET = 4;
 export const GAP = 1;           // between the day frame and the year rings
 
 // Streak tiers, darkened from the spec palette so every one clears the 4.5:1
-// contrast a scanner needs. Measured against white: 5.02, 5.77, 6.17, 6.05, 5.88.
+// contrast a scanner needs. Measured against white: 6.53, 5.77, 6.17, 6.05, 5.88.
+//
+// Every tier separates from the noise by HUE, not by brightness: the deepest red
+// is only 1.30:1 against the noise in luminance and still reads instantly. That
+// is why the day-one tier cannot be neutral. It used to be #6f6f6f, 1.11:1
+// against a #767676 noise and the same hue, so a brand-new token rendered as a
+// grey blob with no heart visible in it at all. #70575f is the same weight with
+// a trace of rose, which makes the whole ladder a hue journey into #c8102e.
 export const TIERS = [
   { min: 100, colour: "#c8102e" },
   { min: 30,  colour: "#bd2242" },
   { min: 7,   colour: "#a83a55" },
   { min: 3,   colour: "#8e5566" },
-  { min: 0,   colour: "#6f6f6f" },
+  { min: 0,   colour: "#70575f" },
 ];
+// The noise cannot be lightened to make room: #767676 is the lightest tone that
+// still decodes at every size. Measured, #828282 and up fail from 500px.
 export const NOISE = "#767676";   // uncontrolled modules, 4.54 against white
 export const GHOST = "#f4eef0";   // frame cells not yet earned
 export const FIELD = "#ffffff";
