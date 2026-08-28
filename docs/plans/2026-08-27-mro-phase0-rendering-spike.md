@@ -1,5 +1,17 @@
 # MRO Phase 0: Rendering Spike -- Implementation Plan
 
+> **SUPERSEDED 2026-08-28 for Tasks 3-11.** The composition this plan draws (a
+> small static QR with 365 heart cells around it) was rejected on review: the
+> code plus its quiet zone claimed 61% of the canvas, so the heart could only be
+> a thin outline around a square. The heart is now drawn by the code's own
+> modules via QArt reshuffling, with a day frame outside it.
+>
+> Tasks 1 and 2 are done (`a321c6f`, `eb0d1fc`), though Task 2 was rebuilt around
+> the new design. **Tasks 3-11 below are obsolete** -- see
+> `docs/plans/2026-08-28-mro-phase0-rendering-spike-rev2.md`.
+> Kept for the record: its budgets, fallback ladder and OpenSea reasoning still
+> apply and are carried into the revision.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Prove, with numbers, that Machine Readable Only's fully on-chain image (static QR + 365-cell heart + rings + seven Marks) can be rendered by contracts on Base within the spec's gas and size budget, decodes as a real QR from the actual on-chain SVG, and is displayed and refreshed by OpenSea; or fail loudly so a fallback is chosen before anything else is built.

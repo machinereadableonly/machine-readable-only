@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MRO Phase 0 Rendering Spike -- Plan Revision 2 (Tasks 3-11)</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>MRO Phase 0 Rendering Spike -- Plan Revision 2 (Tasks 3-11)</h1>
+<p>Supersedes Tasks 3-11 of <code>docs/plans/2026-08-27-mro-phase0-rendering-spike.md</code>.
+Tasks 1 and 2 of that plan are done and stay done, though Task 2 was rebuilt
+around a different design; see commits <code>a321c6f</code> and <code>eb0d1fc</code>.</p>
+<h2>Why this revision exists</h2>
+<p>The original plan drew a small static QR with 365 heart cells arranged around
+it. Built and reviewed on 2026-08-27, that composition was rejected: the code
+plus its mandatory quiet zone claimed 61% of the canvas before the heart got
+anything, so the heart could only ever be a thin outline strangling a square.</p>
+<p>The design now is the inversion. The heart IS the code, drawn by QArt module
+reshuffling, with a two-ring frame outside it that fills one cell per credited
+day. That changes what the contracts must draw, so Tasks 3 through 11 no longer
+describe the work.</p>
+<p><strong>What this unblocks:</strong> the same thing as before. Phase 0 answers one question
+with numbers -- can the image be rendered by contracts on Base inside the gas
+and size budget, does it decode from the real on-chain SVG, and does OpenSea
+display and refresh it. Plans 2-5 (token contract, Warden, client, Clock) stay
+blocked until it passes.</p>
+<h2>What is already proven</h2>
+<p>Measured on 2026-08-27, all under <code>tools/</code> with 25 passing tests:</p>
+<ul>
+<li>The QArt heart works at QR version 5, level L: 70.9% of modules land on the
+target at a fixed mask, 72.4% averaged when all eight masks are searched.</li>
+<li>Per-token variance is narrow (1.6 points across twelve token ids), so no
+collector draws a visibly worse heart.</li>
+<li>Emitting same-colour runs as grouped <code>&lt;path&gt;</code> elements instead of one <code>&lt;rect&gt;</code>
+per cell cuts the SVG from 70,298 to about 5,000 bytes -- roughly 9,200 bytes
+of <code>tokenURI</code> against a 20,000 limit. <strong>This is the single technique that puts
+the design inside budget</strong> and the Solidity renderer must reproduce it.</li>
+<li>The spec&#39;s streak palette cannot colour a scannable code; four of five tiers
+fail the 4.5:1 contrast a scanner needs. A darkened palette clears every tier.</li>
+</ul>
+<p><strong>Still unmeasured, and the real risk: gas.</strong> Every number above is bytes. The
+2,000,000 gas half of the budget has not been touched, and string building in
+Solidity is where gas goes.</p>
+<h2>Architecture</h2>
+<p>The Nouns-style descriptor split survives, but the pieces change. The heart is
+no longer drawn from geometry -- it arrives as a per-token bitmap -- so
+<code>HeartRenderer</code> is replaced by <code>CodeRenderer</code>, and the frame gets its own
+renderer.</p>
+<pre><code>contracts/src/render/
+  TokenView.sol       the struct every renderer consumes
+  HeartMask.sol       GENERATED: the 37x37 heart target, 172 bytes, SHARED
+  FrameGeometry.sol   GENERATED: 376 day-frame cells (done, eb0d1fc)
+  Palette.sol         streak tiers, noise tone, ghost tone, contrast-checked
+  CodeRenderer.sol    the code block as two paths, heart modules and noise
+  FrameRenderer.sol   day frame, ghost cells, year rings
+  MarkRenderer.sol    the seven Marks
+  Renderer.sol        assembles SVG + JSON + base64; IRenderer
+  IRenderer.sol
+  spike/MROSpikeToken.sol   stub ERC-721, owner-settable state, ERC-4906
+</code></pre>
+<p><strong>One decision worth stating plainly:</strong> the heart target is identical for every
+token -- only the noise differs -- so <code>HeartMask.sol</code> stores it <strong>once as a
+shared constant</strong>, not per token. Storing it per token would add 172 bytes to
+every mint for no information. This is what makes duotone affordable.</p>
+<h2>Global constraints</h2>
+<ul>
+<li>Everything from the original plan&#39;s Global Constraints still holds: Solidity
+0.8.35, EVM <code>cancun</code>, OpenZeppelin v5.7.0, Solady v0.1.26, plain ASCII, no
+identifiers, no AI attribution, secrets only in the contracts env file, builds
+through <code>~/scripts/safe-build.sh</code>, <code>/bin/grep</code> never bare <code>grep</code>.</li>
+<li>Foundry needs <code>export PATH=$HOME/.foundry/bin:$PATH</code>; Node needs
+<code>source ~/.nvm/nvm.sh</code>.</li>
+<li><strong>Budgets (unchanged):</strong> <code>tokenURI</code> passes under 2,000,000 gas and 20,000
+bytes, targets 1,000,000 and 5,000. Every contract under 24,576 bytes runtime
+with positive margin.</li>
+<li><strong>Geometry (new):</strong> QR version 5, level L, 37x37 modules, 4-cell quiet zone,
+45-cell code block. Day frame is two rings immediately outside the block, 376
+cells on a 49x49 local grid, 365 for days and 11 that light only at wholeness.
+Canvas is <code>45 + 2*(2 + 1 + years)</code>, so 51 at year zero.</li>
+<li><strong>Palette (new, contrast-checked against white):</strong> streak 1-2 <code>#6f6f6f</code> 5.02,
+3-6 <code>#8e5566</code> 5.77, 7-29 <code>#a83a55</code> 6.17, 30-99 <code>#bd2242</code> 6.05, 100+ <code>#c8102e</code>
+5.88. Noise modules <code>#767676</code> 4.54. Ghost frame cells <code>#f4eef0</code>. Every one of
+these is a test assertion, not a comment.</li>
+<li><strong>Marks:</strong> the ladder in <code>docs/2026-08-27-mro-mark-surfaces.md</code>. Voice is
+redefined (quiet-zone tint plus receipts in attributes), so the old
+<code>voiceQr</code> second code is gone.</li>
+</ul>
+<blockquote>
+<p><strong>operator-manual steps in this plan.</strong> After completing any of these, tell Claude
+so it can update memory immediately.</p>
+<ul>
+<li><strong>Task 3:</strong> scan <code>docs/scan-test.png</code> with a phone and report failures.
+This is the last unverified assumption in the whole design.</li>
+<li><strong>Task 9:</strong> put the RPC URLs, Etherscan key and spike private key into the
+contracts env file via WinSCP, and fund the spike key with Base Sepolia ETH
+from the CDP faucet.</li>
+<li><strong>Task 10:</strong> approve the throwaway Base <strong>mainnet</strong> deploy, create an
+OpenSea API key, and fund the spike key with about 0.001 ETH on mainnet.</li>
+</ul>
+<p><strong>Irreversible:</strong> Task 10 puts a throwaway contract and three tokens on Base
+mainnet permanently. Named &quot;MRO Spike (throwaway)&quot;, not the collection.
+Nothing else here is irreversible.</p>
+<p><strong>Trade-off stated up front:</strong> this plan builds real renderers, not mock-ups,
+so Plan 2 reuses them unchanged. That makes it longer than a pure probe but
+avoids drawing the artwork twice.</p>
+</blockquote>
+<hr>
+<h2>Task 3: Bitmap CLI, shared heart mask, and the phone scan gate</h2>
+<p><strong>Why:</strong> the contracts need two byte strings -- a per-token code bitmap and the
+one shared heart mask -- and nothing downstream can be tested without them.
+This task also closes the last unverified assumption in the design.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>tools/heart-mask.mjs</code>, <code>tools/token-bitmap.mjs</code>,
+<code>tools/test/token-bitmap.test.mjs</code></li>
+<li>Generates: <code>contracts/src/render/HeartMask.sol</code></li>
+</ul>
+<p><strong>Interfaces produced:</strong></p>
+<ul>
+<li><code>tokenBitmap(domain, tokenId) -&gt; { hex, mask, match, size: 37, bytes: 172 }</code>,
+packing row-major, bit 7 of byte 0 is module (0,0) -- the same packing
+<code>qart.packModules</code> already produces.</li>
+<li><code>HeartMask.sol</code>: <code>library HeartMask { uint256 constant SIZE = 37; function bits() internal pure returns (bytes memory); }</code> returning 172 bytes.</li>
+<li>CLI: <code>node token-bitmap.mjs &lt;id&gt;</code> prints the hex, for the deploy script.</li>
+</ul>
+<p><strong>Steps:</strong></p>
+<ol>
+<li>Write <code>tools/test/token-bitmap.test.mjs</code> first: the CLI&#39;s hex round-trips
+through <code>unpackModules</code> to the same modules <code>bestOfAllMasks</code> produced; the
+hex is exactly 344 characters; two ids give different hex; the heart mask is
+identical regardless of token id.</li>
+<li>Run the tests, confirm they fail for the right reason (missing module, not a
+runner error -- <code>node --test test/</code> with a trailing slash fails spuriously on
+Node 24; the script is bare <code>node --test</code>).</li>
+<li>Write <code>tools/heart-mask.mjs</code>, generating <code>HeartMask.sol</code> from
+<code>heart-target.mjs</code> with a <code>// GENERATED</code> header.</li>
+<li>Write <code>tools/token-bitmap.mjs</code> wrapping <code>bestOfAllMasks</code> and <code>packModules</code>.</li>
+<li>Run the tests to green, generate <code>HeartMask.sol</code>, and confirm it compiles
+with <code>forge build --sizes</code>.</li>
+<li><strong>operator-manual gate:</strong> the operator scans <code>docs/scan-test.png</code> at 100% zoom and reports
+which tiles fail. Expected: all pass; the marginal ones are tile 3 (base at
+120px) and tile 10 (inverted at 180px). <strong>If tiles 6 or 7 fail, stop</strong> -- that
+is the low-streak grey state, and it would mean new tokens do not scan, which
+changes the palette rather than the code.</li>
+<li>Commit.</li>
+</ol>
+<h2>Task 4: <code>TokenView</code> and <code>Palette</code></h2>
+<p><strong>Why:</strong> every renderer consumes one struct and one colour table. Fixing them
+first stops the later tasks disagreeing about field names.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>contracts/src/render/TokenView.sol</code>,
+<code>contracts/src/render/Palette.sol</code>, <code>contracts/test/Palette.t.sol</code></li>
+</ul>
+<p><strong>Interfaces produced:</strong></p>
+<pre><code class="language-solidity">struct TokenView {
+    uint256 tokenId;
+    uint32 level; uint32 streak; uint32 lastDay; uint32 mintDay;
+    uint32 generation; uint32 seedsGiven;
+    bool resting; bool sunset;
+    uint256 marks;      // bit n = mark id n (1 Vein .. 7 Singularity)
+    bytes32 agentKeyId;
+    bytes code;         // 172 bytes, packed 37x37, written once at mint
+    uint32 today;       // block.timestamp / 86400, supplied by the token contract
+}
+library Palette {
+    function tier(uint32 streak) internal pure returns (string memory);
+    function lapsed(uint32 streak, uint32 lastDay, uint32 today) internal pure returns (string memory);
+    function noise() internal pure returns (string memory);   // &quot;#767676&quot;
+    function ghost() internal pure returns (string memory);   // &quot;#f4eef0&quot;
+}
+</code></pre>
+<p><strong>Steps:</strong></p>
+<ol>
+<li>Write <code>Palette.t.sol</code> first, asserting each tier boundary (0, 2, 3, 6, 7, 29,
+30, 99, 100) returns the exact hex string, and that the lapse steps behave.</li>
+<li>Confirm the tests fail.</li>
+<li>Write <code>TokenView.sol</code> and <code>Palette.sol</code>.</li>
+<li>Green, <code>forge build --sizes</code>, commit.</li>
+</ol>
+<p><strong>Note on lapse.</strong> The spec pales the heart in steps at 3, 7 and 30 days lapsed.
+Those pale tones will fail the contrast bar exactly as the original streak
+palette did. <strong>Compute the lapsed tones and assert their contrast in the test</strong>;
+if any falls under 4.5:1, the lapse must be carried by the frame alone and the
+code holds its last scannable tier. Decide this in Task 4, not later.</p>
+<h2>Task 5: <code>CodeRenderer</code></h2>
+<p><strong>Why:</strong> the code block is most of the image and most of the gas. Getting its
+path emission right is what makes or breaks the budget.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>contracts/src/render/CodeRenderer.sol</code>,
+<code>contracts/test/CodeRenderer.t.sol</code></li>
+</ul>
+<p><strong>Interfaces produced:</strong></p>
+<pre><code class="language-solidity">library CodeRenderer {
+    // Emits two &lt;path&gt; elements: heart modules in `heartFill`, the rest in `noiseFill`.
+    // Same-colour horizontal runs are merged, which is what keeps the SVG near 5 KB.
+    function paths(bytes memory code, bytes memory mask, uint256 offset,
+                   string memory heartFill, string memory noiseFill)
+        internal pure returns (string memory);
+    function isDark(bytes memory packed, uint256 k) internal pure returns (bool);
+}
+</code></pre>
+<p><strong>Steps:</strong></p>
+<ol>
+<li>Write <code>CodeRenderer.t.sol</code> first. Assert: <code>isDark</code> matches the known packing
+for a fixture bitmap; a single isolated module emits <code>M{x} {y}h1v1h-1z</code>; a
+run of five emits <code>h5</code>; output contains exactly two <code>&lt;path</code> elements; the
+heart path and noise path never cover the same cell.</li>
+<li>Confirm failure.</li>
+<li>Implement using Solady <code>DynamicBufferLib</code> for concatenation and <code>LibString</code>
+for number formatting. Run-merge per row.</li>
+<li>Green. Record <code>forge test --gas-report</code> for <code>paths</code> -- this is the first real
+gas number in the whole spike and belongs in the results file.</li>
+<li>Commit.</li>
+</ol>
+<h2>Task 6: <code>FrameRenderer</code></h2>
+<p><strong>Why:</strong> the frame carries the accumulation, which is the piece&#39;s subject.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>contracts/src/render/FrameRenderer.sol</code>,
+<code>contracts/test/FrameGeometry.t.sol</code>, <code>contracts/test/FrameRenderer.t.sol</code></li>
+</ul>
+<p><strong>Interfaces produced:</strong></p>
+<pre><code class="language-solidity">library FrameRenderer {
+    function canvas(uint32 years) internal pure returns (uint256);   // 45 + 2*(3 + years)
+    function paths(TokenView memory v, string memory colour, string memory ghostFill)
+        internal pure returns (string memory);   // day frame, ghost cells, year rings
+}
+</code></pre>
+<p><strong>Steps:</strong></p>
+<ol>
+<li>Write <code>FrameGeometry.t.sol</code> first, mirroring the Node tests: 376 cells, all in
+the two rings, none inside the block, first cell on the top row, the last 11
+low on the grid.</li>
+<li>Write <code>FrameRenderer.t.sol</code>: cells lit equals <code>min(level, 365)</code> below
+wholeness; at <code>level &gt;= 365</code> all 376 light and no ghost cells remain; canvas
+grows two per completed year; year rings never overlap the frame.</li>
+<li>Confirm failure, implement, green.</li>
+<li><code>forge build --sizes</code>, commit.</li>
+</ol>
+<h2>Task 7: <code>MarkRenderer</code>, <code>Renderer</code>, <code>IRenderer</code></h2>
+<p><strong>Why:</strong> this assembles the image and the JSON, and is where the size budget is
+finally decided.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>contracts/src/render/MarkRenderer.sol</code>,
+<code>contracts/src/render/Renderer.sol</code>, <code>contracts/src/render/IRenderer.sol</code>,
+<code>contracts/test/MarkRenderer.t.sol</code>, <code>contracts/test/Renderer.t.sol</code></li>
+</ul>
+<p><strong>Interfaces produced:</strong></p>
+<pre><code class="language-solidity">interface IRenderer { function tokenURI(TokenView memory v) external view returns (string memory); }
+library MarkRenderer {
+    uint256 constant VEIN = 1&lt;&lt;1; uint256 constant PULSE = 1&lt;&lt;2; uint256 constant VOICE = 1&lt;&lt;3;
+    uint256 constant BLOOM = 1&lt;&lt;4; uint256 constant HALO = 1&lt;&lt;5; uint256 constant CROWN = 1&lt;&lt;6;
+    uint256 constant SINGULARITY = 1&lt;&lt;7;
+    function has(uint256 marks, uint256 bit) internal pure returns (bool);
+    function field(uint256 marks) internal pure returns (string memory);      // Halo tint or white
+    function ghost(uint256 marks) internal pure returns (string memory);      // Vein darkens the ghost
+    function frameFill(uint256 marks, string memory colour) internal pure returns (string memory); // Crown gold
+    function heartFill(uint256 marks, string memory colour) internal pure returns (string memory); // Bloom gradient
+    function quietTint(uint256 marks) internal pure returns (string memory);  // Voice
+    function defs(uint256 marks) internal pure returns (string memory);       // Bloom gradient defs
+    function names(uint256 marks) internal pure returns (string memory);      // JSON array
+}
+</code></pre>
+<p><strong>Steps:</strong></p>
+<ol>
+<li>Write <code>MarkRenderer.t.sol</code> first: each Mark changes the output; no two Marks
+write the same attribute; <code>names()</code> matches the ladder order; a Bloom gradient
+stop never falls below 4.5:1 contrast.</li>
+<li>Write <code>Renderer.t.sol</code> including the <strong>differential test</strong> described below.</li>
+<li>Confirm failure, implement, green.</li>
+<li>Commit.</li>
+</ol>
+<p><strong>The differential test is the important part of this task.</strong>
+<code>tools/render-token.mjs</code> is the reference renderer. Have Node write fixtures to
+<code>tools/out/fixtures.json</code> -- an array of <code>{ state, svg }</code> for the six life
+stages and each Mark -- then have <code>Renderer.t.sol</code> read that file through
+Foundry&#39;s <code>vm.readFile</code> and assert <code>keccak256(actual) == keccak256(expected)</code>.
+Add <code>tools/out</code> to <code>fs_permissions</code> in <code>foundry.toml</code> for this.</p>
+<p>Two renderers that must agree, checked byte for byte, is far stronger than
+asserting substrings, and it means a change to the Node reference can never
+silently diverge from the contract.</p>
+<h2>Task 8: <code>MROSpikeToken</code>, size guard and gas budget</h2>
+<p><strong>Why:</strong> this is the task that produces the spike&#39;s headline numbers.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>contracts/src/spike/MROSpikeToken.sol</code>,
+<code>contracts/test/MROSpikeToken.t.sol</code>, <code>contracts/test/ContractSize.t.sol</code>,
+<code>contracts/test/GasBudget.t.sol</code></li>
+</ul>
+<p><strong>Interfaces produced:</strong></p>
+<pre><code class="language-solidity">contract MROSpikeToken is ERC721, Ownable, IERC4906 {
+    struct State { uint32 level; uint32 streak; uint32 lastDay; uint32 mintDay;
+                   uint32 generation; uint32 seedsGiven; bool resting; bool sunset;
+                   uint256 marks; bytes32 agentKeyId; bytes code; }
+    constructor(address renderer_);
+    function mint(uint256 id, address to, bytes calldata code) external onlyOwner;
+    function setState(uint256 id, State calldata s) external onlyOwner;   // emits MetadataUpdate
+    function touchRange(uint256 from, uint256 to) external onlyOwner;     // emits BatchMetadataUpdate
+    function setRenderer(address r) external onlyOwner;
+    function setSunset(bool on) external onlyOwner;
+    function today() public view returns (uint32);
+    function tokenURI(uint256 id) public view override returns (string memory);
+}
+</code></pre>
+<p><strong>Steps:</strong></p>
+<ol>
+<li>Write the tests first. Per the global smart-contract rules, <strong>every owner
+function gets an explicit test and every access-control revert gets a test</strong>:
+<code>mint</code>, <code>setState</code>, <code>touchRange</code>, <code>setRenderer</code>, <code>setSunset</code> each from a
+non-owner must revert, plus the Ownable2Step transfer flow.</li>
+<li><code>ContractSize.t.sol</code>: every contract under 24,576 bytes with positive margin,
+asserted, plus a strict-limit anvil deploy with non-empty <code>cast code</code>.</li>
+<li><code>GasBudget.t.sol</code>: <code>tokenURI</code> gas and byte length at six states -- day 1,
+day 200, whole, whole and lapsed, three years, and all Marks set. Assert
+under 2,000,000 gas and 20,000 bytes; log the numbers whether or not they
+pass so the results table can be filled either way.</li>
+<li>Implement, green, <code>forge build --sizes</code>, commit.</li>
+</ol>
+<p><strong>If the gas budget fails here, stop and re-plan.</strong> The fallback ladder from the
+original plan still applies: (a) further path compression, (b) rings and Bloom
+become flat fills, (c) off-chain renderer with on-chain SVG as a permanent
+fallback -- and (c) is a spec change needing the operator&#39;s approval, not a fix.</p>
+<h2>Task 9: Deploy script, local run, end-to-end decode</h2>
+<p><strong>Why:</strong> a rendered SVG that a decoder cannot read is a failed spike, and only
+the real on-chain output settles that.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>contracts/script/DeploySpike.s.sol</code>, <code>tools/verify-tokenuri.mjs</code>,
+<code>tools/test/verify-tokenuri.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces produced:</strong></p>
+<ul>
+<li><code>decodeTokenUri(uri) -&gt; { json, svg }</code></li>
+<li><code>verifyToken({ rpcUrl, address, id, expectedUrl }) -&gt; { ok, decoded, gasEstimate, bytes, pngPath }</code></li>
+</ul>
+<p><strong>Steps:</strong></p>
+<ol>
+<li>Write <code>DeploySpike.s.sol</code>, minting three tokens: id 1 at day one, id 2 at
+level 200 with streak 45 and Vein plus Bloom, id 3 whole with streak 400,
+one year, and every Mark except Singularity.</li>
+<li>Write <code>verify-tokenuri.mjs</code>: read <code>tokenURI</code> over RPC with viem, split the
+data URI, base64-decode, rasterise the SVG with resvg, decode with jsqr,
+assert the payload matches, and report gas and byte length.</li>
+<li>Run against a local anvil end to end.</li>
+<li>Green, commit.</li>
+</ol>
+<h2>Task 10: Base Sepolia deployment (operator-manual funding)</h2>
+<p><strong>Why:</strong> a public RPC applies caps a local anvil does not, and a <code>tokenURI</code> that
+only works locally is not proven.</p>
+<p><strong>Files:</strong> create <code>docs/phase0-results.md</code>, first section.</p>
+<p><strong>Steps:</strong></p>
+<ol>
+<li><code>cast wallet new</code>, then <strong>operator-manual:</strong> put the private key into the contracts
+env file as <code>SPIKE_DEPLOYER_KEY</code> via WinSCP alongside the RPC URLs and
+Etherscan key, and fund the address from the CDP faucet. Do not print the key
+anywhere else. Wait for the operator to confirm both.</li>
+<li>Deploy and verify with <code>forge script ... --rpc-url base_sepolia --broadcast --verify</code>.</li>
+<li>Read <code>tokenURI</code> back from the public RPC, confirm it does not hit the
+provider&#39;s <code>eth_call</code> gas cap, and run <code>verify-tokenuri.mjs</code> against it.</li>
+<li>Record every number in <code>docs/phase0-results.md</code>.</li>
+</ol>
+<h2>Task 11: Throwaway mainnet deploy for the OpenSea test (the operator approval)</h2>
+<p><strong>Why:</strong> OpenSea discontinued all testnet support in July 2025, so display and
+refresh behaviour can only be checked on mainnet.</p>
+<p><strong>This is the irreversible step.</strong> Before any <code>--broadcast</code> against <code>base</code>, state
+to the operator: &quot;This deploys <code>MRO Spike (throwaway)</code> and three tokens to Base mainnet
+permanently, costs about $1 in ETH, and is not the collection. Approve?&quot; Proceed
+only on an explicit yes.</p>
+<p><strong>Files:</strong> create <code>tools/opensea-check.mjs</code>; modify <code>docs/phase0-results.md</code>.</p>
+<p><strong>Steps:</strong></p>
+<ol>
+<li><strong>operator-manual:</strong> OpenSea API key into the env file, about 0.001 ETH on Base
+mainnet to the spike address.</li>
+<li>Write <code>opensea-check.mjs</code> (GET the token, optionally POST a refresh).</li>
+<li>Deploy on explicit approval.</li>
+<li>Confirm OpenSea renders the image, flattens the SVG to PNG, and that the
+flattened PNG still decodes -- <strong>rasterise their PNG and run it through jsqr</strong>,
+do not eyeball it.</li>
+<li>Change a token&#39;s state, emit ERC-4906 with the exact range <strong>after</strong> the
+write, call the refresh endpoint, and time how long the new image takes to
+appear. Record it.</li>
+</ol>
+<h2>Task 12: Go / no-go and spec amendment</h2>
+<p><strong>Files:</strong> modify <code>docs/phase0-results.md</code>,
+<code>docs/specs/2026-08-27-machine-readable-only-design.md</code>.</p>
+<p><strong>Steps:</strong></p>
+<ol>
+<li>Write the verdict as one of exactly three outcomes: <code>PASS</code>,
+<code>PASS WITH FALLBACK (a) or (b)</code>, or <code>FAIL</code> with the failing criterion. Under
+it, the measured table with every cell filled, then &quot;What surprised us&quot;, three
+bullets maximum, facts only.</li>
+<li><strong>Amend the spec.</strong> This revision needs more than the original plan expected.
+Section 8 (what is drawn) is rewritten around the code-heart; the Marks table
+is replaced by the ladder in <code>docs/2026-08-27-mro-mark-surfaces.md</code>; the
+streak palette is replaced with the contrast-checked one; the canvas, QR
+version and quiet-zone numbers change; the <code>voiceQr</code> second code is removed.
+Render the HTML alongside the markdown.</li>
+<li>Update memory and commit.</li>
+</ol>
+<h2>What this plan deliberately does not build</h2>
+<p>The real token contract, the Warden, the Clock and the reference client. Those
+are Plans 2-5 and stay blocked until the verdict in Task 12 is <code>PASS</code>.</p>
+<h2>Self-review</h2>
+<ul>
+<li><strong>Coverage.</strong> Gas and size (Tasks 5, 8), renderer split (Tasks 5-7), decode
+from real on-chain SVG (Tasks 9-10), OpenSea display and refresh (Task 11),
+contract sizes and access control (Task 8), the phone scan gate (Task 3),
+fallback ladder (Task 8), spec amendment (Task 12).</li>
+<li><strong>Carried forward unchanged from the original plan:</strong> the fallback ladder, the
+budgets, the mainnet-only OpenSea reasoning, the TokenView lineage fields
+(<code>generation</code>, <code>seedsGiven</code>, <code>resting</code>, <code>sunset</code>) so Plan 2 needs no renderer
+change.</li>
+<li><strong>Known gaps, stated rather than hidden.</strong> Gas is entirely unmeasured until
+Task 5. The lapse palette may fail contrast and Task 4 forces that decision
+early rather than discovering it in Task 7. The phone scan test is the last
+unverified assumption and gates Task 3.</li>
+</ul>
+
+</body>
+</html>
