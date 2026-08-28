@@ -24,7 +24,8 @@ modules, 660 of them on the heart, merged into 372 runs.
 | Runs composed in a register, one `mstore` each | 1,872,623 | worse, see below |
 | Run jumping with `LibBit.fls` | 1,201,275 | |
 | The same source compiled `via_ir` | 693,747 | |
-| Buffer sized for the worst case, plus an overflow guard | **714,651** | shipped |
+| Buffer sized for the worst case, plus an overflow guard | 714,651 | |
+| Both classes written in one pass over the rows (Task 6 refactor) | **691,899** | shipped |
 
 Floor with an empty code (both paths present, nothing drawn): **1,839**.
 Worst case, a degenerate code of alternating modules -- 703 runs instead of 372,
@@ -85,6 +86,87 @@ Line, statement, branch and function coverage of `CodeRenderer.sol` are all
 
 ---
 
+## Task 6: `FrameRenderer`
+
+The frame is one cell per credited day, filling from the top, plus one outline
+ring per completed year. Unlike the code block it is not a fixed size: the rings
+grow the canvas, so this is the only part of the image whose cost has to be
+checked at the far end rather than at a typical value.
+
+### Gas
+
+| Token | Gas | Frame bytes |
+| --- | ---: | ---: |
+| Day zero, nothing earned | 240,986 | 1,259 |
+| Day 200, part earned | 359,427 | 1,286 |
+| Whole, one ring | 450,256 | 2,676 |
+| Whole, three rings | 462,202 | 2,742 |
+| Whole, eighty rings (the cap) | 990,983 | 5,938 |
+
+Getting there took two steps, both measured rather than guessed.
+
+**Reading the geometry constant word-wise saved 54,585 gas.** Sixteen cells fit
+in one word, so the constant is read 24 times instead of 752. Useful, but far
+smaller than expected -- a probe with the cell loop disabled showed the loop cost
+479,958 gas in total, about 1,276 per cell, and only a tenth of that was the
+byte indexing. The loop itself was the cost.
+
+**Precomputing the frame as a row bitmap took the whole loop away.** A whole
+frame lights every cell, so there is nothing to discover by walking them: the
+generator now also emits `FrameGeometry.rows()`, 49 rows of bits, which the
+renderer shifts into place directly. Below wholeness it walks only the days
+actually earned and derives the ghost as the frame minus the lit, one XOR per
+row rather than a second walk. Day zero fell from 510,920 to 240,986 and the
+capped case from 1,254,078 to 990,983.
+
+That matters because a token spends nearly all of its life whole, which was
+precisely the case the first implementation handled worst.
+
+### The ring cap
+
+Rings are the only unbounded part of the image, so `MAX_RINGS` is set at 80.
+Two independent measurements put the ceiling in the same place:
+
+- **Bytes.** The reference renderer's tokenURI crosses 20,000 at 85 completed
+  years: 84 measured at 19,932, 85 at 20,044. Eighty leaves 448 bytes of
+  headroom.
+- **The renderer.** A canvas row is held in one 256-bit word. Eighty rings make
+  the canvas 211 cells; 107 would make it 265 and break that.
+
+Past ten years the cost is close to linear, about 6,800 gas and 42 bytes per
+additional year, which is recorded as a test so the right cap can be read off
+the curve if it ever has to come down.
+
+Eighty years is far beyond any plausible tenure, and the alternative to a cap is
+a token that eventually cannot be rendered at all.
+
+### Correctness
+
+13 tests for the renderer and 7 for the geometry, including byte-for-byte
+assertions against the reference renderer at three life stages, and a check that
+the two representations of the frame -- the ordered cell list and the row bitmap
+-- hold exactly the same 376 cells. Line, statement and function coverage of both
+files is 100%.
+
+---
+
+## Both renderers together
+
+| Token | Code | Frame | Total |
+| --- | ---: | ---: | ---: |
+| Day zero | 691,899 | 240,986 | 932,885 |
+| Whole, one ring | 691,899 | 450,256 | 1,142,155 |
+| Whole, eighty rings | 691,899 | 990,983 | 1,682,882 |
+
+Against the 2,000,000 hard limit that leaves **317,118 gas at the ring cap** and
+857,845 in the ordinary case, for the JSON envelope and the base64 wrapper that
+Task 7 adds.
+
+**The cap case is the one to watch.** If base64 and JSON come to more than
+317,118 gas, `MAX_RINGS` comes down rather than anything else changing -- the
+curve above says what each year is worth, so the new cap can be read straight
+off it. The ordinary case has comfortable room either way.
+
 ## Build configuration change made here
 
 `via_ir = true` in `[profile.default]`, for the 507,528 gas above.
@@ -111,23 +193,23 @@ on `CodeRenderer.sol`.
 
 ## What this leaves for the rest of the image
 
-`tokenURI` still has to add the day frame and year rings, the Marks, the JSON
-metadata and the base64 wrapper around the SVG.
+`tokenURI` still has to add the Marks, the JSON metadata and the base64 wrapper
+around the SVG. Task 7 builds those.
 
 | | Gas | Bytes |
 | --- | ---: | ---: |
 | Target | 1,000,000 | 5,000 |
-| Spent by `CodeRenderer.paths` | 714,651 | 4,519 |
-| Left for everything else | 285,349 | 481 |
+| Spent by both renderers, ordinary token | 1,142,155 | 7,195 |
 | Hard limit | 2,000,000 | 20,000 |
-| Left against the hard limit | 1,285,349 | 15,481 |
+| Left against the hard limit, ordinary token | 857,845 | 12,805 |
+| Left against the hard limit, at the ring cap | 317,118 | 10,062 |
 
-**The target is already tight and the byte target is effectively gone.** The
-frame draws 376 cells against the code's 894, so on the code block's rate it
-would cost roughly 290,000 gas on its own, which would land the pair at the
-target with nothing left for JSON or base64. The hard limit has real room.
+**The 1,000,000 gas / 5,000 byte target is gone and should be recorded as
+missed**, not nearly met: the two renderers alone exceed both halves of it. The
+2,000,000 / 20,000 hard limit is the one that decides whether the spike passes,
+and an ordinary token sits comfortably inside it.
 
-This is not a failure -- the spike's fail-over condition is 2,000,000 gas and
-20,000 bytes, and both have margin. It does mean the 1,000,000 / 5,000 target
-should be treated as lost rather than nearly met, unless the frame turns out
-much cheaper per cell than the code block. That will be known at Task 6.
+The single open risk is the ring cap. An eighty-year-old token leaves 317,118
+gas for base64 and JSON. If that proves too little, `MAX_RINGS` comes down --
+`RingCurve.t.sol` records what each year costs, so the replacement value can be
+read straight off the curve without re-deriving anything.

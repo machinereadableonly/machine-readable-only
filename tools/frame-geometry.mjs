@@ -30,9 +30,23 @@ export function frameCells() {
   return cells.map(c => [c.x, c.y]);
 }
 
+// The same 376 cells as a bitmap, one 8-byte big-endian value per local row,
+// bit LOCAL-1-x set when the cell at x is part of the frame.
+//
+// This exists purely for gas. A whole frame lights every cell, and a renderer
+// that has this constant can OR 49 rows straight in instead of walking all 376
+// cells to discover the same thing -- and walking them measured 1,131 gas each.
+// The ghost is then the frame minus what is lit, which is one XOR per row.
+export function frameRows(cells) {
+  const rows = new Array(LOCAL).fill(0n);
+  for (const [x, y] of cells) rows[y] |= 1n << BigInt(LOCAL - 1 - x);
+  return rows;
+}
+
 export function toSolidity(cells) {
   const hex = cells.map(([x, y]) =>
     x.toString(16).padStart(2, "0") + y.toString(16).padStart(2, "0")).join("");
+  const rowsHex = frameRows(cells).map(r => r.toString(16).padStart(16, "0")).join("");
   return `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
@@ -50,6 +64,13 @@ library FrameGeometry {
     // Two bytes per cell: x then y, local coordinates.
     function cells() internal pure returns (bytes memory) {
         return hex"${hex}";
+    }
+
+    // The same cells as a bitmap: eight bytes per local row, bit LOCAL-1-x set
+    // when x is a frame cell. Lets a renderer light a whole frame without
+    // walking every cell to work out which they are.
+    function rows() internal pure returns (bytes memory) {
+        return hex"${rowsHex}";
     }
 }
 `;

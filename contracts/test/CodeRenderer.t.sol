@@ -4,6 +4,7 @@ pragma solidity ^0.8.30;
 import {Test} from "forge-std/Test.sol";
 import {CodeRenderer} from "../src/render/CodeRenderer.sol";
 import {HeartMask} from "../src/render/HeartMask.sol";
+import {PathParser} from "./helpers/PathParser.sol";
 
 /// @notice Exposes the library externally so `forge test --gas-report` can bill it.
 /// @dev An internal library function is inlined into its caller and never shows up
@@ -141,62 +142,6 @@ contract CodeRendererTest is Test {
         "zM16 32h3v1h-3zM20 32h2v1h-2zM23 32h1v1h-1zM15 33h7v1h-7zM19 34h2v1h-2z";
     }
 
-    // ---------------------------------------------------------------------
-    // A tiny parser for the emitted path data. Every run is written exactly as
-    // "M<x> <y>h<w>v1h-<w>z", so the test can read back which cells were drawn
-    // instead of trusting the string blind.
-    // ---------------------------------------------------------------------
-    struct Run {
-        uint256 x;
-        uint256 y;
-        uint256 w;
-    }
-
-    function _parseRuns(string memory d) internal pure returns (Run[] memory runs) {
-        bytes memory b = bytes(d);
-        uint256 count;
-        for (uint256 i; i < b.length; ++i) {
-            if (b[i] == "M") ++count;
-        }
-        runs = new Run[](count);
-
-        uint256 n;
-        uint256 p;
-        while (p < b.length) {
-            require(b[p] == "M", "expected M");
-            ++p;
-            uint256 x;
-            (x, p) = _readUint(b, p);
-            require(b[p] == " ", "expected space after x");
-            ++p;
-            uint256 y;
-            (y, p) = _readUint(b, p);
-            require(b[p] == "h", "expected h after y");
-            ++p;
-            uint256 w;
-            (w, p) = _readUint(b, p);
-            // The closing "v1h-<w>z" must mirror the width exactly, or the cell
-            // outline does not close and the fill is undefined.
-            require(b[p] == "v" && b[p + 1] == "1" && b[p + 2] == "h" && b[p + 3] == "-", "malformed run tail");
-            p += 4;
-            uint256 back;
-            (back, p) = _readUint(b, p);
-            require(back == w, "the closing width does not mirror the opening one");
-            require(b[p] == "z", "a run is not closed");
-            ++p;
-            runs[n++] = Run(x, y, w);
-        }
-    }
-
-    function _readUint(bytes memory b, uint256 p) internal pure returns (uint256 v, uint256 q) {
-        q = p;
-        while (q < b.length && b[q] >= "0" && b[q] <= "9") {
-            v = v * 10 + (uint8(b[q]) - 48);
-            ++q;
-        }
-        require(q > p, "expected a number");
-    }
-
     /// @dev Pulls the two d attributes out of the assembled output.
     function _split(string memory out) internal pure returns (string memory first, string memory second) {
         string[] memory parts = vm.split(out, "\"");
@@ -294,21 +239,21 @@ contract CodeRendererTest is Test {
         (string memory noiseD, string memory heartD) = _split(_out());
 
         uint256 drawn;
-        drawn += _checkRuns(_parseRuns(heartD), code, mask, true);
-        drawn += _checkRuns(_parseRuns(noiseD), code, mask, false);
+        drawn += _checkRuns(PathParser.parse(heartD), code, mask, true);
+        drawn += _checkRuns(PathParser.parse(noiseD), code, mask, false);
         assertEq(drawn, HEART_CELLS + NOISE_CELLS, "the two paths cover every dark module, once each");
     }
 
     /// @dev Walks every cell of every run and checks it belongs to this class.
     /// Because a cell can only satisfy one of the two mask predicates, proving
     /// each cell is on the right side also proves the two paths never overlap.
-    function _checkRuns(Run[] memory runs, bytes memory code, bytes memory mask, bool wantHeart)
+    function _checkRuns(PathParser.Run[] memory runs, bytes memory code, bytes memory mask, bool wantHeart)
         internal
         pure
         returns (uint256 cells)
     {
         for (uint256 r; r < runs.length; ++r) {
-            Run memory run = runs[r];
+            PathParser.Run memory run = runs[r];
             assertGt(run.w, 0, "a run is never empty");
             uint256 y = run.y - CODE_OFF;
             assertLt(y, SIZE, "a run sits inside the code");
@@ -325,12 +270,8 @@ contract CodeRendererTest is Test {
 
     function test_theHeartHoldsTheCellsTheMaskClaims() public view {
         (string memory noiseD, string memory heartD) = _split(_out());
-        assertEq(_countCells(_parseRuns(heartD)), HEART_CELLS, "heart cell count");
-        assertEq(_countCells(_parseRuns(noiseD)), NOISE_CELLS, "noise cell count");
-    }
-
-    function _countCells(Run[] memory runs) internal pure returns (uint256 n) {
-        for (uint256 r; r < runs.length; ++r) n += runs[r].w;
+        assertEq(PathParser.countCells(heartD), HEART_CELLS, "heart cell count");
+        assertEq(PathParser.countCells(noiseD), NOISE_CELLS, "noise cell count");
     }
 
     // ---------------------------------------------------------------------
@@ -405,7 +346,7 @@ contract CodeRendererTest is Test {
         for (uint256 k; k < SIZE * SIZE; ++k) {
             if (CodeRenderer.isDark(code, k)) ++dark;
         }
-        assertEq(_countCells(_parseRuns(noiseD)), dark, "every module drawn, exactly once");
+        assertEq(PathParser.countCells(noiseD), dark, "every module drawn, exactly once");
     }
 
     function test_anEmptyCodeDrawsNothingButStillEmitsBothPaths() public view {

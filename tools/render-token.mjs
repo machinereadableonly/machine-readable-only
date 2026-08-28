@@ -50,7 +50,19 @@ export function lapsedColour(streak, lastDay, today) {
   const steps = gap >= 7 ? 2 : 1;
   return TIERS[TIERS.length - 1 - (steps >= index ? 0 : index - steps)].colour;
 }
-export const canvasFor = years => BLOCK + 2 * (THICK + GAP + years);
+// Completed-year rings stop growing the canvas at MAX_RINGS. Two independent
+// measurements put the ceiling in the same place. By bytes: the tokenURI crosses
+// the 20,000 limit at 85 years (84 measured at 19,932, 85 at 20,044), and 80
+// leaves 448 bytes of headroom. By the renderer: the contract holds one canvas
+// row in a single 256-bit word, and 80 rings make the canvas 211 cells, while
+// 107 would make it 265 and break that. Eighty years is far past any plausible
+// tenure, and the alternative to a cap is a token that eventually cannot be
+// rendered at all.
+//
+// MUST stay identical to FrameRenderer.MAX_RINGS in Solidity.
+export const MAX_RINGS = 80;
+export const ringsFor = years => Math.min(years, MAX_RINGS);
+export const canvasFor = years => BLOCK + 2 * (THICK + GAP + ringsFor(years));
 
 const FRAME = frameCells();
 
@@ -77,7 +89,8 @@ export function pathFor(set, canvas) {
  * @param state    { level, streak, years, marks }
  */
 export function renderSvg(modules, want, size, state) {
-  const { level = 0, streak = 0, years = 0, marks = [] } = state;
+  const { level = 0, streak = 0, years: rawYears = 0, marks = [] } = state;
+  const years = ringsFor(rawYears);
   const canvas = canvasFor(years);
   const frameOff = years + GAP;          // where the 49-grid frame starts
   const blockOff = frameOff + THICK;     // where the 45-cell block starts
@@ -114,12 +127,19 @@ export function renderSvg(modules, want, size, state) {
     }
   }
 
+  // Draw order: the frame's two paths, then the code's two. Every one of these
+  // four sets is disjoint from the others -- no cell appears in two of them -- so
+  // the order changes no pixel. It is fixed this way so that each renderer's pair
+  // of paths is adjacent in the output, which lets FrameRenderer and CodeRenderer
+  // each emit one string that the assembler simply concatenates. Interleaving
+  // them would force both libraries to be split into single-path functions for no
+  // visual gain.
   const groups = [];
   if (dim.size) groups.push([ghost, dim]);
-  if (noise.size) groups.push([NOISE, noise]);
   const frameColour = gold ?? colour;
   const framed = new Set([...lit, ...rings]);
   if (framed.size) groups.push([frameColour, framed]);
+  if (noise.size) groups.push([NOISE, noise]);
   if (heart.size) groups.push([colour, heart]);
 
   const body = groups.map(([c, s]) => `<path fill="${c}" d="${pathFor(s, canvas)}"/>`).join("");

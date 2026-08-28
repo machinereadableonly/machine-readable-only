@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { frameCells, toSolidity, LOCAL, BLOCK, THICK, DAY_CELLS, TOTAL_CELLS } from "../frame-geometry.mjs";
+import { frameCells, frameRows, toSolidity, LOCAL, BLOCK, THICK, DAY_CELLS, TOTAL_CELLS } from "../frame-geometry.mjs";
 
 test("376 unique cells, all in the two rings outside the block", () => {
   const cells = frameCells();
@@ -52,4 +52,20 @@ test("Solidity output carries the header, constants and two bytes per cell", () 
 
 test("generation is deterministic", () => {
   assert.deepEqual(frameCells(), frameCells());
+});
+
+test("the row bitmap holds exactly the cells the list does", () => {
+  const cells = frameCells();
+  const rows = frameRows(cells);
+  assert.equal(rows.length, LOCAL);
+
+  // Same cells, counted two ways.
+  const bits = rows.reduce((n, r) => n + [...r.toString(2)].filter(c => c === "1").length, 0);
+  assert.equal(bits, cells.length, "bitmap and list disagree on how many cells there are");
+
+  for (const [x, y] of cells)
+    assert.equal((rows[y] >> BigInt(LOCAL - 1 - x)) & 1n, 1n, `cell ${x},${y} missing from the bitmap`);
+
+  // Nothing set outside the 49 columns that exist.
+  for (const r of rows) assert.ok(r < (1n << BigInt(LOCAL)), "a bit is set off the grid");
 });

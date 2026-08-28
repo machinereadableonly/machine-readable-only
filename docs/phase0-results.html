@@ -121,7 +121,12 @@ modules, 660 of them on the heart, merged into 372 runs.</p>
 </tr>
 <tr>
 <td>Buffer sized for the worst case, plus an overflow guard</td>
-<td align="right"><strong>714,651</strong></td>
+<td align="right">714,651</td>
+<td></td>
+</tr>
+<tr>
+<td>Both classes written in one pass over the rows (Task 6 refactor)</td>
+<td align="right"><strong>691,899</strong></td>
 <td>shipped</td>
 </tr>
 </tbody></table>
@@ -187,6 +192,119 @@ independent implementation rather than against themselves.</p>
 <p>Line, statement, branch and function coverage of <code>CodeRenderer.sol</code> are all
 100%.</p>
 <hr>
+<h2>Task 6: <code>FrameRenderer</code></h2>
+<p>The frame is one cell per credited day, filling from the top, plus one outline
+ring per completed year. Unlike the code block it is not a fixed size: the rings
+grow the canvas, so this is the only part of the image whose cost has to be
+checked at the far end rather than at a typical value.</p>
+<h3>Gas</h3>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th align="right">Gas</th>
+<th align="right">Frame bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Day zero, nothing earned</td>
+<td align="right">240,986</td>
+<td align="right">1,259</td>
+</tr>
+<tr>
+<td>Day 200, part earned</td>
+<td align="right">359,427</td>
+<td align="right">1,286</td>
+</tr>
+<tr>
+<td>Whole, one ring</td>
+<td align="right">450,256</td>
+<td align="right">2,676</td>
+</tr>
+<tr>
+<td>Whole, three rings</td>
+<td align="right">462,202</td>
+<td align="right">2,742</td>
+</tr>
+<tr>
+<td>Whole, eighty rings (the cap)</td>
+<td align="right">990,983</td>
+<td align="right">5,938</td>
+</tr>
+</tbody></table>
+<p>Getting there took two steps, both measured rather than guessed.</p>
+<p><strong>Reading the geometry constant word-wise saved 54,585 gas.</strong> Sixteen cells fit
+in one word, so the constant is read 24 times instead of 752. Useful, but far
+smaller than expected -- a probe with the cell loop disabled showed the loop cost
+479,958 gas in total, about 1,276 per cell, and only a tenth of that was the
+byte indexing. The loop itself was the cost.</p>
+<p><strong>Precomputing the frame as a row bitmap took the whole loop away.</strong> A whole
+frame lights every cell, so there is nothing to discover by walking them: the
+generator now also emits <code>FrameGeometry.rows()</code>, 49 rows of bits, which the
+renderer shifts into place directly. Below wholeness it walks only the days
+actually earned and derives the ghost as the frame minus the lit, one XOR per
+row rather than a second walk. Day zero fell from 510,920 to 240,986 and the
+capped case from 1,254,078 to 990,983.</p>
+<p>That matters because a token spends nearly all of its life whole, which was
+precisely the case the first implementation handled worst.</p>
+<h3>The ring cap</h3>
+<p>Rings are the only unbounded part of the image, so <code>MAX_RINGS</code> is set at 80.
+Two independent measurements put the ceiling in the same place:</p>
+<ul>
+<li><strong>Bytes.</strong> The reference renderer&#39;s tokenURI crosses 20,000 at 85 completed
+years: 84 measured at 19,932, 85 at 20,044. Eighty leaves 448 bytes of
+headroom.</li>
+<li><strong>The renderer.</strong> A canvas row is held in one 256-bit word. Eighty rings make
+the canvas 211 cells; 107 would make it 265 and break that.</li>
+</ul>
+<p>Past ten years the cost is close to linear, about 6,800 gas and 42 bytes per
+additional year, which is recorded as a test so the right cap can be read off
+the curve if it ever has to come down.</p>
+<p>Eighty years is far beyond any plausible tenure, and the alternative to a cap is
+a token that eventually cannot be rendered at all.</p>
+<h3>Correctness</h3>
+<p>13 tests for the renderer and 7 for the geometry, including byte-for-byte
+assertions against the reference renderer at three life stages, and a check that
+the two representations of the frame -- the ordered cell list and the row bitmap
+-- hold exactly the same 376 cells. Line, statement and function coverage of both
+files is 100%.</p>
+<hr>
+<h2>Both renderers together</h2>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th align="right">Code</th>
+<th align="right">Frame</th>
+<th align="right">Total</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Day zero</td>
+<td align="right">691,899</td>
+<td align="right">240,986</td>
+<td align="right">932,885</td>
+</tr>
+<tr>
+<td>Whole, one ring</td>
+<td align="right">691,899</td>
+<td align="right">450,256</td>
+<td align="right">1,142,155</td>
+</tr>
+<tr>
+<td>Whole, eighty rings</td>
+<td align="right">691,899</td>
+<td align="right">990,983</td>
+<td align="right">1,682,882</td>
+</tr>
+</tbody></table>
+<p>Against the 2,000,000 hard limit that leaves <strong>317,118 gas at the ring cap</strong> and
+857,845 in the ordinary case, for the JSON envelope and the base64 wrapper that
+Task 7 adds.</p>
+<p><strong>The cap case is the one to watch.</strong> If base64 and JSON come to more than
+317,118 gas, <code>MAX_RINGS</code> comes down rather than anything else changing -- the
+curve above says what each year is worth, so the new cap can be read straight
+off it. The ordinary case has comfortable room either way.</p>
 <h2>Build configuration change made here</h2>
 <p><code>via_ir = true</code> in <code>[profile.default]</code>, for the 507,528 gas above.</p>
 <p>The cost is that <strong><code>forge coverage</code> cannot use the IR pipeline</strong>: optimised
@@ -204,8 +322,8 @@ the table above prove directly. Verified: coverage runs clean and reports 100%
 on <code>CodeRenderer.sol</code>.</p>
 <hr>
 <h2>What this leaves for the rest of the image</h2>
-<p><code>tokenURI</code> still has to add the day frame and year rings, the Marks, the JSON
-metadata and the base64 wrapper around the SVG.</p>
+<p><code>tokenURI</code> still has to add the Marks, the JSON metadata and the base64 wrapper
+around the SVG. Task 7 builds those.</p>
 <table>
 <thead>
 <tr>
@@ -220,14 +338,9 @@ metadata and the base64 wrapper around the SVG.</p>
 <td align="right">5,000</td>
 </tr>
 <tr>
-<td>Spent by <code>CodeRenderer.paths</code></td>
-<td align="right">714,651</td>
-<td align="right">4,519</td>
-</tr>
-<tr>
-<td>Left for everything else</td>
-<td align="right">285,349</td>
-<td align="right">481</td>
+<td>Spent by both renderers, ordinary token</td>
+<td align="right">1,142,155</td>
+<td align="right">7,195</td>
 </tr>
 <tr>
 <td>Hard limit</td>
@@ -235,19 +348,24 @@ metadata and the base64 wrapper around the SVG.</p>
 <td align="right">20,000</td>
 </tr>
 <tr>
-<td>Left against the hard limit</td>
-<td align="right">1,285,349</td>
-<td align="right">15,481</td>
+<td>Left against the hard limit, ordinary token</td>
+<td align="right">857,845</td>
+<td align="right">12,805</td>
+</tr>
+<tr>
+<td>Left against the hard limit, at the ring cap</td>
+<td align="right">317,118</td>
+<td align="right">10,062</td>
 </tr>
 </tbody></table>
-<p><strong>The target is already tight and the byte target is effectively gone.</strong> The
-frame draws 376 cells against the code&#39;s 894, so on the code block&#39;s rate it
-would cost roughly 290,000 gas on its own, which would land the pair at the
-target with nothing left for JSON or base64. The hard limit has real room.</p>
-<p>This is not a failure -- the spike&#39;s fail-over condition is 2,000,000 gas and
-20,000 bytes, and both have margin. It does mean the 1,000,000 / 5,000 target
-should be treated as lost rather than nearly met, unless the frame turns out
-much cheaper per cell than the code block. That will be known at Task 6.</p>
+<p><strong>The 1,000,000 gas / 5,000 byte target is gone and should be recorded as
+missed</strong>, not nearly met: the two renderers alone exceed both halves of it. The
+2,000,000 / 20,000 hard limit is the one that decides whether the spike passes,
+and an ordinary token sits comfortably inside it.</p>
+<p>The single open risk is the ring cap. An eighty-year-old token leaves 317,118
+gas for base64 and JSON. If that proves too little, <code>MAX_RINGS</code> comes down --
+<code>RingCurve.t.sol</code> records what each year costs, so the replacement value can be
+read straight off the curve without re-deriving anything.</p>
 
 </body>
 </html>
