@@ -28,6 +28,28 @@ export const GHOST = "#f4eef0";   // frame cells not yet earned
 export const FIELD = "#ffffff";
 
 export const tierColour = streak => TIERS.find(t => streak >= t.min).colour;
+
+// A lapse walks BACK DOWN the same ladder rather than introducing paler tones.
+// Paler is not available: #767676 is the lightest ink that still decodes, so a
+// genuinely paler heart would stop scanning. Reusing the ladder means every
+// colour a lapse can produce is already proven scannable.
+//
+// Steps at 3, 7 and 30 days so each step is one marketplace refresh rather than
+// a continuous fade needing a refresh every day. At 30 the heart returns all the
+// way to the start, which is what the spec's separate effective-streak rule
+// implies as well.
+//
+// MUST stay identical to Palette.lapsed in contracts/src/render/Palette.sol.
+// The Solidity has the same boundary tests; if these two ladders ever diverge,
+// one of the two suites fails.
+export function lapsedColour(streak, lastDay, today) {
+  const gap = today > lastDay ? today - lastDay : 0;   // a backwards clock is not a lapse
+  if (gap < 3) return tierColour(streak);
+  if (gap >= 30) return TIERS[TIERS.length - 1].colour;
+  const index = TIERS.length - 1 - TIERS.findIndex(t => streak >= t.min);
+  const steps = gap >= 7 ? 2 : 1;
+  return TIERS[TIERS.length - 1 - (steps >= index ? 0 : index - steps)].colour;
+}
 export const canvasFor = years => BLOCK + 2 * (THICK + GAP + years);
 
 const FRAME = frameCells();

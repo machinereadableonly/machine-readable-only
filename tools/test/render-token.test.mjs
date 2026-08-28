@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
-import { renderSvg, canvasFor, tierColour, TIERS, NOISE } from "../render-token.mjs";
+import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
 const PAYLOAD = payloadFor("example.com", 1);
@@ -143,4 +143,32 @@ test("marks change the image without breaking the scan", () => {
     assert.ok(got.ok, `mark ${mark} broke the scan: ${got.why}`);
     assert.equal(got.destination, DESTINATION, `mark ${mark} changed the destination`);
   }
+});
+
+test("a lapse walks back down the same ladder, never off it", () => {
+  // Kept identical to Palette.lapsed in Solidity, which asserts these same
+  // boundaries. If the two ever diverge, one of the two suites fails.
+  const RED = "#c8102e", ROSE = "#bd2242", DUSK = "#a83a55", TINT = "#8e5566", START = "#70575f";
+  const at = gap => lapsedColour(100, 1000, 1000 + gap);
+  assert.equal(at(0), RED, "same day");
+  assert.equal(at(2), RED, "two days, still inert");
+  assert.equal(at(3), ROSE, "3 days, one step");
+  assert.equal(at(6), ROSE);
+  assert.equal(at(7), DUSK, "7 days, two steps");
+  assert.equal(at(29), DUSK);
+  assert.equal(at(30), START, "30 days, back to the start");
+  assert.equal(at(9999), START);
+
+  assert.equal(lapsedColour(0, 1000, 1003), START, "cannot fall below the start");
+  assert.equal(lapsedColour(3, 1000, 1007), START);
+  assert.equal(lapsedColour(100, 1000, 999), RED, "a backwards clock is not a lapse");
+
+  const ladder = new Set(TIERS.map(t => t.colour));
+  for (const streak of [0, 3, 7, 30, 100]) {
+    for (const gap of [0, 2, 3, 7, 30, 500]) {
+      assert.ok(ladder.has(lapsedColour(streak, 1000, 1000 + gap)),
+        `streak ${streak} gap ${gap} produced a colour outside the ladder`);
+    }
+  }
+  assert.equal(TINT, TIERS.find(t => t.min === 3).colour, "ladder order changed");
 });
