@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 0 rendering spike -- measured results</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Phase 0 rendering spike -- measured results</h1>
+<p>Started at Task 5 rather than Task 8, because the gas budget is the risk the
+spike exists to retire and the first real number arrived here. Every figure
+below is measured, not estimated.</p>
+<p>Budget, from the spec: <strong>1,000,000 gas / 5,000 bytes target, 2,000,000 gas /
+20,000 bytes hard fail</strong>, for the whole <code>tokenURI</code> call.</p>
+<hr>
+<h2>Task 5: <code>CodeRenderer.paths</code></h2>
+<p>The code block is roughly two-thirds of the image and, on these numbers, most of
+the gas. Measured on token 1 of <code>example.com</code> at the year-zero offset: 894 dark
+modules, 660 of them on the heart, merged into 372 runs.</p>
+<h3>Gas</h3>
+<table>
+<thead>
+<tr>
+<th>Implementation</th>
+<th align="right">Gas</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Per-module reads, <code>DynamicBufferLib</code>, <code>LibString</code></td>
+<td align="right">3,198,702</td>
+<td>fails the hard limit outright</td>
+</tr>
+<tr>
+<td>Rows read as words, buffer reserved up front</td>
+<td align="right">1,699,273</td>
+<td></td>
+</tr>
+<tr>
+<td>Runs composed in a register, one <code>mstore</code> each</td>
+<td align="right">1,872,623</td>
+<td>worse, see below</td>
+</tr>
+<tr>
+<td>Run jumping with <code>LibBit.fls</code></td>
+<td align="right">1,201,275</td>
+<td></td>
+</tr>
+<tr>
+<td>The same source compiled <code>via_ir</code></td>
+<td align="right">693,747</td>
+<td></td>
+</tr>
+<tr>
+<td>Buffer sized for the worst case, plus an overflow guard</td>
+<td align="right"><strong>714,651</strong></td>
+<td>shipped</td>
+</tr>
+</tbody></table>
+<p>Floor with an empty code (both paths present, nothing drawn): <strong>1,839</strong>.
+Worst case, a degenerate code of alternating modules -- 703 runs instead of 372,
+which no real QR produces but the library must survive: <strong>1,483,240</strong>.</p>
+<p>Three things are worth keeping from that table.</p>
+<p><strong>The obvious implementation missed the hard limit by 60%.</strong> Reading one module
+at a time, allocating a string per coordinate and appending eight times per run
+cost 3.2M gas for a picture that is 4.5 KB of text. None of that is visible in
+the byte measurements, which is exactly why the resume checklist insisted this
+number be taken at Task 5 rather than Task 8.</p>
+<p><strong>Composing runs in a register made it worse before the scan was fixed.</strong> That
+step removed every per-run allocation and gas went UP by 173,000. The reason is
+that allocation was never the bottleneck: a probe with run writing disabled
+showed the bit-by-bit scan alone cost 954,000 gas, at roughly 350 gas for each
+of its 2,738 iterations. Optimising the wrong half is only visible if each half
+is measured separately, so both were.</p>
+<p><strong><code>via_ir</code> is worth 507,528 gas on identical source.</strong> That is not a rounding
+difference, it is 25% of the entire budget, and it is why <code>via_ir = true</code> is now
+set in <code>foundry.toml</code>. See the note below on what it costs.</p>
+<p>The last row bought memory safety for 20,904 gas. The buffer had been sized to
+the measured path length, which a degenerate code -- alternating modules, 19 runs
+per row -- would have overrun by roughly 8,000 bytes, writing into whatever
+memory followed it. It is now sized to that worst case and guarded per run.</p>
+<h3>Bytes</h3>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th align="right">Bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Heart path data</td>
+<td align="right">2,495</td>
+</tr>
+<tr>
+<td>Noise path data</td>
+<td align="right">1,970</td>
+</tr>
+<tr>
+<td>Element markup around them</td>
+<td align="right">54</td>
+</tr>
+<tr>
+<td><strong><code>paths()</code> total</strong></td>
+<td align="right"><strong>4,519</strong></td>
+</tr>
+</tbody></table>
+<p>Consistent with the 4,986 measured for the whole SVG in the Task 2 exploration,
+which included the frame the code block does not draw.</p>
+<h3>Contract size</h3>
+<p>Every render library is <code>internal</code> and inlines into its caller, so each measures
+57 bytes of runtime with 24,519 bytes of margin. The harness contract that makes
+<code>paths</code> externally callable for the gas report measures 1,923 bytes.</p>
+<h3>Correctness</h3>
+<p>15 tests, all passing, including a byte-for-byte assertion that the Solidity
+output equals the path data <code>tools/render-token.mjs</code> produces for the same
+token. That test is what makes the assembly in this library safe to write: the
+run finder, the row reader and the register composer are all checked against an
+independent implementation rather than against themselves.</p>
+<p>Line, statement, branch and function coverage of <code>CodeRenderer.sol</code> are all
+100%.</p>
+<hr>
+<h2>Build configuration change made here</h2>
+<p><code>via_ir = true</code> in <code>[profile.default]</code>, for the 507,528 gas above.</p>
+<p>The cost is that <strong><code>forge coverage</code> cannot use the IR pipeline</strong>: optimised
+output no longer maps back to source, so coverage either misreports or fails
+with &quot;stack too deep&quot;. This is a live, open Foundry issue
+(foundry-rs/foundry#13001, still open January 2026), and the documented
+<code>--ir-minimum</code> workaround does not always compile either.</p>
+<p>Resolved with a second profile rather than by giving up either side:</p>
+<pre><code>FOUNDRY_PROFILE=coverage forge coverage
+</code></pre>
+<p><code>[profile.coverage]</code> sets <code>via_ir = false</code> and <code>optimizer = false</code>. That is
+sound because coverage measures which lines the tests reach, not how those lines
+are compiled -- and this source compiles both ways, which the two gas figures in
+the table above prove directly. Verified: coverage runs clean and reports 100%
+on <code>CodeRenderer.sol</code>.</p>
+<hr>
+<h2>What this leaves for the rest of the image</h2>
+<p><code>tokenURI</code> still has to add the day frame and year rings, the Marks, the JSON
+metadata and the base64 wrapper around the SVG.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th align="right">Gas</th>
+<th align="right">Bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Target</td>
+<td align="right">1,000,000</td>
+<td align="right">5,000</td>
+</tr>
+<tr>
+<td>Spent by <code>CodeRenderer.paths</code></td>
+<td align="right">714,651</td>
+<td align="right">4,519</td>
+</tr>
+<tr>
+<td>Left for everything else</td>
+<td align="right">285,349</td>
+<td align="right">481</td>
+</tr>
+<tr>
+<td>Hard limit</td>
+<td align="right">2,000,000</td>
+<td align="right">20,000</td>
+</tr>
+<tr>
+<td>Left against the hard limit</td>
+<td align="right">1,285,349</td>
+<td align="right">15,481</td>
+</tr>
+</tbody></table>
+<p><strong>The target is already tight and the byte target is effectively gone.</strong> The
+frame draws 376 cells against the code&#39;s 894, so on the code block&#39;s rate it
+would cost roughly 290,000 gas on its own, which would land the pair at the
+target with nothing left for JSON or base64. The hard limit has real room.</p>
+<p>This is not a failure -- the spike&#39;s fail-over condition is 2,000,000 gas and
+20,000 bytes, and both have margin. It does mean the 1,000,000 / 5,000 target
+should be treated as lost rather than nearly met, unless the frame turns out
+much cheaper per cell than the code block. That will be known at Task 6.</p>
+
+</body>
+</html>

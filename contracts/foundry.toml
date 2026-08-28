@@ -6,7 +6,24 @@ solc = "0.8.35"
 evm_version = "cancun"   # Base (OP Stack) supports Cancun + PUSH0; matches base-200
 optimizer = true
 optimizer_runs = 200
+# The IR pipeline is not a preference here, it is the gas budget. Measured on
+# CodeRenderer.paths with an identical source: legacy 1,201,275 gas, via-ir
+# 693,747. The whole tokenURI has 2,000,000 to spend, so the 507,528 the IR
+# pipeline gives back is the difference between a working image and a re-plan.
+via_ir = true
 fs_permissions = [{ access = "read", path = "./out" }]
+
+# `forge coverage` cannot use the IR pipeline: optimised output no longer maps
+# back to the source, so coverage either misreports or fails outright with
+# "stack too deep" (foundry-rs/foundry#13001, still open Jan 2026, and the
+# --ir-minimum workaround does not always compile either). Coverage therefore
+# builds the legacy way. That is sound because coverage measures which lines the
+# tests reach, not how they are compiled -- and the source compiles both ways,
+# which the gas figures above prove. Run it with:
+#     FOUNDRY_PROFILE=coverage forge coverage
+[profile.coverage]
+via_ir = false
+optimizer = false
 
 [rpc_endpoints]
 local        = "http://127.0.0.1:8545"

@@ -56,7 +56,7 @@ const FRAME = frameCells();
 
 // Same-colour horizontal runs merged into one path each. This is what keeps the
 // image inside budget: one rect per cell measured 70,298 bytes, this form 4,986.
-function pathFor(set, canvas) {
+export function pathFor(set, canvas) {
   let d = "";
   for (let y = 0; y < canvas; y++) {
     let x = 0;
