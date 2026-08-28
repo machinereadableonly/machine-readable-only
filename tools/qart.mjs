@@ -18,6 +18,26 @@ export const MASKS = [0, 1, 2, 3, 4, 5, 6, 7];
 
 // Free bytes ride in a second byte segment after a "#", so the scan destination
 // is unchanged: the fragment is never sent to the server.
+//
+// They must also be characters a scanner will accept as part of a URL. Arbitrary
+// binary decodes to a string full of control bytes, and a phone then refuses to
+// offer the link at all -- the code scans and nothing happens. jsqr hides this by
+// stopping at the first byte that is not valid text and returning the clean
+// prefix, which is how it survived a green test suite; see test/decode-strict.
+//
+// The allowed set has to stay an affine subspace of GF(2)^8 or the whole QArt
+// method collapses, because the solver derives its basis by flipping single bits.
+// Fixing the top three bits and freeing the low five satisfies both: 32 values,
+// 0x40 to 0x5F, the characters "@", "A".."Z", "[", "\\", "]", "^" and "_".
+//
+// Five is the ceiling, not a guess. A six-bit set would have to be 0x40-0x7F,
+// the only 64-value coset that avoids the control range, and that one contains
+// the backtick and DEL -- both of which a browser rewrites, which would change
+// the URL the visitor is shown. Measured against Node's WHATWG URL parser: the
+// only printable bytes it rewrites in a fragment are " < > and the backtick.
+export const FREE_BASE = 0x40;                 // "@"
+export const FREE_BITS = [0, 1, 2, 3, 4];      // the low five bits are ours
+
 export function freeByteBudget(payloadLength) {
   const segment1 = 4 + 8 + payloadLength * 8;
   const segment2Header = 4 + 8;
@@ -47,17 +67,20 @@ export function solve(payload, mask, target) {
   const K = freeByteBudget(payload.length);
   if (K < 1) throw new Error(`payload too long for version ${VERSION}: ${payload.length} chars`);
 
-  const baseline = encode(payload, new Uint8Array(K), mask);
+  const baseBytes = new Uint8Array(K).fill(FREE_BASE);
+  const baseline = encode(payload, baseBytes, mask);
   const size = baseline.modules.size;
   const base = moduleBits(baseline);
 
   // Basis: flip one free bit, record which modules moved.
   const basis = [];
   for (let byte = 0; byte < K; byte++) {
-    for (let bit = 0; bit < 8; bit++) {
+    for (const bit of FREE_BITS) {
       const v = new Uint8Array(K);
       v[byte] = 1 << bit;
-      const moved = moduleBits(encode(payload, v, mask));
+      const probe = baseBytes.slice();
+      probe[byte] ^= v[byte];
+      const moved = moduleBits(encode(payload, probe, mask));
       const delta = new Uint8Array(size * size);
       for (let i = 0; i < moved.length; i++) delta[i] = moved[i] ^ base[i];
       basis.push({ vec: packBits(delta), val: v });
@@ -80,7 +103,7 @@ export function solve(payload, mask, target) {
   }
 
   // Walk the pivots, adding the ones that flip a module the wrong way.
-  const chosen = new Uint8Array(K);
+  const chosen = baseBytes.slice();
   let current = packBits(base);
   for (const p of pivots) {
     if (Number(bitAt(current, p.pos)) !== want[p.pos]) { current ^= p.vec; xorInto(chosen, p.val); }

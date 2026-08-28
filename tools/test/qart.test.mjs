@@ -1,44 +1,44 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Resvg } from "@resvg/resvg-js";
-import jsQR from "jsqr";
-import { solve, bestOfAllMasks, packModules, unpackModules, payloadFor, freeByteBudget } from "../qart.mjs";
+import { solve, bestOfAllMasks, packModules, unpackModules, payloadFor,
+         freeByteBudget, FREE_BITS } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
+import { renderModules, scanResult } from "./helpers/decode.mjs";
 
 const PAYLOAD = payloadFor("example.com", 1);
+const DESTINATION = PAYLOAD.slice(0, -1);   // everything before the "#"
 
-function decode(modules, size, px = 700) {
-  const q = 4, dim = size + 2 * q;
-  let d = "";
-  for (let j = 0; j < size; j++) for (let i = 0; i < size; i++)
-    if (modules[j * size + i]) d += `M${q + i} ${q + j}h1v1h-1z`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${dim} ${dim}" shape-rendering="crispEdges"><rect width="${dim}" height="${dim}" fill="#fff"/><path fill="#111" d="${d}"/></svg>`;
-  const img = new Resvg(svg, { fitTo: { mode: "width", value: px } }).render();
-  const got = jsQR(new Uint8ClampedArray(img.pixels), img.width, img.height);
-  return got ? got.data : null;
-}
+const scan = (modules, size, px = 700) => scanResult(renderModules(modules, size, px), px);
 
-test("the reshuffled code still decodes to its own payload", () => {
+test("the reshuffled code still sends a scanner to its own destination", () => {
   const r = solve(PAYLOAD, 0);
-  assert.equal(decode(r.modules, r.size), PAYLOAD);
+  const got = scan(r.modules, r.size);
+  assert.ok(got.ok, `${got.why}: ${JSON.stringify(got.text)}`);
+  assert.equal(got.destination, DESTINATION);
 });
 
 test("a useful share of modules land on the heart", () => {
+  // 60% is the floor, not the target. The URL-safe alphabet gives 5 free bits
+  // per byte instead of 8, so the solver controls 400 of 1369 modules and the
+  // rest fall as chance leaves them -- about 50% right by luck. Measured 64.9%
+  // with the interior-first order; anything under 60% means something regressed.
   const r = solve(PAYLOAD, 0);
-  assert.ok(r.match > 0.65, `match too low: ${(r.match * 100).toFixed(1)}%`);
+  assert.ok(r.match > 0.60, `match too low: ${(r.match * 100).toFixed(1)}%`);
   assert.equal(r.size, 37);
 });
 
 test("every free bit becomes a usable pivot", () => {
   const r = solve(PAYLOAD, 0);
-  assert.equal(r.controlled, freeByteBudget(PAYLOAD.length) * 8);
+  assert.equal(r.controlled, freeByteBudget(PAYLOAD.length) * FREE_BITS.length);
 });
 
 test("searching all eight masks never does worse than a fixed one", () => {
   const fixed = solve(PAYLOAD, 0);
   const best = bestOfAllMasks(PAYLOAD);
   assert.ok(best.match >= fixed.match, `best ${best.match} < fixed ${fixed.match}`);
-  assert.equal(decode(best.modules, best.size), PAYLOAD);
+  const got = scan(best.modules, best.size);
+  assert.ok(got.ok, `${got.why}: ${JSON.stringify(got.text)}`);
+  assert.equal(got.destination, DESTINATION);
 });
 
 test("different tokens produce different codes but comparable quality", () => {

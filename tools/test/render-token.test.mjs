@@ -1,21 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Resvg } from "@resvg/resvg-js";
-import jsQR from "jsqr";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
 import { renderSvg, canvasFor, tierColour, TIERS, NOISE } from "../render-token.mjs";
+import { scanResult } from "./helpers/decode.mjs";
 
 const PAYLOAD = payloadFor("example.com", 1);
 const CODE = solve(PAYLOAD, 0);
 const TARGET = heartTarget(CODE.size);
 
 const render = state => renderSvg(CODE.modules, TARGET.want, CODE.size, state);
-function decode(svg, px = 700) {
-  const img = new Resvg(svg, { fitTo: { mode: "width", value: px } }).render();
-  const got = jsQR(new Uint8ClampedArray(img.pixels), img.width, img.height);
-  return got ? got.data : null;
-}
+const DESTINATION = PAYLOAD.slice(0, -1);   // everything before the "#"
 // WCAG relative luminance, for the contrast the scanner actually needs.
 const expand = h => { const s = h.replace("#", ""); return s.length === 3 ? s.split("").map(c => c + c).join("") : s; };
 const lum = h => {
@@ -41,7 +36,29 @@ test("the token scans at every stage of its life", () => {
     { level: 365, streak: 140, years: 1 },
     { level: 365, streak: 1, years: 1 },       // whole but lapsed
     { level: 1095, streak: 400, years: 3 },
-  ]) assert.equal(decode(render(state)), PAYLOAD, `failed at ${JSON.stringify(state)}`);
+  ]) {
+    const got = scanResult(render(state));
+    assert.ok(got.ok, `${JSON.stringify(state)}: ${got.why} -- ${JSON.stringify(got.text)}`);
+    assert.equal(got.destination, DESTINATION, `wrong destination at ${JSON.stringify(state)}`);
+  }
+});
+
+test("the real image scans at every size a viewer might see it", () => {
+  // Contrast against white is necessary but NOT sufficient: the noise tone clears
+  // WCAG at 4.54 and a scanner's binarizer still has to cope with three inks at
+  // once. Only decoding the actual rendered token proves it, and it has to hold
+  // across sizes -- a local binarizer behaves differently on a big raster than a
+  // small one, so passing at one size says nothing about the others.
+  for (const px of [900, 700, 500, 350, 250]) {
+    for (const state of [
+      { level: 0, streak: 0, years: 0 },          // day one, the palest state
+      { level: 200, streak: 45, years: 0 },
+      { level: 365, streak: 140, years: 1 },
+    ]) {
+      const got = scanResult(render(state), px);
+      assert.ok(got.ok, `${px}px ${JSON.stringify(state)}: ${got.why}`);
+    }
+  }
 });
 
 test("the image stays inside the spec's size budget", () => {
@@ -81,6 +98,8 @@ test("marks change the image without breaking the scan", () => {
   for (const mark of ["vein", "halo", "crown"]) {
     const svg = render({ level: 200, streak: 45, years: 0, marks: [mark] });
     assert.notEqual(svg, base, `mark ${mark} changed nothing`);
-    assert.equal(decode(svg), PAYLOAD, `mark ${mark} broke the scan`);
+    const got = scanResult(svg);
+    assert.ok(got.ok, `mark ${mark} broke the scan: ${got.why}`);
+    assert.equal(got.destination, DESTINATION, `mark ${mark} changed the destination`);
   }
 });
