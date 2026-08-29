@@ -188,6 +188,11 @@ export function renderSvg(modules, want, size, state) {
   const {
     level = 0, streak = 0, years: rawYears = 0, marks = [],
     lastDay = 0, today = 0, resting = false, sunset = false,
+    // Pixels per cell to declare as the SVG's intrinsic size, or 0 for none.
+    // Zero is the shipped behaviour and emits no width/height at all. Mirrors
+    // Renderer.pxPerCell(); RendererSized overrides it to 16. The two must stay
+    // identical or the differential test is measuring nothing.
+    pxPerCell = 0,
   } = state;
   const years = ringsFor(rawYears);
   const canvas = canvasFor(years);
@@ -269,7 +274,13 @@ export function renderSvg(modules, want, size, state) {
     ? `<rect x="${blockOff}" y="${blockOff}" width="${BLOCK}" height="${BLOCK}" fill="${VOICE_QUIET}"/>`
     : "";
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${canvas} ${canvas}" shape-rendering="crispEdges">${defs}<rect width="${canvas}" height="${canvas}" fill="${field}"/>${quiet}${body}</svg>`;
+  // ` width="848" height="848"` when a size is declared, empty otherwise -- so
+  // the unsized build emits the exact bytes it always has, down to the single
+  // space before viewBox.
+  const px = pxPerCell ? canvas * pxPerCell : 0;
+  const intrinsic = px ? ` width="${px}" height="${px}"` : "";
+
+  return `<svg xmlns="http://www.w3.org/2000/svg"${intrinsic} viewBox="0 0 ${canvas} ${canvas}" shape-rendering="crispEdges">${defs}<rect width="${canvas}" height="${canvas}" fill="${field}"/>${quiet}${body}</svg>`;
 }
 
 // ---------------------------------------------------------------------------

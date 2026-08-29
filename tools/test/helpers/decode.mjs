@@ -5,6 +5,14 @@
 // carrying 77 bytes of binary junk pass as a tidy URL through the whole suite,
 // while real phones scanned it and offered no link at all. ZXing is the library a
 // phone's scanner descends from and returns the WHOLE payload, junk included.
+//
+// The file is split into three layers on purpose: pixels -> text (decodePixels),
+// text -> verdict (judge), and the SVG conveniences that sit on top. Task 10c
+// Phase 2 has to put a THIRD PARTY's PNG through the identical checks, and it
+// enters at the pixel layer rather than the SVG one. Two definitions of "it
+// scans" is the exact failure this project already had once, when jsqr and a
+// real phone disagreed -- so a new consumer gets a new entry point, never a new
+// copy of the rules.
 import { Resvg } from "@resvg/resvg-js";
 import jsQR from "jsqr";
 import { QRCodeReader, BinaryBitmap, HybridBinarizer, RGBLuminanceSource,
@@ -29,22 +37,31 @@ export function renderModules(modules, size, px = 700, ink = "#111") {
 
 function rasterise(svg, px) {
   const img = new Resvg(svg, { fitTo: { mode: "width", value: px } }).render();
-  return { pixels: new Uint8ClampedArray(img.pixels), w: img.width, h: img.height };
+  return { pixels: new Uint8ClampedArray(img.pixels), width: img.width, height: img.height };
 }
 
-export function decodeStrict(svg, px = 700) {
-  const { pixels, w, h } = rasterise(svg, px);
-  const lum = new Int32Array(w * h);
-  for (let i = 0; i < w * h; i++) {
+/**
+ * Pixels to text: the only place ZXing is ever called.
+ *
+ * @param {{pixels: Uint8ClampedArray, width: number, height: number}} img RGBA.
+ * @returns {string|null} the whole payload, or null if nothing decoded.
+ */
+export function decodePixels({ pixels, width, height }) {
+  const lum = new Int32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
     lum[i] = (pixels[i * 4] << 16) | (pixels[i * 4 + 1] << 8) | pixels[i * 4 + 2];
   }
-  const bitmap = new BinaryBitmap(new HybridBinarizer(new RGBLuminanceSource(lum, w, h)));
+  const bitmap = new BinaryBitmap(new HybridBinarizer(new RGBLuminanceSource(lum, width, height)));
   try { return new QRCodeReader().decode(bitmap, HINTS).getText(); } catch { return null; }
 }
 
+export function decodeStrict(svg, px = 700) {
+  return decodePixels(rasterise(svg, px));
+}
+
 export function decodeLenient(svg, px = 700) {
-  const { pixels, w, h } = rasterise(svg, px);
-  const r = jsQR(pixels, w, h);
+  const { pixels, width, height } = rasterise(svg, px);
+  const r = jsQR(pixels, width, height);
   return r ? r.data : null;
 }
 
@@ -52,8 +69,10 @@ export function decodeLenient(svg, px = 700) {
 // browser will take as written, and it goes to the destination we intended. The
 // QArt free bytes live in the fragment, so they are expected in the string -- but
 // the fragment is never sent to a server, so they cost the visitor nothing.
-export function scanResult(svg, px = 700) {
-  const text = decodeStrict(svg, px);
+//
+// Pure text in, verdict out. Everything that claims a code scans -- our own
+// renders and other people's PNGs alike -- comes through here.
+export function judge(text) {
   if (text === null) return { ok: false, why: "no decode", text: null };
   if (!text.startsWith("https://")) return { ok: false, why: "not a URL", text };
   let url;
@@ -62,4 +81,14 @@ export function scanResult(svg, px = 700) {
   const bad = [...text].filter(c => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) > 0x7e);
   if (bad.length) return { ok: false, why: `${bad.length} unprintable characters`, text };
   return { ok: true, why: null, text, destination: `${url.origin}${url.pathname}` };
+}
+
+/** Our own SVG, rasterised by us. */
+export function scanResult(svg, px = 700) {
+  return judge(decodeStrict(svg, px));
+}
+
+/** Somebody else's already-rasterised image. Same rules, different doorway. */
+export function scanPixels(img) {
+  return judge(decodePixels(img));
 }

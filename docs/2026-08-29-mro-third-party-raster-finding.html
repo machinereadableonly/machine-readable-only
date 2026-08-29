@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The third-party raster finding</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>The third-party raster finding</h1>
+<p>Task 10c Phase 2, 2026-08-29. Measured against Alchemy&#39;s NFT API on Base
+Sepolia.</p>
+<h2>The short version</h2>
+<p>Three findings, in descending order of how much they matter.</p>
+<ol>
+<li><strong>The ERC-4906 refresh did not happen.</strong> A state change that the chain
+confirms, with the event emitted correctly after the write, left Alchemy&#39;s
+cached metadata frozen for at least twelve minutes -- through polling,
+<code>refreshCache=true</code> twice, and <code>invalidateContract</code>. For a piece whose whole
+subject is an image that changes as the agent returns, this is the serious
+one. No contract change fixes it; the gap is on the consumer side.</li>
+<li><strong>Declaring an intrinsic SVG size cuts third-party decode failures from 54%
+to 3.6%</strong>, measured as a controlled A/B between two live contracts that
+differ in nothing else. It costs about 1,600 gas and 32 bytes.</li>
+<li><strong>The artwork was never at fault.</strong> Our renderer at the identical pixel width
+decoded in 55 of 56 cases where theirs failed 30 times. The difference is
+that their CDN interpolates and ours does not.</li>
+</ol>
+<h2>What was measured, first pass</h2>
+<p>Against <code>0xfd8AaAc531b02fCA9Df5dDdAa97a78fF2b102190</code> -- the sweep D soak
+contract, which carries the current palette but pre-robust-solve bitmaps. The
+numbers in this section are that older contract; the A/B further down re-runs
+everything on fresh contracts with current bitmaps and is the one to quote.</p>
+<p>Seven token bitmaps (ids 1, 2, 3, 5, 8, 12, 13), each fetched from Alchemy at
+ten URLs: the two the API advertises, and eight widths constructed from the
+documented Cloudinary transform. Every image was decoded with ZXing through the
+same oracle the whole suite uses -- <code>scanPixels</code>, a new entry point into
+<code>tools/test/helpers/decode.mjs</code>, not a second copy of the rules.</p>
+<table>
+<thead>
+<tr>
+<th>URL</th>
+<th>What it is</th>
+<th>Renders at</th>
+<th>Grey levels</th>
+<th>Decoded</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thumbnailUrl</code></td>
+<td>advertised by the API</td>
+<td>250px</td>
+<td>3</td>
+<td>7 / 7</td>
+</tr>
+<tr>
+<td><code>pngUrl</code> (<code>convert-png</code>)</td>
+<td>advertised by the API</td>
+<td>53-57px</td>
+<td>3</td>
+<td>7 / 7</td>
+</tr>
+<tr>
+<td><code>w_NNN/scaled</code></td>
+<td>constructed per the FAQ</td>
+<td>256-1600px</td>
+<td>170-205</td>
+<td>33 / 56</td>
+</tr>
+</tbody></table>
+<p>Per token, failures out of eight constructed widths:</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Failures</th>
+<th>Which widths</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>8</td>
+<td>all of them</td>
+</tr>
+<tr>
+<td>2</td>
+<td>3</td>
+<td>1000, 1080, 1600</td>
+</tr>
+<tr>
+<td>3</td>
+<td>3</td>
+<td>1000, 1080, 1600</td>
+</tr>
+<tr>
+<td>5</td>
+<td>7</td>
+<td>all but 700</td>
+</tr>
+<tr>
+<td>8</td>
+<td>1</td>
+<td>256</td>
+</tr>
+<tr>
+<td>12</td>
+<td>0</td>
+<td>--</td>
+</tr>
+<tr>
+<td>13</td>
+<td>1</td>
+<td>1080</td>
+</tr>
+</tbody></table>
+<p><strong>23 of 56 constructed resizes failed: 41%.</strong> The control column -- our own
+renderer at the same width, decoded the same way -- failed once in 56, and that
+one case (token 12 at 700px) is the known pre-robust-solve fragile bitmap that
+this contract still carries.</p>
+<h2>The mechanism</h2>
+<p>The grey-level count is the tell. The artwork is duotone on white, so a crisp
+rasterisation of it holds <strong>3</strong> distinct grey levels. Every constructed resize
+came back holding <strong>170 to 205</strong>.</p>
+<p>That is interpolation. Alchemy&#39;s CDN rasterises the SVG once at its intrinsic
+size and then scales that bitmap to the requested width, smoothing as it goes.
+Module edges soften into gradients, and a binarizer that has to place a
+threshold between &quot;dark&quot; and &quot;light&quot; loses modules that are now halfway between.
+Our renderer is asked for the width directly, rasterises the vectors at that
+width, and every module edge stays a hard step -- 3 levels, and it decodes.</p>
+<p>The two advertised URLs escape this because Cloudinary rasterises those from the
+vectors rather than resampling a bitmap: both come back at 3 grey levels.</p>
+<h2>The part that touches settled ground</h2>
+<p><code>pngUrl</code> renders at <strong>53px</strong> -- and 57px for a token with a year ring. That is
+the canvas in viewBox units, one pixel per cell, because <strong>our SVG declares no
+intrinsic width or height</strong>. The consumer is not choosing 53px; it is falling
+back to our units in the absence of a size.</p>
+<p>Phase 1 considered declaring <code>width</code> and <code>height</code> (option C) and did not build
+it, on the reasoning that it &quot;only helps consumers that honour it&quot;. This is a
+measured instance of a real consumer honouring it: Cloudinary derives both its
+PNG dimensions and its upscale factor from that intrinsic size. Declaring
+<code>width = canvas * K</code> would mean their single rasterisation happens at K times
+the resolution before any smoothing is applied.</p>
+<p><strong>That reasoning is not proof.</strong> Whether it actually fixes the constructed
+resizes can only be settled by deploying a sized SVG and re-running this exact
+sweep. It is free to do so on Sepolia. It is not being done unilaterally,
+because it changes the shipped image bytes and it reverses a decision already
+made.</p>
+<h2>THE A/B, AND IT SETTLES IT</h2>
+<p>Run 2026-08-29 after the above. Two contracts were deployed to Base Sepolia
+carrying the <strong>same twenty-six states and the same bitmaps</strong>, differing only in
+whether the SVG declares <code>width</code>/<code>height</code>. <code>RendererSized.t.sol</code> pins that the
+two images are otherwise byte-identical, so a decode difference can only come
+from the intrinsic size.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>address</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Renderer</code> (plain)</td>
+<td><code>0xf63d235B178faEdFcf7cba64632e330bcE94554c</code></td>
+</tr>
+<tr>
+<td><code>RendererSized</code></td>
+<td><code>0x8db8a6d5cb6BFE2F868c6D50936C20F0aF336aD6</code></td>
+</tr>
+<tr>
+<td>token, plain</td>
+<td><code>0x12C641d5C15DeEc21D71912973Bd8f63967b9bF6</code></td>
+</tr>
+<tr>
+<td>token, sized</td>
+<td><code>0x12c82BCE6f64f797358031Caae3c9652bD5Bd209</code></td>
+</tr>
+</tbody></table>
+<p>Seven bitmaps x eight constructed widths, decoded off Alchemy&#39;s own PNG:</p>
+<table>
+<thead>
+<tr>
+<th>Build</th>
+<th>Failures</th>
+<th>Rate</th>
+<th><code>pngUrl</code> renders at</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>unsized (shipped today)</td>
+<td>30 / 56</td>
+<td><strong>54%</strong></td>
+<td>53px</td>
+</tr>
+<tr>
+<td>sized, <code>canvas * 16</code></td>
+<td>2 / 56</td>
+<td><strong>3.6%</strong></td>
+<td>848px</td>
+</tr>
+</tbody></table>
+<p>The two residuals are token 3 at 700px and 850px. Their grey-level counts fall
+from 170-208 to 143-174 as well: the CDN still interpolates, but it is now
+downscaling an 848px raster instead of upscaling a 53px one, and a downscale of
+a crisp source loses far less.</p>
+<p><code>pngUrl</code> moving from 53px to 848px is the second win, and arguably the larger
+one: that is the URL a consumer is handed, and 53px was never going to survive
+being stretched into a display card.</p>
+<h3>What it costs</h3>
+<p>Measured over RPC on the two live contracts:</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Plain</th>
+<th>Sized</th>
+<th>Delta</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1, day one</td>
+<td>1,410,174 gas / 8,850 B</td>
+<td>1,411,606 / 8,882</td>
+<td>+1,432 gas, +32 B</td>
+</tr>
+<tr>
+<td>16, ten years</td>
+<td>1,501,957 / 9,431</td>
+<td>1,501,259 / 9,467</td>
+<td>-698 gas, +36 B</td>
+</tr>
+<tr>
+<td>21, level 364 worst case</td>
+<td>1,631,616 / 8,892</td>
+<td>1,633,224 / 8,924</td>
+<td>+1,608 gas, +32 B</td>
+</tr>
+</tbody></table>
+<p>About 1,600 gas and 32 bytes. The worst case moves to 1,633,224 gas and 8,924
+bytes, leaving 366,776 gas and 11,076 bytes inside the hard limit. The negative
+delta on token 16 is optimiser noise, not a saving.</p>
+<h2>ERC-4906: THE REFRESH DID NOT HAPPEN</h2>
+<p>Rehearsed 2026-08-29 on the plain contract, and this is the most serious thing
+in this document.</p>
+<p>Token 1 was warmed in Alchemy&#39;s cache at Level 365, then moved on chain to Level
+300 by <code>setState</code>, which emits <code>MetadataUpdate(1)</code> <strong>after</strong> the write. The chain
+was confirmed to have changed: a direct <code>tokenURI</code> read returns Level 300,
+Streak 77, and still decodes to its own url.</p>
+<p>Alchemy did not update. Measured:</p>
+<ul>
+<li><strong>12 minutes of polling</strong> without a refresh flag: Level 365 throughout.</li>
+<li><strong><code>refreshCache=true</code></strong>, twice, ten minutes apart: Level 365.</li>
+<li><strong><code>invalidateContract</code></strong>, then four more minutes of polling: Level 365.</li>
+<li><code>timeLastUpdated</code> stayed frozen at <code>2026-08-29T12:38:35.181Z</code> -- the moment of
+the pre-write read. It is not re-reading at all, rather than re-reading and
+getting a stale answer.</li>
+</ul>
+<p>A longer poll is running; the catch-up time, if it comes, lands in
+<code>tools/out/erc4906-watch.log</code>.</p>
+<p><strong>Why this matters more here than for most NFTs.</strong> This piece is defined as a
+living record of return visits -- the image is supposed to change as the agent
+comes back. An indexer that caches the first render and will not re-read it
+displays a token frozen at day one. The ERC-4906 event is emitted correctly and
+in the right order; the gap is on the consumer side, and no contract change
+fixes it.</p>
+<p><strong>Stated honestly:</strong> this is one token, one indexer, over about twelve minutes.
+It is not proof that Alchemy never refreshes. It is proof that the event plus
+both documented refresh mechanisms did not produce an update in that window,
+which is enough to stop anyone assuming the refresh path works.</p>
+<h2>How much this matters</h2>
+<p>An honest reading of the severity, in both directions:</p>
+<ul>
+<li><strong>The URLs a marketplace is handed all work.</strong> <code>thumbnailUrl</code> and <code>pngUrl</code> are
+what the NFT API returns; a consumer that displays what it is given displays a
+decodable code. Nothing here shows a wallet or marketplace failing.</li>
+<li><strong><code>w_NNN/scaled</code> is developer-constructed</strong>, documented in Alchemy&#39;s FAQ as a
+thing you can build, not a field they return. Nobody is obliged to use it.</li>
+<li><strong>But 53px is what <code>pngUrl</code> hands over</strong>, and any consumer that scales that up
+for display -- a browser stretching a 53px image into a 400px card -- applies
+exactly the same smoothing client-side, where we cannot measure it.</li>
+</ul>
+<h2>Two operational findings, both worth keeping</h2>
+<ol>
+<li><strong>A cold token returns no CDN copy at all.</strong> The first read of a token that
+Alchemy has never ingested comes back with <code>cachedUrl</code> set to our raw <code>data:</code>
+URI and <code>thumbnailUrl</code>, <code>pngUrl</code>, <code>contentType</code> and <code>size</code> all <code>null</code>.
+<code>refreshCache=true</code> starts the ingest, and the ingest is <strong>asynchronous</strong> --
+three of five tokens in an early probe still had no image seconds later.
+<code>metadataWithImage</code> polls for it. Reading once and reporting &quot;no image&quot; would
+have been wrong, the same trap as reading a tokenURI straight after a write.</li>
+<li><strong>Alchemy&#39;s documented 30,000-byte tokenURI limit is not close.</strong> Our worst
+case is 10,066 bytes and Alchemy stored these SVGs at 7,818 to 8,302 bytes.
+This is the first third-party number this project has.</li>
+</ol>
+<h2>Basescan</h2>
+<p>Inconclusive, stated as such. The server-rendered HTML for the token page
+carries <code>/images/main/nft-placeholder.svg</code> rather than the artwork. That is not
+proof it never renders -- the media may load client-side -- and this VPS has no
+browser to settle it. Not claimed either way.</p>
+<h2>Sources</h2>
+<ul>
+<li>Alchemy NFT API FAQ, image caching, <code>convert-png</code>, <code>w_NNN/scaled</code>, the
+30,000-byte limit -- <a href="https://www.alchemy.com/docs/reference/nft-api-faq">https://www.alchemy.com/docs/reference/nft-api-faq</a></li>
+<li>getNFTMetadata v3, <code>refreshCache</code> -- <a href="https://www.alchemy.com/docs/reference/nft-api-endpoints/nft-api-endpoints/nft-metadata-endpoints/get-nft-metadata-v-3">https://www.alchemy.com/docs/reference/nft-api-endpoints/nft-api-endpoints/nft-metadata-endpoints/get-nft-metadata-v-3</a></li>
+<li>Refresh NFT metadata / <code>invalidateContract</code> -- <a href="https://www.alchemy.com/support/how-can-i-update-the-nfts-metadata-using-alchemy-s-nft-api">https://www.alchemy.com/support/how-can-i-update-the-nfts-metadata-using-alchemy-s-nft-api</a></li>
+</ul>
+
+</body>
+</html>
