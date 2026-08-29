@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blue Blood: the rung-2 Mark</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Blue Blood: the rung-2 Mark</h1>
+<p>Design decided 2026-08-29. Replaces Pulse, which was dropped on measured gas
+evidence the same day.</p>
+<h2>Why this exists</h2>
+<p>Pulse was rung 2 of the seven-Mark ladder and it is gone. <code>RendererPulse</code>
+measured the cheapest workable version of its <code>animation_url</code> -- image rendered
+once, second copy spent only on encoding, HTML because OpenSea&#39;s live media
+documentation supports SVG for <code>image</code> only -- and it cost +469,027 gas. That
+put the day-364 worst case at 2,025,331 gas with the minimum Mark set and
+2,065,436 with every Mark, over the 2,000,000 hard limit. Bytes were never the
+problem; gas was. the operator dropped it.</p>
+<p>That leaves rung 2 empty. The ladder is a priced ladder, so an empty rung is not
+a cosmetic gap: Vein at 1 and Voice at 20 have nothing between them.</p>
+<h2>The surface</h2>
+<p>The design rule that makes Marks composable is that no two claim the same
+surface, so a token wearing all seven is still one legible image rather than a
+pile of effects. The drawn image has exactly seven surfaces and six were already
+claimed:</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Mark</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>the field behind everything</td>
+<td>Halo</td>
+</tr>
+<tr>
+<td>the quiet zone hugging the code</td>
+<td>Voice</td>
+</tr>
+<tr>
+<td>frame cells not yet earned</td>
+<td>Vein</td>
+</tr>
+<tr>
+<td>earned day cells and year rings</td>
+<td>Crown</td>
+</tr>
+<tr>
+<td>the heart modules</td>
+<td>Bloom</td>
+</tr>
+<tr>
+<td>the QArt target picture itself</td>
+<td>Singularity</td>
+</tr>
+<tr>
+<td><strong>the noise modules&#39; ink</strong></td>
+<td><strong>unclaimed</strong></td>
+</tr>
+</tbody></table>
+<p>Blue Blood claims the last one. Three things make it the right choice rather
+than merely the only one:</p>
+<ul>
+<li><strong>It is the largest remaining surface.</strong> The noise is roughly half the lit
+modules in the code block, so the Mark is visible at a thumbnail.</li>
+<li><strong>It costs almost nothing.</strong> <code>CodeRenderer.paths</code> already takes the noise ink
+as a parameter, exactly as it takes the heart fill. The Mark is a substituted
+string, the same shape as Vein, Halo and Crown, which together measure about
+5,000 gas and 206 bytes for all five drawing Marks.</li>
+<li><strong>It is the opposite of Pulse&#39;s failure.</strong> Pulse needed a second document;
+this needs a different four-byte colour.</li>
+</ul>
+<p>The alternative considered and rejected was inventing new geometry -- a marker
+cell in the day frame showing today&#39;s position in the year. It is affordable at
+roughly 40 bytes and disturbs no invariant, but it needs new drawing code in
+both languages and is close to invisible at a 256px thumbnail. A rung-2 Mark
+that cannot be seen in a listing is not worth selling.</p>
+<h2>The name</h2>
+<p>&quot;Blue Blood&quot; carries both meanings the tier needs: aristocracy, for a paid Mark
+on a ladder that ends in Crown and Singularity, and literal blue blood in the
+vessels, which sits directly beside Vein at rung 1.</p>
+<p>The metadata identifier is <code>blueblood</code>, one lowercase token, because
+<code>MarkRenderer.names()</code> emits from a fixed single-word literal array and the
+other six entries are single words.</p>
+<h2>The colour, and how it is derived</h2>
+<p><strong>The binding constraint is luminance, not taste.</strong> The heart ink and the noise
+ink must MATCH in BT.601 luminance. Once a raster is large enough that ZXing&#39;s
+8x8 binarizer blocks fall inside a single module, a block has no local contrast
+and resolves against its neighbours, and the LIGHTER of the two inks goes to
+background. A constant <code>#767676</code> noise against a heart running luma 74 to 104
+stopped a bare token decoding at 1200px and a fully marked one at 900px. So a
+tinted noise may move in HUE but not in WEIGHT.</p>
+<p>The inks are therefore <strong>derived, not chosen</strong>. A slate hue direction
+<code>[60, 90, 130]</code> is pulled 70% toward its own grey to set the intensity, then
+scaled so each tier lands on that tier&#39;s exact luma. Hand-picking five hex
+values would have been five chances to break the invariant by eye.</p>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Heart</th>
+<th>Heart chroma</th>
+<th>Noise today</th>
+<th>Blue Blood noise</th>
+<th>Noise chroma</th>
+<th>Luma gap</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0 (streak 100+)</td>
+<td><code>#c8102e</code></td>
+<td>184</td>
+<td><code>#4a4a4a</code></td>
+<td><code>#444b55</code></td>
+<td>17</td>
+<td>0.39</td>
+</tr>
+<tr>
+<td>1 (streak 30+)</td>
+<td><code>#bd2242</code></td>
+<td>155</td>
+<td><code>#545454</code></td>
+<td><code>#4d5560</code></td>
+<td>19</td>
+<td>0.13</td>
+</tr>
+<tr>
+<td>2 (streak 7+)</td>
+<td><code>#a83a55</code></td>
+<td>110</td>
+<td><code>#5e5e5e</code></td>
+<td><code>#565f6c</code></td>
+<td>22</td>
+<td>0.18</td>
+</tr>
+<tr>
+<td>3 (streak 3+)</td>
+<td><code>#8e5566</code></td>
+<td>57</td>
+<td><code>#686868</code></td>
+<td><code>#5f6a77</code></td>
+<td>24</td>
+<td>0.21</td>
+</tr>
+<tr>
+<td>4 (day one)</td>
+<td><code>#70575f</code></td>
+<td>25</td>
+<td><code>#5f5f5f</code></td>
+<td><code>#57606d</code></td>
+<td>22</td>
+<td>0.60</td>
+</tr>
+</tbody></table>
+<p>Every gap is inside the existing <code>gap &lt;= 1</code> assertion.</p>
+<h3>Why this intensity and not a bolder one</h3>
+<p>Chroma is a constant that governs what the token LOOKS like, so it was rendered
+at every value rather than argued. At chroma 60 to 77 the Mark decodes perfectly
+well and still looks wrong: the day-one heart carries chroma 25, so a vivid
+noise <strong>out-saturates the heart it surrounds</strong> and the noise becomes the subject
+of the picture. At chroma 8 to 11 it is indistinguishable from the shipped
+neutral grey, which cannot be sold as a Mark.</p>
+<p>That yields the rule, and it is stricter than &quot;it decodes&quot;:</p>
+<blockquote>
+<p>The noise chroma must stay below the heart&#39;s chroma at the same tier.</p>
+</blockquote>
+<p>Day one is the binding case, because the start-tier heart is the least saturated
+colour on the ladder. At 22 against 25 the rule holds at every tier with the
+narrowest margin exactly where it should be tested.</p>
+<p>Sheets: <code>docs/noise-mark.png</code> (hue) and <code>docs/noise-mark-intensity.png</code>
+(intensity), regenerated by <code>node tools/noise-mark-sheet.mjs</code>. Both gitignored,
+like every other PNG in this repo.</p>
+<h2>The invariant that changes</h2>
+<p><code>tools/test/render-token.test.mjs</code> and <code>contracts/test/PaletteNoise.t.sol</code>
+currently assert the noise is a NEUTRAL grey (<code>chroma === 0</code>). That assertion
+exists for a real reason: the two inks are matched in luminance, so hue is the
+only thing separating them, and a near-neutral HEART would be invisible against
+a neutral noise.</p>
+<p>Blue Blood makes the noise chromatic, so the assertion has to be restated rather
+than deleted:</p>
+<ul>
+<li>Unmarked, the noise stays neutral and the existing rule is unchanged.</li>
+<li>With Blue Blood, the two inks must differ in HUE, and the noise chroma must
+stay below the heart chroma at the same tier.</li>
+<li>The luminance match holds in both cases and is not relaxed.</li>
+</ul>
+<p>This is a load-bearing invariant bought by the state soak on 2026-08-29. It is
+being made stricter and more explicit, not loosened, but it must be reviewed as
+a change to proven ground rather than slipped in as a test edit.</p>
+<h2>What changes</h2>
+<ul>
+<li><code>MarkRenderer</code>: <code>PULSE</code> becomes <code>BLUEBLOOD</code> at the same bit (rung 2, price 5),
+<code>names()</code> emits <code>blueblood</code>, and a new <code>noise(marks, tierNoise)</code> selector
+returns the slate ink or the shipped grey.</li>
+<li><code>Palette</code>: the five Blue Blood inks alongside the five neutral ones, taken
+from ONE rung so the pair cannot be wired apart, as the existing inks are.</li>
+<li><code>Renderer</code>: pass the noise through <code>MarkRenderer.noise</code> the way it already
+passes the heart fill through <code>MarkRenderer.heartFill</code>.</li>
+<li><code>tools/render-token.mjs</code>: the same constants and the same selection. The two
+languages are diffed byte for byte, so a divergence fails the suite.</li>
+<li>Tests: the luminance match extended over both palettes; the new chroma-ceiling
+rule; a decode gate over the Blue Blood inks at every tier and every size; the
+differential test&#39;s fixtures regenerated.</li>
+</ul>
+<h2>Cost</h2>
+<p>Expected to be indistinguishable from zero -- a substituted colour string, the
+same shape as Vein, Halo and Crown. To be MEASURED, not assumed, and reported
+against the day-364 worst case before it is called done.</p>
+<h2>What this does not do</h2>
+<p>It does not restore what Pulse meant. Pulse made the heart beat; nothing on this
+ladder now suggests motion. That was the operator&#39;s explicit call when the slot was
+declared open rather than reserved for an aliveness Mark.</p>
+<h2>Files to remove, pending approval</h2>
+<p><code>contracts/src/render/RendererPulse.sol</code> and <code>contracts/test/PulseCost.t.sol</code>
+exist only to have measured Pulse. Their numbers are recorded in
+<code>docs/phase0-results.md</code>, so the files are spent. They are NOT deleted by this
+design; removal is a separate ask.</p>
+
+</body>
+</html>
