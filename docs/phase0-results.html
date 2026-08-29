@@ -2077,6 +2077,10 @@ every 3 minutes for 30 minutes: the timestamp never moved.</strong> That is row 
 uninformative about ERC-4906, and it means the refresh did not run.</li>
 </ul>
 <h3>The one mechanism still untried</h3>
+<blockquote>
+<p>RESOLVED later the same day, and not in the way this section expected. The
+endpoint is not available on Base Sepolia at all. See the next section.</p>
+</blockquote>
 <p>Both the original test and this one used <code>getNFTMetadata?refreshCache=true</code>.
 Neither used the DEDICATED <code>refreshNftMetadata</code> endpoint, which is the one that
 returns <code>status</code> and <code>estimatedMsToRefresh</code> -- the only variant that reports
@@ -2096,6 +2100,144 @@ change.</p>
 <p>The deeper safety net is already in the artwork. The QR encodes
 <code>https://&lt;domain&gt;/t/&lt;id&gt;</code>, so a stale marketplace thumbnail still scans to the
 live record. The token carries the address of its own current truth.</p>
+<hr>
+<h2>ERC-4906 re-tested again: the untried endpoint does not exist here</h2>
+<p>The previous section named one outstanding action -- try the dedicated
+<code>refreshNftMetadata</code> endpoint -- and said the question stayed open until then.
+That action is now done, and it cannot answer the question, because the endpoint
+is not available on this network.</p>
+<p>What follows also corrects a claim made mid-session and reported to the operator before it
+had been checked properly: that the refresh &quot;works&quot;. One re-read did occur, but
+it cannot be attributed to any request, and three isolated attempts since have
+each produced nothing.</p>
+<h3>The untried endpoint was never going to answer</h3>
+<pre><code>POST https://base-sepolia.g.alchemy.com/nft/v3/&lt;key&gt;/refreshNftMetadata
+400 Bad Request
+{&quot;error&quot;:{&quot;message&quot;:&quot;This endpoint isn&#39;t enabled for that chain or network just yet - please contact the Alchemy team for support!&quot;}}
+</code></pre>
+<p>Alchemy&#39;s own page for it lists support as &quot;Ethereum (Mainnet &amp; Sepolia),
+Polygon (Mainnet, Mumbai &amp; Amoy), Arbitrum One (mainnet), Optimism (mainnet) &amp;
+Base (mainnet)&quot;. Base Sepolia is absent and the API agrees. So <code>status</code> and
+<code>estimatedMsToRefresh</code> -- the only fields that would report whether a refresh was
+accepted -- are unobtainable on this network. The one mechanism the last write-up
+was waiting on has been struck off, not satisfied.</p>
+<p><code>invalidateContract</code> and <code>getNFTMetadata?refreshCache=true</code> are not gated the
+same way; both return 200 here.</p>
+<h3>The pipeline is not dead -- it ingests cold entries fine</h3>
+<p>The original reading, that Alchemy &quot;was not re-reading at all&quot;, is contradicted
+by this project&#39;s own soak data. All 26 tokens on the adopted contract carry
+DISTINCT <code>timeLastUpdated</code> stamps, each matching the minute Phase 2 or Phase 3
+first fetched that token:</p>
+<table>
+<thead>
+<tr>
+<th>Tokens</th>
+<th>timeLastUpdated</th>
+<th>Fetched by</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1, 5</td>
+<td>12:42:08, 12:42:57</td>
+<td>Phase 2, the seven bitmaps</td>
+</tr>
+<tr>
+<td>10, 15, 20, 21, 25, 26</td>
+<td>14:38:39 - 14:42:47</td>
+<td>Phase 3, the remaining nineteen</td>
+</tr>
+</tbody></table>
+<p><code>tools/third-party-check.mjs:63</code> shows the cause: <code>metadataWithImage</code> opens with
+<code>getNftMetadata({ refreshCache: true })</code>. That call performed the initial ingest
+26 times and stamped each one. So the failure is narrower than &quot;refresh is
+broken&quot;: it is specific to invalidating an entry that is already WARM.</p>
+<h3>Three explicit mechanisms, three nulls</h3>
+<p>A second write put token 1 at Level 200 (block 46134224, <code>MetadataUpdate(1)</code>
+emitted with the correct topic, confirmed in the receipt). The chain was then
+re-read over RPC and genuinely reports Level 200 while the cache reports 300 --
+verified directly rather than assumed, because the first pass of this test
+asserted the chain state from a hardcoded string in the harness.</p>
+<p>Each round ran in isolation, outside the documented one-refresh-per-token-per-15
+-minutes window, watching <code>timeLastUpdated</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Round</th>
+<th>Request</th>
+<th>Window</th>
+<th>timeLastUpdated</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A</td>
+<td><code>refreshCache=true</code> alone</td>
+<td>21:05 - 21:25</td>
+<td>never moved</td>
+</tr>
+<tr>
+<td>B</td>
+<td><code>invalidateContract</code> alone</td>
+<td>21:26 - 21:46</td>
+<td>never moved</td>
+</tr>
+<tr>
+<td>C</td>
+<td><code>invalidateContract</code> then <code>refreshCache=true</code></td>
+<td>21:46 - 22:06</td>
+<td>never moved</td>
+</tr>
+</tbody></table>
+<p>Round C is the sequence that was fired at 20:48, one minute before the only
+re-read ever observed. Repeated deliberately against a real divergence, it did
+nothing.</p>
+<h3>The one re-read, and why it is not credited to us</h3>
+<p><code>timeLastUpdated</code> moved once, from <code>2026-08-29T12:38:35.181Z</code> to
+<code>2026-08-29T20:49:07.916Z</code>, and the value it picked up was correct for the chain
+at that moment. It is tempting to credit the 20:48 calls, and that is what was
+reported mid-session. Two things argue against it:</p>
+<ul>
+<li>Round C reproduced those exact calls and produced nothing in 20 minutes.</li>
+<li>The gap between the two stamps is 8.2 hours, and the change it collected was
+itself about eight hours stale.</li>
+</ul>
+<p>A slow internal re-crawl explains both; the 20:48 calls explain neither. Alchemy
+documents no re-crawl cadence for NFT metadata -- the FAQ covers only floor
+price, cached 5 minutes -- so this cannot be settled from documentation. It is
+being settled by observation instead: <code>tools/erc4906-passive-watch.mjs</code> polls
+every 10 minutes for 12 hours and issues NO refresh requests at all. If the
+cache moves to Level 200 near 04:50Z untouched, the re-crawl is real and the
+explicit calls are what does nothing here.</p>
+<h3>What is established, stated exactly</h3>
+<ol>
+<li><code>refreshNftMetadata</code> is unavailable on Base Sepolia. HTTP 400, quoted above.</li>
+<li><code>refreshCache=true</code> ingests a COLD token. 26 instances, attributed to our own
+code rather than inferred.</li>
+<li>On a WARM entry with a real divergence, none of the three available
+mechanisms produced a re-read inside 20 minutes each.</li>
+<li>Passive staleness of at least 8.2 hours is confirmed, with a correctly
+emitted <code>MetadataUpdate</code> on chain throughout.</li>
+<li>Exactly one re-read has been observed and its cause is UNATTRIBUTED.</li>
+<li>Our own emission side is correct, verified twice: blocks 46119616 and
+46134224, topic
+<code>0xf8e1a15aba9398e019f0b49df1a4fde98ee17ae345cb5f6b5e2c27f5033e8ce7</code>.</li>
+</ol>
+<h3>What this does NOT establish</h3>
+<p>That Alchemy ignores ERC-4906. Nothing here tests that, because no mechanism
+that reports acceptance is reachable on this network. It also does not transfer
+to mainnet, where the dedicated endpoint DOES exist and where a paying
+marketplace&#39;s cache is unlikely to be serviced like a testnet&#39;s.</p>
+<h3>The design rule is unchanged, and so is the mitigation</h3>
+<p>The piece must never DEPEND on an indexer refreshing -- that was true when the
+refresh looked broken and it is true now that it looks merely unreachable. No
+contract change is called for; the gap is entirely consumer-side.</p>
+<p>The mitigation also survives, with one correction to its shape. The Clock
+already batches check-ins into one transaction daily at 00:05, so the same job
+can poke an indexer for the tokens it touched. What this round shows is that the
+poke cannot be assumed to work: on Base Sepolia none of the three calls did
+anything, so the Plan 3 step must verify <code>timeLastUpdated</code> moved rather than
+fire and forget.</p>
+<p>And the artwork keeps its own escape hatch regardless. The QR encodes
+<code>https://&lt;domain&gt;/t/&lt;id&gt;</code>, so a stale thumbnail still scans to the live record.</p>
 
 </body>
 </html>

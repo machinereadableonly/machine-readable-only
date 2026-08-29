@@ -41,4 +41,33 @@ contract Erc4906 is Script {
         vm.stopBroadcast();
         console.log("token", id, "moved to level 300, streak 77");
     }
+
+    /// @notice Move token `id` to an ARBITRARY level, so the refresh question can
+    /// be asked more than once on the same throwaway token.
+    ///
+    /// @dev `bump` hardcodes level 300, which is single-use: once a token sits
+    /// there, a second test cannot tell a successful refresh from a cache that
+    /// never moved. Isolating WHICH refresh call works needs a fresh distinct
+    /// state each round, and re-using the already-sacrificed token keeps the
+    /// adopted contract's soak fixtures intact.
+    function bumpTo(address token, uint256 id, uint32 level, uint32 streak) external {
+        vm.startBroadcast(vm.envUint("SPIKE_DEPLOYER_KEY"));
+
+        MROSpikeToken t = MROSpikeToken(token);
+        uint32 today = t.today();
+
+        t.setState(id, MROSpikeToken.Token({
+            level: level,
+            streak: streak,
+            lastDay: today,
+            mintDay: today - level,
+            generation: 0,
+            seedsGiven: 0,
+            resting: false,
+            reserved: 0
+        }));
+
+        vm.stopBroadcast();
+        console.log("token", id, "moved to level", level);
+    }
 }

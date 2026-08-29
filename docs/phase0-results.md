@@ -1301,6 +1301,9 @@ Measured on `0x12C641d5C15DeEc21D71912973Bd8f63967b9bF6` token 1, chain at Level
 
 ### The one mechanism still untried
 
+> RESOLVED later the same day, and not in the way this section expected. The
+> endpoint is not available on Base Sepolia at all. See the next section.
+
 Both the original test and this one used `getNFTMetadata?refreshCache=true`.
 Neither used the DEDICATED `refreshNftMetadata` endpoint, which is the one that
 returns `status` and `estimatedMsToRefresh` -- the only variant that reports
@@ -1326,3 +1329,129 @@ change.
 The deeper safety net is already in the artwork. The QR encodes
 `https://<domain>/t/<id>`, so a stale marketplace thumbnail still scans to the
 live record. The token carries the address of its own current truth.
+
+---
+
+## ERC-4906 re-tested again: the untried endpoint does not exist here
+
+The previous section named one outstanding action -- try the dedicated
+`refreshNftMetadata` endpoint -- and said the question stayed open until then.
+That action is now done, and it cannot answer the question, because the endpoint
+is not available on this network.
+
+What follows also corrects a claim made mid-session and reported to the operator before it
+had been checked properly: that the refresh "works". One re-read did occur, but
+it cannot be attributed to any request, and three isolated attempts since have
+each produced nothing.
+
+### The untried endpoint was never going to answer
+
+```
+POST https://base-sepolia.g.alchemy.com/nft/v3/<key>/refreshNftMetadata
+400 Bad Request
+{"error":{"message":"This endpoint isn't enabled for that chain or network just yet - please contact the Alchemy team for support!"}}
+```
+
+Alchemy's own page for it lists support as "Ethereum (Mainnet & Sepolia),
+Polygon (Mainnet, Mumbai & Amoy), Arbitrum One (mainnet), Optimism (mainnet) &
+Base (mainnet)". Base Sepolia is absent and the API agrees. So `status` and
+`estimatedMsToRefresh` -- the only fields that would report whether a refresh was
+accepted -- are unobtainable on this network. The one mechanism the last write-up
+was waiting on has been struck off, not satisfied.
+
+`invalidateContract` and `getNFTMetadata?refreshCache=true` are not gated the
+same way; both return 200 here.
+
+### The pipeline is not dead -- it ingests cold entries fine
+
+The original reading, that Alchemy "was not re-reading at all", is contradicted
+by this project's own soak data. All 26 tokens on the adopted contract carry
+DISTINCT `timeLastUpdated` stamps, each matching the minute Phase 2 or Phase 3
+first fetched that token:
+
+| Tokens | timeLastUpdated | Fetched by |
+|---|---|---|
+| 1, 5 | 12:42:08, 12:42:57 | Phase 2, the seven bitmaps |
+| 10, 15, 20, 21, 25, 26 | 14:38:39 - 14:42:47 | Phase 3, the remaining nineteen |
+
+`tools/third-party-check.mjs:63` shows the cause: `metadataWithImage` opens with
+`getNftMetadata({ refreshCache: true })`. That call performed the initial ingest
+26 times and stamped each one. So the failure is narrower than "refresh is
+broken": it is specific to invalidating an entry that is already WARM.
+
+### Three explicit mechanisms, three nulls
+
+A second write put token 1 at Level 200 (block 46134224, `MetadataUpdate(1)`
+emitted with the correct topic, confirmed in the receipt). The chain was then
+re-read over RPC and genuinely reports Level 200 while the cache reports 300 --
+verified directly rather than assumed, because the first pass of this test
+asserted the chain state from a hardcoded string in the harness.
+
+Each round ran in isolation, outside the documented one-refresh-per-token-per-15
+-minutes window, watching `timeLastUpdated`:
+
+| Round | Request | Window | timeLastUpdated |
+|---|---|---|---|
+| A | `refreshCache=true` alone | 21:05 - 21:25 | never moved |
+| B | `invalidateContract` alone | 21:26 - 21:46 | never moved |
+| C | `invalidateContract` then `refreshCache=true` | 21:46 - 22:06 | never moved |
+
+Round C is the sequence that was fired at 20:48, one minute before the only
+re-read ever observed. Repeated deliberately against a real divergence, it did
+nothing.
+
+### The one re-read, and why it is not credited to us
+
+`timeLastUpdated` moved once, from `2026-08-29T12:38:35.181Z` to
+`2026-08-29T20:49:07.916Z`, and the value it picked up was correct for the chain
+at that moment. It is tempting to credit the 20:48 calls, and that is what was
+reported mid-session. Two things argue against it:
+
+- Round C reproduced those exact calls and produced nothing in 20 minutes.
+- The gap between the two stamps is 8.2 hours, and the change it collected was
+  itself about eight hours stale.
+
+A slow internal re-crawl explains both; the 20:48 calls explain neither. Alchemy
+documents no re-crawl cadence for NFT metadata -- the FAQ covers only floor
+price, cached 5 minutes -- so this cannot be settled from documentation. It is
+being settled by observation instead: `tools/erc4906-passive-watch.mjs` polls
+every 10 minutes for 12 hours and issues NO refresh requests at all. If the
+cache moves to Level 200 near 04:50Z untouched, the re-crawl is real and the
+explicit calls are what does nothing here.
+
+### What is established, stated exactly
+
+1. `refreshNftMetadata` is unavailable on Base Sepolia. HTTP 400, quoted above.
+2. `refreshCache=true` ingests a COLD token. 26 instances, attributed to our own
+   code rather than inferred.
+3. On a WARM entry with a real divergence, none of the three available
+   mechanisms produced a re-read inside 20 minutes each.
+4. Passive staleness of at least 8.2 hours is confirmed, with a correctly
+   emitted `MetadataUpdate` on chain throughout.
+5. Exactly one re-read has been observed and its cause is UNATTRIBUTED.
+6. Our own emission side is correct, verified twice: blocks 46119616 and
+   46134224, topic
+   `0xf8e1a15aba9398e019f0b49df1a4fde98ee17ae345cb5f6b5e2c27f5033e8ce7`.
+
+### What this does NOT establish
+
+That Alchemy ignores ERC-4906. Nothing here tests that, because no mechanism
+that reports acceptance is reachable on this network. It also does not transfer
+to mainnet, where the dedicated endpoint DOES exist and where a paying
+marketplace's cache is unlikely to be serviced like a testnet's.
+
+### The design rule is unchanged, and so is the mitigation
+
+The piece must never DEPEND on an indexer refreshing -- that was true when the
+refresh looked broken and it is true now that it looks merely unreachable. No
+contract change is called for; the gap is entirely consumer-side.
+
+The mitigation also survives, with one correction to its shape. The Clock
+already batches check-ins into one transaction daily at 00:05, so the same job
+can poke an indexer for the tokens it touched. What this round shows is that the
+poke cannot be assumed to work: on Base Sepolia none of the three calls did
+anything, so the Plan 3 step must verify `timeLastUpdated` moved rather than
+fire and forget.
+
+And the artwork keeps its own escape hatch regardless. The QR encodes
+`https://<domain>/t/<id>`, so a stale thumbnail still scans to the live record.
