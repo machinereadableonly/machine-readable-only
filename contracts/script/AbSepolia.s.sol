@@ -5,22 +5,25 @@ import {Script, console} from "forge-std/Script.sol";
 
 import {MROSpikeToken} from "../src/spike/MROSpikeToken.sol";
 import {Renderer} from "../src/render/Renderer.sol";
-import {RendererSized} from "../src/render/RendererSized.sol";
+import {RendererUnsized} from "../src/render/RendererUnsized.sol";
 import {SpikeBitmaps} from "./SpikeBitmaps.sol";
 import {SoakStates} from "./SoakStates.sol";
 
 /// @notice The intrinsic-size A/B, on Base Sepolia.
 ///
 /// @dev Deploys the SAME twenty-six states twice, once behind the shipped
-/// `Renderer` and once behind `RendererSized`, so a third-party CDN can be
+/// `Renderer` and once behind `RendererUnsized`, so a third-party CDN can be
 /// pointed at both and the only difference between them is the `width`/`height`
 /// attribute on the SVG. Anything else that differed would make the comparison
 /// worthless, which is what `RendererSized.t.sol` exists to prevent.
 ///
-/// The question it answers, and the reason it is worth a deploy: measured on
+/// The question it answered, and the reason it was worth a deploy: measured on
 /// 2026-08-29, Alchemy's CDN rasterised the unsized SVG at its viewBox units --
-/// 53 pixels -- then interpolated that bitmap up, and 41% of the results would
-/// not decode. See docs/2026-08-29-mro-third-party-raster-finding.md.
+/// 53 pixels -- then interpolated that bitmap up, and 54% of the results would
+/// not decode against the sized build's 3.6%. The intrinsic size was adopted on
+/// that evidence; this script is kept so the comparison can be re-run if a CDN
+/// ever changes how it treats one.
+/// See docs/2026-08-29-mro-third-party-raster-finding.md.
 ///
 /// Nothing here is irreversible and nothing costs real money: Base Sepolia, from
 /// a throwaway key. The key is read with vm.envUint rather than passed as
@@ -28,26 +31,26 @@ import {SoakStates} from "./SoakStates.sol";
 ///
 ///   forge script script/AbSepolia.s.sol:AbSepolia --rpc-url base_sepolia --broadcast --slow
 contract AbSepolia is Script {
-    function run() external returns (address plainToken, address sizedToken) {
+    function run() external returns (address sizedToken, address unsizedToken) {
         uint256 key = vm.envUint("SPIKE_DEPLOYER_KEY");
         address to = vm.addr(key);
 
         vm.startBroadcast(key);
 
-        Renderer plain = new Renderer();
-        RendererSized sized = new RendererSized();
-        MROSpikeToken a = new MROSpikeToken(address(plain));
-        MROSpikeToken b = new MROSpikeToken(address(sized));
+        Renderer sized = new Renderer();
+        RendererUnsized unsized = new RendererUnsized();
+        MROSpikeToken a = new MROSpikeToken(address(sized));
+        MROSpikeToken b = new MROSpikeToken(address(unsized));
 
         _fill(a, to);
         _fill(b, to);
 
         vm.stopBroadcast();
 
-        console.log("renderer plain ", address(plain));
-        console.log("renderer sized ", address(sized));
-        console.log("token    plain ", address(a));
-        console.log("token    sized ", address(b));
+        console.log("renderer sized  ", address(sized));
+        console.log("renderer unsized", address(unsized));
+        console.log("token    sized  ", address(a));
+        console.log("token    unsized", address(b));
         console.log("states         ", SoakStates.COUNT);
         return (address(a), address(b));
     }
