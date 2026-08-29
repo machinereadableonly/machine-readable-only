@@ -27,7 +27,7 @@ contract GasBudgetTest is Test {
     uint256 constant GAS_TARGET = 1_000_000;
     uint256 constant BYTE_TARGET = 5_000;
 
-    uint256 constant ALL_MARKS = MarkRenderer.VEIN | MarkRenderer.PULSE | MarkRenderer.VOICE
+    uint256 constant ALL_MARKS = MarkRenderer.VEIN | MarkRenderer.BLUEBLOOD | MarkRenderer.VOICE
         | MarkRenderer.BLOOM | MarkRenderer.HALO | MarkRenderer.CROWN | MarkRenderer.SINGULARITY;
 
     /// @dev Token 1 on example.com, from tools/token-bitmap.mjs.
@@ -194,5 +194,34 @@ contract GasBudgetTest is Test {
         if (_gasIsMeaningful()) {
             assertLt(throughToken, GAS_LIMIT, "the real call must fit the hard limit");
         }
+    }
+
+    /// @notice What Blue Blood costs, measured against the same token without it.
+    ///
+    /// @dev The Mark it replaced cost 469,027 gas and pushed the day-364 worst
+    /// case over the 2,000,000 hard limit, which is why Pulse was dropped. This
+    /// is the number that has to be seen beside that one: Blue Blood claims the
+    /// noise ink, which `CodeRenderer.paths` already takes as a parameter, so it
+    /// substitutes one seven-character colour for another. The image bytes must
+    /// therefore be IDENTICAL, and only the branch costs gas.
+    function test_whatBlueBloodCosts() public {
+        uint256 without = ALL_MARKS ^ MarkRenderer.BLUEBLOOD;
+
+        _place(40, 364, 100, 1000, false, without);
+        _place(41, 364, 100, 1000, false, ALL_MARKS);
+
+        (uint256 gasOff, uint256 lenOff) = _measure("day 364, without Blue Blood", 40);
+        (uint256 gasOn, uint256 lenOn) = _measure("day 364, with Blue Blood", 41);
+
+        // Signed: the Mark turned out to be CHEAPER than the branch it replaced,
+        // and an unsigned subtraction underflows rather than saying so.
+        console.log("delta gas (negative means cheaper)");
+        console.logInt(int256(gasOn) - int256(gasOff));
+        // 12 bytes exactly: `,"blueblood"` in the Marks attribute. The IMAGE is
+        // unchanged -- one seven-character hex colour swapped for another -- and
+        // Renderer.t.sol asserts that half directly on `svg()`. Every Mark pays
+        // this same name cost; it is the ladder's, not this Mark's.
+        assertEq(lenOn - lenOff, 12, "the only byte cost may be the Mark's name");
+        assertLt(gasOn, GAS_LIMIT, "Blue Blood must stay inside the hard limit");
     }
 }

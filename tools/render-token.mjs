@@ -79,7 +79,7 @@ export const BLOOM_TO = "#c8102e";    // Bloom: the far end of the heart gradien
 // It is also a different hue from Halo's rose, so Voice reads as amber rather
 // than as a slightly deeper pink that would vanish when both Marks are worn at
 // once.
-export const MARKS = ["vein", "pulse", "voice", "bloom", "halo", "crown", "singularity"];
+export const MARKS = ["vein", "blueblood", "voice", "bloom", "halo", "crown", "singularity"];
 
 // TIERS is written top-down (100+ first) while Solidity indexes the ladder
 // bottom-up (0 = the start of a life). Everything below works in RUNGS -- the
@@ -226,7 +226,10 @@ export function renderSvg(modules, want, size, state) {
   const frozen = resting || sunset;
   const rung = frozen ? rungOf(streak) : lapsedRung(streak, lastDay, today);
   const colour = colourAt(rung);
-  const noise = noiseAt(rung);
+  // Blue Blood claims the noise ink -- the one surface no other Mark touches.
+  // Selected by RUNG, not by colour, so the heart and the noise can never be
+  // taken from different tiers. Mirrors MarkRenderer.noise in Solidity.
+  const noise = marks.includes("blueblood") ? bluebloodAt(rung) : noiseAt(rung);
   const gold = marks.includes("crown") ? CROWN_GOLD : null;
   const ghost = marks.includes("vein") ? VEIN_GHOST : GHOST;
   const field = marks.includes("halo") ? HALO_FIELD : FIELD;

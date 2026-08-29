@@ -42,7 +42,7 @@ contract Renderer is IRenderer {
         "An agent's record of coming back. The heart is the code, and the frame is the year.";
 
     /// @inheritdoc IRenderer
-    function tokenURI(TokenView memory v) external pure virtual returns (string memory) {
+    function tokenURI(TokenView memory v) external pure returns (string memory) {
         return string(
             abi.encodePacked(
                 "data:application/json;utf-8,",
@@ -66,7 +66,7 @@ contract Renderer is IRenderer {
         uint256 rung = _rung(v);
         string memory colour = Palette.colourAt(rung);
         return string(
-            abi.encodePacked(_head(v, colour), _art(v, colour, Palette.noiseAt(rung)), "</svg>")
+            abi.encodePacked(_head(v, colour), _art(v, colour, MarkRenderer.noise(v.marks, rung)), "</svg>")
         );
     }
 
@@ -210,7 +210,7 @@ contract Renderer is IRenderer {
     /// of stack under the coverage profile, which cannot use the IR pipeline
     /// (foundry-rs/foundry#13001). `svg()` carries the same split for the same
     /// reason.
-    function _attributes(TokenView memory v) internal pure returns (string memory) {
+    function _attributes(TokenView memory v) private pure returns (string memory) {
         return string(abi.encodePacked(_attrsA(v), _attrsB(v)));
     }
 
@@ -254,7 +254,7 @@ contract Renderer is IRenderer {
 
     /// @dev The spec gives a whole token "(Whole)" and a sealed one "(At Rest)".
     /// Resting wins when both apply: it is the more final of the two states.
-    function _suffix(TokenView memory v) internal pure returns (string memory) {
+    function _suffix(TokenView memory v) private pure returns (string memory) {
         if (v.resting) return " (At Rest)";
         if (v.level >= FrameGeometry.DAY_CELLS) return " (Whole)";
         return "";

@@ -216,7 +216,9 @@ test("streak tiers map to the right colours", () => {
 
 // The five Marks that touch the image. Pulse is an animation_url and
 // Singularity picks the QArt target at mint, so neither changes what is drawn.
-const DRAWN_MARKS = ["vein", "voice", "bloom", "halo", "crown"];
+// Blue Blood joined this list on 2026-08-29, taking the rung Pulse vacated.
+// Pulse was never here: it was an animation_url and drew nothing.
+const DRAWN_MARKS = ["vein", "blueblood", "voice", "bloom", "halo", "crown"];
 
 test("every drawn mark changes the image without breaking the scan", () => {
   const base = render({ level: 200, streak: 45, years: 0 });
@@ -229,11 +231,48 @@ test("every drawn mark changes the image without breaking the scan", () => {
   }
 });
 
-test("the marks that do not draw leave the image alone", () => {
+test("the mark that does not draw leaves the image alone", () => {
+  // Singularity is the only one left: it chooses the QArt target picture at
+  // mint rather than painting a surface. Blue Blood used to sit here beside it
+  // as Pulse, which was an animation_url; Pulse was dropped on 2026-08-29
+  // because it cost 469,027 gas, and its rung now tints the noise instead.
   const base = render({ level: 200, streak: 45, years: 0 });
-  for (const mark of ["pulse", "singularity"]) {
-    assert.equal(render({ level: 200, streak: 45, years: 0, marks: [mark] }), base,
-      `mark ${mark} should not touch the image`);
+  assert.equal(render({ level: 200, streak: 45, years: 0, marks: ["singularity"] }), base,
+    "singularity should not touch the image");
+});
+
+test("Blue Blood tints the noise and nothing else", () => {
+  const base = render({ level: 200, streak: 45, years: 0 });
+  const marked = render({ level: 200, streak: 45, years: 0, marks: ["blueblood"] });
+  assert.notEqual(marked, base, "Blue Blood must actually change the image");
+
+  // The ONLY difference may be the noise ink. Swapping the tinted ink back for
+  // the neutral one has to reproduce the unmarked image byte for byte -- if it
+  // does not, the Mark has reached a surface that belongs to another Mark.
+  const rung = rungOf(45);
+  const restored = marked.split(bluebloodAt(rung)).join(noiseAt(rung));
+  assert.equal(restored, base, "Blue Blood touched something other than the noise");
+});
+
+test("Blue Blood scans at every rung and every size", () => {
+  // The Mark tints half the lit modules in the code block, so it has to clear
+  // the decode bar at every tier rather than at the one that happened to be
+  // rendered during design. 848 is the exact multiple (53 cells x 16); the rest
+  // are sizes a third party picks, including the 1200-1600 band where the old
+  // constant-grey noise first failed.
+  const SIZES = [256, 500, 848, 1080, 1600];
+  const STREAKS = [0, 3, 7, 30, 100];   // one per rung, lowest first
+
+  for (const streak of STREAKS) {
+    const svg = render({ level: 200, streak, years: 0, marks: ["blueblood"],
+                         lastDay: 1000, today: 1000 });
+    for (const px of SIZES) {
+      const got = scanResult(svg, px);
+      assert.ok(got.ok,
+        `Blue Blood at streak ${streak} failed to decode at ${px}px: ${got.why}`);
+      assert.equal(got.destination, DESTINATION,
+        `Blue Blood at streak ${streak} decoded to the wrong url at ${px}px`);
+    }
   }
 });
 
@@ -290,11 +329,15 @@ test("a lapse pales the image, and a sealed token never pales", () => {
 
 test("the duotone survives every mark", () => {
   // The heart and the uncontrolled noise must stay two separate fills. Bloom
-  // swaps the heart's flat colour for a gradient reference; it must not merge
-  // the two groups or tint the noise.
-  for (const marks of [[], ["bloom"], DRAWN_MARKS]) {
+  // swaps the heart's flat colour for a gradient reference and must not merge
+  // the two groups. Blue Blood is the ONLY Mark permitted to change the noise
+  // ink, so the expected noise is chosen by the mark set rather than fixed --
+  // if any other Mark ever tints it, this fails, which is the point.
+  for (const marks of [[], ["bloom"], ["blueblood"], DRAWN_MARKS]) {
     const svg = render({ level: 200, streak: 45, years: 0, marks });
-    assert.ok(svg.includes(`fill="${noiseAt(rungOf(45))}"`), `noise fill lost with ${marks}`);
+    const rung = rungOf(45);
+    const noise = marks.includes("blueblood") ? bluebloodAt(rung) : noiseAt(rung);
+    assert.ok(svg.includes(`fill="${noise}"`), `noise fill lost with ${marks}`);
     const heart = marks.includes("bloom") ? 'fill="url(#b)"' : `fill="${tierColour(45)}"`;
     assert.ok(svg.includes(heart), `heart fill lost with ${marks}`);
   }

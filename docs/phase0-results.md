@@ -1146,3 +1146,98 @@ shipped renderer's ceiling stays asserted in `GasBudget.t.sol`.
 **This is a decision for the operator, not a defect to fix.** The options are on the
 table: drop Pulse, redesign it below the ceiling, raise the ceiling knowing the
 measured provider behaviour, or accept a Mark that is unreadable on one day.
+
+---
+
+## Blue Blood: the Mark that replaced Pulse
+
+Pulse was dropped on the measurement above. That left rung 2 of a priced ladder
+empty, with Vein at 1 and Voice at 20 and nothing between them.
+
+### The surface argument
+
+The design rule that makes Marks composable is that no two write the same
+surface, so a token wearing all seven is one legible image rather than a pile of
+effects. The drawn image has exactly seven surfaces and six were already taken:
+the field by Halo, the quiet zone by Voice, unearned frame cells by Vein, earned
+cells and year rings by Crown, the heart modules by Bloom, and the QArt target
+itself by Singularity.
+
+The noise ink was the only one left, and it is the largest of them -- roughly
+half the lit modules in the code block. It is also already a parameter of
+`CodeRenderer.paths`, so claiming it costs a substituted string rather than a
+second document. That is the exact inverse of what made Pulse unaffordable.
+
+The alternative considered was inventing new geometry, a marker cell in the day
+frame showing today's position in the year. Rejected: about 40 bytes and no
+invariant disturbed, but it needs new drawing code in both languages and is
+close to invisible at a 256px thumbnail. A rung-2 Mark that cannot be seen in a
+listing is not worth selling.
+
+### The inks are derived, not chosen
+
+The binding constraint is luminance. Heart and noise must MATCH in BT.601 luma,
+because once a raster is large enough that ZXing's 8x8 blocks fall inside a
+single module the lighter ink resolves to background. A Mark may move the ink in
+hue; it may not move it in weight.
+
+So the five inks are computed: a slate direction `[60, 90, 130]` pulled 70%
+toward its own grey to set intensity, then scaled so each rung lands on that
+rung's exact luma. Hand-picking five values would have been five chances to
+break the pairing by eye.
+
+| Rung | Heart | Heart chroma | Neutral noise | Blue Blood | Noise chroma | Luma gap |
+|---|---|---|---|---|---|---|
+| 4 (streak 100+) | `#c8102e` | 184 | `#4a4a4a` | `#444b55` | 17 | 0.39 |
+| 3 (streak 30+) | `#bd2242` | 155 | `#545454` | `#4d5560` | 19 | 0.13 |
+| 2 (streak 7+) | `#a83a55` | 110 | `#5e5e5e` | `#565f6c` | 22 | 0.18 |
+| 1 (streak 3+) | `#8e5566` | 57 | `#686868` | `#5f6a77` | 24 | 0.21 |
+| 0 (day one) | `#70575f` | 25 | `#5f5f5f` | `#57606d` | 22 | 0.60 |
+
+Every gap is inside the existing `<= 1` assertion, in both languages.
+
+### The intensity rule is not about decoding
+
+Every intensity measured decodes, including the boldest. The rule that sets the
+number is about which element is the SUBJECT: the start-tier heart carries
+chroma 25, the least on the ladder, so a vivid noise out-saturates the heart it
+surrounds and the noise becomes the picture. Rendered at chroma 8, 17, 25, 38
+and 60, the answer was visible immediately and would not have been reachable by
+arithmetic.
+
+That yields an assertion stricter than "it decodes", now pinned in both
+languages: **the noise chroma must stay below the heart chroma at the same
+tier**, with day one the binding case at 22 against 25.
+
+Sheets: `docs/noise-mark.png` and `docs/noise-mark-intensity.png`, from
+`tools/noise-mark-sheet.mjs`.
+
+### Cost: indistinguishable from free
+
+Measured at the day-364 worst case, the same token with and without the Mark:
+
+| | gas | tokenURI bytes |
+|---|---|---|
+| without Blue Blood | 1,578,029 | 9,212 |
+| with Blue Blood | 1,575,624 | 9,224 |
+| delta | **-2,405** | **+12** |
+
+The Mark measured 2,405 gas CHEAPER than not wearing it, which at 0.15% of the
+call is inside the noise rather than a real saving; it is reported as measured
+and no cause is claimed for it. The 12 bytes are `,"blueblood"` in the Marks
+attribute -- the ladder's name cost, which every Mark pays. The IMAGE length is
+unchanged, asserted directly on `svg()`, because a seven-character hex colour
+was swapped for another.
+
+`Renderer` grew 248 bytes of runtime code to 12,411, leaving 12,165 of margin.
+
+### What was removed
+
+`RendererPulse.sol` and `contracts/test/PulseCost.t.sol` were deleted with the operator's
+approval once the Pulse numbers above were recorded. The git history keeps them.
+
+### What this does not do
+
+It does not restore what Pulse meant. Pulse made the heart beat; nothing on the
+ladder now suggests motion. That was a deliberate call when the rung was
+declared open rather than reserved for an aliveness Mark.

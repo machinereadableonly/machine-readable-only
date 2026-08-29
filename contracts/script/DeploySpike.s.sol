@@ -28,7 +28,7 @@ contract DeploySpike is Script {
     /// @dev Singularity is left off token 3 on purpose: it selects the QArt
     /// target picture at mint and has no render effect, so wearing it here
     /// would change nothing while implying it did.
-    uint256 constant MARKS_NO_SINGULARITY = MarkRenderer.VEIN | MarkRenderer.PULSE
+    uint256 constant MARKS_NO_SINGULARITY = MarkRenderer.VEIN | MarkRenderer.BLUEBLOOD
         | MarkRenderer.VOICE | MarkRenderer.BLOOM | MarkRenderer.HALO | MarkRenderer.CROWN;
 
     uint256 constant VEIN_AND_BLOOM = MarkRenderer.VEIN | MarkRenderer.BLOOM;
