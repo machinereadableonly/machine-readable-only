@@ -1620,6 +1620,260 @@ pre-write read, so it was not re-reading at all.</p>
 that caches day one and will not re-read shows a frozen token. Stated honestly:
 one token, one indexer, one window -- not proof that Alchemy never refreshes,
 but enough that nobody should assume the refresh path works.</p>
+<hr>
+<h2>Task 10c Phase 3: the rest of the matrix, a real domain, and Pulse</h2>
+<p>Phase 2 put seven bitmaps in front of Alchemy and adopted the intrinsic SVG
+size on the strength of them. Seven is a demonstration. This phase finishes the
+matrix, then answers the two questions Phase 0 had been carrying unbudgeted
+since Task 7.</p>
+<h3>The remaining 19 bitmaps: 26 of 26, clean</h3>
+<p>The full soak matrix has 26 states; Phase 2 drove 7 of them (ids 1, 2, 3, 5, 8,
+12, 13). The other 19 were run here against
+<code>0x12c82BCE6f64f797358031Caae3c9652bD5Bd209</code>, the adopted sized design, in five
+batches of one process each.</p>
+<p><strong>171 third-party decodes, zero failures.</strong> Every state, at Alchemy&#39;s own
+thumbnail and <code>/convert-png</code> plus eight constructed widths from 256 to 1600,
+decoded to its own url, with our own render as the control at each width.</p>
+<p>The grey-level column behaves exactly as Phase 2 described: their thumbnail and
+<code>convert-png</code> come back at 3 levels, matching ours, while every constructed
+<code>w_NNN</code> resize sits between 141 and 195. That is the CDN interpolating a
+downscale of a crisp 848px source -- the harmless version of the mechanism that
+broke 54% of decodes when the SVG declared no size. It is now a smoothing
+artefact on top of a readable code rather than the code&#39;s destruction.</p>
+<p>This does not extend to OpenSea, which remains unchecked and must not be
+described otherwise.</p>
+<h3>A realistic domain costs about 0.8 points of heart</h3>
+<p>Every bitmap solved on this project encodes <code>example.com</code>, which was never
+going to be the domain. That is not cosmetic: QR version 5 level L carries 108
+data codewords, the payload consumes them first, and the remainder is the
+entire budget the QArt solver has for shaping the heart. Free bytes are
+<code>104 - payloadLength</code>, and only the low five bits of each are usable, so a
+longer domain subtracts shaping capacity directly.</p>
+<p>Measured with <code>tools/payload-length-check.mjs</code>, the same five ids under both
+domains so domain length is the only variable:</p>
+<table>
+<thead>
+<tr>
+<th>payload</th>
+<th>chars</th>
+<th>free bits</th>
+<th>mask</th>
+<th>match</th>
+<th>gate cost</th>
+<th>masks rejected</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>example.com/t/1</code></td>
+<td>24</td>
+<td>400</td>
+<td>7</td>
+<td>64.9%</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>example.com/t/12</code></td>
+<td>25</td>
+<td>395</td>
+<td>7</td>
+<td>63.9%</td>
+<td>1.5</td>
+<td>1</td>
+</tr>
+<tr>
+<td><code>example.com/t/55</code></td>
+<td>25</td>
+<td>395</td>
+<td>1</td>
+<td>63.3%</td>
+<td>0.9</td>
+<td>1</td>
+</tr>
+<tr>
+<td><code>example.com/t/1234</code></td>
+<td>27</td>
+<td>385</td>
+<td>7</td>
+<td>64.1%</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>example.com/t/12345</code></td>
+<td>28</td>
+<td>380</td>
+<td>4</td>
+<td>63.3%</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>machine-readable.xyz/t/1</code></td>
+<td>33</td>
+<td>355</td>
+<td>4</td>
+<td>63.0%</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>machine-readable.xyz/t/12</code></td>
+<td>34</td>
+<td>350</td>
+<td>4</td>
+<td>63.6%</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>machine-readable.xyz/t/55</code></td>
+<td>34</td>
+<td>350</td>
+<td>4</td>
+<td>62.5%</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>machine-readable.xyz/t/1234</code></td>
+<td>36</td>
+<td>340</td>
+<td>4</td>
+<td>63.6%</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>machine-readable.xyz/t/12345</code></td>
+<td>37</td>
+<td>335</td>
+<td>4</td>
+<td>62.6%</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+</tbody></table>
+<p><code>machine-readable.xyz</code> is a PLACEHOLDER of representative length (20
+characters), chosen because the real domain is undecided. Match is scored over
+all 1,369 modules in the grid, not over the heart&#39;s own cells.</p>
+<p>Three findings.</p>
+<p><strong>The cost is 0.84 points of heart match, averaged over the five ids.</strong> Free
+bits fall 11.5% and match falls 1.3% relative -- a slope of about 0.065 points
+per payload character. The heart is far less sensitive to payload length than
+the capacity arithmetic suggests, because the solver is already placing far
+fewer bits than the heart has cells.</p>
+<p><strong>Robustness did not degrade -- it improved, on this sample.</strong> Under
+<code>example.com</code> two of five tokens needed a fallback mask to pass the decode
+gate; under the longer payload, none did. Five tokens is a small sample and
+this may be chance, so the honest claim is that a realistic domain shows no
+robustness penalty, not that it confers a benefit.</p>
+<p><strong>Every realistic-domain solve chose mask 4</strong>, the mask that carried both
+fragile codes found in Phase 1, and all five passed the gate. That is further
+evidence for the Phase 1 conclusion that mask 4 is not the problem and banning
+it would have been the wrong fix.</p>
+<p>The script reproduces all three known Phase 1 results exactly -- token 1 at mask
+7 and 64.9%, token 12 costing 1.5 points, token 55 costing 0.9 -- which is why
+its new numbers can be trusted.</p>
+<p><strong>No action falls out of this.</strong> The domain choice is not constrained by the
+artwork at any plausible length, and the codes must be re-solved against the
+real domain before minting regardless, since a bitmap encodes its own url.</p>
+<h3>Pulse: measured at last, and it busts the gas ceiling on one day</h3>
+<p>Tasks 7, 8 and 9 each recorded the same placeholder -- &quot;<code>animation_url</code> is
+unbudgeted and unbuilt, it roughly doubles tokenURI bytes&quot;. <code>RendererPulse</code> is
+a variant built to replace that adjective with numbers. It is NOT the shipped
+renderer: <code>Renderer</code> is untouched, every existing fixture stays byte-identical,
+and <code>test_withoutPulseTheVariantIsByteIdentical</code> pins that the two differ in
+<code>animation_url</code> and nothing else.</p>
+<p><strong>HTML is the only workable shape.</strong> Verified against OpenSea&#39;s live media
+documentation on 2026-08-29: <code>animation_url</code> supports GLTF, GLB, WEBM, MP4,
+M4V, OGV, OGG, MP3, WAV and OGA, &quot;or it can point to an HTML page&quot;. SVG is
+supported for <code>image</code> only. An <code>animation_url</code> holding an SVG data URI would be
+a format the marketplace does not claim to render, so the cheap-looking option
+is not a workable one.</p>
+<p><strong>The cheapest workable version renders the image once.</strong> The obvious
+implementation renders it twice -- once for <code>image</code>, once inside the HTML -- and
+<code>svg()</code> is the expensive half of <code>tokenURI</code>. Rendering once and spending the
+second copy only on encoding is the difference between a variant that doubles
+the call and one that adds 30%. The animation is a CSS rule targeting the last
+path in the document, because the draw order is fixed and asserted (ghost,
+frame, noise, heart) so the heart is always last; giving the heart path an id
+would put bytes on every token to serve the one Mark that uses them.</p>
+<p>Cost, on identical state at the day-364 worst case with every Mark:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>gas</th>
+<th>bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>shipped renderer</td>
+<td>1,578,380</td>
+<td>9,219</td>
+</tr>
+<tr>
+<td>Pulse variant</td>
+<td>2,047,407</td>
+<td>17,960</td>
+</tr>
+<tr>
+<td><strong>delta</strong></td>
+<td><strong>+469,027</strong></td>
+<td><strong>+8,741</strong></td>
+</tr>
+</tbody></table>
+<p>Where that lands against the 2,000,000 gas / 20,000 byte hard limit:</p>
+<table>
+<thead>
+<tr>
+<th>level</th>
+<th>Pulse + Vein</th>
+<th>all Marks</th>
+<th>verdict</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>1,794,631</td>
+<td>1,829,398</td>
+<td>under</td>
+</tr>
+<tr>
+<td>200</td>
+<td>1,913,021</td>
+<td>1,952,607</td>
+<td>under</td>
+</tr>
+<tr>
+<td><strong>364</strong></td>
+<td><strong>2,025,331</strong></td>
+<td><strong>2,065,436</strong></td>
+<td><strong>OVER</strong></td>
+</tr>
+<tr>
+<td>365</td>
+<td>1,824,980</td>
+<td>1,865,349</td>
+<td>under</td>
+</tr>
+</tbody></table>
+<p><strong>Bytes always fit</strong> -- 17,970 at the worst, inside 20,000. <strong>Gas does not.</strong>
+Pulse crosses the hard limit at level 364 only, by 25,331 gas with the minimum
+Mark set and 65,436 with every Mark. That is the same day-before-the-seal worst
+case Task 8 found, for the same reason: twelve ghost cells threaded through 364
+lit ones shatter both frame paths into short runs.</p>
+<p>Level 364 is one day in a token&#39;s life, but it is a day every token that gets
+there will pass through, and <code>tokenURI</code> reverting or being refused on that day
+is not an acceptable failure mode for a piece whose subject is the record of
+returning.</p>
+<p>The ceiling is recorded here, not asserted in the suite: Pulse is not adopted,
+so a ceiling assertion would fail the build over a variant nobody ships. The
+shipped renderer&#39;s ceiling stays asserted in <code>GasBudget.t.sol</code>.</p>
+<p><strong>This is a decision for the operator, not a defect to fix.</strong> The options are on the
+table: drop Pulse, redesign it below the ceiling, raise the ceiling knowing the
+measured provider behaviour, or accept a Mark that is unreadable on one day.</p>
 
 </body>
 </html>
