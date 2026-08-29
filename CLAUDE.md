@@ -17,9 +17,9 @@ return visits, so the artwork is the agent's own history of coming back.
   in progress -- Tasks 1-10 of plan revision 2 done as of 2026-08-29, plus
   Task 10b (the state soak) and Task 10c Phase 1. The budget question is
   SETTLED (see Gotchas) and the spike is deployed and Basescan-verified on
-  Base Sepolia. Task 10c Phase 2 (third-party render check, on Sepolia and
-  free) is next. TASK 11, the throwaway Base MAINNET deploy for the OpenSea
-  check, WAS DROPPED by the operator on 2026-08-29: Phase 0 spends no real funds.
+  Base Sepolia. Task 10c Phase 2 (third-party render check) is DONE; Phase 3
+  is next. TASK 11, the throwaway Base MAINNET deploy for the OpenSea check,
+  WAS DROPPED by the operator on 2026-08-29: Phase 0 spends no real funds.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -130,11 +130,24 @@ return visits, so the artwork is the agent's own history of coming back.
   Task 10c Phase 2 rehearses the same mechanism against a free consumer.
 - **tokenURI gas WAS the live risk and is now settled.** Measured comparables:
   Loot 572k, Anonymice 24M. Phase 0 targets 1M gas / 5 KB and fails over at
-  2M / 20 KB. Measured 2026-08-29 through the token contract on Base Sepolia:
-  worst case 1,590,476 gas / 10,066 bytes, leaving about 410,000 gas of
-  headroom. The 2M / 20 KB HARD limit passes; the 1M / 5 KB TARGET is MISSED
-  and must be reported as missed. The worst case is the day BEFORE the heart
-  seals (level 364), not the oldest token -- see docs/phase0-results.md.
+  2M / 20 KB. Measured 2026-08-29 through the token contract on Base Sepolia,
+  after the intrinsic SVG size was adopted: worst case 1,633,224 gas / 8,924
+  bytes, leaving 366,776 gas and 11,076 bytes. The 2M / 20 KB HARD limit
+  passes; the 1M / 5 KB TARGET is MISSED and must be reported as missed. The
+  worst case is the day BEFORE the heart seals (level 364), not the oldest
+  token -- see docs/phase0-results.md. Do not quote the older 1,590,476 /
+  10,066 pair; it predates the intrinsic size.
+- **A third party's CDN interpolates unless the SVG declares a size.** With no
+  width/height it rasterises at the viewBox units -- 53 pixels, one per module
+  -- then upscales that bitmap, and 54% of the results would not decode.
+  Declaring canvas * 16 took that to 3.6%. The grey-level count is the cheap
+  diagnostic: the artwork has 3, a resampled copy has 150-208.
+- **The ERC-4906 refresh did not happen, and no contract change fixes it.**
+  A confirmed on-chain state change, with MetadataUpdate emitted after the
+  write, left Alchemy's cache frozen through 35+ minutes of polling,
+  refreshCache twice and invalidateContract. This piece is defined as an image
+  that changes as an agent returns, so this is the biggest open risk in the
+  project. It is a design question, not a Solidity one.
 - **Coinbase Agentic Wallets cannot sign NFT trades** -- this rules out an
   otherwise obvious integration.
 - **Distribution is the real risk, not the build.** Five of six early-2026
