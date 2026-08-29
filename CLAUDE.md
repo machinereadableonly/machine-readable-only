@@ -96,7 +96,7 @@ return visits, so the artwork is the agent's own history of coming back.
   JSON) plus a 365-cell pixel heart, one cell per credited day. Streak sets
   colour at 3 / 7 / 30 / 100; a lapse pales it in steps. Rings mark extra
   years.
-- **Marks:** seven paid tiers -- Vein 1, Pulse 5, Voice 20, Bloom 50,
+- **Marks:** seven paid tiers -- Vein 1, Blue Blood 5, Voice 20, Bloom 50,
   Halo 100 (x1000), Crown 5,000 (x100), Singularity 100,000 (x10) --
   gated by level, wholeness and streak.
 - **Endings:** Rest (owner seals, irreversible), Sunset (operator closes),

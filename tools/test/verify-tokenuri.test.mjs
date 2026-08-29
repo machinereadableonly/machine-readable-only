@@ -26,7 +26,7 @@ function uriFor(state) {
 }
 
 const WORST = { level: 364, streak: 400, lastDay: 1000, today: 1000,
-                marks: ["vein", "pulse", "voice", "bloom", "halo", "crown"] };
+                marks: ["vein", "blueblood", "voice", "bloom", "halo", "crown"] };
 
 test("a tokenURI splits into parseable JSON and a decodable SVG", () => {
   const { json, svg } = decodeTokenUri(uriFor(WORST));

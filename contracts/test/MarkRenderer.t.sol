@@ -20,7 +20,7 @@ contract MarkRendererTest is Test {
     }
 
     function _all() internal pure returns (uint256) {
-        return MarkRenderer.VEIN | MarkRenderer.PULSE | MarkRenderer.VOICE | MarkRenderer.BLOOM
+        return MarkRenderer.VEIN | MarkRenderer.BLUEBLOOD | MarkRenderer.VOICE | MarkRenderer.BLOOM
             | MarkRenderer.HALO | MarkRenderer.CROWN | MarkRenderer.SINGULARITY;
     }
 
@@ -32,7 +32,7 @@ contract MarkRendererTest is Test {
         // Ids 1 to 7, so bit n is mark n and bit 0 is never used. The ladder is
         // Vein, Pulse, Voice, Bloom, Halo, Crown, Singularity.
         assertEq(MarkRenderer.VEIN, 1 << 1, "Vein is mark 1");
-        assertEq(MarkRenderer.PULSE, 1 << 2, "Pulse is mark 2");
+        assertEq(MarkRenderer.BLUEBLOOD, 1 << 2, "Blue Blood is mark 2");
         assertEq(MarkRenderer.VOICE, 1 << 3, "Voice is mark 3");
         assertEq(MarkRenderer.BLOOM, 1 << 4, "Bloom is mark 4");
         assertEq(MarkRenderer.HALO, 1 << 5, "Halo is mark 5");
@@ -95,7 +95,7 @@ contract MarkRendererTest is Test {
 
     function test_theTwoMarksThatDrawNothingDrawNothing() public pure {
         // Pulse is an animation_url; Singularity picks the QArt target at mint.
-        uint256 both = MarkRenderer.PULSE | MarkRenderer.SINGULARITY;
+        uint256 both = MarkRenderer.BLUEBLOOD | MarkRenderer.SINGULARITY;
         assertEq(MarkRenderer.field(both), "#ffffff", "field untouched");
         assertEq(MarkRenderer.ghost(both), Palette.ghost(), "ghost untouched");
         assertEq(MarkRenderer.frameFill(both, STREAK), STREAK, "frame untouched");
@@ -129,7 +129,7 @@ contract MarkRendererTest is Test {
         );
         assertEq(
             MarkRenderer.names(_all()),
-            '["vein","pulse","voice","bloom","halo","crown","singularity"]',
+            '["vein","blueblood","voice","bloom","halo","crown","singularity"]',
             "all seven, in ladder order"
         );
     }
@@ -140,7 +140,7 @@ contract MarkRendererTest is Test {
         assertEq(MarkRenderer.names(1), "[]", "bit 0 is not a mark");
         assertEq(MarkRenderer.names(1 << 8), "[]", "bit 8 is not a mark");
         assertEq(MarkRenderer.names(type(uint256).max), 
-            '["vein","pulse","voice","bloom","halo","crown","singularity"]',
+            '["vein","blueblood","voice","bloom","halo","crown","singularity"]',
             "every bit set still yields exactly the seven");
     }
 }

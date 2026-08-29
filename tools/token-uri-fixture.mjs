@@ -28,7 +28,7 @@ export const STAGES = [
   ["whole and lapsed", { level: 365,      streak: 140, lastDay: 1000, today: 1040 }],
   ["ten years, capped",{ level: 365 * 10, streak: 400, lastDay: 1000, today: 1000 }],
   ["every drawn mark", { level: 365 * 10, streak: 400, lastDay: 1000, today: 1000,
-                         marks: ["vein", "pulse", "voice", "bloom", "halo", "crown", "singularity"] }],
+                         marks: ["vein", "blueblood", "voice", "bloom", "halo", "crown", "singularity"] }],
   ["sealed at rest",   { level: 365 * 3,  streak: 200, lastDay: 1000, today: 9999, resting: true }],
 ];
 

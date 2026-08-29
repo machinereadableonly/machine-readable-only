@@ -54,7 +54,7 @@ library RenderFixture {
         c[i++] = Case(365, 400, 1000, 1000, 32, false, false, 8887, 0x9af36e2f13b1468c120dfed4d7a07175c9b52939a074f689f66f1683c3b2cb8a, "mark halo");
         c[i++] = Case(365, 400, 1000, 1000, 64, false, false, 8888, 0x21f6643be9df517763b1af70ee3b47be22a6184c9c68247e060d42d4cbadbc69, "mark crown");
         c[i++] = Case(365, 400, 1000, 1000, 122, false, false, 9206, 0x9a25d3683a6eb593839cca09452f178fd39cf10c7a4a541a8cd367d2471fcab8, "all drawing marks");
-        c[i++] = Case(365, 400, 1000, 1000, 254, false, false, 9228, 0x716f50530195716e7999300d778ca1e8055077ace1108f46293b7e22227fda5e, "all seven marks");
+        c[i++] = Case(365, 400, 1000, 1000, 254, false, false, 9232, 0xd3ec0bdf9393e31e05bb67f545904b2d3e18cc00ec732b14082b456d889c146a, "all seven marks");
         c[i++] = Case(365, 400, 1000, 9999, 0, true, false, 8884, 0x67490dca20f51b027abb39ef572373d371bbb20c208963433dc20e5a6ee5130b, "resting");
         c[i++] = Case(365, 400, 1000, 9999, 0, false, true, 8882, 0xed352579f1540d780ed5095728f8f4123e785baa9d18f79db90ba351ea25acb5, "sunset");
     }

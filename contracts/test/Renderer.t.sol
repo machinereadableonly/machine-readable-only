@@ -24,7 +24,7 @@ contract RendererTest is Test {
         hex"ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80";
     }
 
-    uint256 constant ALL_MARKS = MarkRenderer.VEIN | MarkRenderer.PULSE | MarkRenderer.VOICE
+    uint256 constant ALL_MARKS = MarkRenderer.VEIN | MarkRenderer.BLUEBLOOD | MarkRenderer.VOICE
         | MarkRenderer.BLOOM | MarkRenderer.HALO | MarkRenderer.CROWN | MarkRenderer.SINGULARITY;
 
     function setUp() public {
@@ -98,8 +98,8 @@ contract RendererTest is Test {
     function test_everyMarkAtOnceMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(365 * 10, 400, 1000, 1000);
         v.marks = ALL_MARKS;
-        _diff("every drawn mark", v, 10102,
-            0x2af02a3f07a778b247b4ce8ca4bb765e962aa043b7fd66182cda3d038f6664ab);
+        _diff("every drawn mark", v, 10106,
+            0x56950279ce158df5fd7f0ddb8c9cde42fc1c6d5d35400aa171fab2ee60e31b57);
     }
 
     function test_aSealedTokenMatchesTheJavascriptReference() public view {
@@ -237,5 +237,38 @@ contract RendererTest is Test {
             if (hit) return i;
         }
         revert("not found");
+    }
+
+    /// @notice Blue Blood may change the ink and nothing else.
+    ///
+    /// @dev The Mark claims the noise, which is the one surface no other Mark
+    /// touches. `CodeRenderer.paths` already takes that ink as a parameter, so
+    /// wearing the Mark swaps one seven-character hex colour for another and the
+    /// image cannot change length. If it ever does, the Mark has reached a
+    /// surface that belongs to somebody else -- which is the rule that keeps a
+    /// token wearing all seven legible.
+    function test_blueBloodChangesTheInkAndNothingElse() public view {
+        TokenView memory v = _view(200, 45, 1000, 1000);
+        string memory bare = r.svg(v);
+
+        v.marks = MarkRenderer.BLUEBLOOD;
+        string memory marked = r.svg(v);
+
+        assertTrue(
+            keccak256(bytes(bare)) != keccak256(bytes(marked)),
+            "Blue Blood must actually change the image"
+        );
+        assertEq(
+            bytes(marked).length, bytes(bare).length,
+            "a colour swap cannot change the image length"
+        );
+        assertTrue(
+            vm.contains(marked, Palette.bluebloodAt(Palette.tierIndex(45))),
+            "the slate ink is missing from a Blue Blood token"
+        );
+        assertFalse(
+            vm.contains(marked, Palette.noiseAt(Palette.tierIndex(45))),
+            "the neutral noise ink survived into a Blue Blood token"
+        );
     }
 }
