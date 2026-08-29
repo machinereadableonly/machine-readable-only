@@ -90,13 +90,45 @@ contract Renderer is IRenderer {
         return rim + FrameGeometry.THICK;
     }
 
+    /// @notice Pixels per cell to declare as the SVG's intrinsic size, or 0 for none.
+    ///
+    /// @dev Zero is the shipped behaviour and emits no `width`/`height` at all,
+    /// so every existing fixture stays byte-identical. `RendererSized` overrides
+    /// it, and the two are deployed side by side on Sepolia to settle one
+    /// measured question rather than an argument.
+    ///
+    /// Why it matters, measured 2026-08-29 against Alchemy's NFT API: with no
+    /// intrinsic size, their CDN rasterised the token at its viewBox units --
+    /// 53 pixels for a year-zero canvas, one pixel per cell -- and then
+    /// interpolated THAT bitmap up to whatever width was asked for. The result
+    /// carried 170 to 205 grey levels against our 3, and 41% of those resizes
+    /// would not decode. Declaring a size moves their one rasterisation up to
+    /// `canvas * pxPerCell` before any smoothing is applied.
+    ///
+    /// Virtual and pure rather than an immutable, deliberately: an immutable
+    /// would make `tokenURI` and `svg` view rather than pure, which changes
+    /// IRenderer and every caller for the sake of a spike experiment.
+    function pxPerCell() internal pure virtual returns (uint256) {
+        return 0;
+    }
+
     /// @dev The open tag, Bloom's gradient definition, the field and Voice's tint.
+    ///
+    /// Emitted in two steps rather than one `abi.encodePacked`. Adding the
+    /// intrinsic-size call to a single eleven-argument expression blew the IR
+    /// pipeline's stack (`too deep by 2 slots`), the same wall `_attributes`
+    /// already splits around.
     function _head(TokenView memory v, string memory colour) private pure returns (string memory) {
         string memory c = LibString.toString(FrameRenderer.canvas(FrameRenderer.rings(v.level)));
+        string memory open = string(
+            abi.encodePacked(
+                '<svg xmlns="http://www.w3.org/2000/svg"', _intrinsic(v), ' viewBox="0 0 ', c, " ", c,
+                '" shape-rendering="crispEdges">'
+            )
+        );
         return string(
             abi.encodePacked(
-                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ', c, " ", c,
-                '" shape-rendering="crispEdges">',
+                open,
                 MarkRenderer.defs(v.marks, colour),
                 '<rect width="', c, '" height="', c, '" fill="', MarkRenderer.field(v.marks), '"/>',
                 _quiet(v.marks, _blockOff(v.level))
@@ -124,6 +156,17 @@ contract Renderer is IRenderer {
                 )
             )
         );
+    }
+
+    /// @dev `width="848" height="848"` when a size is declared, and the empty
+    /// string when it is not -- so the unsized build emits the exact bytes it
+    /// always has, down to the single space before `viewBox`.
+    function _intrinsic(TokenView memory v) private pure returns (string memory) {
+        uint256 k = pxPerCell();
+        if (k == 0) return "";
+        string memory px =
+            LibString.toString(FrameRenderer.canvas(FrameRenderer.rings(v.level)) * k);
+        return string(abi.encodePacked(' width="', px, '" height="', px, '"'));
     }
 
     /// @dev Voice tints the whole 45-cell block rather than the 656 cells of the
