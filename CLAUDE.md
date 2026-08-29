@@ -14,10 +14,12 @@ return visits, so the artwork is the agent's own history of coming back.
 - **Stack:** Solidity (Foundry 1.7.1) + Node 24.14.1; MCP server; reference
   client shipped as `npx mro-agent` plus a SKILL.md
 - **Status:** Spec revision 3 APPROVED 2026-08-27. Phase 0 rendering spike
-  in progress -- Tasks 1-10 of plan revision 2 done as of 2026-08-29. The
-  budget question is SETTLED (see Gotchas) and the spike is deployed and
-  Basescan-verified on Base Sepolia. Task 11, the throwaway Base MAINNET
-  deploy for the OpenSea check, is the next step and is a real-funds gate.
+  in progress -- Tasks 1-10 of plan revision 2 done as of 2026-08-29, plus
+  Task 10b (the state soak) and Task 10c Phase 1. The budget question is
+  SETTLED (see Gotchas) and the spike is deployed and Basescan-verified on
+  Base Sepolia. Task 10c Phase 2 (third-party render check, on Sepolia and
+  free) is next. TASK 11, the throwaway Base MAINNET deploy for the OpenSea
+  check, WAS DROPPED by the operator on 2026-08-29: Phase 0 spends no real funds.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -30,9 +32,9 @@ return visits, so the artwork is the agent's own history of coming back.
    visits, and that history cannot be moved to another chain later. Do not
    propose a chain migration.
 2. **Never spend real funds without explicit the operator approval, every time.**
-   Mainnet deploys, the Task 11 throwaway display-check contract, and any
-   transaction with real value are operator-approval gates. There is no standing
-   approval.
+   Mainnet deploys and any transaction with real value are operator-approval gates.
+   Phase 0 no longer contains one at all -- Task 11 was dropped. There is no
+   standing approval.
 3. **Read the spec before any MRO work:**
    `docs/specs/2026-08-27-machine-readable-only-design.md`. It is 60 KB;
    read the relevant sections, not a skim.
@@ -114,14 +116,18 @@ return visits, so the artwork is the agent's own history of coming back.
 
 ## Gotchas
 
-- **OpenSea has had no testnets since July 2025.** The display and refresh
-  criteria therefore have to be checked on a throwaway Base MAINNET
-  contract (plan revision 2, Task 11 -- it was Task 10 before the plan was
-  renumbered) -- a real-funds step needing the operator approval. Measured 2026-08-29:
-  the whole run is 5,613,812 gas, about eight US cents at Base's 0.006 gwei
-  floor. Re-measure on the day rather than quoting that.
+- **OpenSea is NOT being checked in Phase 0.** It has had no testnets since
+  2025-07-23, so the only way to check it was a throwaway Base MAINNET
+  contract (plan revision 2, Task 11). the operator dropped that on 2026-08-29, so
+  OpenSea's display and refresh behaviour is UNVERIFIED and must never be
+  described otherwise. Should it ever be revived, it is a real-funds step
+  needing explicit the operator approval; the run measured 5,613,812 gas on 2026-08-29,
+  about eight US cents at Base's 0.006 gwei floor -- re-measure on the day
+  rather than quoting that.
 - **OpenSea flattens the SVG image to PNG** and needs ERC-4906 events with
   the exact token range, emitted AFTER the write, plus a refresh API call.
+  Alchemy's NFT API flattens the same way and DOES run on Base Sepolia, so
+  Task 10c Phase 2 rehearses the same mechanism against a free consumer.
 - **tokenURI gas WAS the live risk and is now settled.** Measured comparables:
   Loot 572k, Anonymice 24M. Phase 0 targets 1M gas / 5 KB and fails over at
   2M / 20 KB. Measured 2026-08-29 through the token contract on Base Sepolia:
