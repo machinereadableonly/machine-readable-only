@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
-         rungOf, colourAt, noiseAt, MAX_RINGS, ringsFor, ringSpan,
+         rungOf, colourAt, noiseAt, bluebloodAt, MAX_RINGS, ringsFor, ringSpan,
          VOICE_QUIET } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
@@ -38,6 +38,35 @@ const luma601 = h => {
   const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
   return 0.299 * r + 0.587 * g + 0.114 * b;
 };
+
+test("every Blue Blood ink matches its tier in luminance", () => {
+  // The Mark may move the noise in HUE; it may not move it in WEIGHT. The
+  // binarizer resolves on weight and does not care why an ink is lighter, so
+  // Blue Blood clears exactly the bar the neutral palette clears. Mirrors
+  // PaletteNoise.t.sol.
+  for (let rung = 0; rung < TIERS.length; rung++) {
+    const gap = Math.abs(luma601(colourAt(rung)) - luma601(bluebloodAt(rung)));
+    assert.ok(gap <= 1,
+      `rung ${rung}: heart ${colourAt(rung)} and Blue Blood ${bluebloodAt(rung)} `
+      + `are ${gap.toFixed(1)} apart in luminance -- they must match`);
+  }
+});
+
+test("Blue Blood never out-chromas the heart it surrounds", () => {
+  // Not a decode rule -- every intensity measured decodes. It is about which
+  // element is the subject: the start-tier heart carries the least chroma on
+  // the ladder, so a vivid noise takes the picture over. Day one binds it.
+  const chroma = h => {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+    return Math.max(r, g, b) - Math.min(r, g, b);
+  };
+  for (let rung = 0; rung < TIERS.length; rung++) {
+    const heart = chroma(colourAt(rung)), noise = chroma(bluebloodAt(rung));
+    assert.ok(noise < heart,
+      `rung ${rung}: Blue Blood ${bluebloodAt(rung)} has chroma ${noise} against `
+      + `a heart ${colourAt(rung)} at ${heart} -- the noise must stay quieter`);
+  }
+});
 
 test("every noise ink matches its tier in luminance", () => {
   // The invariant the state soak bought on 2026-08-29. Both inks of the code
