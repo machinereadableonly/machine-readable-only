@@ -1613,7 +1613,7 @@ source.</p>
 <p>Token 1 was warmed in Alchemy&#39;s cache at Level 365, then moved on chain to Level
 300. <code>setState</code> emits <code>MetadataUpdate(id)</code> after the write, in the order the EIP
 requires, and a direct <code>tokenURI</code> read confirms the new state. Alchemy did not
-update through <strong>35 minutes of polling, <code>refreshCache=true</code> twice ten minutes
+update through <strong>90 minutes of polling, <code>refreshCache=true</code> twice ten minutes
 apart, and <code>invalidateContract</code></strong> -- and <code>timeLastUpdated</code> stayed frozen at the
 pre-write read, so it was not re-reading at all.</p>
 <p>This piece is defined as an image that changes as an agent returns. An indexer

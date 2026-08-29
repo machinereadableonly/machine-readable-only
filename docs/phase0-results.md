@@ -991,7 +991,7 @@ The most serious open item in Phase 0, and no contract change fixes it.
 Token 1 was warmed in Alchemy's cache at Level 365, then moved on chain to Level
 300. `setState` emits `MetadataUpdate(id)` after the write, in the order the EIP
 requires, and a direct `tokenURI` read confirms the new state. Alchemy did not
-update through **35 minutes of polling, `refreshCache=true` twice ten minutes
+update through **90 minutes of polling, `refreshCache=true` twice ten minutes
 apart, and `invalidateContract`** -- and `timeLastUpdated` stayed frozen at the
 pre-write read, so it was not re-reading at all.
 

@@ -144,7 +144,7 @@ return visits, so the artwork is the agent's own history of coming back.
   diagnostic: the artwork has 3, a resampled copy has 150-208.
 - **The ERC-4906 refresh did not happen, and no contract change fixes it.**
   A confirmed on-chain state change, with MetadataUpdate emitted after the
-  write, left Alchemy's cache frozen through 35+ minutes of polling,
+  write, left Alchemy's cache frozen through 90 minutes of polling,
   refreshCache twice and invalidateContract. This piece is defined as an image
   that changes as an agent returns, so this is the biggest open risk in the
   project. It is a design question, not a Solidity one.
