@@ -1030,6 +1030,137 @@ makes a stalled token still look like a finished object.</p>
 <p>Token 4 at the other end: gold Crown frame with a single pale notch where it is
 one day short of sealing, cream Voice quiet zone, Halo field, Bloom gradient on
 the heart. All five drawing Marks are distinguishable at a glance.</p>
+<hr>
+<h2>Task 10: Base Sepolia</h2>
+<p>The one thing a local anvil cannot test is a <strong>provider&#39;s <code>eth_call</code> gas cap</strong>.
+Anvil applies none. A public RPC does, and a <code>tokenURI</code> that only works locally
+is not proven. That is the whole reason this task exists.</p>
+<p>Deployed 2026-08-29 from a throwaway key, both contracts verified on Basescan:</p>
+<table>
+<thead>
+<tr>
+<th>Contract</th>
+<th>Address</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Renderer</code></td>
+<td><a href="https://sepolia.basescan.org/address/0x6fd68f65be17f399cfc1799ca09be8a765bcabd1"><code>0x6fD68f65Be17F399cFc1799cA09bE8a765BCabD1</code></a></td>
+</tr>
+<tr>
+<td><code>MROSpikeToken</code></td>
+<td><a href="https://sepolia.basescan.org/address/0x672a1555a19b4a5e2d12047543f8558c088c7af8"><code>0x672a1555A19B4a5E2d12047543f8558C088c7AF8</code></a></td>
+</tr>
+</tbody></table>
+<h3>The answer: no cap was hit</h3>
+<p>All four tokens read back through Alchemy&#39;s public Base Sepolia endpoint, each
+decoding to its own URL.</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>State</th>
+<th>Gas via public RPC</th>
+<th>On anvil</th>
+<th>URI bytes</th>
+<th>Scan</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Day one</td>
+<td>1,405,809</td>
+<td>1,395,460</td>
+<td>8,793</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Level 200, Vein + Bloom</td>
+<td>1,507,526</td>
+<td>1,497,120</td>
+<td>8,852</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Whole, one year, every drawing Mark</td>
+<td>1,464,458</td>
+<td>1,453,533</td>
+<td>9,417</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>Level 364, every Mark -- worst case</strong></td>
+<td><strong>1,590,476</strong></td>
+<td>1,580,070</td>
+<td>8,840</td>
+<td>OK</td>
+</tr>
+</tbody></table>
+<p>The public figures sit about 10,000 gas above the local ones, uniformly -- the
+L2&#39;s L1 data component, not anything about the contract. <strong>The worst case is
+1,590,476 gas against a 2,000,000 budget, and a real provider served it.</strong></p>
+<p>Three claims that are now measured rather than assumed:</p>
+<ol>
+<li>A provider will return a ~1.59M gas <code>eth_call</code>. No cap, no truncation.</li>
+<li>A ~9,400-byte string comes back over JSON-RPC intact -- the SVG base64-decoded
+to a complete document and ZXing read the code out of every one.</li>
+<li>The Foundry numbers were honest. Local and public agree to within 0.7%.</li>
+</ol>
+<h3>Deployment cost</h3>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Gas</th>
+<th>Cost (ETH)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Renderer</code> deploy</td>
+<td>2,596,549</td>
+<td>0.000016071</td>
+</tr>
+<tr>
+<td><code>MROSpikeToken</code> deploy</td>
+<td>1,648,622</td>
+<td>0.000009899</td>
+</tr>
+<tr>
+<td>Four mints</td>
+<td>1,064,480</td>
+<td>0.000007293</td>
+</tr>
+<tr>
+<td>Nine state / mark / parent writes</td>
+<td>304,161</td>
+<td>0.000002299</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>5,613,812</strong></td>
+<td><strong>0.000035562</strong></td>
+</tr>
+</tbody></table>
+<p>At the Base Sepolia gas price of the day (0.0074 gwei). The useful number for
+mainnet planning is the <strong>gas</strong>, not the ETH: deploying the pair costs about
+<strong>4.25M gas</strong>, and a mint is <strong>262,000 to 279,000</strong>.</p>
+<h3>Notes for whoever repeats this</h3>
+<ul>
+<li><code>DeploySpike.s.sol</code> reads <code>SPIKE_DEPLOYER_KEY</code> with <code>vm.envUint</code> rather than
+taking <code>--private-key</code>, so the key never passes through a shell where it would
+land in history. A real environment variable overrides the env file, which is
+how <code>anvil-verify.sh</code> substitutes anvil&#39;s own account for local runs.</li>
+<li><code>cast call ... &quot;(string)&quot;</code> escapes the inner quotes of a returned string, so
+the naive <code>sed</code> that strips the outer pair leaves invalid JSON behind. Use
+<code>--json</code> and <code>jq -r &#39;.[0]&#39;</code>.</li>
+<li><code>verify-tokenuri.mjs --file &lt;path&gt; &lt;id&gt; [domain] [gas]</code> checks a URI fetched
+by any other means. That exists so a provider URL carrying an API key never
+has to reach the Node process, and it is what Task 11 will use on OpenSea&#39;s
+own copy of the metadata.</li>
+</ul>
 
 </body>
 </html>

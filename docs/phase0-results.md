@@ -616,3 +616,69 @@ makes a stalled token still look like a finished object.
 Token 4 at the other end: gold Crown frame with a single pale notch where it is
 one day short of sealing, cream Voice quiet zone, Halo field, Bloom gradient on
 the heart. All five drawing Marks are distinguishable at a glance.
+
+---
+
+## Task 10: Base Sepolia
+
+The one thing a local anvil cannot test is a **provider's `eth_call` gas cap**.
+Anvil applies none. A public RPC does, and a `tokenURI` that only works locally
+is not proven. That is the whole reason this task exists.
+
+Deployed 2026-08-29 from a throwaway key, both contracts verified on Basescan:
+
+| Contract | Address |
+|---|---|
+| `Renderer` | [`0x6fD68f65Be17F399cFc1799cA09bE8a765BCabD1`](https://sepolia.basescan.org/address/0x6fd68f65be17f399cfc1799ca09be8a765bcabd1) |
+| `MROSpikeToken` | [`0x672a1555A19B4a5E2d12047543f8558C088c7AF8`](https://sepolia.basescan.org/address/0x672a1555a19b4a5e2d12047543f8558c088c7af8) |
+
+### The answer: no cap was hit
+
+All four tokens read back through Alchemy's public Base Sepolia endpoint, each
+decoding to its own URL.
+
+| Token | State | Gas via public RPC | On anvil | URI bytes | Scan |
+|---|---|---|---|---|---|
+| 1 | Day one | 1,405,809 | 1,395,460 | 8,793 | OK |
+| 2 | Level 200, Vein + Bloom | 1,507,526 | 1,497,120 | 8,852 | OK |
+| 3 | Whole, one year, every drawing Mark | 1,464,458 | 1,453,533 | 9,417 | OK |
+| 4 | **Level 364, every Mark -- worst case** | **1,590,476** | 1,580,070 | 8,840 | OK |
+
+The public figures sit about 10,000 gas above the local ones, uniformly -- the
+L2's L1 data component, not anything about the contract. **The worst case is
+1,590,476 gas against a 2,000,000 budget, and a real provider served it.**
+
+Three claims that are now measured rather than assumed:
+
+1. A provider will return a ~1.59M gas `eth_call`. No cap, no truncation.
+2. A ~9,400-byte string comes back over JSON-RPC intact -- the SVG base64-decoded
+   to a complete document and ZXing read the code out of every one.
+3. The Foundry numbers were honest. Local and public agree to within 0.7%.
+
+### Deployment cost
+
+| Step | Gas | Cost (ETH) |
+|---|---|---|
+| `Renderer` deploy | 2,596,549 | 0.000016071 |
+| `MROSpikeToken` deploy | 1,648,622 | 0.000009899 |
+| Four mints | 1,064,480 | 0.000007293 |
+| Nine state / mark / parent writes | 304,161 | 0.000002299 |
+| **Total** | **5,613,812** | **0.000035562** |
+
+At the Base Sepolia gas price of the day (0.0074 gwei). The useful number for
+mainnet planning is the **gas**, not the ETH: deploying the pair costs about
+**4.25M gas**, and a mint is **262,000 to 279,000**.
+
+### Notes for whoever repeats this
+
+- `DeploySpike.s.sol` reads `SPIKE_DEPLOYER_KEY` with `vm.envUint` rather than
+  taking `--private-key`, so the key never passes through a shell where it would
+  land in history. A real environment variable overrides the env file, which is
+  how `anvil-verify.sh` substitutes anvil's own account for local runs.
+- `cast call ... "(string)"` escapes the inner quotes of a returned string, so
+  the naive `sed` that strips the outer pair leaves invalid JSON behind. Use
+  `--json` and `jq -r '.[0]'`.
+- `verify-tokenuri.mjs --file <path> <id> [domain] [gas]` checks a URI fetched
+  by any other means. That exists so a provider URL carrying an API key never
+  has to reach the Node process, and it is what Task 11 will use on OpenSea's
+  own copy of the metadata.

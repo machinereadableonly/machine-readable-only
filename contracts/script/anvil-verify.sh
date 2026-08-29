@@ -28,8 +28,11 @@ forge build >/dev/null
 
 # --json puts the run summary on stdout; the deployed addresses are in the
 # returns block, keyed by the names run() declares.
-OUT=$(forge script script/DeploySpike.s.sol:DeploySpike \
-        --rpc-url "$RPC" --private-key "$KEY" --broadcast --json 2>/dev/null \
+# The script reads SPIKE_DEPLOYER_KEY itself, so both the local and the public
+# path use one mechanism. A real environment variable takes precedence over the
+# env file, which is what lets this override the Sepolia key with anvil's.
+OUT=$(SPIKE_DEPLOYER_KEY="$KEY" forge script script/DeploySpike.s.sol:DeploySpike \
+        --rpc-url "$RPC" --broadcast --json 2>/dev/null \
       | sed -n '/^{/p' | jq -s '[.[] | select(.returns)] | last')
 
 TOKEN=$(echo "$OUT" | jq -er '.returns.token.value')
