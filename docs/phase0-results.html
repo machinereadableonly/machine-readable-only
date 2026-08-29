@@ -1161,6 +1161,164 @@ by any other means. That exists so a provider URL carrying an API key never
 has to reach the Node process, and it is what Task 11 will use on OpenSea&#39;s
 own copy of the metadata.</li>
 </ul>
+<hr>
+<h2>Task 10b: the accelerated state soak</h2>
+<p>Ten tasks in, the spike had rendered <strong>four states on chain</strong> out of a design
+space with five tiers, four lapse bands, eleven ring counts, 366 heart fills,
+five drawing Marks and three lifecycles. Four samples is a demonstration, not a
+test, and Task 11 spends real money to ask OpenSea a question.</p>
+<p><code>tools/state-matrix.mjs</code> is the single definition of which states matter, shared
+by all four sweeps so they cannot drift apart.</p>
+<h3>Sweep A -- colour boundaries. 88 pairs. PASSES</h3>
+<p>Every tier threshold crossed with every lapse threshold, one step either side,
+generated into <code>contracts/test/ColourFixture.sol</code> and asserted against <code>Palette</code>.
+All 88 agree between the two renderers. Two properties are asserted rather than
+assumed: a lapse can never produce an ink outside the tier ladder, and can never
+move a token <strong>up</strong> it.</p>
+<h3>Sweep B -- 32-state differential. PASSES</h3>
+<p>Every tier live and lapsed, seven ring counts including one past the cap, five
+heart fills, each drawing Mark alone, all together, and both frozen lifecycles.
+All 32 byte-for-byte identical to the JS reference. Widest is the ten-year token
+at 9,715 bytes.</p>
+<h3>Sweep C -- decode sweep. FAILED, then fixed</h3>
+<p><strong>This is what the soak was for.</strong> A bare token stopped decoding at 1200px and a
+fully marked one at 900px, while a plain black-on-white control of the same code
+passed at every size to 1600.</p>
+<p>Root cause: the code carries <strong>two</strong> inks and both must binarize as dark. The
+heart ran 74 to 104 in luminance; the noise was a constant <code>#767676</code> at 118.
+Once a raster is large enough that ZXing&#39;s 8x8 blocks fall inside a single
+module, a block has no local contrast and resolves against its neighbours -- and
+the lighter ink goes to background.</p>
+<p><strong>It is the gap, not the darkness:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Heart luma</th>
+<th>Noise luma</th>
+<th>Gap</th>
+<th>1600px</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>74</td>
+<td>118</td>
+<td>44</td>
+<td>FAIL</td>
+</tr>
+<tr>
+<td>74</td>
+<td>74</td>
+<td>0</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>17</td>
+<td>74</td>
+<td>57</td>
+<td>FAIL</td>
+</tr>
+</tbody></table>
+<p>A <em>darker</em> heart made it worse. The fix is a noise ink per rung, matched in
+luminance to its tier, so the two separate by <strong>hue alone</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Heart</th>
+<th>Noise</th>
+<th>Luma</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>#70575f</code></td>
+<td><code>#5f5f5f</code></td>
+<td>95</td>
+</tr>
+<tr>
+<td><code>#8e5566</code></td>
+<td><code>#686868</code></td>
+<td>104</td>
+</tr>
+<tr>
+<td><code>#a83a55</code></td>
+<td><code>#5e5e5e</code></td>
+<td>94</td>
+</tr>
+<tr>
+<td><code>#bd2242</code></td>
+<td><code>#545454</code></td>
+<td>84</td>
+</tr>
+<tr>
+<td><code>#c8102e</code></td>
+<td><code>#4a4a4a</code></td>
+<td>74</td>
+</tr>
+</tbody></table>
+<p>The pairing is structural: <code>Palette</code> exposes rungs, and <code>Renderer</code> derives one
+rung per token and takes both inks from it. <code>PaletteNoise.t.sol</code> asserts the
+luminance match as a property, so adding a tier fails the suite unless its grey
+is matched too.</p>
+<p>Two consequences. The <strong>start tier is subtler</strong> -- hue alone now separates heart
+from noise, which makes chroma load-bearing rather than decorative, and the test
+pins chroma &gt;= 20. And the <strong>decode margin widened a long way</strong>: <code>#f9eaef</code> used
+to fail at 900px and was pinned as proof the quiet-zone tint had no room; it now
+passes, as does everything to about <code>#d4aabb</code>. <code>#c294a8</code> is the new
+counter-example.</p>
+<p>After the fix: 80 decodes clean, five inks against four ring counts, bare and
+fully marked, plus the eight extremes at five raster sizes each.</p>
+<h3>Sweep D -- 26 states on Base Sepolia. PASSES, with one caveat</h3>
+<p>One token per state, all placed in a single broadcast, then every one read back
+through the public RPC and decoded. One token per state rather than one token
+cycled, because each token&#39;s code encodes its <strong>own</strong> url and reusing a bitmap
+would weaken the destination check to nothing.</p>
+<table>
+<thead>
+<tr>
+<th>Contract</th>
+<th>Address</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Renderer</code></td>
+<td><code>0x5A314CE605b3e6a571f7D89F3Ce14eA388Fd66cd</code></td>
+</tr>
+<tr>
+<td><code>MROSpikeToken</code></td>
+<td><code>0xfd8AaAc531b02fCA9Df5dDdAa97a78fF2b102190</code></td>
+</tr>
+</tbody></table>
+<p><strong>25 of 26 decoded. Gas ranged 1,350,279 to 1,630,387; bytes 8,466 to 9,483.</strong>
+Every state fits the 2,000,000 / 20,000 hard limit through a real provider.</p>
+<p>Sunset was applied last, on its own, because it is piece-wide and irreversible --
+inside the batch it would have frozen the other twenty-five and every read after
+it would have been wrong. Confirmed: <code>isSunset</code> true, the <code>Sunset</code> attribute
+flips to yes, and the image <strong>changes</strong> as the colour freezes.</p>
+<h3>The one failure: a rasteriser resonance, not the artwork</h3>
+<p>Token 12 failed to decode. Reproduced offline, then bounded:</p>
+<ul>
+<li>It fails at <strong>exactly 700px</strong> and passes at 250, 350, 500 and 900.</li>
+<li>Its QArt match is 65.4%, <strong>better</strong> than its neighbours -- not a weak solve.</li>
+<li>Canvas is 53 cells, so 700px is 13.208 px per module.</li>
+</ul>
+<p><strong>Every exact multiple of the canvas passes</strong> -- 10, 12, 13, 14, 16, 18 and 20
+px per module all decode. Failures occur only at fractional ratios, and only at
+narrow resonances: 13.208 and 14.151 fail while 13.396, 13.774 and 13.962 pass.
+The cause is uneven module sampling when boundaries land on fractional pixels,
+not anything about the colours.</p>
+<p>Prevalence across all 26 bitmaps at five sizes: <strong>one failure in 130</strong>. The
+exact-multiple size was clean for every token.</p>
+<p><strong>What follows from it.</strong> Where we control the raster -- our own PNG output, the
+scan sheet, anything handed to a decoder -- render at an integer multiple of the
+canvas. Where we do not, the risk is a rare, size-specific miss on a minority of
+tokens, and a real camera&#39;s optical blur works against the artefact rather than
+with it. This is worth re-checking on OpenSea&#39;s own flattened PNG in Task 11,
+which is the one raster nobody here chooses.</p>
+<h3>An operational finding worth keeping</h3>
+<p>A <code>tokenURI</code> read issued immediately after the sunset transaction returned the
+<strong>pre-sunset</strong> state, and a read a minute later returned the correct one. A
+public RPC load-balances, and a read can hit a node that has not yet processed
+the write. Anything that writes and then verifies -- the Clock, the Warden, and
+the ERC-4906 refresh timing in Task 11 -- has to poll rather than read once.</p>
 
 </body>
 </html>

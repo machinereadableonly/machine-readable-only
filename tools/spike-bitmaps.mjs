@@ -23,8 +23,18 @@ export const SPIKE_TOKENS = [
   { id: 4, note: "level 364, the measured worst case" },
 ];
 
-export function spikeBitmaps(domain) {
-  return SPIKE_TOKENS.map(t => ({ ...t, ...tokenBitmap(domain, t.id), url: payloadFor(domain, t.id) }));
+/// The state soak mints one token per state, so each keeps its OWN code and the
+/// "decoded to its own url" check stays strict. Reusing one bitmap across the
+/// soak would weaken that check to nothing.
+export function soakTokens(count) {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i + 1,
+    note: i < SPIKE_TOKENS.length ? SPIKE_TOKENS[i].note : `soak state ${i}`,
+  }));
+}
+
+export function spikeBitmaps(domain, tokens = SPIKE_TOKENS) {
+  return tokens.map(t => ({ ...t, ...tokenBitmap(domain, t.id), url: payloadFor(domain, t.id) }));
 }
 
 export function render(domain, rows) {
@@ -59,8 +69,9 @@ library SpikeBitmaps {
 const here = dirname(fileURLToPath(import.meta.url));
 
 if (process.argv[1] && process.argv[1].endsWith("spike-bitmaps.mjs")) {
-  const [domain = "example.com"] = process.argv.slice(2);
-  const rows = spikeBitmaps(domain);
+  const [domain = "example.com", countArg] = process.argv.slice(2);
+  const count = Number(countArg ?? SPIKE_TOKENS.length);
+  const rows = spikeBitmaps(domain, soakTokens(count));
   const out = join(here, "..", "contracts", "script", "SpikeBitmaps.sol");
   writeFileSync(out, render(domain, rows));
   for (const r of rows) {

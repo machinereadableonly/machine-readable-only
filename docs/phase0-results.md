@@ -682,3 +682,128 @@ mainnet planning is the **gas**, not the ETH: deploying the pair costs about
   by any other means. That exists so a provider URL carrying an API key never
   has to reach the Node process, and it is what Task 11 will use on OpenSea's
   own copy of the metadata.
+
+---
+
+## Task 10b: the accelerated state soak
+
+Ten tasks in, the spike had rendered **four states on chain** out of a design
+space with five tiers, four lapse bands, eleven ring counts, 366 heart fills,
+five drawing Marks and three lifecycles. Four samples is a demonstration, not a
+test, and Task 11 spends real money to ask OpenSea a question.
+
+`tools/state-matrix.mjs` is the single definition of which states matter, shared
+by all four sweeps so they cannot drift apart.
+
+### Sweep A -- colour boundaries. 88 pairs. PASSES
+
+Every tier threshold crossed with every lapse threshold, one step either side,
+generated into `contracts/test/ColourFixture.sol` and asserted against `Palette`.
+All 88 agree between the two renderers. Two properties are asserted rather than
+assumed: a lapse can never produce an ink outside the tier ladder, and can never
+move a token **up** it.
+
+### Sweep B -- 32-state differential. PASSES
+
+Every tier live and lapsed, seven ring counts including one past the cap, five
+heart fills, each drawing Mark alone, all together, and both frozen lifecycles.
+All 32 byte-for-byte identical to the JS reference. Widest is the ten-year token
+at 9,715 bytes.
+
+### Sweep C -- decode sweep. FAILED, then fixed
+
+**This is what the soak was for.** A bare token stopped decoding at 1200px and a
+fully marked one at 900px, while a plain black-on-white control of the same code
+passed at every size to 1600.
+
+Root cause: the code carries **two** inks and both must binarize as dark. The
+heart ran 74 to 104 in luminance; the noise was a constant `#767676` at 118.
+Once a raster is large enough that ZXing's 8x8 blocks fall inside a single
+module, a block has no local contrast and resolves against its neighbours -- and
+the lighter ink goes to background.
+
+**It is the gap, not the darkness:**
+
+| Heart luma | Noise luma | Gap | 1600px |
+|---|---|---|---|
+| 74 | 118 | 44 | FAIL |
+| 74 | 74 | 0 | OK |
+| 17 | 74 | 57 | FAIL |
+
+A *darker* heart made it worse. The fix is a noise ink per rung, matched in
+luminance to its tier, so the two separate by **hue alone**:
+
+| Heart | Noise | Luma |
+|---|---|---|
+| `#70575f` | `#5f5f5f` | 95 |
+| `#8e5566` | `#686868` | 104 |
+| `#a83a55` | `#5e5e5e` | 94 |
+| `#bd2242` | `#545454` | 84 |
+| `#c8102e` | `#4a4a4a` | 74 |
+
+The pairing is structural: `Palette` exposes rungs, and `Renderer` derives one
+rung per token and takes both inks from it. `PaletteNoise.t.sol` asserts the
+luminance match as a property, so adding a tier fails the suite unless its grey
+is matched too.
+
+Two consequences. The **start tier is subtler** -- hue alone now separates heart
+from noise, which makes chroma load-bearing rather than decorative, and the test
+pins chroma >= 20. And the **decode margin widened a long way**: `#f9eaef` used
+to fail at 900px and was pinned as proof the quiet-zone tint had no room; it now
+passes, as does everything to about `#d4aabb`. `#c294a8` is the new
+counter-example.
+
+After the fix: 80 decodes clean, five inks against four ring counts, bare and
+fully marked, plus the eight extremes at five raster sizes each.
+
+### Sweep D -- 26 states on Base Sepolia. PASSES, with one caveat
+
+One token per state, all placed in a single broadcast, then every one read back
+through the public RPC and decoded. One token per state rather than one token
+cycled, because each token's code encodes its **own** url and reusing a bitmap
+would weaken the destination check to nothing.
+
+| Contract | Address |
+|---|---|
+| `Renderer` | `0x5A314CE605b3e6a571f7D89F3Ce14eA388Fd66cd` |
+| `MROSpikeToken` | `0xfd8AaAc531b02fCA9Df5dDdAa97a78fF2b102190` |
+
+**25 of 26 decoded. Gas ranged 1,350,279 to 1,630,387; bytes 8,466 to 9,483.**
+Every state fits the 2,000,000 / 20,000 hard limit through a real provider.
+
+Sunset was applied last, on its own, because it is piece-wide and irreversible --
+inside the batch it would have frozen the other twenty-five and every read after
+it would have been wrong. Confirmed: `isSunset` true, the `Sunset` attribute
+flips to yes, and the image **changes** as the colour freezes.
+
+### The one failure: a rasteriser resonance, not the artwork
+
+Token 12 failed to decode. Reproduced offline, then bounded:
+
+- It fails at **exactly 700px** and passes at 250, 350, 500 and 900.
+- Its QArt match is 65.4%, **better** than its neighbours -- not a weak solve.
+- Canvas is 53 cells, so 700px is 13.208 px per module.
+
+**Every exact multiple of the canvas passes** -- 10, 12, 13, 14, 16, 18 and 20
+px per module all decode. Failures occur only at fractional ratios, and only at
+narrow resonances: 13.208 and 14.151 fail while 13.396, 13.774 and 13.962 pass.
+The cause is uneven module sampling when boundaries land on fractional pixels,
+not anything about the colours.
+
+Prevalence across all 26 bitmaps at five sizes: **one failure in 130**. The
+exact-multiple size was clean for every token.
+
+**What follows from it.** Where we control the raster -- our own PNG output, the
+scan sheet, anything handed to a decoder -- render at an integer multiple of the
+canvas. Where we do not, the risk is a rare, size-specific miss on a minority of
+tokens, and a real camera's optical blur works against the artefact rather than
+with it. This is worth re-checking on OpenSea's own flattened PNG in Task 11,
+which is the one raster nobody here chooses.
+
+### An operational finding worth keeping
+
+A `tokenURI` read issued immediately after the sunset transaction returned the
+**pre-sunset** state, and a read a minute later returned the correct one. A
+public RPC load-balances, and a read can hit a node that has not yet processed
+the write. Anything that writes and then verifies -- the Clock, the Warden, and
+the ERC-4906 refresh timing in Task 11 -- has to poll rather than read once.

@@ -36,6 +36,144 @@ library SpikeBitmaps {
             return hex"feb791dbfc15e056106ebe53fcbb75ff57f5dba3f03faec14ecded07faaaaaafe00fe1fe00ce0efee979eefddfc59ffeff6ef4fbfedfe3d7feefeeb29effddfc78ffeff6ee17bfedfe4effeefeef2d6ffddfe78bfeff"
                 hex"6e2043fedfeb69feefeeb3c2ffddfcebffeff6ec81bfedfe6623eefeeb7e4ffddfe58cbeff6e183afedfeb6cb6efeefa0067ddf443f86ff4ea905f2db716bac8fc0fa5d2ac0b9bee86bd2bcd05f6d3f86feaeba15f80";
         }
+
+        // soak state 4 -- https://example.com/t/5# (mask 7, heart match 64.9%)
+        if (id == 5) {
+            return hex"fe190993fc1617a1106ebd0bd8bb74fff7f5dbabf1bfaec16ed3ed07faaaaaafe01fedfe00d33eefebb3eefffff37fff66f70afbdfedf8b7feeeeea09efdffdf86ffef66e72fbfffff6a3feefeef29cffdfff5d9fe66"
+                hex"679663fedfeb6fffeefee8fcffffff845ff66f7365bdfedfd08feeeeea5b27dffdda6bdef66c8a90fffff12c26efecfa007fdffc67fb66642bf043adfb16ba5cef2f95d5b6b62d2e8966b433051761e30feeca8fcd80";
+        }
+
+        // soak state 5 -- https://example.com/t/6# (mask 4, heart match 64.5%)
+        if (id == 6) {
+            return hex"fea619f3fc15a0d2506ebe527cbb75fe9ff5dba3f83faec14ec5ed07faaaaaafe00fe1fe00ce0efee97feefddfc59ffeff6ef5fbfedfe3dffeefeeb29effddfc7affeff6ee0fbfedfe4effeefeef296ffddfe7b4feff"
+                hex"6e203bfedfeb6a7eefeeb3a8ffddfce95feff6ec8ebfedfe6673eefeeb7ecffddfe589feff6e181afedfef6e6cefeefa005fddf443f80ff6ea90536dff16bac4fe0fa5d0ec569bee82f96bcd05ba1ff86fec89095f80";
+        }
+
+        // soak state 6 -- https://example.com/t/7# (mask 2, heart match 63.5%)
+        if (id == 7) {
+            return hex"fe49ae0bfc171c31906e99731ebb75decdf5dba7b1fbaec16dc3dd07faaaaaafe008f9cf00fbcfeefd51eeddfdcbaffee7ef7bfbcfdcffaffefeefae9efddfdc98ffee7ef6ffbcfdcf897fefeefee9cfddfde99efee7"
+                hex"efae13cfdcf7143efeefaff4fddfdc09ffee7ef46abcfdcfa147efeefabc6fddfdeba0bee7ef9739cfdcfb18fcfeedfe0045dfdc63fbee7eea70483dcb11ba81eadfe5d499e015eeb0c5884305cf50241fecdc464380";
+        }
+
+        // soak state 7 -- https://example.com/t/8# (mask 7, heart match 64.2%)
+        if (id == 8) {
+            return hex"fe23801bfc16d321d06ebc83d8bb74ff2ff5dbabfbbfaec16ed3ed07faaaaaafe01fe1fe00d33eefebb1eefffff34fff66f70bfbdfedf8bffeeeeea0befdffdf85ffef66e73fbfffff6a7feefeef2acffdfff5f0fe66"
+                hex"67972bfedfeb673feefee8c2ffffff864ff66f736a3dfedfd0b7eeeeea5a47dffdda679ef66f0afbfffff92ef4efeefa0067dffc67fae6642bf04f6db716ba74edcf95d4bb232d2e95669433059be1230feca669cd80";
+        }
+
+        // soak state 8 -- https://example.com/t/9# (mask 4, heart match 64.4%)
+        if (id == 9) {
+            return hex"fe8d1853fc1524d6d06ebfdbfcbb75ff8ff5dba3fa3faec14ecded07faaaaaafe00fedfe00ce0efee97beefddfc5affeff6ef5fbfedfe3dffeefeeb2beffddfc7bffeff6ee07bfedfe4ebfeefeef2e6ffddfe7a2feff"
+                hex"6e210bfedfeb613eefeeb3fcffddfce9efeff6ec8e3fedfe661beefeeb7f2ffddfe580feff6d9851fedfe36e64efecfa007fddf443f9eff4ea9053edfb16bae0feefa5d3a19e9bee9abd0bcd057a53386fe887475f80";
+        }
+
+        // soak state 9 -- https://example.com/t/10# (mask 4, heart match 64.9%)
+        if (id == 10) {
+            return hex"fead02e3fc15601a506ebf53fcbb75ff47f5dba3f33faec14e85ed07faaaaaafe00fedfe00ce0efee97beefddfc59ffeff6ef5fbfedfe3dffeefeeb2beffddfc79ffeff6ee07bfedfe4e7feefeef2a6ffddfe787feff"
+                hex"6e2053fedfeb647eefeeb3c4ffddfcea8feff6ec8f3fedfe66c7eefeeb7fe7fddfe58bdeff6b18737edfe36e3aefeefa004fdde443f94ff4ea90572df914ba84fe4fa5d0b4c3dbee92fb0ecd053a93286fee8fe43f80";
+        }
+
+        // soak state 10 -- https://example.com/t/11# (mask 4, heart match 64.6%)
+        if (id == 11) {
+            return hex"feaebb5bfc156c92906ebf5afcbb75ffdff5dba3f9bfaec14ec9ed07faaaaaafe00fe9fe00ce0efee97beefddfc5bffeff6ef5fbfedfe3dffeefeeb29effddfc7affeff6ee0fbfedfe4ebfeefeef2deffddfe7bffeff"
+                hex"6e2013fedfeb69feefeeb3a6ffddfcebefeff6ec983fedfe66f7eefeeb7c87fddfe585feff6b1860fedfe36feeefecfa0077ddf443f92ff6ea905badf114bacefe4fa5d020c7dbee9edd2ecd053653686feaa78c7f80";
+        }
+
+        // soak state 11 -- https://example.com/t/12# (mask 4, heart match 65.4%)
+        if (id == 12) {
+            return hex"fe8e2b5bfc15a056906ebfcbfcbb75ff1ff5dba3f9bfaec14ec5ed07faaaaaafe00fe9fe00ce0efee979eefddfc58ffeff6ef4fbfedfe3d7feefeeb29effddfc79ffeff6ee0fbfedfe4e7feefeef296ffddfe7a8feff"
+                hex"6e202bfedfeb653eefeeb3ccffddfcebefeff6ec953fedfe6657eefeeb7ceffddfe58e9eff6b1842fedfe36ee6efeefa0047ddf443f9cff6ea9057edb114ba8ef86fa5d27487dbee88b94ecd057a97e86feca30c1f80";
+        }
+
+        // soak state 12 -- https://example.com/t/13# (mask 4, heart match 64.4%)
+        if (id == 13) {
+            return hex"fe8d92e3fc15acde506ebfc2fcbb75ff87f5dba3f33faec14e89ed07faaaaaafe00fedfe00ce0efee979eefddfc5affeff6ef4fbfedfe3d7feefeeb2beffddfc7affeff6ee07bfedfe4ebfeefeef2eeffddfe790feff"
+                hex"6e206bfedfeb68beefeeb3aeffddfcea8feff6ec823fedfe6667eefeeb7f8ffddfe580beff6b18517edfe36f32efecfa007fdde443f9aff4ea905b6db914bac4f86fa5d2e083dbee849f6ecd057657a86fe88b645f80";
+        }
+
+        // soak state 13 -- https://example.com/t/14# (mask 7, heart match 64.1%)
+        if (id == 14) {
+            return hex"fe2332b3fc1613e1d06ebc0a58bb74ff7ff5dbabf8bfaec16edfed07faaaaaafe01fedfe00d33eefebb7eefffff37fff66f70afbdfedf8bffeeeeea0defdffdf84ffef66e737bfffff6abfeefeef2a4ffdfff5cefe66"
+                hex"6796f3fedfeb6fffeefee8f8ffffff876ff66f7366bdfedfd0bfeeeee25b4fdffd1a609ef66f8ad3fffff12c7cefeefa0057dffc67fb46662bf043adf114ba32e96f95d6eaae6d2e99409133059f6dbb0fe8c0c8ad80";
+        }
+
+        // soak state 14 -- https://example.com/t/15# (mask 4, heart match 65.4%)
+        if (id == 15) {
+            return hex"feac327bfc15a89e106ebecbfcbb75fe5ff5dba3f33faec14ecded07faaaaaafe00fedfe00ce0efee97beefddfc59ffeff6ef5fbfedfe3d7feefeeb2beffddfc79ffeff6ee07bfedfe4e3feefeef2beffddfe789feff"
+                hex"6e2053fedfeb663eefeeb3a4ffddfceb1feff6ec8bbfedfe6633eefeeb7fe7fddfe58a9eff6b1801fedfe36ea4efeefa0057ddf443f96ff6ea905badf114baa0fc0fa5d1e08adbee9cbf6ecd0572d3a06fec8d047f80";
+        }
+
+        // soak state 15 -- https://example.com/t/16# (mask 4, heart match 64.9%)
+        if (id == 16) {
+            return hex"fe8ca27bfc15645a106ebe5afcbb75fe9ff5dba3f33faec14ec1ed07faaaaaafe00fedfe00ce0efee979eefddfc5affeff6ef4fbfedfe3dffeefeeb2beffddfc7affeff6ee07bfedfe4effeefeef2f6ffddfe79efeff"
+                hex"6e206bfedfeb6afeefeeb3ceffddfceb1feff6ec86bfedfe6693eefeeb7f8ffddfe581feff6b1823fedfe36facefecfa0067ddf443f98ff6ea9057edb114bae0fa2fa5d3b4cadbee8adb0ecd053e17206fea89841f80";
+        }
+
+        // soak state 16 -- https://example.com/t/17# (mask 4, heart match 64.5%)
+        if (id == 17) {
+            return hex"fe8f1bc3fc1568d2d06ebe53fcbb75fe07f5dba3f9bfaec14e8ded07faaaaaafe00fe9fe00ce0efee979eefddfc58ffeff6ef4fbfedfe3dffeefeeb29effddfc79ffeff6ee0fbfedfe4e3feefeef28effddfe7a6feff"
+                hex"6e202bfedfeb677eefeeb3acffddfcea7feff6ec91bfedfe66a3eefeeb7ceffddfe58fdeff6b18307edfe36e78efeefa005fdde443f9eff4ea905b6db914baaafa2fa5d320cedbee86fd2ecd0532d7606feea1ec5f80";
+        }
+
+        // soak state 17 -- https://example.com/t/18# (mask 4, heart match 64.8%)
+        if (id == 18) {
+            return hex"fea5385bfc15e816506ebec3fcbb75fe5ff5dba3f9bfaec14ec5ed07faaaaaafe00fe1fe00ce0efee979eefddfc5affeff6ef4fbfedfe3dffeefeeb2feffddfc7affeff6ee1fbfedfe4ebfeefeef28cffddfe795feff"
+                hex"6e21ebfedfeb617eefeeb38cffddfce81feff6ec853fedfe6637eefeeb7d87fddfe583deff6b183a7edfe36ea2efeefa0077ddf443f8cff4ea905b6db514bae8fe6fa5d2299adbee94b92ecd05fadb2c6feac7803f80";
+        }
+
+        // soak state 18 -- https://example.com/t/19# (mask 4, heart match 63.9%)
+        if (id == 19) {
+            return hex"fea681e3fc15e49e906ebecafcbb75fec7f5dba3f33faec14e89ed07faaaaaafe00fe5fe00ce0efee979eefddfc58ffeff6ef4fbfedfe3dffeefeeb2deffddfc79ffeff6ee17bfedfe4e7feefeef2f4ffddfe7adfeff"
+                hex"6e21abfedfeb6cfeefeeb3eeffddfce97feff6ec923fedfe6607eefeeb7ee7fddfe58dfeff6b1829fedfe36f76efecfa004fdde443f8aff6ea9057edbd14baa2fe6fa5d2bd9edbee989f0ecd05f61b6c6feeefe87f80";
+        }
+
+        // soak state 19 -- https://example.com/t/20# (mask 4, heart match 63.9%)
+        if (id == 20) {
+            return hex"fe973b43fc15a45a106ebedbfcbb75fe1ff5dba3fabfaec14ec9ed07faaaaaafe00fe9fe00ce0efee97deefddfc58ffeff6ef4fbfedfe3dffeefeeb29effddfc7affeff6ee17bfedfe4e7feefeef2b4ffddfe7aefeff"
+                hex"6e2083fedfeb61beefeeb386ffddfce98feff6ec9b3fedfe6643eefeeb7c6ffddfe58bfeff6b1869fedfef6ff0efeefa007fdde443f90ff6ea905badb114baecfeefa5d3319edbee86db6ecd057ed3686fee43223f80";
+        }
+
+        // soak state 20 -- https://example.com/t/21# (mask 7, heart match 64.4%)
+        if (id == 21) {
+            return hex"fe183b8bfc161f25d06ebc1a58bb74ff3ff5dbabf13faec16edbed07faaaaaafe01fe9fe00d33eefebb1eefffff36fff66f70bfbdfedf8b7feeeeea0fefdffdf87ffef66e727bfffff6affeefeef2aeffdfff5e9fe66"
+                hex"679623fedfeb687feefee8daffffff85fff66f73763dfedfd0cfeeeee258c7dffd1a61fef66f8abbfffffd2d28efeefa007fdfec67fb26662bf043adb114ba7eeb8f95d43bba6d2e8324913305936d730fea0eeeed80";
+        }
+
+        // soak state 21 -- https://example.com/t/22# (mask 4, heart match 63.9%)
+        if (id == 22) {
+            return hex"feb412fbfc156416d06ebe43fcbb75fe47f5dba3f03faec14e89ed07faaaaaafe00fedfe00ce0efee97feefddfc59ffeff6ef5fbfedfe3d7feefeeb2beffddfc7affeff6ee1fbfedfe4e7feefeef284ffddfe781feff"
+                hex"6e20fbfedfeb60feefeeb38effddfce8efeff6ec813fedfe66d3eefeeb7f67fddfe58ebeff6b18587edfef6f2cefeefa0077ddf443f98ff4ea905b6df914bae6f8cfa5d1f1dadbee9c992ecd053ed7a86fec6fca1f80";
+        }
+
+        // soak state 22 -- https://example.com/t/23# (mask 4, heart match 64.5%)
+        if (id == 23) {
+            return hex"feb7ab43fc15689e106ebe4afcbb75fedff5dba3fabfaec14ec5ed07faaaaaafe00fe9fe00ce0efee97feefddfc5bffeff6ef5fbfedfe3d7feefeeb29effddfc79ffeff6ee17bfedfe4ebfeefeef2fcffddfe7b9feff"
+                hex"6e20bbfedfeb6d7eefeeb3ecffddfce98feff6ec963fedfe66e3eefeeb7c07fddfe5809eff6b184bfedfef6ef8efecfa004fdde443f9eff6ea9057edf114baacf8cfa5d165dedbee90bf0ecd053217e86fe847a25f80";
+        }
+
+        // soak state 23 -- https://example.com/t/24# (mask 4, heart match 65.2%)
+        if (id == 24) {
+            return hex"fe95b263fc156056906ebf4afcbb75ff9ff5dba3f03faec14ecded07faaaaaafe00fedfe00ce0efee97deefddfc5affeff6ef4fbfedfe3d7feefeeb2beffddfc79ffeff6ee1fbfedfe4effeefeef2d4ffddfe798feff"
+                hex"6e20c3fedfeb6e7eefeeb384ffddfce97feff6ec88bfedfe6687eefeeb7f0ffddfe5849eff6b1808fedfef6ebaefecfa005fdde443f94ff6ea905badb114ba82fcafa5d2f1d3dbee84b92ecd053a53a06fe869aa3f80";
+        }
+
+        // soak state 24 -- https://example.com/t/25# (mask 4, heart match 63.9%)
+        if (id == 25) {
+            return hex"fe960bdbfc156cde506ebf43fcbb75ff07f5dba3fabfaec14e81ed07faaaaaafe00fe9fe00ce0efee97deefddfc58ffeff6ef4fbfedfe3d7feefeeb29effddfc7affeff6ee17bfedfe4e3feefeef2acffddfe7a0feff"
+                hex"6e2083fedfeb63feefeeb3e6ffddfce81feff6ec9fbfedfe66b7eefeeb7c6ffddfe58abeff6b181b7edfef6f6eefeefa0067ddf443f92ff4ea90572db914bac8fcafa5d265d7dbee889f0ecd053693e06fec41c27f80";
+        }
+
+        // soak state 25 -- https://example.com/t/26# (mask 4, heart match 64.6%)
+        if (id == 26) {
+            return hex"feb69bdbfc15a01a506ebfd2fcbb75ffc7f5dba3fabfaec14e8ded07faaaaaafe00fe9fe00ce0efee97feefddfc5bffeff6ef5fbfedfe3dffeefeeb29effddfc79ffeff6ee17bfedfe4effeefeef2e4ffddfe7b7feff"
+                hex"6e20bbfedfeb6f3eefeeb38cffddfce81feff6ec92bfedfe6617eefeeb7c07fddfe581deff6b18397edfef6e66efecfa0057ddf443f9cff4ea905b6df914ba88fa8fa5d03197dbee9efb6ecd057a57606fea45421f80";
+        }
+
+        // soak state 26 -- https://example.com/t/27# (mask 4, heart match 65.2%)
+        if (id == 27) {
+            return hex"feb52263fc15ac92906ebfdbfcbb75ff5ff5dba3f03faec14ec1ed07faaaaaafe00fedfe00ce0efee97feefddfc59ffeff6ef5fbfedfe3dffeefeeb2beffddfc7affeff6ee1fbfedfe4e3feefeef29cffddfe78ffeff"
+                hex"6e20fbfedfeb62beefeeb3eeffddfce97feff6ec85bfedfe6627eefeeb7f67fddfe58ffeff6b182afedfef6fb2efeefa006fdde443f9aff6ea9057edf114bac2fa8fa5d0a593dbee92dd4ecd057697206fee6d2a5f80";
+        }
         revert NoBitmapFor(id);
     }
 }
