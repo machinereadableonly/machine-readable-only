@@ -536,3 +536,83 @@ the spec should be amended in Task 12.
   not track its own id range. The real contract must emit over the ids it
   actually minted; that is a Plan 2 requirement, recorded here so it is not
   lost.
+
+---
+
+## Task 9: deploy script, local run, end-to-end decode
+
+Everything above was measured inside Foundry. A `forge` test never crosses the
+RPC boundary, so it cannot show that a node returns the call at all, and it
+cannot rasterise the SVG and put a decoder on it. **"The image renders" and "a
+decoder reads the image a chain returned" are different claims**, and only the
+second one matters for an art piece whose subject is a scannable code.
+
+`contracts/script/anvil-verify.sh` is the whole check in one command: start an
+anvil with `--code-size-limit 24576`, run `DeploySpike.s.sol`, then read each
+token's `tokenURI` back over JSON-RPC with viem, base64-decode the SVG out of
+it, rasterise with resvg and decode with ZXing.
+
+### Result: four for four
+
+| Token | State | Gas over RPC | URI bytes | SVG bytes | Scan |
+|---|---|---|---|---|---|
+| 1 | Day one | 1,395,460 | 8,793 | 6,000 | OK |
+| 2 | Level 200, Vein + Bloom | 1,497,120 | 8,852 | 6,028 | OK |
+| 3 | Whole, one year, every Mark that draws | 1,453,533 | 9,417 | 6,422 | OK |
+| 4 | **Level 364, every Mark -- the worst case** | **1,580,070** | 8,840 | 5,995 | OK |
+
+Each token decoded to **its own** URL, not merely to something well-formed --
+`verifyToken` fails a token whose code scans cleanly to the wrong id, which is
+a failure mode a plain "did it decode" check would pass.
+
+The RPC figures run a little above the Foundry ones because `eth_estimateGas`
+includes the 21,000 intrinsic cost and the calldata. Token 4 measured 1,580,070
+here against 1,582,582 in `GasBudget.t.sol` -- the two agree to within 0.2%,
+which is the useful result: **the test EVM was not flattering the number.**
+
+No provider cap was hit, but a local anvil applies none. That is what Task 10
+on Base Sepolia is for.
+
+### What the verifier checks
+
+`tools/verify-tokenuri.mjs`, exercised by `tools/test/verify-tokenuri.test.mjs`
+(7 tests, no chain needed) and by the anvil run above:
+
+- `decodeTokenUri(uri)` splits the URI and **parses** the JSON rather than
+  regexing it, which is what proves a raw `#` has not truncated the payload.
+- The image must be a `data:image/svg+xml;base64,` payload that decodes to a
+  complete `<svg>...</svg>`.
+- `scanResult` from `tools/test/helpers/decode.mjs` -- the same and only decode
+  oracle the rest of the suite uses. Importing it rather than copying it is the
+  point: two definitions of "it scans" is exactly the failure this project had
+  once, when jsqr and a real phone disagreed.
+- The decoded destination must equal `https://<domain>/t/<id>`.
+- A PNG of what the chain returned is written to `tools/out/token-<id>.png`,
+  for the OpenSea comparison in Task 11 -- their flattened PNG has to be checked
+  against ours, not against the SVG.
+
+### The bitmaps are generated, not hand-copied
+
+Each token's code encodes its own URL, so the four bitmaps cannot be shared and
+cannot be invented. `tools/spike-bitmaps.mjs` generates
+`contracts/script/SpikeBitmaps.sol` from the same generator the renderer tests
+use, carrying the `GENERATED` header this project's convention requires. Four
+344-character literals pasted into a deploy script by hand would be unreviewable.
+
+| Token | Mask | Heart match |
+|---|---|---|
+| 1 | 7 | 64.9% |
+| 2 | 4 | 64.5% |
+| 3 | 1 | 64.5% |
+| 4 | 4 | 64.5% |
+
+### Looked at, not only measured
+
+Day one renders as the muted `#70575f` start tier with the frame a pale ghost
+outline carrying exactly one lit cell. The heart is fully drawn from day one --
+it is the code -- and the frame is the thing that accumulates, which is what
+makes a stalled token still look like a finished object.
+
+Token 4 at the other end: gold Crown frame with a single pale notch where it is
+one day short of sealing, cream Voice quiet zone, Halo field, Bloom gradient on
+the heart. All five drawing Marks are distinguishable at a glance.

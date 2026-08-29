@@ -905,6 +905,131 @@ not track its own id range. The real contract must emit over the ids it
 actually minted; that is a Plan 2 requirement, recorded here so it is not
 lost.</li>
 </ul>
+<hr>
+<h2>Task 9: deploy script, local run, end-to-end decode</h2>
+<p>Everything above was measured inside Foundry. A <code>forge</code> test never crosses the
+RPC boundary, so it cannot show that a node returns the call at all, and it
+cannot rasterise the SVG and put a decoder on it. <strong>&quot;The image renders&quot; and &quot;a
+decoder reads the image a chain returned&quot; are different claims</strong>, and only the
+second one matters for an art piece whose subject is a scannable code.</p>
+<p><code>contracts/script/anvil-verify.sh</code> is the whole check in one command: start an
+anvil with <code>--code-size-limit 24576</code>, run <code>DeploySpike.s.sol</code>, then read each
+token&#39;s <code>tokenURI</code> back over JSON-RPC with viem, base64-decode the SVG out of
+it, rasterise with resvg and decode with ZXing.</p>
+<h3>Result: four for four</h3>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>State</th>
+<th>Gas over RPC</th>
+<th>URI bytes</th>
+<th>SVG bytes</th>
+<th>Scan</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Day one</td>
+<td>1,395,460</td>
+<td>8,793</td>
+<td>6,000</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Level 200, Vein + Bloom</td>
+<td>1,497,120</td>
+<td>8,852</td>
+<td>6,028</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Whole, one year, every Mark that draws</td>
+<td>1,453,533</td>
+<td>9,417</td>
+<td>6,422</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>Level 364, every Mark -- the worst case</strong></td>
+<td><strong>1,580,070</strong></td>
+<td>8,840</td>
+<td>5,995</td>
+<td>OK</td>
+</tr>
+</tbody></table>
+<p>Each token decoded to <strong>its own</strong> URL, not merely to something well-formed --
+<code>verifyToken</code> fails a token whose code scans cleanly to the wrong id, which is
+a failure mode a plain &quot;did it decode&quot; check would pass.</p>
+<p>The RPC figures run a little above the Foundry ones because <code>eth_estimateGas</code>
+includes the 21,000 intrinsic cost and the calldata. Token 4 measured 1,580,070
+here against 1,582,582 in <code>GasBudget.t.sol</code> -- the two agree to within 0.2%,
+which is the useful result: <strong>the test EVM was not flattering the number.</strong></p>
+<p>No provider cap was hit, but a local anvil applies none. That is what Task 10
+on Base Sepolia is for.</p>
+<h3>What the verifier checks</h3>
+<p><code>tools/verify-tokenuri.mjs</code>, exercised by <code>tools/test/verify-tokenuri.test.mjs</code>
+(7 tests, no chain needed) and by the anvil run above:</p>
+<ul>
+<li><code>decodeTokenUri(uri)</code> splits the URI and <strong>parses</strong> the JSON rather than
+regexing it, which is what proves a raw <code>#</code> has not truncated the payload.</li>
+<li>The image must be a <code>data:image/svg+xml;base64,</code> payload that decodes to a
+complete <code>&lt;svg&gt;...&lt;/svg&gt;</code>.</li>
+<li><code>scanResult</code> from <code>tools/test/helpers/decode.mjs</code> -- the same and only decode
+oracle the rest of the suite uses. Importing it rather than copying it is the
+point: two definitions of &quot;it scans&quot; is exactly the failure this project had
+once, when jsqr and a real phone disagreed.</li>
+<li>The decoded destination must equal <code>https://&lt;domain&gt;/t/&lt;id&gt;</code>.</li>
+<li>A PNG of what the chain returned is written to <code>tools/out/token-&lt;id&gt;.png</code>,
+for the OpenSea comparison in Task 11 -- their flattened PNG has to be checked
+against ours, not against the SVG.</li>
+</ul>
+<h3>The bitmaps are generated, not hand-copied</h3>
+<p>Each token&#39;s code encodes its own URL, so the four bitmaps cannot be shared and
+cannot be invented. <code>tools/spike-bitmaps.mjs</code> generates
+<code>contracts/script/SpikeBitmaps.sol</code> from the same generator the renderer tests
+use, carrying the <code>GENERATED</code> header this project&#39;s convention requires. Four
+344-character literals pasted into a deploy script by hand would be unreviewable.</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Mask</th>
+<th>Heart match</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>7</td>
+<td>64.9%</td>
+</tr>
+<tr>
+<td>2</td>
+<td>4</td>
+<td>64.5%</td>
+</tr>
+<tr>
+<td>3</td>
+<td>1</td>
+<td>64.5%</td>
+</tr>
+<tr>
+<td>4</td>
+<td>4</td>
+<td>64.5%</td>
+</tr>
+</tbody></table>
+<h3>Looked at, not only measured</h3>
+<p>Day one renders as the muted <code>#70575f</code> start tier with the frame a pale ghost
+outline carrying exactly one lit cell. The heart is fully drawn from day one --
+it is the code -- and the frame is the thing that accumulates, which is what
+makes a stalled token still look like a finished object.</p>
+<p>Token 4 at the other end: gold Crown frame with a single pale notch where it is
+one day short of sealing, cream Voice quiet zone, Halo field, Bloom gradient on
+the heart. All five drawing Marks are distinguishable at a glance.</p>
 
 </body>
 </html>
