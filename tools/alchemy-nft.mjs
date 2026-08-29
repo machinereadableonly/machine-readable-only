@@ -151,3 +151,36 @@ export async function fetchImagePixels(url) {
     height: png.height,
   };
 }
+
+/**
+ * Ask Alchemy to re-ingest ONE token, through the DEDICATED refresh endpoint.
+ *
+ * This is not the same thing as `getNFTMetadata?refreshCache=true`. That one
+ * folds the request into a read and tells you nothing about whether the refresh
+ * was accepted; this one is a POST that answers with `status` (expected
+ * "Queued") and `estimatedMsToRefresh`. It is the only variant that can
+ * distinguish "the refresh ran and produced a stale answer" from "the refresh
+ * never ran", which is exactly the question the ERC-4906 work is stuck on.
+ *
+ * An error is a RESULT here, not a failure, so this returns the status and the
+ * body instead of throwing. Alchemy's own page for the endpoint lists its
+ * supported networks as "Ethereum (Mainnet & Sepolia), Polygon (Mainnet, Mumbai
+ * & Amoy), Arbitrum One (mainnet), Optimism (mainnet) & Base (mainnet)" --
+ * Base SEPOLIA is absent, so a refusal is a plausible outcome and the wording
+ * of that refusal is worth capturing verbatim.
+ *
+ * Live-checked 2026-08-29:
+ *   https://www.alchemy.com/docs/reference/nft-api-endpoints/nft-api-endpoints/nft-metadata-endpoints/refresh-nft-metadata-v-3
+ */
+export async function refreshNftMetadata({ base, contract, tokenId }) {
+  const url = `${base}/refreshNftMetadata`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ contractAddress: contract, tokenId: String(tokenId) }),
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch { /* keep the raw text; a non-JSON body is the finding */ }
+  return { ok: res.ok, httpStatus: res.status, statusText: res.statusText, json, text, url: redact(url) };
+}

@@ -19,8 +19,10 @@ return visits, so the artwork is the agent's own history of coming back.
   (see Gotchas) and the spike is deployed and Basescan-verified on Base
   Sepolia. TASK 11, the throwaway Base MAINNET deploy for the OpenSea check,
   WAS DROPPED by the operator on 2026-08-29: Phase 0 spends no real funds.
-  **Phase 0 is NOT signed off.** The ERC-4906 refresh failure (see Gotchas)
-  is a design question that must be settled with the operator before it closes.
+  **Phase 0 is NOT signed off.** ERC-4906 (see Gotchas) is the one item left,
+  and it is now a JUDGEMENT CALL for the operator rather than more measurement: the
+  question is unanswerable on Base Sepolia, so it closes by accepting that
+  limit, not by testing further for free.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -150,22 +152,33 @@ return visits, so the artwork is the agent's own history of coming back.
   -- then upscales that bitmap, and 54% of the results would not decode.
   Declaring canvas * 16 took that to 3.6%. The grey-level count is the cheap
   diagnostic: the artwork has 3, a resampled copy has 150-208.
-- **ERC-4906: no PASSIVE pickup, and the explicit refresh is still untested.**
-  Corrected 2026-08-29 after the first write-up overstated it. What holds:
-  MetadataUpdate(1) IS on chain (block 46119616, correct topic), the EIP obliges
-  nobody ("a third party CAN update"), and Alchemy's cache stayed stale for 7.4
-  hours after a confirmed state change. What does NOT hold: that explicit
-  refresh fails. Both attempts used getNFTMetadata?refreshCache=true, both fell
-  foul of Alchemy's documented one-refresh-per-token-per-15-minutes global
-  limit, and refreshes are QUEUED. A clean single refresh outside that window
-  left timeLastUpdated unmoved for 30 minutes -- which means the refresh never
-  ran, and says nothing about ERC-4906.
-  NEXT: the dedicated refreshNftMetadata endpoint, the only one returning status
-  and estimatedMsToRefresh, has never been tried. Watch timeLastUpdated, not
-  Level: see tools/erc4906-retest.mjs for the discriminator table.
-  All of it is Base Sepolia; a testnet cache may not be serviced like mainnet.
-  The design rule stands regardless: the piece must never DEPEND on an indexer
-  refreshing. Do not propose contract changes -- the gap is consumer-side.
+- **ERC-4906 is UNANSWERABLE on Base Sepolia, not answered.** Corrected twice on
+  2026-08-29; do not restate either earlier version. What holds: MetadataUpdate(1)
+  is on chain (blocks 46119616 and 46134224, correct topic), the EIP obliges
+  nobody ("a third party CAN update"), and passive staleness of at least 8.2
+  hours is confirmed. What is NEW: the dedicated refreshNftMetadata endpoint --
+  the only variant reporting whether a refresh was accepted -- returns HTTP 400
+  "This endpoint isn't enabled for that chain or network just yet". Base Sepolia
+  is absent from its supported-network list. So the one outstanding action item
+  is STRUCK OFF, not satisfied.
+  The three reachable mechanisms each got 20 clean minutes against a verified
+  gap (chain Level 200, cache Level 300): refreshCache=true alone,
+  invalidateContract alone, and both in sequence ALL left timeLastUpdated
+  unmoved. refreshCache=true DOES ingest a COLD token -- all 26 soak tokens carry
+  distinct stamps set by tools/third-party-check.mjs:63 -- so the pipeline is not
+  dead; only warm-entry invalidation fails.
+  Exactly ONE re-read has ever been seen (12:38:35Z -> 20:49:07Z) and it is
+  UNATTRIBUTED: the sequence fired one minute before it was later reproduced and
+  did nothing. An 8.2-hour gap collecting an 8-hour-old change fits a slow
+  internal re-crawl; Alchemy documents no cadence. tools/erc4906-passive-watch.mjs
+  tests that by making no refresh requests at all.
+  NEVER claim Alchemy ignores ERC-4906 -- nothing here tests it. Watch
+  timeLastUpdated, not Level; tools/erc4906-retest.mjs carries the discriminator
+  table. All of it is Base Sepolia, where the endpoint does not exist; mainnet
+  has it. The design rule stands regardless: the piece must never DEPEND on an
+  indexer refreshing, and the Plan 3 poke must VERIFY timeLastUpdated moved
+  rather than fire and forget. Do not propose contract changes -- the gap is
+  consumer-side.
 - **Coinbase Agentic Wallets cannot sign NFT trades** -- this rules out an
   otherwise obvious integration.
 - **Distribution is the real risk, not the build.** Five of six early-2026

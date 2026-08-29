@@ -28,11 +28,47 @@
 //
 // Only the middle case justifies the alarm the first finding raised.
 //
-//   node tools/erc4906-retest.mjs read    <contract> <tokenId>
-//   node tools/erc4906-retest.mjs refresh <contract> <tokenId>
+// THE THIRD MODE, added 2026-08-29, and what it found. `read` and `refresh`
+// between them cannot tell row 3 apart from a request that was never accepted,
+// because getNFTMetadata?refreshCache=true reports nothing about the refresh
+// itself. The DEDICATED endpoint does: it answers with `status` and
+// `estimatedMsToRefresh`.
+//
+// MEASURED: it is not available here.
+//
+//   POST .../nft/v3/<key>/refreshNftMetadata  ->  400 Bad Request
+//   {"error":{"message":"This endpoint isn't enabled for that chain or network
+//    just yet - please contact the Alchemy team for support!"}}
+//
+// So the question cannot be answered on this testnet at all -- which is a very
+// different statement from "ERC-4906 is being ignored", and the difference must
+// be preserved in every write-up.
+//
+// WHAT THE THREE REACHABLE MECHANISMS DO, each given 20 clean minutes on
+// 2026-08-29 against a verified chain/cache divergence (chain Level 200, cache
+// Level 300):
+//
+//   refreshCache=true alone .................. timeLastUpdated never moved
+//   invalidateContract alone ................. timeLastUpdated never moved
+//   invalidateContract then refreshCache=true  timeLastUpdated never moved
+//
+// One re-read HAS been observed, 12:38:35Z -> 20:49:07Z, and it is UNATTRIBUTED:
+// the third sequence above reproduces the calls made one minute before it and
+// does nothing. An 8.2-hour gap collecting an 8-hour-old change looks far more
+// like a slow internal re-crawl. tools/out/passive-longwatch.mjs tests that by
+// making no refresh requests at all.
+//
+// DO NOT re-run this expecting the endpoint mode to work. Re-run it on a network
+// where the endpoint exists -- Base MAINNET does, Base Sepolia does not.
+//
+//   node tools/erc4906-retest.mjs read     <contract> <tokenId>
+//   node tools/erc4906-retest.mjs refresh  <contract> <tokenId>
+//   node tools/erc4906-retest.mjs endpoint <contract> <tokenId> [watchMinutes]
 import { createPublicClient, http, parseAbi } from "viem";
 
-import { loadEnv, nftApiBase, getNftMetadata, redact } from "./alchemy-nft.mjs";
+import {
+  loadEnv, nftApiBase, getNftMetadata, refreshNftMetadata, redact,
+} from "./alchemy-nft.mjs";
 import { decodeTokenUri, attributesOf } from "./verify-tokenuri.mjs";
 
 const ABI = parseAbi(["function tokenURI(uint256) view returns (string)"]);
@@ -59,10 +95,69 @@ async function cached({ base, contract, tokenId, refreshCache = false }) {
   return { level: attrs.Level, name: m.name, timeLastUpdated: m.timeLastUpdated };
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const stamp = () => new Date().toISOString().slice(11, 19) + "Z";
+
+/**
+ * POST the dedicated refresh endpoint, then watch the timestamp.
+ *
+ * The watch is part of the same command rather than a separate one, because the
+ * two halves are only meaningful together: an accepted request that never
+ * lands, and a refused request, look the same if you only run the first half.
+ * It stops early the moment `timeLastUpdated` moves -- that is the whole signal.
+ */
+async function endpointMode({ base, client, contract, tokenId, watchMinutes }) {
+  const before = await cached({ base, contract, tokenId });
+
+  const r = await refreshNftMetadata({ base, contract, tokenId });
+  console.log(`\nPOST ${r.url}`);
+  console.log(`http            ${r.httpStatus} ${r.statusText}`);
+  console.log(`body            ${r.text.slice(0, 400)}`);
+
+  if (!r.ok) {
+    // Not a failure of the test. The endpoint refusing on this network is an
+    // answer, and the wording of the refusal is the evidence -- record it.
+    console.log(`\nREFUSED. The dedicated endpoint did not accept the request on this`);
+    console.log(`network, so it cannot be used to settle the question here. This says`);
+    console.log(`nothing about whether ERC-4906 is honoured.`);
+    return;
+  }
+
+  const status = r.json?.status;
+  const eta = r.json?.estimatedMsToRefresh;
+  console.log(`status          ${status ?? "(absent)"}`);
+  console.log(`estimatedMs     ${eta ?? "(absent)"}`);
+  console.log(`\nACCEPTED. This is the first time a refresh is known to have been`);
+  console.log(`enqueued, so a timestamp that still refuses to move now means`);
+  console.log(`something. Watching for ${watchMinutes} minutes.`);
+  console.log(`\ntimeLastUpdated before  ${before.timeLastUpdated}`);
+
+  for (let minute = 1; minute <= watchMinutes; minute++) {
+    await sleep(60_000);
+    const now = await cached({ base, contract, tokenId });
+    const moved = now.timeLastUpdated !== before.timeLastUpdated;
+    console.log(`[${stamp()}] minute ${String(minute).padStart(2)}  `
+      + `Level ${now.level}  timeLastUpdated ${now.timeLastUpdated}  `
+      + `moved ${moved ? "YES" : "no"}`);
+    if (moved) {
+      const chain = await onChainLevel(client, contract, tokenId);
+      const agrees = String(chain.level) === String(now.level);
+      console.log(`\nTIMESTAMP MOVED. Chain Level ${chain.level}, Alchemy Level ${now.level}.`);
+      console.log(agrees
+        ? `ROW 1: it re-read and got the current state. The refresh path WORKS.`
+        : `ROW 2: it re-read and served a stale answer. This is the serious case.`);
+      return;
+    }
+  }
+
+  console.log(`\nROW 3 after an ACCEPTED request: ${watchMinutes} minutes and the`);
+  console.log(`timestamp never moved. Report exactly that, and nothing stronger.`);
+}
+
 async function main() {
-  const [mode, contract, tokenId] = process.argv.slice(2);
+  const [mode, contract, tokenId, watchArg] = process.argv.slice(2);
   if (!mode || !contract || !tokenId) {
-    console.error("usage: erc4906-retest.mjs <read|refresh> <contract> <tokenId>");
+    console.error("usage: erc4906-retest.mjs <read|refresh|endpoint> <contract> <tokenId> [watchMinutes]");
     process.exit(2);
   }
 
@@ -88,6 +183,13 @@ async function main() {
     console.log(`moved immediately: ${after.timeLastUpdated !== before ? "YES" : "no (expected -- it is queued)"}`);
     console.log(`\nNow run the read mode every few minutes for at least 30, and`);
     console.log(`watch timeLastUpdated rather than Level. See this file's header.`);
+  }
+
+  if (mode === "endpoint") {
+    await endpointMode({
+      base, client, contract, tokenId,
+      watchMinutes: Number(watchArg ?? 20),
+    });
   }
 }
 
