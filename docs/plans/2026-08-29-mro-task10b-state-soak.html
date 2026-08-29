@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task 10b: the accelerated state soak</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Task 10b: the accelerated state soak</h1>
+<p><strong>Goal:</strong> exercise every visual state the piece can reach -- every streak tier,
+every lapse step, every ring count, every Mark, and the two frozen lifecycles --
+against the contracts on Base Sepolia, in minutes rather than years.</p>
+<hr>
+<h2>Why this, and why now</h2>
+<p>Ten tasks in, the spike has rendered <strong>four states on chain</strong>. The design space
+is considerably larger:</p>
+<table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>States</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Streak tiers</td>
+<td>5 (<code>0-2</code>, <code>3-6</code>, <code>7-29</code>, <code>30-99</code>, <code>100+</code>)</td>
+</tr>
+<tr>
+<td>Lapse bands</td>
+<td>4 (<code>gap&lt;3</code>, <code>3-6</code>, <code>7-29</code>, <code>&gt;=30</code>)</td>
+</tr>
+<tr>
+<td>Ring counts</td>
+<td>11 (0 to the cap of 10)</td>
+</tr>
+<tr>
+<td>Heart fill</td>
+<td>366 (0 to 365)</td>
+</tr>
+<tr>
+<td>Marks</td>
+<td>128 bit combinations, 5 of which draw</td>
+</tr>
+<tr>
+<td>Lifecycle</td>
+<td>3 (live, resting, sunset)</td>
+</tr>
+</tbody></table>
+<p>Four samples out of that is a demonstration, not a test. Task 11 spends real
+money to ask OpenSea a question, and it would be foolish to spend it before
+knowing the contract renders correctly at every state a token can actually
+occupy.</p>
+<p><strong>What this task is really hunting.</strong> Because a lapse walks <em>back down</em> the same
+tier ladder rather than using paler tones, only five inks ever reach the canvas,
+and all five are already proven scannable. So decode is the lesser risk. The
+real risk is <strong>the two renderers disagreeing at a boundary</strong> -- Solidity and the
+JS reference each compute the tier and the lapse independently, and the
+differential test currently pins seven states out of hundreds. A boundary-off-by-one
+in <code>lapsed()</code> would be invisible today and permanent once tokens exist.</p>
+<p>It unblocks Task 11 by making the mainnet spend worth making.</p>
+<hr>
+<h2>Scope: four checks, cheapest first</h2>
+<p>The cross-product is roughly 800,000 states. Testing it is neither possible nor
+useful. These four sweeps cover every axis independently, plus the combinations
+where axes actually interact.</p>
+<h3>A. Colour boundaries -- exhaustive, no rendering</h3>
+<p>Every tier boundary against every lapse boundary: <code>streak</code> in
+<code>{0, 1, 2, 3, 6, 7, 29, 30, 99, 100, 400}</code> crossed with <code>gap</code> in
+<code>{0, 2, 3, 6, 7, 29, 30, 60}</code>. <strong>88 pairs</strong>, each one step either side of a
+threshold.</p>
+<p>This needs no image at all -- it is two pure functions, <code>Palette.lapsed</code> in
+Solidity and <code>lapsedColour</code> in JS. A generated fixture table drives a Solidity
+test that asserts all 88 in one run. Cheap enough that there is no argument for
+sampling.</p>
+<p><strong>This is the check most likely to find a real bug.</strong></p>
+<h3>B. Full-render differential -- 30 states</h3>
+<p>The existing seven-stage differential extended to cover: each of the 5 tiers at
+rest and lapsed, ring counts 0/1/2/5/9/10/11 (11 proving the cap holds), heart
+fills 1/12/200/364/365, each of the 5 drawing Marks alone, all Marks, no Marks,
+resting and sunset.</p>
+<p>Same mechanism as today -- keccak256 and byte length against
+<code>tools/token-uri-fixture.mjs</code> -- so a divergence anywhere in the image is caught,
+not just in the colour.</p>
+<h3>C. Decode sweep -- offline, ~40 renders</h3>
+<p>Every ink against every ring count, with and without Marks, decoded by ZXing at
+700px; the eight visual extremes also at 250, 350, 500 and 900px.</p>
+<p><strong>Memory is the hazard here, not correctness.</strong> A sweep of exactly this shape
+took the box to 6.28 GB and destroyed a session on 2026-08-28. This one runs in
+batches of ten through <code>~/scripts/safe-build.sh</code>, and decodes at one size by
+default rather than fourteen.</p>
+<h3>D. On-chain soak -- ~30 states, Base Sepolia</h3>
+<p>The accelerated part. <code>MROSpikeToken.setState</code> places a token at any life stage
+instantly, so one token can live a decade in a few minutes.</p>
+<p>For each state: <code>setState</code>, then read <code>tokenURI</code> back <strong>over the public RPC</strong>,
+decode it, and record gas. This is the only check that covers what B and C
+cannot:</p>
+<ol>
+<li>That a state <em>transition</em> is reflected -- the contract has only ever been
+read in its post-deploy state.</li>
+<li>That ERC-4906 <code>MetadataUpdate</code> fires with the right token id, after the write.</li>
+<li>That <strong>no state exceeds the gas cap over RPC.</strong> Four states were measured
+there; thirty is a different claim.</li>
+</ol>
+<p>Existing tokens are reused rather than minted, so no new QArt bitmaps are needed
+and the cost is ~30 <code>setState</code> calls at 35,000 gas each.</p>
+<p><strong>Estimated cost: about 1.1M gas, roughly 0.000008 ETH.</strong> The deployer holds
+0.0088 ETH, so this is 0.1% of the balance.</p>
+<hr>
+<h2>What this deliberately does not do</h2>
+<ul>
+<li><strong>Not all 366 heart fills.</strong> The frame is drawn by a run-length walk over a
+bitmap; five representative fills plus the measured worst case at 364 covers
+the shapes. Rendering 366 states to prove a loop is theatre.</li>
+<li><strong>Not all 128 Mark bitmaps.</strong> Five bits draw; <code>MarkRenderer.names</code> already has
+a test proving it ignores bits outside 1-7.</li>
+<li><strong>No OpenSea.</strong> That is Task 11 and needs mainnet.</li>
+<li><strong>No new contract code.</strong> If a sweep finds a bug, fixing it is a separate
+decision, not something to fold in silently.</li>
+</ul>
+<h2>Files</h2>
+<p><strong>Create:</strong></p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tools/state-matrix.mjs</code></td>
+<td>The single definition of which states matter, imported by every sweep so they cannot drift</td>
+</tr>
+<tr>
+<td><code>tools/colour-fixture.mjs</code></td>
+<td>Generates the 88-pair table for the Solidity test</td>
+</tr>
+<tr>
+<td><code>contracts/test/PaletteBoundaries.t.sol</code></td>
+<td>Sweep A</td>
+</tr>
+<tr>
+<td><code>tools/soak-offline.mjs</code></td>
+<td>Sweep C, batched and capped</td>
+</tr>
+<tr>
+<td><code>contracts/script/soak-sepolia.sh</code></td>
+<td>Sweep D</td>
+</tr>
+</tbody></table>
+<p><strong>Modify:</strong> <code>tools/token-uri-fixture.mjs</code> and <code>contracts/test/Renderer.t.sol</code>
+for sweep B; <code>docs/phase0-results.md</code> for the results.</p>
+<h2>Order, and where it can stop early</h2>
+<ol>
+<li>Sweep A. If Solidity and JS disagree on a colour, <strong>stop and report</strong> -- that
+is a real bug and everything after it is measuring the wrong thing.</li>
+<li>Sweep B. Same rule: a differential failure stops the task.</li>
+<li>Sweep C, batched.</li>
+<li>Sweep D against Sepolia.</li>
+<li>Record every count in <code>docs/phase0-results.md</code>, render the HTML, commit.</li>
+</ol>
+<h2>Trade-offs, stated plainly</h2>
+<ul>
+<li><strong>This delays Task 11 by a session.</strong> That is the point: the mainnet spend
+buys an answer about OpenSea, and it is worth more once the contract is known
+correct.</li>
+<li><strong>Sweep A is the one that earns its keep.</strong> B, C and D are confirmation. If
+time were short, A alone would be the right subset -- but it is also the
+cheapest, so there is no reason to cut the others.</li>
+<li><strong>Nothing here is irreversible.</strong> Testnet only, no real funds, no mainnet.</li>
+</ul>
+
+</body>
+</html>
