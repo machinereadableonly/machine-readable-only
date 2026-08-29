@@ -13,13 +13,14 @@ return visits, so the artwork is the agent's own history of coming back.
   speculative collectible)
 - **Stack:** Solidity (Foundry 1.7.1) + Node 24.14.1; MCP server; reference
   client shipped as `npx mro-agent` plus a SKILL.md
-- **Status:** Spec revision 3 APPROVED 2026-08-27. Phase 0 rendering spike
-  in progress -- Tasks 1-10 of plan revision 2 done as of 2026-08-29, plus
-  Task 10b (the state soak) and Task 10c Phase 1. The budget question is
-  SETTLED (see Gotchas) and the spike is deployed and Basescan-verified on
-  Base Sepolia. Task 10c Phase 2 (third-party render check) is DONE; Phase 3
-  is next. TASK 11, the throwaway Base MAINNET deploy for the OpenSea check,
+- **Status:** Spec revision 3 APPROVED 2026-08-27. Phase 0's TASK LIST IS
+  COMPLETE as of 2026-08-29 -- Tasks 1-10 of plan revision 2, plus Task 10b
+  (the state soak) and Task 10c Phases 1-3. The budget question is SETTLED
+  (see Gotchas) and the spike is deployed and Basescan-verified on Base
+  Sepolia. TASK 11, the throwaway Base MAINNET deploy for the OpenSea check,
   WAS DROPPED by the operator on 2026-08-29: Phase 0 spends no real funds.
+  **Phase 0 is NOT signed off.** The ERC-4906 refresh failure (see Gotchas)
+  is a design question that must be settled with the operator before it closes.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -137,6 +138,13 @@ return visits, so the artwork is the agent's own history of coming back.
   worst case is the day BEFORE the heart seals (level 364), not the oldest
   token -- see docs/phase0-results.md. Do not quote the older 1,590,476 /
   10,066 pair; it predates the intrinsic size.
+  TWO worst-case figures exist and BOTH are correct -- do not treat one as a
+  stale version of the other. 1,633,224 / 8,924 is soak token 21 read over RPC,
+  the number for what a real provider returns. 1,585,616 / 9,223 is token 1
+  with every Mark in Foundry, the number the suite asserts and the one to
+  compare across commits. They differ because a bitmap encodes its own url, so
+  every token has its own run structure. Blue Blood added 80 gas and 4 bytes to
+  the second figure on 2026-08-29.
 - **A third party's CDN interpolates unless the SVG declares a size.** With no
   width/height it rasterises at the viewBox units -- 53 pixels, one per module
   -- then upscales that bitmap, and 54% of the results would not decode.
