@@ -46,7 +46,7 @@ contract Renderer is IRenderer {
         return string(
             abi.encodePacked(
                 "data:application/json;utf-8,",
-                '{"name":"', NAME, " %23", LibString.toString(v.tokenId),
+                '{"name":"', NAME, " %23", LibString.toString(v.tokenId), _suffix(v),
                 '","description":"', DESCRIPTION,
                 '","image":"data:image/svg+xml;base64,', Base64.encode(bytes(svg(v))),
                 '","attributes":[', _attributes(v), "]}"
@@ -132,28 +132,66 @@ contract Renderer is IRenderer {
         );
     }
 
-    /// @dev Exactly what `TokenView` carries, and no more.
+    /// @dev The spec's attribute list, in the spec's order.
     ///
-    /// The spec's attribute list also wants `parent`, but the struct has no such
-    /// field -- it holds `generation` and `seedsGiven` only. Emitting an invented
-    /// value would put a number on chain that nothing produced, so the gap is
-    /// left for the token contract to close by adding the field.
+    /// `Heart` is filled cells over 365, `Children` is what the struct calls
+    /// `seedsGiven`, and `Agent Key` is the bound key as fixed-width hex.
+    /// `Parent` is 0 for a founding token. `Sunset` is the one entry the spec
+    /// does not list; it is real piece-wide state a reader can act on, so it
+    /// stays.
+    ///
+    /// Split in two because `abi.encodePacked` with fourteen arguments runs out
+    /// of stack under the coverage profile, which cannot use the IR pipeline
+    /// (foundry-rs/foundry#13001). `svg()` carries the same split for the same
+    /// reason.
     function _attributes(TokenView memory v) private pure returns (string memory) {
+        return string(abi.encodePacked(_attrsA(v), _attrsB(v)));
+    }
+
+    function _attrsA(TokenView memory v) private pure returns (string memory) {
         return string(
             abi.encodePacked(
                 _num("Level", v.level),
                 _num("Streak", v.streak),
+                _str("Heart", _heart(v.level)),
                 _num("Years", FrameRenderer.rings(v.level)),
                 _str("Whole", v.level >= FrameGeometry.DAY_CELLS ? "yes" : "no"),
                 _num("Mint Day", v.mintDay),
-                _num("Last Day", v.lastDay),
+                _num("Last Day", v.lastDay)
+            )
+        );
+    }
+
+    function _attrsB(TokenView memory v) private pure returns (string memory) {
+        return string(
+            abi.encodePacked(
+                _str("Agent Key", LibString.toHexString(uint256(v.agentKeyId), 32)),
                 _num("Generation", v.generation),
-                _num("Seeds Given", v.seedsGiven),
+                _num("Parent", v.parent),
+                _num("Children", v.seedsGiven),
                 _str("Resting", v.resting ? "yes" : "no"),
                 _str("Sunset", v.sunset ? "yes" : "no"),
                 '{"trait_type":"Marks","value":', MarkRenderer.names(v.marks), "}"
             )
         );
+    }
+
+    /// @dev "212/365". Cells shown is capped at 365 even though level is not.
+    function _heart(uint32 level) private pure returns (string memory) {
+        uint256 shown = level >= FrameGeometry.DAY_CELLS ? FrameGeometry.DAY_CELLS : level;
+        return string(
+            abi.encodePacked(
+                LibString.toString(shown), "/", LibString.toString(FrameGeometry.DAY_CELLS)
+            )
+        );
+    }
+
+    /// @dev The spec gives a whole token "(Whole)" and a sealed one "(At Rest)".
+    /// Resting wins when both apply: it is the more final of the two states.
+    function _suffix(TokenView memory v) private pure returns (string memory) {
+        if (v.resting) return " (At Rest)";
+        if (v.level >= FrameGeometry.DAY_CELLS) return " (Whole)";
+        return "";
     }
 
     function _num(string memory k, uint256 val) private pure returns (string memory) {

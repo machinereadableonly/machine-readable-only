@@ -14,6 +14,7 @@ struct TokenView {
     uint32 mintDay;      // UTC day index of the mint
     uint32 generation;   // 0 for a founding token, 1+ for a seeded child
     uint32 seedsGiven;   // how many children this token has seeded
+    uint256 parent;      // 0 for a founding token, else the id it was seeded from
     bool resting;        // owner sealed it: the image is final and never pales
     bool sunset;         // operator closed the piece: same freeze, piece-wide
     uint256 marks;       // bit n set = mark id n (1 Vein .. 7 Singularity)

@@ -270,38 +270,47 @@ export function markNames(marks) {
 
 /**
  * @param state { tokenId, level, streak, lastDay, mintDay, today, generation,
- *                seedsGiven, resting, marks }
+ *                seedsGiven, parent, agentKeyId, resting, sunset, marks }
  */
-// The attributes are exactly what TokenView carries, and no more. The spec's
-// list also wants `parent`, but the struct has no such field -- it holds
-// `generation` and `seedsGiven` only. Inventing a value here would put a number
-// on chain that nothing produced, so the gap is left for the token contract in
-// Task 8 to close by adding the field.
+// The attribute list is the spec's, in the spec's order. `Sunset` is the one
+// entry the spec does not list; it is real piece-wide state a reader can act
+// on, so it stays. Every line here has a twin in Renderer._attrsA / _attrsB --
+// the differential test exists to catch the two drifting apart.
 export function tokenUri(modules, want, size, state) {
   const {
     tokenId = 0, level = 0, streak = 0, lastDay = 0, mintDay = 0, today = 0,
-    generation = 0, seedsGiven = 0, resting = false, sunset = false, marks = [],
+    generation = 0, seedsGiven = 0, parent = 0, agentKeyId = 0,
+    resting = false, sunset = false, marks = [],
   } = state;
 
   const years = Math.floor(level / DAY_CELLS);
+  // Cells shown is capped at 365 even though level is not.
+  const shown = Math.min(level, DAY_CELLS);
+  // Resting wins over whole: it is the more final of the two states.
+  const suffix = resting ? " (At Rest)" : level >= DAY_CELLS ? " (Whole)" : "";
+  // BigInt so a plain number and a 0x..n literal both render the same 66 chars.
+  const keyHex = `0x${BigInt(agentKeyId).toString(16).padStart(64, "0")}`;
   const svg = renderSvg(modules, want, size,
     { level, streak, years, marks, lastDay, today, resting, sunset });
   const image = Buffer.from(svg, "utf8").toString("base64");
 
   const json = "{"
-    + `"name":"${TOKEN_NAME} %23${tokenId}",`
+    + `"name":"${TOKEN_NAME} %23${tokenId}${suffix}",`
     + `"description":"${DESCRIPTION}",`
     + `"image":"data:image/svg+xml;base64,${image}",`
     + `"attributes":[`
     + [
         num("Level", level),
         num("Streak", streak),
+        str("Heart", `${shown}/${DAY_CELLS}`),
         num("Years", ringsFor(years)),
         str("Whole", level >= DAY_CELLS ? "yes" : "no"),
         num("Mint Day", mintDay),
         num("Last Day", lastDay),
+        str("Agent Key", keyHex),
         num("Generation", generation),
-        num("Seeds Given", seedsGiven),
+        num("Parent", parent),
+        num("Children", seedsGiven),
         str("Resting", resting ? "yes" : "no"),
         str("Sunset", sunset ? "yes" : "no"),
         attr("Marks", markNames(marks)),

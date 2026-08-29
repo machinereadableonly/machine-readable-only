@@ -19,6 +19,7 @@ contract TokenViewTest is Test {
             mintDay: 19_635,
             generation: 0,
             seedsGiven: 0,
+            parent: 88,
             resting: false,
             sunset: false,
             marks: 0,
@@ -37,6 +38,7 @@ contract TokenViewTest is Test {
         assertEq(v.mintDay, 19_635);
         assertEq(v.generation, 0);
         assertEq(v.seedsGiven, 0);
+        assertEq(v.parent, 88);
         assertFalse(v.resting);
         assertFalse(v.sunset);
         assertEq(v.marks, 0);

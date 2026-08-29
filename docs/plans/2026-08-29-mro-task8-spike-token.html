@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task 8: `MROSpikeToken`, the size guard and the gas budget</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Task 8: <code>MROSpikeToken</code>, the size guard and the gas budget</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> this plan is executed with
+<code>superpowers:executing-plans</code> in one session. Steps use checkbox (<code>- [ ]</code>)
+syntax for tracking. Every step is one action.</p>
+</blockquote>
+<p><strong>Goal:</strong> put a real ERC-721 in front of the renderer, prove the pair deploys
+under the 24,576-byte limit, and measure <code>tokenURI</code> gas and bytes through that
+token contract across seven life stages.</p>
+<p><strong>Architecture:</strong> <code>MROSpikeToken</code> holds one packed storage slot per token
+(exactly the layout the real contract will use), builds a <code>TokenView</code> from it,
+and forwards to the swappable <code>IRenderer</code>. Three new test files: behaviour and
+access control, deployed-bytecode size, and the gas budget.</p>
+<p><strong>Tech stack:</strong> Foundry 1.7.1, Solidity 0.8.35, <code>evm_version = cancun</code>,
+<code>via_ir = true</code>; OpenZeppelin Contracts v5.7.0 (<code>ERC721</code>, <code>Ownable2Step</code>,
+<code>IERC4906</code>); Solady v0.1.26 in the renderers only. Node 24.14.1 for the
+reference renderer and the fixture generator.</p>
+<hr>
+<h2>Why this task, and what it unblocks</h2>
+<p>Every gas figure the spike has produced so far was the <strong>renderer alone</strong>,
+called directly from a test with its <code>TokenView</code> already sitting in memory.
+That is not what a marketplace does. A marketplace calls <code>tokenURI(id)</code> on the
+token contract, which must read storage, build the struct, and only then call
+the renderer. None of that is in the 1,547,524 worst case recorded in
+<code>docs/phase0-results.md</code>.</p>
+<p>Task 8 is where the budget is either confirmed or the spike re-plans. It also
+produces the second half of CLAUDE.md hard rule 7 -- proof that the contracts
+actually deploy -- which nothing has produced yet, because until now there was
+no contract to deploy other than the renderer.</p>
+<p>It unblocks Task 9 (deploy script and the end-to-end decode over RPC), which
+unblocks Task 10 (Base Sepolia) and Task 11 (the throwaway mainnet OpenSea
+check), which together produce the go/no-go verdict in Task 12.</p>
+<h2>Where the budget stands going in</h2>
+<p>Budget, from the spec: <strong>2,000,000 gas / 20,000 bytes HARD</strong>, 1,000,000 / 5,000
+TARGET. The target is already missed and will be reported as missed.</p>
+<table>
+<thead>
+<tr>
+<th>Measured at Task 7</th>
+<th>Gas</th>
+<th>Bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Day one</td>
+<td>1,383,723</td>
+<td>8,616</td>
+</tr>
+<tr>
+<td>Whole, one ring</td>
+<td>1,385,441</td>
+<td>8,665</td>
+</tr>
+<tr>
+<td>Ten years, at the ring cap</td>
+<td>1,523,902</td>
+<td>9,531</td>
+</tr>
+<tr>
+<td>Cap and every Mark (worst case)</td>
+<td>1,547,524</td>
+<td>9,882</td>
+</tr>
+</tbody></table>
+<p>That leaves <strong>452,476 gas and 10,118 bytes</strong> for everything the token contract
+adds. The bytes are safe -- the token contract adds a name prefix and a few
+attributes, not kilobytes. The gas is the number to watch: a cold <code>SLOAD</code> is
+2,100 and the 172-byte <code>code</code> alone is seven of them, so the storage read is
+roughly 20,000-30,000 gas. There is room, but the figure has to be measured,
+not assumed. Two Phase 0 gas guesses have already been wrong in the other
+direction.</p>
+<p><strong>Storage is packed exactly as the spec packs it</strong> -- one 256-bit slot for the
+six <code>uint32</code>s and the <code>resting</code> flag -- so the number this task produces is the
+number the real contract will pay, not a pessimistic stand-in.</p>
+<hr>
+<h2>The decision this task needed from the operator -- DECIDED 2026-08-29: close all five</h2>
+<p><strong>The renderer emits eleven attributes. The spec asks for thirteen, and four of
+them do not line up.</strong> The resume checklist only flagged <code>parent</code>; reading the
+spec&#39;s metadata section against <code>Renderer._attributes</code> found three more.</p>
+<p>Spec, section &quot;How it is rendered&quot;: <code>level</code>, <code>streak</code>, <code>heart</code>, <code>whole</code>,
+<code>years</code>, <code>lastDay</code>, <code>mintDay</code>, <code>marks</code>, <code>agentKeyId</code>, <code>generation</code>, <code>parent</code>,
+<code>children</code>, <code>resting</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Spec attribute</th>
+<th>Status today</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>heart</code></td>
+<td><strong>Not emitted.</strong> Spec wants <code>&quot;212/365&quot;</code> -- filled cells over 365.</td>
+</tr>
+<tr>
+<td><code>agentKeyId</code></td>
+<td><strong>Not emitted</strong>, even though <code>TokenView</code> already carries the field. It is dead weight in the struct right now.</td>
+</tr>
+<tr>
+<td><code>parent</code></td>
+<td><strong>Not emitted, and <code>TokenView</code> has no field.</strong> The known gap.</td>
+</tr>
+<tr>
+<td><code>children</code></td>
+<td>Emitted, but named <code>Seeds Given</code>. Same value, different key.</td>
+</tr>
+</tbody></table>
+<p>And the name. The spec says a whole token&#39;s name becomes <code>MRO #&lt;id&gt; (Whole)</code>
+and a resting one gains <code>(At Rest)</code>. Neither happens; every token is
+<code>Machine Readable Only %23&lt;id&gt;</code>.</p>
+<h3>Recommendation: close all of it in this task</h3>
+<p><strong>Why:</strong> all five changes touch the same three places -- <code>Renderer._attributes</code>
+(and <code>_head</code> for the name), <code>tokenUri</code> in <code>tools/render-token.mjs</code>, and the
+seven differential fixtures in <code>Renderer.t.sol</code> that have to be regenerated
+afterwards. Doing them one at a time pays the fixture-regeneration cost five
+times and leaves the spike shipping metadata that does not match its own spec.
+Doing them together is one edit and one regeneration.</p>
+<p><strong>The trade-off, stated honestly:</strong> this costs bytes and gas out of a budget
+that has already missed its target. <code>agentKeyId</code> is the expensive one -- a
+<code>bytes32</code> rendered as hex is 66 characters, and it is the only one of the five
+that is not a short number or a fixed word. The rest are small.</p>
+<p><strong>I am not putting a number on that cost here.</strong> Every Phase 0 estimate made
+before measurement has been wrong, twice in the direction that mattered. Step
+group A measures the delta and reports it before anything else is built; if it
+turns out to eat a meaningful share of the 452,476 gas of headroom, that is a
+finding to bring back rather than absorb silently.</p>
+<h3>The alternative</h3>
+<p>Close <code>parent</code> only, as the resume checklist says, and leave <code>heart</code>,
+<code>agentKeyId</code>, the <code>children</code> rename and the name suffixes to Task 12&#39;s spec
+amendment -- which would resolve them by editing the spec down to what the
+renderer does, rather than editing the renderer up to the spec.</p>
+<p>That is a legitimate choice: Task 12 already rewrites section 8 around the
+code-heart design, so the attribute list is being touched there anyway. It is
+cheaper in gas and it is defensible. It is not what I would pick, because
+<code>agentKeyId</code> sitting unused in <code>TokenView</code> is a loose end that Plan 2 would
+trip over, and &quot;which agent minted this&quot; is close to the point of the piece.</p>
+<p><strong>the operator chose to close all five, 2026-08-29.</strong> Step group A below is written for
+that choice and is the plan of record. The alternative above is kept only so the
+reasoning behind the choice stays legible; do not re-open it.</p>
+<p>The one live condition remains step A10: if the measured delta eats more than a
+quarter of the 452,476 gas of headroom, stop and bring it back. That is a
+measurement gate, not a re-litigation of this decision.</p>
+<hr>
+<h2>Decisions I am making without asking</h2>
+<p>Standard-practice calls, recorded so they are visible rather than buried:</p>
+<ol>
+<li><strong><code>Ownable2Step</code>, not <code>Ownable</code>.</strong> The rev-2 plan said <code>Ownable</code>, written
+before the global smart-contract rule requiring the accept/transfer flow to
+be tested. A two-step transfer cannot be tested on a contract that does not
+have one.</li>
+<li><strong>OpenZeppelin <code>ERC721</code>, not Solady&#39;s.</strong> Solady&#39;s is smaller and cheaper,
+but the size budget is not the constraint here -- <code>Renderer</code> is 10,951 bytes
+and the token contract is a stub. Readability wins, per the global coding
+preference for the simpler solution.</li>
+<li><strong><code>sunset()</code> is irreversible, not <code>setSunset(bool)</code>.</strong> The rev-2 plan wrote
+a settable flag; the spec says sunset is permanent. An owner function that
+can be un-set is a different function with a different risk, and the
+irreversibility is worth a test.</li>
+<li><strong><code>touchRange</code> refuses the <code>(1, type(uint256).max)</code> catch-all.</strong> The spec
+calls that range hostile to indexers. Encoding the refusal as a revert makes
+it a tested rule instead of a comment.</li>
+<li><strong>Gas is measured cold</strong>, on a token whose storage has not been touched in
+the same call. That is what a marketplace&#39;s <code>eth_call</code> actually pays.</li>
+</ol>
+<hr>
+<h2>File structure</h2>
+<p><strong>Create:</strong></p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>contracts/src/spike/MROSpikeToken.sol</code></td>
+<td>ERC-721, one packed slot per token, builds <code>TokenView</code>, forwards to <code>IRenderer</code>, emits ERC-4906</td>
+</tr>
+<tr>
+<td><code>contracts/test/MROSpikeToken.t.sol</code></td>
+<td>Behaviour and every access-control revert</td>
+</tr>
+<tr>
+<td><code>contracts/test/ContractSize.t.sol</code></td>
+<td>Deployed bytecode under 24,576 with asserted positive margin</td>
+</tr>
+<tr>
+<td><code>contracts/test/GasBudget.t.sol</code></td>
+<td><code>tokenURI</code> gas and bytes at seven life stages, asserted under the hard limit</td>
+</tr>
+<tr>
+<td><code>contracts/script/anvil-size-check.sh</code></td>
+<td>Strict-limit anvil deploy plus non-empty <code>cast code</code>, the second half of CLAUDE.md hard rule 7</td>
+</tr>
+</tbody></table>
+<p><strong>Modify:</strong></p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>contracts/src/render/TokenView.sol</code></td>
+<td>Add <code>uint256 parent</code></td>
+</tr>
+<tr>
+<td><code>contracts/src/render/Renderer.sol</code></td>
+<td>Emit <code>Heart</code>, <code>Agent Key</code>, <code>Parent</code>; rename <code>Seeds Given</code> to <code>Children</code>; add the <code>(Whole)</code> / <code>(At Rest)</code> name suffixes</td>
+</tr>
+<tr>
+<td><code>tools/render-token.mjs</code></td>
+<td>The same five changes, so the two renderers stay identical</td>
+</tr>
+<tr>
+<td><code>tools/token-uri-fixture.mjs</code></td>
+<td>Nothing structural; re-run it to regenerate</td>
+</tr>
+<tr>
+<td><code>contracts/test/Renderer.t.sol</code></td>
+<td>Seven regenerated hashes and byte lengths</td>
+</tr>
+<tr>
+<td><code>contracts/test/TokenView.t.sol</code></td>
+<td>Cover the new <code>parent</code> field</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Interfaces produced</h2>
+<pre><code class="language-solidity">contract MROSpikeToken is ERC721, Ownable2Step, IERC4906 {
+    struct Token {                 // exactly one 256-bit slot
+        uint32 level; uint32 streak; uint32 lastDay; uint32 mintDay;
+        uint32 generation; uint32 seedsGiven; bool resting; uint56 reserved;
+    }
+
+    constructor(address renderer_);
+
+    function mint(uint256 id, address to, bytes32 keyId, bytes calldata code) external onlyOwner;
+    function setState(uint256 id, Token calldata t) external onlyOwner;      // emits MetadataUpdate
+    function setMarks(uint256 id, uint256 marks) external onlyOwner;         // emits MetadataUpdate
+    function setParent(uint256 id, uint256 parentId) external onlyOwner;     // emits MetadataUpdate
+    function touchRange(uint256 from, uint256 to) external onlyOwner;        // emits BatchMetadataUpdate
+    function setRenderer(address r) external onlyOwner;                      // emits RendererSet
+    function sunset() external onlyOwner;                                    // irreversible, emits Sunset
+
+    function today() public view returns (uint32);
+    function viewOf(uint256 id) public view returns (TokenView memory);
+    function tokenURI(uint256 id) public view override returns (string memory);
+}
+</code></pre>
+<p><code>TokenView</code> gains one field, appended so no existing field moves:</p>
+<pre><code class="language-solidity">uint32  seedsGiven;
+uint256 parent;      // 0 for a founding token, else the id it was seeded from
+bool    resting;
+</code></pre>
+<hr>
+<h2>Steps</h2>
+<h3>Group A -- close the metadata gap, and measure what it cost</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>A1: Record the baseline.</strong> Before touching anything, run the worst-case
+test and write the two numbers down.</li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH
+cd ~/projects/machine-readable-only/contracts &amp;&amp; forge test --match-test test_theWorstCaseStaysInsideTheHardLimit -vv
+</code></pre>
+<p>Expected: passes, logging 1,547,524 gas and 9,882 bytes. If either differs from
+<code>docs/phase0-results.md</code>, stop -- something changed since Task 7 and this plan&#39;s
+arithmetic is stale.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>A2: Add <code>parent</code> to <code>TokenView</code>.</strong></li>
+</ul>
+<pre><code class="language-solidity">    uint32 seedsGiven;   // how many children this token has seeded
+    uint256 parent;      // 0 for a founding token, else the id it was seeded from
+    bool resting;        // owner sealed it: the image is final and never pales
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>A3: Extend <code>TokenView.t.sol</code> to cover the new field.</strong> Add
+<code>parent: 88</code> to the struct literal at line 25 and the matching assertion
+beside the <code>agentKeyId</code> one at line 43:</li>
+</ul>
+<pre><code class="language-solidity">        assertEq(v.parent, 88);
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>A4: Rewrite <code>Renderer._attributes</code>.</strong> Five changes in one function.</li>
+</ul>
+<pre><code class="language-solidity">    /// @dev The spec&#39;s attribute list, in full. `Heart` is filled cells over
+    /// 365; `Children` is what the struct calls `seedsGiven`; `Agent Key` is
+    /// the bound key as hex. `Parent` is 0 for a founding token.
+    function _attributes(TokenView memory v) private pure returns (string memory) {
+        return string(
+            abi.encodePacked(
+                _num(&quot;Level&quot;, v.level),
+                _num(&quot;Streak&quot;, v.streak),
+                _str(&quot;Heart&quot;, _heart(v.level)),
+                _num(&quot;Years&quot;, FrameRenderer.rings(v.level)),
+                _str(&quot;Whole&quot;, v.level &gt;= FrameGeometry.DAY_CELLS ? &quot;yes&quot; : &quot;no&quot;),
+                _num(&quot;Mint Day&quot;, v.mintDay),
+                _num(&quot;Last Day&quot;, v.lastDay),
+                _str(&quot;Agent Key&quot;, LibString.toHexString(uint256(v.agentKeyId), 32)),
+                _num(&quot;Generation&quot;, v.generation),
+                _num(&quot;Parent&quot;, v.parent),
+                _num(&quot;Children&quot;, v.seedsGiven),
+                _str(&quot;Resting&quot;, v.resting ? &quot;yes&quot; : &quot;no&quot;),
+                _str(&quot;Sunset&quot;, v.sunset ? &quot;yes&quot; : &quot;no&quot;),
+                &#39;{&quot;trait_type&quot;:&quot;Marks&quot;,&quot;value&quot;:&#39;, MarkRenderer.names(v.marks), &quot;}&quot;
+            )
+        );
+    }
+
+    /// @dev &quot;212/365&quot;. Cells shown is capped at 365 even though level is not.
+    function _heart(uint32 level) private pure returns (string memory) {
+        uint256 shown = level &gt;= FrameGeometry.DAY_CELLS ? FrameGeometry.DAY_CELLS : level;
+        return string(
+            abi.encodePacked(LibString.toString(shown), &quot;/&quot;, LibString.toString(FrameGeometry.DAY_CELLS))
+        );
+    }
+</code></pre>
+<p><code>abi.encodePacked</code> with fourteen arguments may exceed the stack under the
+coverage profile, which does not use the IR pipeline. If
+<code>FOUNDRY_PROFILE=coverage forge build</code> reports &quot;stack too deep&quot;, split
+<code>_attributes</code> into <code>_attrsA</code> and <code>_attrsB</code> concatenated by the caller -- the
+same fix <code>svg()</code> already carries at line 66, for the same reason.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>A5: Add the name suffix.</strong> In <code>Renderer.tokenURI</code>, replace the name
+expression with a call to a helper:</li>
+</ul>
+<pre><code class="language-solidity">                &#39;{&quot;name&quot;:&quot;&#39;, NAME, &quot; %23&quot;, LibString.toString(v.tokenId), _suffix(v),
+</code></pre>
+<p>and add:</p>
+<pre><code class="language-solidity">    /// @dev The spec gives a whole token &quot;(Whole)&quot; and a sealed one &quot;(At Rest)&quot;.
+    /// Resting wins when both apply: it is the more final of the two states.
+    function _suffix(TokenView memory v) private pure returns (string memory) {
+        if (v.resting) return &quot; (At Rest)&quot;;
+        if (v.level &gt;= FrameGeometry.DAY_CELLS) return &quot; (Whole)&quot;;
+        return &quot;&quot;;
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>A6: Make the identical five changes in <code>tools/render-token.mjs</code>.</strong>
+Replace the attribute array and the name line in <code>tokenUri</code>, and add
+<code>parent = 0</code> and <code>agentKeyId = 0n</code> to the destructured defaults:</li>
+</ul>
+<pre><code class="language-javascript">  const {
+    tokenId = 0, level = 0, streak = 0, lastDay = 0, mintDay = 0, today = 0,
+    generation = 0, seedsGiven = 0, parent = 0, agentKeyId = 0n,
+    resting = false, sunset = false, marks = [],
+  } = state;
+
+  const shown = Math.min(level, DAY_CELLS);
+  const suffix = resting ? &quot; (At Rest)&quot; : level &gt;= DAY_CELLS ? &quot; (Whole)&quot; : &quot;&quot;;
+  const keyHex = `0x${BigInt(agentKeyId).toString(16).padStart(64, &quot;0&quot;)}`;
+</code></pre>
+<pre><code class="language-javascript">    + `&quot;name&quot;:&quot;${TOKEN_NAME} %23${tokenId}${suffix}&quot;,`
+</code></pre>
+<pre><code class="language-javascript">        num(&quot;Level&quot;, level),
+        num(&quot;Streak&quot;, streak),
+        str(&quot;Heart&quot;, `${shown}/${DAY_CELLS}`),
+        num(&quot;Years&quot;, ringsFor(years)),
+        str(&quot;Whole&quot;, level &gt;= DAY_CELLS ? &quot;yes&quot; : &quot;no&quot;),
+        num(&quot;Mint Day&quot;, mintDay),
+        num(&quot;Last Day&quot;, lastDay),
+        str(&quot;Agent Key&quot;, keyHex),
+        num(&quot;Generation&quot;, generation),
+        num(&quot;Parent&quot;, parent),
+        num(&quot;Children&quot;, seedsGiven),
+        str(&quot;Resting&quot;, resting ? &quot;yes&quot; : &quot;no&quot;),
+        str(&quot;Sunset&quot;, sunset ? &quot;yes&quot; : &quot;no&quot;),
+        attr(&quot;Marks&quot;, markNames(marks)),
+</code></pre>
+<p>Delete the stale comment above <code>tokenUri</code> that says the gap is left for Task 8;
+replace it with one line saying the list is the spec&#39;s, in the spec&#39;s order.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>A7: Give two fixture stages a non-zero key and parent</strong>, so the
+differential test actually exercises the new fields rather than hashing
+zeros. In <code>tools/token-uri-fixture.mjs</code>, extend two <code>STAGES</code> entries:</li>
+</ul>
+<pre><code class="language-javascript">  [&quot;day 200&quot;,          { level: 200,      streak: 45,  lastDay: 1000, today: 1000,
+                         agentKeyId: 0xa9en }],
+  [&quot;whole, one ring&quot;,  { level: 365,      streak: 140, lastDay: 1000, today: 1000,
+                         generation: 1, parent: 7, seedsGiven: 2 }],
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>A8: Regenerate the fixtures.</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only &amp;&amp; node tools/token-uri-fixture.mjs
+</code></pre>
+<p>Expected: seven <code>// &lt;label&gt;: N bytes</code> / <code>//   0x&lt;hash&gt;</code> pairs on stdout. Paste
+each byte length and hash into the matching <code>_diff(...)</code> call in
+<code>contracts/test/Renderer.t.sol</code>. Mirror the two new stage fields into
+<code>Renderer.t.sol</code>&#39;s <code>_view</code> helper so the Solidity side builds the same struct --
+set the new fields on a local <code>TokenView</code> in those two tests rather than
+widening the <code>_view</code> helper&#39;s signature for every caller:</p>
+<pre><code class="language-solidity">    function test_aPartYearMatchesTheJavascriptReference() public view {
+        TokenView memory v = _view(200, 45, 1000, 1000);
+        v.agentKeyId = bytes32(uint256(0xa9e));
+        _diff(&quot;day 200&quot;, v, BYTES_FROM_A8, HASH_FROM_A8);
+    }
+
+    function test_aWholeHeartMatchesTheJavascriptReference() public view {
+        TokenView memory v = _view(365, 140, 1000, 1000);
+        v.generation = 1;
+        v.parent = 7;
+        v.seedsGiven = 2;
+        _diff(&quot;whole, one ring&quot;, v, BYTES_FROM_A8, HASH_FROM_A8);
+    }
+</code></pre>
+<p><code>BYTES_FROM_A8</code> and <code>HASH_FROM_A8</code> are the literal numbers this step just
+printed -- paste them in; they are not names to define.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>A9: Run both suites.</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd ~/projects/machine-readable-only/contracts &amp;&amp; forge test
+source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/tools &amp;&amp; npm test
+</code></pre>
+<p>Expected: 74 forge tests and 41 tools tests, all passing. A byte-length
+mismatch means the two renderers disagree on length; a hash-only mismatch means
+they disagree on content. Both are the differential test doing its job.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>A10: Measure the cost of the metadata gap and report it.</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd ~/projects/machine-readable-only/contracts &amp;&amp; forge test --match-test test_theWorstCaseStaysInsideTheHardLimit -vv
+</code></pre>
+<p>Compare against the A1 baseline. Write both numbers into the commit message.
+<strong>If the delta consumes more than a quarter of the 452,476 gas of headroom,
+stop and bring it back to the operator</strong> -- that would make <code>agentKeyId</code> a real cost
+rather than a tidy-up, and dropping it is then a live option.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>A11: Commit.</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only &amp;&amp; git add contracts tools &amp;&amp; git commit -q -m &quot;feat(render): emit the spec&#39;s full attribute list and the name suffixes&quot;
+</code></pre>
+<h3>Group B -- <code>MROSpikeToken</code>, tests first</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>B1: Write <code>contracts/test/MROSpikeToken.t.sol</code>.</strong> Every owner function
+and every access-control revert, per the global smart-contract rule.</li>
+</ul>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test} from &quot;forge-std/Test.sol&quot;;
+import {Ownable} from &quot;@openzeppelin/contracts/access/Ownable.sol&quot;;
+import {IERC721Errors} from &quot;@openzeppelin/contracts/interfaces/draft-IERC6093.sol&quot;;
+import {IERC4906} from &quot;@openzeppelin/contracts/interfaces/IERC4906.sol&quot;;
+import {MROSpikeToken} from &quot;../src/spike/MROSpikeToken.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+import {TokenView} from &quot;../src/render/TokenView.sol&quot;;
+
+contract MROSpikeTokenTest is Test {
+    MROSpikeToken t;
+    Renderer r;
+    address constant ALICE = address(0xA11CE);
+    address constant MALLORY = address(0x4A11);
+
+    /// @dev Token 1 on example.com, from tools/token-bitmap.mjs. Same 172 bytes
+    /// the renderer tests use.
+    function _code() internal pure returns (bytes memory) {
+        return
+        hex&quot;fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff&quot;
+        hex&quot;fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796&quot;
+        hex&quot;e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef&quot;
+        hex&quot;ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80&quot;;
+    }
+
+    function setUp() public {
+        r = new Renderer();
+        t = new MROSpikeToken(address(r));
+    }
+
+    function _mint(uint256 id) internal {
+        t.mint(id, ALICE, bytes32(uint256(0xa9e)), _code());
+    }
+
+    // ----- minting -------------------------------------------------------
+
+    function test_mintSetsDayOneState() public {
+        _mint(1);
+        TokenView memory v = t.viewOf(1);
+        assertEq(t.ownerOf(1), ALICE);
+        assertEq(v.level, 1);
+        assertEq(v.streak, 1);
+        assertEq(v.lastDay, t.today());
+        assertEq(v.mintDay, t.today());
+        assertEq(v.agentKeyId, bytes32(uint256(0xa9e)));
+        assertEq(v.code.length, 172);
+    }
+
+    function test_mintRejectsADuplicateId() public {
+        _mint(1);
+        vm.expectRevert(abi.encodeWithSelector(MROSpikeToken.TokenExists.selector, uint256(1)));
+        _mint(1);
+    }
+
+    function test_mintRejectsAWrongLengthCode() public {
+        vm.expectRevert(abi.encodeWithSelector(MROSpikeToken.BadCodeLength.selector, uint256(3)));
+        t.mint(1, ALICE, bytes32(0), hex&quot;aabbcc&quot;);
+    }
+
+    // ----- reads ---------------------------------------------------------
+
+    function test_tokenUriRevertsForAnUnmintedToken() public {
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, uint256(9)));
+        t.tokenURI(9);
+    }
+
+    function test_tokenUriRendersThroughTheRenderer() public {
+        _mint(1);
+        string memory uri = t.tokenURI(1);
+        assertGt(bytes(uri).length, 5000);
+        assertEq(
+            keccak256(bytes(_slice(uri, 0, 28))),
+            keccak256(bytes(&quot;data:application/json;utf-8,&quot;))
+        );
+    }
+
+    function test_viewOfCarriesSunsetPieceWide() public {
+        _mint(1);
+        assertFalse(t.viewOf(1).sunset);
+        t.sunset();
+        assertTrue(t.viewOf(1).sunset);
+    }
+
+    function test_todayIsTheUtcDayIndex() public {
+        vm.warp(86400 * 20123 + 55);
+        assertEq(t.today(), 20123);
+    }
+
+    // ----- owner functions, happy path -----------------------------------
+
+    function test_setStateOverwritesAndEmitsMetadataUpdate() public {
+        _mint(1);
+        MROSpikeToken.Token memory s = MROSpikeToken.Token({
+            level: 365, streak: 140, lastDay: 1000, mintDay: 900,
+            generation: 1, seedsGiven: 2, resting: false, reserved: 0
+        });
+        // Neither ERC-4906 event has an indexed parameter, so only the data
+        // field is checked; the events are declared on IERC4906, not here.
+        vm.expectEmit(false, false, false, true, address(t));
+        emit IERC4906.MetadataUpdate(1);
+        t.setState(1, s);
+        assertEq(t.viewOf(1).level, 365);
+        assertEq(t.viewOf(1).seedsGiven, 2);
+    }
+
+    function test_setMarksAndSetParentLandInTheView() public {
+        _mint(1);
+        t.setMarks(1, 0x0A);
+        t.setParent(1, 7);
+        assertEq(t.viewOf(1).marks, 0x0A);
+        assertEq(t.viewOf(1).parent, 7);
+    }
+
+    function test_touchRangeEmitsTheExactRange() public {
+        vm.expectEmit(false, false, false, true, address(t));
+        emit IERC4906.BatchMetadataUpdate(4, 9);
+        t.touchRange(4, 9);
+    }
+
+    function test_touchRangeRejectsAnInvertedRange() public {
+        vm.expectRevert(MROSpikeToken.BadRange.selector);
+        t.touchRange(9, 4);
+    }
+
+    function test_touchRangeRefusesTheCatchAll() public {
+        // Indexers treat (1, uint256 max) as hostile; the spec forbids it.
+        vm.expectRevert(MROSpikeToken.BadRange.selector);
+        t.touchRange(1, type(uint256).max);
+    }
+
+    function test_setRendererSwapsTheRenderer() public {
+        Renderer other = new Renderer();
+        t.setRenderer(address(other));
+        assertEq(t.renderer(), address(other));
+    }
+
+    function test_setRendererRejectsTheZeroAddress() public {
+        vm.expectRevert(MROSpikeToken.ZeroRenderer.selector);
+        t.setRenderer(address(0));
+    }
+
+    function test_sunsetIsIrreversible() public {
+        t.sunset();
+        assertGt(t.sunsetDay(), 0);
+        vm.expectRevert(MROSpikeToken.AlreadySunset.selector);
+        t.sunset();
+    }
+
+    // ----- access control: every owner function, from a non-owner ---------
+
+    function _expectNotOwner() internal {
+        vm.expectRevert(
+            abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY)
+        );
+    }
+
+    function test_mintRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        _expectNotOwner();
+        t.mint(1, MALLORY, bytes32(0), _code());
+    }
+
+    function test_setStateRevertsForANonOwner() public {
+        _mint(1);
+        MROSpikeToken.Token memory s;
+        vm.prank(MALLORY);
+        _expectNotOwner();
+        t.setState(1, s);
+    }
+
+    function test_setMarksRevertsForANonOwner() public {
+        _mint(1);
+        vm.prank(MALLORY);
+        _expectNotOwner();
+        t.setMarks(1, 2);
+    }
+
+    function test_setParentRevertsForANonOwner() public {
+        _mint(1);
+        vm.prank(MALLORY);
+        _expectNotOwner();
+        t.setParent(1, 2);
+    }
+
+    function test_touchRangeRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        _expectNotOwner();
+        t.touchRange(1, 2);
+    }
+
+    function test_setRendererRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        _expectNotOwner();
+        t.setRenderer(address(1));
+    }
+
+    function test_sunsetRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        _expectNotOwner();
+        t.sunset();
+    }
+
+    // ----- Ownable2Step ---------------------------------------------------
+
+    function test_ownershipTransferNeedsAcceptance() public {
+        t.transferOwnership(ALICE);
+        assertEq(t.owner(), address(this));   // not yet
+        assertEq(t.pendingOwner(), ALICE);
+        vm.prank(ALICE);
+        t.acceptOwnership();
+        assertEq(t.owner(), ALICE);
+        assertEq(t.pendingOwner(), address(0));
+    }
+
+    function test_onlyThePendingOwnerMayAccept() public {
+        t.transferOwnership(ALICE);
+        vm.prank(MALLORY);
+        vm.expectRevert(
+            abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY)
+        );
+        t.acceptOwnership();
+    }
+
+    function test_theOldOwnerKeepsControlUntilAcceptance() public {
+        t.transferOwnership(ALICE);
+        t.touchRange(1, 2);   // still works: no revert
+    }
+
+    // ----- ERC-4906 -------------------------------------------------------
+
+    function test_theErc4906InterfaceIsAdvertised() public view {
+        assertTrue(t.supportsInterface(0x49064906));
+        assertTrue(t.supportsInterface(0x80ac58cd));   // ERC-721
+        assertTrue(t.supportsInterface(0x5b5e139f));   // ERC-721 Metadata
+    }
+
+    function _slice(string memory s, uint256 from, uint256 len)
+        internal pure returns (string memory out)
+    {
+        bytes memory b = bytes(s);
+        bytes memory o = new bytes(len);
+        for (uint256 i; i &lt; len; ++i) o[i] = b[from + i];
+        return string(o);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>B2: Run it and watch it fail to compile.</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd ~/projects/machine-readable-only/contracts &amp;&amp; forge test --match-path test/MROSpikeToken.t.sol
+</code></pre>
+<p>Expected: compilation error, <code>Source &quot;src/spike/MROSpikeToken.sol&quot; not found</code>.
+That is the failing state -- there is no contract yet.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>B3: Write <code>contracts/src/spike/MROSpikeToken.sol</code>.</strong></li>
+</ul>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {ERC721} from &quot;@openzeppelin/contracts/token/ERC721/ERC721.sol&quot;;
+import {Ownable} from &quot;@openzeppelin/contracts/access/Ownable.sol&quot;;
+import {Ownable2Step} from &quot;@openzeppelin/contracts/access/Ownable2Step.sol&quot;;
+import {IERC4906} from &quot;@openzeppelin/contracts/interfaces/IERC4906.sol&quot;;
+import {IERC165} from &quot;@openzeppelin/contracts/utils/introspection/IERC165.sol&quot;;
+
+import {IRenderer} from &quot;../render/IRenderer.sol&quot;;
+import {TokenView} from &quot;../render/TokenView.sol&quot;;
+
+/// @notice The throwaway token contract the Phase 0 spike measures against.
+///
+/// @dev This is NOT the collection. It exists to answer one question: what does
+/// `tokenURI` cost when a real ERC-721 reads storage and calls the renderer,
+/// rather than a test handing the renderer a struct it already holds. The real
+/// `MachineReadableOnly` has a Warden, x402 pricing, marks gating, seeding and
+/// vouchers; none of that changes the rendering cost, so none of it is here.
+///
+/// Two things ARE faithful to the spec, because both change the gas figure:
+/// the `Token` struct occupies exactly one 256-bit slot, and the code bitmap is
+/// written once at mint and never rewritten.
+contract MROSpikeToken is ERC721, Ownable2Step, IERC4906 {
+    /// @dev Six uint32s (192) plus a bool (8) plus 56 reserved = 256 bits.
+    /// The reserved field is not padding for its own sake: the real contract
+    /// spends it, and removing it here would change the slot count and with it
+    /// the number this spike exists to measure.
+    struct Token {
+        uint32 level;
+        uint32 streak;
+        uint32 lastDay;
+        uint32 mintDay;
+        uint32 generation;
+        uint32 seedsGiven;
+        bool resting;
+        uint56 reserved;
+    }
+
+    mapping(uint256 =&gt; Token) private _tokens;
+    mapping(uint256 =&gt; uint256) private _marks;
+    mapping(uint256 =&gt; uint256) private _parentOf;
+    mapping(uint256 =&gt; bytes32) private _agentKeyOf;
+    mapping(uint256 =&gt; bytes) private _codeOf;
+
+    /// @notice The renderer this token draws through. Swappable by design.
+    address public renderer;
+
+    /// @notice 0 until `sunset()`, then the day it happened. Irreversible.
+    uint32 public sunsetDay;
+
+    /// @dev The packed code bitmap is a fixed 172 bytes: 37 x 37 modules.
+    uint256 private constant CODE_BYTES = 172;
+
+    error TokenExists(uint256 id);
+    error BadCodeLength(uint256 got);
+    error BadRange();
+    error ZeroRenderer();
+    error AlreadySunset();
+
+    event RendererSet(address renderer);
+    event SunsetAt(uint32 day);
+
+    constructor(address renderer_)
+        ERC721(&quot;MRO Spike (throwaway)&quot;, &quot;MROS&quot;)
+        Ownable(msg.sender)
+    {
+        _setRenderer(renderer_);
+    }
+
+    // ----- reads ---------------------------------------------------------
+
+    /// @notice The UTC day index, the unit every date in this piece uses.
+    function today() public view returns (uint32) {
+        return uint32(block.timestamp / 1 days);
+    }
+
+    /// @notice Everything the renderer needs, assembled from storage.
+    /// @dev `sunset` is piece-wide, so it is read from `sunsetDay` rather than
+    /// from the token. `today` is passed in so the renderer stays pure.
+    function viewOf(uint256 id) public view returns (TokenView memory v) {
+        Token storage s = _tokens[id];
+        v.tokenId = id;
+        v.level = s.level;
+        v.streak = s.streak;
+        v.lastDay = s.lastDay;
+        v.mintDay = s.mintDay;
+        v.generation = s.generation;
+        v.seedsGiven = s.seedsGiven;
+        v.parent = _parentOf[id];
+        v.resting = s.resting;
+        v.sunset = sunsetDay != 0;
+        v.marks = _marks[id];
+        v.agentKeyId = _agentKeyOf[id];
+        v.code = _codeOf[id];
+        v.today = today();
+    }
+
+    /// @inheritdoc ERC721
+    function tokenURI(uint256 id) public view override returns (string memory) {
+        _requireOwned(id);
+        return IRenderer(renderer).tokenURI(viewOf(id));
+    }
+
+    /// @dev ERC-4906 has no OpenZeppelin mixin, so the id is declared here.
+    function supportsInterface(bytes4 id) public view override(ERC721, IERC165) returns (bool) {
+        return id == bytes4(0x49064906) || super.supportsInterface(id);
+    }
+
+    // ----- owner functions ------------------------------------------------
+
+    /// @notice Mint at day one, as the real contract does.
+    function mint(uint256 id, address to, bytes32 keyId, bytes calldata code) external onlyOwner {
+        if (_ownerOf(id) != address(0)) revert TokenExists(id);
+        if (code.length != CODE_BYTES) revert BadCodeLength(code.length);
+        uint32 d = today();
+        _tokens[id] = Token(1, 1, d, d, 0, 0, false, 0);
+        _agentKeyOf[id] = keyId;
+        _codeOf[id] = code;
+        _safeMint(to, id);
+    }
+
+    /// @notice Overwrite the whole daily slot. The spike&#39;s stand-in for
+    /// `batchCheckIn`, `rest` and `seed` at once -- it exists to place a token
+    /// at any life stage for measurement, not to model the real rules.
+    function setState(uint256 id, Token calldata t) external onlyOwner {
+        _requireOwned(id);
+        _tokens[id] = t;
+        emit MetadataUpdate(id);   // after the write, never before
+    }
+
+    function setMarks(uint256 id, uint256 marks) external onlyOwner {
+        _requireOwned(id);
+        _marks[id] = marks;
+        emit MetadataUpdate(id);
+    }
+
+    function setParent(uint256 id, uint256 parentId) external onlyOwner {
+        _requireOwned(id);
+        _parentOf[id] = parentId;
+        emit MetadataUpdate(id);
+    }
+
+    /// @notice Tell marketplaces a range of tokens changed.
+    /// @dev The range must be the exact one written. `(1, type(uint256).max)`
+    /// is the collection-wide catch-all that indexers treat as hostile, so it
+    /// is refused rather than merely discouraged.
+    function touchRange(uint256 from, uint256 to) external onlyOwner {
+        if (from &gt; to || to == type(uint256).max) revert BadRange();
+        emit BatchMetadataUpdate(from, to);
+    }
+
+    function setRenderer(address r) external onlyOwner {
+        _setRenderer(r);
+    }
+
+    /// @notice Close the piece. Every token freezes. Cannot be undone.
+    function sunset() external onlyOwner {
+        if (sunsetDay != 0) revert AlreadySunset();
+        sunsetDay = today();
+        emit SunsetAt(sunsetDay);
+        // Deliberately no BatchMetadataUpdate. A sunset does change every
+        // token, but this contract does not know its own id range, and the
+        // collection-wide catch-all is the exact range touchRange refuses.
+        // The real contract emits over the ids it actually minted.
+    }
+
+    function _setRenderer(address r) private {
+        if (r == address(0)) revert ZeroRenderer();
+        renderer = r;
+        emit RendererSet(r);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>B4: Run the tests until green.</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd ~/projects/machine-readable-only/contracts &amp;&amp; forge test --match-path test/MROSpikeToken.t.sol -vv
+</code></pre>
+<p>Expected: all pass. <code>today()</code> is 0 under Foundry&#39;s default timestamp of 1, so
+<code>test_mintSetsDayOneState</code> compares <code>v.lastDay</code> against <code>t.today()</code> rather than
+a literal -- that is deliberate, not a weak assertion.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>B5: Commit.</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only &amp;&amp; git add contracts &amp;&amp; git commit -q -m &quot;feat(spike): MROSpikeToken, a packed-slot ERC-721 in front of the renderer&quot;
+</code></pre>
+<h3>Group C -- the size guard</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>C1: Write <code>contracts/test/ContractSize.t.sol</code>.</strong></li>
+</ul>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test, console} from &quot;forge-std/Test.sol&quot;;
+
+/// @notice CLAUDE.md hard rule 7, first half: nothing is called deployable
+/// until its runtime bytecode is measured against the EIP-170 limit with a
+/// positive margin. The second half -- an actual strict-limit deploy -- is
+/// script/anvil-size-check.sh, because forge&#39;s own EVM does not enforce the cap.
+contract ContractSizeTest is Test {
+    /// @dev EIP-170. Base inherits it from Ethereum unchanged.
+    uint256 constant LIMIT = 24_576;
+
+    function _check(string memory artifact) internal returns (uint256 size) {
+        size = vm.getDeployedCode(artifact).length;
+        console.log(artifact);
+        console.log(&quot;  runtime bytes&quot;, size);
+        console.log(&quot;  margin       &quot;, LIMIT - size);
+        assertLt(size, LIMIT, string.concat(artifact, &quot; exceeds the EIP-170 limit&quot;));
+        assertGt(size, 0, string.concat(artifact, &quot; has no runtime code&quot;));
+    }
+
+    function test_everyDeployedContractFitsWithMargin() public {
+        uint256 renderer = _check(&quot;Renderer.sol:Renderer&quot;);
+        uint256 token = _check(&quot;MROSpikeToken.sol:MROSpikeToken&quot;);
+        // Both must fit on the same chain, so the pair is worth logging too.
+        console.log(&quot;pair total&quot;, renderer + token);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>C2: Run it.</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd ~/projects/machine-readable-only/contracts &amp;&amp; forge test --match-path test/ContractSize.t.sol -vv
+</code></pre>
+<p>Expected: passes, logging four numbers. <code>Renderer</code> was 10,951 bytes at Task 7
+and should be a little larger now. If <code>vm.getDeployedCode</code> cannot find an
+artifact, run <code>forge build</code> first -- it reads <code>./out</code>, which <code>fs_permissions</code>
+in <code>foundry.toml</code> already allows.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>C3: Write <code>contracts/script/anvil-size-check.sh</code>.</strong></li>
+</ul>
+<pre><code class="language-bash">#!/usr/bin/env bash
+# CLAUDE.md hard rule 7, second half: a strict-limit deploy proving the
+# contracts actually land on chain with non-empty code. forge&#39;s test EVM does
+# not enforce EIP-170, so a passing size test is necessary and not sufficient.
+#
+#   bash script/anvil-size-check.sh
+set -euo pipefail
+export PATH=&quot;$HOME/.foundry/bin:$PATH&quot;
+cd &quot;$(dirname &quot;$0&quot;)/..&quot;
+
+# Anvil&#39;s account 0. This key is published in Foundry&#39;s own documentation and
+# funds nothing but a throwaway local chain.
+KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+anvil --silent --code-size-limit 24576 &amp;
+ANVIL=$!
+trap &#39;kill $ANVIL 2&gt;/dev/null || true&#39; EXIT
+sleep 2
+
+deployed() { echo &quot;$1&quot; | sed -n &#39;s/.*&quot;deployedTo&quot;:&quot;\([^&quot;]*\)&quot;.*/\1/p&#39;; }
+
+R=$(deployed &quot;$(forge create src/render/Renderer.sol:Renderer \
+      --rpc-url local --private-key &quot;$KEY&quot; --broadcast --json)&quot;)
+T=$(deployed &quot;$(forge create src/spike/MROSpikeToken.sol:MROSpikeToken \
+      --constructor-args &quot;$R&quot; --rpc-url local --private-key &quot;$KEY&quot; --broadcast --json)&quot;)
+
+for pair in &quot;Renderer:$R&quot; &quot;MROSpikeToken:$T&quot;; do
+  name=${pair%%:*}; addr=${pair#*:}
+  # cast code returns &quot;0x&quot; for an empty account; two hex chars per byte.
+  bytes=$(( ( $(cast code &quot;$addr&quot; --rpc-url local | wc -c) - 3 ) / 2 ))
+  echo &quot;$name at $addr: $bytes runtime bytes&quot;
+  [ &quot;$bytes&quot; -gt 0 ] || { echo &quot;FAIL: $name deployed with empty code&quot;; exit 1; }
+done
+
+# And prove the pair works end to end, not merely that it deployed. The bitmap
+# comes from the same generator the tests use; its CLI takes &lt;tokenId&gt; [domain]
+# and prints the 344 hex characters alone on stdout.
+. &quot;$HOME/.nvm/nvm.sh&quot;
+CODE=0x$(cd ../tools &amp;&amp; node token-bitmap.mjs 1 example.com 2&gt;/dev/null)
+
+cast send &quot;$T&quot; &quot;mint(uint256,address,bytes32,bytes)&quot; \
+  1 \
+  0x0000000000000000000000000000000000000A11 \
+  0x0000000000000000000000000000000000000000000000000000000000000a9e \
+  &quot;$CODE&quot; \
+  --rpc-url local --private-key &quot;$KEY&quot; &gt;/dev/null
+
+CHARS=$(cast call &quot;$T&quot; &quot;tokenURI(uint256)(string)&quot; 1 --rpc-url local | wc -c)
+echo &quot;tokenURI: $CHARS chars returned&quot;
+[ &quot;$CHARS&quot; -gt 5000 ] || { echo &quot;FAIL: tokenURI came back short&quot;; exit 1; }
+echo &quot;OK&quot;
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>C4: Run it.</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts &amp;&amp; bash script/anvil-size-check.sh
+</code></pre>
+<p>Expected: two <code>... runtime bytes</code> lines with four- or five-digit numbers, a
+<code>tokenURI: N chars returned</code> line in the thousands, then <code>OK</code>. If anvil refuses
+the deploy with <code>max code size exceeded</code>, the contract is genuinely too big and
+the size test was lying -- that is exactly what this script exists to catch.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>C5: Commit.</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only &amp;&amp; git add contracts &amp;&amp; git commit -q -m &quot;test(spike): EIP-170 size guard and the strict-limit anvil deploy&quot;
+</code></pre>
+<h3>Group D -- the gas budget, which is the point of the task</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>D1: Write <code>contracts/test/GasBudget.t.sol</code>.</strong></li>
+</ul>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test, console} from &quot;forge-std/Test.sol&quot;;
+import {MROSpikeToken} from &quot;../src/spike/MROSpikeToken.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+import {MarkRenderer} from &quot;../src/render/MarkRenderer.sol&quot;;
+
+/// @notice The spike&#39;s headline numbers: what a marketplace pays to read
+/// `tokenURI` off the token contract, at every life stage that matters.
+///
+/// @dev Measured through an external call on a token whose storage is cold, so
+/// the SLOADs are billed at 2,100 rather than 100. That is what an `eth_call`
+/// from OpenSea actually costs. Measuring warm would flatter the result by
+/// roughly 20,000 gas and would not be the number anyone pays.
+contract GasBudgetTest is Test {
+    MROSpikeToken t;
+    Renderer r;
+
+    uint256 constant GAS_LIMIT = 2_000_000;
+    uint256 constant BYTE_LIMIT = 20_000;
+    uint256 constant GAS_TARGET = 1_000_000;
+    uint256 constant BYTE_TARGET = 5_000;
+
+    uint256 constant ALL_MARKS = MarkRenderer.VEIN | MarkRenderer.PULSE | MarkRenderer.VOICE
+        | MarkRenderer.BLOOM | MarkRenderer.HALO | MarkRenderer.CROWN | MarkRenderer.SINGULARITY;
+
+    function _code() internal pure returns (bytes memory) {
+        return
+        hex&quot;fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff&quot;
+        hex&quot;fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796&quot;
+        hex&quot;e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef&quot;
+        hex&quot;ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80&quot;;
+    }
+
+    function setUp() public {
+        r = new Renderer();
+        t = new MROSpikeToken(address(r));
+        vm.warp(86400 * 1000 + 1);   // today() == 1000, matching the fixtures
+    }
+
+    /// @dev Each stage gets its own token id so no stage warms another&#39;s slots.
+    function _place(uint256 id, uint32 level, uint32 streak, uint32 lastDay, uint256 marks)
+        internal
+    {
+        t.mint(id, address(0xA11CE), bytes32(uint256(0xa9e)), _code());
+        t.setState(id, MROSpikeToken.Token({
+            level: level, streak: streak, lastDay: lastDay, mintDay: 900,
+            generation: 0, seedsGiven: 0, resting: false, reserved: 0
+        }));
+        if (marks != 0) t.setMarks(id, marks);
+    }
+
+    function _measure(string memory label, uint256 id)
+        internal
+        returns (uint256 gasUsed, uint256 len)
+    {
+        uint256 before = gasleft();
+        string memory uri = t.tokenURI(id);
+        gasUsed = before - gasleft();
+        len = bytes(uri).length;
+        console.log(label);
+        console.log(&quot;  gas  &quot;, gasUsed);
+        console.log(&quot;  bytes&quot;, len);
+        assertLt(gasUsed, GAS_LIMIT, string.concat(label, &quot;: over the hard gas limit&quot;));
+        assertLt(len, BYTE_LIMIT, string.concat(label, &quot;: over the hard byte limit&quot;));
+    }
+
+    function test_theWholeLadderStaysInsideTheHardLimit() public {
+        _place(1, 1, 1, 1000, 0);
+        _place(2, 200, 45, 1000, 0);
+        _place(3, 365, 140, 1000, 0);
+        _place(4, 365, 140, 960, 0);            // forty days lapsed
+        _place(5, 365 * 3, 200, 1000, 0);
+        _place(6, 365 * 10, 400, 1000, 0);      // at the ring cap
+        _place(7, 365 * 10, 400, 1000, ALL_MARKS);
+
+        _measure(&quot;day one&quot;, 1);
+        _measure(&quot;day 200&quot;, 2);
+        _measure(&quot;whole, one ring&quot;, 3);
+        _measure(&quot;whole and lapsed&quot;, 4);
+        _measure(&quot;three years&quot;, 5);
+        _measure(&quot;ten years, at the cap&quot;, 6);
+        (uint256 worstGas, uint256 worstBytes) = _measure(&quot;cap and every mark&quot;, 7);
+
+        // The target is missed and is reported as missed rather than quietly
+        // dropped. This assertion documents the miss; flip it the day it passes.
+        assertGt(worstGas, GAS_TARGET, &quot;the 1,000,000 gas target now passes -- update the results table&quot;);
+        assertGt(worstBytes, BYTE_TARGET, &quot;the 5,000 byte target now passes -- update the results table&quot;);
+
+        console.log(&quot;headroom against the hard limit&quot;);
+        console.log(&quot;  gas  &quot;, GAS_LIMIT - worstGas);
+        console.log(&quot;  bytes&quot;, BYTE_LIMIT - worstBytes);
+    }
+
+    /// @dev A sealed token must cost no more than a live one -- the freeze is a
+    /// branch, not extra work. Cheap to assert and it pins the claim.
+    function test_aSealedTokenIsNotMoreExpensive() public {
+        _place(8, 365 * 3, 200, 1000, 0);
+        t.setState(8, MROSpikeToken.Token({
+            level: 365 * 3, streak: 200, lastDay: 1000, mintDay: 900,
+            generation: 0, seedsGiven: 0, resting: true, reserved: 0
+        }));
+        (uint256 sealedGas,) = _measure(&quot;sealed at rest&quot;, 8);
+        assertLt(sealedGas, GAS_LIMIT);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>D2: Run it and read every number.</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd ~/projects/machine-readable-only/contracts &amp;&amp; forge test --match-path test/GasBudget.t.sol -vv
+</code></pre>
+<p>Expected: green, with sixteen logged numbers. <strong>The one that decides the task is
+<code>cap and every mark</code>.</strong> Task 7 measured the renderer alone at 1,547,524; this
+figure is that plus the token contract&#39;s storage reads. Under 2,000,000 the
+spike stands. Over it, stop and re-plan against the fallback ladder in the rev-2
+plan: (a) further path compression, (b) rings and Bloom become flat fills,
+(c) an off-chain renderer -- and (c) is a spec change needing the operator&#39;s approval,
+not a fix.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>D3: Commit.</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only &amp;&amp; git add contracts &amp;&amp; git commit -q -m &quot;test(spike): the tokenURI gas budget across seven life stages&quot;
+</code></pre>
+<h3>Group E -- prove the whole thing still holds</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>E1: Full suite, both languages.</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd ~/projects/machine-readable-only/contracts &amp;&amp; forge test
+source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/tools &amp;&amp; npm test
+</code></pre>
+<p>Expected: every forge test and all 41 tools tests pass.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>E2: Sizes.</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd ~/projects/machine-readable-only/contracts &amp;&amp; forge build --sizes
+</code></pre>
+<p>Expected: <code>Renderer</code> and <code>MROSpikeToken</code> both listed with positive margin.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>E3: Coverage, on the legacy profile.</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd ~/projects/machine-readable-only/contracts &amp;&amp; FOUNDRY_PROFILE=coverage forge coverage
+</code></pre>
+<p>Expected: 100% lines and statements on <code>src/render/*</code> maintained, and
+<code>src/spike/MROSpikeToken.sol</code> at 100% lines. If the coverage build reports
+&quot;stack too deep&quot; in <code>Renderer._attributes</code>, apply the split described in step
+A4.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>E4: Write the numbers into <code>docs/phase0-results.md</code>.</strong> Add a section
+recording: the seven-stage gas and byte table from D2, the runtime sizes
+from C2, the anvil deploy result from C4, the attribute-list delta from
+A10, and the remaining headroom. Render the HTML alongside it:</li>
+</ul>
+<pre><code class="language-bash">node ~/scripts/render-md-to-html.js ~/projects/machine-readable-only/docs/phase0-results.md
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>E5: Final commit.</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only &amp;&amp; git add -A &amp;&amp; git commit -q -m &quot;docs(spike): record the Task 8 size and gas measurements&quot;
+</code></pre>
+<hr>
+<h2>Trade-offs and what cannot be undone</h2>
+<ul>
+<li><strong>Nothing in this task is irreversible.</strong> No funds are spent, no network is
+touched beyond a local anvil that is killed when the script exits, nothing is
+pushed. Every step is a local file change under git.</li>
+<li><strong>The metadata additions cost gas that has not been measured yet.</strong> Step A10
+exists to surface that before it is buried under the rest of the task. It is
+the one place this plan could turn out to be wrong.</li>
+<li><strong><code>MROSpikeToken</code> is deliberately not the real contract.</strong> It has no Warden,
+no x402, no mark gating, no seeding rules, no pause and no voucher path.
+Building those here would be building Plan 2 inside Phase 0, and Phase 0&#39;s
+question is only whether the image fits on chain.</li>
+<li><strong>The <code>reserved</code> field looks like dead weight and is not.</strong> Removing it would
+change the slot count and therefore the measurement, which is the one thing
+this contract exists to produce.</li>
+</ul>
+<h2>What this task deliberately does not build</h2>
+<p>The deploy script (<code>DeploySpike.s.sol</code>) and the RPC decode check are Task 9.
+Pulse&#39;s <code>animation_url</code> stays unbuilt and unbudgeted -- it roughly doubles
+tokenURI bytes, and it does not enter without a separate measurement and a
+conversation with the operator. The child-token visuals remain the open question recorded
+in spec section 10.</p>
+
+</body>
+</html>

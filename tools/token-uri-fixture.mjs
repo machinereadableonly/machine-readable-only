@@ -21,8 +21,10 @@ import { tokenUri } from "./render-token.mjs";
 /// The six life stages the differential test covers, plus the Marks case.
 export const STAGES = [
   ["day one",          { level: 1,        streak: 1,   lastDay: 1000, today: 1000 }],
-  ["day 200",          { level: 200,      streak: 45,  lastDay: 1000, today: 1000 }],
-  ["whole, one ring",  { level: 365,      streak: 140, lastDay: 1000, today: 1000 }],
+  ["day 200",          { level: 200,      streak: 45,  lastDay: 1000, today: 1000,
+                         agentKeyId: 0xa9en }],
+  ["whole, one ring",  { level: 365,      streak: 140, lastDay: 1000, today: 1000,
+                         generation: 1, parent: 7, seedsGiven: 2 }],
   ["whole and lapsed", { level: 365,      streak: 140, lastDay: 1000, today: 1040 }],
   ["ten years, capped",{ level: 365 * 10, streak: 400, lastDay: 1000, today: 1000 }],
   ["every drawn mark", { level: 365 * 10, streak: 400, lastDay: 1000, today: 1000,
