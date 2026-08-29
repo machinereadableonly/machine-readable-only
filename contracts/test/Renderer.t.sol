@@ -62,15 +62,15 @@ contract RendererTest is Test {
     }
 
     function test_dayOneMatchesTheJavascriptReference() public view {
-        _diff("day one", _view(1, 1, 1000, 1000), 8790,
-            0xf1efd06f3c5d030f192f5784ea5fb984fc56dee9d0ce4edc2e178d80d9fbb85d);
+        _diff("day one", _view(1, 1, 1000, 1000), 8826,
+            0xc9776123c933b8ea853356412691c9e8072b4b847462b0da095dcf1ba1b7df26);
     }
 
     function test_aPartYearMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(200, 45, 1000, 1000);
         v.agentKeyId = bytes32(uint256(0xa9e));
-        _diff("day 200", v, 8795,
-            0x326e25d70f9bee69e239af02c240e7e02c014bfe23d54f36eb1d63f4f3d8ee87);
+        _diff("day 200", v, 8827,
+            0xa0378aded6012838abb1d42d2bbb6959733bbc6c229c9a4263178ae01c147ba4);
     }
 
     function test_aWholeHeartMatchesTheJavascriptReference() public view {
@@ -78,35 +78,35 @@ contract RendererTest is Test {
         v.generation = 1;
         v.parent = 7;
         v.seedsGiven = 2;
-        _diff("whole, one ring", v, 8849,
-            0x59db4566dbcca8ce38cb383bd874a9682c56dd4cfa346e15b8ea155924324c74);
+        _diff("whole, one ring", v, 8881,
+            0x85eb55ad13ce55fa4a21d432cf09afd8090adc47a038066e5aba263c2cb29f33);
     }
 
     function test_aLapsedTokenMatchesTheJavascriptReference() public view {
         // Forty days without a check-in. This is the case that caught a real
         // divergence: the JS renderer had a lapse function it never called, so
         // the image never paled while this renderer's did.
-        _diff("whole and lapsed", _view(365, 140, 1000, 1040), 8849,
-            0xb4e5c64df841844617048fd28bcbecbcd555b417681dea04d88c2d6e1102b311);
+        _diff("whole and lapsed", _view(365, 140, 1000, 1040), 8881,
+            0xc92fc8193735bdd35f30efdadab7d7010e42945cfc0f71b2503ddddc04b22ca3);
     }
 
     function test_theRingCapMatchesTheJavascriptReference() public view {
-        _diff("ten years, capped", _view(365 * 10, 400, 1000, 1000), 9715,
-            0x13436624752455693df20a735fad5ced5506e75da047e70737ee036c28556a9d);
+        _diff("ten years, capped", _view(365 * 10, 400, 1000, 1000), 9751,
+            0x47f0687968543a35be923154d13d7224668c1dbf3c8fc91c0f066db12c0e6430);
     }
 
     function test_everyMarkAtOnceMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(365 * 10, 400, 1000, 1000);
         v.marks = ALL_MARKS;
-        _diff("every drawn mark", v, 10066,
-            0x7b598337af8d19f0472d056ccd0e57d95314bc8c4c21ea530d0dc62ac53262e5);
+        _diff("every drawn mark", v, 10102,
+            0x2af02a3f07a778b247b4ce8ca4bb765e962aa043b7fd66182cda3d038f6664ab);
     }
 
     function test_aSealedTokenMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(365 * 3, 200, 1000, 9999);
         v.resting = true;
-        _diff("sealed at rest", v, 9081,
-            0x3e59aa382dce9137639ae5314aa58da70d1b1a089c98f43a0636c8b897f9b4cb);
+        _diff("sealed at rest", v, 9117,
+            0x3d365a93f4dc7bb11a537cfa45146857fe16807f7872184787c2cf149262be88);
     }
 
     // ---------------------------------------------------------------------

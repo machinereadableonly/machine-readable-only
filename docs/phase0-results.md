@@ -929,3 +929,73 @@ That has not happened on any payload measured.
   Process exit is what frees them. `tools/spike-bitmaps.sh` therefore solves one
   token per process, and keeps its rows in `tools/out/spike-rows.jsonl` so a
   failed assembly does not cost the eight-minute solve again.
+
+---
+
+## Task 10c Phase 2: a rasteriser we do not own, and the intrinsic size
+
+2026-08-29. Full write-up in
+`docs/2026-08-29-mro-third-party-raster-finding.md`; this is the part that
+belongs beside the budget.
+
+### The first third-party limit anyone has measured
+
+Alchemy's NFT API documents that a `tokenURI` response over **30,000 bytes**
+returns "Contract returned a broken token URI, do not retry". Measured on the
+live contracts, Alchemy stored our SVGs at 7,818 to 8,334 bytes and the whole
+`tokenURI` worst case is 8,924. Not close, and the first real number from
+outside this project to sit beside the self-imposed 20,000-byte limit.
+
+| Limit | Source | Ours | Headroom |
+|---|---|---|---|
+| 2,000,000 gas | this project | 1,633,224 | 366,776 |
+| 20,000 bytes | this project | 8,924 | 11,076 |
+| 30,000 bytes | Alchemy, documented | 8,924 | 21,076 |
+
+### The budget after adopting the intrinsic SVG size
+
+The SVG now declares `width` and `height` at `canvas * 16`. Measured over RPC on
+two live Base Sepolia contracts that differ in nothing else:
+
+| Token | Unsized | Sized | Delta |
+|---|---|---|---|
+| 1, day one | 1,410,174 gas / 8,850 B | 1,411,606 / 8,882 | +1,432 gas, +32 B |
+| 16, ten years | 1,501,957 / 9,431 | 1,501,259 / 9,467 | -698 gas, +36 B |
+| **21, level 364 worst case** | 1,631,616 / 8,892 | **1,633,224 / 8,924** | +1,608 gas, +32 B |
+
+About 1,600 gas and 32 bytes. The worst case is still the day before the heart
+seals, and it still passes the 2,000,000 / 20,000 hard limit while missing the
+1,000,000 / 5,000 target -- which must keep being reported as missed.
+
+### Why it was worth 32 bytes
+
+Seven bitmaps x eight widths, decoded off **Alchemy's own flattened PNG** rather
+than ours:
+
+| Build | Failures | Rate | `pngUrl` renders at |
+|---|---|---|---|
+| unsized | 30 / 56 | 54% | 53px |
+| sized | 2 / 56 | 3.6% | 848px |
+
+With no declared size their CDN rasterises at the viewBox units -- 53 pixels,
+one per cell -- then interpolates that bitmap up, reaching 170 to 208 grey
+levels where the artwork has 3. Our own renderer at the identical width decoded
+55 of the same 56, so the artwork was never the fault. A declared size moves
+their single rasterisation to 848px first, leaving a downscale of a crisp
+source.
+
+### The ERC-4906 refresh did not happen
+
+The most serious open item in Phase 0, and no contract change fixes it.
+
+Token 1 was warmed in Alchemy's cache at Level 365, then moved on chain to Level
+300. `setState` emits `MetadataUpdate(id)` after the write, in the order the EIP
+requires, and a direct `tokenURI` read confirms the new state. Alchemy did not
+update through **35 minutes of polling, `refreshCache=true` twice ten minutes
+apart, and `invalidateContract`** -- and `timeLastUpdated` stayed frozen at the
+pre-write read, so it was not re-reading at all.
+
+This piece is defined as an image that changes as an agent returns. An indexer
+that caches day one and will not re-read shows a frozen token. Stated honestly:
+one token, one indexer, one window -- not proof that Alchemy never refreshes,
+but enough that nobody should assume the refresh path works.

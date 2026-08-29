@@ -90,26 +90,37 @@ contract Renderer is IRenderer {
         return rim + FrameGeometry.THICK;
     }
 
-    /// @notice Pixels per cell to declare as the SVG's intrinsic size, or 0 for none.
+    /// @notice Pixels per cell declared as the SVG's intrinsic size.
     ///
-    /// @dev Zero is the shipped behaviour and emits no `width`/`height` at all,
-    /// so every existing fixture stays byte-identical. `RendererSized` overrides
-    /// it, and the two are deployed side by side on Sepolia to settle one
-    /// measured question rather than an argument.
+    /// @dev SIXTEEN, adopted 2026-08-29 on a measured A/B rather than an
+    /// argument. Two contracts carrying the same twenty-six states and the same
+    /// bitmaps were deployed to Base Sepolia differing in nothing but this
+    /// number, and Alchemy's own flattened PNGs were decoded off both:
     ///
-    /// Why it matters, measured 2026-08-29 against Alchemy's NFT API: with no
-    /// intrinsic size, their CDN rasterised the token at its viewBox units --
-    /// 53 pixels for a year-zero canvas, one pixel per cell -- and then
-    /// interpolated THAT bitmap up to whatever width was asked for. The result
-    /// carried 170 to 205 grey levels against our 3, and 41% of those resizes
-    /// would not decode. Declaring a size moves their one rasterisation up to
-    /// `canvas * pxPerCell` before any smoothing is applied.
+    ///   unsized   30 of 56 constructed resizes failed (54%), pngUrl at 53px
+    ///   sized     2 of 56 failed (3.6%),                    pngUrl at 848px
+    ///
+    /// The mechanism: with no intrinsic size their CDN rasterises the token at
+    /// its viewBox units -- 53 pixels for a year-zero canvas, one pixel per
+    /// cell -- and then interpolates THAT bitmap up to whatever width was asked
+    /// for, arriving at 170 to 208 grey levels where the artwork has 3. A
+    /// declared size moves their single rasterisation up to `canvas * 16` first,
+    /// so what remains is a downscale of a crisp source. Cost, measured over
+    /// RPC: about 1,600 gas and 32 bytes.
+    ///
+    /// Sixteen because it is the multiple this project already uses as its
+    /// "exact multiple" control everywhere else, and because it puts a
+    /// year-zero token at 848px and a ten-ring token at 1,424px -- above the
+    /// sizes third parties ask for, so their scaling is a downscale.
+    ///
+    /// Full write-up: docs/2026-08-29-mro-third-party-raster-finding.md
     ///
     /// Virtual and pure rather than an immutable, deliberately: an immutable
     /// would make `tokenURI` and `svg` view rather than pure, which changes
-    /// IRenderer and every caller for the sake of a spike experiment.
+    /// IRenderer and every caller. `RendererUnsized` overrides it to 0 and is
+    /// the control kept so this can be re-measured if a CDN changes.
     function pxPerCell() internal pure virtual returns (uint256) {
-        return 0;
+        return 16;
     }
 
     /// @dev The open tag, Bloom's gradient definition, the field and Voice's tint.
