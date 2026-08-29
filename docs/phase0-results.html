@@ -2014,6 +2014,88 @@ approval once the Pulse numbers above were recorded. The git history keeps them.
 <p>It does not restore what Pulse meant. Pulse made the heart beat; nothing on the
 ladder now suggests motion. That was a deliberate call when the rung was
 declared open rather than reserved for an aliveness Mark.</p>
+<hr>
+<h2>ERC-4906 re-tested, and the first finding corrected</h2>
+<p>The Phase 2 finding said the refresh &quot;did not happen&quot;. That was two claims, and
+they are not equally supported. Re-tested 2026-08-29 after reading Alchemy&#39;s own
+documentation, which named three flaws in the original method.</p>
+<h3>What was wrong with the first test</h3>
+<ul>
+<li><strong>Ninety minutes of polling without a refresh flag only reads the cache.</strong> It
+never asks for a re-read, so it can only show the cache does not self-expire.</li>
+<li><strong>Alchemy allows &quot;one refresh per token every 15 minutes, globally for all
+users&quot;</strong> (their SDK documentation). The two <code>refreshCache=true</code> calls were TEN
+minutes apart, so at most one was ever enqueued.</li>
+<li><strong>Refreshes are queued, not synchronous.</strong> The dedicated endpoint returns
+<code>status: &quot;Queued&quot;</code> and an <code>estimatedMsToRefresh</code>. <code>invalidateContract</code> was
+given four minutes.</li>
+</ul>
+<p>And <code>timeLastUpdated</code> is documented as the LAST REFRESH TIME, so its staying
+frozen is consistent with no refresh having run at all. The first test read it
+as &quot;it is not re-reading&quot;, which does not follow.</p>
+<h3>What is now verified rather than assumed</h3>
+<p><strong>Our side is correct.</strong> <code>MetadataUpdate(1)</code> is on chain at block 46119616 with
+topic <code>0xf8e1a15aba9398e019f0b49df1a4fde98ee17ae345cb5f6b5e2c27f5033e8ce7</code>,
+exactly as EIP-4906 specifies; 29 such events sit on the contract. This had only
+ever been asserted from the source before.</p>
+<p><strong>ERC-4906 obliges nobody.</strong> The EIP&#39;s language is that a third party &quot;can&quot;
+update the metadata. No requirement, no timing guarantee. Confirmed against the
+spec text. So the design rule holds regardless of any measurement: the piece
+must never depend on an indexer refreshing.</p>
+<h3>The re-test result: still inconclusive, but for a nameable reason</h3>
+<p>The discriminator is <code>timeLastUpdated</code>, not Level. Three outcomes are possible
+and only one justifies alarm:</p>
+<table>
+<thead>
+<tr>
+<th>Observation</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>timestamp moves, Level updates</td>
+<td>Refresh works. Operational problem only.</td>
+</tr>
+<tr>
+<td>timestamp moves, Level does not</td>
+<td>It re-read and got a stale answer. Serious.</td>
+</tr>
+<tr>
+<td>timestamp never moves</td>
+<td>The refresh never ran. Says nothing about ERC-4906.</td>
+</tr>
+</tbody></table>
+<p>Measured on <code>0x12C641d5C15DeEc21D71912973Bd8f63967b9bF6</code> token 1, chain at Level
+300 and cache at Level 365:</p>
+<ul>
+<li><strong>Passive staleness is now 7.4 hours, not 90 minutes.</strong> <code>timeLastUpdated</code>
+frozen at <code>2026-08-29T12:38:35.181Z</code>, the cached name still reading
+&quot;(Whole)&quot;. This part of the original finding is STRONGER than first reported:
+a correctly emitted event produced no passive pickup in that window.</li>
+<li><strong>One clean refresh, issued well outside the 15-minute window, then polled
+every 3 minutes for 30 minutes: the timestamp never moved.</strong> That is row 3 --
+uninformative about ERC-4906, and it means the refresh did not run.</li>
+</ul>
+<h3>The one mechanism still untried</h3>
+<p>Both the original test and this one used <code>getNFTMetadata?refreshCache=true</code>.
+Neither used the DEDICATED <code>refreshNftMetadata</code> endpoint, which is the one that
+returns <code>status</code> and <code>estimatedMsToRefresh</code> -- the only variant that reports
+whether a refresh was actually accepted. Until that is tried, &quot;explicit refresh
+does not work&quot; is not established.</p>
+<p><code>tools/erc4906-retest.mjs</code> carries the method and the discriminator table.
+Record in <code>tools/out/erc4906-retest.log</code> (gitignored).</p>
+<h3>Standing caveat</h3>
+<p>All of this is Base Sepolia. There is no reason to assume an indexer services a
+testnet cache with mainnet urgency, and that caveat travels with every number
+above.</p>
+<h3>Why this is probably smaller than it first looked</h3>
+<p>If explicit refresh works, it has an obvious home: the Clock already batches
+every check-in into one transaction daily at 00:05, so the same job can poke the
+indexer for the tokens it just touched. That is a Plan 3 cron step, not a design
+change.</p>
+<p>The deeper safety net is already in the artwork. The QR encodes
+<code>https://&lt;domain&gt;/t/&lt;id&gt;</code>, so a stale marketplace thumbnail still scans to the
+live record. The token carries the address of its own current truth.</p>
 
 </body>
 </html>
