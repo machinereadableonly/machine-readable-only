@@ -38,6 +38,23 @@ export const NOISE_BY_TIER = [
   "#686868",   // matches #8e5566, luma 104
   "#5f5f5f",   // matches #70575f, luma 95
 ];
+// Blue Blood, the rung-2 Mark: the noise takes a slate tint. Same weights as
+// NOISE_BY_TIER above -- the luminance pairing does not bend for a Mark, because
+// the binarizer does not care why an ink is lighter. Only the hue moves.
+//
+// Derived, not chosen: a slate direction [60, 90, 130] pulled 70% toward its own
+// grey, then scaled so each tier lands on its exact BT.601 luma. The intensity
+// is set by the rule that the noise must stay less saturated than the heart it
+// surrounds, or the noise becomes the subject; the start tier binds it at chroma
+// 22 against the heart's 25. Must match Palette.bluebloodAt in Solidity.
+export const BLUEBLOOD_BY_TIER = [
+  "#444b55",   // matches #c8102e, luma 74
+  "#4d5560",   // matches #bd2242, luma 84
+  "#565f6c",   // matches #a83a55, luma 94
+  "#5f6a77",   // matches #8e5566, luma 104
+  "#57606d",   // matches #70575f, luma 95
+];
+
 export const GHOST = "#f4eef0";   // frame cells not yet earned
 export const FIELD = "#ffffff";
 
@@ -71,6 +88,7 @@ const TOP = TIERS.length - 1;
 export const rungOf = streak => TOP - TIERS.findIndex(t => streak >= t.min);
 export const colourAt = rung => TIERS[TOP - rung].colour;
 export const noiseAt = rung => NOISE_BY_TIER[TOP - rung];
+export const bluebloodAt = rung => BLUEBLOOD_BY_TIER[TOP - rung];
 export const tierColour = streak => colourAt(rungOf(streak));
 
 // A lapse walks BACK DOWN the same ladder rather than introducing paler tones.

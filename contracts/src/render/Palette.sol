@@ -53,6 +53,31 @@ library Palette {
         return "#5f5f5f";                   // matches #70575f, luma 95
     }
 
+    /// @notice The noise ink at a rung when the token wears Blue Blood.
+    ///
+    /// @dev The Mark claims the one surface nothing else does. These are the
+    /// SAME weights as `noiseAt` -- the pairing rule does not bend for a Mark,
+    /// because the binarizer does not care why an ink is lighter. Only the hue
+    /// moves.
+    ///
+    /// Derived rather than chosen: a slate direction [60, 90, 130] pulled 70%
+    /// toward its own grey to set the intensity, then scaled so each rung lands
+    /// on that rung's exact BT.601 luma. Picking five values by eye would have
+    /// been five chances to break the match.
+    ///
+    /// The intensity is set by a rule that is not about decoding -- every
+    /// intensity measured decodes. It is that the noise must stay less
+    /// saturated than the heart it surrounds, or the noise becomes the subject
+    /// of the picture. The start tier binds it: that heart carries chroma 25,
+    /// the least on the ladder, against this ink's 22.
+    function bluebloodAt(uint256 index) internal pure returns (string memory) {
+        if (index >= 4) return "#444b55";   // matches #c8102e, luma 74
+        if (index == 3) return "#4d5560";   // matches #bd2242, luma 84
+        if (index == 2) return "#565f6c";   // matches #a83a55, luma 94
+        if (index == 1) return "#5f6a77";   // matches #8e5566, luma 104
+        return "#57606d";                   // matches #70575f, luma 95
+    }
+
     /// @notice The rung a live, unbroken streak sits on.
     function tierIndex(uint32 streak) internal pure returns (uint256) {
         if (streak >= 100) return 4;
