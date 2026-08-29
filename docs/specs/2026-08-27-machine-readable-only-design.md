@@ -513,11 +513,21 @@ deployed behind a stub ERC-721 whose state can be set by hand, on Base Sepolia
 for gas, size and decode, and as a throwaway contract on Base mainnet for the
 OpenSea criteria (OpenSea discontinued all testnet support in July 2025, so
 display and refresh can only be tested on mainnet; plan
-`docs/superpowers/plans/2026-08-27-mro-phase0-rendering-spike.md`); `tokenURI` **passes at 2M gas and 20 KB, targets 1M and 5 KB**; every
-contract under the size limit with margin (`forge build --sizes`); the QR decodes from the actual
-on-chain SVG; the token displays on OpenSea testnet; after three daily state
-changes with `BatchMetadataUpdate`, OpenSea shows each new image within 24
-hours; `animation_url` either plays or Pulse is confirmed static.
+`docs/plans/2026-08-28-mro-phase0-rendering-spike-rev2.md`, which supersedes
+the 2026-08-27 original for Tasks 3-11); `tokenURI` **passes at 2M gas and
+20 KB, targets 1M and 5 KB**; every contract under the size limit with margin
+(`forge build --sizes`); the QR decodes from the actual on-chain SVG; **the
+token displays on OpenSea MAINNET** -- the earlier wording here said "OpenSea
+testnet", which contradicts the same sentence above and was impossible from
+July 2025; after three daily state changes with `BatchMetadataUpdate`, OpenSea
+shows each new image within 24 hours; `animation_url` either plays or Pulse is
+confirmed static.
+
+> **Measured results, 2026-08-29:** the gas, size and decode criteria are met
+> and recorded in `docs/phase0-results.md`. Worst case 1,590,476 gas and 10,066
+> bytes read back through a public Base Sepolia RPC, against the 2M / 20 KB
+> hard limit; the 1M / 5 KB target is missed. Only the OpenSea criteria remain
+> untested. The pass/fail verdict itself is Task 12 and is not yet written.
 
 **Fallback ladder if gas or size fail after splitting:** (a) row-run
 compression of the QR and heart paths; (b) rings and the Bloom gradient

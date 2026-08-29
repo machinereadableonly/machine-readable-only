@@ -14,7 +14,10 @@ return visits, so the artwork is the agent's own history of coming back.
 - **Stack:** Solidity (Foundry 1.7.1) + Node 24.14.1; MCP server; reference
   client shipped as `npx mro-agent` plus a SKILL.md
 - **Status:** Spec revision 3 APPROVED 2026-08-27. Phase 0 rendering spike
-  in progress -- Task 1 (scaffold) done, Task 2 (heart geometry) next.
+  in progress -- Tasks 1-10 of plan revision 2 done as of 2026-08-29. The
+  budget question is SETTLED (see Gotchas) and the spike is deployed and
+  Basescan-verified on Base Sepolia. Task 11, the throwaway Base MAINNET
+  deploy for the OpenSea check, is the next step and is a real-funds gate.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -27,7 +30,7 @@ return visits, so the artwork is the agent's own history of coming back.
    visits, and that history cannot be moved to another chain later. Do not
    propose a chain migration.
 2. **Never spend real funds without explicit the operator approval, every time.**
-   Mainnet deploys, the Task 10 throwaway display-check contract, and any
+   Mainnet deploys, the Task 11 throwaway display-check contract, and any
    transaction with real value are operator-approval gates. There is no standing
    approval.
 3. **Read the spec before any MRO work:**
@@ -113,11 +116,19 @@ return visits, so the artwork is the agent's own history of coming back.
 
 - **OpenSea has had no testnets since July 2025.** The display and refresh
   criteria therefore have to be checked on a throwaway Base MAINNET
-  contract (plan Task 10) -- a real-funds step needing the operator approval.
+  contract (plan revision 2, Task 11 -- it was Task 10 before the plan was
+  renumbered) -- a real-funds step needing the operator approval. Measured 2026-08-29:
+  the whole run is 5,613,812 gas, about eight US cents at Base's 0.006 gwei
+  floor. Re-measure on the day rather than quoting that.
 - **OpenSea flattens the SVG image to PNG** and needs ERC-4906 events with
   the exact token range, emitted AFTER the write, plus a refresh API call.
-- **tokenURI gas is the live risk.** Measured comparables: Loot 572k,
-  Anonymice 24M. Phase 0 targets 1M gas / 5 KB and fails over at 2M / 20 KB.
+- **tokenURI gas WAS the live risk and is now settled.** Measured comparables:
+  Loot 572k, Anonymice 24M. Phase 0 targets 1M gas / 5 KB and fails over at
+  2M / 20 KB. Measured 2026-08-29 through the token contract on Base Sepolia:
+  worst case 1,590,476 gas / 10,066 bytes, leaving about 410,000 gas of
+  headroom. The 2M / 20 KB HARD limit passes; the 1M / 5 KB TARGET is MISSED
+  and must be reported as missed. The worst case is the day BEFORE the heart
+  seals (level 364), not the oldest token -- see docs/phase0-results.md.
 - **Coinbase Agentic Wallets cannot sign NFT trades** -- this rules out an
   otherwise obvious integration.
 - **Distribution is the real risk, not the build.** Five of six early-2026

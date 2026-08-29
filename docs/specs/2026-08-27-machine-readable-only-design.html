@@ -746,11 +746,22 @@ deployed behind a stub ERC-721 whose state can be set by hand, on Base Sepolia
 for gas, size and decode, and as a throwaway contract on Base mainnet for the
 OpenSea criteria (OpenSea discontinued all testnet support in July 2025, so
 display and refresh can only be tested on mainnet; plan
-<code>docs/superpowers/plans/2026-08-27-mro-phase0-rendering-spike.md</code>); <code>tokenURI</code> <strong>passes at 2M gas and 20 KB, targets 1M and 5 KB</strong>; every
-contract under the size limit with margin (<code>forge build --sizes</code>); the QR decodes from the actual
-on-chain SVG; the token displays on OpenSea testnet; after three daily state
-changes with <code>BatchMetadataUpdate</code>, OpenSea shows each new image within 24
-hours; <code>animation_url</code> either plays or Pulse is confirmed static.</p>
+<code>docs/plans/2026-08-28-mro-phase0-rendering-spike-rev2.md</code>, which supersedes
+the 2026-08-27 original for Tasks 3-11); <code>tokenURI</code> <strong>passes at 2M gas and
+20 KB, targets 1M and 5 KB</strong>; every contract under the size limit with margin
+(<code>forge build --sizes</code>); the QR decodes from the actual on-chain SVG; <strong>the
+token displays on OpenSea MAINNET</strong> -- the earlier wording here said &quot;OpenSea
+testnet&quot;, which contradicts the same sentence above and was impossible from
+July 2025; after three daily state changes with <code>BatchMetadataUpdate</code>, OpenSea
+shows each new image within 24 hours; <code>animation_url</code> either plays or Pulse is
+confirmed static.</p>
+<blockquote>
+<p><strong>Measured results, 2026-08-29:</strong> the gas, size and decode criteria are met
+and recorded in <code>docs/phase0-results.md</code>. Worst case 1,590,476 gas and 10,066
+bytes read back through a public Base Sepolia RPC, against the 2M / 20 KB
+hard limit; the 1M / 5 KB target is missed. Only the OpenSea criteria remain
+untested. The pass/fail verdict itself is Task 12 and is not yet written.</p>
+</blockquote>
 <p><strong>Fallback ladder if gas or size fail after splitting:</strong> (a) row-run
 compression of the QR and heart paths; (b) rings and the Bloom gradient
 become flat fills; (c) last resort, an off-chain renderer served by the

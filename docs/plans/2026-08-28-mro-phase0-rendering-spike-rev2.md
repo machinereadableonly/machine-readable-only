@@ -401,7 +401,9 @@ refresh behaviour can only be checked on mainnet.
 
 **This is the irreversible step.** Before any `--broadcast` against `base`, state
 to the operator: "This deploys `MRO Spike (throwaway)` and three tokens to Base mainnet
-permanently, costs about $1 in ETH, and is not the collection. Approve?" Proceed
+permanently, costs about <MEASURED> in ETH, and is not the collection.
+Approve?" -- measuring the cost fresh on the day rather than quoting a figure
+from this plan. Proceed
 only on an explicit yes.
 
 **Files:** create `tools/opensea-check.mjs`; modify `docs/phase0-results.md`.
