@@ -188,11 +188,12 @@ export function renderSvg(modules, want, size, state) {
   const {
     level = 0, streak = 0, years: rawYears = 0, marks = [],
     lastDay = 0, today = 0, resting = false, sunset = false,
-    // Pixels per cell to declare as the SVG's intrinsic size, or 0 for none.
-    // Zero is the shipped behaviour and emits no width/height at all. Mirrors
-    // Renderer.pxPerCell(); RendererSized overrides it to 16. The two must stay
-    // identical or the differential test is measuring nothing.
-    pxPerCell = 0,
+    // Pixels per cell declared as the SVG's intrinsic size. Mirrors
+    // Renderer.pxPerCell(), adopted 2026-08-29 on a measured A/B: it took
+    // third-party decode failures from 54% to 3.6%. The two languages must
+    // carry the same number or the differential test is measuring nothing.
+    // Pass 0 for the RendererUnsized control.
+    pxPerCell = 16,
   } = state;
   const years = ringsFor(rawYears);
   const canvas = canvasFor(years);

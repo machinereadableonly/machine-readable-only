@@ -4,22 +4,23 @@ pragma solidity ^0.8.30;
 import {Test} from "forge-std/Test.sol";
 
 import {Renderer} from "../src/render/Renderer.sol";
-import {RendererSized} from "../src/render/RendererSized.sol";
+import {RendererUnsized} from "../src/render/RendererUnsized.sol";
 import {FrameGeometry} from "../src/render/FrameGeometry.sol";
 import {TokenView} from "../src/render/TokenView.sol";
 
-/// @notice The intrinsic-size experiment: what `RendererSized` changes, and
-/// everything it must leave alone.
+/// @notice The intrinsic pixel size the SVG declares, and what it must not touch.
 ///
-/// @dev This variant exists to answer one measured question on Base Sepolia --
-/// whether declaring `width`/`height` stops a third-party CDN interpolating the
-/// artwork into something that will not decode. See
-/// docs/2026-08-29-mro-third-party-raster-finding.md. Until that measurement is
-/// in, the plain `Renderer` is what ships, and the tests below are what stop the
-/// experiment leaking into it.
+/// @dev Adopted 2026-08-29 on a measured A/B against Alchemy's NFT API: the
+/// unsized build failed 30 of 56 constructed third-party resizes, the sized
+/// build 2. See docs/2026-08-29-mro-third-party-raster-finding.md.
+///
+/// `RendererUnsized` is the control that experiment used, kept so the comparison
+/// can be re-run. These tests pin that the only difference between the two is
+/// the `width`/`height` attribute -- if anything else ever diverges, the A/B was
+/// measuring two changes rather than one.
 contract RendererSizedTest is Test {
-    Renderer plain;
-    RendererSized sized;
+    Renderer shipped;
+    RendererUnsized control;
 
     /// @dev Token 1 on example.com, the same bitmap the other render tests use.
     function _bitmap() internal pure returns (bytes memory) {
@@ -31,8 +32,8 @@ contract RendererSizedTest is Test {
     }
 
     function setUp() public {
-        plain = new Renderer();
-        sized = new RendererSized();
+        shipped = new Renderer();
+        control = new RendererUnsized();
     }
 
     function _view(uint32 level) internal pure returns (TokenView memory v) {
@@ -49,20 +50,11 @@ contract RendererSizedTest is Test {
         return vm.indexOf(haystack, needle) != type(uint256).max;
     }
 
-    /// The shipped renderer must not have gained an intrinsic size. This is the
-    /// test that would fail if the experiment were ever switched on by accident.
-    function test_thePlainRendererStillDeclaresNoIntrinsicSize() public view {
-        string memory s = plain.svg(_view(365));
-        assertFalse(_has(s, "width=\"8"), "plain renderer must not declare a width in pixels");
-        assertTrue(
-            _has(s, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 53 53\""),
-            "the plain open tag must be byte-identical to what shipped"
-        );
-    }
-
-    /// A year-zero canvas is 53 cells, so sixteen pixels a cell is 848.
-    function test_theSizedRendererDeclaresCanvasTimesSixteen() public view {
-        string memory s = sized.svg(_view(365));
+    /// A year-zero canvas is 53 cells, so sixteen pixels a cell is 848. This is
+    /// the number a third-party rasteriser reads instead of falling back to the
+    /// viewBox units, which is the whole point of declaring it.
+    function test_theShippedRendererDeclaresCanvasTimesSixteen() public view {
+        string memory s = shipped.svg(_view(365));
         assertTrue(_has(s, "width=\"848\" height=\"848\""), "expected 53 x 16 = 848");
         assertTrue(_has(s, "viewBox=\"0 0 53 53\""), "the viewBox must be untouched");
     }
@@ -70,21 +62,31 @@ contract RendererSizedTest is Test {
     /// The declared size has to track the canvas, which grows with year rings --
     /// a fixed number would stretch the art the moment a token completes a year.
     function test_theDeclaredSizeGrowsWithTheCanvas() public view {
-        string memory s = sized.svg(_view(uint32(FrameGeometry.DAY_CELLS) * 10));
+        string memory s = shipped.svg(_view(uint32(FrameGeometry.DAY_CELLS) * 10));
         assertTrue(_has(s, "viewBox=\"0 0 89 89\""), "ten rings should give an 89-cell canvas");
         assertTrue(_has(s, "width=\"1424\" height=\"1424\""), "expected 89 x 16 = 1424");
     }
 
-    /// The experiment must change the header and nothing else. If the two images
-    /// differ anywhere past the open tag, the variant is not measuring the
-    /// intrinsic size -- it is measuring a second, accidental change.
+    /// The control must stay what shipped before, or re-running the A/B measures
+    /// something other than the intrinsic size.
+    function test_theControlDeclaresNoIntrinsicSize() public view {
+        string memory s = control.svg(_view(365));
+        assertFalse(_has(s, "width=\"8"), "the control must not declare a width in pixels");
+        assertTrue(
+            _has(s, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 53 53\""),
+            "the control's open tag must be the pre-2026-08-29 bytes"
+        );
+    }
+
+    /// The size must change the header and nothing else. Anything diverging past
+    /// the open tag means the two builds differ in a second, accidental way.
     function test_nothingButTheOpenTagDiffers() public view {
         TokenView memory v = _view(200);
-        bytes memory a = bytes(plain.svg(v));
-        bytes memory b = bytes(sized.svg(v));
+        bytes memory a = bytes(control.svg(v));
+        bytes memory b = bytes(shipped.svg(v));
 
         // ` width="848" height="848"` is 25 characters.
-        assertEq(b.length, a.length + 25, "only the intrinsic size should have been added");
+        assertEq(b.length, a.length + 25, "only the intrinsic size should differ");
 
         uint256 tail = a.length - 40;
         for (uint256 i = 1; i <= tail; ++i) {
@@ -95,7 +97,7 @@ contract RendererSizedTest is Test {
     /// Both must still be reachable through the interface the token calls.
     function test_bothRenderersProduceAParseableTokenUri() public view {
         TokenView memory v = _view(365);
-        assertTrue(_has(plain.tokenURI(v), "data:application/json;utf-8,{\"name\":"), "plain");
-        assertTrue(_has(sized.tokenURI(v), "data:application/json;utf-8,{\"name\":"), "sized");
+        assertTrue(_has(shipped.tokenURI(v), "data:application/json;utf-8,{\"name\":"), "shipped");
+        assertTrue(_has(control.tokenURI(v), "data:application/json;utf-8,{\"name\":"), "control");
     }
 }
