@@ -7,8 +7,20 @@
 // 344-character literals nobody could check; generating them keeps the script
 // honest and matches how FrameGeometry.sol and HeartMask.sol are produced.
 //
-//   node tools/spike-bitmaps.mjs [domain]
-import { writeFileSync } from "node:fs";
+//   bash tools/spike-bitmaps.sh [domain] [count]
+//
+// RUN IT THROUGH THAT SCRIPT, not directly. Solving one token now renders and
+// decodes it in five states at ten raster sizes (see robust-solve.mjs), and
+// resvg's buffers are NATIVE -- they are not the JS heap, so capping
+// --max-old-space-size does nothing and a 27-token run in ONE process reached
+// 2.0 GB and throttled against the memory cap. Process exit is the only thing
+// that reliably frees them, which is the same reason soak-offline.sh batches.
+//
+// So this file has two single-purpose modes and the shell script joins them:
+//
+//   node tools/spike-bitmaps.mjs --row <id> [domain]   -- one token, one JSON line
+//   node tools/spike-bitmaps.mjs --assemble <rows.jsonl> [domain]  -- write the .sol
+import { writeFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -69,13 +81,36 @@ library SpikeBitmaps {
 const here = dirname(fileURLToPath(import.meta.url));
 
 if (process.argv[1] && process.argv[1].endsWith("spike-bitmaps.mjs")) {
-  const [domain = "example.com", countArg] = process.argv.slice(2);
-  const count = Number(countArg ?? SPIKE_TOKENS.length);
-  const rows = spikeBitmaps(domain, soakTokens(count));
-  const out = join(here, "..", "contracts", "script", "SpikeBitmaps.sol");
-  writeFileSync(out, render(domain, rows));
-  for (const r of rows) {
-    console.error(`token ${r.id} (${r.note}): mask ${r.mask}, match ${(r.match * 100).toFixed(1)}%`);
+  const argv = process.argv.slice(2);
+  const flag = argv[0];
+
+  if (flag === "--row") {
+    // ONE token, in its own process, as a JSON line on stdout. Diagnostics go to
+    // stderr so the caller can collect stdout cleanly.
+    const id = Number(argv[1]);
+    const domain = argv[2] ?? "example.com";
+    const count = Math.max(id, SPIKE_TOKENS.length);
+    const note = soakTokens(count).find(t => t.id === id)?.note ?? `soak state ${id - 1}`;
+    const [row] = spikeBitmaps(domain, [{ id, note }]);
+    console.error(`token ${id} (${note}): mask ${row.mask}, match ${(row.match * 100).toFixed(1)}%`
+      + (row.rejected ? `, ${row.rejected} better-matching mask(s) rejected as unscannable` : ""));
+    console.log(JSON.stringify(row));
+
+  } else if (flag === "--assemble") {
+    // Every row, already solved, joined into the generated library.
+    const rows = readFileSync(argv[1], "utf8").trim().split("\n")
+      .filter(Boolean).map(l => JSON.parse(l))
+      .sort((a, b) => a.id - b.id);
+    if (rows.length === 0) throw new Error("no rows to assemble");
+    const domain = argv[2] ?? "example.com";
+    const out = join(here, "..", "contracts", "script", "SpikeBitmaps.sol");
+    writeFileSync(out, render(domain, rows));
+    console.error(`wrote ${out} with ${rows.length} bitmaps`);
+
+  } else {
+    console.error("usage: spike-bitmaps.mjs --row <id> [domain]");
+    console.error("       spike-bitmaps.mjs --assemble <rows.jsonl> [domain]");
+    console.error("normally you want: bash tools/spike-bitmaps.sh [domain] [count]");
+    process.exit(1);
   }
-  console.error(`wrote ${out}`);
 }

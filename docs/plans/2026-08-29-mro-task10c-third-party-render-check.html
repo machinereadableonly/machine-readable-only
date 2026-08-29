@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task 10c: the third-party render check, and closing the decode blind spot</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Task 10c: the third-party render check, and closing the decode blind spot</h1>
+<p>Written 2026-08-29, after the operator stopped Task 11 a second time: &quot;We are not ready
+for mainnet. First we test on testnet. We need to make sure everything works
+before we spend real money.&quot;</p>
+<p>Status: APPROVED by the operator 2026-08-29 (&quot;Use placeholder&quot; for the domain question).</p>
+<p>Phase 1 is complete and changed the shape of the task -- it found a real defect
+in the solver rather than merely closing a blind spot. the operator chose <strong>option A</strong> from
+<code>docs/2026-08-29-mro-fragile-mask-finding.md</code>: select the code by robustness
+first, heart match second. Option C&#39;s intrinsic SVG pixel size was NOT chosen and
+is not being built; step 3 below is therefore superseded and step 4 reduces to
+re-running the sweep against the new selection.</p>
+<hr>
+<h2>Why this exists</h2>
+<p>Task 11 was written on one premise: OpenSea has no testnet, so the only way to
+learn how a third party displays this token is to pay for a mainnet deploy.</p>
+<p><strong>That premise was checked today and it is half wrong.</strong></p>
+<p>OpenSea&#39;s own farewell notice (23 July 2025) gives their reason for dropping
+testnets, and one of the three reasons they list is that <em>&quot;blockchain explorers
+now support basic NFT features&quot;</em>. OpenSea is not the only party that takes a
+<code>tokenURI</code>, parses the JSON, and rasterises an on-chain SVG into a PNG it
+chooses the dimensions of. At least two others do exactly that, both run on
+Base Sepolia, and both are free:</p>
+<ul>
+<li><strong>Alchemy&#39;s NFT API</strong> caches NFT media through a Cloudinary CDN, generates a
+256x256 thumbnail, exposes arbitrary resizes (<code>w_400,h_400</code>), and offers a
+<code>/convert-png</code> path that flattens an SVG. Base Sepolia is a supported network.</li>
+<li><strong>Basescan</strong> renders the NFT image on its token page, from the same verified
+contract we already have deployed.</li>
+</ul>
+<p>Neither <em>is</em> OpenSea. But the specific failure mode this project is exposed to
+is not an OpenSea quirk -- it is <strong>&quot;a rasteriser we do not control picks its own
+pixel size&quot;</strong>, which is exactly what sweep D found on token 12. Any third-party
+flattener probes that. Getting two of them to agree, for free, before spending,
+is the right order.</p>
+<p>Alongside that, the research turned up a genuine blind spot in our own suite and
+one probable root cause we can fix outright. Both are cheap.</p>
+<h3>What is already covered, honestly</h3>
+<table>
+<thead>
+<tr>
+<th>Sweep</th>
+<th>What it covered</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A</td>
+<td>88 colour boundary pairs, Solidity vs JS</td>
+<td>clean</td>
+</tr>
+<tr>
+<td>B</td>
+<td>32-state differential, byte-for-byte</td>
+<td>clean</td>
+</tr>
+<tr>
+<td>C</td>
+<td>80 decodes offline + 8 extremes x 5 sizes</td>
+<td>found the palette bug, now clean</td>
+</tr>
+<tr>
+<td>D</td>
+<td>26 states on Base Sepolia, 5 sizes each</td>
+<td>25/26</td>
+</tr>
+</tbody></table>
+<p>That is real coverage and it earned its keep. What follows is what it still
+cannot see.</p>
+<h3>What is genuinely left, and who can answer it</h3>
+<p><strong>Only mainnet can answer:</strong> does OpenSea itself display the token, and does the
+ERC-4906 event plus a refresh call actually update its cached image. Confirmed
+live today: <code>testnets.opensea.io</code> 307-redirects to a shutdown notice. There is
+no preview path for a contract-deployed NFT. Task 11 remains necessary.</p>
+<p><strong>Testnet or offline can answer everything below, and none of it has been done.</strong></p>
+<ol>
+<li><p><strong>Our decode sweep tops out at 900px, and the bug it caught lived at 1200px.</strong>
+<code>DECODE_SIZES</code> is <code>[250, 350, 500, 700, 900]</code>. Sweep C diagnosed the palette
+bug by going to 1600px by hand, but the standing regression sweep never
+followed it up there. Nothing in either test suite decodes above 900px today.
+<strong>The sweep that found the bug cannot currently see it come back.</strong> This is
+the single most important gap on the list and it costs minutes.</p>
+</li>
+<li><p><strong>The SVG declares no pixel size.</strong> Both renderers emit
+<code>&lt;svg viewBox=&quot;0 0 c c&quot; shape-rendering=&quot;crispEdges&quot;&gt;</code> with no <code>width</code> or
+<code>height</code>. That hands the choice of raster size to whatever consumes it --
+which is the precise condition that made token 12 fail at 700px. The canvas
+is not even a fixed number of cells; it grows with year rings:</p>
+<table>
+<thead>
+<tr>
+<th>Years</th>
+<th>Canvas</th>
+<th>At a fixed 500px</th>
+<th>At a fixed 1080px</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td>51</td>
+<td>9.80 px/cell</td>
+<td>21.18 px/cell</td>
+</tr>
+<tr>
+<td>1</td>
+<td>53</td>
+<td>9.43</td>
+<td>20.38</td>
+</tr>
+<tr>
+<td>5</td>
+<td>69</td>
+<td>7.25</td>
+<td>15.65</td>
+</tr>
+<tr>
+<td>10</td>
+<td>89</td>
+<td>5.62</td>
+<td>12.13</td>
+</tr>
+</tbody></table>
+<p>Every one of those is fractional. A third party that picks a round number
+lands on a fractional ratio for essentially every token. Declaring
+<code>width = height = canvas * K</code> makes the SVG&#39;s own intrinsic size an exact
+multiple, which is the one lever we hold over rasterisers we do not own.
+Whether a given consumer honours it is the open question -- and step 4 is how
+we find out without paying.</p>
+</li>
+<li><p><strong>State and bitmap have never been crossed.</strong> The offline sweep renders every
+state with token 1&#39;s bitmap. The on-chain sweep gives each of 26 bitmaps a
+single state. Each token has its own QArt solve, so module layout differs per
+token -- that is exactly how token 12 slipped through -- and the interaction
+of &quot;unusual state&quot; with &quot;unusual bitmap&quot; is untested in both directions.</p>
+</li>
+<li><p><strong>No third party has ever parsed this token.</strong> Every decode to date has run
+through our own resvg + ZXing pipeline, against an SVG we rendered. Nobody
+else&#39;s JSON parser, base64 decoder, SVG rasteriser or CDN has touched it.</p>
+</li>
+<li><p><strong>A hard external limit exists and we had not found it.</strong> Alchemy&#39;s NFT API
+documents that a <code>tokenURI</code> response over <strong>30,000 bytes</strong> returns a broken
+token URI error. Our worst case is 10,066 bytes, so we pass -- but this is the
+first real third-party number anyone has produced for this project, and it
+belongs in the budget table next to the 20,000-byte self-imposed limit.</p>
+</li>
+<li><p><strong>The payload is not realistic.</strong> Every bitmap ever solved uses
+<code>example.com</code> and token ids 1-26. The real domain changes the payload length,
+which changes the QArt solve, the heart match rate and potentially the decode
+margin. A longer domain is not a cosmetic difference.</p>
+</li>
+<li><p><strong><code>Pulse</code>&#39;s <code>animation_url</code> is still unbudgeted and unbuilt.</strong> Two of the
+seven Marks do not draw. This is a build gap carried since Task 7 and it is
+the operator&#39;s call whether it belongs in Phase 0.</p>
+</li>
+</ol>
+<hr>
+<h2>The plan</h2>
+<p>Three phases. Nothing here spends real money, and nothing is irreversible.
+Phase 1 is offline. Phase 2 uses Base Sepolia, where the deployer already holds
+<strong>0.050 ETH</strong> against a measured run cost of 0.0000356 ETH -- roughly 1,400 runs
+of headroom, so no faucet trip is needed.</p>
+<h3>Phase 1 -- close the blind spot and control the raster (offline, free)</h3>
+<ol>
+<li><p><strong>Extend the decode sweep above 900px.</strong> Add 1100, 1200, 1400 and 1600 to
+<code>DECODE_SIZES</code> in <code>tools/state-matrix.mjs</code>, and run the extremes batch. Run
+it in batches through <code>~/scripts/safe-build.sh</code>, per the memory rule -- this
+is exactly the shape of sweep that took the box down on 2026-08-28.
+<em>Expected:</em> clean, because the palette fix was verified at 1600px by hand
+during diagnosis. If it is not clean, that is a finding and I stop and report
+rather than fix it silently.</p>
+</li>
+<li><p><strong>Cross state against bitmap.</strong> Extend the offline sweep to render each state
+against several distinct token bitmaps rather than only token 1&#39;s, at the
+sizes third parties actually pick (256, 500, 1000, 1080) as well as our exact
+multiples. Report the failure rate as a fraction, the way sweep D did.</p>
+</li>
+<li><p><strong>Give the SVG an intrinsic pixel size.</strong> Emit
+<code>width=&quot;{canvas*K}&quot; height=&quot;{canvas*K}&quot;</code> from both renderers, K chosen so the
+result sits in a sensible range (K=20 gives 1020px at year zero, 1780px at
+the cap). Measure the cost in bytes and gas -- expected to be about 30 bytes
+and a few thousand gas, but it gets measured, not assumed. Re-run the
+differential and the full suite; both renderers must stay byte-for-byte
+identical.</p>
+</li>
+<li><p><strong>Re-run steps 1 and 2 against the sized SVG</strong> and state plainly whether the
+fractional-resonance failures disappear. This is the measurement that decides
+whether step 3 was worth its bytes.</p>
+</li>
+</ol>
+<h3>Phase 2 -- put it in front of third parties (Base Sepolia, free)</h3>
+<ol start="5">
+<li><p><strong>Deploy a fresh soak contract to Base Sepolia</strong> carrying the current palette
+and the sized SVG, with the same 26 states, and <strong>without applying sunset</strong> --
+the existing soak contract <code>0xfd8A...2190</code> was sunset at the end of Task 10b,
+so every token on it is frozen and no longer shows its true state.</p>
+</li>
+<li><p><strong>Drive Alchemy&#39;s NFT API against it.</strong> For all 26 tokens: fetch the
+metadata, confirm the JSON parses and the attributes survive, then pull the
+Cloudinary-cached image at the 256px thumbnail, at <code>/convert-png</code>, and at
+several explicit resizes. Rasterise nothing ourselves -- take <em>their</em> PNG,
+and run ZXing on it, checking each token decodes to its own URL. This is the
+nearest available analogue to what OpenSea does, and it is the whole point of
+the phase. Poll rather than read once; a cache that has not warmed is not a
+failure.</p>
+</li>
+<li><p><strong>Check Basescan&#39;s rendering</strong> of the same contract as a second, independent
+consumer. Capture what it produces and decode it the same way.</p>
+</li>
+<li><p><strong>Exercise ERC-4906 end to end.</strong> Change a token&#39;s state, emit the event,
+and confirm the indexer&#39;s cached image actually changes -- polling, because a
+read straight after a write returned stale state on Sepolia during Task 10b.
+This rehearses the exact sequence Task 11 has to get right on OpenSea, where
+a mistake costs a redeploy.</p>
+</li>
+<li><p><strong>Record the 30,000-byte Alchemy limit</strong> in <code>docs/phase0-results.md</code> beside
+the existing budget table.</p>
+</li>
+</ol>
+<h3>Phase 3 -- the two open decisions (no spend, the operator&#39;s call)</h3>
+<ol start="10">
+<li><p><strong>Re-solve QArt at a realistic payload.</strong> Pick a plausible real domain
+length and 4-5 digit token ids, re-solve, and report the heart match rate
+and decode margin against the <code>example.com</code> baseline. If the match rate
+falls materially, that is a design input, not a bug -- and better known now
+than after mainnet.</p>
+</li>
+<li><p><strong>Bring <code>Pulse</code>&#39;s <code>animation_url</code> to the operator as a decision</strong> with a measured
+byte and gas cost for the cheapest workable version, rather than leaving it
+on the open list for a fourth task running.</p>
+</li>
+<li><p><strong>Then, and only then, Task 11.</strong> Unchanged, still requiring explicit
+approval and a freshly measured cost on the day.</p>
+</li>
+</ol>
+<hr>
+<h2>Trade-offs, stated up front</h2>
+<ul>
+<li><strong>This delays Task 11 by roughly a session.</strong> That is the cost. The return is
+that the eight-cent mainnet deploy gets to answer one question instead of
+discovering three, and a redeploy caused by a bug we could have caught costs
+more than the delay does.</li>
+<li><strong>Step 3 changes the shipped image bytes.</strong> It is a real change to a settled
+artefact, so it is measured and put in front of the operator before it stands. If the
+measurement says it does not help, it comes back out.</li>
+<li><strong>None of this proves OpenSea works.</strong> Two third parties agreeing raises
+confidence; it does not substitute for Task 11. I will not claim otherwise in
+the results.</li>
+<li><strong>Nothing here is irreversible.</strong> No real funds, no mainnet, no deletions.</li>
+</ul>
+<h2>operator-manual steps</h2>
+<p>After completing any operator-only step, tell Claude so it can update memory
+immediately.</p>
+<ul>
+<li><strong>None in Phase 1 or 2.</strong> The Sepolia key, RPC URL and Etherscan key are in
+place and funded; Alchemy&#39;s NFT API uses the same key already in the secrets
+file, read by script and never printed.</li>
+<li><strong>Phase 3, step 10</strong> needs one input from the operator: the domain to solve against, or
+a confirmed placeholder length if the domain is still undecided.</li>
+<li><strong>Task 11</strong> keeps both existing gates: the two secrets, and explicit approval
+for the mainnet spend.</li>
+</ul>
+<h2>Sources checked today</h2>
+<ul>
+<li>OpenSea, <em>Farewell testnets</em> -- <a href="https://support.opensea.io/en/articles/11833955-farewell-testnets">https://support.opensea.io/en/articles/11833955-farewell-testnets</a>
+(confirmed live: <code>testnets.opensea.io</code> 307-redirects here; ended 23 July 2025)</li>
+<li>OpenSea metadata standards -- <a href="https://docs.opensea.io/docs/metadata-standards">https://docs.opensea.io/docs/metadata-standards</a></li>
+<li>Alchemy NFT API FAQ, image caching, <code>/convert-png</code>, the 30,000-byte limit --
+<a href="https://www.alchemy.com/docs/reference/nft-api-faq">https://www.alchemy.com/docs/reference/nft-api-faq</a></li>
+<li>Alchemy NFT API, Base Sepolia among supported networks --
+<a href="https://www.alchemy.com/docs/reference/nft-api-endpoints/nft-api-endpoints/nft-metadata-endpoints/get-nft-metadata-v-3">https://www.alchemy.com/docs/reference/nft-api-endpoints/nft-api-endpoints/nft-metadata-endpoints/get-nft-metadata-v-3</a></li>
+<li>ERC-4906 -- <a href="https://eips.ethereum.org/EIPS/eip-4906">https://eips.ethereum.org/EIPS/eip-4906</a></li>
+<li>MetaMask mobile does not render base64 data-URI NFT images; closed as not
+planned -- <a href="https://github.com/MetaMask/metamask-mobile/issues/6200">https://github.com/MetaMask/metamask-mobile/issues/6200</a>
+(recorded as a known consumer limitation, not something this plan fixes)</li>
+</ul>
+
+</body>
+</html>

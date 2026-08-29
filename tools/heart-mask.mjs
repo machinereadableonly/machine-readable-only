@@ -8,8 +8,7 @@
 // module against this one mask.
 import { writeFileSync } from "node:fs";
 import { heartTarget } from "./heart-target.mjs";
-import { packModules } from "./qart.mjs";
-import { VERSION_SIZE } from "./token-bitmap.mjs";
+import { packModules, VERSION_SIZE } from "./qart.mjs";
 
 export const SIZE = VERSION_SIZE;
 export const OUT = "../contracts/src/render/HeartMask.sol";
