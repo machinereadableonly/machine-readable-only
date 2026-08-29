@@ -366,6 +366,272 @@ and an ordinary token sits comfortably inside it.</p>
 gas for base64 and JSON. If that proves too little, <code>MAX_RINGS</code> comes down --
 <code>RingCurve.t.sol</code> records what each year costs, so the replacement value can be
 read straight off the curve without re-deriving anything.</p>
+<hr>
+<h2>Task 7: the wrapper, the Marks, and the ring cap</h2>
+<p>Measured 2026-08-28 and 2026-08-29 with three temporary probes (<code>B64Probe</code>,
+<code>WrapperProbe</code>, <code>MarkCostProbe</code>), deleted once these numbers were recorded.
+Every figure is the complete <code>tokenURI</code> for one token under <code>via_ir</code>.</p>
+<h3>The encoding is settled: base64 the SVG, serve the JSON as utf-8</h3>
+<p>Three routes for the same token, measured at the old 80-ring canvas:</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th align="right">Bytes</th>
+<th align="right">Gas</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>base64 SVG inside a utf-8 JSON</td>
+<td align="right">14,780</td>
+<td align="right">2,375,511</td>
+</tr>
+<tr>
+<td>utf-8 SVG, percent-escaped</td>
+<td align="right">11,139</td>
+<td align="right">5,846,742</td>
+</tr>
+<tr>
+<td>base64 SVG inside a base64 JSON</td>
+<td align="right">19,804</td>
+<td align="right">3,210,443</td>
+</tr>
+</tbody></table>
+<p>Base64 wins on gas by a factor of 2.5 despite being the largest but one on
+bytes, because a per-byte escape loop in Solidity costs far more than Solady&#39;s
+word-wise encoder. The spec left this open pending the spike; the spike has
+answered it.</p>
+<p>A raw <code>#</code> cannot appear anywhere in the URI. The whole <code>tokenURI</code> is itself a
+URI, so a raw hash starts the fragment and truncates the JSON -- measured,
+<code>JSON.parse</code> fails at position 31. Base64 hides every <code>#</code> inside the SVG,
+including Bloom&#39;s <code>url(#b)</code>; the only one left is in the name, written <code>%23</code>.</p>
+<h3>The Marks are nearly free</h3>
+<p>Each Mark against a bare token, at the ten-ring cap:</p>
+<table>
+<thead>
+<tr>
+<th>Mark</th>
+<th align="right">Gas delta</th>
+<th align="right">Bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Vein</td>
+<td align="right">-739</td>
+<td align="right">+6</td>
+</tr>
+<tr>
+<td>Halo</td>
+<td align="right">+3,021</td>
+<td align="right">+6</td>
+</tr>
+<tr>
+<td>Crown</td>
+<td align="right">+4,419</td>
+<td align="right">+7</td>
+</tr>
+<tr>
+<td>Voice</td>
+<td align="right">+4,601</td>
+<td align="right">+83</td>
+</tr>
+<tr>
+<td>Bloom</td>
+<td align="right">+11,456</td>
+<td align="right">+219</td>
+</tr>
+<tr>
+<td>All five together</td>
+<td align="right">+5,127</td>
+<td align="right">+206</td>
+</tr>
+</tbody></table>
+<p>Vein and the combined figure measure below the sum of their parts because a
+Mark substitutes one colour string for another of the same length; the
+differences are noise, not savings. The point stands: Marks are colour
+substitutions into paths that already exist, not new geometry.</p>
+<h3>The ring cap: 80 did not fit, and would not have been worth it if it had</h3>
+<p>At the old cap the complete <code>tokenURI</code> with every drawn Mark came to
+<strong>2,434,094 gas</strong>, over the 2,000,000 hard limit. The limit broke between 37 and
+38 rings. Bytes were never the constraint -- even 80 rings came to 15,307.</p>
+<p>Splitting the per-ring cost showed where it lived:</p>
+<table>
+<thead>
+<tr>
+<th>Rings</th>
+<th align="right">Frame and rings</th>
+<th align="right">Code block</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td align="right">458,969</td>
+<td align="right">706,458</td>
+</tr>
+<tr>
+<td>20</td>
+<td align="right">596,264</td>
+<td align="right">712,414</td>
+</tr>
+<tr>
+<td>40</td>
+<td align="right">730,622</td>
+<td align="right">712,414</td>
+</tr>
+<tr>
+<td>80</td>
+<td align="right">1,001,486</td>
+<td align="right">749,285</td>
+</tr>
+</tbody></table>
+<p>From 1 ring to 80 the frame grew by 542,517 gas and the code block by 42,827.
+Ninety-three per cent of the cost was the frame renderer&#39;s own row walk, not the
+larger canvas pushing coordinates up a digit.</p>
+<p>That made a cheaper ring encoding look worth pursuing to defend a cap of 80.
+Rendering the same token at every ring count (<code>tools/ring-sheet.mjs</code>) settled it
+differently: the rings stop being <em>readable</em> long before they stop fitting.</p>
+<table>
+<thead>
+<tr>
+<th>Rings</th>
+<th align="right">Canvas</th>
+<th align="right">Heart as % of canvas</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td align="right">51</td>
+<td align="right">88%</td>
+</tr>
+<tr>
+<td>5</td>
+<td align="right">69</td>
+<td align="right">65%</td>
+</tr>
+<tr>
+<td>10</td>
+<td align="right">89</td>
+<td align="right">51%</td>
+</tr>
+<tr>
+<td>20</td>
+<td align="right">91 (old geometry)</td>
+<td align="right">49%</td>
+</tr>
+<tr>
+<td>80</td>
+<td align="right">211 (old geometry)</td>
+<td align="right">21%</td>
+</tr>
+</tbody></table>
+<p>An 80-ring token is a red field with a stamp in the middle, and it does not
+decode at a 300px thumbnail at all. <strong>The cap is now 10</strong>, decided on that
+evidence rather than on what fits.</p>
+<h3>Making the rings countable cost more than the cap saved, until it did not</h3>
+<p>Rings drawn edge to edge merge into one slab of colour, so the year count cannot
+be read off the image. Separating them with a blank cell fixed that and broke
+the byte budget: away from a ring&#39;s own edge a row crosses every ring
+separately, so ten rings put twenty one-cell runs on every row. The frame path
+alone measured <strong>20,531 bytes</strong>, over the 20,000 limit for the whole <code>tokenURI</code>.</p>
+<p>Rings are now emitted as four bars each, outside the row walk -- four runs per
+ring whatever the canvas size. <code>GAP</code> guarantees a blank cell between the
+innermost ring and the day frame, so no run here could ever have merged with a
+frame run, and the differential test against the JS reference confirms no pixel
+moved.</p>
+<h3>Where the budget stands: Task 7 complete</h3>
+<p>Measured by <code>Renderer.t.sol</code> on the assembled contract, not by a probe. Run
+<code>forge test --match-test test_theWorstCaseStaysInsideTheHardLimit -vv</code> to
+reproduce.</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th align="right">Gas</th>
+<th align="right">Bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Day one</td>
+<td align="right">1,383,723</td>
+<td align="right">8,616</td>
+</tr>
+<tr>
+<td>Whole, one ring</td>
+<td align="right">1,385,441</td>
+<td align="right">8,665</td>
+</tr>
+<tr>
+<td>Ten years, at the cap</td>
+<td align="right">1,523,902</td>
+<td align="right">9,531</td>
+</tr>
+<tr>
+<td><strong>Cap and every Mark (worst case)</strong></td>
+<td align="right"><strong>1,547,524</strong></td>
+<td align="right"><strong>9,882</strong></td>
+</tr>
+</tbody></table>
+<table>
+<thead>
+<tr>
+<th></th>
+<th align="right">Gas</th>
+<th align="right">Bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Target</td>
+<td align="right">1,000,000</td>
+<td align="right">5,000</td>
+</tr>
+<tr>
+<td>Worst case</td>
+<td align="right">1,547,524</td>
+<td align="right">9,882</td>
+</tr>
+<tr>
+<td>Hard limit</td>
+<td align="right">2,000,000</td>
+<td align="right">20,000</td>
+</tr>
+<tr>
+<td>Left for the token contract</td>
+<td align="right">452,476</td>
+<td align="right">10,118</td>
+</tr>
+</tbody></table>
+<p><strong>The 1,000,000 gas / 5,000 byte target is missed and is recorded as missed.</strong>
+The 2,000,000 / 20,000 hard limit has real headroom in every state, including
+the worst one -- where the previous eighty-ring cap was over it outright.</p>
+<p>These figures are slightly above the probe&#39;s because the assembled renderer
+emits two things the probe did not: the <code>Sunset</code> attribute and the <code>Marks</code>
+array.</p>
+<h3>Correctness</h3>
+<ul>
+<li><code>Renderer.t.sol</code> diffs the complete <code>tokenURI</code> against
+<code>tools/render-token.mjs</code> across seven life stages -- day one, day 200, whole,
+whole and lapsed, the ring cap, every Mark at once, and a sealed token -- by
+keccak256 and byte length. Regenerate with <code>node tools/token-uri-fixture.mjs</code>.</li>
+<li>The lapse case caught a real divergence: the JS renderer had a lapse function
+it never called, so its image never paled while the contract&#39;s did.</li>
+<li>No raw <code>#</code> survives into the URI, asserted byte by byte on a Bloom token,
+whose <code>url(#b)</code> reference is the easiest one to leak.</li>
+<li>100% line and statement coverage on every file under <code>src/render</code>.</li>
+<li><code>Renderer</code> is 10,951 bytes with 13,625 bytes of margin, deployed to a local
+anvil and called back over RPC: <code>tokenURI</code> returned 9,974 bytes for a token at
+the cap wearing six Marks.</li>
+</ul>
+<h3>What Task 7 leaves open</h3>
+<ul>
+<li><strong><code>TokenView</code> has no <code>parent</code> field.</strong> The spec&#39;s attribute list wants one;
+the struct holds <code>generation</code> and <code>seedsGiven</code> only. Emitting an invented
+value would put a number on chain that nothing produced, so the renderer emits
+what the struct holds and the gap passes to the token contract in Task 8.</li>
+<li><strong>Pulse&#39;s <code>animation_url</code> is unbudgeted and unbuilt.</strong> The spec wants an
+on-chain <code>data:text/html;base64</code> page carrying a second copy of the SVG plus a
+SMIL animation, which roughly doubles tokenURI bytes. Phase 0&#39;s job is the
+static image; this needs measuring separately before it is decided.</li>
+</ul>
 
 </body>
 </html>

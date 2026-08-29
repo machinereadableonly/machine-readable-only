@@ -58,8 +58,16 @@ return visits, so the artwork is the agent's own history of coming back.
   access-control revert gets a test, and `forge build --sizes` must show
   positive runtime margin under 24,576 bytes before anything is called
   deploy-ready.
-- Builds and any heavy Node work go through `~/scripts/build-project.sh` or
-  `~/scripts/safe-build.sh` -- an uncapped build kills the whole tmux pane.
+- **Builds AND any long-running compute go through `~/scripts/build-project.sh`
+  or `~/scripts/safe-build.sh`.** The wrapper takes any command, not just a
+  build: `~/scripts/safe-build.sh node ./sweep.mjs`.
+  This project's normal work is exactly the shape that breaks the box --
+  rasterising SVGs and decoding them in bulk. On 2026-08-28 a bare
+  `node -e` sweep (400 renders x 14 pixel sizes) reached 6.28 GB resident,
+  hit the 7.8 GB box limit, and destroyed this tmux session. The rule was
+  already here; it said "builds", and that was not a build.
+  Rule of thumb: if a command is slow enough that you are about to background
+  it, it is big enough to cap. Split bulk sweeps into batches as well.
 - Use `/bin/grep`, never bare `grep`.
 - Foundry needs `export PATH=$HOME/.foundry/bin:$PATH`; Node needs
   `source ~/.nvm/nvm.sh`. Non-interactive shells have neither on PATH.

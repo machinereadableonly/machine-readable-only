@@ -28,20 +28,26 @@ export const GHOST = "#f4eef0";   // frame cells not yet earned
 export const FIELD = "#ffffff";
 
 // Mark colours. Each Mark claims one surface and no two claim the same one, so
-// a token wearing all five is still legible. Every value here was decode-tested
-// with ZXing on the real rendered token at 900, 700, 500, 350 and 250 px --
-// contrast arithmetic alone is not sufficient, as the noise ink sits at 4.54
-// against white and so is already at the floor before any tint is applied.
+// a token wearing all five is still legible. Every value here is decode-tested
+// with ZXing on the real rendered token at 900, 700, 500 and 350 px by
+// render-token.test.mjs -- contrast arithmetic alone is not sufficient, as the
+// noise ink sits at 4.54 against white and so is already at the floor before
+// any tint is applied.
 export const VEIN_GHOST = "#e3ccd3";  // Vein: the year ahead, visible from day one
 export const VOICE_QUIET = "#fdf3e3"; // Voice: the quiet zone hugging the code
 export const HALO_FIELD = "#fbeff2";  // Halo: the whole field
 export const CROWN_GOLD = "#b8860b";  // Crown: frame and year rings
 export const BLOOM_TO = "#c8102e";    // Bloom: the far end of the heart gradient
 
-// The deepest quiet-zone tint that still decodes is #f9eaef; #f7e3e8 fails at
-// 700 and 500 px. VOICE_QUIET is a step back from that floor and a different
-// hue, so Voice reads as amber against Halo's rose rather than as a slightly
-// deeper pink that would vanish when both Marks are worn at once.
+// Re-measured 2026-08-29, correcting an earlier note in this file that claimed
+// #f9eaef was the deepest tint that still decodes. It is not: #f9eaef fails at
+// 900 px, and #f7e3e8 fails at 900, 700 and 500. The shipped #fdf3e3 decodes at
+// all four sizes, asserted in render-token.test.mjs so the margin cannot be
+// tightened without the suite noticing.
+//
+// It is also a different hue from Halo's rose, so Voice reads as amber rather
+// than as a slightly deeper pink that would vanish when both Marks are worn at
+// once.
 export const MARKS = ["vein", "pulse", "voice", "bloom", "halo", "crown", "singularity"];
 
 export const tierColour = streak => TIERS.find(t => streak >= t.min).colour;
@@ -143,17 +149,25 @@ export function ringBars(rings, canvas) {
 /**
  * @param modules  the code's module bits, row major, size*size
  * @param want     the heart target bits, same shape, used to split heart from noise
- * @param state    { level, streak, years, marks }
+ * @param state    { level, streak, years, marks, lastDay, today, resting, sunset }
  */
 export function renderSvg(modules, want, size, state) {
-  const { level = 0, streak = 0, years: rawYears = 0, marks = [] } = state;
+  const {
+    level = 0, streak = 0, years: rawYears = 0, marks = [],
+    lastDay = 0, today = 0, resting = false, sunset = false,
+  } = state;
   const years = ringsFor(rawYears);
   const canvas = canvasFor(years);
   const frameOff = ringSpan(years) + GAP;   // where the 49-grid frame starts
   const blockOff = frameOff + THICK;     // where the 45-cell block starts
   const codeOff = blockOff + QUIET;      // where the modules start
 
-  const colour = tierColour(streak);
+  // A token that has stopped checking in pales, walking back down the tier
+  // ladder. A sealed or sunset token does not: its image is final, so the
+  // stored streak colours it forever. Both branches must mirror Palette.tier
+  // and Palette.lapsed in Solidity exactly.
+  const frozen = resting || sunset;
+  const colour = frozen ? tierColour(streak) : lapsedColour(streak, lastDay, today);
   const gold = marks.includes("crown") ? CROWN_GOLD : null;
   const ghost = marks.includes("vein") ? VEIN_GHOST : GHOST;
   const field = marks.includes("halo") ? HALO_FIELD : FIELD;
@@ -258,17 +272,20 @@ export function markNames(marks) {
  * @param state { tokenId, level, streak, lastDay, mintDay, today, generation,
  *                seedsGiven, resting, marks }
  */
+// The attributes are exactly what TokenView carries, and no more. The spec's
+// list also wants `parent`, but the struct has no such field -- it holds
+// `generation` and `seedsGiven` only. Inventing a value here would put a number
+// on chain that nothing produced, so the gap is left for the token contract in
+// Task 8 to close by adding the field.
 export function tokenUri(modules, want, size, state) {
   const {
     tokenId = 0, level = 0, streak = 0, lastDay = 0, mintDay = 0, today = 0,
-    generation = 0, seedsGiven = 0, resting = false, marks = [],
+    generation = 0, seedsGiven = 0, resting = false, sunset = false, marks = [],
   } = state;
 
   const years = Math.floor(level / DAY_CELLS);
-  // A resting or sunset token freezes: the stored streak colours it forever
-  // rather than the lapse walking it back down the ladder.
-  const streakNow = resting ? streak : streak;
-  const svg = renderSvg(modules, want, size, { level, streak, years, marks });
+  const svg = renderSvg(modules, want, size,
+    { level, streak, years, marks, lastDay, today, resting, sunset });
   const image = Buffer.from(svg, "utf8").toString("base64");
 
   const json = "{"
@@ -278,7 +295,7 @@ export function tokenUri(modules, want, size, state) {
     + `"attributes":[`
     + [
         num("Level", level),
-        num("Streak", streakNow),
+        num("Streak", streak),
         num("Years", ringsFor(years)),
         str("Whole", level >= DAY_CELLS ? "yes" : "no"),
         num("Mint Day", mintDay),
@@ -286,6 +303,7 @@ export function tokenUri(modules, want, size, state) {
         num("Generation", generation),
         num("Seeds Given", seedsGiven),
         str("Resting", resting ? "yes" : "no"),
+        str("Sunset", sunset ? "yes" : "no"),
         attr("Marks", markNames(marks)),
       ].join(",")
     + "]}";

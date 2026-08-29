@@ -213,3 +213,152 @@ The single open risk is the ring cap. An eighty-year-old token leaves 317,118
 gas for base64 and JSON. If that proves too little, `MAX_RINGS` comes down --
 `RingCurve.t.sol` records what each year costs, so the replacement value can be
 read straight off the curve without re-deriving anything.
+
+---
+
+## Task 7: the wrapper, the Marks, and the ring cap
+
+Measured 2026-08-28 and 2026-08-29 with three temporary probes (`B64Probe`,
+`WrapperProbe`, `MarkCostProbe`), deleted once these numbers were recorded.
+Every figure is the complete `tokenURI` for one token under `via_ir`.
+
+### The encoding is settled: base64 the SVG, serve the JSON as utf-8
+
+Three routes for the same token, measured at the old 80-ring canvas:
+
+| Route | Bytes | Gas |
+| --- | ---: | ---: |
+| base64 SVG inside a utf-8 JSON | 14,780 | 2,375,511 |
+| utf-8 SVG, percent-escaped | 11,139 | 5,846,742 |
+| base64 SVG inside a base64 JSON | 19,804 | 3,210,443 |
+
+Base64 wins on gas by a factor of 2.5 despite being the largest but one on
+bytes, because a per-byte escape loop in Solidity costs far more than Solady's
+word-wise encoder. The spec left this open pending the spike; the spike has
+answered it.
+
+A raw `#` cannot appear anywhere in the URI. The whole `tokenURI` is itself a
+URI, so a raw hash starts the fragment and truncates the JSON -- measured,
+`JSON.parse` fails at position 31. Base64 hides every `#` inside the SVG,
+including Bloom's `url(#b)`; the only one left is in the name, written `%23`.
+
+### The Marks are nearly free
+
+Each Mark against a bare token, at the ten-ring cap:
+
+| Mark | Gas delta | Bytes |
+| --- | ---: | ---: |
+| Vein | -739 | +6 |
+| Halo | +3,021 | +6 |
+| Crown | +4,419 | +7 |
+| Voice | +4,601 | +83 |
+| Bloom | +11,456 | +219 |
+| All five together | +5,127 | +206 |
+
+Vein and the combined figure measure below the sum of their parts because a
+Mark substitutes one colour string for another of the same length; the
+differences are noise, not savings. The point stands: Marks are colour
+substitutions into paths that already exist, not new geometry.
+
+### The ring cap: 80 did not fit, and would not have been worth it if it had
+
+At the old cap the complete `tokenURI` with every drawn Mark came to
+**2,434,094 gas**, over the 2,000,000 hard limit. The limit broke between 37 and
+38 rings. Bytes were never the constraint -- even 80 rings came to 15,307.
+
+Splitting the per-ring cost showed where it lived:
+
+| Rings | Frame and rings | Code block |
+| --- | ---: | ---: |
+| 1 | 458,969 | 706,458 |
+| 20 | 596,264 | 712,414 |
+| 40 | 730,622 | 712,414 |
+| 80 | 1,001,486 | 749,285 |
+
+From 1 ring to 80 the frame grew by 542,517 gas and the code block by 42,827.
+Ninety-three per cent of the cost was the frame renderer's own row walk, not the
+larger canvas pushing coordinates up a digit.
+
+That made a cheaper ring encoding look worth pursuing to defend a cap of 80.
+Rendering the same token at every ring count (`tools/ring-sheet.mjs`) settled it
+differently: the rings stop being *readable* long before they stop fitting.
+
+| Rings | Canvas | Heart as % of canvas |
+| --- | ---: | ---: |
+| 0 | 51 | 88% |
+| 5 | 69 | 65% |
+| 10 | 89 | 51% |
+| 20 | 91 (old geometry) | 49% |
+| 80 | 211 (old geometry) | 21% |
+
+An 80-ring token is a red field with a stamp in the middle, and it does not
+decode at a 300px thumbnail at all. **The cap is now 10**, decided on that
+evidence rather than on what fits.
+
+### Making the rings countable cost more than the cap saved, until it did not
+
+Rings drawn edge to edge merge into one slab of colour, so the year count cannot
+be read off the image. Separating them with a blank cell fixed that and broke
+the byte budget: away from a ring's own edge a row crosses every ring
+separately, so ten rings put twenty one-cell runs on every row. The frame path
+alone measured **20,531 bytes**, over the 20,000 limit for the whole `tokenURI`.
+
+Rings are now emitted as four bars each, outside the row walk -- four runs per
+ring whatever the canvas size. `GAP` guarantees a blank cell between the
+innermost ring and the day frame, so no run here could ever have merged with a
+frame run, and the differential test against the JS reference confirms no pixel
+moved.
+
+### Where the budget stands: Task 7 complete
+
+Measured by `Renderer.t.sol` on the assembled contract, not by a probe. Run
+`forge test --match-test test_theWorstCaseStaysInsideTheHardLimit -vv` to
+reproduce.
+
+| Token | Gas | Bytes |
+| --- | ---: | ---: |
+| Day one | 1,383,723 | 8,616 |
+| Whole, one ring | 1,385,441 | 8,665 |
+| Ten years, at the cap | 1,523,902 | 9,531 |
+| **Cap and every Mark (worst case)** | **1,547,524** | **9,882** |
+
+| | Gas | Bytes |
+| --- | ---: | ---: |
+| Target | 1,000,000 | 5,000 |
+| Worst case | 1,547,524 | 9,882 |
+| Hard limit | 2,000,000 | 20,000 |
+| Left for the token contract | 452,476 | 10,118 |
+
+**The 1,000,000 gas / 5,000 byte target is missed and is recorded as missed.**
+The 2,000,000 / 20,000 hard limit has real headroom in every state, including
+the worst one -- where the previous eighty-ring cap was over it outright.
+
+These figures are slightly above the probe's because the assembled renderer
+emits two things the probe did not: the `Sunset` attribute and the `Marks`
+array.
+
+### Correctness
+
+- `Renderer.t.sol` diffs the complete `tokenURI` against
+  `tools/render-token.mjs` across seven life stages -- day one, day 200, whole,
+  whole and lapsed, the ring cap, every Mark at once, and a sealed token -- by
+  keccak256 and byte length. Regenerate with `node tools/token-uri-fixture.mjs`.
+- The lapse case caught a real divergence: the JS renderer had a lapse function
+  it never called, so its image never paled while the contract's did.
+- No raw `#` survives into the URI, asserted byte by byte on a Bloom token,
+  whose `url(#b)` reference is the easiest one to leak.
+- 100% line and statement coverage on every file under `src/render`.
+- `Renderer` is 10,951 bytes with 13,625 bytes of margin, deployed to a local
+  anvil and called back over RPC: `tokenURI` returned 9,974 bytes for a token at
+  the cap wearing six Marks.
+
+### What Task 7 leaves open
+
+- **`TokenView` has no `parent` field.** The spec's attribute list wants one;
+  the struct holds `generation` and `seedsGiven` only. Emitting an invented
+  value would put a number on chain that nothing produced, so the renderer emits
+  what the struct holds and the gap passes to the token contract in Task 8.
+- **Pulse's `animation_url` is unbudgeted and unbuilt.** The spec wants an
+  on-chain `data:text/html;base64` page carrying a second copy of the SVG plus a
+  SMIL animation, which roughly doubles tokenURI bytes. Phase 0's job is the
+  static image; this needs measuring separately before it is decided.

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE,
-         MAX_RINGS, ringsFor, ringSpan } from "../render-token.mjs";
+         MAX_RINGS, ringsFor, ringSpan, VOICE_QUIET } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
 const PAYLOAD = payloadFor("example.com", 1);
@@ -186,6 +186,35 @@ test("the worst case a token can reach still scans", () => {
     const got = scanResult(svg, px);
     assert.ok(got.ok, `the worst case failed at ${px}px: ${got.why}`);
     assert.equal(got.destination, DESTINATION, `the destination changed at ${px}px`);
+  }
+});
+
+test("the shipped quiet-zone tint keeps its decode margin", () => {
+  // Measured 2026-08-29. An earlier comment in render-token.mjs claimed #f9eaef
+  // was the deepest tint that still decodes; it is not, it fails at 900px. This
+  // pins the shipped value so the margin cannot be quietly tightened.
+  const at = tint => {
+    const svg = render({ level: 200, streak: 45, years: 0, marks: ["voice"] })
+      .replace(new RegExp(VOICE_QUIET, "g"), tint);
+    return [900, 700, 500, 350].filter(px => !scanResult(svg, px).ok);
+  };
+  assert.deepEqual(at(VOICE_QUIET), [], "the shipped tint must decode at every size");
+  assert.ok(at("#f9eaef").length > 0, "#f9eaef is not a safe floor and must not be adopted");
+});
+
+test("a lapse pales the image, and a sealed token never pales", () => {
+  // The bug this covers: lapsedColour existed and was unit-tested, but
+  // renderSvg called tierColour and the lapse never reached the picture, while
+  // Palette.lapsed did apply it on the Solidity side.
+  const base = { level: 200, streak: 100, years: 0, lastDay: 1000 };
+  const fresh = render({ ...base, today: 1000 });
+  const lapsed = render({ ...base, today: 1040 });
+  assert.notEqual(fresh, lapsed, "forty days without a check-in should pale the image");
+  assert.ok(lapsed.includes(tierColour(0)), "a long lapse returns to the start tier");
+
+  for (const freeze of ["resting", "sunset"]) {
+    assert.equal(render({ ...base, today: 1040, [freeze]: true }), fresh,
+      `a ${freeze} token should keep the colour it was sealed with`);
   }
 });
 
