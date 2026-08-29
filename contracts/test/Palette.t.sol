@@ -37,13 +37,33 @@ contract PaletteTest is Test {
     function test_theStartTierIsNotNeutral() public pure {
         // A neutral first tier is unreadable: it used to be #6f6f6f against a
         // #767676 noise, 1.11:1 apart and the same hue, so a new token showed no
-        // heart at all. Every tier separates from the noise by hue, not weight.
+        // heart at all. Every tier separates from the noise by hue, not weight --
+        // and since 2026-08-29 by hue ALONE, the two being matched in luminance
+        // on purpose. See Palette's header and PaletteNoise.t.sol.
         assertColour(Palette.tier(0), START, "start tier must carry a trace of rose");
-        assertTrue(!_eq(Palette.tier(0), Palette.noise()), "start tier equals the noise");
+        assertTrue(
+            !_eq(Palette.colourAt(0), Palette.noiseAt(0)),
+            "the start tier and its noise are the same ink -- no heart would show"
+        );
+    }
+
+    /// @dev Every rung must have a distinct pair. Matching them in luminance is
+    /// deliberate; making them the same colour would erase the heart.
+    function test_noTierIsTheSameInkAsItsNoise() public pure {
+        for (uint256 i; i < Palette.TIER_COUNT; ++i) {
+            assertTrue(
+                !_eq(Palette.colourAt(i), Palette.noiseAt(i)),
+                "a tier and its noise are the same ink"
+            );
+        }
     }
 
     function test_groundTones() public pure {
-        assertColour(Palette.noise(), "#767676", "noise");
+        // The noise is no longer one colour; it is one per rung, matched in
+        // luminance to its tier. PaletteNoise.t.sol asserts the match itself,
+        // as a property. These are the values that match today.
+        assertColour(Palette.noiseAt(0), "#5f5f5f", "noise at the start tier");
+        assertColour(Palette.noiseAt(4), "#4a4a4a", "noise at the top tier");
         assertColour(Palette.ghost(), "#f4eef0", "ghost");
     }
 

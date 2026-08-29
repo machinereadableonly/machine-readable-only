@@ -23,7 +23,21 @@ export const TIERS = [
 ];
 // The noise cannot be lightened to make room: #767676 is the lightest tone that
 // still decodes at every size. Measured, #828282 and up fail from 500px.
-export const NOISE = "#767676";   // uncontrolled modules, 4.54 against white
+// The noise is one ink PER TIER, matched in luminance to the heart at that
+// tier, so the two separate by hue alone. Measured 2026-08-29: with a single
+// #767676 noise (luma 118) against a heart running 74 to 104, a bare token
+// stopped decoding at 1200px and a fully marked one at 900px, while a plain
+// black-on-white control of the same code passed at every size to 1600. It is
+// the luminance GAP that does it, not darkness -- luma 74 against 74 passes at
+// 1600, luma 17 against 74 fails. Index n here pairs with TIERS[n] reversed;
+// noiseFor() does the pairing so no caller has to.
+export const NOISE_BY_TIER = [
+  "#4a4a4a",   // matches #c8102e, luma 74
+  "#545454",   // matches #bd2242, luma 84
+  "#5e5e5e",   // matches #a83a55, luma 94
+  "#686868",   // matches #8e5566, luma 104
+  "#5f5f5f",   // matches #70575f, luma 95
+];
 export const GHOST = "#f4eef0";   // frame cells not yet earned
 export const FIELD = "#ffffff";
 
@@ -50,7 +64,14 @@ export const BLOOM_TO = "#c8102e";    // Bloom: the far end of the heart gradien
 // once.
 export const MARKS = ["vein", "pulse", "voice", "bloom", "halo", "crown", "singularity"];
 
-export const tierColour = streak => TIERS.find(t => streak >= t.min).colour;
+// TIERS is written top-down (100+ first) while Solidity indexes the ladder
+// bottom-up (0 = the start of a life). Everything below works in RUNGS -- the
+// Solidity direction -- so the two languages can be read side by side.
+const TOP = TIERS.length - 1;
+export const rungOf = streak => TOP - TIERS.findIndex(t => streak >= t.min);
+export const colourAt = rung => TIERS[TOP - rung].colour;
+export const noiseAt = rung => NOISE_BY_TIER[TOP - rung];
+export const tierColour = streak => colourAt(rungOf(streak));
 
 // A lapse walks BACK DOWN the same ladder rather than introducing paler tones.
 // Paler is not available: #767676 is the lightest ink that still decodes, so a
@@ -65,13 +86,25 @@ export const tierColour = streak => TIERS.find(t => streak >= t.min).colour;
 // MUST stay identical to Palette.lapsed in contracts/src/render/Palette.sol.
 // The Solidity has the same boundary tests; if these two ladders ever diverge,
 // one of the two suites fails.
-export function lapsedColour(streak, lastDay, today) {
+/**
+ * The rung a token sits on once a lapse is counted.
+ *
+ * Returned as a rung rather than a colour because the heart ink and the noise
+ * ink must come from the SAME rung -- they are matched in luminance, and a
+ * mismatch stops the code decoding at large rasters. Mirrors
+ * Palette.lapsedIndex in Solidity line for line.
+ */
+export function lapsedRung(streak, lastDay, today) {
   const gap = today > lastDay ? today - lastDay : 0;   // a backwards clock is not a lapse
-  if (gap < 3) return tierColour(streak);
-  if (gap >= 30) return TIERS[TIERS.length - 1].colour;
-  const index = TIERS.length - 1 - TIERS.findIndex(t => streak >= t.min);
+  if (gap < 3) return rungOf(streak);
+  if (gap >= 30) return 0;
+  const rung = rungOf(streak);
   const steps = gap >= 7 ? 2 : 1;
-  return TIERS[TIERS.length - 1 - (steps >= index ? 0 : index - steps)].colour;
+  return steps >= rung ? 0 : rung - steps;
+}
+
+export function lapsedColour(streak, lastDay, today) {
+  return colourAt(lapsedRung(streak, lastDay, today));
 }
 // Completed-year rings stop growing the canvas at MAX_RINGS.
 //
@@ -167,14 +200,16 @@ export function renderSvg(modules, want, size, state) {
   // stored streak colours it forever. Both branches must mirror Palette.tier
   // and Palette.lapsed in Solidity exactly.
   const frozen = resting || sunset;
-  const colour = frozen ? tierColour(streak) : lapsedColour(streak, lastDay, today);
+  const rung = frozen ? rungOf(streak) : lapsedRung(streak, lastDay, today);
+  const colour = colourAt(rung);
+  const noise = noiseAt(rung);
   const gold = marks.includes("crown") ? CROWN_GOLD : null;
   const ghost = marks.includes("vein") ? VEIN_GHOST : GHOST;
   const field = marks.includes("halo") ? HALO_FIELD : FIELD;
   const voice = marks.includes("voice");
   const bloom = marks.includes("bloom");
 
-  const lit = new Set(), dim = new Set(), noise = new Set();
+  const lit = new Set(), dim = new Set(), noiseCells = new Set();
 
   // Day frame. The 11 surplus cells light only when the heart is whole.
   const whole = level >= DAY_CELLS;
@@ -188,7 +223,7 @@ export function renderSvg(modules, want, size, state) {
     for (let i = 0; i < size; i++) {
       if (!modules[j * size + i]) continue;
       const p = (codeOff + j) * canvas + (codeOff + i);
-      (want[j * size + i] ? heart : noise).add(p);
+      (want[j * size + i] ? heart : noiseCells).add(p);
     }
   }
 
@@ -206,7 +241,7 @@ export function renderSvg(modules, want, size, state) {
   // row walk and then append the bars.
   const framePath = pathFor(lit, canvas) + ringBars(years, canvas);
   if (framePath) groups.push([frameColour, framePath]);
-  if (noise.size) groups.push([NOISE, noise]);
+  if (noiseCells.size) groups.push([noise, noiseCells]);
   if (heart.size) groups.push([colour, heart]);
 
   // Bloom replaces the heart's flat fill with a gradient running from the

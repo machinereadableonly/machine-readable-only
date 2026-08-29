@@ -2,8 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
-import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE,
-         MAX_RINGS, ringsFor, ringSpan, VOICE_QUIET } from "../render-token.mjs";
+import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
+         rungOf, colourAt, noiseAt, MAX_RINGS, ringsFor, ringSpan,
+         VOICE_QUIET } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
 const PAYLOAD = payloadFor("example.com", 1);
@@ -26,7 +27,30 @@ test("every streak tier clears the contrast a scanner needs", () => {
   for (const t of TIERS)
     assert.ok(contrast(t.colour, "#ffffff") >= 4.5,
       `tier ${t.min} (${t.colour}) is ${contrast(t.colour, "#ffffff").toFixed(2)}, under 4.5`);
-  assert.ok(contrast(NOISE, "#ffffff") >= 4.5, "noise tone is too light to scan");
+  for (const n of NOISE_BY_TIER)
+    assert.ok(contrast(n, "#ffffff") >= 4.5,
+      `noise ${n} is ${contrast(n, "#ffffff").toFixed(2)} against white, under 4.5`);
+});
+
+// BT.601, the weighting ZXing's RGBLuminanceSource uses -- not WCAG's, which is
+// a human legibility measure. The binarizer is what this has to satisfy.
+const luma601 = h => {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+};
+
+test("every noise ink matches its tier in luminance", () => {
+  // The invariant the state soak bought on 2026-08-29. Both inks of the code
+  // must binarize as dark; once the raster is large enough that ZXing's 8x8
+  // blocks fall inside one module, the lighter of the two goes to background.
+  // A bare token stopped decoding at 1200px and a fully marked one at 900px
+  // while the noise was a constant #767676. Mirrors PaletteNoise.t.sol.
+  for (let rung = 0; rung < TIERS.length; rung++) {
+    const gap = Math.abs(luma601(colourAt(rung)) - luma601(noiseAt(rung)));
+    assert.ok(gap <= 1,
+      `rung ${rung}: heart ${colourAt(rung)} and noise ${noiseAt(rung)} `
+      + `are ${gap.toFixed(1)} apart in luminance -- they must match`);
+  }
 });
 
 test("the token scans at every stage of its life", () => {
@@ -77,12 +101,20 @@ test("the day-one heart is visible against the noise", () => {
   // apart, so a new token showed no heart. Neither a shared hue nor a shared
   // weight is acceptable on its own -- the two inks have to differ somehow.
   const day1 = tierColour(0);
-  const sameHue = h => { const e = h.replace("#", "");
+  const chroma = h => { const e = h.replace("#", "");
     const [r, g, b] = [0, 2, 4].map(i => parseInt(e.substr(i, 2), 16));
-    return Math.max(r, g, b) - Math.min(r, g, b) < 8; };   // near-neutral
-  assert.ok(!(sameHue(day1) && sameHue(NOISE)) || contrast(day1, NOISE) >= 2,
-    `day-one heart ${day1} and noise ${NOISE} are both neutral and only `
-    + `${contrast(day1, NOISE).toFixed(2)}:1 apart -- the heart will not read`);
+    return Math.max(r, g, b) - Math.min(r, g, b); };
+
+  // The heart and the noise are matched in LUMINANCE on purpose, so contrast
+  // can no longer do this job -- hue is the only thing left separating them.
+  // That makes chroma load-bearing rather than decorative: a neutral start tier
+  // would now be completely invisible against its noise, not merely faint.
+  const noise = noiseAt(rungOf(0));
+  assert.ok(chroma(noise) === 0, `the noise ${noise} must be a neutral grey`);
+  assert.ok(chroma(day1) >= 20,
+    `day-one heart ${day1} has chroma ${chroma(day1)}. Its noise ${noise} is `
+    + `matched in luminance, so hue is all that separates them -- a near-neutral `
+    + `heart would not read at all`);
 });
 
 test("the real image scans at every size a viewer might see it", () => {
@@ -190,16 +222,25 @@ test("the worst case a token can reach still scans", () => {
 });
 
 test("the shipped quiet-zone tint keeps its decode margin", () => {
-  // Measured 2026-08-29. An earlier comment in render-token.mjs claimed #f9eaef
-  // was the deepest tint that still decodes; it is not, it fails at 900px. This
-  // pins the shipped value so the margin cannot be quietly tightened.
+  // Measured 2026-08-29, then re-measured the same day after the noise inks were
+  // matched to their tiers in luminance.
+  //
+  // The margin moved a long way. #f9eaef used to fail at 900px and was pinned
+  // here as the proof that the shipped tint had no room to spare; it now decodes
+  // at every size, and so does everything down to about #d4aabb. Matching the
+  // code's two inks did that -- with the noise no longer the lightest thing in
+  // the block, the binarizer has far more to work with. #c294a8 is the new
+  // counter-example, and it fails at 700px and below.
+  //
+  // The lesson is kept rather than the number: a tint has to be MEASURED, and
+  // the floor moves when anything else in the block changes.
   const at = tint => {
     const svg = render({ level: 200, streak: 45, years: 0, marks: ["voice"] })
       .replace(new RegExp(VOICE_QUIET, "g"), tint);
     return [900, 700, 500, 350].filter(px => !scanResult(svg, px).ok);
   };
   assert.deepEqual(at(VOICE_QUIET), [], "the shipped tint must decode at every size");
-  assert.ok(at("#f9eaef").length > 0, "#f9eaef is not a safe floor and must not be adopted");
+  assert.ok(at("#c294a8").length > 0, "#c294a8 must remain too deep to adopt");
 });
 
 test("a lapse pales the image, and a sealed token never pales", () => {
@@ -224,7 +265,7 @@ test("the duotone survives every mark", () => {
   // the two groups or tint the noise.
   for (const marks of [[], ["bloom"], DRAWN_MARKS]) {
     const svg = render({ level: 200, streak: 45, years: 0, marks });
-    assert.ok(svg.includes(`fill="${NOISE}"`), `noise fill lost with ${marks}`);
+    assert.ok(svg.includes(`fill="${noiseAt(rungOf(45))}"`), `noise fill lost with ${marks}`);
     const heart = marks.includes("bloom") ? 'fill="url(#b)"' : `fill="${tierColour(45)}"`;
     assert.ok(svg.includes(heart), `heart fill lost with ${marks}`);
   }

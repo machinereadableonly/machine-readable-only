@@ -6,6 +6,7 @@ import {Renderer} from "../src/render/Renderer.sol";
 import {IRenderer} from "../src/render/IRenderer.sol";
 import {FrameRenderer} from "../src/render/FrameRenderer.sol";
 import {MarkRenderer} from "../src/render/MarkRenderer.sol";
+import {Palette} from "../src/render/Palette.sol";
 import {TokenView} from "../src/render/TokenView.sol";
 
 /// @notice The assembled image and metadata, and the differential check that
@@ -62,14 +63,14 @@ contract RendererTest is Test {
 
     function test_dayOneMatchesTheJavascriptReference() public view {
         _diff("day one", _view(1, 1, 1000, 1000), 8790,
-            0x02304860c4fac20909c195deb0bd6c67dfbacdd6580a0c975ed7413953540367);
+            0xf1efd06f3c5d030f192f5784ea5fb984fc56dee9d0ce4edc2e178d80d9fbb85d);
     }
 
     function test_aPartYearMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(200, 45, 1000, 1000);
         v.agentKeyId = bytes32(uint256(0xa9e));
         _diff("day 200", v, 8795,
-            0xaf464e625703a52bbced738223de38cdca13390ce87ade7740a239accb962ef1);
+            0x326e25d70f9bee69e239af02c240e7e02c014bfe23d54f36eb1d63f4f3d8ee87);
     }
 
     function test_aWholeHeartMatchesTheJavascriptReference() public view {
@@ -78,7 +79,7 @@ contract RendererTest is Test {
         v.parent = 7;
         v.seedsGiven = 2;
         _diff("whole, one ring", v, 8849,
-            0xde0cbfd23f0ce60f97650d3cc9365ceeb1918da04370fa3167705d60512c9677);
+            0x59db4566dbcca8ce38cb383bd874a9682c56dd4cfa346e15b8ea155924324c74);
     }
 
     function test_aLapsedTokenMatchesTheJavascriptReference() public view {
@@ -86,26 +87,26 @@ contract RendererTest is Test {
         // divergence: the JS renderer had a lapse function it never called, so
         // the image never paled while this renderer's did.
         _diff("whole and lapsed", _view(365, 140, 1000, 1040), 8849,
-            0x511b8ef68c8e0cbf824be4b9cf3f32792182a746893ff9599288f75dac822536);
+            0xb4e5c64df841844617048fd28bcbecbcd555b417681dea04d88c2d6e1102b311);
     }
 
     function test_theRingCapMatchesTheJavascriptReference() public view {
         _diff("ten years, capped", _view(365 * 10, 400, 1000, 1000), 9715,
-            0x19bfe3713a006e052854eab4c98ea6255342e6700afff526b88d23336e399bbc);
+            0x13436624752455693df20a735fad5ced5506e75da047e70737ee036c28556a9d);
     }
 
     function test_everyMarkAtOnceMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(365 * 10, 400, 1000, 1000);
         v.marks = ALL_MARKS;
         _diff("every drawn mark", v, 10066,
-            0xf05f97e42a00f774b044697c8acef7c04aee2f36a94011a1d2b41c0c71d4a8ca);
+            0x7b598337af8d19f0472d056ccd0e57d95314bc8c4c21ea530d0dc62ac53262e5);
     }
 
     function test_aSealedTokenMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(365 * 3, 200, 1000, 9999);
         v.resting = true;
         _diff("sealed at rest", v, 9081,
-            0x8d8c5a0e1dccc4582565b60cff6de886a2f6081adc2209b1bcb3fd49d100d7f9);
+            0x3e59aa382dce9137639ae5314aa58da70d1b1a089c98f43a0636c8b897f9b4cb);
     }
 
     // ---------------------------------------------------------------------
@@ -144,9 +145,17 @@ contract RendererTest is Test {
         TokenView memory v = _view(200, 45, 1000, 1000);
         v.marks = MarkRenderer.CROWN;
         string memory out = r.svg(v);
+
+        // Both inks are read off the palette rather than pasted in. They are a
+        // matched pair now -- one per rung -- so a hardcoded noise here would
+        // rot the moment a tier is retuned, which is exactly what it did.
+        uint256 rung = Palette.tierIndex(45);
+        string memory heart = Palette.colourAt(rung);
+        string memory noise = Palette.noiseAt(rung);
+
         assertLt(_indexOf(out, "#f4eef0"), _indexOf(out, "#b8860b"), "ghost before frame");
-        assertLt(_indexOf(out, "#b8860b"), _indexOf(out, "#767676"), "frame before noise");
-        assertLt(_indexOf(out, "#767676"), _indexOf(out, "#bd2242"), "noise before heart");
+        assertLt(_indexOf(out, "#b8860b"), _indexOf(out, noise), "frame before noise");
+        assertLt(_indexOf(out, noise), _indexOf(out, heart), "noise before heart");
     }
 
     function test_aRestingTokenNeverPales() public view {

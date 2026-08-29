@@ -63,17 +63,25 @@ contract Renderer is IRenderer {
     /// (foundry-rs/foundry#13001), and as a single `abi.encodePacked` this ran
     /// out of stack under the coverage profile.
     function svg(TokenView memory v) public pure returns (string memory) {
-        string memory colour = _colour(v);
-        return string(abi.encodePacked(_head(v, colour), _art(v, colour), "</svg>"));
+        uint256 rung = _rung(v);
+        string memory colour = Palette.colourAt(rung);
+        return string(
+            abi.encodePacked(_head(v, colour), _art(v, colour, Palette.noiseAt(rung)), "</svg>")
+        );
     }
 
-    /// @dev A sealed or sunset token keeps the colour it stopped at; a live one
-    /// pales as it lapses. Kept here rather than in Palette so the palette stays
-    /// a pure function of colour, not of token lifecycle.
-    function _colour(TokenView memory v) private pure returns (string memory) {
+    /// @dev The rung this token sits on. A sealed or sunset token keeps the one
+    /// it stopped at; a live one walks back down as it lapses. Kept here rather
+    /// than in Palette so the palette stays a pure function of colour, not of
+    /// token lifecycle.
+    ///
+    /// Returned as an INDEX, not a colour, because the heart ink and the noise
+    /// ink must come from the same rung -- they are matched in luminance, and a
+    /// mismatch stops the code decoding at large rasters. See Palette's header.
+    function _rung(TokenView memory v) private pure returns (uint256) {
         return (v.resting || v.sunset)
-            ? Palette.tier(v.streak)
-            : Palette.lapsed(v.streak, v.lastDay, v.today);
+            ? Palette.tierIndex(v.streak)
+            : Palette.lapsedIndex(v.streak, v.lastDay, v.today);
     }
 
     /// @dev Where the 45-cell block sits on the canvas, in cells.
@@ -97,7 +105,11 @@ contract Renderer is IRenderer {
     }
 
     /// @dev The four paths, in the fixed order: ghost, frame, noise, heart.
-    function _art(TokenView memory v, string memory colour) private pure returns (string memory) {
+    function _art(TokenView memory v, string memory colour, string memory noise)
+        private
+        pure
+        returns (string memory)
+    {
         return string(
             abi.encodePacked(
                 FrameRenderer.paths(
@@ -108,7 +120,7 @@ contract Renderer is IRenderer {
                     HeartMask.bits(),
                     _blockOff(v.level) + QUIET,
                     MarkRenderer.heartFill(v.marks, colour),
-                    Palette.noise()
+                    noise
                 )
             )
         );

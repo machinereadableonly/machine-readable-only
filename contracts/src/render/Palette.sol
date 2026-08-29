@@ -5,18 +5,35 @@ pragma solidity ^0.8.30;
 /// @dev Two measured facts shape every choice here, both established 2026-08-28
 /// against ZXing, the decoder a phone's scanner descends from:
 ///
-/// 1. The noise ink is pinned at #767676. It is the LIGHTEST tone that still
-///    decodes; #828282 and up fail from 500px. Nothing can be made paler to make
-///    room for anything else.
+/// 1. Nothing in the code block may be paler than about #767676: #828282 and up
+///    fail from 500px. That sets the light end.
 /// 2. A tier separates from the noise by HUE, not by weight. The deepest red is
 ///    only 1.30:1 against the noise in luminance and reads instantly, while a
 ///    neutral grey at 1.11:1 vanished into it completely. That is why the first
 ///    tier carries a trace of rose instead of being a pure grey.
+///
+/// A third fact, measured 2026-08-29 by the state soak, turned rule 2 from a
+/// preference into a requirement, and cost the constant noise ink:
+///
+/// 3. The two inks may not separate by luminance AT ALL. Both have to binarize
+///    as dark. Once a raster is large enough that ZXing's 8x8 blocks fall inside
+///    a single module, a block has no local contrast and resolves against its
+///    neighbours -- and the lighter ink goes to background. With the noise
+///    pinned at #767676 (luma 118) against a heart running 74 to 104, a bare
+///    token stopped decoding at 1200px and a fully marked one at 900px, while a
+///    plain black-on-white control of the same code passed at every size to
+///    1600. It is the GAP that does it, not darkness: luma 74 against 74 passes
+///    at 1600, and luma 17 against 74 fails. So the noise is no longer one
+///    colour. Each tier carries its own neutral grey, matched to it in
+///    luminance, and PaletteNoise.t.sol asserts the match rather than the
+///    values.
 library Palette {
-    uint256 private constant TIERS = 5;
+    /// @notice Rungs on the ladder. Public so callers can walk it.
+    uint256 internal constant TIER_COUNT = 5;
 
-    /// @dev Index 0 is the start of a life, index 4 a streak of 100 or more.
-    function _colourAt(uint256 index) private pure returns (string memory) {
+    /// @notice The heart ink at a rung. Index 0 is the start of a life,
+    /// index 4 a streak of 100 or more.
+    function colourAt(uint256 index) internal pure returns (string memory) {
         if (index >= 4) return "#c8102e";   // red,   streak 100+
         if (index == 3) return "#bd2242";   // rose,  30-99
         if (index == 2) return "#a83a55";   // dusk,  7-29
@@ -24,7 +41,20 @@ library Palette {
         return "#70575f";                   // start, 0-2
     }
 
-    function _tierIndex(uint32 streak) private pure returns (uint256) {
+    /// @notice The noise ink at a rung: a neutral grey of the same luminance
+    /// as the heart at that rung, so the two separate by hue alone.
+    /// @dev Do not retune one of these without the other. The pairing is the
+    /// whole point, and PaletteNoise.t.sol will fail if it is broken.
+    function noiseAt(uint256 index) internal pure returns (string memory) {
+        if (index >= 4) return "#4a4a4a";   // matches #c8102e, luma 74
+        if (index == 3) return "#545454";   // matches #bd2242, luma 84
+        if (index == 2) return "#5e5e5e";   // matches #a83a55, luma 94
+        if (index == 1) return "#686868";   // matches #8e5566, luma 104
+        return "#5f5f5f";                   // matches #70575f, luma 95
+    }
+
+    /// @notice The rung a live, unbroken streak sits on.
+    function tierIndex(uint32 streak) internal pure returns (uint256) {
         if (streak >= 100) return 4;
         if (streak >= 30) return 3;
         if (streak >= 7) return 2;
@@ -34,7 +64,7 @@ library Palette {
 
     /// @notice The colour a live, unbroken streak earns.
     function tier(uint32 streak) internal pure returns (string memory) {
-        return _colourAt(_tierIndex(streak));
+        return colourAt(tierIndex(streak));
     }
 
     /// @notice The colour once a lapse is taken into account.
@@ -56,20 +86,27 @@ library Palette {
         pure
         returns (string memory)
     {
+        return colourAt(lapsedIndex(streak, lastDay, today));
+    }
+
+    /// @notice The rung a token sits on once a lapse is taken into account.
+    /// @dev Returned as an index rather than a colour so a caller gets the
+    /// heart ink and the noise ink from the SAME rung. That is what makes it
+    /// impossible to wire the two to different tiers.
+    function lapsedIndex(uint32 streak, uint32 lastDay, uint32 today)
+        internal
+        pure
+        returns (uint256)
+    {
         // A clock that runs backwards is not a lapse. Guard the subtraction
         // rather than letting it wrap into a gap of four billion days.
         uint32 gap = today > lastDay ? today - lastDay : 0;
-        if (gap < 3) return tier(streak);
-        if (gap >= 30) return _colourAt(0);
+        if (gap < 3) return tierIndex(streak);
+        if (gap >= 30) return 0;
 
-        uint256 index = _tierIndex(streak);
+        uint256 index = tierIndex(streak);
         uint256 steps = gap >= 7 ? 2 : 1;
-        return _colourAt(steps >= index ? 0 : index - steps);
-    }
-
-    /// @notice Modules that did not land on the heart.
-    function noise() internal pure returns (string memory) {
-        return "#767676";
+        return steps >= index ? 0 : index - steps;
     }
 
     /// @notice Frame cells not yet earned.
