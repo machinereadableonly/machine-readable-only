@@ -9,7 +9,7 @@ Three findings, in descending order of how much they matter.
 
 1. **The ERC-4906 refresh did not happen.** A state change that the chain
    confirms, with the event emitted correctly after the write, left Alchemy's
-   cached metadata frozen for at least 35 minutes -- through polling,
+   cached metadata frozen for at least 90 minutes -- through polling,
    `refreshCache=true` twice, and `invalidateContract`. For a piece whose whole
    subject is an image that changes as the agent returns, this is the serious
    one. No contract change fixes it; the gap is on the consumer side.
@@ -149,16 +149,16 @@ Streak 77, and still decodes to its own url.
 
 Alchemy did not update. Measured:
 
-- **35 minutes of polling** without a refresh flag: Level 365 throughout, and
-  still stale when this was written; a poller is still running.
+- **90 minutes of polling** without a refresh flag: Level 365 throughout, and
+  still stale when the poller was stopped. It never caught up.
 - **`refreshCache=true`**, twice, ten minutes apart: Level 365.
 - **`invalidateContract`**, then four more minutes of polling: Level 365.
 - `timeLastUpdated` stayed frozen at `2026-08-29T12:38:35.181Z` -- the moment of
   the pre-write read. It is not re-reading at all, rather than re-reading and
   getting a stale answer.
 
-A longer poll is running; the catch-up time, if it comes, lands in
-`tools/out/erc4906-watch.log`.
+The poll ran for 90 minutes and was stopped without ever seeing it catch up;
+the record is in `tools/out/erc4906-watch.log` (gitignored).
 
 **Why this matters more here than for most NFTs.** This piece is defined as a
 living record of return visits -- the image is supposed to change as the agent
@@ -167,7 +167,7 @@ displays a token frozen at day one. The ERC-4906 event is emitted correctly and
 in the right order; the gap is on the consumer side, and no contract change
 fixes it.
 
-**Stated honestly:** this is one token, one indexer, over about 35 minutes.
+**Stated honestly:** this is one token, one indexer, over 90 minutes.
 It is not proof that Alchemy never refreshes. It is proof that the event plus
 both documented refresh mechanisms did not produce an update in that window,
 which is enough to stop anyone assuming the refresh path works.
