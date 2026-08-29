@@ -198,9 +198,23 @@ contract RendererTest is Test {
             string memory uri = r.tokenURI(vs[i]);
             uint256 used = before - gasleft();
             console.log("%s  %s gas  %s bytes", labels[i], used, bytes(uri).length);
-            assertLt(used, 2_000_000, "the worst case overruns the gas limit");
+            if (_gasIsMeaningful()) {
+                assertLt(used, 2_000_000, "the worst case overruns the gas limit");
+            }
             assertLt(bytes(uri).length, 20_000, "the worst case overruns the byte limit");
         }
+    }
+
+/// @dev Gas is only meaningful on the profile that ships. `forge coverage`
+    /// cannot use the IR pipeline (foundry-rs/foundry#13001), so [profile.coverage]
+    /// turns off both via_ir and the optimiser -- and the same source then costs
+    /// roughly two and a half times as much. Asserting a gas ceiling against that
+    /// build measures the coverage profile, not the contract, so the ceiling is
+    /// skipped there. The numbers are still logged, and byte lengths, which the
+    /// optimiser does not touch, are still asserted.
+    function _gasIsMeaningful() internal view returns (bool) {
+        return keccak256(bytes(vm.envOr("FOUNDRY_PROFILE", string("default"))))
+            != keccak256(bytes("coverage"));
     }
 
     function _indexOf(string memory haystack, string memory needle) internal pure returns (uint256) {

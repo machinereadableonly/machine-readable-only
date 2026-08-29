@@ -632,6 +632,279 @@ on-chain <code>data:text/html;base64</code> page carrying a second copy of the S
 SMIL animation, which roughly doubles tokenURI bytes. Phase 0&#39;s job is the
 static image; this needs measuring separately before it is decided.</li>
 </ul>
+<hr>
+<h2>Task 8: <code>MROSpikeToken</code>, the size guard and the gas budget</h2>
+<p>Every number above was measured on the renderer alone, with its <code>TokenView</code>
+already sitting in memory. A marketplace does not do that: it calls
+<code>tokenURI(id)</code> on the token contract, which must read storage and build the
+struct before the renderer sees anything. This section is that call.</p>
+<p><code>MROSpikeToken</code> is not the collection. It has no Warden, no x402, no mark
+gating, no seeding rules, no pause and no vouchers, because none of those
+change the cost of drawing. Two things are faithful to the spec on purpose,
+because both move the number: the <code>Token</code> struct occupies exactly one 256-bit
+slot, and the code bitmap is written once at mint and never rewritten.</p>
+<h3>Gas and bytes, through the token contract</h3>
+<p>Cold storage, one token id per stage so no stage warms another&#39;s slots.
+Reproduce with:</p>
+<pre><code>cd contracts &amp;&amp; forge test --match-test test_theWholeLadderStaysInsideTheHardLimit -vv
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Gas</th>
+<th>Bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Day one</td>
+<td>1,345,244</td>
+<td>8,790</td>
+</tr>
+<tr>
+<td>Day 200</td>
+<td>1,455,429</td>
+<td>8,795</td>
+</tr>
+<tr>
+<td>Whole, one ring</td>
+<td>1,346,323</td>
+<td>8,849</td>
+</tr>
+<tr>
+<td>Whole and lapsed</td>
+<td>1,347,406</td>
+<td>8,848</td>
+</tr>
+<tr>
+<td>Three years</td>
+<td>1,382,351</td>
+<td>9,078</td>
+</tr>
+<tr>
+<td>Ten years, at the ring cap</td>
+<td>1,482,032</td>
+<td>9,715</td>
+</tr>
+<tr>
+<td>Ring cap and every Mark</td>
+<td>1,501,846</td>
+<td><strong>10,066</strong></td>
+</tr>
+<tr>
+<td>Sealed at rest</td>
+<td>1,386,330</td>
+<td>9,081</td>
+</tr>
+<tr>
+<td><strong>Day 364, every Mark</strong></td>
+<td><strong>1,582,582</strong></td>
+<td>9,187</td>
+</tr>
+</tbody></table>
+<p><strong>The spike fits.</strong> Against the 2,000,000 gas / 20,000 byte hard limit that
+leaves <strong>417,378 gas and 9,934 bytes</strong>.</p>
+<p><strong>The 1,000,000 gas / 5,000 byte target is missed</strong> and is reported as missed.
+Two assertions in <code>GasBudget.t.sol</code> now fail loudly if it ever starts passing,
+so this table cannot quietly go stale.</p>
+<p>The dearest stage and the largest stage are different tokens, so each limit is
+tracked against its own worst case rather than one being reported from the
+other&#39;s.</p>
+<h3>The worst case is the day before the heart seals</h3>
+<p>This is the opposite of what the budget was planned around, and it was found by
+sweeping levels rather than by reading the code.</p>
+<p>The day frame is drawn as two paths, lit and ghost. At level 364 there are 364
+lit cells with 12 ghost ones threaded through them, so both paths fragment into
+many short runs. At 365 the ghost path vanishes entirely and the lit one seals
+into a handful of long runs.</p>
+<table>
+<thead>
+<tr>
+<th>Level (every Mark worn)</th>
+<th>Gas</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>352</td>
+<td>1,569,688</td>
+</tr>
+<tr>
+<td>358</td>
+<td>1,572,019</td>
+</tr>
+<tr>
+<td>361</td>
+<td>1,576,407</td>
+</tr>
+<tr>
+<td>364</td>
+<td><strong>1,582,582</strong></td>
+</tr>
+<tr>
+<td>365</td>
+<td>1,372,891</td>
+</tr>
+<tr>
+<td>366</td>
+<td>1,374,236</td>
+</tr>
+<tr>
+<td>730</td>
+<td>1,397,002</td>
+</tr>
+</tbody></table>
+<p><strong>The seal is worth 213,666 gas.</strong> Pinned by
+<code>test_theWorstCaseIsTheDayBeforeTheHeartSeals</code>.</p>
+<p>Rings cannot compound this. The frame fills to <code>min(level, 365)</code>, so a partial
+frame implies <code>level &lt; 365</code>, which implies zero rings. The two expensive cases
+are mutually exclusive, which is why the ring cap is not the ceiling.</p>
+<h3>What the token contract itself costs</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Gas</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tokenURI</code> through the token contract</td>
+<td>1,497,085</td>
+</tr>
+<tr>
+<td>Renderer alone, view already in memory</td>
+<td>1,487,677</td>
+</tr>
+<tr>
+<td><strong>Storage read and struct assembly</strong></td>
+<td><strong>9,408</strong></td>
+</tr>
+</tbody></table>
+<p>This was the one quantity Task 8 existed to find. The plan estimated 20,000 to
+30,000; the real figure is under a third of that, because the packed single
+slot means the six <code>uint32</code>s and the <code>resting</code> flag are one <code>SLOAD</code>, and the
+172-byte code bitmap is the only multi-word read.</p>
+<h3>Contract size</h3>
+<p><code>ContractSize.t.sol</code> reads the build artifacts; the limit is EIP-170&#39;s 24,576.</p>
+<table>
+<thead>
+<tr>
+<th>Contract</th>
+<th>Runtime bytes</th>
+<th>Margin</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Renderer</code></td>
+<td>11,772</td>
+<td>12,804</td>
+</tr>
+<tr>
+<td><code>MROSpikeToken</code></td>
+<td>6,863</td>
+<td>17,713</td>
+</tr>
+</tbody></table>
+<p><code>Renderer</code> grew 821 bytes from Task 7&#39;s 10,951, which is the spec&#39;s full
+attribute list plus the two name suffixes.</p>
+<p>Foundry&#39;s test EVM does not enforce the code-size cap, so that table is
+necessary and not sufficient. <code>contracts/script/anvil-size-check.sh</code> is the
+other half: it deploys both to an anvil started with <code>--code-size-limit 24576</code>,
+asserts non-empty <code>cast code</code> for each, mints a token with a bitmap from
+<code>tools/token-bitmap.mjs</code>, and reads one real <code>tokenURI</code> back over RPC.</p>
+<pre><code>Renderer at 0x5FbDB2315678afecb367f032d93F642f64180aa3: 11772 runtime bytes
+MROSpikeToken at 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512: 6863 runtime bytes
+tokenURI: 8904 chars returned
+OK
+</code></pre>
+<p>Both byte counts agree with the test exactly.</p>
+<h3>The metadata gap, closed</h3>
+<p>The renderer emitted eleven attributes; the spec asks for thirteen and four did
+not line up. All were closed, plus the two name suffixes the spec specifies:</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Was</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>heart</code> (<code>&quot;212/365&quot;</code>)</td>
+<td>not emitted</td>
+</tr>
+<tr>
+<td><code>agentKeyId</code></td>
+<td>not emitted, though <code>TokenView</code> already carried the field</td>
+</tr>
+<tr>
+<td><code>parent</code></td>
+<td>not emitted, and there was no field to emit from</td>
+</tr>
+<tr>
+<td><code>children</code></td>
+<td>emitted under the name <code>Seeds Given</code></td>
+</tr>
+<tr>
+<td>name suffix</td>
+<td>no <code>(Whole)</code> at 365 days, no <code>(At Rest)</code> once sealed</td>
+</tr>
+</tbody></table>
+<p>Measured before and after on the same worst case, renderer alone:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Gas</th>
+<th>Bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Before</td>
+<td>1,547,524</td>
+<td>9,882</td>
+</tr>
+<tr>
+<td>After</td>
+<td>1,482,495</td>
+<td>10,066</td>
+</tr>
+</tbody></table>
+<p><strong>The new attributes made the renderer 65,029 gas cheaper.</strong> <code>_attributes</code> had
+to be split into <code>_attrsA</code> and <code>_attrsB</code> because fourteen arguments to one
+<code>abi.encodePacked</code> runs out of stack under the coverage profile, and two
+smaller calls beat one large one by more than the four new attributes cost.
+This is the third time on this spike that the expensive half was not the one it
+looked like.</p>
+<h3>Correctness</h3>
+<ul>
+<li>112 tests: 74 render, 34 <code>MROSpikeToken</code>, 3 gas budget, 1 size guard.</li>
+<li>Every owner function has an explicit test and every access-control revert has
+one, including the full <code>Ownable2Step</code> flow and the window where the old owner
+still holds control.</li>
+<li>100% line, statement and function coverage on every file under <code>src/render</code>
+and on <code>src/spike/MROSpikeToken.sol</code>.</li>
+<li>Both build profiles run green. Gas ceilings are asserted only on the profile
+that ships: <code>forge coverage</code> cannot use the IR pipeline, so
+<code>[profile.coverage]</code> turns off <code>via_ir</code> and the optimiser, and the same source
+then costs roughly two and a half times as much. Asserting a gas ceiling
+against that build measures the profile, not the contract.</li>
+</ul>
+<h3>One bug found by a test rather than by review</h3>
+<p>The spec stores sunset as <code>sunsetDay == 0 means not sunset</code>. That sentinel works
+only because the piece does not launch on 1 January 1970 -- and it fails outright
+in a test, where the chain clock starts at timestamp 1 and <code>today()</code> is genuinely
+0. An explicit <code>isSunset</code> flag removes the ambiguity at no cost, since a <code>uint32</code>
+and a <code>bool</code> share one slot. <code>test_sunsetOnDayZeroIsStillSunset</code> pins it, and
+the spec should be amended in Task 12.</p>
+<h3>What Task 8 leaves open</h3>
+<ul>
+<li><strong>Pulse&#39;s <code>animation_url</code> is still unbudgeted and unbuilt.</strong> Unchanged from
+Task 7. It roughly doubles tokenURI bytes and needs measuring separately.</li>
+<li><strong><code>touchRange</code> refuses the collection-wide catch-all</strong>, and <code>sunset()</code>
+therefore emits no <code>BatchMetadataUpdate</code> at all, because this contract does
+not track its own id range. The real contract must emit over the ids it
+actually minted; that is a Plan 2 requirement, recorded here so it is not
+lost.</li>
+</ul>
 
 </body>
 </html>

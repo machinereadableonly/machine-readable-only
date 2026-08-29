@@ -73,7 +73,9 @@ contract GasBudgetTest is Test {
         console.log(label);
         console.log("  gas  ", gasUsed);
         console.log("  bytes", len);
-        assertLt(gasUsed, GAS_LIMIT, string.concat(label, ": over the hard gas limit"));
+        if (_gasIsMeaningful()) {
+            assertLt(gasUsed, GAS_LIMIT, string.concat(label, ": over the hard gas limit"));
+        }
         assertLt(len, BYTE_LIMIT, string.concat(label, ": over the hard byte limit"));
     }
 
@@ -116,17 +118,36 @@ contract GasBudgetTest is Test {
         // The 1,000,000 / 5,000 target is missed and is reported as missed
         // rather than quietly dropped. Flip these the day they pass -- and
         // update docs/phase0-results.md in the same commit.
-        assertGt(worstGas, GAS_TARGET, "the gas target now passes: update the results table");
+        if (_gasIsMeaningful()) {
+            assertGt(worstGas, GAS_TARGET, "the gas target now passes: update the results table");
+        }
         assertGt(maxBytes, BYTE_TARGET, "the byte target now passes: update the results table");
 
         console.log("headroom against the hard limit");
-        console.log("  gas, from day 364 with every mark      ", GAS_LIMIT - worstGas);
+        // Guarded, not just skipped: on the coverage profile worstGas exceeds
+        // the limit and this subtraction would underflow into a panic.
+        if (_gasIsMeaningful()) {
+            console.log("  gas, from day 364 with every mark      ", GAS_LIMIT - worstGas);
+        }
         console.log("  bytes, from the ring cap with every mark", BYTE_LIMIT - maxBytes);
     }
 
     function _max(uint256 a, uint256 c) private pure returns (uint256) {
         return a > c ? a : c;
     }
+
+    /// @dev Gas is only meaningful on the profile that ships. `forge coverage`
+    /// cannot use the IR pipeline (foundry-rs/foundry#13001), so [profile.coverage]
+    /// turns off both via_ir and the optimiser -- and the same source then costs
+    /// roughly two and a half times as much. Asserting a gas ceiling against that
+    /// build measures the coverage profile, not the contract, so the ceiling is
+    /// skipped there. The numbers are still logged, and byte lengths, which the
+    /// optimiser does not touch, are still asserted.
+    function _gasIsMeaningful() internal view returns (bool) {
+        return keccak256(bytes(vm.envOr("FOUNDRY_PROFILE", string("default"))))
+            != keccak256(bytes("coverage"));
+    }
+
 
     /// @notice The worst case is the day BEFORE the heart seals, not the oldest
     /// token -- which is the opposite of what the budget was planned around.
@@ -149,7 +170,9 @@ contract GasBudgetTest is Test {
 
         assertGt(almost, whole, "an unsealed frame must be the dearer of the two");
         console.log("the seal is worth", almost - whole);
-        assertLt(almost, GAS_LIMIT, "even the worst case must fit the hard limit");
+        if (_gasIsMeaningful()) {
+            assertLt(almost, GAS_LIMIT, "even the worst case must fit the hard limit");
+        }
     }
 
     /// @dev What the token contract itself adds, isolated. The renderer was
@@ -168,6 +191,8 @@ contract GasBudgetTest is Test {
 
         console.log("through the token contract", throughToken);
         console.log("renderer alone (warm view) ", rendererOnly);
-        assertLt(throughToken, GAS_LIMIT, "the real call must fit the hard limit");
+        if (_gasIsMeaningful()) {
+            assertLt(throughToken, GAS_LIMIT, "the real call must fit the hard limit");
+        }
     }
 }

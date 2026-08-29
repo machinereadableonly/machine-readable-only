@@ -362,3 +362,177 @@ array.
   on-chain `data:text/html;base64` page carrying a second copy of the SVG plus a
   SMIL animation, which roughly doubles tokenURI bytes. Phase 0's job is the
   static image; this needs measuring separately before it is decided.
+
+---
+
+## Task 8: `MROSpikeToken`, the size guard and the gas budget
+
+Every number above was measured on the renderer alone, with its `TokenView`
+already sitting in memory. A marketplace does not do that: it calls
+`tokenURI(id)` on the token contract, which must read storage and build the
+struct before the renderer sees anything. This section is that call.
+
+`MROSpikeToken` is not the collection. It has no Warden, no x402, no mark
+gating, no seeding rules, no pause and no vouchers, because none of those
+change the cost of drawing. Two things are faithful to the spec on purpose,
+because both move the number: the `Token` struct occupies exactly one 256-bit
+slot, and the code bitmap is written once at mint and never rewritten.
+
+### Gas and bytes, through the token contract
+
+Cold storage, one token id per stage so no stage warms another's slots.
+Reproduce with:
+
+```
+cd contracts && forge test --match-test test_theWholeLadderStaysInsideTheHardLimit -vv
+```
+
+| Stage | Gas | Bytes |
+|---|---|---|
+| Day one | 1,345,244 | 8,790 |
+| Day 200 | 1,455,429 | 8,795 |
+| Whole, one ring | 1,346,323 | 8,849 |
+| Whole and lapsed | 1,347,406 | 8,848 |
+| Three years | 1,382,351 | 9,078 |
+| Ten years, at the ring cap | 1,482,032 | 9,715 |
+| Ring cap and every Mark | 1,501,846 | **10,066** |
+| Sealed at rest | 1,386,330 | 9,081 |
+| **Day 364, every Mark** | **1,582,582** | 9,187 |
+
+**The spike fits.** Against the 2,000,000 gas / 20,000 byte hard limit that
+leaves **417,378 gas and 9,934 bytes**.
+
+**The 1,000,000 gas / 5,000 byte target is missed** and is reported as missed.
+Two assertions in `GasBudget.t.sol` now fail loudly if it ever starts passing,
+so this table cannot quietly go stale.
+
+The dearest stage and the largest stage are different tokens, so each limit is
+tracked against its own worst case rather than one being reported from the
+other's.
+
+### The worst case is the day before the heart seals
+
+This is the opposite of what the budget was planned around, and it was found by
+sweeping levels rather than by reading the code.
+
+The day frame is drawn as two paths, lit and ghost. At level 364 there are 364
+lit cells with 12 ghost ones threaded through them, so both paths fragment into
+many short runs. At 365 the ghost path vanishes entirely and the lit one seals
+into a handful of long runs.
+
+| Level (every Mark worn) | Gas |
+|---|---|
+| 352 | 1,569,688 |
+| 358 | 1,572,019 |
+| 361 | 1,576,407 |
+| 364 | **1,582,582** |
+| 365 | 1,372,891 |
+| 366 | 1,374,236 |
+| 730 | 1,397,002 |
+
+**The seal is worth 213,666 gas.** Pinned by
+`test_theWorstCaseIsTheDayBeforeTheHeartSeals`.
+
+Rings cannot compound this. The frame fills to `min(level, 365)`, so a partial
+frame implies `level < 365`, which implies zero rings. The two expensive cases
+are mutually exclusive, which is why the ring cap is not the ceiling.
+
+### What the token contract itself costs
+
+| | Gas |
+|---|---|
+| `tokenURI` through the token contract | 1,497,085 |
+| Renderer alone, view already in memory | 1,487,677 |
+| **Storage read and struct assembly** | **9,408** |
+
+This was the one quantity Task 8 existed to find. The plan estimated 20,000 to
+30,000; the real figure is under a third of that, because the packed single
+slot means the six `uint32`s and the `resting` flag are one `SLOAD`, and the
+172-byte code bitmap is the only multi-word read.
+
+### Contract size
+
+`ContractSize.t.sol` reads the build artifacts; the limit is EIP-170's 24,576.
+
+| Contract | Runtime bytes | Margin |
+|---|---|---|
+| `Renderer` | 11,772 | 12,804 |
+| `MROSpikeToken` | 6,863 | 17,713 |
+
+`Renderer` grew 821 bytes from Task 7's 10,951, which is the spec's full
+attribute list plus the two name suffixes.
+
+Foundry's test EVM does not enforce the code-size cap, so that table is
+necessary and not sufficient. `contracts/script/anvil-size-check.sh` is the
+other half: it deploys both to an anvil started with `--code-size-limit 24576`,
+asserts non-empty `cast code` for each, mints a token with a bitmap from
+`tools/token-bitmap.mjs`, and reads one real `tokenURI` back over RPC.
+
+```
+Renderer at 0x5FbDB2315678afecb367f032d93F642f64180aa3: 11772 runtime bytes
+MROSpikeToken at 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512: 6863 runtime bytes
+tokenURI: 8904 chars returned
+OK
+```
+
+Both byte counts agree with the test exactly.
+
+### The metadata gap, closed
+
+The renderer emitted eleven attributes; the spec asks for thirteen and four did
+not line up. All were closed, plus the two name suffixes the spec specifies:
+
+| Attribute | Was |
+|---|---|
+| `heart` (`"212/365"`) | not emitted |
+| `agentKeyId` | not emitted, though `TokenView` already carried the field |
+| `parent` | not emitted, and there was no field to emit from |
+| `children` | emitted under the name `Seeds Given` |
+| name suffix | no `(Whole)` at 365 days, no `(At Rest)` once sealed |
+
+Measured before and after on the same worst case, renderer alone:
+
+| | Gas | Bytes |
+|---|---|---|
+| Before | 1,547,524 | 9,882 |
+| After | 1,482,495 | 10,066 |
+
+**The new attributes made the renderer 65,029 gas cheaper.** `_attributes` had
+to be split into `_attrsA` and `_attrsB` because fourteen arguments to one
+`abi.encodePacked` runs out of stack under the coverage profile, and two
+smaller calls beat one large one by more than the four new attributes cost.
+This is the third time on this spike that the expensive half was not the one it
+looked like.
+
+### Correctness
+
+- 112 tests: 74 render, 34 `MROSpikeToken`, 3 gas budget, 1 size guard.
+- Every owner function has an explicit test and every access-control revert has
+  one, including the full `Ownable2Step` flow and the window where the old owner
+  still holds control.
+- 100% line, statement and function coverage on every file under `src/render`
+  and on `src/spike/MROSpikeToken.sol`.
+- Both build profiles run green. Gas ceilings are asserted only on the profile
+  that ships: `forge coverage` cannot use the IR pipeline, so
+  `[profile.coverage]` turns off `via_ir` and the optimiser, and the same source
+  then costs roughly two and a half times as much. Asserting a gas ceiling
+  against that build measures the profile, not the contract.
+
+### One bug found by a test rather than by review
+
+The spec stores sunset as `sunsetDay == 0 means not sunset`. That sentinel works
+only because the piece does not launch on 1 January 1970 -- and it fails outright
+in a test, where the chain clock starts at timestamp 1 and `today()` is genuinely
+0. An explicit `isSunset` flag removes the ambiguity at no cost, since a `uint32`
+and a `bool` share one slot. `test_sunsetOnDayZeroIsStillSunset` pins it, and
+the spec should be amended in Task 12.
+
+### What Task 8 leaves open
+
+- **Pulse's `animation_url` is still unbudgeted and unbuilt.** Unchanged from
+  Task 7. It roughly doubles tokenURI bytes and needs measuring separately.
+- **`touchRange` refuses the collection-wide catch-all**, and `sunset()`
+  therefore emits no `BatchMetadataUpdate` at all, because this contract does
+  not track its own id range. The real contract must emit over the ids it
+  actually minted; that is a Plan 2 requirement, recorded here so it is not
+  lost.
