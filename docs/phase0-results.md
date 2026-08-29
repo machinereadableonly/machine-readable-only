@@ -1241,3 +1241,88 @@ approval once the Pulse numbers above were recorded. The git history keeps them.
 It does not restore what Pulse meant. Pulse made the heart beat; nothing on the
 ladder now suggests motion. That was a deliberate call when the rung was
 declared open rather than reserved for an aliveness Mark.
+
+---
+
+## ERC-4906 re-tested, and the first finding corrected
+
+The Phase 2 finding said the refresh "did not happen". That was two claims, and
+they are not equally supported. Re-tested 2026-08-29 after reading Alchemy's own
+documentation, which named three flaws in the original method.
+
+### What was wrong with the first test
+
+- **Ninety minutes of polling without a refresh flag only reads the cache.** It
+  never asks for a re-read, so it can only show the cache does not self-expire.
+- **Alchemy allows "one refresh per token every 15 minutes, globally for all
+  users"** (their SDK documentation). The two `refreshCache=true` calls were TEN
+  minutes apart, so at most one was ever enqueued.
+- **Refreshes are queued, not synchronous.** The dedicated endpoint returns
+  `status: "Queued"` and an `estimatedMsToRefresh`. `invalidateContract` was
+  given four minutes.
+
+And `timeLastUpdated` is documented as the LAST REFRESH TIME, so its staying
+frozen is consistent with no refresh having run at all. The first test read it
+as "it is not re-reading", which does not follow.
+
+### What is now verified rather than assumed
+
+**Our side is correct.** `MetadataUpdate(1)` is on chain at block 46119616 with
+topic `0xf8e1a15aba9398e019f0b49df1a4fde98ee17ae345cb5f6b5e2c27f5033e8ce7`,
+exactly as EIP-4906 specifies; 29 such events sit on the contract. This had only
+ever been asserted from the source before.
+
+**ERC-4906 obliges nobody.** The EIP's language is that a third party "can"
+update the metadata. No requirement, no timing guarantee. Confirmed against the
+spec text. So the design rule holds regardless of any measurement: the piece
+must never depend on an indexer refreshing.
+
+### The re-test result: still inconclusive, but for a nameable reason
+
+The discriminator is `timeLastUpdated`, not Level. Three outcomes are possible
+and only one justifies alarm:
+
+| Observation | Meaning |
+|---|---|
+| timestamp moves, Level updates | Refresh works. Operational problem only. |
+| timestamp moves, Level does not | It re-read and got a stale answer. Serious. |
+| timestamp never moves | The refresh never ran. Says nothing about ERC-4906. |
+
+Measured on `0x12C641d5C15DeEc21D71912973Bd8f63967b9bF6` token 1, chain at Level
+300 and cache at Level 365:
+
+- **Passive staleness is now 7.4 hours, not 90 minutes.** `timeLastUpdated`
+  frozen at `2026-08-29T12:38:35.181Z`, the cached name still reading
+  "(Whole)". This part of the original finding is STRONGER than first reported:
+  a correctly emitted event produced no passive pickup in that window.
+- **One clean refresh, issued well outside the 15-minute window, then polled
+  every 3 minutes for 30 minutes: the timestamp never moved.** That is row 3 --
+  uninformative about ERC-4906, and it means the refresh did not run.
+
+### The one mechanism still untried
+
+Both the original test and this one used `getNFTMetadata?refreshCache=true`.
+Neither used the DEDICATED `refreshNftMetadata` endpoint, which is the one that
+returns `status` and `estimatedMsToRefresh` -- the only variant that reports
+whether a refresh was actually accepted. Until that is tried, "explicit refresh
+does not work" is not established.
+
+`tools/erc4906-retest.mjs` carries the method and the discriminator table.
+Record in `tools/out/erc4906-retest.log` (gitignored).
+
+### Standing caveat
+
+All of this is Base Sepolia. There is no reason to assume an indexer services a
+testnet cache with mainnet urgency, and that caveat travels with every number
+above.
+
+### Why this is probably smaller than it first looked
+
+If explicit refresh works, it has an obvious home: the Clock already batches
+every check-in into one transaction daily at 00:05, so the same job can poke the
+indexer for the tokens it just touched. That is a Plan 3 cron step, not a design
+change.
+
+The deeper safety net is already in the artwork. The QR encodes
+`https://<domain>/t/<id>`, so a stale marketplace thumbnail still scans to the
+live record. The token carries the address of its own current truth.

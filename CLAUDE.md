@@ -150,12 +150,22 @@ return visits, so the artwork is the agent's own history of coming back.
   -- then upscales that bitmap, and 54% of the results would not decode.
   Declaring canvas * 16 took that to 3.6%. The grey-level count is the cheap
   diagnostic: the artwork has 3, a resampled copy has 150-208.
-- **The ERC-4906 refresh did not happen, and no contract change fixes it.**
-  A confirmed on-chain state change, with MetadataUpdate emitted after the
-  write, left Alchemy's cache frozen through 90 minutes of polling,
-  refreshCache twice and invalidateContract. This piece is defined as an image
-  that changes as an agent returns, so this is the biggest open risk in the
-  project. It is a design question, not a Solidity one.
+- **ERC-4906: no PASSIVE pickup, and the explicit refresh is still untested.**
+  Corrected 2026-08-29 after the first write-up overstated it. What holds:
+  MetadataUpdate(1) IS on chain (block 46119616, correct topic), the EIP obliges
+  nobody ("a third party CAN update"), and Alchemy's cache stayed stale for 7.4
+  hours after a confirmed state change. What does NOT hold: that explicit
+  refresh fails. Both attempts used getNFTMetadata?refreshCache=true, both fell
+  foul of Alchemy's documented one-refresh-per-token-per-15-minutes global
+  limit, and refreshes are QUEUED. A clean single refresh outside that window
+  left timeLastUpdated unmoved for 30 minutes -- which means the refresh never
+  ran, and says nothing about ERC-4906.
+  NEXT: the dedicated refreshNftMetadata endpoint, the only one returning status
+  and estimatedMsToRefresh, has never been tried. Watch timeLastUpdated, not
+  Level: see tools/erc4906-retest.mjs for the discriminator table.
+  All of it is Base Sepolia; a testnet cache may not be serviced like mainnet.
+  The design rule stands regardless: the piece must never DEPEND on an indexer
+  refreshing. Do not propose contract changes -- the gap is consumer-side.
 - **Coinbase Agentic Wallets cannot sign NFT trades** -- this rules out an
   otherwise obvious integration.
 - **Distribution is the real risk, not the build.** Five of six early-2026
