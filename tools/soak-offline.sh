@@ -22,7 +22,10 @@ TOTAL=$(node -e 'import("./state-matrix.mjs").then(m=>console.log(m.decodeCases(
 EXTREME=$(node -e 'import("./state-matrix.mjs").then(m=>console.log(m.decodeExtremes().length))')
 
 run "every ink x every ring count, one size" "$TOTAL"
-run "the extremes, five sizes each" "$EXTREME" --extremes
+run "the extremes, every size in DECODE_SIZES" "$EXTREME" --extremes
+CROSS=$(node -e 'import("./state-matrix.mjs").then(m=>console.log(m.crossCases().length))')
+# Five per process is one token id per process, so each solves one bitmap.
+BATCH=5 run "state x bitmap, third-party sizes" "$CROSS" --cross
 
 [ "$FAILED" -eq 0 ] && echo "OK: every state decoded to its own url" || echo "FAIL: see above"
 exit "$FAILED"

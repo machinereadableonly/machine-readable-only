@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The solver has been picking the one fragile code out of eight</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>The solver has been picking the one fragile code out of eight</h1>
+<p>Measured 2026-08-29, Phase 1 of Task 10c. <strong>A decision is needed before any fix
+is written</strong>, because this touches ground the project marked settled: the QArt
+solver and its best-of-8 mask search.</p>
+<hr>
+<h2>The short version</h2>
+<p><code>bestOfAllMasks</code> picks the mask with the highest heart match. On two of twelve
+tokens tested, that criterion selected a code that <strong>fails to scan at roughly a
+fifth of raster sizes</strong>, while seven of the other eight masks for the same token
+scan at every size tested -- for about one percentage point of heart fidelity.</p>
+<p>The selector is not just failing to avoid fragile codes. On both failing tokens
+it actively chose the fragile one, because fragility and fidelity happened to
+point the same way.</p>
+<h2>How it was found</h2>
+<p>Task 10c step 2 crossed twelve independent QArt solves against five states and
+decoded each at the four raster sizes a third party actually picks (256, 500,
+1000, 1080) plus its own exact multiple as a control.</p>
+<p><strong>300 decodes, 3 failures. Every failure at a third-party size. Zero at exact
+multiples.</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Decodes</th>
+<th>Failures</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Third-party sizes (256/500/1000/1080)</td>
+<td>240</td>
+<td>3</td>
+</tr>
+<tr>
+<td>Exact multiples of the canvas</td>
+<td>60</td>
+<td>0</td>
+</tr>
+</tbody></table>
+<p>That alone reproduced the token-12 resonance from sweep D and showed it was not
+a one-off. But the interesting part came from characterising it.</p>
+<h2>It is not a narrow resonance. It is a fragile solve.</h2>
+<p>Each failing token was then decoded at 31 raster sizes from 300px to 1800px,
+alongside two healthy tokens as controls:</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>State</th>
+<th>QArt match</th>
+<th>Decoded</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>whole, 1 year</td>
+<td>64.9%</td>
+<td><strong>31/31</strong></td>
+</tr>
+<tr>
+<td>3</td>
+<td>whole, 1 year</td>
+<td>64.5%</td>
+<td><strong>31/31</strong></td>
+</tr>
+<tr>
+<td>12</td>
+<td>whole, 10 years</td>
+<td>65.4%</td>
+<td>29/31</td>
+</tr>
+<tr>
+<td>55</td>
+<td>whole, 1 year</td>
+<td>64.2%</td>
+<td><strong>25/31 (81%)</strong></td>
+</tr>
+</tbody></table>
+<p>Token 55 fails at 350, 500, 1000, 1150, 1300 and 1550px. That is not the narrow
+resonance sweep D described at one-in-130; it is close to <strong>one raster size in
+five</strong>. And the match rates are all within 1.2 points of each other, so <strong>heart
+match does not predict robustness at all</strong> -- there is no signal in the number
+the solver is currently optimising.</p>
+<h2>The cause: mask 4, chosen for fidelity</h2>
+<p>Solving each token against all eight masks and scoring both fidelity and
+robustness over nine raster sizes:</p>
+<p><strong>Token 55</strong> -- the solver chose mask 4.</p>
+<table>
+<thead>
+<tr>
+<th>Mask</th>
+<th>Match</th>
+<th>Decodes</th>
+<th></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td>62.5%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td>1</td>
+<td>63.3%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td>2</td>
+<td>62.5%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td>3</td>
+<td>62.2%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td><strong>4</strong></td>
+<td><strong>64.2%</strong></td>
+<td><strong>3/9</strong></td>
+<td><strong>chosen -- fails at 350, 500, 1000, 1150, 1300, 1550</strong></td>
+</tr>
+<tr>
+<td>5</td>
+<td>61.4%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td>6</td>
+<td>60.6%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td>7</td>
+<td>62.7%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+</tbody></table>
+<p><strong>Token 12</strong> -- the solver chose mask 4.</p>
+<table>
+<thead>
+<tr>
+<th>Mask</th>
+<th>Match</th>
+<th>Decodes</th>
+<th></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td>62.7%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td>1</td>
+<td>63.3%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td>2</td>
+<td>62.0%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td>3</td>
+<td>62.9%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td><strong>4</strong></td>
+<td><strong>65.4%</strong></td>
+<td><strong>8/9</strong></td>
+<td><strong>chosen -- fails at 700</strong></td>
+</tr>
+<tr>
+<td>5</td>
+<td>59.9%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td>6</td>
+<td>60.3%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td>7</td>
+<td>63.9%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+</tbody></table>
+<p><strong>Token 1</strong> (control) -- chose mask 7, and all eight masks are robust anyway.</p>
+<p>The pattern is consistent: where a token is fragile, mask 4 is the culprit and
+it wins on match by about a point. Mask 4 is the horizontal-bands pattern, which
+produces long uniform runs -- plausible under fractional sampling, though the
+mechanism was not chased further because the fix does not depend on it.</p>
+<p><strong>The cost of avoiding it is 0.9 points of heart match on token 55, and 1.5 on
+token 12.</strong></p>
+<h2>Two hypotheses tested and rejected</h2>
+<ul>
+<li><strong>Antialiasing does not fix it.</strong> Removing <code>shape-rendering=&quot;crispEdges&quot;</code> so
+module edges blur was tested on all three failures. All three still failed.
+Worth having ruled out, since a real camera&#39;s optical blur was thought to work
+against this artefact.</li>
+<li><strong>Controlling our own raster size does not fix it either</strong> -- not on its own.
+It helps only consumers that honour the SVG&#39;s intrinsic size, and a CDN asked
+for a 500px image will still produce 500px. It remains worth doing (see the
+options), but it is mitigation, not a cure.</li>
+</ul>
+<h2>Why this matters more than the numbers suggest</h2>
+<p>The bitmap is solved <strong>off chain</strong>, by <code>tools/token-bitmap.mjs</code>, and the hex is
+passed into <code>mint()</code>. So a stricter selection criterion costs nothing on chain,
+changes no contract, and does not touch the gas budget. But it is also
+<strong>permanent per token</strong>: once a fragile code is minted, that token carries it for
+the life of the piece. This is not a bug that can be patched later.</p>
+<p>Two of twelve tokens is not a rare edge. If it holds, roughly one token in six
+would ship a code that fails to scan at a common marketplace image size.</p>
+<hr>
+<h2>The options</h2>
+<p><strong>A. Change the selection criterion to prefer robustness (recommended).</strong>
+<code>bestOfAllMasks</code> verifies each candidate decodes across a spread of raster
+sizes, and picks the highest-match mask among those that survive. Measured cost:
+about one point of heart fidelity on affected tokens, none on unaffected ones.
+Costs solve time -- roughly 8 masks x N sizes of decoding per token, offline and
+once per token, reducible by testing masks in match order and stopping at the
+first robust one. No contract change, no gas change.</p>
+<p><strong>B. Ban mask 4 outright.</strong> Simpler and faster: drop 4 from <code>MASKS</code>. But it is a
+guess dressed as a rule -- mask 4 was fine on token 1, and nothing proves another
+mask cannot be fragile on some other payload. It also gives up fidelity on every
+token, including the ones that were never at risk.</p>
+<p><strong>C. Do A, and also give the SVG an intrinsic pixel size</strong> (the original Task 10c
+step 3). Belt and braces: A removes the fragility, the declared size keeps
+consumers that honour it on an exact multiple anyway. About 30 extra bytes in
+the tokenURI.</p>
+<p><strong>D. Accept it and move on.</strong> Defensible only if one-in-six tokens carrying a
+code that misses at some sizes is acceptable for the piece. Recording it as a
+known limitation rather than pretending it is not there.</p>
+<h2>What I need from the operator</h2>
+<p>Which option, and if A or C, what counts as &quot;robust&quot; -- the spread of raster
+sizes a solve must clear before it is accepted. My suggestion is the nine sizes
+used above plus the exact multiple, which caught every known failure, but a
+wider net costs only solve time.</p>
+<h2>Evidence</h2>
+<p>Probes are in the session scratchpad and are throwaway:
+<code>/tmp/claude-1001/-home-tj-projects-machine-readable-only/422be5f6-3d7c-4268-b6b2-27572b513830/scratchpad/</code>
+-- <code>probe-aa.mjs</code> (antialiasing), <code>probe-spread.mjs</code> (31 sizes),
+<code>probe-masks.mjs</code> (all eight masks), <code>cross-sweep.log</code> (the 300 decodes).</p>
+<p>Repo changes made so far in Phase 1, both committed-ready and green:</p>
+<ul>
+<li><code>tools/state-matrix.mjs</code> -- <code>DECODE_SIZES</code> extended to 1600px; the cross sweep
+added (<code>THIRD_PARTY_SIZES</code>, <code>CROSS_TOKEN_IDS</code>, <code>crossStates</code>, <code>crossCases</code>).</li>
+<li><code>tools/soak-offline.mjs</code> -- <code>--cross</code> mode, one solve cached per token id.</li>
+<li><code>tools/soak-offline.sh</code> -- runs the cross sweep, five per process.</li>
+</ul>
+<p>The extended extremes sweep passed 72/72 to 1600px, so the palette fix from
+sweep C holds where the bug it fixed actually lived. That blind spot is closed.</p>
+
+</body>
+</html>

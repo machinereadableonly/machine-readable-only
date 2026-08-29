@@ -79,10 +79,10 @@ library SpikeBitmaps {
                 hex"6e2013fedfeb69feefeeb3a6ffddfcebefeff6ec983fedfe66f7eefeeb7c87fddfe585feff6b1860fedfe36feeefecfa0077ddf443f92ff6ea905badf114bacefe4fa5d020c7dbee9edd2ecd053653686feaa78c7f80";
         }
 
-        // soak state 11 -- https://example.com/t/12# (mask 4, heart match 65.4%)
+        // soak state 11 -- https://example.com/t/12# (mask 7, heart match 63.9%)
         if (id == 12) {
-            return hex"fe8e2b5bfc15a056906ebfcbfcbb75ff1ff5dba3f9bfaec14ec5ed07faaaaaafe00fe9fe00ce0efee979eefddfc58ffeff6ef4fbfedfe3d7feefeeb29effddfc79ffeff6ee0fbfedfe4e7feefeef296ffddfe7a8feff"
-                hex"6e202bfedfeb653eefeeb3ccffddfcebefeff6ec953fedfe6657eefeeb7ceffddfe58e9eff6b1842fedfe36ee6efeefa0047ddf443f9cff6ea9057edb114ba8ef86fa5d27487dbee88b94ecd057a97e86feca30c1f80";
+            return hex"fe02922bfc1617a1906ebd0358bb74fea7f5dbabf8bfaec16e9bed07faaaaaafe01fedfe00d33eefebb5eefffff34fff66f70bfbdfedf8bffeeeeea0defdffdf87ffef66e737bfffff6a3feefeef2f4ffdfff5d7fe66"
+                hex"6796cbfedfeb617feefee8f2ffffff86fff66f736f3dfedfd0ebeeeee25b27dffd1a6abef66f8a837ffff12deaefecfa007fdfec67fb86642bf0436db914ba56ed0f95d5eaa76d2e81609133059be9b30fecc6a88d80";
         }
 
         // soak state 12 -- https://example.com/t/13# (mask 4, heart match 64.4%)

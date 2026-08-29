@@ -10,7 +10,12 @@ import { renderModules, scanResult } from "./helpers/decode.mjs";
 
 test("the hex round-trips to the same modules the solver produced", () => {
   const r = tokenBitmap("example.com", 1);
+  // Token 1's best-matching mask is also robust, so the gate does not move it
+  // and the two selectors agree here. That is asserted rather than assumed --
+  // if it ever stops being true, every generated fixture keyed to token 1 moves
+  // with it, and this is the test that says so first.
   const best = bestOfAllMasks(payloadFor("example.com", 1));
+  assert.equal(r.rejected, 0, "token 1 is expected to need no gate rejection");
   const bytes = Uint8Array.from(Buffer.from(r.hex, "hex"));
   assert.deepEqual(Array.from(unpackModules(bytes, SIZE)), Array.from(best.modules));
 });

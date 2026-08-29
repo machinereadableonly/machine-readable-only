@@ -3,7 +3,8 @@
 //   npm run preview -- 42 7    -- token ids 42 and 7, whole, one year
 import { writeFileSync, mkdirSync } from "node:fs";
 import { Resvg } from "@resvg/resvg-js";
-import { bestOfAllMasks, payloadFor } from "./qart.mjs";
+import { unpackModules } from "./qart.mjs";
+import { tokenBitmap, SIZE } from "./token-bitmap.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import { renderSvg } from "./render-token.mjs";
 
@@ -18,9 +19,15 @@ const STATES = [
 ];
 mkdirSync("out", { recursive: true });
 for (const id of ids.length ? ids : [1]) {
-  const code = bestOfAllMasks(payloadFor(DOMAIN, id));
+  // The SHIPPED selection, not the best-matching one. A preview that shows a
+  // different code than the token would carry is a placeholder, and reviewing
+  // a placeholder is how this project got a verdict on a black square once.
+  const bitmap = tokenBitmap(DOMAIN, id);
+  const code = { modules: unpackModules(Uint8Array.from(Buffer.from(bitmap.hex, "hex")), SIZE),
+                 size: SIZE, mask: bitmap.mask, match: bitmap.match };
   const target = heartTarget(code.size);
-  console.log(`token ${id}: mask ${code.mask}, heart ${(code.match * 100).toFixed(1)}%`);
+  console.log(`token ${id}: mask ${code.mask}, heart ${(code.match * 100).toFixed(1)}%`
+    + (bitmap.rejected ? `, ${bitmap.rejected} better-matching mask(s) rejected as unscannable` : ""));
   for (const s of (ids.length > 1 ? [STATES[3]] : STATES)) {
     const svg = renderSvg(code.modules, target.want, code.size, s);
     writeFileSync(`out/token-${id}-${s.tag}.png`,

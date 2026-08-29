@@ -11,6 +11,11 @@ import QRCode from "qrcode";
 import { heartTarget } from "./heart-target.mjs";
 
 export const VERSION = 5;              // 37 x 37 modules
+export const VERSION_SIZE = 37;        // that version's side, in modules
+                                       // Lives here, not in token-bitmap.mjs: heart-mask.mjs
+                                       // needs it too, and importing it from the higher-level
+                                       // bitmap module made a cycle once robust-solve.mjs
+                                       // put a renderer in that path.
 export const ECC = "L";                // lowest correction leaves the most free bits
 const DATA_CODEWORDS = 108;            // version 5, level L, single block
 const DATA_BITS = DATA_CODEWORDS * 8;
@@ -120,13 +125,20 @@ export function solve(payload, mask, target) {
 
 // Every mask puts the free modules somewhere different, so searching all eight
 // is free fidelity: measured +2.0 points on average, and it lifts the worst case.
+//
+// All eight solves, best heart match first. Callers that care only about
+// fidelity take the head; callers that also care whether the code SCANS walk the
+// list. See robust-solve.mjs for why the second kind exists.
+export function allMaskSolves(payload, target) {
+  return MASKS.map(mask => solve(payload, mask, target))
+              .sort((a, b) => b.match - a.match);
+}
+
+// The best-looking solve, fidelity alone. NOT what a shipped token uses -- see
+// tools/robust-solve.mjs. Kept because the previews and the QArt tests want the
+// pure geometric answer, with no decoder in the loop.
 export function bestOfAllMasks(payload, target) {
-  let best = null;
-  for (const mask of MASKS) {
-    const r = solve(payload, mask, target);
-    if (!best || r.match > best.match) best = r;
-  }
-  return best;
+  return allMaskSolves(payload, target)[0];
 }
 
 // The stored form: one bit per module, row major, packed into bytes.

@@ -1319,6 +1319,191 @@ which is the one raster nobody here chooses.</p>
 public RPC load-balances, and a read can hit a node that has not yet processed
 the write. Anything that writes and then verifies -- the Clock, the Warden, and
 the ERC-4906 refresh timing in Task 11 -- has to poll rather than read once.</p>
+<hr>
+<h2>Task 10c, Phase 1: the solver was picking the one fragile code out of eight</h2>
+<p>Task 10c exists because Task 11&#39;s premise was checked and found to be half
+wrong. OpenSea has had no testnet since 23 July 2025 -- confirmed live,
+<code>testnets.opensea.io</code> now 307-redirects to a shutdown notice -- but OpenSea is
+not the only party that parses a <code>tokenURI</code> and rasterises an on-chain SVG at
+dimensions it chooses. Alchemy&#39;s NFT API and Basescan both do, both run on Base
+Sepolia, and both are free. That reopened a large amount of testable ground
+before any real money is spent.</p>
+<p>Phase 1 was meant to close a blind spot. It found a defect instead.</p>
+<h3>First, the blind spot, which was real</h3>
+<p><code>DECODE_SIZES</code> stopped at 900px. The palette bug sweep C found on 2026-08-29 did
+not appear until <strong>1200px</strong> on a bare token; the diagnosis that pinned it went to
+1600px by hand, but the standing sweep never followed. <strong>The sweep that found the
+bug could not have seen it come back.</strong></p>
+<p>Extended to 1100, 1200, 1400 and 1600px: <strong>72/72 clean</strong>. The palette fix holds
+where the bug it fixed actually lived, and the gap is closed.</p>
+<h3>Then the cross sweep, which found the defect</h3>
+<p>Every previous decode sweep held one of two variables still. The offline sweep
+rendered every state with token 1&#39;s bitmap; the Sepolia sweep gave each of 27
+bitmaps a single state. Each token has its own QArt solve, so the module layout
+differs per token -- which is how token 12 reached a live chain before anyone saw
+it fail -- and the interaction had never been tested.</p>
+<p>Twelve independent solves x five states x four third-party raster sizes, plus
+each case at its own exact multiple as a control:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Decodes</th>
+<th>Failures</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Third-party sizes (256 / 500 / 1000 / 1080)</td>
+<td>240</td>
+<td>3</td>
+</tr>
+<tr>
+<td>Exact multiples of the canvas</td>
+<td>60</td>
+<td><strong>0</strong></td>
+</tr>
+</tbody></table>
+<p>Characterising the three failures across 31 raster sizes from 300 to 1800px,
+against two healthy tokens as controls:</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>State</th>
+<th>QArt match</th>
+<th>Decoded</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>whole, 1 year</td>
+<td>64.9%</td>
+<td><strong>31/31</strong></td>
+</tr>
+<tr>
+<td>3</td>
+<td>whole, 1 year</td>
+<td>64.5%</td>
+<td><strong>31/31</strong></td>
+</tr>
+<tr>
+<td>12</td>
+<td>whole, 10 years</td>
+<td>65.4%</td>
+<td>29/31</td>
+</tr>
+<tr>
+<td>55</td>
+<td>whole, 1 year</td>
+<td>64.2%</td>
+<td><strong>25/31</strong></td>
+</tr>
+</tbody></table>
+<p>Token 55 fails at 350, 500, 1000, 1150, 1300 and 1550px -- <strong>one raster size in
+five</strong>, not the one-in-130 narrow resonance sweep D described. All four match
+rates sit within 1.2 points of each other, so <strong>heart match carries no signal
+about robustness</strong>: the number the solver was optimising cannot see this.</p>
+<h3>The cause: the selector was choosing the fragile one</h3>
+<p>Solving each token against all eight masks and scoring fidelity and robustness
+separately:</p>
+<p><strong>Token 55</strong> -- <code>bestOfAllMasks</code> chose mask 4.</p>
+<table>
+<thead>
+<tr>
+<th>Mask</th>
+<th>Match</th>
+<th>Decodes</th>
+<th></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>63.3%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+<tr>
+<td><strong>4</strong></td>
+<td><strong>64.2%</strong></td>
+<td><strong>3/9</strong></td>
+<td><strong>chosen; fails at 350, 500, 1000, 1150, 1300, 1550</strong></td>
+</tr>
+<tr>
+<td>7</td>
+<td>62.7%</td>
+<td>9/9</td>
+<td>robust</td>
+</tr>
+</tbody></table>
+<p>Seven of the eight masks were fully robust. <strong>Token 12</strong> was the same story: mask
+4 chosen at 65.4%, failing at 700px, with mask 7 robust at 63.9%. Token 1, the
+control, had all eight masks robust and was never at risk.</p>
+<p>Mask 4 is <strong>not</strong> inherently bad -- it is the chosen, robust mask on 20 of the 27
+soak tokens. That is why banning it was rejected as a fix: it would have been a
+guess that cost fidelity everywhere to solve a problem in two places.</p>
+<p>Two hypotheses were tested and rejected:</p>
+<ul>
+<li><strong>Antialiasing does not help.</strong> Dropping <code>shape-rendering=&quot;crispEdges&quot;</code> so
+module edges blur was tried on all three failures. All three still failed.</li>
+<li><strong>Controlling our own raster size does not cure it.</strong> It only helps consumers
+that honour the SVG&#39;s intrinsic size; a CDN asked for 500px still makes 500px.</li>
+</ul>
+<h3>The fix: robustness first, heart match second</h3>
+<p>the operator chose option A on 2026-08-29. <code>tools/robust-solve.mjs</code> now selects the
+<strong>highest-matching mask that survives a decode gate</strong> -- five states x nine
+raster sizes plus each state&#39;s exact multiple, 50 decodes per candidate. Masks
+are tried in match order and the first survivor wins, so a healthy token pays for
+exactly one gate run.</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Was</th>
+<th>Now</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>mask 7, 64.9%</td>
+<td>mask 7, 64.9%</td>
+<td>unchanged</td>
+</tr>
+<tr>
+<td>12</td>
+<td>mask 4, 65.4%</td>
+<td>mask 7, 63.9%</td>
+<td>1.5 points</td>
+</tr>
+<tr>
+<td>55</td>
+<td>mask 4, 64.2%</td>
+<td>mask 1, 63.3%</td>
+<td>0.9 points</td>
+</tr>
+</tbody></table>
+<p>Token 1 is unchanged, which is why every generated fixture keyed to it -- the
+render, colour, code-path, frame-path and tokenURI fixtures -- is byte-identical
+and the 121 Solidity tests needed no regeneration.</p>
+<p><strong>This costs no gas and changes no contract.</strong> The bitmap is solved off chain and
+passed into <code>mint()</code> as hex. But it is permanent per token: a fragile code, once
+minted, is carried for the life of the piece, which is why the gate is stricter
+than the failures strictly required.</p>
+<p><code>robustSolve</code> throws rather than returning a fragile code if no mask survives.
+That has not happened on any payload measured.</p>
+<h3>Two operational traps this turned up</h3>
+<ul>
+<li><strong><code>safe-build.sh</code> prints its banner on STDOUT</strong>, not stderr. Appending a
+generator&#39;s stdout straight to a file mixes banner text into the data. Sieve by
+shape (<code>grep &#39;^{&#39;</code>). Same class of trap as <code>forge --json</code> printing &quot;No files
+changed&quot; first.</li>
+<li><strong>resvg&#39;s raster buffers are NATIVE memory.</strong> <code>--max-old-space-size</code> does not
+bound them: a 27-token generation in one process sat at 2.0 GB and throttled
+against the memory cap without finishing, with the JS heap capped at 768 MB.
+Process exit is what frees them. <code>tools/spike-bitmaps.sh</code> therefore solves one
+token per process, and keeps its rows in <code>tools/out/spike-rows.jsonl</code> so a
+failed assembly does not cost the eight-minute solve again.</li>
+</ul>
 
 </body>
 </html>
