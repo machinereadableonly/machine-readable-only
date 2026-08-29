@@ -100,46 +100,44 @@ contract FrameRendererTest is Test {
     // level 365, one ring: whole, so every cell lights and the ghost disappears.
     function _wholeFrameD() internal pure returns (string memory) {
         return
-        "M0 0h53v1h-53zM0 1h1v1h-1zM52 1h1v1h-1zM0 2h1v1h-1zM2 2h49v1h-49zM52 2h1v1h-1zM0 3h1v1h-1z"
-        "M2 3h49v1h-49zM52 3h1v1h-1zM0 4h1v1h-1zM2 4h2v1h-2zM49 4h2v1h-2zM52 4h1v1h-1zM0 5h1v1h-1zM"
-        "2 5h2v1h-2zM49 5h2v1h-2zM52 5h1v1h-1zM0 6h1v1h-1zM2 6h2v1h-2zM49 6h2v1h-2zM52 6h1v1h-1zM0 "
-        "7h1v1h-1zM2 7h2v1h-2zM49 7h2v1h-2zM52 7h1v1h-1zM0 8h1v1h-1zM2 8h2v1h-2zM49 8h2v1h-2zM52 8h"
-        "1v1h-1zM0 9h1v1h-1zM2 9h2v1h-2zM49 9h2v1h-2zM52 9h1v1h-1zM0 10h1v1h-1zM2 10h2v1h-2zM49 10h"
-        "2v1h-2zM52 10h1v1h-1zM0 11h1v1h-1zM2 11h2v1h-2zM49 11h2v1h-2zM52 11h1v1h-1zM0 12h1v1h-1zM2"
-        " 12h2v1h-2zM49 12h2v1h-2zM52 12h1v1h-1zM0 13h1v1h-1zM2 13h2v1h-2zM49 13h2v1h-2zM52 13h1v1h"
-        "-1zM0 14h1v1h-1zM2 14h2v1h-2zM49 14h2v1h-2zM52 14h1v1h-1zM0 15h1v1h-1zM2 15h2v1h-2zM49 15h"
-        "2v1h-2zM52 15h1v1h-1zM0 16h1v1h-1zM2 16h2v1h-2zM49 16h2v1h-2zM52 16h1v1h-1zM0 17h1v1h-1zM2"
-        " 17h2v1h-2zM49 17h2v1h-2zM52 17h1v1h-1zM0 18h1v1h-1zM2 18h2v1h-2zM49 18h2v1h-2zM52 18h1v1h"
-        "-1zM0 19h1v1h-1zM2 19h2v1h-2zM49 19h2v1h-2zM52 19h1v1h-1zM0 20h1v1h-1zM2 20h2v1h-2zM49 20h"
-        "2v1h-2zM52 20h1v1h-1zM0 21h1v1h-1zM2 21h2v1h-2zM49 21h2v1h-2zM52 21h1v1h-1zM0 22h1v1h-1zM2"
-        " 22h2v1h-2zM49 22h2v1h-2zM52 22h1v1h-1zM0 23h1v1h-1zM2 23h2v1h-2zM49 23h2v1h-2zM52 23h1v1h"
-        "-1zM0 24h1v1h-1zM2 24h2v1h-2zM49 24h2v1h-2zM52 24h1v1h-1zM0 25h1v1h-1zM2 25h2v1h-2zM49 25h"
-        "2v1h-2zM52 25h1v1h-1zM0 26h1v1h-1zM2 26h2v1h-2zM49 26h2v1h-2zM52 26h1v1h-1zM0 27h1v1h-1zM2"
-        " 27h2v1h-2zM49 27h2v1h-2zM52 27h1v1h-1zM0 28h1v1h-1zM2 28h2v1h-2zM49 28h2v1h-2zM52 28h1v1h"
-        "-1zM0 29h1v1h-1zM2 29h2v1h-2zM49 29h2v1h-2zM52 29h1v1h-1zM0 30h1v1h-1zM2 30h2v1h-2zM49 30h"
-        "2v1h-2zM52 30h1v1h-1zM0 31h1v1h-1zM2 31h2v1h-2zM49 31h2v1h-2zM52 31h1v1h-1zM0 32h1v1h-1zM2"
-        " 32h2v1h-2zM49 32h2v1h-2zM52 32h1v1h-1zM0 33h1v1h-1zM2 33h2v1h-2zM49 33h2v1h-2zM52 33h1v1h"
-        "-1zM0 34h1v1h-1zM2 34h2v1h-2zM49 34h2v1h-2zM52 34h1v1h-1zM0 35h1v1h-1zM2 35h2v1h-2zM49 35h"
-        "2v1h-2zM52 35h1v1h-1zM0 36h1v1h-1zM2 36h2v1h-2zM49 36h2v1h-2zM52 36h1v1h-1zM0 37h1v1h-1zM2"
-        " 37h2v1h-2zM49 37h2v1h-2zM52 37h1v1h-1zM0 38h1v1h-1zM2 38h2v1h-2zM49 38h2v1h-2zM52 38h1v1h"
-        "-1zM0 39h1v1h-1zM2 39h2v1h-2zM49 39h2v1h-2zM52 39h1v1h-1zM0 40h1v1h-1zM2 40h2v1h-2zM49 40h"
-        "2v1h-2zM52 40h1v1h-1zM0 41h1v1h-1zM2 41h2v1h-2zM49 41h2v1h-2zM52 41h1v1h-1zM0 42h1v1h-1zM2"
-        " 42h2v1h-2zM49 42h2v1h-2zM52 42h1v1h-1zM0 43h1v1h-1zM2 43h2v1h-2zM49 43h2v1h-2zM52 43h1v1h"
-        "-1zM0 44h1v1h-1zM2 44h2v1h-2zM49 44h2v1h-2zM52 44h1v1h-1zM0 45h1v1h-1zM2 45h2v1h-2zM49 45h"
-        "2v1h-2zM52 45h1v1h-1zM0 46h1v1h-1zM2 46h2v1h-2zM49 46h2v1h-2zM52 46h1v1h-1zM0 47h1v1h-1zM2"
-        " 47h2v1h-2zM49 47h2v1h-2zM52 47h1v1h-1zM0 48h1v1h-1zM2 48h2v1h-2zM49 48h2v1h-2zM52 48h1v1h"
-        "-1zM0 49h1v1h-1zM2 49h49v1h-49zM52 49h1v1h-1zM0 50h1v1h-1zM2 50h49v1h-49zM52 50h1v1h-1zM0 "
-        "51h1v1h-1zM52 51h1v1h-1zM0 52h53v1h-53z";
+        "M2 2h49v1h-49zM2 3h49v1h-49zM2 4h2v1h-2zM49 4h2v1h-2zM2 5h2v1h-2zM49 5h2v1h-2zM2 6h2v1h-2z"
+        "M49 6h2v1h-2zM2 7h2v1h-2zM49 7h2v1h-2zM2 8h2v1h-2zM49 8h2v1h-2zM2 9h2v1h-2zM49 9h2v1h-2zM2"
+        " 10h2v1h-2zM49 10h2v1h-2zM2 11h2v1h-2zM49 11h2v1h-2zM2 12h2v1h-2zM49 12h2v1h-2zM2 13h2v1h-"
+        "2zM49 13h2v1h-2zM2 14h2v1h-2zM49 14h2v1h-2zM2 15h2v1h-2zM49 15h2v1h-2zM2 16h2v1h-2zM49 16h"
+        "2v1h-2zM2 17h2v1h-2zM49 17h2v1h-2zM2 18h2v1h-2zM49 18h2v1h-2zM2 19h2v1h-2zM49 19h2v1h-2zM2"
+        " 20h2v1h-2zM49 20h2v1h-2zM2 21h2v1h-2zM49 21h2v1h-2zM2 22h2v1h-2zM49 22h2v1h-2zM2 23h2v1h-"
+        "2zM49 23h2v1h-2zM2 24h2v1h-2zM49 24h2v1h-2zM2 25h2v1h-2zM49 25h2v1h-2zM2 26h2v1h-2zM49 26h"
+        "2v1h-2zM2 27h2v1h-2zM49 27h2v1h-2zM2 28h2v1h-2zM49 28h2v1h-2zM2 29h2v1h-2zM49 29h2v1h-2zM2"
+        " 30h2v1h-2zM49 30h2v1h-2zM2 31h2v1h-2zM49 31h2v1h-2zM2 32h2v1h-2zM49 32h2v1h-2zM2 33h2v1h-"
+        "2zM49 33h2v1h-2zM2 34h2v1h-2zM49 34h2v1h-2zM2 35h2v1h-2zM49 35h2v1h-2zM2 36h2v1h-2zM49 36h"
+        "2v1h-2zM2 37h2v1h-2zM49 37h2v1h-2zM2 38h2v1h-2zM49 38h2v1h-2zM2 39h2v1h-2zM49 39h2v1h-2zM2"
+        " 40h2v1h-2zM49 40h2v1h-2zM2 41h2v1h-2zM49 41h2v1h-2zM2 42h2v1h-2zM49 42h2v1h-2zM2 43h2v1h-"
+        "2zM49 43h2v1h-2zM2 44h2v1h-2zM49 44h2v1h-2zM2 45h2v1h-2zM49 45h2v1h-2zM2 46h2v1h-2zM49 46h"
+        "2v1h-2zM2 47h2v1h-2zM49 47h2v1h-2zM2 48h2v1h-2zM49 48h2v1h-2zM2 49h49v1h-49zM2 50h49v1h-49"
+        "zM0 0h53v1h-53zM0 52h53v1h-53zM0 1h1v51h-1zM52 1h1v51h-1z";
     }
 
     // ---------------------------------------------------------------------
     // Canvas and rings
     // ---------------------------------------------------------------------
 
-    function test_theCanvasGrowsTwoCellsPerCompletedYear() public pure {
+    function test_theCanvasGrowsFourCellsPerCompletedYear() public pure {
+        // Two cells per side: the ring itself, and the blank cell that separates
+        // it from the next ring in. The first year costs only two, because the
+        // outermost ring needs nothing outside it.
         assertEq(FrameRenderer.canvas(0), 51, "year zero");
         assertEq(FrameRenderer.canvas(1), 53, "one completed year");
-        assertEq(FrameRenderer.canvas(3), 57, "three completed years");
+        assertEq(FrameRenderer.canvas(3), 61, "three completed years");
+        assertEq(FrameRenderer.canvas(10), 89, "the cap");
+    }
+
+    function test_ringsAreSeparatedSoTheyCanBeCounted() public pure {
+        // The point of the gap. Without it the rings merge into one slab of
+        // colour and the year count cannot be read off the image.
+        assertEq(FrameRenderer.ringSpan(0), 0, "no years, no rings");
+        assertEq(FrameRenderer.ringSpan(1), 1, "one ring is one cell");
+        assertEq(FrameRenderer.ringSpan(2), 3, "ring, gap, ring");
+        assertEq(FrameRenderer.ringSpan(10), 19, "ten rings and nine gaps");
     }
 
     function test_ringsCountCompletedYears() public pure {
@@ -150,17 +148,17 @@ contract FrameRendererTest is Test {
         assertEq(FrameRenderer.rings(1095), 3, "three completed years");
     }
 
-    function test_ringsStopGrowingAtTheMeasuredCeiling() public pure {
-        // Measured on the reference renderer: the tokenURI crosses the 20,000
-        // byte limit at 85 completed years (84 came to 19,932, 85 to 20,044).
-        // The cap also keeps a canvas row inside the single word the renderer
-        // holds it in: 80 rings make the canvas 211 cells, 107 would make it 265.
-        assertEq(FrameRenderer.MAX_RINGS, 80, "the cap is 80 years");
-        assertEq(FrameRenderer.rings(365 * 80), 80, "eighty years still counts");
-        assertEq(FrameRenderer.rings(365 * 200), 80, "beyond the cap it stops");
-        assertEq(FrameRenderer.rings(type(uint32).max), 80, "a runaway clock cannot grow it");
+    function test_ringsStopGrowingAtTheReadableCeiling() public pure {
+        // Ten, decided 2026-08-29 on the rendered evidence in docs/year-rings.png
+        // rather than on what fits: past ten years the heart is under half the
+        // canvas and the rings are no longer countable. Lineage carries a token
+        // on from there, and the Years attribute keeps counting regardless.
+        assertEq(FrameRenderer.MAX_RINGS, 10, "the cap is 10 years");
+        assertEq(FrameRenderer.rings(365 * 10), 10, "ten years still counts");
+        assertEq(FrameRenderer.rings(365 * 200), 10, "beyond the cap it stops");
+        assertEq(FrameRenderer.rings(type(uint32).max), 10, "a runaway clock cannot grow it");
         assertLt(FrameRenderer.canvas(FrameRenderer.MAX_RINGS), 256, "a row still fits one word");
-        assertEq(FrameRenderer.canvas(FrameRenderer.MAX_RINGS), 211, "the widest canvas");
+        assertEq(FrameRenderer.canvas(FrameRenderer.MAX_RINGS), 89, "the widest canvas");
     }
 
     // ---------------------------------------------------------------------
@@ -203,9 +201,11 @@ contract FrameRendererTest is Test {
     }
 
     /// @dev Cells in the outlines of the first `count` rings, outermost first.
+    /// Ring k sits at depth 2k, because a blank cell separates each ring from
+    /// the next so the rings can be counted.
     function _ringCells(uint256 count) internal pure returns (uint256 n) {
         uint256 c = FrameRenderer.canvas(count);
-        for (uint256 k; k < count; ++k) n += 4 * (c - 1 - 2 * k);
+        for (uint256 k; k < count; ++k) n += 4 * (c - 1 - 4 * k);
     }
 
     function test_anEmptyPathIsOmittedRatherThanEmitted() public view {
@@ -228,7 +228,8 @@ contract FrameRendererTest is Test {
         // is what keeps both safe.
         uint32 level = 365 * 3;
         uint256 canvas = FrameRenderer.canvas(3);
-        uint256 frameStart = 3 + FrameRenderer.GAP;
+        uint256 span = FrameRenderer.ringSpan(3);
+        uint256 frameStart = span + FrameRenderer.GAP;
         PathParser.Run[] memory runs = PathParser.parse(_pathFor(_out(level), COLOUR));
 
         uint256 ringCells;
@@ -240,8 +241,11 @@ contract FrameRendererTest is Test {
                 if (y < depth) depth = y;
                 if (canvas - 1 - x < depth) depth = canvas - 1 - x;
                 if (canvas - 1 - y < depth) depth = canvas - 1 - y;
-                if (depth < 3) {
-                    ++ringCells;   // a ring cell: inside the three outermost rings
+                if (depth < span) {
+                    // A ring cell. Rings sit at even depths, so an odd depth
+                    // inside the span is a gap and must stay empty.
+                    assertEq(depth % 2, 0, "a lit cell fell in a gap between rings");
+                    ++ringCells;
                 } else {
                     assertGe(depth, frameStart, "a lit cell fell in the gap");
                     assertLt(depth, frameStart + FrameGeometry.THICK, "a lit cell fell inside the block");
@@ -252,7 +256,7 @@ contract FrameRendererTest is Test {
     }
 
     function test_theWidestCanvasStillRendersAndStaysInBudget() public view {
-        // The capped case, 80 completed years. This is the largest image the
+        // The capped case, 10 completed years. This is the largest image the
         // piece can ever produce, so it is the one that has to stay renderable.
         string memory out = harness.paths(_view(uint32(365 * FrameRenderer.MAX_RINGS)), COLOUR, GHOST);
         assertEq(bytes(_pathFor(out, GHOST)).length, 0, "a whole frame has no ghost left");
@@ -263,9 +267,8 @@ contract FrameRendererTest is Test {
             FrameGeometry.CELL_COUNT + _ringCells(FrameRenderer.MAX_RINGS),
             "every frame cell and every ring cell is drawn"
         );
-        // The reference renderer measured the whole tokenURI at 19,552 bytes here,
-        // against a 20,000 limit. The frame's own share has to leave room for the
-        // code block, the JSON and the base64 wrapper on top of it.
+        // The frame's own share has to leave room for the code block, the JSON
+        // and the base64 wrapper on top of it.
         assertLt(bytes(out).length, 6000, "the widest frame overruns its share of the budget");
     }
 

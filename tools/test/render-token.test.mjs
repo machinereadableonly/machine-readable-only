@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
-import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE } from "../render-token.mjs";
+import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE,
+         MAX_RINGS, ringsFor, ringSpan } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
 const PAYLOAD = payloadFor("example.com", 1);
@@ -119,10 +120,28 @@ test("the frame seals only when the heart is whole", () => {
   assert.ok(!sealed.includes("#f4eef0"), "a whole heart should have no ghost cells left");
 });
 
-test("canvas grows one ring per completed year", () => {
+test("canvas grows one ring per completed year, with a gap between rings", () => {
+  // Two cells per side per year: the ring, and the blank that separates it from
+  // the next one in. Without the blank the rings merge into a single slab and
+  // the year count cannot be read off the image.
   assert.equal(canvasFor(0), 51);
   assert.equal(canvasFor(1), 53);
-  assert.equal(canvasFor(3), 57);
+  assert.equal(canvasFor(3), 61);
+  assert.equal(canvasFor(10), 89, "the cap");
+  assert.equal(canvasFor(99), 89, "past the cap it stops growing");
+});
+
+test("the ring cap is ten years and matches the contract", () => {
+  // Decided 2026-08-29 on rendered evidence (docs/year-rings.png): past ten
+  // years the heart is under half the canvas and the rings stop being
+  // countable. MUST equal FrameRenderer.MAX_RINGS, asserted there too.
+  assert.equal(MAX_RINGS, 10);
+  assert.equal(ringsFor(10), 10);
+  assert.equal(ringsFor(400), 10);
+  assert.equal(ringSpan(0), 0, "no years, no rings");
+  assert.equal(ringSpan(1), 1, "one ring is one cell");
+  assert.equal(ringSpan(2), 3, "ring, gap, ring");
+  assert.equal(ringSpan(10), 19, "ten rings and nine gaps");
 });
 
 test("streak tiers map to the right colours", () => {
@@ -134,14 +153,51 @@ test("streak tiers map to the right colours", () => {
   assert.equal(tierColour(9999), "#c8102e");
 });
 
-test("marks change the image without breaking the scan", () => {
+// The five Marks that touch the image. Pulse is an animation_url and
+// Singularity picks the QArt target at mint, so neither changes what is drawn.
+const DRAWN_MARKS = ["vein", "voice", "bloom", "halo", "crown"];
+
+test("every drawn mark changes the image without breaking the scan", () => {
   const base = render({ level: 200, streak: 45, years: 0 });
-  for (const mark of ["vein", "halo", "crown"]) {
+  for (const mark of DRAWN_MARKS) {
     const svg = render({ level: 200, streak: 45, years: 0, marks: [mark] });
     assert.notEqual(svg, base, `mark ${mark} changed nothing`);
     const got = scanResult(svg);
     assert.ok(got.ok, `mark ${mark} broke the scan: ${got.why}`);
     assert.equal(got.destination, DESTINATION, `mark ${mark} changed the destination`);
+  }
+});
+
+test("the marks that do not draw leave the image alone", () => {
+  const base = render({ level: 200, streak: 45, years: 0 });
+  for (const mark of ["pulse", "singularity"]) {
+    assert.equal(render({ level: 200, streak: 45, years: 0, marks: [mark] }), base,
+      `mark ${mark} should not touch the image`);
+  }
+});
+
+test("the worst case a token can reach still scans", () => {
+  // Ten rings and every drawn Mark at once: the largest canvas, the tinted
+  // quiet zone and the gradient heart all working against the scanner
+  // together. Checked at four pixel sizes because a local binarizer behaves
+  // differently on a big raster than a small one.
+  const svg = render({ level: 365 * 10, streak: 140, years: 10, marks: DRAWN_MARKS });
+  for (const px of [900, 700, 500, 350]) {
+    const got = scanResult(svg, px);
+    assert.ok(got.ok, `the worst case failed at ${px}px: ${got.why}`);
+    assert.equal(got.destination, DESTINATION, `the destination changed at ${px}px`);
+  }
+});
+
+test("the duotone survives every mark", () => {
+  // The heart and the uncontrolled noise must stay two separate fills. Bloom
+  // swaps the heart's flat colour for a gradient reference; it must not merge
+  // the two groups or tint the noise.
+  for (const marks of [[], ["bloom"], DRAWN_MARKS]) {
+    const svg = render({ level: 200, streak: 45, years: 0, marks });
+    assert.ok(svg.includes(`fill="${NOISE}"`), `noise fill lost with ${marks}`);
+    const heart = marks.includes("bloom") ? 'fill="url(#b)"' : `fill="${tierColour(45)}"`;
+    assert.ok(svg.includes(heart), `heart fill lost with ${marks}`);
   }
 });
 

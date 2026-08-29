@@ -8,7 +8,7 @@
 //
 //   node tools/frame-path-fixture.mjs <level> <years>
 import { frameCells, BLOCK, THICK, LOCAL, DAY_CELLS } from "./frame-geometry.mjs";
-import { pathFor, canvasFor, ringsFor, GAP } from "./render-token.mjs";
+import { pathFor, canvasFor, ringsFor, ringSpan, ringBars, GAP } from "./render-token.mjs";
 
 const FRAME = frameCells();
 
@@ -16,27 +16,20 @@ const FRAME = frameCells();
 export function framePaths(level, rawYears) {
   const years = ringsFor(rawYears);
   const canvas = canvasFor(years);
-  const frameOff = years + GAP;
+  const frameOff = ringSpan(years) + GAP;
 
-  const lit = new Set(), dim = new Set(), rings = new Set();
+  const lit = new Set(), dim = new Set();
   const whole = level >= DAY_CELLS;
   FRAME.forEach(([x, y], i) => {
     const p = (y + frameOff) * canvas + (x + frameOff);
     ((whole || i < level) ? lit : dim).add(p);
   });
-  for (let k = 0; k < years; k++) {
-    const a = k, b = canvas - 1 - k;
-    for (let t = a; t <= b; t++) {
-      rings.add(a * canvas + t); rings.add(b * canvas + t);
-      rings.add(t * canvas + a); rings.add(t * canvas + b);
-    }
-  }
-  const framed = new Set([...lit, ...rings]);
+  const frameD = pathFor(lit, canvas) + ringBars(years, canvas);
   return {
     canvas, years, whole,
     litCells: lit.size, dimCells: dim.size,
     ghostD: dim.size ? pathFor(dim, canvas) : "",
-    frameD: framed.size ? pathFor(framed, canvas) : "",
+    frameD,
   };
 }
 

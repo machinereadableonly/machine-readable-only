@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
+import {LibString} from "solady/src/utils/LibString.sol";
+
 import {FrameGeometry} from "./FrameGeometry.sol";
 import {PathWriter} from "./PathWriter.sol";
 import {TokenView} from "./TokenView.sol";
@@ -25,18 +27,31 @@ library FrameRenderer {
     /// can never be mistaken for a day.
     uint256 internal constant GAP = 1;
 
-    /// @dev Year rings stop growing the canvas here. Two independent measurements
-    /// put the ceiling in the same place. By bytes: the reference renderer's
-    /// tokenURI crosses the 20,000 limit at 85 completed years (84 measured at
-    /// 19,932, 85 at 20,044), so 80 leaves 448 bytes of headroom. By this
-    /// renderer: a canvas row is held in one 256-bit word, and 80 rings make the
-    /// canvas 211 cells while 107 would make it 265 and break that.
+    /// @dev Year rings stop growing the canvas here.
     ///
-    /// Eighty years is far past any plausible tenure, and the alternative to a cap
-    /// is a token that eventually cannot be rendered at all.
+    /// Ten, decided 2026-08-29 after rendering the same token at every ring count
+    /// (docs/year-rings.png). The previous cap of 80 was set by what still fits
+    /// the gas and byte limits, which was the wrong question: the rings stop
+    /// being readable long before they stop fitting. At 20 rings the heart is
+    /// under half the canvas and at 80 it is a fifth, and an 80-ring token does
+    /// not decode at a 300px thumbnail at all.
+    ///
+    /// Ten years is also where the piece has a better answer than an eleventh
+    /// ring: the token seeds a child and Lineage carries the record on. The
+    /// Years attribute keeps counting past the cap, so only the ring stops.
     ///
     /// MUST stay identical to MAX_RINGS in tools/render-token.mjs.
-    uint256 internal constant MAX_RINGS = 80;
+    uint256 internal constant MAX_RINGS = 10;
+
+    /// @dev How many cells the rings occupy on each side: one cell per ring with
+    /// one cell of field between them, so they can be counted. Contiguous rings
+    /// merged into a single slab of colour, which defeats the point of drawing
+    /// one per year.
+    ///
+    /// MUST stay identical to ringSpan in tools/render-token.mjs.
+    function ringSpan(uint256 ringCount) internal pure returns (uint256) {
+        return ringCount == 0 ? 0 : 2 * ringCount - 1;
+    }
 
     /// @notice Completed years, which is how many rings the token has earned.
     function rings(uint32 level) internal pure returns (uint256 r) {
@@ -46,7 +61,7 @@ library FrameRenderer {
 
     /// @notice The canvas edge for a token with `ringCount` rings.
     function canvas(uint256 ringCount) internal pure returns (uint256) {
-        return FrameGeometry.BLOCK + 2 * (FrameGeometry.THICK + GAP + ringCount);
+        return FrameGeometry.BLOCK + 2 * (FrameGeometry.THICK + GAP + ringSpan(ringCount));
     }
 
     /// @notice The ghost path and the lit path, in that order.
@@ -62,7 +77,7 @@ library FrameRenderer {
     {
         uint256 ringCount = rings(v.level);
         uint256 size = canvas(ringCount);
-        uint256 frameOff = ringCount + GAP;
+        uint256 frameOff = ringSpan(ringCount) + GAP;
 
         uint256[] memory litRows = new uint256[](size);
         uint256[] memory ghostRows = new uint256[](size);
@@ -142,35 +157,60 @@ library FrameRenderer {
         string memory colour,
         string memory ghostFill
     ) private pure returns (string memory) {
-        // A row can hold at most one run per frame cell, plus the two blocks of
-        // ring cells. Bounding this by what the geometry can produce rather than
-        // by what it typically does is what keeps the buffer safe.
-        uint256 maxRuns = FrameGeometry.CELL_COUNT + 2 * size;
+        // Only frame cells go through the row walk now -- the rings are appended
+        // as bars afterwards -- so one run per frame cell bounds it.
+        uint256 maxRuns = FrameGeometry.CELL_COUNT;
         PathWriter.Buffer memory ghostBuf = PathWriter.create(maxRuns);
         PathWriter.Buffer memory litBuf = PathWriter.create(maxRuns);
 
-        // forge-lint: disable-next-line(incorrect-shift)
-        uint256 full = (1 << size) - 1;
-        // forge-lint: disable-next-line(incorrect-shift)
-        uint256 edges = ringCount == 0 ? 0 : (((1 << ringCount) - 1) << (size - ringCount)) | ((1 << ringCount) - 1);
-
         for (uint256 y; y < size; ++y) {
-            uint256 lit = litRows[y];
-            if (ringCount != 0) {
-                // Rows inside a ring's own top or bottom edge are filled across.
-                lit |= (y < ringCount || size - 1 - y < ringCount) ? full : edges;
-            }
             PathWriter.writeRow(ghostBuf, ghostRows[y], size, 0, y);
-            PathWriter.writeRow(litBuf, lit, size, 0, y);
+            PathWriter.writeRow(litBuf, litRows[y], size, 0, y);
         }
 
         bytes memory ghostD = PathWriter.seal(ghostBuf);
-        bytes memory litD = PathWriter.seal(litBuf);
+        bytes memory litD = abi.encodePacked(PathWriter.seal(litBuf), _ringBars(ringCount, size));
 
         bytes memory out;
         if (ghostD.length != 0) out = abi.encodePacked('<path fill="', ghostFill, '" d="', ghostD, '"/>');
         if (litD.length != 0) out = abi.encodePacked(out, '<path fill="', colour, '" d="', litD, '"/>');
         return string(out);
+    }
+
+    /// @dev One outline ring per completed year, outermost first, as four bars.
+    ///
+    /// The gap that makes rings countable also makes them ruinous to draw row by
+    /// row: away from a ring's own top or bottom edge a row crosses every ring
+    /// separately, so ten rings put twenty one-cell runs on every row. Measured
+    /// at the cap that came to 20,531 bytes for the frame alone, over the 20,000
+    /// limit for the whole tokenURI. As bars it is four runs per ring whatever
+    /// the canvas size.
+    ///
+    /// GAP keeps a blank cell between the innermost ring and the day frame, so no
+    /// run here could ever have merged with a frame run. Emitting them separately
+    /// moves no pixel.
+    function _ringBars(uint256 ringCount, uint256 size) private pure returns (bytes memory d) {
+        for (uint256 k; k < ringCount; ++k) {
+            uint256 o = 2 * k;              // ring k sits at depth 2k
+            uint256 len = size - 2 * o;     // its full width, corners included
+            d = abi.encodePacked(
+                d,
+                "M", LibString.toString(o), " ", LibString.toString(o),
+                "h", LibString.toString(len), "v1h-", LibString.toString(len), "z",
+                "M", LibString.toString(o), " ", LibString.toString(size - 1 - o),
+                "h", LibString.toString(len), "v1h-", LibString.toString(len), "z"
+            );
+            if (len > 2) {
+                uint256 h = len - 2;        // the sides, corners already drawn
+                d = abi.encodePacked(
+                    d,
+                    "M", LibString.toString(o), " ", LibString.toString(o + 1),
+                    "h1v", LibString.toString(h), "h-1z",
+                    "M", LibString.toString(size - 1 - o), " ", LibString.toString(o + 1),
+                    "h1v", LibString.toString(h), "h-1z"
+                );
+            }
+        }
     }
 
     /// @dev One local row of the frame bitmap, bit LOCAL-1-x set for a frame cell.

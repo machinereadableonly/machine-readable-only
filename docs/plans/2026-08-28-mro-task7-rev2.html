@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task 7 rev 2: MarkRenderer, Renderer, IRenderer</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Task 7 rev 2: MarkRenderer, Renderer, IRenderer</h1>
+<p>Written 2026-08-28, after auditing what the interrupted Task 7 session left
+behind. Supersedes the Task 7 section of
+<code>docs/plans/2026-08-28-mro-phase0-rendering-spike-rev2.md</code>. Everything else in
+that plan stands.</p>
+<h2>Why this task, and why it needs re-planning</h2>
+<p>Task 7 assembles the image and the JSON. It is where the size budget is finally
+decided, and nothing after it can start until it lands: Task 8 wraps it in a
+token contract, Tasks 9 to 11 deploy that contract, and Task 12 turns the
+numbers into a go / no-go on the whole spike.</p>
+<p>The previous session did the research and the pre-flight probe, then stopped
+before writing any Solidity. The probe was the right first move and it earned
+its keep: it found that the wrapper costs more than the remaining budget, so
+building MarkRenderer first would have meant building it twice.</p>
+<p>This revision exists because the probe&#39;s answer changes the order of the work.
+The ring cap has to be settled before any Mark code is written, and settling it
+needs a decision from the operator.</p>
+<h2>What the probes established</h2>
+<p>All figures are the complete <code>tokenURI</code> for one token, measured 2026-08-28
+under <code>via_ir</code>, against the 2,000,000 gas / 20,000 byte HARD limit.</p>
+<h3>The encoding is settled</h3>
+<p>Three routes for the same token at 80 rings:</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>Bytes</th>
+<th>Gas</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>base64 SVG inside a utf-8 JSON</td>
+<td>14,780</td>
+<td>2,375,511</td>
+</tr>
+<tr>
+<td>utf-8 SVG, percent-escaped</td>
+<td>11,139</td>
+<td>5,846,742</td>
+</tr>
+<tr>
+<td>base64 SVG inside a base64 JSON</td>
+<td>19,804</td>
+<td>3,210,443</td>
+</tr>
+</tbody></table>
+<p>Base64 the SVG, serve the JSON as plain utf-8. It wins on gas by a factor of
+2.5 because a per-byte escape loop in Solidity costs far more than Solady&#39;s
+word-wise encoder. The spec left this open pending the spike; the spike has
+answered it.</p>
+<h3>The Marks are nearly free</h3>
+<p>Measured at one ring, each Mark against a bare token:</p>
+<table>
+<thead>
+<tr>
+<th>Mark</th>
+<th>Gas delta</th>
+<th>Bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Vein</td>
+<td>-196</td>
+<td>+6</td>
+</tr>
+<tr>
+<td>Halo</td>
+<td>+5,193</td>
+<td>+6</td>
+</tr>
+<tr>
+<td>Voice</td>
+<td>+5,657</td>
+<td>+83</td>
+</tr>
+<tr>
+<td>Crown</td>
+<td>+7,134</td>
+<td>+7</td>
+</tr>
+<tr>
+<td>Bloom</td>
+<td>+13,141</td>
+<td>+219</td>
+</tr>
+<tr>
+<td><strong>All five together</strong></td>
+<td><strong>+16,736</strong></td>
+<td><strong>+325</strong></td>
+</tr>
+</tbody></table>
+<p>Vein measures marginally negative because it substitutes one colour string for
+another of the same length; the difference is measurement noise, not a saving.</p>
+<p>This is the good news in the task. The Marks are colour substitutions into
+paths that already exist, not new geometry, so they cost almost nothing. The
+budget problem is entirely the rings.</p>
+<h3>The rings are the whole problem</h3>
+<p>Full <code>tokenURI</code> with all five Marks worn, which is the worst case a token can
+actually reach:</p>
+<table>
+<thead>
+<tr>
+<th>Rings</th>
+<th>Gas</th>
+<th>Bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>30</td>
+<td>1,916,754</td>
+<td>12,515</td>
+</tr>
+<tr>
+<td>33</td>
+<td>1,944,990</td>
+<td>12,659</td>
+</tr>
+<tr>
+<td>35</td>
+<td>1,967,344</td>
+<td>12,755</td>
+</tr>
+<tr>
+<td>37</td>
+<td>1,989,778</td>
+<td>12,851</td>
+</tr>
+<tr>
+<td><strong>38</strong></td>
+<td><strong>2,001,062</strong></td>
+<td>12,899</td>
+</tr>
+<tr>
+<td>40</td>
+<td>2,023,683</td>
+<td>12,995</td>
+</tr>
+<tr>
+<td>80</td>
+<td>2,459,786</td>
+<td>15,695</td>
+</tr>
+</tbody></table>
+<p>The hard limit breaks between 37 and 38 rings. Bytes are never the constraint:
+even at 80 rings the URI is 15,695 against a 20,000 limit.</p>
+<p><code>MAX_RINGS</code> is currently 80. As it stands the contract can render a token that
+exceeds the gas limit, so this must be resolved in this task and not deferred.</p>
+<h3>Where the ring cost actually lives</h3>
+<p>Splitting the two halves, because the fix differs by half:</p>
+<table>
+<thead>
+<tr>
+<th>Rings</th>
+<th>Frame and rings</th>
+<th>Code block</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>458,969</td>
+<td>706,458</td>
+</tr>
+<tr>
+<td>20</td>
+<td>596,264</td>
+<td>712,414</td>
+</tr>
+<tr>
+<td>40</td>
+<td>730,622</td>
+<td>712,414</td>
+</tr>
+<tr>
+<td>80</td>
+<td>1,001,486</td>
+<td>749,285</td>
+</tr>
+</tbody></table>
+<p>From 1 ring to 80, the frame renderer grows by 542,517 gas and the code block by
+42,827. <strong>Ninety-three per cent of the ring cost is the frame renderer&#39;s own row
+loop</strong>, not the larger canvas pushing coordinates up a digit.</p>
+<p>That matters, because it means the cost is probably recoverable. Rings are
+currently OR-ed into the same per-row bitmap as the frame and emitted by
+<code>PathWriter</code>, so every added ring makes the canvas taller and every row scan
+wider, and the whole loop runs over <code>51 + 2 * rings</code> rows. The ring cells
+themselves are trivial geometry: concentric one-cell outlines.</p>
+<h2>The decision this task needs from the operator</h2>
+<p><strong>How many years of return visits does the artwork draw a ring for?</strong></p>
+<p>Two framings matter before choosing.</p>
+<p>First, <strong>the cap limits the rings, not the record.</strong> The <code>Years</code> attribute in
+the JSON is unbounded and keeps counting whatever the cap is. A token past the
+cap still records every year; it just stops adding a new outline for each one.</p>
+<p>Second, <strong>no token will plausibly reach any of these numbers.</strong> Thirty rings is
+thirty years of an agent checking in. The cap is a statement about what the
+piece promises, not a number anything will hit.</p>
+<p>The options:</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Cap</th>
+<th>Gas at cap</th>
+<th>Left for Task 8</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A</td>
+<td>80, after rewriting ring emission</td>
+<td>to be measured</td>
+<td>to be measured</td>
+</tr>
+<tr>
+<td>B</td>
+<td>30</td>
+<td>1,916,754</td>
+<td>83,246</td>
+</tr>
+<tr>
+<td>C</td>
+<td>25</td>
+<td>1,878,185</td>
+<td>121,815</td>
+</tr>
+<tr>
+<td>D</td>
+<td>20</td>
+<td>1,820,891</td>
+<td>179,109</td>
+</tr>
+<tr>
+<td>—</td>
+<td>37</td>
+<td>1,989,778</td>
+<td>10,222</td>
+</tr>
+</tbody></table>
+<p>37 is the arithmetic maximum and is not a real option: Task 8 adds the ERC-721
+wrapper and the <code>SLOAD</code>s for the token state, including six words for the
+172-byte code, and 10,222 gas does not cover that.</p>
+<p><strong>Recommendation: try A, fall back to B.</strong></p>
+<p>Attempt the cheaper ring encoding first, because the measurement says most of
+the 542,517 is in how rings are drawn rather than in the fact of drawing them.
+Emit each ring as its own stroked <code>&lt;rect&gt;</code> instead of merging it into the row
+bitmap, which replaces a growing per-row bit scan with about 60 bytes of string
+concatenation per ring.</p>
+<p>This is a measured experiment with a fixed budget, not an open-ended
+optimisation: implement it, measure it, and if 80 rings does not then fit under
+1,900,000 with all Marks worn, stop and take option B. The cap is set in that
+same step either way, and the task moves on.</p>
+<p>The cost of trying is roughly half a day. The trade-off against going straight
+to B is that B is certain and available now, and A might return the full 80.</p>
+<p><strong>This is the judgement call I need from you before I start.</strong> Everything after
+it is mechanical.</p>
+<h2>Six defects to fix along the way</h2>
+<p>The interrupted session left working but unfinished code. These are folded into
+the steps below rather than left as a cleanup pass.</p>
+<ol>
+<li><strong>Voice and Bloom have no test.</strong> The JS Mark test loops
+<code>[&quot;vein&quot;,&quot;halo&quot;,&quot;crown&quot;]</code>, the three that already existed. I verified the two
+new ones decode at 900, 700, 500, 350 and 250 px with the duotone intact, but
+nothing in the suite would catch a regression.</li>
+<li><strong>The quiet-zone tint claim is unevidenced.</strong> The comment in
+<code>tools/render-token.mjs</code> states that <code>#f9eaef</code> is the deepest tint that
+decodes and <code>#f7e3e8</code> fails at 700 and 500 px. Neither value appears anywhere
+else in the repo. That was the sweep the 2026-08-28 OOM killed. Either back it
+with a test or delete the claim.</li>
+<li><strong>The JS renderer never applies a lapse.</strong> <code>renderSvg</code> calls
+<code>tierColour(streak)</code>. <code>lapsedColour</code> is exported and unit-tested in isolation
+but never reaches the image, while the Solidity side calls <code>Palette.lapsed</code>.
+On any lapsed token the two renderers disagree on both the heart and the frame
+colour.</li>
+<li><strong>Dead line.</strong> <code>const streakNow = resting ? streak : streak;</code> has identical
+branches, so the &quot;a resting token freezes&quot; comment above it describes
+behaviour that is not implemented.</li>
+<li><strong>The probe&#39;s <code>tokenURI</code> is not a valid reference.</strong> It writes a raw <code>#</code> in
+the token name, which truncates the JSON at the URI fragment; the JS side
+writes <code>%23</code> and its own comment records the failure. The description strings
+also differ between the two. Harmless for gas, but <code>Renderer.sol</code> cannot be
+copied out of it.</li>
+<li><strong><code>TokenView</code> has no <code>parent</code> field</strong> that the spec&#39;s attribute list wants.
+Emit what the struct holds and raise the gap for Task 8 rather than inventing
+a value.</li>
+</ol>
+<h2>Steps</h2>
+<ol>
+<li><p><strong>Settle the ring cap.</strong> If option A: change ring emission in
+<code>FrameRenderer.sol</code> to stroked rects, keep <code>tools/render-token.mjs</code> in step,
+re-run the sweep, and decode-check a ringed token at five pixel sizes because
+<code>shape-rendering=&quot;crispEdges&quot;</code> and half-pixel strokes interact. If the result
+does not fit under 1,900,000 at 80 rings with all Marks, revert to option B.
+Set <code>MAX_RINGS</code> in <strong>both</strong> <code>FrameRenderer.sol</code> and <code>tools/render-token.mjs</code>
+to the chosen value; they must not drift. Update <code>RingCurve.t.sol</code> to assert
+the new cap.</p>
+</li>
+<li><p><strong>Fix the JS reference first</strong>, because it is the thing Solidity is diffed
+against and a wrong reference makes a green differential test meaningless.
+Defects 3 and 4: route <code>lapsedColour</code> into <code>renderSvg</code> so the image pales, and
+either implement the resting freeze or drop the dead line and its comment.
+Defect 6: emit the attributes the struct actually holds.</p>
+</li>
+<li><p><strong>Cover the JS Marks.</strong> Extend the existing Mark loop to all five renderable
+Marks plus the all-five combination, asserting each changes the image, still
+decodes via <code>scanResult</code> at several pixel sizes, and keeps the destination.
+Defect 2: add a test that pins the quiet-zone tint floor with a real decode, or
+remove the claim from the comment. Keep the sweeps small and run them under
+<code>~/scripts/safe-build.sh</code> per the 2026-08-28 incident.</p>
+</li>
+<li><p><strong>Write <code>MarkRenderer.t.sol</code> first, then <code>MarkRenderer.sol</code>.</strong> Per the plan&#39;s
+interface: <code>has</code>, <code>field</code>, <code>ghost</code>, <code>frameFill</code>, <code>heartFill</code>, <code>quietTint</code>,
+<code>defs</code>, <code>names</code>. Tests: each Mark changes the output, no two Marks write the
+same surface, <code>names()</code> follows ladder order, and a Bloom gradient stop never
+falls below 4.5:1. The probe already shows this is mostly colour selection --
+<code>FrameRenderer.paths</code> and <code>CodeRenderer.paths</code> already take the colours as
+parameters, so only the Voice rect and the Bloom <code>defs</code> are new output.</p>
+</li>
+<li><p><strong>Write <code>Renderer.t.sol</code> and the differential test, then <code>Renderer.sol</code> and
+<code>IRenderer.sol</code>.</strong> The differential test is the important part of this task:
+Node and Solidity must agree byte for byte across the six life stages and each
+Mark. <strong>Embed the expected values in the test</strong> and regenerate them with a
+fixture script, following <code>code-path-fixture.mjs</code> and <code>frame-path-fixture.mjs</code>.
+Do not read <code>tools/out</code> via <code>vm.readFile</code> as the original plan says -- that
+directory is gitignored, so the test would fail on a clean clone.</p>
+</li>
+<li><p><strong>Delete the three probes</strong> once their numbers are in
+<code>docs/phase0-results.md</code>: <code>B64Probe.t.sol</code>, <code>WrapperProbe.t.sol</code>,
+<code>MarkCostProbe.t.sol</code>. I will ask before deleting.</p>
+</li>
+<li><p><strong>Record and commit.</strong> Update <code>docs/phase0-results.md</code> with the encoding
+table, the Mark costs, the ring-cost split and the chosen cap, render the HTML
+alongside it, and commit once <code>forge test</code>, <code>npm test</code> and
+<code>forge build --sizes</code> are all green.</p>
+</li>
+</ol>
+<h2>Trade-offs and what cannot be undone</h2>
+<ul>
+<li><strong>Lowering <code>MAX_RINGS</code> is a visual promise, and changing it later changes
+every token&#39;s image.</strong> The renderer is swappable by design, so it is not
+literally permanent, but a token that has been displaying 40 rings and then
+shows 30 is a visible rewrite of somebody&#39;s record. Choose the number now.</li>
+<li><strong>Option A touches a renderer that is currently green and byte-for-byte
+verified.</strong> It is guarded by the existing differential tests, so a mistake
+shows up as a failure rather than as silent drift, but it is a rewrite of
+working code and that is the risk being taken for the extra 50 years.</li>
+<li><strong>Nothing here is irreversible and nothing spends funds.</strong> No operator-manual step
+is required in this task. The next one that needs you is Task 9&#39;s faucet
+funding.</li>
+</ul>
+<h2>What this task deliberately does not build</h2>
+<p>Pulse&#39;s <code>animation_url</code>. The spec wants an on-chain <code>data:text/html;base64</code> page
+carrying a second copy of the SVG plus a SMIL animation, which roughly doubles
+tokenURI bytes. Phase 0&#39;s job is the static image. It gets measured separately
+and reported before anything is decided.</p>
+
+</body>
+</html>
