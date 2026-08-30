@@ -966,11 +966,48 @@ test("the directory renders every registered key as a JWKS", async () => {
 // Each of these is an address a fetch must never reach. Loopback and the
 // 169.254.169.254 metadata address are the two that turn a directory fetch
 // into a way to read this machine.
-for (const addr of ["127.0.0.1", "::1", "10.0.0.5", "192.168.1.1", "172.16.0.1", "169.254.169.254", "0.0.0.0"]) {
+//
+// The IPv6 spellings are not padding. A text-prefix version of this guard
+// shipped and let EVERY one of these through in ::ffff: form, with the fetch
+// genuinely made. An agent registering its own domain controls its own AAAA
+// records, so it picks the spelling.
+for (const addr of [
+  "127.0.0.1", "::1", "10.0.0.5", "192.168.1.1", "172.16.0.1", "169.254.169.254", "0.0.0.0",
+  "100.64.0.1", "224.0.0.1",
+  "::ffff:169.254.169.254", "::ffff:127.0.0.1", "::ffff:10.0.0.1",
+  "0:0:0:0:0:ffff:169.254.169.254", "::ffff:a9fe:a9fe", "::127.0.0.1",
+  "fe80::1", "fe80::1%eth0", "fc00::1", "fd12:3456::1", "ff02::1",
+  "64:ff9b::a9fe:a9fe", "2002:a9fe:a9fe::1", "::",
+]) {
   test(`${addr} is blocked`, () => assert.equal(isBlockedAddress(addr), true));
 }
 
-test("a public address is allowed", () => assert.equal(isBlockedAddress("93.184.216.34"), false));
+// A guard must fail CLOSED on what it cannot parse. The first version returned
+// "not blocked" for any string that was not a dotted quad.
+for (const junk of ["", "garbage", "not-an-ip", "999.999.999.999"]) {
+  test(`unparseable input ${JSON.stringify(junk)} is blocked`, () =>
+    assert.equal(isBlockedAddress(junk), true));
+}
+
+// The control: a guard that blocks everything is not a guard.
+for (const ok of ["93.184.216.34", "8.8.8.8", "2606:2800:220:1:248:1893:25c8:1946", "2001:4860:4860::8888"]) {
+  test(`public address ${ok} is allowed`, () => assert.equal(isBlockedAddress(ok), false));
+}
+
+test("a directory that resolves to an IPv4-mapped IPv6 metadata address is refused", async () => {
+  // End to end through the guard, not just the predicate: this is the exact
+  // shape that was measured getting through.
+  let fetched = false;
+  await assert.rejects(
+    () =>
+      guardedFetchDirectory("https://evil.example.com/x", {
+        resolve: async () => ["::ffff:169.254.169.254"],
+        fetch: async () => { fetched = true; return new Response("{}", { status: 200 }); },
+      }),
+    /address/i
+  );
+  assert.equal(fetched, false, "fetch must never be reached for a blocked address");
+});
 
 test("a non-https directory URL is refused", async () => {
   await assert.rejects(
@@ -1037,6 +1074,7 @@ Expected: FAIL, `Cannot find module '../src/door/directory.mjs'`.
 // sends Signature-Agent pointing at us. Either way the key id is the RFC 7638
 // thumbprint and the entry rule is identical.
 import { lookup as dnsLookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { jwkToKeyID } from "web-bot-auth";
 
 /// A directory response larger than this is refused unread. A JWKS is a few
@@ -1044,22 +1082,108 @@ import { jwkToKeyID } from "web-bot-auth";
 const MAX_BODY = 64 * 1024;
 const FETCH_TIMEOUT_MS = 3000;
 
-/// The address ranges a directory fetch must never reach. Without this, an
-/// agent could name a URL that makes THIS machine fetch its own private
-/// network, including a cloud metadata service.
-export function isBlockedAddress(addr) {
-  if (addr === "::1" || addr === "0.0.0.0" || addr.startsWith("fe80:") || addr.startsWith("fc") || addr.startsWith("fd")) {
-    return true;
+/**
+ * Expand an IPv6 literal to its 16 bytes, or null if it is not one.
+ *
+ * Written out because the decision below has to be made on the ADDRESS, not on
+ * how it happens to be spelled. IPv6 has several ways to write the same
+ * address, and a prefix test on the text misses most of them.
+ */
+function ipv6Bytes(addr) {
+  const bare = addr.split("%")[0].toLowerCase();
+  if (isIP(bare) !== 6) return null;
+  let head = bare;
+  let tail = "";
+  if (bare.includes("::")) {
+    const [h, t = ""] = bare.split("::");
+    head = h;
+    tail = t;
   }
-  const p = addr.split(".").map(Number);
-  if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
-  const [a, b] = p;
+  const expand = (part) => {
+    if (!part) return [];
+    const out = [];
+    for (const piece of part.split(":")) {
+      if (piece.includes(".")) {
+        const quad = piece.split(".").map(Number);
+        if (quad.length !== 4 || quad.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+        out.push((quad[0] << 8) | quad[1], (quad[2] << 8) | quad[3]);
+      } else {
+        out.push(parseInt(piece, 16));
+      }
+    }
+    return out;
+  };
+  const h = expand(head);
+  const t = expand(tail);
+  if (h === null || t === null) return null;
+  const groups = bare.includes("::")
+    ? [...h, ...Array(8 - h.length - t.length).fill(0), ...t]
+    : h;
+  if (groups.length !== 8 || groups.some((g) => !Number.isInteger(g))) return null;
+  const bytes = [];
+  for (const g of groups) bytes.push((g >> 8) & 0xff, g & 0xff);
+  return bytes;
+}
+
+/// The IPv4 ranges a directory fetch must never reach.
+function blockedV4(a, b) {
   if (a === 0 || a === 127) return true;                 // this host, loopback
   if (a === 10) return true;                             // private
   if (a === 172 && b >= 16 && b <= 31) return true;      // private
   if (a === 192 && b === 168) return true;               // private
-  if (a === 169 && b === 254) return true;               // link-local and metadata
+  if (a === 169 && b === 254) return true;               // link-local, and the metadata address
   if (a === 100 && b >= 64 && b <= 127) return true;     // carrier-grade NAT
+  if (a >= 224) return true;                             // multicast and reserved
+  return false;
+}
+
+/**
+ * Is this address one a directory fetch must never reach?
+ *
+ * Without this, an agent could name a URL that makes THIS machine fetch its own
+ * private network, including the cloud metadata service.
+ *
+ * IT IS DECIDED ON BYTES, NEVER ON SPELLING. A text-prefix version of this
+ * check shipped and was measured on 2026-08-30 to let EVERY blocked range
+ * through in IPv4-mapped IPv6 form: `::ffff:169.254.169.254` was allowed and
+ * the fetch really was made. That is not theoretical -- an agent registering
+ * its own domain controls its own AAAA records, so it chooses what we resolve.
+ * The mapped forms, the deprecated `::a.b.c.d` compatible form, NAT64 and 6to4
+ * all carry an IPv4 address inside them, so each is unwrapped and judged by the
+ * IPv4 rules.
+ *
+ * It also FAILS CLOSED on anything it cannot parse. The previous version
+ * returned "not blocked" for any string that was not a dotted quad, which is
+ * the wrong direction for a guard.
+ */
+export function isBlockedAddress(addr) {
+  if (typeof addr !== "string" || addr === "") return true;
+  const kind = isIP(addr.split("%")[0]);
+  if (kind === 0) return true;                                   // not an IP at all
+  if (kind === 4) {
+    const [a, b] = addr.split(".").map(Number);
+    return blockedV4(a, b);
+  }
+
+  const bytes = ipv6Bytes(addr);
+  if (!bytes) return true;
+  const zeros = (n) => bytes.slice(0, n).every((x) => x === 0);
+
+  if (zeros(16)) return true;                                    // ::
+  if (zeros(15) && bytes[15] === 1) return true;                 // ::1, loopback
+  if (zeros(10) && bytes[10] === 0xff && bytes[11] === 0xff) {
+    return blockedV4(bytes[12], bytes[13]);                      // ::ffff:a.b.c.d
+  }
+  if (zeros(12)) return blockedV4(bytes[12], bytes[13]);         // ::a.b.c.d
+  if (bytes[0] === 0x00 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b) {
+    return true;                                                 // 64:ff9b::/96, NAT64
+  }
+  if (bytes[0] === 0x20 && bytes[1] === 0x02) {
+    return blockedV4(bytes[2], bytes[3]);                        // 2002::/16, 6to4
+  }
+  if ((bytes[0] & 0xfe) === 0xfc) return true;                   // fc00::/7, unique local
+  if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80) return true; // fe80::/10, link-local
+  if (bytes[0] === 0xff) return true;                            // multicast
   return false;
 }
 
