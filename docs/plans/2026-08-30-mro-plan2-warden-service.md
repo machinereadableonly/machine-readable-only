@@ -2791,6 +2791,31 @@ export function completeSolve(q, tokenId, qrHex) {
   q.completeSolve(tokenId, qrHex);
 }
 
+/**
+ * Drain the queue, one row at a time.
+ *
+ * `spawn(tokenId)` returns `{ hex }` or throws. It is injected so the unit
+ * tests never start a process: a real spawn is a ten-second, half-gigabyte
+ * child and has no place in a suite that must stay fast.
+ *
+ * The loop terminates because claimNext takes the lowest pending row and
+ * failSolve returns a row under MAX_TRIES straight to `pending` -- so it is
+ * retried immediately rather than starving the queue behind it -- while a row
+ * at MAX_TRIES moves to `failed`, which claimNext no longer returns. Every row
+ * ends `done` or `failed`; none can sit in `pending` or `solving` forever.
+ */
+export async function runSolver(q, spawn, alert = console.error) {
+  let row;
+  while ((row = claimNext(q))) {
+    try {
+      const result = await spawn(row.tokenId);
+      completeSolve(q, row.tokenId, result.hex);
+    } catch {
+      failSolve(q, row.tokenId, alert);
+    }
+  }
+}
+
 export function failSolve(q, tokenId, alert = console.error) {
   const tries = q.bumpSolveTries(tokenId);
   if (tries >= MAX_TRIES) {
@@ -2839,14 +2864,23 @@ and to the returned object:
 //
 // Run as:  node --max-old-space-size=768 src/solve/worker.mjs <domain> <tokenId>
 import { robustSolveFor } from "../../../tools/robust-solve.mjs";
+import { packModules } from "../../../tools/qart.mjs";
+
+/// Hex, unprefixed -- the same convention tools/token-bitmap.mjs already uses,
+/// so a bitmap solved here and one solved there are the same bytes.
+const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 
 const [domain, tokenId] = process.argv.slice(2);
 
 try {
   const solved = robustSolveFor(domain, Number(tokenId));
+  // solved.qr is the solver's own object, NOT the packed bitmap: serialising it
+  // produced 1369 numbered properties rather than a hex string. The bytes the
+  // contract stores come from packModules.
+  const packed = packModules(solved.modules, solved.size);
   // The parent reads one line of JSON from stdout. Anything else on stdout
   // would be parsed as a result, so diagnostics go to stderr.
-  process.stdout.write(JSON.stringify({ ok: true, qr: solved.qr, mask: solved.mask, match: solved.match }) + "\n");
+  process.stdout.write(JSON.stringify({ ok: true, hex: hex(packed), mask: solved.mask, match: solved.match }) + "\n");
   process.exit(0);
 } catch (err) {
   process.stderr.write(`solve failed for token ${tokenId}: ${err.message}\n`);
@@ -2891,10 +2925,13 @@ const out = execFileSync("node", ["--max-old-space-size=768", "src/solve/worker.
 const solved = JSON.parse(out.trim());
 assert.equal(solved.ok, true, "the worker must report success on its stdout line");
 
-const scan = scanResult(solved.qr, { domain: DOMAIN, tokenId: TOKEN_ID });
+// scanResult's real signature is (svg, px) and it returns { ok, destination }.
+// Read it from tools/test/helpers/decode.mjs rather than assuming: the shape
+// assumed here first was wrong and the check could not run.
+const scan = scanResult(svgFor(solved.hex), 1080);
 assert.equal(scan.ok, true, `the stored bitmap must decode: ${JSON.stringify(scan)}`);
-assert.equal(scan.decoded.split("#")[0], payloadFor(DOMAIN, TOKEN_ID).split("#")[0],
-  "the part before the fragment must be the intended destination");
+assert.equal(scan.destination, payloadFor(DOMAIN, TOKEN_ID).split("#")[0],
+  "the decoded destination must be the intended one");
 
 console.log(`bitmap for token ${TOKEN_ID} decodes at every gate size, mask ${solved.mask}`);
 ```
