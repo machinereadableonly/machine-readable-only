@@ -8,3 +8,6 @@ tools/out/
 # Real secret files, at any depth. The .example schema file stays tracked.
 .env
 !*.env.example
+
+# SDD scratch workspace (ledgers, briefs, review packages) -- not part of the piece
+.superpowers/
