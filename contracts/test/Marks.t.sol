@@ -118,4 +118,14 @@ contract MarksTest is MroTestBase {
         vm.expectRevert(MachineReadableOnly.Sunset.selector);
         t.applyMark(1, 1);
     }
+
+    /// @dev Task 4 built this refusal but could not test it, because nothing
+    /// could set a token resting until Task 5 added `rest`.
+    function test_applyMarkRefusesARestingToken() public {
+        vm.prank(ALICE);
+        t.rest(1);
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
+        t.applyMark(1, 1);
+    }
 }
