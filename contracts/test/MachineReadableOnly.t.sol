@@ -149,4 +149,96 @@ contract MachineReadableOnlyTest is MroTestBase {
         assertTrue(t.supportsInterface(0x49064906), "ERC-4906");
         assertTrue(t.supportsInterface(0x80ac58cd), "ERC-721");
     }
+
+    function _mint(uint256 id, address to, bytes32 key) internal {
+        vm.prank(WARDEN);
+        t.mint(id, to, key, _code());
+    }
+
+    function test_mintSetsDayOneState() public {
+        _mint(1, ALICE, KEY);
+        assertEq(t.ownerOf(1), ALICE);
+        assertEq(t.viewOf(1).level, 1);
+        assertEq(t.viewOf(1).streak, 1);
+        assertEq(t.viewOf(1).lastDay, t.today());
+        assertEq(t.viewOf(1).mintDay, t.today());
+        assertEq(t.viewOf(1).agentKeyId, KEY);
+        assertEq(t.viewOf(1).code.length, 172);
+        assertEq(t.totalMinted(), 1);
+        assertEq(t.mintedTo(ALICE), 1);
+    }
+
+    function test_mintEmitsMintedAndMetadataUpdate() public {
+        vm.expectEmit(true, true, false, true);
+        emit MachineReadableOnly.Minted(1, KEY);
+        _mint(1, ALICE, KEY);
+    }
+
+    function test_mintRevertsForANonWarden() public {
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.NotWarden.selector);
+        t.mint(1, ALICE, KEY, _code());
+    }
+
+    function test_oneMintPerKeyEver() public {
+        _mint(1, ALICE, KEY);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.AlreadyMinted.selector);
+        t.mint(2, ALICE, KEY, _code());
+    }
+
+    function test_mintRejectsATakenId() public {
+        _mint(1, ALICE, KEY);
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.TokenExists.selector, uint256(1)));
+        t.mint(1, ALICE, bytes32(uint256(2)), _code());
+    }
+
+    function test_mintRejectsAWrongLengthCode() public {
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadCodeLength.selector, uint256(3)));
+        t.mint(1, ALICE, KEY, hex"010203");
+    }
+
+    function test_mintEnforcesTheSupplyCap() public {
+        t.setSupplyCap(1);
+        _mint(1, ALICE, KEY);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.SupplyCap.selector);
+        t.mint(2, ALICE, bytes32(uint256(2)), _code());
+    }
+
+    /// @dev The cap counts tokens ever minted to an address, not tokens held,
+    /// so transferring one out does not free a slot. Spec conflict 12.
+    function test_walletCapCountsMintsNotHoldings() public {
+        t.setWalletCap(1);
+        _mint(1, ALICE, KEY);
+        vm.prank(ALICE);
+        t.transferFrom(ALICE, MALLORY, 1);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.WalletCap.selector);
+        t.mint(2, ALICE, bytes32(uint256(2)), _code());
+    }
+
+    function test_mintIsBlockedByPause() public {
+        t.pause();
+        vm.prank(WARDEN);
+        vm.expectRevert();
+        t.mint(1, ALICE, KEY, _code());
+    }
+
+    function test_mintIsBlockedBySunset() public {
+        t.sunset();
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.Sunset.selector);
+        t.mint(1, ALICE, KEY, _code());
+    }
+
+    function test_transferStillWorksWhenPaused() public {
+        _mint(1, ALICE, KEY);
+        t.pause();
+        vm.prank(ALICE);
+        t.transferFrom(ALICE, MALLORY, 1);
+        assertEq(t.ownerOf(1), MALLORY);
+    }
 }

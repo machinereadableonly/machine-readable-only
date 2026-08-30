@@ -36,8 +36,13 @@ abstract contract MroTestBase is Test {
         for (uint256 i = 0; i < ids.length; i++) out = abi.encodePacked(out, ids[i]);
     }
 
-    // _deployAndMintOne() is intentionally omitted from this Task 1 version of
-    // the shared base: it calls t.mint(...), which does not exist until a
-    // later task adds minting (Task 1 is state, reads and dials only). Restore
-    // it once MachineReadableOnly.mint() exists -- see task-1-report.md.
+    /// @dev Deploy the pair and mint token 1 to ALICE, past day zero so that
+    /// `lastDay + 1` arithmetic is meaningful.
+    function _deployAndMintOne() internal {
+        r = new Renderer();
+        t = new MachineReadableOnly(address(r), WARDEN);
+        vm.warp(86_400 * 1000 + 1);
+        vm.prank(WARDEN);
+        t.mint(1, ALICE, KEY, _code());
+    }
 }

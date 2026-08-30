@@ -192,4 +192,47 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
         warden = w;
         emit WardenSet(w);
     }
+
+    error AlreadyMinted();
+    error TokenExists(uint256 id);
+    error SupplyCap();
+    error WalletCap();
+    error BadCodeLength(uint256 got);
+
+    event Minted(uint256 indexed id, bytes32 indexed keyId);
+
+    // ---------------------------------------------------------------------
+    // Warden functions
+    // ---------------------------------------------------------------------
+
+    /// @notice Mint one token for one agent key.
+    /// @dev The id is chosen by the Warden rather than a counter, so a mint can
+    /// be reserved before it settles. `hasMinted` is per key and permanent: a
+    /// later `rebind` moves a token to a new key but never frees the old one.
+    function mint(uint256 id, address to, bytes32 keyId, bytes calldata code)
+        external
+        onlyWarden
+        whenNotPaused
+        notSunset
+    {
+        if (_hasMinted[keyId]) revert AlreadyMinted();
+        if (_ownerOf(id) != address(0)) revert TokenExists(id);
+        if (totalMinted >= supplyCap) revert SupplyCap();
+        if (mintedTo[to] >= walletCap) revert WalletCap();
+        if (code.length != CODE_BYTES) revert BadCodeLength(code.length);
+
+        uint32 d = today();
+        _tokens[id] = Token(1, 1, d, d, 0, 0, false, 0);
+        _agentKeyOf[id] = keyId;
+        _codeOf[id] = code;
+        _hasMinted[keyId] = true;
+        _firstMintDay[keyId] = d;
+        unchecked {
+            totalMinted += 1;
+            mintedTo[to] += 1;
+        }
+
+        _safeMint(to, id);
+        emit Minted(id, keyId);
+    }
 }
