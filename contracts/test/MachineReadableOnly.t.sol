@@ -101,6 +101,17 @@ contract MachineReadableOnlyTest is MroTestBase {
         t.pause();
     }
 
+    /// @dev unpause() is guarded by nothing but onlyOwner, so if that modifier
+    /// were ever dropped this is the only test that would notice.
+    function test_unpauseRevertsForANonOwner() public {
+        t.pause();
+        vm.prank(MALLORY);
+        vm.expectRevert();
+        t.unpause();
+        // Still paused: the failed call changed nothing.
+        assertTrue(t.paused());
+    }
+
     function test_sunsetSetsTheDayAndIsIrreversible() public {
         vm.warp(86_400 * 1234 + 1);
         t.sunset();
