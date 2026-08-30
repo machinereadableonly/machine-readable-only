@@ -630,7 +630,7 @@ and hard in practice. Verified 2026-08-27 against OpenSea's docs:
    shows it plays, Pulse is specified as a static beating motif with the
    animation as a bonus, not a promise.
 4. **The heart geometry is a design job**: exactly 365 cells in a heart around
-   a 29 x 29 square, in a pleasing fill order. An off-chain generator with a
+   a 37 x 37 square, in a pleasing fill order. An off-chain generator with a
    browser preview iterates it; the result is frozen into a constant.
 5. **QR decodability** holds at full size (`shape-rendering="crispEdges"`) and
    not in thumbnails. Accepted.
@@ -946,7 +946,7 @@ because the npm tarball ships only `dist/` and `README.md`; required-components 
 expiry and single use; key registration and directory regeneration; SSRF guard
 against private ranges; each tool's success and every `reason`; the live
 rebind re-check; unique-index behaviour under 100 concurrent `checkin` calls;
-QR round-trip through `jsqr`; `mint` and `upgrade` with a mocked facilitator,
+QR round-trip through ZXing, with `jsqr` asserted to agree; `mint` and `upgrade` with a mocked facilitator,
 including sold-out reservation; MCP 2026-07-28 header handling; gas guard
 deferral producing identical level and streak.
 
