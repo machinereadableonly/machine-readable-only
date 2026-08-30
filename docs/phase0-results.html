@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Phase 0 rendering spike -- measured results</title>
+  <title>docs/phase0-results.html</title>
   <style>
     :root {
       --bg: #fafaf7;
@@ -2356,6 +2356,80 @@ forget.</li>
 <li>The QR escape hatch stays: it encodes <code>https://&lt;domain&gt;/t/&lt;id&gt;</code>, so a stale
 thumbnail still scans to the live record.</li>
 </ol>
+<hr>
+<h2>Plan 1: <code>MachineReadableOnly</code> deployed to Base Sepolia</h2>
+<p>Not a Phase 0 task -- this is the final task of Plan 1 (the real token
+contract, not the spike), deployed and verified 2026-08-30 from the same
+throwaway key, <code>contracts/script/DeployPlan1.s.sol</code>. The Warden was not set
+via <code>WARDEN_ADDRESS</code> (still unset in the project&#39;s secrets), so the script
+fell back to the deployer&#39;s own address, which is correct for a testnet smoke
+deploy and logged loudly as such.</p>
+<table>
+<thead>
+<tr>
+<th>Contract</th>
+<th>Address</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Renderer</code></td>
+<td><a href="https://sepolia.basescan.org/address/0xfba313941ccaaf08492ce501cf2f73839904fc35"><code>0xfBA313941CCaAf08492cE501cF2F73839904fc35</code></a></td>
+</tr>
+<tr>
+<td><code>MachineReadableOnly</code></td>
+<td><a href="https://sepolia.basescan.org/address/0x29fd79212d6f7fc61ddf21afebe44046f3d1db65"><code>0x29Fd79212D6f7fc61ddF21aFEbe44046F3D1DB65</code></a></td>
+</tr>
+</tbody></table>
+<p>Both verified on Basescan via the Etherscan V2 API (<code>forge script ... --verify</code>
+reported <code>Pass - Verified</code> for each).</p>
+<h3>Deployment cost</h3>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Gas</th>
+<th>Cost (ETH, 0.006 gwei)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Renderer</code> deploy</td>
+<td>2,734,775</td>
+<td>0.0000164087</td>
+</tr>
+<tr>
+<td><code>MachineReadableOnly</code> deploy</td>
+<td>3,064,472</td>
+<td>0.0000183868</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>5,799,247</strong></td>
+<td><strong>0.0000347955</strong></td>
+</tr>
+</tbody></table>
+<h3>End-to-end read-back</h3>
+<p>Token 1 minted as the Warden (deployer), then read back through Alchemy&#39;s
+public Base Sepolia RPC, outside Foundry entirely:</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Gas via public RPC</th>
+<th>URI bytes</th>
+<th>SVG bytes</th>
+<th>Scan</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>1,411,274</td>
+<td>8,829</td>
+<td>6,025</td>
+<td>OK, decoded to its own URL</td>
+</tr>
+</tbody></table>
+<p>Both figures sit well inside the 2,000,000 gas / 20,000 byte hard limit.
+Mint itself cost 352,642 gas.</p>
 
 </body>
 </html>

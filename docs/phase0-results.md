@@ -1582,3 +1582,42 @@ DECIDED, not proven:
 3. Plan 3 must choose how to emit for a scattered daily subset.
 4. The QR escape hatch stays: it encodes `https://<domain>/t/<id>`, so a stale
    thumbnail still scans to the live record.
+
+---
+
+## Plan 1: `MachineReadableOnly` deployed to Base Sepolia
+
+Not a Phase 0 task -- this is the final task of Plan 1 (the real token
+contract, not the spike), deployed and verified 2026-08-30 from the same
+throwaway key, `contracts/script/DeployPlan1.s.sol`. The Warden was not set
+via `WARDEN_ADDRESS` (still unset in the project's secrets), so the script
+fell back to the deployer's own address, which is correct for a testnet smoke
+deploy and logged loudly as such.
+
+| Contract | Address |
+|---|---|
+| `Renderer` | [`0xfBA313941CCaAf08492cE501cF2F73839904fc35`](https://sepolia.basescan.org/address/0xfba313941ccaaf08492ce501cf2f73839904fc35) |
+| `MachineReadableOnly` | [`0x29Fd79212D6f7fc61ddF21aFEbe44046F3D1DB65`](https://sepolia.basescan.org/address/0x29fd79212d6f7fc61ddf21afebe44046f3d1db65) |
+
+Both verified on Basescan via the Etherscan V2 API (`forge script ... --verify`
+reported `Pass - Verified` for each).
+
+### Deployment cost
+
+| Step | Gas | Cost (ETH, 0.006 gwei) |
+|---|---|---|
+| `Renderer` deploy | 2,734,775 | 0.0000164087 |
+| `MachineReadableOnly` deploy | 3,064,472 | 0.0000183868 |
+| **Total** | **5,799,247** | **0.0000347955** |
+
+### End-to-end read-back
+
+Token 1 minted as the Warden (deployer), then read back through Alchemy's
+public Base Sepolia RPC, outside Foundry entirely:
+
+| Token | Gas via public RPC | URI bytes | SVG bytes | Scan |
+|---|---|---|---|---|
+| 1 | 1,411,274 | 8,829 | 6,025 | OK, decoded to its own URL |
+
+Both figures sit well inside the 2,000,000 gas / 20,000 byte hard limit.
+Mint itself cost 352,642 gas.
