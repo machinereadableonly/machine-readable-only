@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
-import { claimNext, completeSolve, failSolve, runSolver, MAX_TRIES } from "../src/solve/queue.mjs";
+import { claimNext, completeSolve, failSolve, runSolver, requeueOrphans, MAX_TRIES } from "../src/solve/queue.mjs";
 
 function withMint() {
   const db = openDb(":memory:");
@@ -75,4 +75,35 @@ test("runSolver retries a failing row up to MAX_TRIES, then moves on without loo
   assert.equal(attempts, MAX_TRIES, "the failing row is retried exactly MAX_TRIES times");
   assert.equal(q.getMint(1).solveState, "failed");
   assert.equal(q.getMint(2).solveState, "done", "a permanently-failing row must not block the rest of the queue");
+});
+
+test("requeueOrphans returns a row stuck in 'solving' to 'pending', and it can then be claimed", () => {
+  const { db, q } = withMint();
+  db.prepare("UPDATE mints SET solveState = 'solving' WHERE tokenId = 1").run();
+
+  const changed = requeueOrphans(q);
+
+  assert.equal(changed, 1, "exactly one orphaned row was requeued");
+  assert.equal(q.getMint(1).solveState, "pending");
+  assert.equal(claimNext(q).tokenId, 1, "the requeued row is claimable again");
+});
+
+test("requeueOrphans does not touch 'done' or 'failed' rows", () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  db.prepare("INSERT INTO mints (tokenId, toAddress, keyId, solveState) VALUES (1, '0xabc', 'k1', 'done')").run();
+  db.prepare("INSERT INTO mints (tokenId, toAddress, keyId, solveState) VALUES (2, '0xabc', 'k1', 'failed')").run();
+
+  const changed = requeueOrphans(q);
+
+  assert.equal(changed, 0, "a version that reset everything would wrongly report changes here");
+  assert.equal(q.getMint(1).solveState, "done");
+  assert.equal(q.getMint(2).solveState, "failed");
+});
+
+test("requeueOrphans on a queue with nothing solving changes nothing", () => {
+  const { q } = withMint();
+  const changed = requeueOrphans(q);
+  assert.equal(changed, 0);
+  assert.equal(q.getMint(1).solveState, "pending");
 });
