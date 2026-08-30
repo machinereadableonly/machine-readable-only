@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
+import {TokenView} from "../src/render/TokenView.sol";
 import {MroTestBase} from "./MroTestBase.sol";
 
 /// @notice The contract and the Phase 0 renderer, end to end.
@@ -37,11 +38,26 @@ contract TokenUriGoldenTest is MroTestBase {
         assertTrue(_contains(uri, "data:image/svg+xml;base64,"), "base64 svg image");
     }
 
-    function test_tokenUriCarriesTheLevelAttribute() public view {
+    /// @dev Asserts VALUES, not labels. The labels appear whatever the numbers
+    /// are, so a label-only assertion would pass even if the renderer read the
+    /// wrong struct field or swapped two of them -- which is the exact class of
+    /// bug this test exists to catch.
+    function test_tokenUriCarriesTheCorrectAttributeValues() public view {
         string memory uri = t.tokenURI(1);
-        assertTrue(_contains(uri, "Level"), "Level attribute present");
-        assertTrue(_contains(uri, "Generation"), "Generation attribute present");
-        assertTrue(_contains(uri, "Parent"), "Parent attribute present");
+        TokenView memory v = t.viewOf(1);
+
+        assertTrue(
+            _contains(uri, string.concat('"trait_type":"Level","value":', vm.toString(v.level), "}")),
+            "Level value matches contract state"
+        );
+        assertTrue(
+            _contains(uri, string.concat('"trait_type":"Generation","value":', vm.toString(v.generation), "}")),
+            "Generation value matches contract state"
+        );
+        assertTrue(
+            _contains(uri, string.concat('"trait_type":"Parent","value":', vm.toString(v.parent), "}")),
+            "Parent value matches contract state"
+        );
     }
 
     function test_tokenUriRevertsForANonexistentToken() public {
@@ -72,5 +88,10 @@ contract TokenUriGoldenTest is MroTestBase {
         emit log_named_uint("worst-case tokenURI bytes", bytes(uri).length);
         assertLt(used, 2_000_000, "the 2M hard gas limit");
         assertLt(bytes(uri).length, 20_000, "the 20,000 byte hard limit");
+
+        assertTrue(
+            _contains(uri, string.concat('"trait_type":"Level","value":', vm.toString(uint256(364)), "}")),
+            "the rendered output reflects level 364, not just the contract state"
+        );
     }
 }
