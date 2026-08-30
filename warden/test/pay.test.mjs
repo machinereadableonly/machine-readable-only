@@ -186,3 +186,57 @@ test("upgradeId 8, 0, 32 and 33 are rejected by the schema", () => {
     assert.equal(result.success, false, `upgradeId ${upgradeId} should be rejected`);
   }
 });
+
+// The cap is a COUNT, not a constraint: unlike the one-mint-per-key rule there
+// is no unique index behind it, so the post-settlement read is the only thing
+// between a settled payment and a token the contract would refuse to write.
+test("a mint whose supply cap is taken during settlement is paid-but-unavailable, not an over-cap token", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  const alerts = [];
+
+  // The last slot is taken WHILE the payment settles -- exactly the window the
+  // pre-payment check cannot see.
+  const takeLastSlotMidSettlement = (fn) => async (...args) => {
+    q.insertToken({ tokenId: 99, keyId: "someone-else", owner: "0xdef", lastDay: 100, mintDay: 100 });
+    return fn(...args);
+  };
+
+  const tool = makeMintTool({
+    q,
+    paid: takeLastSlotMidSettlement,
+    supplyCap: 1,
+    today: () => 100,
+    alert: (msg) => alerts.push(msg),
+  });
+
+  const r = await tool.handler({ to: "0x" + "3".repeat(40) }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "paid-but-unavailable");
+  assert.equal(r.detail, "supply-cap-reached");
+  // Money changed hands and the agent got nothing: somebody has to see that.
+  assert.equal(alerts.length, 1);
+  // The over-cap token was never written.
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM tokens").get().n, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM mints").get().n, 0);
+});
+
+// A client branching on `result.ok` -- the field every other tool here answers
+// with -- read a PAID upgrade success as a failure, because success returned
+// only `{ accepted: true }`.
+test("a successful upgrade answers ok:true as well as accepted:true", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  const tool = makeUpgradeTool({
+    q,
+    catalogue: { 1: { name: "Vein", minLevel: 1, supply: 10 } },
+    paid: settleNow,
+  });
+  const r = await tool.handler({ tokenId: 1, upgradeId: 1 }, { keyId: "k1" });
+  assert.equal(r.ok, true);
+  assert.equal(r.accepted, true);
+  // Every refusal from this tool carries ok:false, so the two are readable the
+  // same way: this is the assertion that would catch a success with no `ok`.
+  const refused = await tool.handler({ tokenId: 99, upgradeId: 1 }, { keyId: "k1" });
+  assert.equal(refused.ok, false);
+});

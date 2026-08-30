@@ -531,3 +531,32 @@ test("createServer refuses to start without an allowRegistration decision", asyn
     mcp: { nodeHandler: () => {} },
   }));
 });
+
+// -- a request target that will not parse -------------------------------------
+
+// "//evil.example%2fmcp" makes pinnedUrl throw. It was caught by the router's
+// outer catch, which answered 500 and wrote a console.error line -- so a
+// malformed target was a free, unauthenticated way to flood the log. It is the
+// CALLER's mistake, so it is a 400. Confirmed not a bypass: nothing dispatches
+// and nothing verifies, which is what the mcp assertion below pins.
+test("a malformed percent-encoded target is a 400, never a 500 and never a dispatch", async () => {
+  let mcpReached = false;
+  const { server, base } = await startServer({
+    mcp: { nodeHandler: (req, res) => { mcpReached = true; res.writeHead(200); res.end("mcp-reached"); } },
+  });
+  try {
+    for (const path of ["//evil.example%2fmcp", "//%2f%2fevil.example/mcp", "http://evil.example%2fmcp"]) {
+      const res = await rawRequest(base, { method: "POST", path });
+      assert.equal(res.status, 400, `${path} should be 400, got ${res.status}`);
+      assert.equal(JSON.parse(res.text).reason, "target");
+    }
+    assert.equal(mcpReached, false, "a malformed target must never reach the MCP handler");
+
+    // CONTROL: a well-formed target still routes, so the guard above refuses
+    // only what it means to.
+    const control = await rawRequest(base, { method: "GET", path: "/t/1" });
+    assert.equal(control.status, 200);
+  } finally {
+    server.close();
+  }
+});

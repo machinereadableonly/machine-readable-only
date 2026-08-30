@@ -1,7 +1,7 @@
 // Lineage. One seed per agent-year, free, and the child is bound to the caller.
 import * as z from "zod";
 
-export function makeSeedTool({ q, today }) {
+export function makeSeedTool({ q, today, supplyCap }) {
   return {
     name: "seed",
     config: {
@@ -14,6 +14,15 @@ export function makeSeedTool({ q, today }) {
       annotations: { readOnlyHint: false, openWorldHint: false },
     },
     async handler({ parentId, to }, ctx) {
+      // A seeded child is a token in the SAME collection, so it counts against
+      // the same supply cap `mint` checks. This tool inserted tokens without
+      // ever looking at it, so seeds could carry the collection past a cap the
+      // contract would then refuse to write -- a queued token nothing could
+      // ever mine. Required, never defaulted: a missing cap would compare
+      // against undefined and silently never fire.
+      if (!Number.isFinite(supplyCap)) throw new Error("seed requires a numeric supplyCap");
+      if (q.tokenCount() >= supplyCap) return { ok: false, reason: "supply-cap-reached" };
+
       const parent = q.getToken(parentId);
       if (!parent) return { ok: false, reason: "unknown-token" };
       if (parent.keyId !== ctx.keyId) return { ok: false, reason: "not-bound-to-caller" };
@@ -25,10 +34,17 @@ export function makeSeedTool({ q, today }) {
       const years = Math.floor((today() - q.firstMintDay(ctx.keyId)) / 365);
       if (q.seedsSpent(ctx.keyId) >= years) return { ok: false, reason: "no-seed-available" };
 
+      // ONE FACT, the same way `mint` writes its two rows. A child token whose
+      // lineage never landed is a token with no parent and generation 0 -- an
+      // ordinary mint, indistinguishable from one, and it would still have
+      // consumed the key's seed for the year.
       const tokenId = q.nextTokenId();
-      q.insertToken({ tokenId, keyId: ctx.keyId, owner: to, lastDay: today(), mintDay: today() });
-      q.setLineage(tokenId, parent.generation + 1, parentId);
-      return { ok: true, tokenId, parentId, generation: parent.generation + 1, to, level: 1, txStatus: "queued" };
+      const generation = parent.generation + 1;
+      q.transact(() => {
+        q.insertToken({ tokenId, keyId: ctx.keyId, owner: to, lastDay: today(), mintDay: today() });
+        q.setLineage(tokenId, generation, parentId);
+      });
+      return { ok: true, tokenId, parentId, generation, to, level: 1, txStatus: "queued" };
     },
   };
 }

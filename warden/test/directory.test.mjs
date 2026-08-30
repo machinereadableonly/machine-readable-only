@@ -330,7 +330,79 @@ test("a registration is refused when the rate limit says so", async () => {
   const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
   const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
   const nonce = "server-issued-nonce";
-  const r = await registerRoute(q, { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) }, () => false);
+  const r = await registerRoute(
+    q,
+    { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) },
+    () => false,
+    alwaysFreshNonce
+  );
   assert.equal(r.ok, false);
   assert.equal(r.reason, "rate-limited");
+  assert.equal(q.allKeys().length, 0, "a rate-limited registration must not be stored");
+});
+
+// THE BUDGET IS SPENT LAST, AND PER KEY.
+//
+// `allow()` used to be the FIRST line of registerRoute, before a single field
+// was looked at, and it was called with no argument so the limiter behind it
+// could only ever be global. Together that meant 21 junk bodies -- costing an
+// attacker nothing to produce -- spent the whole minute's budget for EVERY
+// agent on earth. POST /keys is the only way in for an agent with no domain of
+// its own, so that closed the entrance.
+
+test("a malformed registration never reaches the rate limiter", async () => {
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+
+  const charged = [];
+  const allow = (keyId) => { charged.push(keyId); return true; };
+
+  // Thirty junk registrations, in every shape the route can be handed: no
+  // fields at all, a bad nonce, a bad proof, an unparseable JWK.
+  const spent = new Set();
+  const checkNonce = (n) => (spent.has(n) ? false : (spent.add(n), true));
+  for (let i = 0; i < 30; i++) {
+    const shape = [
+      {},
+      { jwk, nonce: `n${i}`, proof: "" },
+      { jwk, nonce: 12345, proof: "abc" },
+      { jwk, nonce: `stale${i}`, proof: await proofFor(`stale${i}`, pair.privateKey) },
+      { jwk: { kty: "OKP" }, nonce: `n${i}`, proof: "not-base64url-of-a-signature" },
+    ][i % 5];
+    // The fourth shape is a well-formed request with a nonce this server did
+    // not mint, which is refused at the nonce check.
+    const nonceCheck = i % 5 === 3 ? () => false : checkNonce;
+    const r = await registerRoute(q, shape, allow, nonceCheck);
+    assert.equal(r.ok, false);
+  }
+
+  assert.deepEqual(charged, [], "an invalid registration must cost no budget at all");
+  assert.equal(q.allKeys().length, 0);
+});
+
+test("the budget is charged to the derived thumbprint, so one key cannot lock out another", async () => {
+  const q = queries(openDb(":memory:"));
+  const charged = [];
+  const spent = new Set();
+  const checkNonce = (n) => (spent.has(n) ? false : (spent.add(n), true));
+
+  // Two DIFFERENT keys registering. The id `allow` is handed must be each
+  // key's own RFC 7638 thumbprint -- the value the route derives from the key
+  // it has just proved possession of, and the same one it stores.
+  for (let i = 0; i < 2; i++) {
+    const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+    const nonce = `nonce-${i}`;
+    const r = await registerRoute(
+      q,
+      { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) },
+      (keyId) => { charged.push(keyId); return true; },
+      checkNonce
+    );
+    assert.equal(r.ok, true);
+    assert.equal(charged[i], r.keyId, "the budget key must be the stored key id");
+  }
+
+  assert.equal(new Set(charged).size, 2, "two distinct keys must be charged separately");
 });

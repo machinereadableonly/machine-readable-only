@@ -1,4 +1,5 @@
 // Sorting a request into one of four cases.
+import { createHash } from "node:crypto";
 import { issueChallenge, checkChallenge, CHALLENGE_MS } from "./challenge.mjs";
 import { verifyRequest, headerOf } from "./verify.mjs";
 
@@ -64,7 +65,8 @@ export async function admit(req, deps) {
   };
 
   const like = toRequestLike(req, domain);
-  if (!headerOf(like, "signature")) return fail(undefined);
+  const signature = headerOf(like, "signature");
+  if (!signature) return fail(undefined);
 
   const verified = await verifyRequest(like, lookupKey);
   if (!verified.ok) return fail(verified.reason);
@@ -74,7 +76,18 @@ export async function admit(req, deps) {
   const checked = checkChallenge(secret, offered, answer, verified.keyId, now, seen);
   if (!checked.ok) return fail(checked.reason);
 
-  return { ok: true, keyId: verified.keyId };
+  // THE EVIDENCE, CARRIED FORWARD. `credits.sigHash` is the record of which
+  // signed request bought a day, and the door is the only place that ever
+  // holds that signature. Hashing it here rather than storing the header
+  // itself keeps a fixed-width value out of which nothing can be replayed,
+  // while still being reproducible by anyone holding the original request.
+  // Before this it was set by nobody and every credit row stored "".
+  return { ok: true, keyId: verified.keyId, sigHash: sigHashOf(signature) };
+}
+
+/// SHA-256 of the Signature header value, in hex.
+export function sigHashOf(signature) {
+  return createHash("sha256").update(signature, "utf8").digest("hex");
 }
 
 // `headerOf` is imported from verify.mjs rather than written again here. It has

@@ -37,7 +37,30 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       }
 
       const day = today();
-      if (!q.insertCredit(tokenId, day, ctx.sigHash ?? "")) {
+      // Level counts distinct credited days and never falls. A streak
+      // CONTINUES only when this day is the one immediately after the last
+      // credited day; any gap starts again at 1.
+      const level = token.level + 1;
+      const streak = day === token.lastDay + 1 ? token.streak + 1 : 1;
+
+      // ONE FACT, NOT TWO. The credit row and the token row it advances are
+      // written inside a single transaction, so nothing can ever observe a
+      // credited day whose level was not applied, or a level with no credit
+      // behind it. The unique index on (tokenId, day) is still what decides
+      // whether the day was new -- there is deliberately no lock.
+      //
+      // ctx.sigHash is the SHA-256 of the RFC 9421 Signature header the door
+      // verified for this request, threaded through authInfo. The `?? ""`
+      // fallback is unreachable through the door and is kept only so a
+      // check-in can never be refused over bookkeeping; if it ever fires,
+      // empty strings in credits.sigHash are the symptom to look for.
+      const credited = q.transact(() => {
+        if (!q.insertCredit(tokenId, day, ctx.sigHash ?? "")) return false;
+        q.creditDay(tokenId, day, level, streak);
+        return true;
+      });
+
+      if (!credited) {
         return {
           accepted: false,
           reason: "already-credited-today",
@@ -48,8 +71,8 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       return {
         accepted: true,
         creditedDay: day,
-        level: token.level + 1,
-        streak: day === token.lastDay + 1 ? token.streak + 1 : 1,
+        level,
+        streak,
         nextWindowOpensAt: new Date((day + 1) * 86_400_000).toISOString(),
       };
     },

@@ -21,9 +21,23 @@ export function makeMintTool({ q, paid, supplyCap, today, alert = console.error 
       if (q.tokenCount() >= supplyCap) return { ok: false, reason: "supply-cap-reached" };
 
       return paid(async () => {
-        // Re-decided after settlement, for the same reason as upgrade: two
-        // concurrent settlements from one key both pass the check above. The
-        // unique index on mints.keyId is what actually holds it.
+        // BOTH GATES ARE RE-DECIDED AFTER SETTLEMENT, because settling takes
+        // seconds and everything checked before it is now stale.
+        //
+        // `already-minted` is re-decided by the unique index on mints.keyId
+        // below: two concurrent settlements from one key both pass the
+        // pre-payment check, and the index is what actually holds it.
+        //
+        // The supply cap has no index behind it -- it is a count, not a
+        // constraint -- so it has to be re-READ here, and this read is the only
+        // thing between a settled payment and a token over the cap that the
+        // contract would refuse to write. `seed` takes slots from the same
+        // count, so this is not only a race between two mints.
+        if (q.tokenCount() >= supplyCap) {
+          alert(`mint settled for key ${ctx.keyId} but the supply cap was reached during settlement`);
+          return { ok: false, reason: "paid-but-unavailable", detail: "supply-cap-reached" };
+        }
+
         // The id is assigned HERE, not by the contract. The contract takes it
         // as an argument and reverts if taken, so the id promised now is the id
         // that lands.

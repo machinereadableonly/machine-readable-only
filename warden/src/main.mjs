@@ -15,10 +15,10 @@
 // the test suite. (In practice it also can't be imported without a full set
 // of environment variables set, since requireEnv() below runs at module
 // load and throws on the first missing one.)
-import { execFile } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createServer } from "./server.mjs";
+import { makeAllowRegistration, makePaidStub, makeSpawnSolve } from "./bootstrap.mjs";
 import { makeMcpHandler } from "./mcp/server.mjs";
 import { tokenView } from "./mcp/tokenView.mjs";
 import { openDb } from "./mirror/db.mjs";
@@ -58,116 +58,32 @@ const domain = requireEnv("MRO_DOMAIN");
 const challengeSecret = requireEnv("CHALLENGE_SECRET");
 const rpcUrl = requireEnv("BASE_RPC_URL");
 const contract = requireEnv("MRO_CONTRACT_ADDRESS");
-// Not consumed by anything below yet -- see makePaidStub()'s comment for
-// why -- but it is still required here and validated the same way the other
-// five are. The day real payment collection is wired, this is the address
-// x402's `payTo` must use, and failing loudly now means it is never
-// discovered missing only once that wiring lands.
+// Not consumed by anything below yet -- see makePaidStub()'s comment in
+// bootstrap.mjs for why -- but it is still required here and validated the
+// same way the others are. The day real payment collection is wired, this is
+// the address x402's `payTo` must use, and failing loudly now means it is
+// never discovered missing only once that wiring lands.
 const treasuryAddress = requireEnv("TREASURY_ADDRESS");
 const stateDbPath = requireEnv("STATE_DB_PATH");
 
-/**
- * Registration rate limiting for POST /keys.
- *
- * The spec's dial is 20 registrations per minute per source and 10,000 keys
- * total. `allowRegistration` is called as `allow()` -- server.mjs's
- * registerRoute never passes the request or a source IP through to it -- so
- * a PER-SOURCE limit cannot be enforced at this seam as the router is built.
- * What this implements instead:
- *   - a GLOBAL sliding window, 20 registrations per minute, all sources
- *     combined (not per source -- there is no source to key on here);
- *   - the 10,000-key total cap, read live off the mirror on every call.
- * It resets to an empty window on every restart, because the window lives in
- * a plain array in this process's memory, not in the mirror. The total cap
- * does NOT reset, because it is read from the database, not from memory.
- */
-function makeAllowRegistration(q) {
-  const WINDOW_MS = 60_000;
-  const MAX_PER_WINDOW = 20;
-  const MAX_TOTAL_KEYS = 10_000;
-  const recent = [];
-  return function allowRegistration() {
-    const now = Date.now();
-    while (recent.length && now - recent[0] > WINDOW_MS) recent.shift();
-    if (recent.length >= MAX_PER_WINDOW) return false;
-    if (q.allKeys().length >= MAX_TOTAL_KEYS) return false;
-    recent.push(now);
-    return true;
-  };
+// The chain the contract above is deployed on, published to agents at
+// mro://contract. It was hardcoded to 8453 beside an address read from the
+// environment, so a Warden pointed at a Base Sepolia contract told every
+// caller the token lived on Base mainnet -- an address and a chain id that do
+// not belong together are worse than either alone. Required, and required to
+// be a positive integer, because a wrong default here is exactly the silent
+// failure being removed.
+const chainId = Number(requireEnv("MRO_CHAIN_ID"));
+if (!Number.isInteger(chainId) || chainId <= 0) {
+  throw new Error("MRO_CHAIN_ID must be a positive integer, for example 8453 for Base mainnet");
 }
 
-/**
- * The paid-tool wrapper `mint` and `upgrade` call through.
- *
- * `makePaid()` in src/pay/x402.mjs is this project's real, tested seam for
- * this: it just needs an x402ResourceServer and an `accepts` list. Building
- * a real one was attempted here and abandoned, for two reasons checked by
- * hand on 2026-08-30, not guessed:
- *
- * 1. x402ResourceServer needs a payment SCHEME registered before it can
- *    build requirements for a network. @x402/evm's ExactEvmScheme is what
- *    knows how to accept USDC on an EVM chain (Base) -- it is a
- *    devDependency of @x402/mcp in this project's own lockfile, not an
- *    installed runtime dependency here: `import("@x402/evm")` throws
- *    ERR_MODULE_NOT_FOUND, and node_modules/@x402/evm does not exist.
- *    Adding a new npm dependency is not this bootstrap's call to make.
- * 2. Even reaching that point is worse than skipping it.
- *    x402ResourceServer.initialize() makes a LIVE HTTP call to the
- *    facilitator to fetch its supported payment kinds, and THROWS if that
- *    call fails (read directly out of @x402/core's initialize()) -- which
- *    would make this WHOLE PROCESS's startup, not just the two paid tools,
- *    depend on reaching a specific third-party host over the network. And
- *    with no scheme registered, buildPaymentRequirements() returns an EMPTY
- *    accepts array rather than throwing, but createPaymentWrapper THROWS
- *    SYNCHRONOUSLY on an empty accepts array ("PaymentWrapperConfig.accepts
- *    must have at least one payment requirement" -- reproduced by hand).
- *    So the real path crashes the process at startup either way.
- *
- * So this fails closed, locally, with no network call: every paid tool call
- * is refused. Never a crash, and never a free mint or Mark. Wiring the real
- * path needs @x402/evm added as a dependency and its ExactEvmScheme
- * registered on a resourceServer here -- left for whoever picks up real
- * payment collection.
- */
-function makePaidStub() {
-  return (_handler) => async () => ({ ok: false, reason: "payment-not-configured" });
-}
-
-const WORKER_PATH = fileURLToPath(new URL("./solve/worker.mjs", import.meta.url));
-
-/**
- * Build the `spawn(tokenId)` runSolver drains the queue with.
- *
- * A CHILD PROCESS, not a call in this process -- queue.mjs's own header is
- * why: one solve measured 532 MB resident and about ten seconds, Node runs
- * one thread, and only a process exit actually returns resvg's native
- * buffers. `--max-old-space-size=768` and the argument order match
- * worker.mjs's own documented invocation exactly. `process.execPath` (not a
- * bare "node") is what this process itself was launched with, so it works
- * under PM2's pinned interpreter the same way it works from a shell with nvm
- * sourced.
- */
-function makeSpawnSolve(forDomain) {
-  return (tokenId) =>
-    new Promise((resolve, reject) => {
-      execFile(
-        process.execPath,
-        ["--max-old-space-size=768", WORKER_PATH, forDomain, String(tokenId)],
-        { timeout: 60_000 },
-        (err, stdout, stderr) => {
-          if (err) return reject(new Error(stderr.trim() || err.message));
-          let result;
-          try {
-            result = JSON.parse(stdout.trim().split("\n").pop());
-          } catch {
-            return reject(new Error(`worker produced no parseable result: ${stdout.slice(0, 200)}`));
-          }
-          if (!result.ok) return reject(new Error("worker reported failure"));
-          resolve(result);
-        }
-      );
-    });
-}
+// The three policies this process runs on -- the registration limiter, the
+// paid-tool stub and the solver spawn -- are built in ./bootstrap.mjs and
+// imported above, NOT written here. Nothing can import this file to test them
+// (see the header), so anything defined here is by construction untested. They
+// are pure factories over there, and warden/test/bootstrap.test.mjs drives them
+// directly.
 
 async function main() {
   const db = openDb(stateDbPath);
@@ -201,6 +117,7 @@ async function main() {
     chain,
     today: utcDay,
     contract,
+    chainId,
     challengeSecret,
     domain,
     llmsTxt,

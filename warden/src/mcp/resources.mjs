@@ -5,12 +5,16 @@
 import { ResourceTemplate } from "@modelcontextprotocol/server";
 import { tokenView } from "./tokenView.mjs";
 
-export function registerResources(server, { q, contract, llmsTxt }) {
+export function registerResources(server, { q, contract, chainId, llmsTxt }) {
   server.registerResource("llms.txt", "mro://llms.txt", { title: "What this piece is", mimeType: "text/markdown" },
     async (uri) => ({ contents: [{ uri: uri.href, text: llmsTxt }] }));
 
+  // The chain id comes from configuration alongside the address, never as a
+  // literal. Hardcoded 8453 sat beside an address read from the environment,
+  // so a Warden pointed at a Base Sepolia deployment published a mainnet chain
+  // id with a testnet address -- a pair that cannot both be right.
   server.registerResource("contract", "mro://contract", { title: "The contract", mimeType: "application/json" },
-    async (uri) => ({ contents: [{ uri: uri.href, text: JSON.stringify({ address: contract, chainId: 8453 }) }] }));
+    async (uri) => ({ contents: [{ uri: uri.href, text: JSON.stringify({ address: contract, chainId }) }] }));
 
   // The `list` callback is required to be specified, even as `undefined` --
   // the SDK's own words for it -- so a caller cannot forget resource listing
