@@ -47,6 +47,11 @@ test("an unknown token is refused", async () => {
   assert.equal(r.reason, "unknown-token");
 });
 
+// Two things hold this now and BOTH are load-bearing: the day guard refuses
+// every call after the first, because the first advanced lastDay to today; and
+// the unique (tokenId, day) index is still what decides a race this process
+// cannot serialise -- a second Warden, or a write interleaved across an await.
+// mirror.test.mjs drives that index directly.
 test("100 simultaneous check-ins produce exactly one credit", async () => {
   const { q } = withToken();
   const tool = makeCheckinTool({ q, chain: noChainRead, today: () => 101 });
@@ -148,4 +153,52 @@ test("the check-in stores the sigHash it was given", async () => {
   const tool = makeCheckinTool({ q, chain: noChainRead, today: () => 101 });
   await tool.handler({ tokenId: 1 }, { keyId: "k1", sigHash: "a".repeat(64) });
   assert.equal(creditsFor(db, 1)[0].sigHash, "a".repeat(64));
+});
+
+// THE MIRROR MUST NOT RUN AHEAD OF THE CHAIN.
+//
+// MachineReadableOnly.sol:249 mints with `Token(1, 1, d, d, ...)` -- lastDay
+// IS the mint day -- and :314 reverts DayNotAdvanced(id) on `day <= s.lastDay`.
+// So a check-in on the day of minting is refused ON CHAIN. The unique
+// (tokenId, day) index cannot catch it, because on mint day that index is
+// empty; before this guard the mirror credited the day, wrote level 2, and
+// every later day inherited the offset. `seed` mints its child the same way
+// (MachineReadableOnly.sol:545), so a seeded child is covered by the same rule.
+test("a check-in on the mint day is refused, and nothing about the token moves", async () => {
+  // lastDay === mintDay === today is exactly what mint and seed leave behind.
+  const { db, q } = withToken({ lastDay: 100 });
+  const tool = makeCheckinTool({ q, chain: noChainRead, today: () => 100 });
+  const before = q.getToken(1);
+
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1", sigHash: "b".repeat(64) });
+  assert.equal(r.accepted, false);
+  assert.equal(r.reason, "already-credited-today");
+  // It reopens the day after lastDay, which is the first day the chain accepts.
+  assert.equal(r.nextWindowOpensAt, new Date(101 * 86_400_000).toISOString());
+
+  assert.deepEqual(q.getToken(1), before, "level, streak and lastDay must all be untouched");
+  assert.equal(q.getToken(1).level, 1);
+  assert.equal(q.getToken(1).streak, 1);
+  assert.equal(creditsFor(db, 1).length, 0, "a refused day must leave no credit row");
+});
+
+test("a day BEFORE lastDay is refused too, not credited as a backfill", async () => {
+  // A clock that has gone backwards, or a reconcile that moved lastDay
+  // forward. The chain reverts on `day <= lastDay`, both halves of it.
+  const { db, q } = withToken({ lastDay: 100 });
+  const tool = makeCheckinTool({ q, chain: noChainRead, today: () => 99 });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.accepted, false);
+  assert.equal(r.reason, "already-credited-today");
+  assert.equal(creditsFor(db, 1).length, 0);
+});
+
+test("CONTROL: the very next day IS credited, so the guard refuses only what the chain refuses", async () => {
+  const { db, q } = withToken({ lastDay: 100 });
+  const tool = makeCheckinTool({ q, chain: noChainRead, today: () => 101 });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.accepted, true);
+  assert.equal(r.level, 2);
+  assert.equal(r.streak, 2);
+  assert.equal(creditsFor(db, 1).length, 1);
 });

@@ -46,7 +46,40 @@ sudo ln -s /etc/nginx/sites-available/<domain> /etc/nginx/sites-enabled/<domain>
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-## 4. Start the Warden under PM2
+## 4. Create the configuration file -- [the operator ONLY]
+
+`src/main.mjs` requires SEVEN environment variables and refuses to start,
+naming the first one missing, if any is absent. They come from a
+configuration file in `warden/` that is never committed and that Claude never
+reads, creates or prints.
+
+the operator creates it via WinSCP (saved site `vps`), copying `warden/.env.example` to
+`warden/.env` in the same directory and filling in every value. `.env.example`
+is the schema and carries a comment for each variable; it is the only
+env-shaped file in git.
+
+Then set the permissions -- a file uploaded by WinSCP arrives mode 644:
+
+```
+chmod 600 ~/projects/machine-readable-only/warden/.env
+```
+
+Claude can run that `chmod`, and can confirm the file exists and its mode with
+`ls -la`, but must never display its contents.
+
+The seven, all required: `MRO_DOMAIN`, `CHALLENGE_SECRET`, `BASE_RPC_URL`,
+`MRO_CONTRACT_ADDRESS`, `MRO_CHAIN_ID`, `TREASURY_ADDRESS` and
+`STATE_DB_PATH`. `PORT` is optional and `ecosystem.config.cjs` supplies it;
+the bind address is NOT read from the environment at all, it is hardcoded to
+127.0.0.1 in `main.mjs` so no misconfiguration anywhere can expose this port
+directly.
+
+`MRO_CHAIN_ID` must match the chain `MRO_CONTRACT_ADDRESS` is deployed on:
+8453 for Base mainnet, 84532 for Base Sepolia. It is published to agents at
+`mro://contract`, so a mismatch tells every caller the token lives somewhere
+it does not.
+
+## 5. Start the Warden under PM2
 
 From the `warden/` directory:
 
@@ -56,9 +89,17 @@ pm2 save
 ```
 
 `ecosystem.config.cjs` runs one fork-mode instance bound to `127.0.0.1:3006`
-only -- nginx is the only thing that talks to it from outside.
+only -- nginx is the only thing that talks to it from outside. It passes
+`--env-file` to the interpreter, so the file from step 4 is what configures
+the process; PM2 itself supplies only `NODE_ENV` and `PORT`.
 
-## 5. Close the port to the outside world
+If step 4 was skipped the process will not start, and `pm2 logs mro-warden`
+will name the missing variable. That is the intended behaviour: a Warden
+started with no `CHALLENGE_SECRET` would issue forgeable challenges, and one
+with no `MRO_DOMAIN` would pin the signature authority to the literal string
+"undefined".
+
+## 6. Close the port to the outside world
 
 ```
 sudo ufw deny 3006
@@ -69,7 +110,7 @@ only thing standing between 3006 and the internet -- but a UFW rule that
 matches the binding is one less way a misconfiguration elsewhere could expose
 it directly.
 
-## 6. Cloudflare settings -- [the operator ONLY, dashboard]
+## 7. Cloudflare settings -- [the operator ONLY, dashboard]
 
 These all need the Cloudflare dashboard.
 
@@ -93,7 +134,7 @@ These all need the Cloudflare dashboard.
   it is still on before going live, since a flat/DNS-only record would
   bypass all of the above.
 
-## 7. If a visitor's signing fails
+## 8. If a visitor's signing fails
 
 Point them at Cloudflare's signed-agent test endpoint first, before digging
 into this project's own code:
@@ -107,7 +148,7 @@ answers "is your signature even reaching Cloudflare correctly" independently
 of anything the Warden does. Ruling that out first avoids debugging this
 project's admission logic for a problem that is actually upstream of it.
 
-## 8. Verify
+## 9. Verify
 
 - `curl -sI https://<domain>/` should return the door page over HTTPS with a
   valid certificate (no `-k` needed).
