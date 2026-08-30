@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
-import { verifyRequest, MAX_WINDOW_MS } from "../src/door/verify.mjs";
+import { parseDictionary } from "structured-headers";
+import { verifyRequest, MAX_WINDOW_MS, coveredComponents } from "../src/door/verify.mjs";
 
 const VECTORS = JSON.parse(
   readFileSync(new URL("./vectors/web_bot_auth_architecture_v1.json", import.meta.url), "utf8")
@@ -273,4 +274,33 @@ test("component parameters carrying a component name do not count as covering it
   const r = await verifyRequest(req, lookup);
   assert.equal(r.ok, false);
   assert.equal(r.reason, "components");
+});
+
+test("a component name that is not a string is refused, whatever it stringifies to", async () => {
+  // Hardening, not a live bug: a structured-headers Token or DisplayString
+  // stringifies back to its plain text, so a member written as %"@method"
+  // would have read as @method under String(). Upstream rejects a non-string
+  // component ("type is not string") before verifyRequest's callback runs, so
+  // this is unreachable through a whole request today -- which is exactly why
+  // the test calls coveredComponents directly. Going through a request would
+  // prove upstream's check, not ours, and ours must not depend on somebody
+  // else's validation surviving a dependency bump.
+  const params = '(%"@authority" %"@method" %"@path" %"signature-agent");created=1;expires=2';
+  // The parser accepts the line, and every member stringifies to exactly the
+  // name REQUIRED wants -- so without the guard this would return the full set.
+  assert.deepEqual(
+    parseDictionary("sig=" + params).get("sig")[0].map(([name]) => String(name)),
+    ["@authority", "@method", "@path", "signature-agent"]
+  );
+  assert.equal(coveredComponents('"@signature-params": ' + params), null);
+
+  // A bare Token takes the same path. Tokens cannot start with "@", so this
+  // one stands in for a header component name.
+  assert.equal(coveredComponents('"@signature-params": (signature-agent);created=1'), null);
+
+  // Control: the same line written with genuine strings does parse.
+  assert.deepEqual(
+    coveredComponents('"@signature-params": ("@authority" "@method" "@path" "signature-agent");created=1'),
+    ["@authority", "@method", "@path", "signature-agent"]
+  );
 });
