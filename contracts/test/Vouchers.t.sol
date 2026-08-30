@@ -151,4 +151,28 @@ contract VouchersTest is MroTestBase {
         vm.expectRevert();
         t.checkInWithVoucher(1, d, hex"deadbeef");
     }
+
+    /// @dev The digest covers the token id, so a voucher earned by one token
+    /// cannot be spent on another. Pinned by test rather than left to the
+    /// typehash's construction: if `id` were ever dropped from
+    /// VOUCHER_TYPEHASH, every other voucher test here would still pass.
+    function test_aVoucherCannotBeReplayedOntoAnotherToken() public {
+        t.setVouchersEnabled(true);
+        vm.prank(wardenAddr);
+        t.mint(2, MALLORY, bytes32(uint256(2)), _code());
+
+        uint32 d = t.today() + 1;
+        bytes memory sigForToken1 = _sign(1, d);
+
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.BadVoucher.selector);
+        t.checkInWithVoucher(2, d, sigForToken1);
+
+        // And the same voucher still works on the token it was signed for,
+        // which is what proves the revert above was about the id and not
+        // about the voucher being invalid in general.
+        vm.prank(MALLORY);
+        t.checkInWithVoucher(1, d, sigForToken1);
+        assertEq(t.viewOf(1).level, 2);
+    }
 }
