@@ -106,6 +106,7 @@ contract TokenUriGoldenTest is MroTestBase {
             ds[i] = d + 1 + i;
             packed = abi.encodePacked(packed, uint32(1));
         }
+        _warpToDay(d + 363);
         vm.prank(WARDEN);
         t.batchCheckIn(packed, ds);
         assertEq(t.viewOf(1).level, 364);

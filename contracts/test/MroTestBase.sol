@@ -75,12 +75,29 @@ abstract contract MroTestBase is Test {
         vm.warp(block.timestamp + 365 days);
     }
 
+    /// @dev Move the chain clock to the UTC day index `day`, the unit the
+    /// contract counts in. Needed because a day can no longer be credited
+    /// before the chain reaches it: `batchCheckIn` and `checkInWithVoucher`
+    /// both reject `day > today()`. Warps to an ABSOLUTE timestamp rather than
+    /// `block.timestamp + n`, which sidesteps the via_ir common-subexpression
+    /// trap documented on `_warpOneYear` above. A no-op if already past `day`.
+    function _warpToDay(uint32 day) internal {
+        uint256 target = uint256(day) * 1 days + 1;
+        if (target > block.timestamp) vm.warp(target);
+    }
+
     /// @dev Put a token at an arbitrary level by checking it in repeatedly is
     /// far too slow, so the budget tests warp the clock and check in once per
     /// needed day instead. 365 check-ins is affordable in a test; a decade is
     /// not, which is why seedsAvailable is asserted directly.
     /// @dev Moved here from Lifecycle.t.sol so a second test file (the golden
     /// tokenURI test) can share it rather than keep a second copy.
+    /// @dev It ADVANCES THE CLOCK by 364 days, which it must, because a day can
+    /// no longer be credited before the chain reaches it. The seed-budget tests
+    /// depend on that figure: they warp a further year and expect a budget of
+    /// exactly 1, which holds at 364 (729 days of tenure) and would flip to 2
+    /// at 366 (731). Changing this count changes those tests' arithmetic -- they
+    /// will fail loudly rather than drift, but they will fail.
     function _makeWhole(uint256 id) internal {
         uint32 d = t.today();
         uint32[] memory ids = new uint32[](364);
@@ -91,6 +108,7 @@ abstract contract MroTestBase is Test {
         }
         bytes memory packed;
         for (uint32 i = 0; i < 364; i++) packed = abi.encodePacked(packed, ids[i]);
+        _warpToDay(d + 364);
         vm.prank(WARDEN);
         t.batchCheckIn(packed, ds);
         assertEq(t.viewOf(id).level, 365);

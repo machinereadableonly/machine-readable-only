@@ -82,6 +82,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     error NotWarden();
     error ZeroRenderer();
     error ZeroWarden();
+    error RenounceDisabled();
     /// @dev The piece is closed. Distinct from AlreadySunset, which is the
     /// double-call guard. These cannot share a name with the event.
     error Sunset();
@@ -173,6 +174,17 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
 
+    /// @notice Disabled. Ownership can be transferred but never abandoned.
+    /// @dev OpenZeppelin ships `renounceOwnership` live and `Ownable2Step` does
+    /// not override it. Renouncing WHILE PAUSED would freeze the piece forever:
+    /// no mint, no check-in, no seed, no unpause and no remedy, because there is
+    /// no upgrade path. `sunset()` is the designed operator ending and leaves
+    /// transfers, `rebind` and every token's art intact, so renounce has no
+    /// legitimate use here and exactly one catastrophic failure mode.
+    function renounceOwnership() public pure override {
+        revert RenounceDisabled();
+    }
+
     /// @notice Close the piece. Irreversible.
     /// @dev Emits no metadata event. A sunset does change every token, but the
     /// collection-wide range is the one event indexers treat as hostile, and
@@ -197,6 +209,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     }
 
     error AlreadyMinted();
+    error IdTooLarge(uint256 id);
+    error ZeroKeyId();
     error TokenExists(uint256 id);
     error SupplyCap();
     error WalletCap();
@@ -218,6 +232,14 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         whenNotPaused
         notSunset
     {
+        // batchCheckIn addresses ids in 4 packed bytes, so an id that does not
+        // fit 32 bits would mint and render but could never be checked in, and
+        // vouchers ship disabled. Rejected here rather than widening the packing.
+        if (id > type(uint32).max) revert IdTooLarge(id);
+        // A Warden serialising a missing thumbprint to zero would burn the zero
+        // key permanently AND create a shared seed budget that any token owner
+        // could rebind into for free.
+        if (keyId == bytes32(0)) revert ZeroKeyId();
         if (_hasMinted[keyId]) revert AlreadyMinted();
         if (_ownerOf(id) != address(0)) revert TokenExists(id);
         if (totalMinted >= supplyCap) revert SupplyCap();
@@ -240,6 +262,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     }
 
     error DayNotAdvanced(uint256 id);
+    error FutureDay(uint32 day);
     error LengthMismatch();
     error Resting(uint256 id);
     error NoSuchToken(uint256 id);
@@ -266,6 +289,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (packedIds.length != n * 4) revert LengthMismatch();
         if (n == 0) revert EmptyBatch();
 
+        // Read once, not once per token: this is the gas-critical loop.
+        uint32 tday = today();
+
         uint32 lo = type(uint32).max;
         uint32 hi = 0;
 
@@ -280,6 +306,11 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
             // reads a different mapping and would cost a cold SLOAD per entry.
             if (s.level == 0) revert NoSuchToken(id);
             if (s.resting) revert Resting(id);
+            // A day index is bounded above as well as below. Without this, a
+            // Warden passing a TIMESTAMP where a day index belongs sets lastDay
+            // to about 4.7M and every real check-in reverts DayNotAdvanced
+            // forever, with no admin path to reset it.
+            if (day > tday) revert FutureDay(day);
             if (day <= s.lastDay) revert DayNotAdvanced(id);
 
             unchecked {
@@ -353,6 +384,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         address signer = ECDSA.recoverCalldata(voucherHash(id, day), wardenSig);
         if (signer != warden) revert BadVoucher();
 
+        // Bounded above for the same reason as batchCheckIn: a signed voucher
+        // for a nonsense future day would brick the token permanently.
+        if (day > today()) revert FutureDay(day);
         if (day <= s.lastDay) revert DayNotAdvanced(id);
 
         unchecked {
@@ -384,15 +418,26 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         return _upgrades[upgradeId];
     }
 
+    /// @dev `sold` is owned by `applyMark` and is preserved across an edit.
+    /// Taking it from calldata meant that editing a price required re-supplying
+    /// the current count, and getting it wrong silently reset scarcity and
+    /// re-opened a sold-out Mark. Scarcity is a stated property of the ladder.
     function setUpgrade(uint8 upgradeId, Upgrade calldata u) external onlyOwner {
+        uint32 sold = _upgrades[upgradeId].sold;
         _upgrades[upgradeId] = u;
+        _upgrades[upgradeId].sold = sold;
         emit UpgradeSet(upgradeId);
     }
 
     /// @notice Apply a paid Mark to a token.
     /// @dev Payment settles off chain through x402 before the Warden calls
     /// this, which is why there is no value transfer here.
-    function applyMark(uint256 id, uint8 upgradeId) external onlyWarden notSunset {
+    function applyMark(uint256 id, uint8 upgradeId)
+        external
+        onlyWarden
+        whenNotPaused
+        notSunset
+    {
         Upgrade storage u = _upgrades[upgradeId];
         if (!u.active) revert MarkInactive();
 
@@ -401,6 +446,11 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (u.maxSupply != 0 && u.sold >= u.maxSupply) revert MarkSoldOut();
 
         Token storage s = _tokens[id];
+        // level is 1 from the moment a token exists, so zero means never
+        // minted. Without this, any upgrade whose minLevel dial is 0 lets marks
+        // be written to a phantom id, consuming a capped supply slot; mint does
+        // not clear _marks, so that id would later mint already marked.
+        if (s.level == 0) revert NoSuchToken(id);
         if (s.resting) revert Resting(id);
         if (s.level < u.minLevel) revert MarkGate();
         if (s.streak < u.minStreak) revert MarkGate();
@@ -481,6 +531,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         Token storage p = _tokens[parentId];
         if (p.resting) revert Resting(parentId);
         if (p.level < 365) revert ParentNotWhole();
+        // Same 32-bit ceiling as mint: seed is the other creation path.
+        if (childId > type(uint32).max) revert IdTooLarge(childId);
         if (_ownerOf(childId) != address(0)) revert TokenExists(childId);
         if (totalMinted >= supplyCap) revert SupplyCap();
         if (mintedTo[to] >= walletCap) revert WalletCap();

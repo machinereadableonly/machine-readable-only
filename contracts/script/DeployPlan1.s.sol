@@ -20,6 +20,11 @@ contract DeployPlan1 is Script {
         address warden = vm.envOr("WARDEN_ADDRESS", address(0));
 
         if (warden == address(0)) {
+            // Base Sepolia only. On any other chain a missing WARDEN_ADDRESS
+            // must fail loudly rather than silently hand the hot deploy key
+            // permanent mint, mark and seed authority over a permanent
+            // contract that has no upgrade path.
+            require(block.chainid == 84532, "WARDEN_ADDRESS must be set outside Base Sepolia");
             warden = vm.addr(key);
             console.log("warden (defaulted to deployer)", warden);
         } else {
