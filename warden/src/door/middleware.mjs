@@ -12,11 +12,28 @@ import { verifyRequest, headerOf } from "./verify.mjs";
  * trusting it would let a signature minted for another site verify here.
  */
 export function toRequestLike(req, domain) {
-  return {
-    method: req.method,
-    url: new URL(req.url, `https://${domain}`).toString(),
-    headers: req.headers,
-  };
+  return { method: req.method, url: pinnedUrl(req.url, domain).toString(), headers: req.headers };
+}
+
+/**
+ * Reduce a request target to a URL on OUR origin, whatever it claimed to be.
+ *
+ * THE TWO-STEP IS THE WHOLE POINT. Node passes the request target through
+ * verbatim, and a target may carry its own authority: "//evil.example/mcp" is
+ * protocol-relative and "http://evil.example/mcp" is absolute-form. Parsed
+ * against a base, that authority WINS -- measured 2026-08-30, both produced
+ * @authority = evil.example while pathname stayed /mcp. So the router still
+ * dispatched to /mcp while the signature was verified against somebody else's
+ * host, and a signature minted for any site at path /mcp was admitted here.
+ *
+ * Reducing to pathname + search first, then rebuilding on the configured
+ * origin, leaves nothing for a target to override. Pinning at the CALL SITES
+ * is what allowed this: it is done here, once, so no caller can forget.
+ */
+export function pinnedUrl(target, domain) {
+  const origin = `https://${domain}`;
+  const claimed = new URL(target, origin);
+  return new URL(claimed.pathname + claimed.search, origin);
 }
 
 /// The body of a 401. It tells an agent everything it needs to come back.

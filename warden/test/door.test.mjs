@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
-import { toRequestLike, challengeBody, admit, sweepSeen } from "../src/door/middleware.mjs";
+import { toRequestLike, pinnedUrl, challengeBody, admit, sweepSeen } from "../src/door/middleware.mjs";
 import { issueChallenge, CHALLENGE_MS } from "../src/door/challenge.mjs";
 import { createServer } from "../src/server.mjs";
 
@@ -36,6 +37,20 @@ test("the configured domain wins over a forged Host header", () => {
     "example.com"
   );
   assert.equal(like.url, "https://example.com/mcp");
+});
+
+test("pinnedUrl reduces a protocol-relative target's authority to the configured domain", () => {
+  // "//evil.example/mcp" is protocol-relative; parsed against a base its
+  // authority wins over the base's. pinnedUrl must not let that survive.
+  const url = pinnedUrl("//evil.example/mcp", "example.com");
+  assert.equal(url.host, "example.com");
+  assert.equal(url.pathname, "/mcp");
+});
+
+test("pinnedUrl reduces an absolute-form target's authority to the configured domain", () => {
+  const url = pinnedUrl("http://evil.example/mcp", "example.com");
+  assert.equal(url.host, "example.com");
+  assert.equal(url.pathname, "/mcp");
 });
 
 // -- challengeBody ------------------------------------------------------------
@@ -169,12 +184,69 @@ async function startServer(overrides = {}) {
     challengeSecret: SECRET,
     tokenView: (q, id) => (id === 1 ? { tokenId: 1 } : null),
     mcp: { nodeHandler: (req, res) => { res.writeHead(200); res.end("mcp-reached"); } },
+    allowRegistration: () => true,
     ...overrides,
   };
   const server = createServer(config);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   return { server, base: `http://127.0.0.1:${port}` };
+}
+
+/**
+ * Send a request whose request-target (the raw string on the request line) is
+ * exactly `path`, bypassing the normalisation `fetch`/the URL constructor
+ * would apply. This is how a protocol-relative ("//evil.example/mcp") or
+ * absolute-form ("http://evil.example/mcp") target reaches a real server:
+ * Node hands `req.url` through verbatim, whatever the client wrote on the
+ * request line.
+ */
+function rawRequest(base, { method = "GET", path, headers = {}, body } = {}) {
+  const { hostname, port } = new URL(base);
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({ hostname, port, method, path, headers }, (res) => {
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString("utf8") }));
+    });
+    req.on("error", reject);
+    if (body !== undefined) req.write(body);
+    req.end();
+  });
+}
+
+/// Register a fresh key on `base` through the real /keys endpoint, so a
+/// forged-authority attack has a genuinely known, verifiable key to sign
+/// with -- this is not testing "unknown key", it is testing the authority pin.
+async function registerFreshKey(base) {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const publicJwk = publicKey.export({ format: "jwk" });
+  const privateJwk = privateKey.export({ format: "jwk" });
+  const nonceRes = await fetch(`${base}/keys/nonce`);
+  const { nonce } = await nonceRes.json();
+  const proof = edSign(null, Buffer.from(nonce), privateKey).toString("base64url");
+  const regRes = await fetch(`${base}/keys`, { method: "POST", body: JSON.stringify({ jwk: publicJwk, nonce, proof }) });
+  assert.equal((await regRes.json()).ok, true);
+  return { privateJwk };
+}
+
+/// Sign a message the way a real client would, for an arbitrary target URL
+/// (which may name a different authority than this server).
+async function signFor(privateJwk, targetUrl) {
+  const target = new URL(targetUrl);
+  const signer = await signerFromJWK(privateJwk);
+  const message = {
+    method: "POST",
+    url: target.toString(),
+    headers: { "signature-agent": `"https://${DOMAIN}"`, host: target.host },
+  };
+  const created = new Date();
+  const headers = await signatureHeaders(message, signer, {
+    created,
+    expires: new Date(created.getTime() + 60_000),
+    components: CLIENT_COMPONENTS,
+  });
+  return { headers: { ...message.headers, ...headers }, keyId: signer.keyid };
 }
 
 test("GET /t/<id> is public: no signature required, 200 for a known token, 404 for an unknown one", async () => {
@@ -348,4 +420,114 @@ test("a fully signed and answered POST /mcp reaches the mcp handler", async () =
   } finally {
     server.close();
   }
+});
+
+// -- CRITICAL: the authority pin cannot be defeated by the request target ---
+
+test("a signature minted for https://evil.example/mcp, sent with a protocol-relative target, is refused", async () => {
+  const { server, base } = await startServer();
+  try {
+    const { privateJwk } = await registerFreshKey(base);
+    const { headers } = await signFor(privateJwk, "https://evil.example/mcp");
+    const res = await rawRequest(base, { method: "POST", path: "//evil.example/mcp", headers });
+    assert.equal(res.status, 401, `expected the forged authority to be refused, got ${res.status}: ${res.text}`);
+  } finally {
+    server.close();
+  }
+});
+
+test("a signature minted for https://evil.example/mcp, sent with an absolute-form target, is refused", async () => {
+  const { server, base } = await startServer();
+  try {
+    const { privateJwk } = await registerFreshKey(base);
+    const { headers } = await signFor(privateJwk, "https://evil.example/mcp");
+    const res = await rawRequest(base, { method: "POST", path: "http://evil.example/mcp", headers });
+    assert.equal(res.status, 401, `expected the forged authority to be refused, got ${res.status}: ${res.text}`);
+  } finally {
+    server.close();
+  }
+});
+
+test("CONTROL: a correctly signed request for the configured domain still reaches the handler", async () => {
+  // Proves the pin refuses a FORGED authority specifically, not every
+  // request: a pin that rejected everything would also pass the two tests
+  // above for the wrong reason.
+  const { server, base } = await startServer();
+  try {
+    const { privateJwk } = await registerFreshKey(base);
+    const { headers, keyId } = await signFor(privateJwk, `https://${DOMAIN}/mcp`);
+    const challengeRes = await rawRequest(base, { method: "POST", path: "/mcp", headers: {} });
+    assert.equal(challengeRes.status, 401);
+    const { challenge } = JSON.parse(challengeRes.text);
+    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
+    const res = await rawRequest(base, {
+      method: "POST",
+      path: "/mcp",
+      headers: { ...headers, challenge, "challenge-response": answer },
+    });
+    assert.equal(res.status, 200, `expected the mcp handler to run, got ${res.status}: ${res.text}`);
+    assert.equal(res.text, "mcp-reached");
+  } finally {
+    server.close();
+  }
+});
+
+// -- strict token id parsing -------------------------------------------------
+
+test("/t/0x1 is 404 while /t/1 is 200: Number() must not decide what counts as a token id", async () => {
+  const { server, base } = await startServer();
+  try {
+    const hex = await fetch(`${base}/t/0x1`);
+    assert.equal(hex.status, 404);
+    const decimal = await fetch(`${base}/t/1`);
+    assert.equal(decimal.status, 200);
+  } finally {
+    server.close();
+  }
+});
+
+// -- POST /keys body validation ----------------------------------------------
+
+test("a null JSON body to POST /keys is 400, not 500", async () => {
+  const { server, base } = await startServer();
+  try {
+    const res = await fetch(`${base}/keys`, { method: "POST", body: "null" });
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).reason, "malformed");
+  } finally {
+    server.close();
+  }
+});
+
+test("a number or array JSON body to POST /keys is also 400, not 500", async () => {
+  const { server, base } = await startServer();
+  try {
+    const num = await fetch(`${base}/keys`, { method: "POST", body: "5" });
+    assert.equal(num.status, 400);
+    const arr = await fetch(`${base}/keys`, { method: "POST", body: "[]" });
+    assert.equal(arr.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
+test("an oversized POST /keys body gets the 400 the code means to send, not a connection reset", async () => {
+  const { server, base } = await startServer();
+  try {
+    const res = await fetch(`${base}/keys`, { method: "POST", body: "x".repeat(64 * 1024 + 1) });
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).reason, "too-large");
+  } finally {
+    server.close();
+  }
+});
+
+test("createServer refuses to start without an allowRegistration decision", async () => {
+  assert.throws(() => createServer({
+    stateDbPath: ":memory:",
+    domain: DOMAIN,
+    challengeSecret: SECRET,
+    tokenView: () => null,
+    mcp: { nodeHandler: () => {} },
+  }));
 });
