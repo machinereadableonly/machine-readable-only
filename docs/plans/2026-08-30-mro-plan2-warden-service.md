@@ -2654,7 +2654,10 @@ export function registerResources(server, { q, contract, llmsTxt }) {
   server.registerResource("contract", "mro://contract", { title: "The contract", mimeType: "application/json" },
     async (uri) => ({ contents: [{ uri: uri.href, text: JSON.stringify({ address: contract, chainId: 8453 }) }] }));
 
-  server.registerResource("token", new ResourceTemplate("mro://token/{id}"), { title: "One token", mimeType: "application/json" },
+  // The second argument is REQUIRED by @modelcontextprotocol/server 2.0.0, not
+  // optional -- its own types say "required to be specified, even if
+  // undefined". Constructing with one argument throws inside the SDK.
+  server.registerResource("token", new ResourceTemplate("mro://token/{id}", { list: undefined }), { title: "One token", mimeType: "application/json" },
     async (uri, { id }) => {
       const view = tokenView(q, Number(id));
       return { contents: [{ uri: uri.href, text: JSON.stringify(view ?? { ok: false, reason: "unknown-token" }) }] };
