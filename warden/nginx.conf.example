@@ -1,0 +1,77 @@
+# Example nginx vhost for the Warden. NOT active configuration -- this is a
+# template to copy into /etc/nginx/sites-available/ once <domain> is real,
+# fill in the domain, get a certbot certificate, then enable the site. See
+# DEPLOY.md for the full ordered runbook.
+#
+# Public traffic reaches the Warden ONLY through this proxy. The Warden
+# process itself binds 127.0.0.1:3006 (see ecosystem.config.cjs) and a UFW
+# rule denies external access to 3006 directly (see DEPLOY.md step "ufw deny
+# 3006").
+#
+# IMPORTANT -- do not "fix" this to trust the Host header. The Warden pins the
+# RFC 9421 signature's @authority component to its own CONFIGURED domain
+# (config.domain, read from MRO_DOMAIN), never to whatever Host arrives on
+# the request. That is deliberate: nginx forwards the original Host below
+# because upstream application logic (redirects, absolute URLs it renders)
+# may legitimately want it, but the signature check does not use it, so a
+# forged or mismatched Host header cannot move which authority a signature is
+# checked against. Proxying the real Host through is fine precisely because
+# the Warden does not trust it for anything security-relevant.
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name <domain>;
+
+    ssl_certificate     /etc/letsencrypt/live/<domain>/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/<domain>/privkey.pem;
+
+    root ~/projects/machine-readable-only/warden/public;
+
+    # Static routes served straight from disk -- no need to round-trip
+    # through the Warden process for content that never changes per request.
+    location = / {
+        try_files /door.html =404;
+    }
+
+    location = /llms.txt {
+        try_files /llms.txt =404;
+    }
+
+    location = /client.mjs {
+        try_files /client.mjs =404;
+    }
+
+    location = /skill.md {
+        try_files /skill.md =404;
+    }
+
+    location = /.well-known/http-message-signatures-directory {
+        try_files /.well-known/http-message-signatures-directory =404;
+    }
+
+    # Everything else (the door challenge, /keys, /keys/nonce, /mcp, /t/<id>)
+    # is proxied to the Warden. The original Host is preserved so the
+    # application layer sees the real hostname a visitor used -- this is
+    # NOT the same thing as trusting it for the signature check; see the
+    # comment at the top of this file.
+    location / {
+        proxy_pass http://127.0.0.1:3006;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name <domain>;
+    # certbot's --nginx plugin manages the redirect to 443 here once the
+    # certificate exists; before that this block only needs to exist so
+    # certbot's HTTP-01 challenge has somewhere to answer from.
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
