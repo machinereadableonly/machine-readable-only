@@ -75,6 +75,8 @@ Every API shape below was read from the installed package, not recalled. Three f
 
 ---
 
+> **On expected counts.** The figures below were written before the plan ran, and every task so far has added more tests than it predicted -- the review loop keeps finding gaps worth covering. Treat each number as a MINIMUM, not a target: report the real count, and confirm it is at least the previous task's. A count that went DOWN means a test file was overwritten or a suite stopped being discovered, which has nearly happened once on this plan.
+
 ## Task 0: Amend the spec
 
 Plan 2 reads its requirements from the spec, so the spec must stop contradicting what was built and measured. Same discipline Plan 1 applied to section 7.
@@ -1785,7 +1787,7 @@ Add a `readBody(req, cap)` helper that rejects a body over the cap rather than b
 source ~/.nvm/nvm.sh && cd ~/projects/machine-readable-only/warden && npm test
 ```
 
-Expected: 35 passing (4 + 6 + 6 + 15 + 4). Counts are cumulative minimums: adding a test is fine, losing one is not.
+Expected: at least 35 passing (4 + 6 + 6 + 15 + 4). Report the real number.
 
 - [ ] **Step 9: Commit**
 
@@ -2034,7 +2036,7 @@ export function createServer(config) {
 source ~/.nvm/nvm.sh && cd ~/projects/machine-readable-only/warden && npm test
 ```
 
-Expected: 37 passing.
+Expected: at least 37 passing. Report the real number.
 
 - [ ] **Step 6: Commit**
 
@@ -2500,7 +2502,7 @@ export function makeRestTool({ q, contract }) {
 source ~/.nvm/nvm.sh && cd ~/projects/machine-readable-only/warden && npm test
 ```
 
-Expected: 43 passing, including both rebind tests.
+Expected: at least 43 passing, including both rebind tests. Report the real number.
 
 - [ ] **Step 9: Commit**
 
@@ -2688,7 +2690,7 @@ export function registerResources(server, { q, contract, llmsTxt }) {
 source ~/.nvm/nvm.sh && cd ~/projects/machine-readable-only/warden && npm test
 ```
 
-Expected: 44 passing. If `server/discover` is rejected, check that the request carried `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name`: this revision requires all three and there is no handshake to negotiate them.
+Expected: at least 44 passing. If `server/discover` is rejected, check that the request carried `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name`: this revision requires all three and there is no handshake to negotiate them.
 
 - [ ] **Step 6: Commit**
 
@@ -2969,7 +2971,7 @@ Expected: the success line. If `scanResult`'s signature in `tools/test/helpers/d
 source ~/.nvm/nvm.sh && cd ~/projects/machine-readable-only/warden && npm test
 ```
 
-Expected: 47 passing.
+Expected: at least 47 passing. Report the real number.
 
 - [ ] **Step 9: Commit**
 
@@ -3224,7 +3226,7 @@ and:
 source ~/.nvm/nvm.sh && cd ~/projects/machine-readable-only/warden && npm test
 ```
 
-Expected: 51 passing.
+Expected: at least 51 passing. Report the real number, and confirm the suite still runs in a few seconds -- a jump means heavy compute leaked into it.
 
 - [ ] **Step 7: Commit**
 
