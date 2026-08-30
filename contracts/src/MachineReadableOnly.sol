@@ -1,0 +1,195 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {IERC4906} from "@openzeppelin/contracts/interfaces/IERC4906.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+
+import {IRenderer} from "./render/IRenderer.sol";
+import {TokenView} from "./render/TokenView.sol";
+
+/// @notice The collection. An agent's own record of coming back.
+///
+/// @dev Permanent by design: no proxy and no upgrade path. Only the renderer
+/// is swappable, which is why every drawing decision lives behind IRenderer and
+/// none of it lives here.
+///
+/// The storage rule that decides the gas bill: the daily write OVERWRITES one
+/// `Token` slot. Nothing is ever keyed by day.
+contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
+    /// @dev Six uint32s (192 bits) plus a bool (8) plus 56 reserved = 256.
+    /// Keeping this in one slot is what makes a check-in about 5,000 gas.
+    struct Token {
+        uint32 level;
+        uint32 streak;
+        uint32 lastDay;
+        uint32 mintDay;
+        uint32 generation;
+        uint32 seedsGiven;
+        bool resting;
+        uint56 reserved;
+    }
+
+    /// @dev One paid Mark tier.
+    struct Upgrade {
+        uint64 priceUsdc6;
+        uint32 maxSupply; // 0 = unlimited
+        uint32 sold;
+        uint32 minLevel;
+        uint32 minStreak;
+        bool requiresWhole;
+        bool active;
+    }
+
+    mapping(uint256 => Token) internal _tokens;
+    mapping(uint256 => uint256) internal _marks;
+    mapping(uint256 => uint256) internal _parentOf;
+    mapping(uint256 => bytes32) internal _agentKeyOf;
+    mapping(uint256 => bytes) internal _codeOf;
+
+    /// @dev One mint per key ever. Binding is unlimited, so `rebind` can move a
+    /// token to a new key but can never resurrect a mint.
+    mapping(bytes32 => bool) internal _hasMinted;
+    mapping(bytes32 => uint32) internal _firstMintDay;
+    mapping(bytes32 => uint32) internal _seedsSpent;
+
+    /// @dev Tokens ever MINTED to an address, not tokens currently held.
+    /// Counting holdings would let the cap be defeated by transferring out.
+    mapping(address => uint32) public mintedTo;
+
+    mapping(uint8 => Upgrade) internal _upgrades;
+
+    address public renderer;
+    address public warden;
+    uint32 public supplyCap;
+    uint32 public walletCap;
+    uint32 public totalMinted;
+    uint32 public sunsetDay;
+    bool public isSunset;
+    bool public vouchersEnabled;
+
+    /// @dev The packed code bitmap is a fixed 172 bytes: 37 x 37 modules.
+    uint256 internal constant CODE_BYTES = 172;
+
+    /// @dev ERC-4906's interface id. OpenZeppelin ships the interface, not a mixin.
+    bytes4 internal constant ERC4906_ID = 0x49064906;
+
+    error NotWarden();
+    error ZeroRenderer();
+    error ZeroWarden();
+    /// @dev The piece is closed. Distinct from AlreadySunset, which is the
+    /// double-call guard. These cannot share a name with the event.
+    error Sunset();
+    error AlreadySunset();
+
+    event RendererSet(address renderer);
+    event WardenSet(address warden);
+    event SupplyCapSet(uint32 cap);
+    event WalletCapSet(uint32 cap);
+    event SunsetAt(uint32 day);
+
+    modifier onlyWarden() {
+        if (msg.sender != warden) revert NotWarden();
+        _;
+    }
+
+    modifier notSunset() {
+        if (isSunset) revert Sunset();
+        _;
+    }
+
+    constructor(address renderer_, address warden_)
+        ERC721("Machine Readable Only", "MRO")
+        Ownable(msg.sender)
+    {
+        _setRenderer(renderer_);
+        _setWarden(warden_);
+        supplyCap = 10_000;
+        walletCap = 20;
+    }
+
+    // ---------------------------------------------------------------------
+    // Reads
+    // ---------------------------------------------------------------------
+
+    /// @notice The UTC day index, the unit every date in this piece uses.
+    function today() public view returns (uint32) {
+        return uint32(block.timestamp / 1 days);
+    }
+
+    /// @notice Everything the renderer needs, assembled from storage.
+    function viewOf(uint256 id) public view returns (TokenView memory v) {
+        Token storage s = _tokens[id];
+        v.tokenId = id;
+        v.level = s.level;
+        v.streak = s.streak;
+        v.lastDay = s.lastDay;
+        v.mintDay = s.mintDay;
+        v.generation = s.generation;
+        v.seedsGiven = s.seedsGiven;
+        v.parent = _parentOf[id];
+        v.resting = s.resting;
+        v.sunset = isSunset;
+        v.marks = _marks[id];
+        v.agentKeyId = _agentKeyOf[id];
+        v.code = _codeOf[id];
+        v.today = today();
+    }
+
+    /// @inheritdoc ERC721
+    function tokenURI(uint256 id) public view override returns (string memory) {
+        _requireOwned(id);
+        return IRenderer(renderer).tokenURI(viewOf(id));
+    }
+
+    /// @inheritdoc ERC721
+    function supportsInterface(bytes4 id) public view override(ERC721, IERC165) returns (bool) {
+        return id == ERC4906_ID || super.supportsInterface(id);
+    }
+
+    // ---------------------------------------------------------------------
+    // Dials
+    // ---------------------------------------------------------------------
+
+    function setRenderer(address r) external onlyOwner { _setRenderer(r); }
+    function setWarden(address w) external onlyOwner { _setWarden(w); }
+
+    function setSupplyCap(uint32 cap) external onlyOwner {
+        supplyCap = cap;
+        emit SupplyCapSet(cap);
+    }
+
+    function setWalletCap(uint32 cap) external onlyOwner {
+        walletCap = cap;
+        emit WalletCapSet(cap);
+    }
+
+    function pause() external onlyOwner { _pause(); }
+    function unpause() external onlyOwner { _unpause(); }
+
+    /// @notice Close the piece. Irreversible.
+    /// @dev Emits no metadata event. A sunset does change every token, but the
+    /// collection-wide range is the one event indexers treat as hostile, and
+    /// the piece must never depend on an indexer refreshing anyway.
+    function sunset() external onlyOwner {
+        if (isSunset) revert AlreadySunset();
+        isSunset = true;
+        sunsetDay = today();
+        emit SunsetAt(sunsetDay);
+    }
+
+    function _setRenderer(address r) internal {
+        if (r == address(0)) revert ZeroRenderer();
+        renderer = r;
+        emit RendererSet(r);
+    }
+
+    function _setWarden(address w) internal {
+        if (w == address(0)) revert ZeroWarden();
+        warden = w;
+        emit WardenSet(w);
+    }
+}
