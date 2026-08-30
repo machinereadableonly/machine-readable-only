@@ -36,6 +36,19 @@ abstract contract MroTestBase is Test {
         for (uint256 i = 0; i < ids.length; i++) out = abi.encodePacked(out, ids[i]);
     }
 
+    /// @dev A single packed id, for the common one-token batchCheckIn call.
+    function _one(uint32 id) internal pure returns (bytes memory) {
+        uint32[] memory ids = new uint32[](1);
+        ids[0] = id;
+        return _packed(ids);
+    }
+
+    /// @dev A single-element day array, for the common one-token batchCheckIn call.
+    function _days(uint32 day) internal pure returns (uint32[] memory out) {
+        out = new uint32[](1);
+        out[0] = day;
+    }
+
     /// @dev Deploy the pair and mint token 1 to ALICE, past day zero so that
     /// `lastDay + 1` arithmetic is meaningful.
     function _deployAndMintOne() internal {

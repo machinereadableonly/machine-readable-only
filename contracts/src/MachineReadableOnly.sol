@@ -235,4 +235,58 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
         _safeMint(to, id);
         emit Minted(id, keyId);
     }
+
+    error DayNotAdvanced(uint256 id);
+    error LengthMismatch();
+    error Resting(uint256 id);
+
+    event BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count);
+
+    /// @notice Credit a day to each of many tokens, in one transaction.
+    ///
+    /// @dev Ids arrive packed as 4-byte big-endian values rather than a
+    /// uint32[] because calldata is the dominant cost at this batch size.
+    ///
+    /// Emits one `MetadataUpdate` per token written, AFTER the writes, and
+    /// never a range. A day's check-ins are a scattered subset of ids, so
+    /// `minId..maxId` would always claim untouched tokens had changed. The
+    /// Clock adds paling-step crossers to the same per-token emit set.
+    function batchCheckIn(bytes calldata packedIds, uint32[] calldata days_)
+        external
+        onlyWarden
+        whenNotPaused
+        notSunset
+    {
+        uint256 n = days_.length;
+        if (packedIds.length != n * 4) revert LengthMismatch();
+
+        uint32 lo = type(uint32).max;
+        uint32 hi = 0;
+
+        for (uint256 i = 0; i < n; i++) {
+            uint256 id = uint256(uint32(bytes4(packedIds[i * 4:i * 4 + 4])));
+            uint32 day = days_[i];
+
+            Token storage s = _tokens[id];
+            if (s.resting) revert Resting(id);
+            if (day <= s.lastDay) revert DayNotAdvanced(id);
+
+            unchecked {
+                s.level += 1;
+                s.streak = (day == s.lastDay + 1) ? s.streak + 1 : 1;
+            }
+            s.lastDay = day;
+
+            if (day < lo) lo = day;
+            if (day > hi) hi = day;
+        }
+
+        emit BatchCheckedIn(lo, hi, n);
+
+        // After every storage write, never before: an indexer that re-reads on
+        // the event must not be able to read pre-write state.
+        for (uint256 i = 0; i < n; i++) {
+            emit MetadataUpdate(uint256(uint32(bytes4(packedIds[i * 4:i * 4 + 4]))));
+        }
+    }
 }
