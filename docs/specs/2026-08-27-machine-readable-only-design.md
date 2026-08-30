@@ -339,7 +339,8 @@ mapping(uint256 => Token)   tokens;
 mapping(uint256 => uint256) parentOf;     // 0 for minted tokens
 mapping(bytes32 => uint32)  firstMintDay; // per key: day of its first mint
 mapping(bytes32 => uint32)  seedsSpent;   // per key: seeds used; budget = (today - firstMintDay) / 365
-uint32 sunsetDay;                         // 0 until sunset(); then the day number, irreversible
+uint32 sunsetDay;                         // the day the piece closed; only meaningful when isSunset
+bool   isSunset;                          // irreversible. Shares a slot with sunsetDay, so it is free
 mapping(uint256 => uint256) marks;        // 256-bit bitmask per token; bit n = mark id n
 mapping(uint256 => bytes32) agentKeyOf;   // bound key id (RFC 7638 thumbprint)
 mapping(uint256 => bytes)   qrOf;         // static identity QR bitmap, written once at mint
@@ -369,14 +370,14 @@ Storage rule that decides the gas bill: daily writes **overwrite** the one
 
 | Function | Access | Behaviour |
 |---|---|---|
-| `mint(uint256 tokenId, address to, bytes32 keyId, bytes qr)` | `onlyWarden`, `whenNotPaused` | Reverts `AlreadyMinted` if the key has minted, `TokenExists` if the id is taken, `SupplyCap` if `totalMinted >= supplyCap`, `WalletCap` if `to` already holds 20 minted tokens (owner dial). Records `firstMintDay[key]`. Sets `level = 1`, `streak = 1`, `lastDay = mintDay = today`. Emits `Minted(tokenId, keyId)` |
-| `batchCheckIn(bytes packedIds, uint32[] days)` | `onlyWarden`, `whenNotPaused` | Ids packed as 4-byte values. Per entry: `require(day > lastDay)` else `DayNotAdvanced`; `level += 1`; `streak = (day == lastDay + 1) ? streak + 1 : 1`; `lastDay = day`. Events: `BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count)`, then ERC-4906 `BatchMetadataUpdate(minId, maxId)` over the exact range written (emitted after the storage writes; never the `(1, max)` catch-all, which indexers treat as hostile). Entries for the same token in ascending day order are legal (late writes after an outage) |
+| `mint(uint256 tokenId, address to, bytes32 keyId, bytes qr)` | `onlyWarden`, `whenNotPaused` | Reverts `AlreadyMinted` if the key has minted, `TokenExists` if the id is taken, `SupplyCap` if `totalMinted >= supplyCap`, `WalletCap` if `mintedTo[to] >= walletCap`, counting tokens ever MINTED to that address, not tokens currently held. Amended 2026-08-30: "holds" was ambiguous. Counting current holdings would let the cap be defeated by transferring out before re-minting, and would wrongly block someone who bought on the secondary market. Seeded children are counted the same way. The dial starts at 20. Records `firstMintDay[key]`. Sets `level = 1`, `streak = 1`, `lastDay = mintDay = today`. Emits `Minted(tokenId, keyId)` |
+| `batchCheckIn(bytes packedIds, uint32[] days)` | `onlyWarden`, `whenNotPaused` | Ids packed as 4-byte values. Per entry: `require(day > lastDay)` else `DayNotAdvanced`; `level += 1`; `streak = (day == lastDay + 1) ? streak + 1 : 1`; `lastDay = day`. Events: `BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count)`, then one ERC-4906 `MetadataUpdate(id)` per token written, emitted after the storage writes. Amended 2026-08-30: the range form was impossible, because a day's check-ins are a scattered subset and `minId..maxId` is therefore never the exact set written. Per-token emits are also reuse rather than a new cost -- the Clock already has to emit per token for paling-step crossers. Entries for the same token in ascending day order are legal (late writes after an outage) |
 | `applyMark(uint256 id, uint8 upgradeId)` | `onlyWarden` | Checks `active`, bit unset, `sold < maxSupply` (if capped), `level >= minLevel`, `streak >= minStreak`, `requiresWhole => level >= 365`. Increments `sold`. Emits `MarkApplied(id, upgradeId)` |
 | `rebind(uint256 id, bytes32 newKeyId)` | token owner only | Level, streak, marks untouched. Emits `Rebound(id, newKeyId)` |
 | `seed(uint256 childId, uint256 parentId, address to, bytes qr)` | `onlyWarden`, `whenNotPaused`, not sunset | Requires parent `level >= 365`, not resting, `seedsSpent[key] < (today - firstMintDay[key]) / 365` where `key` is the parent's bound key, `totalMinted < supplyCap`. Increments `seedsSpent[key]` and parent `seedsGiven`; child gets `generation = parent.generation + 1`, `parentOf[child] = parentId`, the parent's bound key, `level = 1`, `streak = 1`. No fee. Emits `Seeded(parentId, childId, generation)` |
 | `rest(uint256 id)` | token owner only | Sets `resting = true`. Irreversible. From then on `batchCheckIn`, `applyMark` and `seed` revert `Resting` for this token; transfers and `rebind` still work. Emits `Rested(id, day, level, streak)` |
 | `checkInWithVoucher(uint256 id, uint32 day, bytes wardenSig)` | anyone, `whenVouchersEnabled` (off at launch) | The durability path: the bound agent submits its own check-in with a Warden-signed EIP-712 voucher and pays its own gas. Ships paused so tokens can outlive the operator if the Warden is ever switched to voucher-only mode. Same `day > lastDay` rule |
-| `sunset()` | contract owner | Sets `sunsetDay`. Irreversible. `mint`, `batchCheckIn`, `applyMark`, `seed` revert `Sunset` for every token; the Renderer treats every token as resting. Transfers and `rebind` still work. Emits `Sunset(day)` |
+| `sunset()` | contract owner | Sets `sunsetDay` and `isSunset`. Reverts `AlreadySunset` if called twice. Irreversible. `mint`, `batchCheckIn`, `applyMark`, `seed` revert `Sunset` for every token; the Renderer treats every token as resting. Transfers and `rebind` still work. Emits `SunsetAt(day)` |
 | `setWarden(address)`, `setRenderer(address)`, `setSupplyCap(uint32)`, `setUpgrade(uint8, Upgrade)` | contract owner | Dials. Emits an event each |
 | `pause()` / `unpause()` | contract owner | Blocks mint, check-in and marks; never transfers or `rebind` |
 | `tokenURI(uint256 id)` | view | `IRenderer(renderer).tokenURI(id, tokens[id], marks[id], agentKeyOf[id], qrOf[id])` |
@@ -384,14 +385,26 @@ Storage rule that decides the gas bill: daily writes **overwrite** the one
 Custom errors: `NotWarden`, `AlreadyMinted`, `TokenExists`, `SupplyCap`,
 `DayNotAdvanced`, `MarkInactive`, `MarkAlreadyApplied`, `MarkSoldOut`,
 `MarkGate`, `NotTokenOwner`, `EnforcedPause`, `Resting`, `Sunset`,
-`ParentNotWhole`, `NoSeedAvailable`, `WalletCap`, `VouchersDisabled`.
+`AlreadySunset`, `ParentNotWhole`, `NoSeedAvailable`, `WalletCap`,
+`VouchersDisabled`.
+
+Errors: `Sunset()` when the piece is closed, and `AlreadySunset()` when
+`sunset()` is called twice. Event: `SunsetAt(uint32 day)`. Amended 2026-08-30:
+the spec previously used `Sunset` for both an error and an event, which does
+not compile. The spike already resolved it this way.
 
 **Effective streak (a Renderer rule that matters):** on-chain `streak` only
 changes at a check-in, so a token that stops checking in would keep its colour
 forever. The Renderer therefore computes
-`effectiveStreak = (today - lastDay > 1) ? 0 : streak` from `block.timestamp`
-for live tokens, which is what makes a lapsed heart pale. For a resting token,
-or after sunset, it uses the stored `streak` unchanged: the colour is locked.
+`effectiveStreak = lapsed(streak, lastDay, today)` for live tokens, which
+steps the colour down at 3, 7 and 30 days lapsed rather than snapping to zero
+on the first missed day. Amended 2026-08-30: the section formerly gave the
+snap-to-zero form, which contradicted the colour section's graded steps. The
+graded form is what is built, and the refresh-cost argument is the stronger
+one -- each step is one marketplace refresh instead of a continuous repaint.
+The two rules agree at the far end, because a 30-day lapse lands back at the
+starting tier. For a resting token, or after sunset, it uses the stored
+`streak` unchanged: the colour is locked.
 
 ### `Renderer.sol`
 
@@ -402,7 +415,13 @@ limit (section 8, rendering risks). Replaced by `setRenderer` when a new Mark
 needs drawing. Token state never lives here.
 
 `applyMark`, `seed` and `rest` each also emit ERC-4906 `MetadataUpdate(id)`, and the Clock emits `MetadataUpdate(id)` for every token whose paling crosses a step (section 8) that day;
-`sunset` emits `BatchMetadataUpdate(1, type(uint256).max)`. Both contracts
+`sunset` emits no metadata event. Amended 2026-08-30: line 373 forbids the
+`(1, max)` catch-all as hostile to indexers, so specifying it here contradicted
+the same document two pages earlier. A sunset does change every token, so this
+is a deliberate choice: the piece must never depend on an indexer refreshing,
+and a terminal one-time event is the cheapest possible thing to leave stale.
+The contract knows its own minted range, so a future operator can emit over the
+ids actually minted if it ever matters. Both contracts
 declare ERC-4906 support in `supportsInterface` (`0x49064906`).
 
 ### Limits that must be respected
@@ -413,12 +432,13 @@ declare ERC-4906 support in `supportsInterface` (`0x49064906`).
 - `forge build --sizes` must show positive margin under 24,576 bytes for both
   contracts, and a deploy to a plain `anvil` (strict code-size limit) must
   return non-empty `cast code`, before either is called deployable.
-- Version-two escape hatch, designed for but not built: a
-  `checkInWithVoucher(id, day, wardenSig)` path where an agent submits its own
-  check-in with a Warden-signed EIP-712 voucher and pays its own gas. Adding
-  it later is a Warden and client change plus one new function on a
-  successor-free contract only if it is included now as an unused, paused
-  function; the build plan decides whether to include the stub.
+- Version-two escape hatch: a `checkInWithVoucher(id, day, wardenSig)` path
+  where an agent submits its own check-in with a Warden-signed EIP-712
+  voucher and pays its own gas. It IS included, as an unused function guarded
+  by a flag that is off at launch. Amended 2026-08-30: this was never an open
+  choice. The durability commitments require the voucher path on chain from
+  day one, and CLAUDE.md's locked decisions say it ships paused. With no
+  upgrade path, a voucher path omitted now could never be added.
 
 ---
 
@@ -478,9 +498,14 @@ and hard in practice. Verified 2026-08-27 against OpenSea's docs:
    OpenSea caches `image` as PNG and says to emit ERC-4906 events
    (`MetadataUpdate(tokenId)` or `BatchMetadataUpdate(from, to)`, with
    `to = type(uint256).max` to refresh a whole collection) or call its refresh
-   API. The contract therefore emits `BatchMetadataUpdate(1, type(uint256).max)`
-   at the end of every `batchCheckIn` and `MetadataUpdate(id)` on mark, seed
-   and rest. How quickly OpenSea re-renders thousands of tokens a day is not
+   API. `sunset` emits no metadata event. Amended 2026-08-30: line 373 forbids
+   the `(1, max)` catch-all as hostile to indexers, so specifying it here
+   contradicted the same document two pages earlier. A sunset does change
+   every token, so this is a deliberate choice: the piece must never depend on
+   an indexer refreshing, and a terminal one-time event is the cheapest
+   possible thing to leave stale. The contract knows its own minted range, so
+   a future operator can emit over the ids actually minted if it ever
+   matters. How quickly OpenSea re-renders thousands of tokens a day is not
    documented; the daily X post, rendered by us, is the reliable human window
    and OpenSea is the gallery with a lag.
 2. **Renderer size and `tokenURI` gas.** Measured on Ethereum mainnet
