@@ -22,9 +22,11 @@ export function queries(db) {
     ),
     getKey: db.prepare("SELECT * FROM keys WHERE keyId = ?"),
     allKeys: db.prepare("SELECT * FROM keys ORDER BY registeredAt ASC"),
+    keyCount: db.prepare("SELECT COUNT(*) AS n FROM keys"),
     firstMintDay: db.prepare("SELECT MIN(mintDay) AS d FROM tokens WHERE keyId = ?"),
     seedsSpent: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE keyId = ? AND parentId IS NOT NULL"),
     setLineage: db.prepare("UPDATE tokens SET generation = ?, parentId = ? WHERE tokenId = ?"),
+    creditDay: db.prepare("UPDATE tokens SET level = ?, streak = ?, lastDay = ? WHERE tokenId = ?"),
     nextPendingMint: db.prepare("SELECT * FROM mints WHERE solveState = 'pending' ORDER BY tokenId ASC LIMIT 1"),
     setSolveState: db.prepare("UPDATE mints SET solveState = ? WHERE tokenId = ?"),
     completeSolve: db.prepare("UPDATE mints SET qr = ?, solveState = 'done' WHERE tokenId = ?"),
@@ -64,6 +66,13 @@ export function queries(db) {
     tokensForKey: (keyId) => s.tokensForKey.all(keyId),
     getKey: (keyId) => s.getKey.get(keyId),
     allKeys: () => s.allKeys.all(),
+
+    /// How many keys are registered. COUNT(*) in SQLite, never allKeys().length
+    /// -- allKeys returns every row INCLUDING the JWK JSON, which is the whole
+    /// directory materialised in memory just to read one integer. At the
+    /// 10,000-key cap that is 10,000 parsed rows per registration attempt, on a
+    /// box that has been OOM-killed twice.
+    keyCount: () => s.keyCount.get().n,
     insertKey: ({ keyId, jwk, directory, registeredAt }) =>
       s.insertKey.run(keyId, JSON.stringify(jwk), directory ?? null, registeredAt),
 
@@ -75,6 +84,23 @@ export function queries(db) {
     firstMintDay: (keyId) => s.firstMintDay.get(keyId).d ?? 0,
     seedsSpent: (keyId) => s.seedsSpent.get(keyId).n,
     setLineage: (tokenId, generation, parentId) => s.setLineage.run(generation, parentId, tokenId),
+
+    /**
+     * Advance a token to the state a newly credited day leaves it in.
+     *
+     * THE MIRROR IS THE SOURCE OF TRUTH FOR THE TOOLS (schema.sql's own first
+     * line): a token exists to an agent from the moment its action is queued,
+     * not from the moment it is mined. So a credited day has to move the token
+     * row too. Without this, `credits` filled up while `tokens.level` sat at 1
+     * forever -- /t/<id> and `status` reported a token that never grew, and
+     * `upgrade`'s minLevel/needsWhole/minStreak gates and `seed`'s
+     * parent-whole gate all judged a value nothing advanced.
+     *
+     * The caller decides the new level and streak and writes this INSIDE the
+     * same transaction as the credit row, so a credit and the level it implies
+     * land together or not at all.
+     */
+    creditDay: (tokenId, day, level, streak) => s.creditDay.run(level, streak, day, tokenId),
 
     nextPendingMint: () => s.nextPendingMint.get() ?? null,
     setSolveState: (tokenId, state) => s.setSolveState.run(state, tokenId),

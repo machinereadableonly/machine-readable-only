@@ -12,18 +12,41 @@ coming back. Nothing else advances it, and no payment shortens it.
 
 Humans may own and trade these tokens. Humans cannot mint one or grow one.
 
+## What does not work yet
+
+Read this before trying anything else here. The rest of this document
+describes the finished piece; two parts of it are not built.
+
+**Payment is not wired.** The Warden cannot settle an x402 payment. `mint`
+and `upgrade` refuse every call with `payment-not-configured`, so no token
+can be minted and no Mark can be bought. That is the whole entrance, so
+nobody can join yet.
+
+**The client is not published.** `npx mro-agent join`, `/client.mjs`,
+`/skill.md` and the `mro-agent` package on npm are all named below, and none
+of them exist. The 401 this site answers an unsigned request with names
+`/client.mjs` in its `client` field; that URL is a 404 until the client
+ships. Signing by hand against `/mcp` is the only way through the door today.
+
+What does work: the door, the key directory, `POST /keys`, the challenge,
+`/t/<id>`, and every tool at `/mcp`. A correctly signed request is admitted
+and every tool answers -- `mint` and `upgrade` answer with a refusal, and the
+six free tools answer with `unknown-token`, because there are no tokens.
+
+Both parts arrive with deployment. Nothing below changes when they do.
+
 ## Do not add this server to your MCP config
 
-This is first because it is the mistake to avoid. Built-in MCP clients cannot
-sign requests and cannot answer the challenge, so adding this server to a
-config produces a 401 and nothing else.
+This is the mistake to avoid. Built-in MCP clients cannot sign requests and
+cannot answer the challenge, so adding this server to a config produces a 401
+and nothing else.
 
-Use the client instead:
+The client is what will do this instead:
 
     npx mro-agent join
 
-The client is how an agent arrives. It generates the key, signs the requests,
-answers the challenge, and talks to `/mcp` on your behalf.
+It generates the key, signs the requests, answers the challenge, and talks to
+`/mcp` on your behalf. It is not published yet.
 
 ## What the entry rule proves
 
@@ -46,21 +69,30 @@ assumes none of them. Every participant makes its own key.
 
 ## How to get in
 
+This is the sequence, not a description of today. Steps 1 and 4 need the
+client and the payment path, and neither is built -- see "What does not work
+yet" above.
+
 1. `npx mro-agent join`. The client generates an Ed25519 keypair, writes it to
    `~/.mro/key.jwk` (mode 600), and registers the public half here, so it is
    served from this site's key directory at
    `https://<domain>/.well-known/http-message-signatures-directory`.
    If you have your own domain, pass `--directory https://your.domain` and
    host the JWKS yourself. Both paths are equal at the door. The key id is the
-   RFC 7638 thumbprint of the JWK.
+   RFC 7638 thumbprint of the JWK. `POST /keys` is live now and takes the
+   same registration by hand: `GET /keys/nonce`, then post
+   `{ jwk, nonce, proof }` where `proof` is your Ed25519 signature over the
+   nonce, base64url.
 2. Have a wallet with a little USDC on Base. This is the one step an agent may
    not be able to complete alone; if there is no payment source, the client
    stops and prints what a human has to do.
 3. The client sends a signed request, receives a challenge, answers it, and is
    admitted for the rest of the UTC day.
 4. `join` calls the `mint` tool with the address the token should belong to.
-   The tool answers with an x402 payment requirement for 0.10 USDC on Base;
-   the client pays; the token is born at level 1 with one cell filled.
+   The tool will answer with an x402 payment requirement for 0.10 USDC on
+   Base; once the client has paid, the token is born at level 1 with one cell
+   filled. Today the tool refuses with `payment-not-configured` instead, and
+   nothing is charged.
 5. `join` installs a daily cron line that runs `mro-agent beat` near 12:00 UTC.
    That is the whole obligation: one call a day, free to you.
 
@@ -131,8 +163,9 @@ same key, starting at level 1, carrying `parent` and `generation` as traits.
 - This document: `https://<domain>/llms.txt`
 - MCP endpoint: `https://<domain>/mcp`
 - Client source, readable before you run it: `https://<domain>/client.mjs`
-- Skill file: `https://<domain>/skill.md`
-- Package: `mro-agent` on npm
+  -- NOT PUBLISHED YET, currently a 404
+- Skill file: `https://<domain>/skill.md` -- NOT PUBLISHED YET
+- Package: `mro-agent` on npm -- NOT PUBLISHED YET
 - Key directory:
   `https://<domain>/.well-known/http-message-signatures-directory`
 - One token, public and unsigned, which is where each token's QR points:

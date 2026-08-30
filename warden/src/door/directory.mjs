@@ -267,6 +267,21 @@ export function guardedFetchDirectory(url, deps = {}) {
 }
 
 /**
+ * The RFC 7638 thumbprint of a JWK, or null if it is not a usable JWK.
+ *
+ * One converter, because this value is BOTH the primary key of the mirror's
+ * `keys` table and the identity the registration budget is keyed on. Deriving
+ * it twice from two call sites is how those two could come apart.
+ */
+export async function keyIdOf(jwk) {
+  try {
+    return await jwkToKeyID(jwk, async (b) => crypto.subtle.digest("SHA-256", b), (u) => Buffer.from(u).toString("base64url"));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Register a key on the easy path.
  *
  * Proof of possession is checked by the CALLER before this runs: the route
@@ -274,12 +289,8 @@ export function guardedFetchDirectory(url, deps = {}) {
  * already been proved.
  */
 export async function registerKey(q, jwk, now = Date.now(), directory = null) {
-  let keyId;
-  try {
-    keyId = await jwkToKeyID(jwk, async (b) => crypto.subtle.digest("SHA-256", b), (u) => Buffer.from(u).toString("base64url"));
-  } catch {
-    return { ok: false, reason: "invalid-jwk" };
-  }
+  const keyId = await keyIdOf(jwk);
+  if (keyId === null) return { ok: false, reason: "invalid-jwk" };
   q.insertKey({ keyId, jwk, directory, registeredAt: now });
   return { ok: true, keyId };
 }
@@ -373,11 +384,27 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map()) {
  * being registered. Without it, registration would accept a public key from
  * anyone, including one lifted from somebody else's published directory.
  *
- * `allow` is the rate-limiting decision, passed in so the policy lives with the
- * route and the check stays testable without a clock.
+ * `allow(keyId)` is the rate-limiting decision, passed in so the policy lives
+ * with the route and the check stays testable without a clock.
+ *
+ * ORDER IS THE WHOLE POINT HERE, and it used to be wrong twice over.
+ *
+ * `allow()` ran FIRST, before a single field was validated, so 21 junk bodies
+ * -- no jwk, no nonce, garbage proof -- spent the whole minute's budget and
+ * every legitimate agent got a 429. POST /keys is the only way in for an agent
+ * with no domain of its own, so that was the entrance closed by 21 requests
+ * costing an attacker nothing. An invalid request must cost nothing NOW: the
+ * budget is only reached once the JWK, the nonce and the proof have all
+ * validated.
+ *
+ * And `allow` was called with no argument, so the budget it guarded could only
+ * ever be global. It is now keyed on the RFC 7638 thumbprint of the key being
+ * registered, which is the only identity this endpoint has that the caller
+ * cannot choose freely -- it is derived from the key it has just PROVED
+ * possession of. One key exhausting its own budget no longer touches anybody
+ * else's.
  */
 export async function registerRoute(q, { jwk, nonce, proof }, allow, checkNonce) {
-  if (!allow()) return { ok: false, reason: "rate-limited" };
   if (!jwk || typeof nonce !== "string" || typeof proof !== "string" || proof === "") {
     return { ok: false, reason: "proof" };
   }
@@ -407,5 +434,17 @@ export async function registerRoute(q, { jwk, nonce, proof }, allow, checkNonce)
   // checking after would leave unowned keys in the directory.
   if (!verified) return { ok: false, reason: "proof" };
 
+  // Everything about this request is now proved, so it may finally cost the
+  // caller some of its own budget. The thumbprint has to be derived before the
+  // budget check, because it IS the budget's key.
+  const keyId = await keyIdOf(jwk);
+  if (keyId === null) return { ok: false, reason: "invalid-jwk" };
+  if (!allow(keyId)) return { ok: false, reason: "rate-limited" };
+
+  // registerKey derives the thumbprint again rather than being handed this
+  // one. That is one extra SHA-256 over a few hundred bytes, on a request that
+  // has already verified an Ed25519 signature, and it buys a single storing
+  // path instead of two -- both going through keyIdOf, so they cannot disagree
+  // about what this key's id is.
   return registerKey(q, jwk, Date.now());
 }

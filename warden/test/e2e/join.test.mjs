@@ -100,6 +100,10 @@ function startJourney() {
         base: `http://127.0.0.1:${port}`,
         paidCalls,
         alerts,
+        // The same handle the tools write through, so an assertion can read
+        // the row a tool claims to have written rather than only its answer.
+        db,
+        q,
         /// Close everything this journey opened: the listener, the second
         /// database handle, and the temp directory. A test that leaves a
         /// listener behind holds the whole suite open.
@@ -175,8 +179,14 @@ async function callMcp(base, privateJwk, payload) {
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...payload }),
   });
   const text = await res.text();
-  return { status: res.status, text, body: res.status === 200 ? parseRpc(text) : undefined };
+  // `sent` carries the exact headers this call signed with, so a test can
+  // reproduce what the door hashed rather than trusting a copy of it.
+  return { status: res.status, text, sent: headers, body: res.status === 200 ? parseRpc(text) : undefined };
 }
+
+/// A header by name, case-blind, the way the door reads them.
+const sentHeader = (headers, name) =>
+  headers[Object.keys(headers).find((k) => k.toLowerCase() === name)];
 
 /// The 2026-07-28 transport answers over SSE, so the JSON-RPC message arrives
 /// on a `data:` line rather than as the whole body.
@@ -266,7 +276,7 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
     });
 
     await t.test("5. checkin credits today", async () => {
-      const { status, body } = await callMcp(base, privateJwk, {
+      const { status, body, sent } = await callMcp(base, privateJwk, {
         method: "tools/call",
         params: { name: "checkin", arguments: { tokenId } },
       });
@@ -274,6 +284,30 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       const result = toolResult(body);
       assert.equal(result.accepted, true, `checkin refused: ${JSON.stringify(result)}`);
       assert.equal(result.creditedDay, utcDay());
+
+      // THE CREDIT NAMES THE REQUEST THAT BOUGHT IT. credits.sigHash was
+      // written by nobody -- `ctx.sigHash ?? ""` into a NOT NULL column --
+      // because the door held the signature and the tool asked for it and
+      // nothing joined them. It is the SHA-256 of the Signature header this
+      // client actually sent, recomputed here from the header itself rather
+      // than from a copy of the rule.
+      const stored = journey.db
+        .prepare("SELECT sigHash FROM credits WHERE tokenId = ? AND day = ?")
+        .get(tokenId, utcDay());
+      const expected = createHash("sha256").update(sentHeader(sent, "signature"), "utf8").digest("hex");
+      assert.equal(stored.sigHash.length, 64);
+      assert.notEqual(stored.sigHash, "", "the empty string is the bug this replaces");
+      assert.equal(stored.sigHash, expected);
+
+      // THE MIRROR ADVANCED, not just the credits table. It is the source of
+      // truth for the tools, so a token that never grows here never grows at
+      // all: /t/<id> and `status` reported level 1 forever, and upgrade's and
+      // seed's gates judged a value nothing moved.
+      const token = journey.q.getToken(tokenId);
+      assert.equal(token.level, 2, "the mint left level 1; one credited day makes it 2");
+      assert.equal(token.lastDay, utcDay());
+      assert.equal(result.level, token.level);
+      assert.equal(result.streak, token.streak);
 
       // The credit is a fact in the mirror, not just a hopeful answer: a
       // second call the same day is refused by the unique index.
@@ -309,6 +343,10 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       assert.equal(view.heart, `${Math.min(view.level, 365)}/365`);
       assert.equal(view.tokenId, tokenId);
       assert.equal(view.owner, TO);
+      // Not level 1: both audiences are told the day that was credited in
+      // step 5, which is the whole reason the mirror has to advance.
+      assert.equal(view.level, 2);
+      assert.equal(view.heart, "2/365");
 
       // Whole objects, not just the three fields: any future field must be
       // told the same way to both audiences.

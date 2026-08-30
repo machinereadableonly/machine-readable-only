@@ -1,12 +1,12 @@
 // warden/src/mcp/tools/upgrade.mjs
 import * as z from "zod";
 
-/// Every reason an upgrade can be refused. All of them are checked BEFORE
-/// payment is requested: an agent must never pay for a Mark it cannot have.
-export const UPGRADE_REASONS = [
-  "unknown-token", "not-bound-to-caller", "mark-inactive", "mark-level-too-low",
-  "mark-needs-whole", "mark-needs-streak", "mark-sold-out", "mark-already-applied",
-];
+// There was an exported UPGRADE_REASONS array here, listing the eight
+// pre-payment refusals. Nothing imported it, nothing validated against it, and
+// it was already out of date -- "paid-but-unavailable" is a reason this tool
+// returns and the list never named it. A catalogue of strings that no code
+// checks is not a constraint, it is a second place for the truth to live and
+// drift; the reasons below are the only list. Deleted 2026-08-30.
 
 export function makeUpgradeTool({ q, catalogue, paid, alert = console.error }) {
   return {
@@ -56,7 +56,13 @@ export function makeUpgradeTool({ q, catalogue, paid, alert = console.error }) {
         // reserveMark returns false when this token already holds the mark, so
         // two settlements racing for the same token cannot both reserve.
         if (!blocked && q.reserveMark(tokenId, upgradeId)) {
-          return { accepted: true, upgradeId, appliedBy: "the next Clock run" };
+          // `ok: true` because every refusal from this tool carries
+          // `ok: false`, and a client that branches on `result.ok` -- the one
+          // field every other tool here answers with -- read a PAID success as
+          // a failure. `accepted` stays alongside it: it is what the design
+          // names this state, and dropping it would break anything already
+          // reading it.
+          return { ok: true, accepted: true, upgradeId, appliedBy: "the next Clock run" };
         }
 
         // MONEY HAS ALREADY CHANGED HANDS. This must never be a quiet refusal:

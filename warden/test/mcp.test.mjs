@@ -115,3 +115,72 @@ test("CONTROL: a tool that returns normally still delivers its real structured r
   assert.equal(payload.result.structuredContent.tokenId, 1);
   assert.equal(payload.result.structuredContent.owner, "0xabc");
 });
+
+/// One JSON-RPC call straight at the handler, with a chosen authInfo. The
+/// 2026-07-28 transport answers over SSE, so the message arrives on a `data:`
+/// line rather than as the whole body.
+async function call(handler, payload, authInfo) {
+  const req = new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...payload }),
+  });
+  const res = await handler.fetch(req, { authInfo });
+  const text = await res.text();
+  const line = text.split("\n").find((l) => l.startsWith("data: "));
+  return JSON.parse(line ? line.slice("data: ".length) : text);
+}
+
+// credits.sigHash is the record of WHICH signed request bought a day, and it
+// was set by nobody: checkin wrote `ctx.sigHash ?? ""` into a NOT NULL column
+// while the door, which is the only thing that ever holds the signature, threw
+// it away. It travels on authInfo.extra, the same channel as the key id, so
+// nothing outside our own door can put a value there.
+test("the sigHash the door computed reaches the tool through authInfo, and is stored", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "real-caller", owner: "0xabc", lastDay: 100, mintDay: 100 });
+
+  const { handler } = makeMcpHandler({
+    q,
+    chain: { boundKeyOf: async () => null },
+    contract: "0xcontract",
+    today: () => 200,
+  });
+
+  const sigHash = "f".repeat(64);
+  const body = await call(
+    handler,
+    { method: "tools/call", params: { name: "checkin", arguments: { tokenId: 1 } } },
+    { token: "n/a", clientId: "real-caller", scopes: [], extra: { keyId: "real-caller", sigHash } }
+  );
+
+  assert.equal(body.result.structuredContent.accepted, true);
+  const row = db.prepare("SELECT sigHash FROM credits WHERE tokenId = 1 AND day = 200").get();
+  assert.equal(row.sigHash, sigHash);
+  assert.notEqual(row.sigHash, "", "the empty string is the bug this replaces");
+});
+
+// The chain id was a literal 8453 sitting beside an address read from the
+// environment, so a Warden pointed at a Base Sepolia deployment published a
+// mainnet chain id with a testnet address.
+test("mro://contract publishes the configured chain id, not a hardcoded mainnet one", async () => {
+  const q = queries(openDb(":memory:"));
+  const { handler } = makeMcpHandler({
+    q,
+    chain: { boundKeyOf: async () => null },
+    contract: "0xsepolia-contract",
+    chainId: 84532,
+    llmsTxt: "# machine readable only",
+  });
+
+  const body = await call(
+    handler,
+    { method: "resources/read", params: { uri: "mro://contract" } },
+    { token: "n/a", clientId: "caller", scopes: [], extra: { keyId: "caller" } }
+  );
+
+  const published = JSON.parse(body.result.contents[0].text);
+  assert.deepEqual(published, { address: "0xsepolia-contract", chainId: 84532 });
+  assert.notEqual(published.chainId, 8453, "the mainnet id must not survive a testnet configuration");
+});

@@ -32,6 +32,12 @@ export function makeMcpHandler(deps) {
       // let one agent act as another.
       const keyId = ctx.authInfo?.extra?.keyId ?? null;
 
+      // The SAME channel, for the same reason: the SHA-256 of the RFC 9421
+      // Signature header the door verified for this request. `checkin` writes
+      // it into credits.sigHash, which is the only record of which signed
+      // request bought a day. Nothing outside our own door can put it here.
+      const sigHash = ctx.authInfo?.extra?.sigHash ?? null;
+
       // EVERY tool this service has, the paid two included. They were built
       // after this list and were never added to it, so `mint` and `upgrade`
       // existed, were tested, and were unreachable: tools/list named six, and
@@ -50,7 +56,7 @@ export function makeMcpHandler(deps) {
           deps.onToolCall?.(tool.name, keyId);
           let result;
           try {
-            result = await tool.handler(args, { keyId, mcpCtx });
+            result = await tool.handler(args, { keyId, sigHash, mcpCtx });
           } catch (err) {
             // THE SDK FORWARDS A THROWN MESSAGE VERBATIM. Measured on
             // 2026-07-28's server 2.0.0: createToolError puts Error.message
@@ -80,10 +86,11 @@ export function makeMcpHandler(deps) {
 
   return {
     handler,
-    /// The door has already verified the caller, so the key id is attached to
-    /// the Node request as `auth`, which is the channel toNodeHandler forwards.
-    nodeHandler(req, res, keyId) {
-      req.auth = { token: "web-bot-auth", clientId: keyId, scopes: [], extra: { keyId } };
+    /// The door has already verified the caller, so the key id AND the hash of
+    /// the signature that proved it are attached to the Node request as
+    /// `auth`, which is the channel toNodeHandler forwards.
+    nodeHandler(req, res, keyId, sigHash = null) {
+      req.auth = { token: "web-bot-auth", clientId: keyId, scopes: [], extra: { keyId, sigHash } };
       return node(req, res);
     },
   };

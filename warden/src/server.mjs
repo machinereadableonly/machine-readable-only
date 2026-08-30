@@ -99,7 +99,18 @@ export function createServer(config) {
       // and a target can carry its own authority ("//evil.example/mcp",
       // "http://evil.example/mcp") that a plain `new URL(req.url, base)`
       // would let win over the configured domain.
-      const path = pinnedUrl(req.url, config.domain).pathname;
+      //
+      // A target that will not parse at all is the CALLER's mistake, so it is
+      // a 400 here and not a 500 from the catch below. Confirmed not a bypass
+      // -- "//evil.example%2fmcp" throws before anything dispatches or
+      // verifies -- but the catch logged a line per request, which made a
+      // malformed target a free unauthenticated way to flood the log.
+      let path;
+      try {
+        path = pinnedUrl(req.url, config.domain).pathname;
+      } catch {
+        return json(res, 400, { ok: false, reason: "target" });
+      }
 
       // Case 1: the QR's destination. Public, unsigned, JSON only. Gating this
       // would mean a scanned token leads nowhere, which is the one distribution
@@ -192,7 +203,7 @@ export function createServer(config) {
       // back OUTSIDE this try, so a rejecting handler becomes an unhandled
       // rejection -- which under Node's default takes the process down and
       // leaves the caller hanging rather than getting the 500 below.
-      if (path === "/mcp") return await config.mcp.nodeHandler(req, res, decision.keyId);
+      if (path === "/mcp") return await config.mcp.nodeHandler(req, res, decision.keyId, decision.sigHash);
 
       return json(res, 404, { ok: false, reason: "unknown-route" });
     } catch (err) {
