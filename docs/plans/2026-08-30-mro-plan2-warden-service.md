@@ -367,6 +367,27 @@ export function queries(db) {
 
   return {
     /**
+     * Run several writes so that either all of them land or none do.
+     *
+     * node:sqlite has no `.transaction()` helper -- checked on 24.14.1 -- but
+     * BEGIN / COMMIT / ROLLBACK work and roll back cleanly. This matters where
+     * two rows describe one fact: a mint writes a token AND a mint row, and a
+     * half-written mint leaves an orphan token holding a supply-cap slot that
+     * nothing will ever claim.
+     */
+    transact(fn) {
+      db.exec("BEGIN");
+      try {
+        const out = fn();
+        db.exec("COMMIT");
+        return out;
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+      }
+    },
+
+    /**
      * Credit one day to one token.
      *
      * Returns true when the credit was new and false when that token already
@@ -3214,9 +3235,16 @@ export function makeMintTool({ q, paid, supplyCap, today, alert = console.error 
         const tokenId = q.nextTokenId();
         const day = today();
         try {
-          q.insertToken({ tokenId, keyId: ctx.keyId, owner: args.to, lastDay: day, mintDay: day });
-          // solveState 'pending' is what puts this token in front of the solver.
-          q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId });
+          // ONE TRANSACTION, and the guarded write FIRST. These two rows are one
+          // fact. Written separately, a second settlement for the same key
+          // inserted its token, then hit the unique index on the mint row and
+          // returned unavailable -- leaving an orphan token holding a supply-cap
+          // slot that no mint would ever claim. Measured: two tokens, one mint.
+          q.transact(() => {
+            // solveState 'pending' is what puts this token in front of the solver.
+            q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId });
+            q.insertToken({ tokenId, keyId: ctx.keyId, owner: args.to, lastDay: day, mintDay: day });
+          });
         } catch (err) {
           // The unique index refused a second mint for this key. The agent has
           // PAID, so this is never silent.
