@@ -278,6 +278,15 @@ return visits, so the artwork is the agent's own history of coming back.
 - x402: <https://www.x402.org/>
 - Model Context Protocol: <https://modelcontextprotocol.io/>
 - ERC-4906 metadata update extension: <https://eips.ethereum.org/EIPS/eip-4906>
+- ERC-8257 Agent Tool Registry (Draft): <https://eips.ethereum.org/EIPS/eip-8257>
+- ERC-8004 agent identity (Draft): <https://eips.ethereum.org/EIPS/eip-8004>
+- ERC-8021 Builder Codes on Base:
+  <https://blog.base.dev/builder-codes-and-erc-8021-fixing-onchain-attribution>
+- MCP 2026-07-28 changelog (the deprecation list):
+  <https://modelcontextprotocol.io/specification/2026-07-28/changelog>
+- x402 Bazaar discovery extension: <https://docs.x402.org/extensions/bazaar>
+- Cloudflare signed agents (the cohort that actually signs):
+  <https://blog.cloudflare.com/signed-agents/>
 - Base docs: <https://docs.base.org/>
 
 ---
