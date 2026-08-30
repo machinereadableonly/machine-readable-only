@@ -1742,7 +1742,7 @@ In the router from Task 5, before the `admit` call (registration cannot require 
 ```js
       // POST /keys: the easy path in, for agents with no domain of their own.
       // Unsigned by necessity, but never unproved: the body carries a signature
-      // over a nonce this server issued.
+      // over a nonce this server issued, and that nonce is spent on use.
       if (req.method === "POST" && path === "/keys") {
         const body = JSON.parse(await readBody(req, 64 * 1024));
         const result = await registerRoute(
@@ -1759,7 +1759,10 @@ In the router from Task 5, before the `admit` call (registration cannot require 
           }
         );
         if (result.ok) writeFileSync(config.directoryPath, renderDirectory(q));
-        return json(res, result.ok ? 201 : 429, result);
+        // Only a rate limit is 429. A bad proof or a spent nonce is a 400:
+        // telling that caller to retry later would be advice that never helps.
+        if (result.ok) return json(res, 201, result);
+        return json(res, result.reason === "rate-limited" ? 429 : 400, result);
       }
 ```
 
@@ -1792,8 +1795,17 @@ Everything so far is a module. This is the service.
 - Test: `warden/test/door.test.mjs`
 
 **Interfaces:**
-- Consumes: `verifyRequest`, `issueChallenge`, `checkChallenge`, `makeLookup`, `queries`.
-- Produces: `toRequestLike(req, domain)` turning a Node `IncomingMessage` into the `{ method, url, headers }` shape `verifyRequest` takes; `admit(req, deps)` returning `{ ok: true, keyId }` or `{ ok: false, status, body }`; `createServer(deps)` returning a Node HTTP server.
+- Consumes: `verifyRequest`, `issueChallenge`, `checkChallenge`, `verifyNonceMinted`, `makeLookup`, `guardedFetchDirectory`, `renderDirectory`, `registerRoute`, `queries`.
+- Produces: `toRequestLike(req, domain)` turning a Node `IncomingMessage` into the `{ method, url, headers }` shape `verifyRequest` takes; `admit(req, deps)` returning `{ ok: true, keyId }` or `{ ok: false, status, body }`; `createServer(config)` returning a Node HTTP server.
+
+**Handlers arrive through `config`, they are not imported.** `server.mjs` must NOT import `tokenView` or the MCP handler: Task 6 builds the first and Task 7 the second, and a router that imports modules from later tasks cannot be run or tested when it is written. `createServer(config)` takes `config.tokenView(q, id)` and `config.mcp.nodeHandler(req, res, keyId)`, and Tasks 6 and 7 pass theirs in.
+
+**This task owns the `/keys` routes.** Task 4 built `registerRoute` and deliberately left the wiring here, because `server.mjs` did not exist yet. Both routes are unsigned by necessity -- registering is how a caller becomes able to sign at all:
+
+- `GET /keys/nonce` issues a nonce with `issueChallenge`, so registration and the entry challenge share one mechanism.
+- `POST /keys` reads a capped body, calls `registerRoute(q, body, allow, checkNonce)` where `checkNonce` verifies with `verifyNonceMinted` and then spends the nonce against the same `seen` set the door uses, and regenerates the served JWKS on success.
+
+**Status codes matter here:** only `rate-limited` is `429`. Every other refusal -- a bad proof, a stale nonce, a malformed JWK -- is `400`. Mapping them all to `429` would tell an agent whose proof failed to back off and retry later, which will never help it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1923,9 +1935,10 @@ import { readFileSync } from "node:fs";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
 import { admit, sweepSeen } from "./door/middleware.mjs";
-import { verifyNonceMinted } from "./door/challenge.mjs";
-import { makeLookup, guardedFetchDirectory, renderDirectory, registerKey } from "./door/directory.mjs";
-import { tokenView } from "./mcp/tokenView.mjs";
+import { issueChallenge, verifyNonceMinted } from "./door/challenge.mjs";
+import { makeLookup, guardedFetchDirectory, renderDirectory, registerRoute } from "./door/directory.mjs";
+// tokenView and the MCP handler are NOT imported: they belong to Tasks 6 and 7
+// and arrive through config, so this router is runnable the day it is written.
 
 const json = (res, status, body) => {
   const text = JSON.stringify(body);
@@ -1949,7 +1962,7 @@ export function createServer(config) {
       // would mean a scanned token leads nowhere, which is the one distribution
       // surface the artwork has.
       if (req.method === "GET" && path.startsWith("/t/")) {
-        const view = tokenView(q, Number(path.slice(3)));
+        const view = config.tokenView(q, Number(path.slice(3)));
         return view ? json(res, 200, view) : json(res, 404, { ok: false, reason: "unknown-token" });
       }
 
