@@ -1023,41 +1023,107 @@ test("a non-443 port is refused", async () => {
   );
 });
 
+// The deps below are `request` and `lookup`, not `fetch` and `resolve`: the
+// address decision now happens inside the resolution the socket uses, so the
+// tests drive that same seam.
+import { Readable } from "node:stream";
+import { EventEmitter } from "node:events";
+
+/// A stand-in for https.request that replies with one body and never touches a
+/// network. `lookup` is still exercised, because the real code calls it.
+function stubRequest(body, status = 200) {
+  return (opts, cb) => {
+    const req = new EventEmitter();
+    req.end = () => {
+      // Drive the pinned lookup exactly as a real connection would.
+      opts.lookup("host.example", { all: true }, (err) => {
+        if (err) return req.emit("error", err);
+        const res = Readable.from([Buffer.from(body)]);
+        res.statusCode = status;
+        cb(res);
+      });
+    };
+    req.destroy = () => {};
+    return req;
+  };
+}
+
+const publicLookup = (h, o, cb) => cb(null, [{ address: "93.184.216.34", family: 4 }]);
+const lookupOf = (addr) => (h, o, cb) =>
+  cb(null, [{ address: addr, family: addr.includes(":") ? 6 : 4 }]);
+
 test("a directory that resolves to a private address is refused", async () => {
   await assert.rejects(
-    () =>
-      guardedFetchDirectory("https://internal.example.com/x", {
-        resolve: async () => ["10.1.2.3"],
+    () => guardedFetchDirectory("https://internal.example.com/x", {
+      request: stubRequest("{}"), lookup: lookupOf("10.1.2.3"),
+    }),
+    /blocked address/i
+  );
+});
+
+// Each of these got through a previous version of the guard. They are kept as
+// end-to-end cases, not just predicate cases, because the bug that mattered was
+// always "the connection still happened".
+for (const addr of ["::ffff:169.254.169.254", "::ffff:0:169.254.169.254", "::127.0.0.1", "64:ff9b::a9fe:a9fe", "2002:a9fe:a9fe::1"]) {
+  test(`a directory resolving to ${addr} is refused end to end`, async () => {
+    await assert.rejects(
+      () => guardedFetchDirectory("https://evil.example.com/x", {
+        request: stubRequest("{}"), lookup: lookupOf(addr),
       }),
-    /address/i
+      /blocked address/i
+    );
+  });
+}
+
+test("one bad address among several refuses the whole connection", async () => {
+  // A resolver that returns a good address and a bad one must get nothing.
+  await assert.rejects(
+    () => guardedFetchDirectory("https://mixed.example.com/x", {
+      request: stubRequest("{}"),
+      lookup: (h, o, cb) => cb(null, [
+        { address: "93.184.216.34", family: 4 },
+        { address: "169.254.169.254", family: 4 },
+      ]),
+    }),
+    /blocked address/i
   );
 });
 
 test("a body over the cap is refused", async () => {
-  const big = "x".repeat(70_000);
   await assert.rejects(
-    () =>
-      guardedFetchDirectory("https://example.com/x", {
-        resolve: async () => ["93.184.216.34"],
-        fetch: async () => new Response(big, { status: 200 }),
-      }),
+    () => guardedFetchDirectory("https://example.com/x", {
+      request: stubRequest("x".repeat(70_000)), lookup: publicLookup,
+    }),
     /too large/i
   );
 });
 
-test("a redirect is not followed", async () => {
+test("a redirect is refused rather than followed", async () => {
   await assert.rejects(
-    () =>
-      guardedFetchDirectory("https://example.com/x", {
-        resolve: async () => ["93.184.216.34"],
-        fetch: async (url, opts) => {
-          assert.equal(opts.redirect, "error", "fetch must be called with redirect: error");
-          throw new TypeError("redirect");
-        },
-      }),
+    () => guardedFetchDirectory("https://example.com/x", {
+      request: stubRequest("", 302), lookup: publicLookup,
+    }),
     /redirect/i
   );
 });
+
+test("a url carrying credentials is refused", async () => {
+  await assert.rejects(
+    () => guardedFetchDirectory("https://user:pw@example.com/x", {
+      request: stubRequest("{}"), lookup: publicLookup,
+    }),
+    /credentials/i
+  );
+});
+
+test("a well-formed directory from a public address is returned", async () => {
+  // The control. A guard that refuses everything would pass every test above.
+  const jwks = await guardedFetchDirectory("https://example.com/x", {
+    request: stubRequest(JSON.stringify({ keys: [{ kty: "OKP" }] })), lookup: publicLookup,
+  });
+  assert.equal(jwks.keys.length, 1);
+});
+
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
@@ -1073,7 +1139,8 @@ Expected: FAIL, `Cannot find module '../src/door/directory.mjs'`.
 // Signature-Agent pointing at it. An agent that does not registers here and
 // sends Signature-Agent pointing at us. Either way the key id is the RFC 7638
 // thumbprint and the entry rule is identical.
-import { lookup as dnsLookup } from "node:dns/promises";
+import { request as httpsRequest } from "node:https";
+import { lookup as dnsLookup } from "node:dns";
 import { isIP } from "node:net";
 import { jwkToKeyID } from "web-bot-auth";
 
@@ -1169,12 +1236,19 @@ export function isBlockedAddress(addr) {
   if (!bytes) return true;
   const zeros = (n) => bytes.slice(0, n).every((x) => x === 0);
 
-  if (zeros(16)) return true;                                    // ::
-  if (zeros(15) && bytes[15] === 1) return true;                 // ::1, loopback
-  if (zeros(10) && bytes[10] === 0xff && bytes[11] === 0xff) {
-    return blockedV4(bytes[12], bytes[13]);                      // ::ffff:a.b.c.d
+  // EVERYTHING IN ::/64 IS JUDGED BY ITS LAST FOUR BYTES.
+  //
+  // Naming embedding forms one branch at a time was wrong twice on this
+  // project: ::ffff:a.b.c.d was missed first, then ::ffff:0:a.b.c.d, the
+  // RFC 2765 translated form. Both live in ::/64, as do ::a.b.c.d, :: and ::1,
+  // and nothing globally routable does. Deciding the whole range at once by
+  // reading the trailing IPv4 means no form can be forgotten, because no form
+  // has to be named.
+  if (zeros(8)) {
+    if (zeros(16)) return true;                                  // ::
+    if (zeros(15) && bytes[15] === 1) return true;               // ::1
+    return blockedV4(bytes[12], bytes[13]);
   }
-  if (zeros(12)) return blockedV4(bytes[12], bytes[13]);         // ::a.b.c.d
   if (bytes[0] === 0x00 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b) {
     return true;                                                 // 64:ff9b::/96, NAT64
   }
@@ -1190,31 +1264,113 @@ export function isBlockedAddress(addr) {
 /**
  * Fetch somebody else's key directory, safely.
  *
- * `deps` exists so the guard is testable without a network: it takes `resolve`
- * and `fetch`, defaulting to the real ones.
+ * WHY node:https AND NOT fetch. The address check has to happen on the
+ * connection the request actually makes. Validating with a DNS lookup and then
+ * handing the URL to fetch leaves fetch to resolve again on its own, and an
+ * agent controls its own DNS records: it answers with a public address for our
+ * check and a private one for the connection. That is DNS rebinding, and
+ * against it a pre-flight check is decoration.
+ *
+ * node:https takes a `lookup`, so the validation happens INSIDE the resolution
+ * the socket uses. There is no window between checking and connecting.
+ *
+ * `deps` takes `request` and `lookup` so every path here is testable with no
+ * network at all.
  */
-export async function guardedFetchDirectory(url, deps = {}) {
-  const resolve = deps.resolve ?? (async (host) => (await dnsLookup(host, { all: true })).map((r) => r.address));
-  const doFetch = deps.fetch ?? fetch;
+export function guardedFetchDirectory(url, deps = {}) {
+  const doRequest = deps.request ?? httpsRequest;
+  const resolver = deps.lookup ?? dnsLookup;
 
-  const parsed = new URL(url);
-  if (parsed.protocol !== "https:") throw new Error("directory must be https");
-  if (parsed.port && parsed.port !== "443") throw new Error("directory must be on port 443");
+  return new Promise((resolve, reject) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return reject(new Error("directory url is not a url"));
+    }
+    if (parsed.protocol !== "https:") return reject(new Error("directory must be https"));
+    if (parsed.port && parsed.port !== "443") return reject(new Error("directory must be on port 443"));
+    // Credentials in a directory URL have no legitimate use here, and they are
+    // a classic way to make a URL parser and an HTTP client disagree about
+    // which host is being addressed.
+    if (parsed.username || parsed.password) {
+      return reject(new Error("directory url must carry no credentials"));
+    }
 
-  for (const addr of await resolve(parsed.hostname)) {
-    if (isBlockedAddress(addr)) throw new Error(`directory resolves to a blocked address: ${addr}`);
-  }
+    const pinnedLookup = (hostname, options, cb) => {
+      resolver(hostname, { ...options, all: true }, (err, addresses) => {
+        if (err) return cb(err);
+        const list = Array.isArray(addresses) ? addresses : [addresses];
+        if (list.length === 0) return cb(new Error("directory host does not resolve"));
+        // EVERY answer is checked, not only the one that would be used: a
+        // resolver returning one good address and one bad one gets no
+        // connection at all.
+        for (const a of list) {
+          if (isBlockedAddress(a.address)) {
+            return cb(new Error(`directory resolves to a blocked address: ${a.address}`));
+          }
+        }
+        // Node asks for `all` itself when happy-eyeballs is on and then expects
+        // the ARRAY back; returning a single address there fails with
+        // "Invalid IP address: undefined".
+        if (options && options.all) return cb(null, list);
+        cb(null, list[0].address, list[0].family);
+      });
+    };
 
-  const res = await doFetch(url, {
-    redirect: "error",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    headers: { accept: "application/http-message-signatures-directory+json, application/json" },
+    const req = doRequest(
+      {
+        protocol: "https:",
+        hostname: parsed.hostname,
+        port: 443,
+        path: parsed.pathname + parsed.search,
+        method: "GET",
+        lookup: pinnedLookup,
+        timeout: FETCH_TIMEOUT_MS,
+        headers: {
+          accept: "application/http-message-signatures-directory+json, application/json",
+          host: parsed.host,
+        },
+      },
+      (res) => {
+        // A redirect is refused, never followed: following one would repeat the
+        // whole address decision against a host we never checked.
+        if (res.statusCode >= 300 && res.statusCode < 400) {
+          res.destroy();
+          return reject(new Error("directory redirected"));
+        }
+        if (res.statusCode !== 200) {
+          res.destroy();
+          return reject(new Error(`directory returned ${res.statusCode}`));
+        }
+
+        let size = 0;
+        const chunks = [];
+        res.on("data", (chunk) => {
+          size += chunk.length;
+          // Capped WHILE reading. Reading the whole body and measuring it
+          // afterwards means an unbounded response is already in memory by the
+          // time it is refused.
+          if (size > MAX_BODY) {
+            res.destroy();
+            return reject(new Error("directory body too large"));
+          }
+          chunks.push(chunk);
+        });
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+          } catch {
+            reject(new Error("directory is not valid json"));
+          }
+        });
+        res.on("error", reject);
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("directory timed out")));
+    req.on("error", reject);
+    req.end();
   });
-  if (!res.ok) throw new Error(`directory returned ${res.status}`);
-
-  const body = await res.text();
-  if (body.length > MAX_BODY) throw new Error("directory body too large");
-  return JSON.parse(body);
 }
 
 /**
