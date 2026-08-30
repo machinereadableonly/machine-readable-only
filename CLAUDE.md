@@ -19,19 +19,22 @@ return visits, so the artwork is the agent's own history of coming back.
   (see Gotchas) and the spike is deployed and Basescan-verified on Base
   Sepolia. TASK 11, the throwaway Base MAINNET deploy for the OpenSea check,
   WAS DROPPED by the operator on 2026-08-29: Phase 0 spends no real funds.
-  **PLAN 1 (the token contract) IS BUILT as of 2026-08-30** -- 218 tests, all
-  ten tasks reviewed, plus a final whole-branch review, deployed and verified on
+  **PLAN 1 (the token contract) IS BUILT as of 2026-08-30** -- all ten tasks
+  reviewed, plus a final whole-branch review, deployed and verified on
   Base Sepolia at MachineReadableOnly 0x29Fd79212D6f7fc61ddF21aFEbe44046F3D1DB65
-  and Renderer 0xfBA313941CCaAf08492cE501cF2F73839904fc35.
-  **SEVEN AGREED ONE-LINE FIXES ARE OUTSTANDING AND MUST LAND BEFORE MAINNET.**
-  Three of them can permanently strand or corrupt a token and the contract has
-  no upgrade path. See the gotcha below and the plan1-prelaunch-fixes memory.
+  and Renderer 0xfBA313941CCaAf08492cE501cF2F73839904fc35 (that is the PRE-FIX
+  build).
+  **THE SEVEN PRE-MAINNET FIXES ARE APPLIED as of 2026-08-30, commit f7347aa**
+  -- 231 tests pass. The DEPLOYED Sepolia contract is one build BEHIND and has
+  not been redeployed. See the gotcha below and the plan1-prelaunch-fixes
+  memory.
   **PHASE 0 IS SIGNED OFF, by the operator on 2026-08-30.** The last item, ERC-4906, was
   closed by DECISION rather than by measurement: keep emitting it, and accept
   that a consumer ignoring it is outside this project's control. The question
   is unanswerable on Base Sepolia, so it closed by accepting that limit. Do
   not re-open it, and do not describe Phase 0 as blocked or pending.
-  **Plan 1 (the token contract) is what comes next; it has not been written.**
+  Next is the Sepolia redeploy (the operator's go-ahead needed -- it broadcasts), then
+  either Plan 2/3 (the Warden) or the deferred child-visuals brainstorm.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -224,21 +227,30 @@ return visits, so the artwork is the agent's own history of coming back.
   key) or Warden-only rebind (a token could never be rebound if the Warden
   died). THE WARDEN'S REBIND RE-CHECK IS A SECURITY CONTROL: it must read the
   chain, never its own database.
-- **SEVEN PRE-MAINNET CONTRACT FIXES ARE OUTSTANDING (agreed 2026-08-30, NONE
-  applied).** All are one-liners; all are missing bounds on inputs the Warden
-  supplies, which is why ten task-level reviews passed and only the whole-branch
-  read caught them. Three are unfixable after deploy: no upper bound on `day`
-  (a timestamp passed as a day index bricks a token forever), token ids are
-  uint256 while batchCheckIn addresses only 32 bits, and applyMark has no
-  existence guard. Plus applyMark missing whenNotPaused, setUpgrade clobbering
-  `sold`, mint accepting a zero keyId, and overriding renounceOwnership to
-  revert. Full detail and reasoning in the plan1-prelaunch-fixes memory. DO NOT
-  DEPLOY TO MAINNET UNTIL THESE LAND.
-- **Two untracked files sit in the tree deliberately** (neither committed,
-  neither deleted -- deletion needs the operator's word): `contracts/script/MintOnePlan1.s.sol`
-  and `contracts/test/ZZReviewProbe.t.sol`. The second is a TEST file, so
-  `forge test` reports 223 rather than the committed 218. If a session sees 223,
-  that is why.
+- **THE SEVEN PRE-MAINNET CONTRACT FIXES ARE APPLIED** (2026-08-30, commit
+  `f7347aa`). All were missing bounds on inputs the Warden supplies, which is
+  why ten task-level reviews passed and only the whole-branch read caught them.
+  Both check-in paths now reject `day > today()`; `mint` and `seed` reject ids
+  above 2**32; `applyMark` gained an existence guard AND `whenNotPaused`;
+  `setUpgrade` preserves `sold`; `mint` rejects a zero keyId; and
+  `renounceOwnership` reverts. Detail in the plan1-prelaunch-fixes memory.
+  **THE DEPLOYED SEPOLIA CONTRACT IS THE PRE-FIX BUILD** -- anything read off
+  chain is old behaviour until it is redeployed.
+  The fix wave produced its own finding: **14 committed tests were crediting
+  days the chain had not reached**, and only passed because the bound was
+  absent. `MroTestBase` gained `_warpToDay(day)`; `_makeWhole` now advances the
+  clock 364 days, and the seed-budget tests' arithmetic depends on that exact
+  figure. Two items stay OPEN for Plan 3, neither a contract bug: `batchCheckIn`
+  is ALL OR NOTHING (re-chunk with credited ids removed, never retry whole), and
+  the Warden's rebind re-check is FRONT-RUNNABLE -- now pinned as an
+  accepted-behaviour test in Lifecycle.t.sol so it is not re-audited as a
+  defect.
+- **The two untracked files are resolved (2026-08-30).**
+  `contracts/script/MintOnePlan1.s.sol` is COMMITTED. `ZZReviewProbe.t.sol` is
+  SUPERSEDED by `contracts/test/Bounds.t.sol`, which inverts every probe to pin
+  the fix; the original was moved to the session scratchpad, not deleted,
+  pending the operator's word. **The true test count is 231.** The old "forge test reports
+  223" hazard no longer applies.
 - **Coinbase Agentic Wallets cannot sign NFT trades** -- this rules out an
   otherwise obvious integration.
 - **Distribution is the real risk, not the build.** Five of six early-2026
