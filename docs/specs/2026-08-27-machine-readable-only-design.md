@@ -361,6 +361,8 @@ address warden;
 address renderer;
 uint32  supplyCap;        // dial; starts at 10,000
 uint32  totalMinted;
+uint32 walletCap;                         // dial; starts at 20
+mapping(address => uint32) mintedTo;      // tokens ever MINTED to an address, not tokens held
 ```
 
 Storage rule that decides the gas bill: daily writes **overwrite** the one
@@ -415,14 +417,15 @@ limit (section 8, rendering risks). Replaced by `setRenderer` when a new Mark
 needs drawing. Token state never lives here.
 
 `applyMark`, `seed` and `rest` each also emit ERC-4906 `MetadataUpdate(id)`, and the Clock emits `MetadataUpdate(id)` for every token whose paling crosses a step (section 8) that day;
-`sunset` emits no metadata event. Amended 2026-08-30: line 373 forbids the
-`(1, max)` catch-all as hostile to indexers, so specifying it here contradicted
-the same document two pages earlier. A sunset does change every token, so this
-is a deliberate choice: the piece must never depend on an indexer refreshing,
-and a terminal one-time event is the cheapest possible thing to leave stale.
-The contract knows its own minted range, so a future operator can emit over the
-ids actually minted if it ever matters. Both contracts
-declare ERC-4906 support in `supportsInterface` (`0x49064906`).
+`sunset` emits no metadata event. Amended 2026-08-30: the `batchCheckIn` row
+in this section forbids the `(1, max)` catch-all as hostile to indexers, so
+specifying it here contradicted the same document elsewhere. A sunset does
+change every token, so this is a deliberate choice: the piece must never
+depend on an indexer refreshing, and a terminal one-time event is the
+cheapest possible thing to leave stale. The contract knows its own minted
+range, so a future operator can emit over the ids actually minted if it ever
+matters. Both contracts declare ERC-4906 support in `supportsInterface`
+(`0x49064906`).
 
 ### Limits that must be respected
 
@@ -498,14 +501,13 @@ and hard in practice. Verified 2026-08-27 against OpenSea's docs:
    OpenSea caches `image` as PNG and says to emit ERC-4906 events
    (`MetadataUpdate(tokenId)` or `BatchMetadataUpdate(from, to)`, with
    `to = type(uint256).max` to refresh a whole collection) or call its refresh
-   API. `sunset` emits no metadata event. Amended 2026-08-30: line 373 forbids
-   the `(1, max)` catch-all as hostile to indexers, so specifying it here
-   contradicted the same document two pages earlier. A sunset does change
-   every token, so this is a deliberate choice: the piece must never depend on
-   an indexer refreshing, and a terminal one-time event is the cheapest
-   possible thing to leave stale. The contract knows its own minted range, so
-   a future operator can emit over the ids actually minted if it ever
-   matters. How quickly OpenSea re-renders thousands of tokens a day is not
+   API. This contract emits one `MetadataUpdate(id)` per token it writes, and
+   never the collection-wide catch-all. Amended 2026-08-30: this paragraph
+   formerly said the contract emits `BatchMetadataUpdate(1, type(uint256).max)`,
+   which contradicted the `batchCheckIn` row in section 7 -- that row already
+   refuses the catch-all as hostile to indexers. A day's check-ins are a
+   scattered subset of ids in any case, so no contiguous range can describe
+   them. How quickly OpenSea re-renders thousands of tokens a day is not
    documented; the daily X post, rendered by us, is the reliable human window
    and OpenSea is the gallery with a lag.
 2. **Renderer size and `tokenURI` gas.** Measured on Ethereum mainnet
