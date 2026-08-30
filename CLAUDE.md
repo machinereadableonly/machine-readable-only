@@ -206,6 +206,17 @@ return visits, so the artwork is the agent's own history of coming back.
   indexer refreshing, and the Plan 3 poke must VERIFY timeLastUpdated moved
   rather than fire and forget. Do not propose contract changes -- the gap is
   consumer-side.
+- **The `rebind` trust boundary is DECIDED (the operator, 2026-08-30), not an oversight.**
+  `rebind` accepts any `bytes32` with no proof of key possession, and it is the
+  only token-owner-callable function that writes identity. Since `seed` keys its
+  budget on the agent key, a token owner can point a whole token at another
+  key's earned budget. ACCEPTED: `seed` is `onlyWarden` and the Warden re-checks
+  the RFC 9421 signature against the CURRENT ON-CHAIN binding, so it needs that
+  key's signature. Same trust boundary as mint, check-in and marks. Do not
+  re-propose EIP-712 proof-of-possession (strands a token whose agent lost its
+  key) or Warden-only rebind (a token could never be rebound if the Warden
+  died). THE WARDEN'S REBIND RE-CHECK IS A SECURITY CONTROL: it must read the
+  chain, never its own database.
 - **Coinbase Agentic Wallets cannot sign NFT trades** -- this rules out an
   otherwise obvious integration.
 - **Distribution is the real risk, not the build.** Five of six early-2026

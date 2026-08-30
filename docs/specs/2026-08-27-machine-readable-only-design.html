@@ -633,6 +633,22 @@ mapping(address =&gt; uint32) mintedTo;      // tokens ever MINTED to an address
 <code>sunset()</code> is called twice. Event: <code>SunsetAt(uint32 day)</code>. Amended 2026-08-30:
 the spec previously used <code>Sunset</code> for both an error and an event, which does
 not compile. The spike already resolved it this way.</p>
+<p><strong>The <code>rebind</code> trust boundary (decided 2026-08-30, during Plan 1).</strong> <code>rebind</code>
+takes an arbitrary <code>bytes32</code> and proves nothing about possession of that key,
+and it is the ONE token-owner-callable function that writes identity. Once
+<code>seed</code> keys its budget on the agent key, a token owner can therefore point a
+whole token at another key&#39;s earned seed budget. This is ACCEPTED, not
+overlooked. The gate is the Warden: <code>seed</code> is <code>onlyWarden</code>, and the Warden
+re-checks the RFC 9421 signature against the CURRENT on-chain binding before it
+acts, so spending another key&#39;s budget needs that key&#39;s signature. The contract
+already trusts the Warden for mint, check-in, marks and seeding; this is the
+same boundary, not a new one. The alternatives were rejected on cost: requiring
+an EIP-712 proof of possession would strand a token whose agent lost its key,
+and making <code>rebind</code> Warden-only would mean a token could never be rebound if
+the Warden died, which is the durability failure the voucher path exists to
+prevent. THE CONSEQUENCE IS BINDING ON THE WARDEN: its rebind re-check is a
+security control, not a convenience, and must never be relaxed to trusting its
+own database over the chain.</p>
 <p><strong>Effective streak (a Renderer rule that matters):</strong> on-chain <code>streak</code> only
 changes at a check-in, so a token that stops checking in would keep its colour
 forever. The Renderer therefore computes
