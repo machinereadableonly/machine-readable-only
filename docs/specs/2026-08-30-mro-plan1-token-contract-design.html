@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan 1 design: the MRO token contract</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan 1 design: the MRO token contract</h1>
+<p>Status: APPROVED by the operator on 2026-08-30, in the brainstorm that produced it.
+Implements section 7 of
+<code>docs/specs/2026-08-27-machine-readable-only-design.md</code>, with the amendments
+listed in step 0 below.</p>
+<hr>
+<h2>1. Why this, and why now</h2>
+<p>Phase 0 was signed off on 2026-08-30. It proved the ARTWORK: that a token&#39;s
+image renders inside the gas and byte budget, decodes through a rasteriser we
+do not own, and survives every state in the 26-state soak. It proved nothing
+about the thing that HOLDS the state the artwork draws from, because that
+contract does not exist yet. The spike token is a throwaway whose <code>setState</code>
+overwrites the whole struct wholesale, has no Warden, and enforces no gate.</p>
+<p>Plan 1 builds the real one. Two properties make it different in kind from
+everything built so far:</p>
+<ul>
+<li><strong>It is permanent.</strong> Base mainnet, no proxy, no upgrade path. The Renderer is
+swappable; the token contract is not. Every decision recorded here is final
+unless the answer is &quot;start a new collection&quot;, which the permanence rule
+forbids.</li>
+<li><strong>It is the gate on everything else.</strong> Plans 2 to 5 -- Warden, reference
+client, Clock, launch -- all need a deployed contract to talk to. Nothing
+downstream can start until this exists.</li>
+</ul>
+<h2>2. Scope</h2>
+<p>IN:</p>
+<ul>
+<li><code>MachineReadableOnly.sol</code> implementing spec section 7 as amended.</li>
+<li>Wiring to the Phase 0 Renderer through the existing <code>IRenderer</code> interface.</li>
+<li>The full Foundry suite from spec section 13.</li>
+<li>The deployability proof required by CLAUDE.md hard rule 7.</li>
+<li>Deploy and Basescan-verify on <strong>Base Sepolia</strong>.</li>
+</ul>
+<p>OUT:</p>
+<ul>
+<li>Base mainnet, and any transaction with real value. There is no standing
+approval and Plan 1 does not create one.</li>
+<li>The Warden, the reference client and the Clock. Plan 1 uses a plain EOA as
+the Warden address for testing.</li>
+<li>Lineage visuals. See section 7.</li>
+</ul>
+<h2>3. Step 0: amend the spec before writing any Solidity</h2>
+<p>Plan 1 reads its requirements from the approved spec, so the spec must stop
+contradicting itself first. This is the outstanding half of Task 12: the
+go/no-go half closed with the Phase 0 sign-off, the amendment half never ran.</p>
+<p>Writing the contract against contradictory text would codify the contradiction
+in a contract that cannot be changed afterwards.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Where</th>
+<th>The contradiction</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>lines 392 vs 450</td>
+<td>Effective streak says one missed day drops colour to zero; the colour section says it pales in steps at 3 / 7 / 30</td>
+<td>Graded steps. Already built in commit <code>be86fee</code>; the refresh-cost argument is the stronger one and the two rules agree at the far end</td>
+</tr>
+<tr>
+<td>3</td>
+<td>line 342</td>
+<td><code>uint32 sunsetDay</code> uses 0 for &quot;not sunset&quot;, which cannot express a genuine day zero</td>
+<td>Explicit <code>bool isSunset</code> beside it. Already built in <code>2ab5373</code>; a uint32 and a bool share one slot, so it costs nothing</td>
+</tr>
+<tr>
+<td>7</td>
+<td>lines 405 and 481, against line 373</td>
+<td>The spec contradicts ITSELF on the catch-all within two pages. Line 373 says the check-in event must be &quot;never the <code>(1, max)</code> catch-all, which indexers treat as hostile&quot;; lines 405 and 481 then specify <code>sunset</code> emitting exactly <code>BatchMetadataUpdate(1, type(uint256).max)</code></td>
+<td>Removed at both 405 and 481. Line 373&#39;s reasoning wins, and it is what the code already does: the spike&#39;s <code>sunset()</code> deliberately emits nothing and <code>touchRange</code> refuses that exact range. See section 6</td>
+</tr>
+<tr>
+<td>8</td>
+<td>line 417</td>
+<td>&quot;the build plan decides whether to include the [voucher] stub&quot;</td>
+<td>Stale. The durability commitments (line 752) and CLAUDE.md&#39;s locked decisions both require it on chain from day one, paused. Not an open choice</td>
+</tr>
+<tr>
+<td>9</td>
+<td>line 373</td>
+<td><code>BatchMetadataUpdate(minId, maxId)</code> &quot;over the exact range written&quot;</td>
+<td>Impossible: a day&#39;s check-ins are a scattered subset, so min..max is never the exact set. The same line&#39;s own hostility argument extends to it. Replaced by per-token emits. See section 6</td>
+</tr>
+<tr>
+<td>10</td>
+<td>section 10 vs the built Renderer</td>
+<td>Child visuals were deferred to &quot;a follow-up brainstorm before the Renderer is built&quot;; the Renderer was built in Phase 0 without them</td>
+<td>Recorded as a known, accepted deferral rather than a defect. See section 7</td>
+</tr>
+</tbody></table>
+<p>Conflicts 1 and 3 were already recorded in project memory and marked &quot;amend in
+Task 12&quot;. Conflicts 7 to 10 were found on 2026-08-30 during this brainstorm and
+are new.</p>
+<h2>4. Structure</h2>
+<p><strong>One contract</strong>, following spec section 7, not a pre-emptively split one.</p>
+<p>Measured baseline on 2026-08-30: <code>MROSpikeToken</code> is 6,863 runtime bytes with
+17,713 of margin, and it already carries ERC-721, <code>Ownable2Step</code>, the renderer
+wiring and sunset. The real contract adds mint caps and key binding, packed
+batch decoding, mark gates, seed arithmetic and EIP-712 vouchers. Two to three
+times the spike still fits under 24,576, but not by enough to assume.</p>
+<p>So: build it whole, and <strong>measure at the first milestone</strong> rather than
+predicting. The named fallback, decided now so it is not invented under
+pressure, is extracting pure logic into <code>library</code> code (check-in decoding, mark
+gating, seed arithmetic) which the compiler inlines as internal calls without a
+separate deployment. Pre-emptive splitting is rejected because it adds
+indirection that may never be needed.</p>
+<p>Growing the spike into the real contract is rejected outright: it models
+nothing real, so it would mean reverse-engineering a throwaway.</p>
+<h2>5. The contract</h2>
+<p>State and functions follow spec section 7 as amended. The load-bearing
+invariants, restated because they are what the tests must pin:</p>
+<ul>
+<li><strong>One <code>Token</code> slot per token, overwritten daily.</strong> Nothing is ever keyed by
+day. This single decision is what makes a check-in about 5,000 gas instead of
+a new storage slot per token per day.</li>
+<li><strong>One mint per key, ever</strong> (<code>hasMinted</code>), while binding is unlimited. So
+<code>rebind</code> can move a token to a new key but can never resurrect a mint.</li>
+<li><strong>The seed budget is keyed by AGENT KEY, not by token</strong>:
+<code>seedsSpent[key] &lt; (today - firstMintDay[key]) / 365</code>. This is the locked
+&quot;tenure, not depth&quot; decision -- a lineage cannot accelerate by seeding
+children who immediately seed further children.</li>
+<li><strong><code>rest</code> and <code>sunset</code> are irreversible.</strong> Both block check-in, marks and
+seeding; neither blocks transfer or <code>rebind</code>. A sealed token can still be
+owned and traded, which is the point.</li>
+<li><strong><code>tokenURI</code> delegates entirely.</strong> The contract assembles a <code>TokenView</code> and
+hands it to <code>IRenderer</code>. It holds no drawing logic, so a renderer swap needs
+no contract change.</li>
+</ul>
+<p>Custom errors as listed in the spec: <code>NotWarden</code>, <code>AlreadyMinted</code>,
+<code>TokenExists</code>, <code>SupplyCap</code>, <code>DayNotAdvanced</code>, <code>MarkInactive</code>,
+<code>MarkAlreadyApplied</code>, <code>MarkSoldOut</code>, <code>MarkGate</code>, <code>NotTokenOwner</code>,
+<code>EnforcedPause</code>, <code>Resting</code>, <code>Sunset</code>, <code>ParentNotWhole</code>, <code>NoSeedAvailable</code>,
+<code>WalletCap</code>, <code>VouchersDisabled</code>.</p>
+<h2>6. ERC-4906: per-token emits, no ranges</h2>
+<p>DECIDED 2026-08-30 after measuring the alternative.</p>
+<p><code>batchCheckIn</code> emits one <code>MetadataUpdate(id)</code> per token written, AFTER the
+storage writes. No <code>BatchMetadataUpdate</code>, and never the collection-wide
+catch-all.</p>
+<h3>Why not the range event</h3>
+<p>A range covers three groups of token:</p>
+<ol>
+<li>Tokens written that day. Genuinely changed.</li>
+<li>Tokens that did NOT check in but crossed a paling step that day. Their image
+genuinely changed with no write at all, because the artwork is a function of
+<code>today</code> and <code>today - lastDay</code> crossing 3, 7 or 30 repaints them.</li>
+<li>Everything else in the range. Genuinely unchanged.</li>
+</ol>
+<p>Group 3 is the bulk of any range, so a range event over-claims. Group 2 is what
+decides it: the spec ALREADY requires the Clock to emit <code>MetadataUpdate(id)</code>
+for every paling-step crosser, so per-token machinery has to exist regardless.
+Per-token emission is therefore not a 14 percent tax for honesty, it is reuse of
+something already required. The emit set is one union: tokens written, plus
+tokens paling.</p>
+<h3>The cost, measured</h3>
+<p><code>MetadataUpdate</code> is a one-topic log with 32 bytes of data: <code>375 + 375 + 8 * 32</code>
+= <strong>1,006 gas</strong>. <code>BatchMetadataUpdate</code> carries 64 bytes: <strong>1,262 gas</strong>.
+Confirmed against this project&#39;s own contract -- <code>touchRange</code>, which validates
+and emits and does nothing else, measures 23,899 gas, of which 21,000 is the
+base any transaction pays.</p>
+<p>At Base&#39;s fee (0.006 gwei, read live from our RPC on 2026-08-30; Basescan showed
+mainnet at 0.005 to 0.006) and ETH around 2,500 USD, 1M gas is about 1.5 US
+cents:</p>
+<table>
+<thead>
+<tr>
+<th>Agents checking in per day</th>
+<th>Per-token</th>
+<th>One range event</th>
+<th>Difference</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>100</td>
+<td>100,600 gas</td>
+<td>1,262 gas</td>
+<td>~0.15 cents/day</td>
+</tr>
+<tr>
+<td>1,000</td>
+<td>1,006,000 gas</td>
+<td>1,262 gas</td>
+<td>~1.5 cents/day</td>
+</tr>
+<tr>
+<td>1,500 (one full chunk)</td>
+<td>1,509,000 gas</td>
+<td>1,262 gas</td>
+<td>~2.3 cents/day</td>
+</tr>
+<tr>
+<td>10,000 (the whole supply cap, daily)</td>
+<td>10,060,000 gas</td>
+<td>8,834 gas</td>
+<td>~15 cents/day</td>
+</tr>
+</tbody></table>
+<p>At the absolute theoretical maximum the honest option costs about 55 USD per
+year more; at a realistic 1,000 active agents, about 5.50 USD per year. Money is
+not the deciding factor. The only real constraint is the per-transaction gas
+budget, and 1,500 per chunk still fits the spec&#39;s own <code>estimateGas &lt; 15M</code> guard
+with per-token emits included -- which a test must assert, not just the Clock.</p>
+<p><code>sunset()</code> emits no metadata event at all, matching the spike and resolving
+conflict 7. The spec asserts the catch-all in two places (lines 405 and 481)
+while forbidding it in a third (line 373); both assertions go.</p>
+<p>A sunset genuinely does change every token, so emitting nothing is a real
+choice and not an oversight. It is the right one here: the collection-wide
+range is the single event indexers treat as hostile, the piece must never
+depend on an indexer refreshing anyway, and a sunset is a one-time terminal
+event whose staleness costs nothing that matters. The real contract knows its
+own minted range, so if a future operator wants to announce a sunset it can
+emit over the ids it actually minted -- which is what the spike&#39;s own comment
+says the real contract should do.</p>
+<p>Standing caveat: measured on 2026-08-29 to 30, Alchemy&#39;s warm-entry
+invalidation does nothing on Base Sepolia, so the PRACTICAL harm of
+over-claiming is currently low. The argument above is structural, not urgent,
+and is recorded that way deliberately.</p>
+<h2>7. Lineage: data now, visuals later</h2>
+<p><code>generation</code>, <code>parentOf</code> and <code>seedsGiven</code> are stored and exposed in <code>TokenView</code>
+from day one. The Phase 0 Renderer surfaces them as text attributes only
+(<code>Renderer.sol:235-237</code>), so a seeded child and a founding token at the same
+level, streak and marks render as identical images.</p>
+<p>That is ACCEPTED for Plan 1, not overlooked. The reasoning:</p>
+<ul>
+<li>The Renderer is swappable through <code>setRenderer</code>, so this is the one decision
+in Plan 1 that is reversible. Adding child visuals later needs no contract
+change and no migration.</li>
+<li>Because the data is recorded from the first mint, a later renderer can draw
+lineage RETROACTIVELY for tokens that already exist.</li>
+<li>All seven drawing surfaces are currently claimed by the Marks ladder, so a
+lineage visual has no free surface waiting. Deciding it properly needs its own
+brainstorm, and rushing it into Plan 1 would either crowd a Mark or produce a
+weak eighth surface.</li>
+</ul>
+<p>Accepted cost, stated plainly: any child minted before the renderer swap looks
+like a founder until the swap lands.</p>
+<h2>8. Vouchers: present and paused</h2>
+<p><code>checkInWithVoucher(uint256 id, uint32 day, bytes wardenSig)</code> ships in the
+contract, guarded by a <code>whenVouchersEnabled</code> flag that is OFF at launch, with
+full EIP-712 machinery and the <code>VouchersDisabled</code> error.</p>
+<p>This is not optional and is not a build-plan choice (conflict 8). The spec&#39;s
+durability commitments require &quot;the voucher check-in path exists on-chain from
+day one so tokens can be kept alive without the Warden&quot;, and CLAUDE.md&#39;s locked
+decisions say it ships paused.</p>
+<p>The reason is the project&#39;s own strongest evidence: five of six early-2026
+agent mints had dead infrastructure within six months. Because the contract has
+no upgrade path, a voucher path left out now can NEVER be added -- the piece
+would simply die with the Warden, and a record of return visits that cannot
+record a return visit is a dead artwork. Including an unused paused function is
+a small permanent cost against an unrecoverable failure.</p>
+<h2>9. Testing</h2>
+<p>Spec section 13&#39;s contract list in full. Specifically:</p>
+<ul>
+<li>Every function, every revert, every owner and Warden path.</li>
+<li>One mint per key; explicit-id mint and <code>TokenExists</code>; supply cap; wallet cap.</li>
+<li><code>day &gt; lastDay</code>; streak continuation vs reset; out-of-order and multi-day late
+writes.</li>
+<li>Marks: bitmask, gates, supply, <code>MarkSoldOut</code>.</li>
+<li><code>rebind</code> by a non-owner reverts; binding one key to several tokens succeeds.</li>
+<li>Pause blocks mint, check-in and marks but never transfer or <code>rebind</code>.</li>
+<li><code>Ownable2Step</code> handover, and every dial setter.</li>
+<li><code>rest</code>: non-owner reverts; resting blocks check-in, marks and seed but not
+transfer or rebind.</li>
+<li><code>seed</code>: every gate, and the one-per-year arithmetic across several years using
+<code>vm.warp</code>.</li>
+<li><code>sunset</code>: freezes everything, cannot be undone, and registers correctly on day
+zero (the regression conflict 3 came from).</li>
+<li>Effective-streak paling for lapsed tokens and colour lock for resting ones.</li>
+<li>A <code>tokenURI</code> golden test that decodes the base64 and asserts cell count,
+colour, rings and mark elements against the REAL Renderer, not a stub.</li>
+<li>A gas test asserting a full 1,500-token chunk including per-token emits stays
+under the 15M guard.</li>
+<li>CLAUDE.md hard rule 7: <code>forge build --sizes</code> showing positive runtime margin,
+AND a strict-limit anvil deploy returning non-empty <code>cast code</code>.</li>
+</ul>
+<p>Per the global smart-contract rules, every owner, emergency and admin function
+gets an explicit test, and every access-control revert gets a test.</p>
+<h2>10. Risks</h2>
+<ul>
+<li><strong>Contract size.</strong> The live risk. Mitigated by the milestone checkpoint in
+section 4 and the named library fallback. <code>test/ContractSize.t.sol</code> already
+fails the suite on a violation.</li>
+<li><strong>Gas per chunk.</strong> Per-token emits add about 1.5M gas to a full chunk. A test
+must assert the 15M guard holds; leaving it to the Clock would move a
+contract-level constraint into a component that does not exist yet.</li>
+<li><strong>Renderer integration.</strong> Where contract and renderer disagree about field
+names or semantics. The golden <code>tokenURI</code> test against the real Renderer is
+the thing that catches it; a stubbed renderer would hide exactly this class of
+bug.</li>
+<li><strong>Permanence.</strong> There is no upgrade path, so a design error here is not
+fixable later. This is why step 0 exists.</li>
+</ul>
+<h2>11. Sequence</h2>
+<ol>
+<li>Amend the spec, six conflicts. Commit.</li>
+<li>Core: ERC-721, state layout, <code>mint</code>, dials, pause, <code>Ownable2Step</code>.
+<strong>SIZE CHECKPOINT.</strong></li>
+<li><code>batchCheckIn</code>: packed id decoding, per-token emits, plus the chunk gas test.</li>
+<li><code>applyMark</code>, <code>rebind</code>, <code>rest</code>.</li>
+<li><code>seed</code> and the per-year budget arithmetic.</li>
+<li><code>checkInWithVoucher</code>, paused, with EIP-712.</li>
+<li>Wire <code>IRenderer</code>; golden <code>tokenURI</code> test against the real Renderer.</li>
+<li>Deployability proof, then Base Sepolia deploy and Basescan verify.</li>
+</ol>
+<p>Phase boundaries for check-in, per the operator&#39;s working style: after step 1, after step
+2 (the size number changes what follows), and after step 8.</p>
+<h2>12. What this design does NOT decide</h2>
+<ul>
+<li>Child token visuals. Deferred to its own brainstorm before any renderer swap.</li>
+<li>Anything about Base mainnet. Plan 1 spends nothing.</li>
+<li>The Clock&#39;s chunking and sorting behaviour, beyond requiring that the contract
+stay under the gas guard at 1,500 per chunk.</li>
+<li>Whether the spike contract and its tests are deleted afterwards. That needs
+the operator&#39;s explicit approval and is not assumed here.</li>
+</ul>
+
+</body>
+</html>
