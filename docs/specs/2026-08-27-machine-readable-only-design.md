@@ -185,9 +185,18 @@ Seed agent (PM2)        --runs mro-agent-->  the same door as everyone else
 **Trust boundary, stated plainly:** the contract believes the Warden for mints,
 check-ins and marks. The Warden's wallet cannot move tokens or funds. The
 contract's `day > lastDay` rule means even a misbehaving Warden cannot credit
-more than one day per token per day. The contract owner can swap the Renderer
-(how tokens are drawn) but cannot touch any token's history; `/llms.txt` states
-both facts.
+more than one day per token per day.
+
+**What the owner can and cannot do, stated exactly (corrected 2026-08-30).**
+An earlier version of this paragraph said the contract owner "cannot touch any
+token's history", and instructed `/llms.txt` to say so. That is FALSE as
+written: `setWarden` is `onlyOwner` and `batchCheckIn` is `onlyWarden`, so an
+owner can appoint itself Warden and credit days. What is exactly true, and what
+`/llms.txt` says, is that no function EDITS OR LOWERS level, streak, marks,
+mint day or lineage -- the record only ever moves forward, so the owner can
+extend a history but cannot rewrite or shorten one. Rendering is swappable; the
+record is not. `setWarden` is named openly in the dial list rather than left
+implied.
 
 ---
 
