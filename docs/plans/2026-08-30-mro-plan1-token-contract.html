@@ -1,0 +1,2332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MRO Plan 1: the token contract -- Implementation Plan</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>MRO Plan 1: the token contract -- Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Build <code>MachineReadableOnly.sol</code>, the permanent ERC-721 that holds every token&#39;s daily record, wire it to the Phase 0 Renderer, and deploy it to Base Sepolia with the full test suite green.</p>
+<p><strong>Architecture:</strong> One non-upgradeable ERC-721 holding a single 256-bit <code>Token</code> slot per token that is overwritten on each check-in. All drawing is delegated to a swappable <code>IRenderer</code>. A Warden address is the only caller permitted to mint, check in and apply marks; the contract owner holds the dials. ERC-4906 is emitted per token, never as a range.</p>
+<p><strong>Tech Stack:</strong> Solidity 0.8.35, Foundry 1.7.1 (<code>via_ir = true</code>, optimizer 200 runs, cancun), OpenZeppelin Contracts 5.7.0 vendored under <code>contracts/lib/</code>, Base Sepolia (chain id 84532).</p>
+<h2>Global Constraints</h2>
+<ul>
+<li><strong>Plain ASCII only</strong> in all code comments and docs. No em dashes, smart quotes, arrows or emoji.</li>
+<li><strong>The contract is permanent.</strong> No proxy, no upgrade path. A design error here is not fixable later.</li>
+<li><strong>Never spend real funds.</strong> This plan touches Base Sepolia only. Base mainnet is a operator-approval gate and this plan does not create one.</li>
+<li><strong>Foundry needs <code>export PATH=$HOME/.foundry/bin:$PATH</code>;</strong> Node needs <code>source ~/.nvm/nvm.sh</code>. Non-interactive shells have neither.</li>
+<li><strong>All work runs from <code>contracts/</code></strong> for forge commands. <code>cd</code> back to the repo root before editing root-level files -- the project-isolation hook compares write targets against the shell&#39;s working directory.</li>
+<li><strong>Deployability rule (CLAUDE.md hard rule 7):</strong> nothing is done until <code>forge build --sizes</code> shows positive runtime margin under 24,576 bytes AND <code>bash script/anvil-size-check.sh</code> returns non-empty <code>cast code</code>.</li>
+<li><strong>Every owner / warden / emergency function gets an explicit test, and every access-control revert gets a test.</strong> Global smart-contract rule.</li>
+<li><strong>Use <code>/bin/grep</code>, never bare <code>grep</code>.</strong></li>
+<li><strong>Both suites green before any commit:</strong> <code>cd contracts &amp;&amp; forge test</code>, and <code>cd tools &amp;&amp; npm test</code>.</li>
+<li><strong>Struct <code>Token</code> must stay in exactly one 256-bit slot.</strong> Six uint32 (192) + bool (8) + uint56 (56) = 256. Breaking this changes the check-in gas cost, which is the number the whole design rests on.</li>
+<li><strong>Commit style:</strong> no AI attribution, no <code>Co-Authored-By</code>, no personal identifiers. Message describes the code change only.</li>
+</ul>
+<hr>
+<h2>File Structure</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>contracts/src/MachineReadableOnly.sol</code></td>
+<td>Create. The whole token contract: state, mint, check-in, marks, rebind, rest, seed, vouchers, dials, <code>tokenURI</code> delegation.</td>
+</tr>
+<tr>
+<td><code>contracts/test/MachineReadableOnly.t.sol</code></td>
+<td>Create. Behaviour and access control for mint, dials, pause, <code>Ownable2Step</code>.</td>
+</tr>
+<tr>
+<td><code>contracts/test/CheckIn.t.sol</code></td>
+<td>Create. <code>batchCheckIn</code> semantics, streak rules, per-token ERC-4906 emits, and the chunk gas guard.</td>
+</tr>
+<tr>
+<td><code>contracts/test/Marks.t.sol</code></td>
+<td>Create. <code>applyMark</code> gates, supply, bitmask, <code>setUpgrade</code>.</td>
+</tr>
+<tr>
+<td><code>contracts/test/Lifecycle.t.sol</code></td>
+<td>Create. <code>rebind</code>, <code>rest</code>, <code>seed</code> and its per-year arithmetic, <code>sunset</code>.</td>
+</tr>
+<tr>
+<td><code>contracts/test/Vouchers.t.sol</code></td>
+<td>Create. EIP-712 voucher path, paused by default.</td>
+</tr>
+<tr>
+<td><code>contracts/test/TokenUriGolden.t.sol</code></td>
+<td>Create. End-to-end <code>tokenURI</code> against the REAL Renderer.</td>
+</tr>
+<tr>
+<td><code>contracts/test/ContractSize.t.sol</code></td>
+<td>Modify. Add <code>MachineReadableOnly</code> to the measured set.</td>
+</tr>
+<tr>
+<td><code>contracts/script/DeployPlan1.s.sol</code></td>
+<td>Create. Renderer + token deploy for Base Sepolia.</td>
+</tr>
+<tr>
+<td><code>docs/specs/2026-08-27-machine-readable-only-design.md</code></td>
+<td>Modify. Task 0&#39;s eight amendments.</td>
+</tr>
+</tbody></table>
+<p>Why one contract file rather than several: the measured spike is 6,863 bytes with 17,713 of margin, so there is real room. Library extraction is the named fallback if the Task 2 checkpoint says otherwise -- see Task 2, Step 6.</p>
+<hr>
+<h2>Task 0: Amend the spec</h2>
+<p>The outstanding half of Task 12. Plan 1 reads its requirements from the spec, so the spec must stop contradicting itself before any Solidity is written. Two of these would otherwise stop compilation or force an arbitrary choice mid-build.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>docs/specs/2026-08-27-machine-readable-only-design.md</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: nothing.</p>
+</li>
+<li><p>Produces: a spec whose section 7 matches what Tasks 1-9 build.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Fix conflict 1, the lapse rule (line 392)</strong></p>
+</li>
+</ul>
+<p>Replace the effective-streak sentence so it matches the graded behaviour built in <code>be86fee</code>. Find:</p>
+<pre><code>`effectiveStreak = (today - lastDay &gt; 1) ? 0 : streak` from `block.timestamp`
+</code></pre>
+<p>Replace the surrounding rule with:</p>
+<pre><code>`effectiveStreak = lapsed(streak, lastDay, today)`, which steps the colour down
+at 3, 7 and 30 days lapsed rather than snapping to zero on the first missed
+day. Amended 2026-08-30: the section formerly gave the snap-to-zero form, which
+contradicted the colour section&#39;s graded steps. The graded form is what is
+built, and the refresh-cost argument is the stronger one -- each step is one
+marketplace refresh instead of a continuous repaint. The two rules agree at the
+far end, because a 30-day lapse lands back at the starting tier.
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Fix conflict 3, the sunset sentinel (line 342)</strong></li>
+</ul>
+<p>Replace:</p>
+<pre><code class="language-solidity">uint32 sunsetDay;                         // 0 until sunset(); then the day number, irreversible
+</code></pre>
+<p>with:</p>
+<pre><code class="language-solidity">uint32 sunsetDay;                         // the day the piece closed; only meaningful when isSunset
+bool   isSunset;                          // irreversible. Shares a slot with sunsetDay, so it is free
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Fix conflicts 7 and 9, the ERC-4906 emission rules</strong></li>
+</ul>
+<p>At line 373, replace the <code>batchCheckIn</code> event clause. Find <code>then ERC-4906 \</code>BatchMetadataUpdate(minId, maxId)` over the exact range written` and replace with:</p>
+<pre><code>then one ERC-4906 `MetadataUpdate(id)` per token written, emitted after the
+storage writes. Amended 2026-08-30: the range form was impossible, because a
+day&#39;s check-ins are a scattered subset and `minId..maxId` is therefore never
+the exact set written. Per-token emits are also reuse rather than a new cost --
+the Clock already has to emit per token for paling-step crossers.
+</code></pre>
+<p>At lines 405 and 481, delete both assertions that <code>sunset</code> emits
+<code>BatchMetadataUpdate(1, type(uint256).max)</code> and replace each with:</p>
+<pre><code>`sunset` emits no metadata event. Amended 2026-08-30: line 373 forbids the
+`(1, max)` catch-all as hostile to indexers, so specifying it here contradicted
+the same document two pages earlier. A sunset does change every token, so this
+is a deliberate choice: the piece must never depend on an indexer refreshing,
+and a terminal one-time event is the cheapest possible thing to leave stale.
+The contract knows its own minted range, so a future operator can emit over the
+ids actually minted if it ever matters.
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Fix conflict 8, the voucher stub (line 417)</strong></li>
+</ul>
+<p>Replace <code>the build plan decides whether to include the stub</code> with:</p>
+<pre><code>it IS included, as an unused function guarded by a flag that is off at launch.
+Amended 2026-08-30: this was never an open choice. The durability commitments
+require the voucher path on chain from day one, and CLAUDE.md&#39;s locked
+decisions say it ships paused. With no upgrade path, a voucher path omitted now
+could never be added.
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Fix conflict 11, the <code>Sunset</code> name collision (NEW, found 2026-08-30)</strong></li>
+</ul>
+<p>The spec lists a custom error <code>Sunset</code> and also specifies <code>sunset()</code> emitting <code>Sunset(day)</code>. <strong>Solidity cannot have an error and an event with the same name in one contract, so the spec as written does not compile.</strong> Amend the error list and the <code>sunset()</code> row to read:</p>
+<pre><code>Errors: `Sunset()` when the piece is closed, and `AlreadySunset()` when
+`sunset()` is called twice. Event: `SunsetAt(uint32 day)`. Amended 2026-08-30:
+the spec previously used `Sunset` for both an error and an event, which does
+not compile. The spike already resolved it this way.
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Fix conflict 12, the wallet cap&#39;s meaning (NEW, found 2026-08-30)</strong></li>
+</ul>
+<p>The spec says <code>WalletCap</code> fires if <code>to</code> &quot;already holds 20 minted tokens&quot;, which is ambiguous between <em>currently holds</em> and <em>was minted</em>. <em>Currently holds</em> would make the cap defeatable by transferring out and re-minting, and would also punish someone who legitimately buys tokens on the secondary market. Amend to:</p>
+<pre><code>`WalletCap` if `mintedTo[to] &gt;= walletCap`, counting tokens ever MINTED to that
+address, not tokens currently held. Amended 2026-08-30: &quot;holds&quot; was ambiguous.
+Counting current holdings would let the cap be defeated by transferring out
+before re-minting, and would wrongly block someone who bought on the secondary
+market. Seeded children are counted the same way. The dial starts at 20.
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Re-render the spec to HTML</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+source ~/.nvm/nvm.sh
+node ~/scripts/render-md-to-html.js docs/specs/2026-08-27-machine-readable-only-design.md
+</code></pre>
+<p>Expected: <code>Wrote docs/specs/2026-08-27-machine-readable-only-design.html</code></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 8: Verify the spec no longer contradicts itself</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+/bin/grep -n &quot;type(uint256).max&quot; docs/specs/2026-08-27-machine-readable-only-design.md
+/bin/grep -n &quot;effectiveStreak = (today&quot; docs/specs/2026-08-27-machine-readable-only-design.md
+/bin/grep -c &quot;build plan decides whether to include&quot; docs/specs/2026-08-27-machine-readable-only-design.md
+</code></pre>
+<p>Expected: the first prints only line 480&#39;s description of what indexers accept (the contract no longer emits it); the second prints nothing; the third prints <code>0</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 9: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add docs/specs/
+git commit -m &quot;docs(spec): amend section 7, the eight conflicts Plan 1 would have codified
+
+Task 12&#39;s outstanding half. Two of these do not compile as written: the
+Sunset error and event share a name, and the wallet cap&#39;s &#39;holds&#39; is
+ambiguous between currently-held and ever-minted.
+
+The sharpest is the catch-all: line 373 forbids BatchMetadataUpdate(1, max)
+as hostile to indexers while lines 405 and 481 specify sunset emitting
+exactly that.&quot;
+</code></pre>
+<hr>
+<h2>Task 1: Contract skeleton, state and reads</h2>
+<p>Everything the renderer needs, with no mutation yet. Ends with a contract that compiles, deploys and can return a <code>tokenURI</code> for a token that does not exist yet (reverting correctly).</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>contracts/src/MachineReadableOnly.sol</code></li>
+<li>Create: <code>contracts/test/MachineReadableOnly.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>IRenderer.tokenURI(TokenView)</code> and the <code>TokenView</code> struct, both from <code>contracts/src/render/</code>.</p>
+</li>
+<li><p>Produces: <code>contract MachineReadableOnly</code>; <code>struct Token</code>; <code>struct Upgrade</code>; <code>today() returns (uint32)</code>; <code>viewOf(uint256) returns (TokenView memory)</code>; public state <code>warden</code>, <code>renderer</code>, <code>supplyCap</code>, <code>walletCap</code>, <code>totalMinted</code>, <code>sunsetDay</code>, <code>isSunset</code>, <code>vouchersEnabled</code>; errors <code>NotWarden</code>, <code>Sunset</code>, <code>AlreadySunset</code>, <code>ZeroRenderer</code>, <code>ZeroWarden</code>; events <code>RendererSet(address)</code>, <code>WardenSet(address)</code>, <code>SupplyCapSet(uint32)</code>, <code>WalletCapSet(uint32)</code>, <code>SunsetAt(uint32)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<p>Create <code>contracts/test/MachineReadableOnly.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test} from &quot;forge-std/Test.sol&quot;;
+
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+
+/// @notice Construction, dials, pause and Ownable2Step for the real contract.
+/// @dev Per the project&#39;s smart-contract rules, every owner function has an
+/// explicit test and every access-control revert has one too.
+contract MachineReadableOnlyTest is Test {
+    MachineReadableOnly t;
+    Renderer r;
+
+    address constant WARDEN = address(0x3A2D);
+
+    function setUp() public {
+        r = new Renderer();
+        t = new MachineReadableOnly(address(r), WARDEN);
+    }
+
+    function test_constructorSetsRendererWardenAndDials() public view {
+        assertEq(t.renderer(), address(r));
+        assertEq(t.warden(), WARDEN);
+        assertEq(t.supplyCap(), 10_000);
+        assertEq(t.walletCap(), 20);
+        assertEq(t.totalMinted(), 0);
+        assertFalse(t.isSunset());
+        assertFalse(t.vouchersEnabled());
+    }
+
+    function test_constructorRejectsAZeroRenderer() public {
+        vm.expectRevert(MachineReadableOnly.ZeroRenderer.selector);
+        new MachineReadableOnly(address(0), WARDEN);
+    }
+
+    function test_constructorRejectsAZeroWarden() public {
+        vm.expectRevert(MachineReadableOnly.ZeroWarden.selector);
+        new MachineReadableOnly(address(r), address(0));
+    }
+
+    function test_todayIsTheUtcDayIndex() public {
+        vm.warp(86_400 * 20_000 + 5);
+        assertEq(t.today(), 20_000);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and watch it fail</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract MachineReadableOnlyTest -vv
+</code></pre>
+<p>Expected: FAIL -- <code>Source &quot;src/MachineReadableOnly.sol&quot; not found</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Write the contract skeleton</strong></li>
+</ul>
+<p>Create <code>contracts/src/MachineReadableOnly.sol</code>. Note <code>Sunset</code> is the error and <code>SunsetAt</code> is the event: they cannot share a name (Task 0, Step 5).</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {ERC721} from &quot;@openzeppelin/contracts/token/ERC721/ERC721.sol&quot;;
+import {Ownable} from &quot;@openzeppelin/contracts/access/Ownable.sol&quot;;
+import {Ownable2Step} from &quot;@openzeppelin/contracts/access/Ownable2Step.sol&quot;;
+import {Pausable} from &quot;@openzeppelin/contracts/utils/Pausable.sol&quot;;
+import {IERC4906} from &quot;@openzeppelin/contracts/interfaces/IERC4906.sol&quot;;
+import {IERC165} from &quot;@openzeppelin/contracts/utils/introspection/IERC165.sol&quot;;
+
+import {IRenderer} from &quot;./render/IRenderer.sol&quot;;
+import {TokenView} from &quot;./render/TokenView.sol&quot;;
+
+/// @notice The collection. An agent&#39;s own record of coming back.
+///
+/// @dev Permanent by design: no proxy and no upgrade path. Only the renderer
+/// is swappable, which is why every drawing decision lives behind IRenderer and
+/// none of it lives here.
+///
+/// The storage rule that decides the gas bill: the daily write OVERWRITES one
+/// `Token` slot. Nothing is ever keyed by day.
+contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
+    /// @dev Six uint32s (192 bits) plus a bool (8) plus 56 reserved = 256.
+    /// Keeping this in one slot is what makes a check-in about 5,000 gas.
+    struct Token {
+        uint32 level;
+        uint32 streak;
+        uint32 lastDay;
+        uint32 mintDay;
+        uint32 generation;
+        uint32 seedsGiven;
+        bool resting;
+        uint56 reserved;
+    }
+
+    /// @dev One paid Mark tier.
+    struct Upgrade {
+        uint64 priceUsdc6;
+        uint32 maxSupply; // 0 = unlimited
+        uint32 sold;
+        uint32 minLevel;
+        uint32 minStreak;
+        bool requiresWhole;
+        bool active;
+    }
+
+    mapping(uint256 =&gt; Token) internal _tokens;
+    mapping(uint256 =&gt; uint256) internal _marks;
+    mapping(uint256 =&gt; uint256) internal _parentOf;
+    mapping(uint256 =&gt; bytes32) internal _agentKeyOf;
+    mapping(uint256 =&gt; bytes) internal _codeOf;
+
+    /// @dev One mint per key ever. Binding is unlimited, so `rebind` can move a
+    /// token to a new key but can never resurrect a mint.
+    mapping(bytes32 =&gt; bool) internal _hasMinted;
+    mapping(bytes32 =&gt; uint32) internal _firstMintDay;
+    mapping(bytes32 =&gt; uint32) internal _seedsSpent;
+
+    /// @dev Tokens ever MINTED to an address, not tokens currently held.
+    /// Counting holdings would let the cap be defeated by transferring out.
+    mapping(address =&gt; uint32) public mintedTo;
+
+    mapping(uint8 =&gt; Upgrade) internal _upgrades;
+
+    address public renderer;
+    address public warden;
+    uint32 public supplyCap;
+    uint32 public walletCap;
+    uint32 public totalMinted;
+    uint32 public sunsetDay;
+    bool public isSunset;
+    bool public vouchersEnabled;
+
+    /// @dev The packed code bitmap is a fixed 172 bytes: 37 x 37 modules.
+    uint256 internal constant CODE_BYTES = 172;
+
+    /// @dev ERC-4906&#39;s interface id. OpenZeppelin ships the interface, not a mixin.
+    bytes4 internal constant ERC4906_ID = 0x49064906;
+
+    error NotWarden();
+    error ZeroRenderer();
+    error ZeroWarden();
+    /// @dev The piece is closed. Distinct from AlreadySunset, which is the
+    /// double-call guard. These cannot share a name with the event.
+    error Sunset();
+    error AlreadySunset();
+
+    event RendererSet(address renderer);
+    event WardenSet(address warden);
+    event SupplyCapSet(uint32 cap);
+    event WalletCapSet(uint32 cap);
+    event SunsetAt(uint32 day);
+
+    modifier onlyWarden() {
+        if (msg.sender != warden) revert NotWarden();
+        _;
+    }
+
+    modifier notSunset() {
+        if (isSunset) revert Sunset();
+        _;
+    }
+
+    constructor(address renderer_, address warden_)
+        ERC721(&quot;Machine Readable Only&quot;, &quot;MRO&quot;)
+        Ownable(msg.sender)
+    {
+        _setRenderer(renderer_);
+        _setWarden(warden_);
+        supplyCap = 10_000;
+        walletCap = 20;
+    }
+
+    // ---------------------------------------------------------------------
+    // Reads
+    // ---------------------------------------------------------------------
+
+    /// @notice The UTC day index, the unit every date in this piece uses.
+    function today() public view returns (uint32) {
+        return uint32(block.timestamp / 1 days);
+    }
+
+    /// @notice Everything the renderer needs, assembled from storage.
+    function viewOf(uint256 id) public view returns (TokenView memory v) {
+        Token storage s = _tokens[id];
+        v.tokenId = id;
+        v.level = s.level;
+        v.streak = s.streak;
+        v.lastDay = s.lastDay;
+        v.mintDay = s.mintDay;
+        v.generation = s.generation;
+        v.seedsGiven = s.seedsGiven;
+        v.parent = _parentOf[id];
+        v.resting = s.resting;
+        v.sunset = isSunset;
+        v.marks = _marks[id];
+        v.agentKeyId = _agentKeyOf[id];
+        v.code = _codeOf[id];
+        v.today = today();
+    }
+
+    /// @inheritdoc ERC721
+    function tokenURI(uint256 id) public view override returns (string memory) {
+        _requireOwned(id);
+        return IRenderer(renderer).tokenURI(viewOf(id));
+    }
+
+    /// @inheritdoc ERC721
+    function supportsInterface(bytes4 id) public view override(ERC721, IERC165) returns (bool) {
+        return id == ERC4906_ID || super.supportsInterface(id);
+    }
+
+    // ---------------------------------------------------------------------
+    // Dials
+    // ---------------------------------------------------------------------
+
+    function setRenderer(address r) external onlyOwner { _setRenderer(r); }
+    function setWarden(address w) external onlyOwner { _setWarden(w); }
+
+    function setSupplyCap(uint32 cap) external onlyOwner {
+        supplyCap = cap;
+        emit SupplyCapSet(cap);
+    }
+
+    function setWalletCap(uint32 cap) external onlyOwner {
+        walletCap = cap;
+        emit WalletCapSet(cap);
+    }
+
+    function pause() external onlyOwner { _pause(); }
+    function unpause() external onlyOwner { _unpause(); }
+
+    /// @notice Close the piece. Irreversible.
+    /// @dev Emits no metadata event. A sunset does change every token, but the
+    /// collection-wide range is the one event indexers treat as hostile, and
+    /// the piece must never depend on an indexer refreshing anyway.
+    function sunset() external onlyOwner {
+        if (isSunset) revert AlreadySunset();
+        isSunset = true;
+        sunsetDay = today();
+        emit SunsetAt(sunsetDay);
+    }
+
+    function _setRenderer(address r) internal {
+        if (r == address(0)) revert ZeroRenderer();
+        renderer = r;
+        emit RendererSet(r);
+    }
+
+    function _setWarden(address w) internal {
+        if (w == address(0)) revert ZeroWarden();
+        warden = w;
+        emit WardenSet(w);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the tests and watch them pass</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract MachineReadableOnlyTest -vv
+</code></pre>
+<p>Expected: PASS, 4 tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Add the dial, pause, sunset and Ownable2Step tests</strong></li>
+</ul>
+<p>Append to <code>contracts/test/MachineReadableOnly.t.sol</code>, inside the contract:</p>
+<pre><code class="language-solidity">    address constant MALLORY = address(0x4A11);
+
+    function test_setRendererByOwner() public {
+        Renderer r2 = new Renderer();
+        t.setRenderer(address(r2));
+        assertEq(t.renderer(), address(r2));
+    }
+
+    function test_setRendererRejectsZero() public {
+        vm.expectRevert(MachineReadableOnly.ZeroRenderer.selector);
+        t.setRenderer(address(0));
+    }
+
+    function test_setRendererRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        vm.expectRevert();
+        t.setRenderer(address(r));
+    }
+
+    function test_setWardenByOwnerAndRejectsZero() public {
+        t.setWarden(address(0xBEEF));
+        assertEq(t.warden(), address(0xBEEF));
+        vm.expectRevert(MachineReadableOnly.ZeroWarden.selector);
+        t.setWarden(address(0));
+    }
+
+    function test_setWardenRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        vm.expectRevert();
+        t.setWarden(MALLORY);
+    }
+
+    function test_setSupplyCapAndWalletCap() public {
+        t.setSupplyCap(50);
+        t.setWalletCap(3);
+        assertEq(t.supplyCap(), 50);
+        assertEq(t.walletCap(), 3);
+    }
+
+    function test_setSupplyCapRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        vm.expectRevert();
+        t.setSupplyCap(1);
+    }
+
+    function test_setWalletCapRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        vm.expectRevert();
+        t.setWalletCap(1);
+    }
+
+    function test_pauseAndUnpauseByOwner() public {
+        t.pause();
+        assertTrue(t.paused());
+        t.unpause();
+        assertFalse(t.paused());
+    }
+
+    function test_pauseRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        vm.expectRevert();
+        t.pause();
+    }
+
+    function test_sunsetSetsTheDayAndIsIrreversible() public {
+        vm.warp(86_400 * 1234 + 1);
+        t.sunset();
+        assertTrue(t.isSunset());
+        assertEq(t.sunsetDay(), 1234);
+        vm.expectRevert(MachineReadableOnly.AlreadySunset.selector);
+        t.sunset();
+    }
+
+    /// @dev The regression behind spec conflict 3. Foundry&#39;s clock starts at
+    /// timestamp 1, so today() is genuinely 0 and a zero sentinel would fail.
+    function test_sunsetOnDayZeroIsStillSunset() public {
+        assertEq(t.today(), 0);
+        t.sunset();
+        assertTrue(t.isSunset());
+        assertEq(t.sunsetDay(), 0);
+    }
+
+    function test_sunsetRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        vm.expectRevert();
+        t.sunset();
+    }
+
+    function test_ownable2StepHandover() public {
+        t.transferOwnership(ALICE_OWNER);
+        // The old owner still holds control until the new one accepts.
+        assertEq(t.owner(), address(this));
+        vm.prank(ALICE_OWNER);
+        t.acceptOwnership();
+        assertEq(t.owner(), ALICE_OWNER);
+    }
+
+    function test_supportsErc4906AndErc721() public view {
+        assertTrue(t.supportsInterface(0x49064906), &quot;ERC-4906&quot;);
+        assertTrue(t.supportsInterface(0x80ac58cd), &quot;ERC-721&quot;);
+    }
+
+    address constant ALICE_OWNER = address(0xA11CE);
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Run and confirm green</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract MachineReadableOnlyTest -vv
+</code></pre>
+<p>Expected: PASS, 19 tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/src/MachineReadableOnly.sol contracts/test/MachineReadableOnly.t.sol
+git commit -m &quot;feat(contract): the token contract&#39;s state, reads and dials
+
+One Token slot per token, overwritten daily and never keyed by day, which
+is what makes a check-in about 5,000 gas. All drawing delegates to
+IRenderer so a renderer swap needs no contract change.
+
+Sunset is an error and SunsetAt is the event: the spec gave both the same
+name, which does not compile.&quot;
+</code></pre>
+<hr>
+<h2>Task 2: Mint, and the size checkpoint</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code></li>
+<li>Modify: <code>contracts/test/MachineReadableOnly.t.sol</code></li>
+<li>Modify: <code>contracts/test/ContractSize.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: Task 1&#39;s state, <code>today()</code>, <code>onlyWarden</code>, <code>notSunset</code>.</p>
+</li>
+<li><p>Produces: <code>mint(uint256 id, address to, bytes32 keyId, bytes calldata code)</code>; errors <code>AlreadyMinted</code>, <code>TokenExists</code>, <code>SupplyCap</code>, <code>WalletCap</code>, <code>BadCodeLength</code>; event <code>Minted(uint256 indexed id, bytes32 indexed keyId)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<p>Append to <code>contracts/test/MachineReadableOnly.t.sol</code>:</p>
+<pre><code class="language-solidity">    bytes32 constant KEY = bytes32(uint256(0xa9e));
+
+    /// @dev Token 1 on example.com, from tools/token-bitmap.mjs. The same 172
+    /// bytes the renderer tests use.
+    function _code() internal pure returns (bytes memory) {
+        return
+        hex&quot;fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff&quot;
+        hex&quot;fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796&quot;
+        hex&quot;e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef&quot;
+        hex&quot;ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80&quot;;
+    }
+
+    function _mint(uint256 id, address to, bytes32 key) internal {
+        vm.prank(WARDEN);
+        t.mint(id, to, key, _code());
+    }
+
+    function test_mintSetsDayOneState() public {
+        _mint(1, ALICE_OWNER, KEY);
+        MachineReadableOnly.Token memory s;
+        assertEq(t.ownerOf(1), ALICE_OWNER);
+        assertEq(t.viewOf(1).level, 1);
+        assertEq(t.viewOf(1).streak, 1);
+        assertEq(t.viewOf(1).lastDay, t.today());
+        assertEq(t.viewOf(1).mintDay, t.today());
+        assertEq(t.viewOf(1).agentKeyId, KEY);
+        assertEq(t.viewOf(1).code.length, 172);
+        assertEq(t.totalMinted(), 1);
+        assertEq(t.mintedTo(ALICE_OWNER), 1);
+        s; // silence the unused local warning
+    }
+
+    function test_mintEmitsMintedAndMetadataUpdate() public {
+        vm.expectEmit(true, true, false, true);
+        emit MachineReadableOnly.Minted(1, KEY);
+        _mint(1, ALICE_OWNER, KEY);
+    }
+
+    function test_mintRevertsForANonWarden() public {
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.NotWarden.selector);
+        t.mint(1, ALICE_OWNER, KEY, _code());
+    }
+
+    function test_oneMintPerKeyEver() public {
+        _mint(1, ALICE_OWNER, KEY);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.AlreadyMinted.selector);
+        t.mint(2, ALICE_OWNER, KEY, _code());
+    }
+
+    function test_mintRejectsATakenId() public {
+        _mint(1, ALICE_OWNER, KEY);
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.TokenExists.selector, uint256(1)));
+        t.mint(1, ALICE_OWNER, bytes32(uint256(2)), _code());
+    }
+
+    function test_mintRejectsAWrongLengthCode() public {
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadCodeLength.selector, uint256(3)));
+        t.mint(1, ALICE_OWNER, KEY, hex&quot;010203&quot;);
+    }
+
+    function test_mintEnforcesTheSupplyCap() public {
+        t.setSupplyCap(1);
+        _mint(1, ALICE_OWNER, KEY);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.SupplyCap.selector);
+        t.mint(2, ALICE_OWNER, bytes32(uint256(2)), _code());
+    }
+
+    /// @dev The cap counts tokens ever minted to an address, not tokens held,
+    /// so transferring one out does not free a slot. Spec conflict 12.
+    function test_walletCapCountsMintsNotHoldings() public {
+        t.setWalletCap(1);
+        _mint(1, ALICE_OWNER, KEY);
+        vm.prank(ALICE_OWNER);
+        t.transferFrom(ALICE_OWNER, MALLORY, 1);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.WalletCap.selector);
+        t.mint(2, ALICE_OWNER, bytes32(uint256(2)), _code());
+    }
+
+    function test_mintIsBlockedByPause() public {
+        t.pause();
+        vm.prank(WARDEN);
+        vm.expectRevert();
+        t.mint(1, ALICE_OWNER, KEY, _code());
+    }
+
+    function test_mintIsBlockedBySunset() public {
+        t.sunset();
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.Sunset.selector);
+        t.mint(1, ALICE_OWNER, KEY, _code());
+    }
+
+    function test_transferStillWorksWhenPaused() public {
+        _mint(1, ALICE_OWNER, KEY);
+        t.pause();
+        vm.prank(ALICE_OWNER);
+        t.transferFrom(ALICE_OWNER, MALLORY, 1);
+        assertEq(t.ownerOf(1), MALLORY);
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract MachineReadableOnlyTest -vv
+</code></pre>
+<p>Expected: FAIL -- <code>Member &quot;mint&quot; not found</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement mint</strong></li>
+</ul>
+<p>Add to <code>MachineReadableOnly.sol</code>, after the dials section:</p>
+<pre><code class="language-solidity">    error AlreadyMinted();
+    error TokenExists(uint256 id);
+    error SupplyCap();
+    error WalletCap();
+    error BadCodeLength(uint256 got);
+
+    event Minted(uint256 indexed id, bytes32 indexed keyId);
+
+    // ---------------------------------------------------------------------
+    // Warden functions
+    // ---------------------------------------------------------------------
+
+    /// @notice Mint one token for one agent key.
+    /// @dev The id is chosen by the Warden rather than a counter, so a mint can
+    /// be reserved before it settles. `hasMinted` is per key and permanent: a
+    /// later `rebind` moves a token to a new key but never frees the old one.
+    function mint(uint256 id, address to, bytes32 keyId, bytes calldata code)
+        external
+        onlyWarden
+        whenNotPaused
+        notSunset
+    {
+        if (_hasMinted[keyId]) revert AlreadyMinted();
+        if (_ownerOf(id) != address(0)) revert TokenExists(id);
+        if (totalMinted &gt;= supplyCap) revert SupplyCap();
+        if (mintedTo[to] &gt;= walletCap) revert WalletCap();
+        if (code.length != CODE_BYTES) revert BadCodeLength(code.length);
+
+        uint32 d = today();
+        _tokens[id] = Token(1, 1, d, d, 0, 0, false, 0);
+        _agentKeyOf[id] = keyId;
+        _codeOf[id] = code;
+        _hasMinted[keyId] = true;
+        _firstMintDay[keyId] = d;
+        unchecked {
+            totalMinted += 1;
+            mintedTo[to] += 1;
+        }
+
+        _safeMint(to, id);
+        emit Minted(id, keyId);
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run and confirm green</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract MachineReadableOnlyTest -vv
+</code></pre>
+<p>Expected: PASS, 31 tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Add the contract to the size test</strong></li>
+</ul>
+<p>In <code>contracts/test/ContractSize.t.sol</code>, replace the body of <code>test_everyDeployedContractFitsWithMargin</code> with:</p>
+<pre><code class="language-solidity">        uint256 renderer = _check(&quot;Renderer.sol:Renderer&quot;);
+        uint256 spike = _check(&quot;MROSpikeToken.sol:MROSpikeToken&quot;);
+        uint256 real = _check(&quot;MachineReadableOnly.sol:MachineReadableOnly&quot;);
+
+        // Both land on the same chain, so the pair is worth logging even though
+        // the limit is per contract, not per deployment.
+        console.log(&quot;pair total&quot;, renderer + real);
+        spike; // the spike is still measured while it exists
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: SIZE CHECKPOINT -- measure and decide</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge build --sizes 2&gt;&amp;1 | /bin/grep -E &quot;MachineReadableOnly|Renderer &quot;
+</code></pre>
+<p>Expected: <code>MachineReadableOnly</code> well under 24,576 with a four-figure margin.</p>
+<p><strong>This is a phase boundary. Report the number to the operator before continuing.</strong></p>
+<p>Decision rule, fixed now so it is not invented under pressure:</p>
+<ul>
+<li><p><strong>Margin above 8,000 bytes:</strong> continue as planned, one contract.</p>
+</li>
+<li><p><strong>Margin 3,000 to 8,000:</strong> continue, but re-measure at the end of every subsequent task rather than only at the end.</p>
+</li>
+<li><p><strong>Margin below 3,000:</strong> stop and apply the named fallback -- move <code>batchCheckIn</code>&#39;s id decoding, <code>applyMark</code>&#39;s gate checks and <code>seed</code>&#39;s budget arithmetic into <code>library</code> contracts with <code>internal</code> functions, which the compiler inlines without a second deployment. Re-measure before continuing.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 7: Commit</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/src/MachineReadableOnly.sol contracts/test/
+git commit -m &quot;feat(contract): mint, with the key, supply and wallet caps
+
+One mint per key ever, while binding stays unlimited, so rebind can move a
+token to a new key but never resurrects a mint.
+
+The wallet cap counts tokens ever minted to an address rather than tokens
+held: counting holdings would let the cap be defeated by transferring out
+before re-minting.&quot;
+</code></pre>
+<hr>
+<h2>Task 3: batchCheckIn, per-token emits, and the gas guard</h2>
+<p>The hottest function in the contract and the one the whole gas budget rests on.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code></li>
+<li>Create: <code>contracts/test/CheckIn.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: Task 2&#39;s <code>mint</code>, Task 1&#39;s state.</p>
+</li>
+<li><p>Produces: <code>batchCheckIn(bytes calldata packedIds, uint32[] calldata days)</code>; errors <code>DayNotAdvanced</code>, <code>LengthMismatch</code>, <code>Resting</code>; event <code>BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<p>Create <code>contracts/test/CheckIn.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test} from &quot;forge-std/Test.sol&quot;;
+import {IERC4906} from &quot;@openzeppelin/contracts/interfaces/IERC4906.sol&quot;;
+
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+
+/// @notice batchCheckIn semantics: the daily overwrite, streak rules, and the
+/// per-token ERC-4906 emits that replaced the impossible range form.
+contract CheckInTest is Test {
+    MachineReadableOnly t;
+    Renderer r;
+
+    address constant WARDEN = address(0x3A2D);
+    address constant ALICE = address(0xA11CE);
+
+    function _code() internal pure returns (bytes memory) {
+        return
+        hex&quot;fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff&quot;
+        hex&quot;fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796&quot;
+        hex&quot;e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef&quot;
+        hex&quot;ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80&quot;;
+    }
+
+    function setUp() public {
+        r = new Renderer();
+        t = new MachineReadableOnly(address(r), WARDEN);
+        // Start well past day zero so lastDay + 1 arithmetic is meaningful.
+        vm.warp(86_400 * 1000 + 1);
+        vm.prank(WARDEN);
+        t.mint(1, ALICE, bytes32(uint256(1)), _code());
+    }
+
+    /// @dev Ids are packed as 4-byte big-endian values.
+    function _packed(uint32[] memory ids) internal pure returns (bytes memory out) {
+        for (uint256 i = 0; i &lt; ids.length; i++) out = abi.encodePacked(out, ids[i]);
+    }
+
+    function _one(uint32 id) internal pure returns (bytes memory) {
+        uint32[] memory ids = new uint32[](1);
+        ids[0] = id;
+        return _packed(ids);
+    }
+
+    function _days(uint32 d) internal pure returns (uint32[] memory out) {
+        out = new uint32[](1);
+        out[0] = d;
+    }
+
+    function test_checkInIncrementsLevelAndContinuesTheStreak() public {
+        uint32 d = t.today();
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d + 1));
+        assertEq(t.viewOf(1).level, 2);
+        assertEq(t.viewOf(1).streak, 2);
+        assertEq(t.viewOf(1).lastDay, d + 1);
+    }
+
+    function test_aGapResetsTheStreakButNotTheLevel() public {
+        uint32 d = t.today();
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d + 5));
+        assertEq(t.viewOf(1).level, 2);
+        assertEq(t.viewOf(1).streak, 1);
+    }
+
+    function test_theSameDayTwiceReverts() public {
+        uint32 d = t.today();
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.DayNotAdvanced.selector, uint256(1)));
+        t.batchCheckIn(_one(1), _days(d));
+    }
+
+    /// @dev Late writes after an outage: several days for one token in one
+    /// call, ascending, are legal and each counts.
+    function test_multiDayLateWritesInOneCall() public {
+        uint32 d = t.today();
+        uint32[] memory ids = new uint32[](3);
+        ids[0] = 1; ids[1] = 1; ids[2] = 1;
+        uint32[] memory ds = new uint32[](3);
+        ds[0] = d + 1; ds[1] = d + 2; ds[2] = d + 3;
+        vm.prank(WARDEN);
+        t.batchCheckIn(_packed(ids), ds);
+        assertEq(t.viewOf(1).level, 4);
+        assertEq(t.viewOf(1).streak, 4);
+    }
+
+    /// @dev The decision from the design doc: one MetadataUpdate per token
+    /// written, never a range. A range would claim untouched tokens changed.
+    function test_emitsOneMetadataUpdatePerTokenWritten() public {
+        uint32 d = t.today();
+        vm.expectEmit(false, false, false, true);
+        emit IERC4906.MetadataUpdate(1);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d + 1));
+    }
+
+    function test_checkInRevertsForANonWarden() public {
+        vm.expectRevert(MachineReadableOnly.NotWarden.selector);
+        t.batchCheckIn(_one(1), _days(t.today() + 1));
+    }
+
+    function test_mismatchedLengthsRevert() public {
+        uint32[] memory ids = new uint32[](2);
+        ids[0] = 1; ids[1] = 1;
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.LengthMismatch.selector);
+        t.batchCheckIn(_packed(ids), _days(t.today() + 1));
+    }
+
+    function test_checkInIsBlockedByPauseAndBySunset() public {
+        t.pause();
+        vm.prank(WARDEN);
+        vm.expectRevert();
+        t.batchCheckIn(_one(1), _days(t.today() + 1));
+        t.unpause();
+        t.sunset();
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.Sunset.selector);
+        t.batchCheckIn(_one(1), _days(t.today() + 1));
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch it fail</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract CheckInTest -vv
+</code></pre>
+<p>Expected: FAIL -- <code>Member &quot;batchCheckIn&quot; not found</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement batchCheckIn</strong></li>
+</ul>
+<p>Add to <code>MachineReadableOnly.sol</code>:</p>
+<pre><code class="language-solidity">    error DayNotAdvanced(uint256 id);
+    error LengthMismatch();
+    error Resting(uint256 id);
+
+    event BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count);
+
+    /// @notice Credit a day to each of many tokens, in one transaction.
+    ///
+    /// @dev Ids arrive packed as 4-byte big-endian values rather than a
+    /// uint32[] because calldata is the dominant cost at this batch size.
+    ///
+    /// Emits one `MetadataUpdate` per token written, AFTER the writes, and
+    /// never a range. A day&#39;s check-ins are a scattered subset of ids, so
+    /// `minId..maxId` would always claim untouched tokens had changed. The
+    /// Clock adds paling-step crossers to the same per-token emit set.
+    function batchCheckIn(bytes calldata packedIds, uint32[] calldata days_)
+        external
+        onlyWarden
+        whenNotPaused
+        notSunset
+    {
+        uint256 n = days_.length;
+        if (packedIds.length != n * 4) revert LengthMismatch();
+
+        uint32 lo = type(uint32).max;
+        uint32 hi = 0;
+
+        for (uint256 i = 0; i &lt; n; i++) {
+            uint256 id = uint256(uint32(bytes4(packedIds[i * 4:i * 4 + 4])));
+            uint32 day = days_[i];
+
+            Token storage s = _tokens[id];
+            if (s.resting) revert Resting(id);
+            if (day &lt;= s.lastDay) revert DayNotAdvanced(id);
+
+            unchecked {
+                s.level += 1;
+                s.streak = (day == s.lastDay + 1) ? s.streak + 1 : 1;
+            }
+            s.lastDay = day;
+
+            if (day &lt; lo) lo = day;
+            if (day &gt; hi) hi = day;
+        }
+
+        emit BatchCheckedIn(lo, hi, n);
+
+        // After every storage write, never before: an indexer that re-reads on
+        // the event must not be able to read pre-write state.
+        for (uint256 i = 0; i &lt; n; i++) {
+            emit MetadataUpdate(uint256(uint32(bytes4(packedIds[i * 4:i * 4 + 4]))));
+        }
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run and confirm green</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract CheckInTest -vv
+</code></pre>
+<p>Expected: PASS, 8 tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Add the chunk gas guard test</strong></li>
+</ul>
+<p>The spec&#39;s Clock asserts <code>estimateGas &lt; 15M</code> before sending. That is a contract-level constraint and must be pinned here, not left to a component that does not exist yet. Append to <code>contracts/test/CheckIn.t.sol</code>:</p>
+<pre><code class="language-solidity">    /// @notice A full 1,500-token chunk, per-token emits included, must fit the
+    /// 15M guard the Clock uses -- and well inside EIP-7825&#39;s 16,777,216 cap.
+    /// @dev This is the number the whole batching design rests on. If it fails,
+    /// the chunk size changes, not the emit policy.
+    function test_aFullChunkFitsTheGasGuard() public {
+        uint32 n = 1500;
+        vm.startPrank(WARDEN);
+        for (uint32 i = 2; i &lt; 2 + n; i++) {
+            t.mint(i, address(uint160(0x10000 + i)), bytes32(uint256(i)), _code());
+        }
+        vm.stopPrank();
+
+        uint32[] memory ids = new uint32[](n);
+        uint32[] memory ds = new uint32[](n);
+        uint32 d = t.today() + 1;
+        for (uint32 i = 0; i &lt; n; i++) {
+            ids[i] = 2 + i;
+            ds[i] = d;
+        }
+
+        vm.prank(WARDEN);
+        uint256 before = gasleft();
+        t.batchCheckIn(_packed(ids), ds);
+        uint256 used = before - gasleft();
+
+        emit log_named_uint(&quot;gas for a 1500-token chunk&quot;, used);
+        assertLt(used, 15_000_000, &quot;a full chunk must fit the Clock&#39;s 15M guard&quot;);
+    }
+</code></pre>
+<p>Note: the wallet cap is 20 by default and each mint here goes to a distinct address, so no cap is hit. The supply cap of 10,000 also holds.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Run it and record the number</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-test test_aFullChunkFitsTheGasGuard -vv
+</code></pre>
+<p>Expected: PASS, with the logged gas figure printed. Record that figure in the commit message -- it is the first real measurement of the daily cost.</p>
+<p>If it FAILS, the fix is to reduce the chunk size in the Clock&#39;s design, not to switch to a range emit. Report to the operator rather than changing the emit policy unilaterally.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/src/MachineReadableOnly.sol contracts/test/CheckIn.t.sol
+git commit -m &quot;feat(contract): batchCheckIn, with per-token metadata events
+
+Ids arrive packed as 4-byte values because calldata dominates at this batch
+size. The daily write overwrites one slot per token and is never keyed by
+day.
+
+One MetadataUpdate per token written, after the writes, never a range: a
+day&#39;s check-ins are a scattered subset, so minId..maxId would always claim
+untouched tokens had changed.
+
+A 1,500-token chunk is pinned under the Clock&#39;s 15M guard by a test rather
+than left to a component that does not exist yet.&quot;
+</code></pre>
+<hr>
+<h2>Task 4: Marks</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code></li>
+<li>Create: <code>contracts/test/Marks.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: Task 2&#39;s <code>mint</code>, Task 1&#39;s <code>Upgrade</code> struct.</p>
+</li>
+<li><p>Produces: <code>applyMark(uint256 id, uint8 upgradeId)</code>; <code>setUpgrade(uint8 id, Upgrade calldata u)</code>; <code>upgradeOf(uint8) returns (Upgrade memory)</code>; <code>marksOf(uint256) returns (uint256)</code>; errors <code>MarkInactive</code>, <code>MarkAlreadyApplied</code>, <code>MarkSoldOut</code>, <code>MarkGate</code>; events <code>MarkApplied(uint256 indexed id, uint8 indexed upgradeId)</code>, <code>UpgradeSet(uint8 indexed upgradeId)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<p>Create <code>contracts/test/Marks.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test} from &quot;forge-std/Test.sol&quot;;
+import {IERC4906} from &quot;@openzeppelin/contracts/interfaces/IERC4906.sol&quot;;
+
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+
+/// @notice applyMark&#39;s gates, supply and bitmask.
+contract MarksTest is Test {
+    MachineReadableOnly t;
+    Renderer r;
+
+    address constant WARDEN = address(0x3A2D);
+    address constant ALICE = address(0xA11CE);
+    address constant MALLORY = address(0x4A11);
+
+    function _code() internal pure returns (bytes memory) {
+        return
+        hex&quot;fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff&quot;
+        hex&quot;fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796&quot;
+        hex&quot;e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef&quot;
+        hex&quot;ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80&quot;;
+    }
+
+    function setUp() public {
+        r = new Renderer();
+        t = new MachineReadableOnly(address(r), WARDEN);
+        vm.warp(86_400 * 1000 + 1);
+        vm.prank(WARDEN);
+        t.mint(1, ALICE, bytes32(uint256(1)), _code());
+        // Vein: cheap, uncapped, no gates.
+        t.setUpgrade(1, MachineReadableOnly.Upgrade({
+            priceUsdc6: 1_000_000, maxSupply: 0, sold: 0,
+            minLevel: 0, minStreak: 0, requiresWhole: false, active: true
+        }));
+    }
+
+    function test_applyMarkSetsTheBitAndEmits() public {
+        vm.expectEmit(true, true, false, true);
+        emit MachineReadableOnly.MarkApplied(1, 1);
+        vm.prank(WARDEN);
+        t.applyMark(1, 1);
+        assertEq(t.marksOf(1), 1 &lt;&lt; 1);
+        assertEq(t.upgradeOf(1).sold, 1);
+    }
+
+    function test_applyMarkEmitsMetadataUpdate() public {
+        vm.expectEmit(false, false, false, true);
+        emit IERC4906.MetadataUpdate(1);
+        vm.prank(WARDEN);
+        t.applyMark(1, 1);
+    }
+
+    function test_applyMarkRevertsForANonWarden() public {
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.NotWarden.selector);
+        t.applyMark(1, 1);
+    }
+
+    function test_anInactiveMarkReverts() public {
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.MarkInactive.selector);
+        t.applyMark(1, 2);
+    }
+
+    function test_theSameMarkTwiceReverts() public {
+        vm.startPrank(WARDEN);
+        t.applyMark(1, 1);
+        vm.expectRevert(MachineReadableOnly.MarkAlreadyApplied.selector);
+        t.applyMark(1, 1);
+        vm.stopPrank();
+    }
+
+    function test_aSoldOutMarkReverts() public {
+        t.setUpgrade(2, MachineReadableOnly.Upgrade({
+            priceUsdc6: 1, maxSupply: 1, sold: 0,
+            minLevel: 0, minStreak: 0, requiresWhole: false, active: true
+        }));
+        vm.prank(WARDEN);
+        t.mint(2, MALLORY, bytes32(uint256(2)), _code());
+        vm.startPrank(WARDEN);
+        t.applyMark(1, 2);
+        vm.expectRevert(MachineReadableOnly.MarkSoldOut.selector);
+        t.applyMark(2, 2);
+        vm.stopPrank();
+    }
+
+    function test_theLevelGateReverts() public {
+        t.setUpgrade(3, MachineReadableOnly.Upgrade({
+            priceUsdc6: 1, maxSupply: 0, sold: 0,
+            minLevel: 50, minStreak: 0, requiresWhole: false, active: true
+        }));
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.MarkGate.selector);
+        t.applyMark(1, 3);
+    }
+
+    function test_theStreakGateReverts() public {
+        t.setUpgrade(4, MachineReadableOnly.Upgrade({
+            priceUsdc6: 1, maxSupply: 0, sold: 0,
+            minLevel: 0, minStreak: 7, requiresWhole: false, active: true
+        }));
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.MarkGate.selector);
+        t.applyMark(1, 4);
+    }
+
+    function test_theWholenessGateReverts() public {
+        t.setUpgrade(5, MachineReadableOnly.Upgrade({
+            priceUsdc6: 1, maxSupply: 0, sold: 0,
+            minLevel: 0, minStreak: 0, requiresWhole: true, active: true
+        }));
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.MarkGate.selector);
+        t.applyMark(1, 5);
+    }
+
+    function test_setUpgradeRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        vm.expectRevert();
+        t.setUpgrade(9, MachineReadableOnly.Upgrade({
+            priceUsdc6: 1, maxSupply: 0, sold: 0,
+            minLevel: 0, minStreak: 0, requiresWhole: false, active: true
+        }));
+    }
+
+    function test_applyMarkIsBlockedBySunset() public {
+        t.sunset();
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.Sunset.selector);
+        t.applyMark(1, 1);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch it fail</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract MarksTest -vv
+</code></pre>
+<p>Expected: FAIL -- <code>Member &quot;setUpgrade&quot; not found</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement marks</strong></li>
+</ul>
+<p>Add to <code>MachineReadableOnly.sol</code>:</p>
+<pre><code class="language-solidity">    error MarkInactive();
+    error MarkAlreadyApplied();
+    error MarkSoldOut();
+    error MarkGate();
+
+    event MarkApplied(uint256 indexed id, uint8 indexed upgradeId);
+    event UpgradeSet(uint8 indexed upgradeId);
+
+    function marksOf(uint256 id) external view returns (uint256) {
+        return _marks[id];
+    }
+
+    function upgradeOf(uint8 upgradeId) external view returns (Upgrade memory) {
+        return _upgrades[upgradeId];
+    }
+
+    function setUpgrade(uint8 upgradeId, Upgrade calldata u) external onlyOwner {
+        _upgrades[upgradeId] = u;
+        emit UpgradeSet(upgradeId);
+    }
+
+    /// @notice Apply a paid Mark to a token.
+    /// @dev Payment settles off chain through x402 before the Warden calls
+    /// this, which is why there is no value transfer here.
+    function applyMark(uint256 id, uint8 upgradeId) external onlyWarden notSunset {
+        Upgrade storage u = _upgrades[upgradeId];
+        if (!u.active) revert MarkInactive();
+
+        uint256 bit = 1 &lt;&lt; upgradeId;
+        if (_marks[id] &amp; bit != 0) revert MarkAlreadyApplied();
+        if (u.maxSupply != 0 &amp;&amp; u.sold &gt;= u.maxSupply) revert MarkSoldOut();
+
+        Token storage s = _tokens[id];
+        if (s.resting) revert Resting(id);
+        if (s.level &lt; u.minLevel) revert MarkGate();
+        if (s.streak &lt; u.minStreak) revert MarkGate();
+        if (u.requiresWhole &amp;&amp; s.level &lt; 365) revert MarkGate();
+
+        _marks[id] |= bit;
+        unchecked { u.sold += 1; }
+
+        emit MarkApplied(id, upgradeId);
+        emit MetadataUpdate(id);
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run and confirm green</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract MarksTest -vv
+</code></pre>
+<p>Expected: PASS, 11 tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/src/MachineReadableOnly.sol contracts/test/Marks.t.sol
+git commit -m &quot;feat(contract): Marks, their gates and their supply
+
+A 256-bit mask per token, one bit per tier. Payment settles off chain
+through x402 before the Warden calls in, so there is no value transfer
+here. Each gate has its own explicit test.&quot;
+</code></pre>
+<hr>
+<h2>Task 5: rebind, rest, and the lifecycle</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code></li>
+<li>Create: <code>contracts/test/Lifecycle.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: Tasks 2-4.</p>
+</li>
+<li><p>Produces: <code>rebind(uint256 id, bytes32 newKeyId)</code>; <code>rest(uint256 id)</code>; errors <code>NotTokenOwner</code>; events <code>Rebound(uint256 indexed id, bytes32 indexed newKeyId)</code>, <code>Rested(uint256 indexed id, uint32 day, uint32 level, uint32 streak)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<p>Create <code>contracts/test/Lifecycle.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test} from &quot;forge-std/Test.sol&quot;;
+import {IERC4906} from &quot;@openzeppelin/contracts/interfaces/IERC4906.sol&quot;;
+
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+
+/// @notice rebind and rest. Both are token-owner functions, not Warden ones.
+contract LifecycleTest is Test {
+    MachineReadableOnly t;
+    Renderer r;
+
+    address constant WARDEN = address(0x3A2D);
+    address constant ALICE = address(0xA11CE);
+    address constant MALLORY = address(0x4A11);
+
+    function _code() internal pure returns (bytes memory) {
+        return
+        hex&quot;fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff&quot;
+        hex&quot;fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796&quot;
+        hex&quot;e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef&quot;
+        hex&quot;ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80&quot;;
+    }
+
+    function _one(uint32 id) internal pure returns (bytes memory) {
+        return abi.encodePacked(id);
+    }
+
+    function _days(uint32 d) internal pure returns (uint32[] memory out) {
+        out = new uint32[](1);
+        out[0] = d;
+    }
+
+    function setUp() public {
+        r = new Renderer();
+        t = new MachineReadableOnly(address(r), WARDEN);
+        vm.warp(86_400 * 1000 + 1);
+        vm.prank(WARDEN);
+        t.mint(1, ALICE, bytes32(uint256(1)), _code());
+    }
+
+    function test_rebindByTheTokenOwnerKeepsLevelAndStreak() public {
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(t.today() + 1));
+
+        vm.prank(ALICE);
+        t.rebind(1, bytes32(uint256(0xBEEF)));
+
+        assertEq(t.viewOf(1).agentKeyId, bytes32(uint256(0xBEEF)));
+        assertEq(t.viewOf(1).level, 2);
+        assertEq(t.viewOf(1).streak, 2);
+    }
+
+    function test_rebindRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.NotTokenOwner.selector);
+        t.rebind(1, bytes32(uint256(2)));
+    }
+
+    /// @dev Binding is unlimited even though minting is once per key: a key
+    /// that already minted can be bound to a second token it was given.
+    function test_aKeyCanBeBoundToSeveralTokens() public {
+        vm.prank(WARDEN);
+        t.mint(2, ALICE, bytes32(uint256(2)), _code());
+        vm.startPrank(ALICE);
+        t.rebind(1, bytes32(uint256(0xAAA)));
+        t.rebind(2, bytes32(uint256(0xAAA)));
+        vm.stopPrank();
+        assertEq(t.viewOf(1).agentKeyId, bytes32(uint256(0xAAA)));
+        assertEq(t.viewOf(2).agentKeyId, bytes32(uint256(0xAAA)));
+    }
+
+    /// @dev Rebinding to a key that already minted must NOT free that key&#39;s
+    /// mint. hasMinted is permanent.
+    function test_rebindDoesNotResurrectAMint() public {
+        vm.prank(ALICE);
+        t.rebind(1, bytes32(uint256(0xCAFE)));
+        // The original key already minted, so it still cannot mint again.
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.AlreadyMinted.selector);
+        t.mint(3, MALLORY, bytes32(uint256(1)), _code());
+    }
+
+    function test_restSealsTheTokenAndEmits() public {
+        vm.expectEmit(true, false, false, false);
+        emit MachineReadableOnly.Rested(1, 0, 0, 0);
+        vm.prank(ALICE);
+        t.rest(1);
+        assertTrue(t.viewOf(1).resting);
+    }
+
+    function test_restRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.NotTokenOwner.selector);
+        t.rest(1);
+    }
+
+    function test_restingBlocksCheckInAndMarksButNotTransferOrRebind() public {
+        vm.prank(ALICE);
+        t.rest(1);
+
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
+        t.batchCheckIn(_one(1), _days(t.today() + 1));
+
+        // Transfer still works.
+        vm.prank(ALICE);
+        t.transferFrom(ALICE, MALLORY, 1);
+        assertEq(t.ownerOf(1), MALLORY);
+
+        // And so does rebind, by the NEW owner.
+        vm.prank(MALLORY);
+        t.rebind(1, bytes32(uint256(0xD00D)));
+        assertEq(t.viewOf(1).agentKeyId, bytes32(uint256(0xD00D)));
+    }
+
+    function test_restIsIrreversible() public {
+        vm.startPrank(ALICE);
+        t.rest(1);
+        // There is no unrest function; resting again is a no-op that still
+        // leaves it sealed.
+        t.rest(1);
+        vm.stopPrank();
+        assertTrue(t.viewOf(1).resting);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch it fail</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract LifecycleTest -vv
+</code></pre>
+<p>Expected: FAIL -- <code>Member &quot;rebind&quot; not found</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement rebind and rest</strong></li>
+</ul>
+<p>Add to <code>MachineReadableOnly.sol</code>:</p>
+<pre><code class="language-solidity">    error NotTokenOwner();
+
+    event Rebound(uint256 indexed id, bytes32 indexed newKeyId);
+    event Rested(uint256 indexed id, uint32 day, uint32 level, uint32 streak);
+
+    modifier onlyTokenOwner(uint256 id) {
+        if (_ownerOf(id) != msg.sender) revert NotTokenOwner();
+        _;
+    }
+
+    /// @notice Point a token at a new agent key. Level, streak and marks are
+    /// untouched.
+    /// @dev Deliberately does NOT clear `hasMinted` for either key. Minting is
+    /// once per key forever; binding is unlimited. Clearing it would turn
+    /// rebind into an unlimited mint.
+    function rebind(uint256 id, bytes32 newKeyId) external onlyTokenOwner(id) {
+        _agentKeyOf[id] = newKeyId;
+        emit Rebound(id, newKeyId);
+        emit MetadataUpdate(id);
+    }
+
+    /// @notice Seal a token forever. The image stops changing.
+    /// @dev Irreversible, and deliberately does not block transfer or rebind:
+    /// a sealed token can still be owned and traded, which is the point.
+    function rest(uint256 id) external onlyTokenOwner(id) {
+        Token storage s = _tokens[id];
+        s.resting = true;
+        emit Rested(id, today(), s.level, s.streak);
+        emit MetadataUpdate(id);
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run and confirm green</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract LifecycleTest -vv
+</code></pre>
+<p>Expected: PASS, 8 tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/src/MachineReadableOnly.sol contracts/test/Lifecycle.t.sol
+git commit -m &quot;feat(contract): rebind and rest
+
+Both are token-owner functions, not Warden ones. rebind deliberately does
+not clear hasMinted for either key: minting is once per key forever and
+binding is unlimited, so clearing it would turn rebind into an unlimited
+mint. A test pins that.
+
+rest is irreversible and blocks check-in and marks, but never transfer or
+rebind, because a sealed token is still meant to be owned and traded.&quot;
+</code></pre>
+<hr>
+<h2>Task 6: seed and the per-year budget</h2>
+<p>The subtlest arithmetic in the contract.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code></li>
+<li>Modify: <code>contracts/test/Lifecycle.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: Tasks 2-5.</p>
+</li>
+<li><p>Produces: <code>seed(uint256 childId, uint256 parentId, address to, bytes calldata code)</code>; <code>seedsAvailable(uint256 parentId) returns (uint32)</code>; errors <code>ParentNotWhole</code>, <code>NoSeedAvailable</code>; event <code>Seeded(uint256 indexed parentId, uint256 indexed childId, uint32 generation)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<p>Append to <code>contracts/test/Lifecycle.t.sol</code>:</p>
+<pre><code class="language-solidity">    /// @dev Put a token at an arbitrary level by checking it in repeatedly is
+    /// far too slow, so the budget tests warp the clock and check in once per
+    /// needed day instead. 365 check-ins is affordable in a test; a decade is
+    /// not, which is why seedsAvailable is asserted directly.
+    function _makeWhole(uint256 id) internal {
+        uint32 d = t.today();
+        uint32[] memory ids = new uint32[](364);
+        uint32[] memory ds = new uint32[](364);
+        for (uint32 i = 0; i &lt; 364; i++) {
+            ids[i] = uint32(id);
+            ds[i] = d + 1 + i;
+        }
+        bytes memory packed;
+        for (uint32 i = 0; i &lt; 364; i++) packed = abi.encodePacked(packed, ids[i]);
+        vm.prank(WARDEN);
+        t.batchCheckIn(packed, ds);
+        assertEq(t.viewOf(id).level, 365);
+    }
+
+    function test_seedRequiresAWholeParent() public {
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.ParentNotWhole.selector);
+        t.seed(2, 1, ALICE, _code());
+    }
+
+    function test_seedCreatesAChildWithTheParentsKeyAndNextGeneration() public {
+        _makeWhole(1);
+        // One year of tenure has passed on the key, so one seed is available.
+        vm.warp(block.timestamp + 365 days);
+        assertEq(t.seedsAvailable(1), 1);
+
+        vm.prank(WARDEN);
+        t.seed(2, 1, ALICE, _code());
+
+        assertEq(t.ownerOf(2), ALICE);
+        assertEq(t.viewOf(2).generation, 1);
+        assertEq(t.viewOf(2).parent, 1);
+        assertEq(t.viewOf(2).level, 1);
+        assertEq(t.viewOf(2).streak, 1);
+        assertEq(t.viewOf(2).agentKeyId, t.viewOf(1).agentKeyId);
+        assertEq(t.viewOf(1).seedsGiven, 1);
+    }
+
+    function test_theBudgetIsOnePerYearOfKeyTenure() public {
+        _makeWhole(1);
+        vm.warp(block.timestamp + 365 days);
+        vm.prank(WARDEN);
+        t.seed(2, 1, ALICE, _code());
+
+        // The second seed in the same year has no budget.
+        assertEq(t.seedsAvailable(1), 0);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.NoSeedAvailable.selector);
+        t.seed(3, 1, ALICE, _code());
+
+        // A second year of tenure grants exactly one more.
+        vm.warp(block.timestamp + 365 days);
+        assertEq(t.seedsAvailable(1), 1);
+        vm.prank(WARDEN);
+        t.seed(3, 1, ALICE, _code());
+        assertEq(t.viewOf(1).seedsGiven, 2);
+    }
+
+    /// @dev Tenure, not depth: a child cannot accelerate the lineage, because
+    /// the budget is keyed by the AGENT KEY and the child shares its parent&#39;s.
+    function test_aChildSharesTheParentsBudgetAndCannotAccelerate() public {
+        _makeWhole(1);
+        vm.warp(block.timestamp + 365 days);
+        vm.prank(WARDEN);
+        t.seed(2, 1, ALICE, _code());
+
+        // The child is on the same key, so it sees the same exhausted budget
+        // even once it is itself whole.
+        assertEq(t.seedsAvailable(2), 0);
+    }
+
+    function test_seedRevertsForANonWarden() public {
+        _makeWhole(1);
+        vm.warp(block.timestamp + 365 days);
+        vm.expectRevert(MachineReadableOnly.NotWarden.selector);
+        t.seed(2, 1, ALICE, _code());
+    }
+
+    function test_seedRefusesARestingParent() public {
+        _makeWhole(1);
+        vm.warp(block.timestamp + 365 days);
+        vm.prank(ALICE);
+        t.rest(1);
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
+        t.seed(2, 1, ALICE, _code());
+    }
+
+    function test_seedIsBlockedBySunsetAndBySupplyCap() public {
+        _makeWhole(1);
+        vm.warp(block.timestamp + 365 days);
+        t.setSupplyCap(1);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.SupplyCap.selector);
+        t.seed(2, 1, ALICE, _code());
+
+        t.setSupplyCap(100);
+        t.sunset();
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.Sunset.selector);
+        t.seed(2, 1, ALICE, _code());
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch it fail</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract LifecycleTest -vv
+</code></pre>
+<p>Expected: FAIL -- <code>Member &quot;seed&quot; not found</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement seed</strong></li>
+</ul>
+<p>Add to <code>MachineReadableOnly.sol</code>:</p>
+<pre><code class="language-solidity">    error ParentNotWhole();
+    error NoSeedAvailable();
+
+    event Seeded(uint256 indexed parentId, uint256 indexed childId, uint32 generation);
+
+    /// @notice How many seeds the parent&#39;s KEY still has this tenure.
+    /// @dev Keyed by agent key, not by token. This is the &quot;tenure, not depth&quot;
+    /// rule: a lineage cannot accelerate by seeding children who immediately
+    /// seed further children, because every descendant shares the same key and
+    /// therefore the same budget.
+    function seedsAvailable(uint256 parentId) public view returns (uint32) {
+        bytes32 key = _agentKeyOf[parentId];
+        uint32 first = _firstMintDay[key];
+        if (first == 0 &amp;&amp; !_hasMinted[key]) return 0;
+        uint32 budget = (today() - first) / 365;
+        uint32 spent = _seedsSpent[key];
+        return budget &gt; spent ? budget - spent : 0;
+    }
+
+    /// @notice Create a child token from a whole parent. Free.
+    function seed(uint256 childId, uint256 parentId, address to, bytes calldata code)
+        external
+        onlyWarden
+        whenNotPaused
+        notSunset
+    {
+        Token storage p = _tokens[parentId];
+        if (p.resting) revert Resting(parentId);
+        if (p.level &lt; 365) revert ParentNotWhole();
+        if (_ownerOf(childId) != address(0)) revert TokenExists(childId);
+        if (totalMinted &gt;= supplyCap) revert SupplyCap();
+        if (mintedTo[to] &gt;= walletCap) revert WalletCap();
+        if (code.length != CODE_BYTES) revert BadCodeLength(code.length);
+        if (seedsAvailable(parentId) == 0) revert NoSeedAvailable();
+
+        bytes32 key = _agentKeyOf[parentId];
+        uint32 d = today();
+
+        _tokens[childId] = Token(1, 1, d, d, p.generation + 1, 0, false, 0);
+        _parentOf[childId] = parentId;
+        _agentKeyOf[childId] = key;
+        _codeOf[childId] = code;
+
+        unchecked {
+            _seedsSpent[key] += 1;
+            p.seedsGiven += 1;
+            totalMinted += 1;
+            mintedTo[to] += 1;
+        }
+
+        _safeMint(to, childId);
+        emit Seeded(parentId, childId, p.generation + 1);
+        emit MetadataUpdate(parentId);
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run and confirm green</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract LifecycleTest -vv
+</code></pre>
+<p>Expected: PASS, 15 tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/src/MachineReadableOnly.sol contracts/test/Lifecycle.t.sol
+git commit -m &quot;feat(contract): seed, and the one-per-year budget
+
+The budget is keyed by agent key, not by token, which is what makes it
+tenure rather than depth: every descendant shares its ancestor&#39;s key, so a
+lineage cannot accelerate by seeding children who seed again immediately.
+A test pins that a child sees the same exhausted budget as its parent.
+
+The child inherits the key and generation + 1, and starts at level 1.&quot;
+</code></pre>
+<hr>
+<h2>Task 7: the voucher path, shipped paused</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code></li>
+<li>Create: <code>contracts/test/Vouchers.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: Tasks 2-3.</p>
+</li>
+<li><p>Produces: <code>checkInWithVoucher(uint256 id, uint32 day, bytes calldata wardenSig)</code>; <code>setVouchersEnabled(bool)</code>; <code>voucherHash(uint256 id, uint32 day) returns (bytes32)</code>; errors <code>VouchersDisabled</code>, <code>BadVoucher</code>; event <code>VouchersEnabledSet(bool)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<p>Create <code>contracts/test/Vouchers.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test} from &quot;forge-std/Test.sol&quot;;
+
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+
+/// @notice The durability path. Ships present and OFF, so a token can outlive
+/// the Warden if the operator ever switches to voucher-only mode.
+contract VouchersTest is Test {
+    MachineReadableOnly t;
+    Renderer r;
+
+    uint256 constant WARDEN_KEY = 0xA11CE5EED;
+    address wardenAddr;
+    address constant ALICE = address(0xA11CE);
+    address constant MALLORY = address(0x4A11);
+
+    function _code() internal pure returns (bytes memory) {
+        return
+        hex&quot;fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff&quot;
+        hex&quot;fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796&quot;
+        hex&quot;e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef&quot;
+        hex&quot;ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80&quot;;
+    }
+
+    function setUp() public {
+        wardenAddr = vm.addr(WARDEN_KEY);
+        r = new Renderer();
+        t = new MachineReadableOnly(address(r), wardenAddr);
+        vm.warp(86_400 * 1000 + 1);
+        vm.prank(wardenAddr);
+        t.mint(1, ALICE, bytes32(uint256(1)), _code());
+    }
+
+    function _sign(uint256 id, uint32 day) internal view returns (bytes memory) {
+        bytes32 digest = t.voucherHash(id, day);
+        (uint8 v, bytes32 rr, bytes32 s) = vm.sign(WARDEN_KEY, digest);
+        return abi.encodePacked(rr, s, v);
+    }
+
+    function test_vouchersAreOffAtLaunch() public {
+        assertFalse(t.vouchersEnabled());
+        uint32 d = t.today() + 1;
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.VouchersDisabled.selector);
+        t.checkInWithVoucher(1, d, _sign(1, d));
+    }
+
+    function test_anyoneCanSubmitAValidVoucherOnceEnabled() public {
+        t.setVouchersEnabled(true);
+        uint32 d = t.today() + 1;
+        // Mallory pays the gas; the signature is what authorises it.
+        vm.prank(MALLORY);
+        t.checkInWithVoucher(1, d, _sign(1, d));
+        assertEq(t.viewOf(1).level, 2);
+        assertEq(t.viewOf(1).streak, 2);
+    }
+
+    function test_aVoucherSignedByTheWrongKeyIsRejected() public {
+        t.setVouchersEnabled(true);
+        uint32 d = t.today() + 1;
+        bytes32 digest = t.voucherHash(1, d);
+        (uint8 v, bytes32 rr, bytes32 s) = vm.sign(0xBAD5EED, digest);
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.BadVoucher.selector);
+        t.checkInWithVoucher(1, d, abi.encodePacked(rr, s, v));
+    }
+
+    /// @dev The signature covers the day, so a voucher cannot be replayed onto
+    /// a different day.
+    function test_aVoucherCannotBeReplayedOntoAnotherDay() public {
+        t.setVouchersEnabled(true);
+        uint32 d = t.today() + 1;
+        bytes memory sig = _sign(1, d);
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.BadVoucher.selector);
+        t.checkInWithVoucher(1, d + 1, sig);
+    }
+
+    /// @dev And the same voucher twice fails on the day rule, not the signature.
+    function test_theSameVoucherTwiceFailsOnTheDayRule() public {
+        t.setVouchersEnabled(true);
+        uint32 d = t.today() + 1;
+        bytes memory sig = _sign(1, d);
+        vm.startPrank(MALLORY);
+        t.checkInWithVoucher(1, d, sig);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.DayNotAdvanced.selector, uint256(1)));
+        t.checkInWithVoucher(1, d, sig);
+        vm.stopPrank();
+    }
+
+    function test_setVouchersEnabledRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        vm.expectRevert();
+        t.setVouchersEnabled(true);
+    }
+
+    function test_vouchersAreBlockedBySunsetAndByResting() public {
+        t.setVouchersEnabled(true);
+        vm.prank(ALICE);
+        t.rest(1);
+        uint32 d = t.today() + 1;
+        vm.prank(MALLORY);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
+        t.checkInWithVoucher(1, d, _sign(1, d));
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch it fail</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract VouchersTest -vv
+</code></pre>
+<p>Expected: FAIL -- <code>Member &quot;voucherHash&quot; not found</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement the voucher path</strong></li>
+</ul>
+<p>Add the import at the top of <code>MachineReadableOnly.sol</code>:</p>
+<pre><code class="language-solidity">import {EIP712} from &quot;@openzeppelin/contracts/utils/cryptography/EIP712.sol&quot;;
+import {ECDSA} from &quot;@openzeppelin/contracts/utils/cryptography/ECDSA.sol&quot;;
+</code></pre>
+<p>Change the contract declaration to inherit <code>EIP712</code>:</p>
+<pre><code class="language-solidity">contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906 {
+</code></pre>
+<p>and add <code>EIP712(&quot;MachineReadableOnly&quot;, &quot;1&quot;)</code> to the constructor&#39;s modifier list:</p>
+<pre><code class="language-solidity">    constructor(address renderer_, address warden_)
+        ERC721(&quot;Machine Readable Only&quot;, &quot;MRO&quot;)
+        Ownable(msg.sender)
+        EIP712(&quot;MachineReadableOnly&quot;, &quot;1&quot;)
+    {
+</code></pre>
+<p>Then add:</p>
+<pre><code class="language-solidity">    error VouchersDisabled();
+    error BadVoucher();
+
+    event VouchersEnabledSet(bool enabled);
+
+    /// @dev The typed-data hash the Warden signs for one token on one day.
+    bytes32 internal constant VOUCHER_TYPEHASH =
+        keccak256(&quot;CheckIn(uint256 id,uint32 day)&quot;);
+
+    function setVouchersEnabled(bool enabled) external onlyOwner {
+        vouchersEnabled = enabled;
+        emit VouchersEnabledSet(enabled);
+    }
+
+    /// @notice The digest a Warden signature must cover.
+    /// @dev Exposed so the reference client can build a voucher without
+    /// reimplementing the domain separator.
+    function voucherHash(uint256 id, uint32 day) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(VOUCHER_TYPEHASH, id, day)));
+    }
+
+    /// @notice The durability path: anyone may submit a Warden-signed check-in
+    /// and pay its gas.
+    /// @dev Ships with `vouchersEnabled` false. It exists from day one because
+    /// the contract has no upgrade path, so a path left out now could never be
+    /// added, and the piece would die with the Warden.
+    function checkInWithVoucher(uint256 id, uint32 day, bytes calldata wardenSig)
+        external
+        whenNotPaused
+        notSunset
+    {
+        if (!vouchersEnabled) revert VouchersDisabled();
+
+        Token storage s = _tokens[id];
+        if (s.resting) revert Resting(id);
+
+        address signer = ECDSA.recover(voucherHash(id, day), wardenSig);
+        if (signer != warden) revert BadVoucher();
+
+        if (day &lt;= s.lastDay) revert DayNotAdvanced(id);
+
+        unchecked {
+            s.level += 1;
+            s.streak = (day == s.lastDay + 1) ? s.streak + 1 : 1;
+        }
+        s.lastDay = day;
+
+        emit MetadataUpdate(id);
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run and confirm green</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract VouchersTest -vv
+</code></pre>
+<p>Expected: PASS, 7 tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Re-measure the size, because EIP712 added code</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge build --sizes 2&gt;&amp;1 | /bin/grep &quot;MachineReadableOnly&quot;
+</code></pre>
+<p>Expected: still under 24,576 with margin. If the margin dropped below 3,000, apply the Task 2 Step 6 fallback before continuing.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/src/MachineReadableOnly.sol contracts/test/Vouchers.t.sol
+git commit -m &quot;feat(contract): the voucher check-in path, shipped paused
+
+The durability commitment. Five of six early-2026 agent mints had dead
+infrastructure within six months, and this contract has no upgrade path,
+so a rescue path omitted now could never be added: the piece would simply
+die with the Warden.
+
+Anyone may submit and pay gas; the Warden signature is what authorises it.
+The signed digest covers the day, so a voucher cannot be replayed onto a
+different one.&quot;
+</code></pre>
+<hr>
+<h2>Task 8: the golden tokenURI test and the deployability proof</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>contracts/test/TokenUriGolden.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: every previous task, plus the real <code>Renderer</code>.</p>
+</li>
+<li><p>Produces: proof that the contract and the Phase 0 Renderer agree.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the golden test</strong></p>
+</li>
+</ul>
+<p>Create <code>contracts/test/TokenUriGolden.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test} from &quot;forge-std/Test.sol&quot;;
+
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+
+/// @notice The contract and the Phase 0 renderer, end to end.
+///
+/// @dev A STUBBED renderer would hide exactly the class of bug this exists to
+/// catch: the contract and the renderer disagreeing about a field&#39;s meaning.
+/// So this drives the real Renderer and asserts on what comes back.
+contract TokenUriGoldenTest is Test {
+    MachineReadableOnly t;
+    Renderer r;
+
+    address constant WARDEN = address(0x3A2D);
+    address constant ALICE = address(0xA11CE);
+
+    function _code() internal pure returns (bytes memory) {
+        return
+        hex&quot;fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff&quot;
+        hex&quot;fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796&quot;
+        hex&quot;e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef&quot;
+        hex&quot;ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80&quot;;
+    }
+
+    function setUp() public {
+        r = new Renderer();
+        t = new MachineReadableOnly(address(r), WARDEN);
+        vm.warp(86_400 * 1000 + 1);
+        vm.prank(WARDEN);
+        t.mint(1, ALICE, bytes32(uint256(1)), _code());
+    }
+
+    function _contains(string memory haystack, string memory needle) internal pure returns (bool) {
+        bytes memory h = bytes(haystack);
+        bytes memory n = bytes(needle);
+        if (n.length &gt; h.length) return false;
+        for (uint256 i = 0; i &lt;= h.length - n.length; i++) {
+            bool ok = true;
+            for (uint256 j = 0; j &lt; n.length; j++) {
+                if (h[i + j] != n[j]) { ok = false; break; }
+            }
+            if (ok) return true;
+        }
+        return false;
+    }
+
+    function test_tokenUriIsAJsonDataUriWithABase64Image() public view {
+        string memory uri = t.tokenURI(1);
+        assertTrue(_contains(uri, &quot;data:application/json&quot;), &quot;json data uri&quot;);
+        assertTrue(_contains(uri, &quot;image&quot;), &quot;has an image field&quot;);
+        assertTrue(_contains(uri, &quot;data:image/svg+xml;base64,&quot;), &quot;base64 svg image&quot;);
+    }
+
+    function test_tokenUriCarriesTheLevelAttribute() public view {
+        string memory uri = t.tokenURI(1);
+        assertTrue(_contains(uri, &quot;Level&quot;), &quot;Level attribute present&quot;);
+        assertTrue(_contains(uri, &quot;Generation&quot;), &quot;Generation attribute present&quot;);
+        assertTrue(_contains(uri, &quot;Parent&quot;), &quot;Parent attribute present&quot;);
+    }
+
+    function test_tokenUriRevertsForANonexistentToken() public {
+        vm.expectRevert();
+        t.tokenURI(999);
+    }
+
+    /// @dev The worst case from Phase 0 is the day BEFORE the heart seals.
+    /// This is the contract-level version of the gas budget the spike measured.
+    function test_worstCaseTokenUriStaysInsideTheHardLimit() public {
+        // Drive the token to level 364 the cheap way: one call, many days.
+        uint32 d = t.today();
+        uint32[] memory ds = new uint32[](363);
+        bytes memory packed;
+        for (uint32 i = 0; i &lt; 363; i++) {
+            ds[i] = d + 1 + i;
+            packed = abi.encodePacked(packed, uint32(1));
+        }
+        vm.prank(WARDEN);
+        t.batchCheckIn(packed, ds);
+        assertEq(t.viewOf(1).level, 364);
+
+        uint256 before = gasleft();
+        string memory uri = t.tokenURI(1);
+        uint256 used = before - gasleft();
+
+        emit log_named_uint(&quot;worst-case tokenURI gas&quot;, used);
+        emit log_named_uint(&quot;worst-case tokenURI bytes&quot;, bytes(uri).length);
+        assertLt(used, 2_000_000, &quot;the 2M hard gas limit&quot;);
+        assertLt(bytes(uri).length, 20_000, &quot;the 20,000 byte hard limit&quot;);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-contract TokenUriGoldenTest -vv
+</code></pre>
+<p>Expected: PASS, 4 tests, with the worst-case gas and byte figures logged. Compare them against <code>docs/phase0-results.md</code>: the spike&#39;s figure was 1,585,616 gas / 9,223 bytes for token 1 with every Mark. These will differ because this token has no Marks; the point is that both sit inside 2,000,000 / 20,000.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run the whole suite</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test
+</code></pre>
+<p>Expected: all suites pass, including the pre-existing 130 tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Prove deployability, both halves</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge build --sizes 2&gt;&amp;1 | /bin/grep -E &quot;MachineReadableOnly|Renderer &quot;
+bash script/anvil-size-check.sh
+</code></pre>
+<p>Expected: positive runtime margin for both contracts, and the anvil script reporting non-empty <code>cast code</code> plus a real <code>tokenURI</code> read back over RPC.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/test/TokenUriGolden.t.sol
+git commit -m &quot;test(contract): the golden tokenURI, against the real renderer
+
+A stubbed renderer would hide exactly the bug this exists to catch: the
+contract and the renderer disagreeing about what a field means. So this
+drives the real Renderer and asserts on what comes back, including the
+worst-case gas and byte figures at level 364, the day before the heart
+seals.&quot;
+</code></pre>
+<hr>
+<h2>Task 9: deploy to Base Sepolia</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>contracts/script/DeployPlan1.s.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: the finished contract.</p>
+</li>
+<li><p>Produces: two verified addresses on Base Sepolia.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the deploy script</strong></p>
+</li>
+</ul>
+<p>Create <code>contracts/script/DeployPlan1.s.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Script, console} from &quot;forge-std/Script.sol&quot;;
+
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+
+/// @notice Deploy the real token contract plus a renderer to Base Sepolia.
+/// @dev The Warden address is passed in rather than defaulted, because a
+/// contract deployed with the wrong Warden cannot be fixed by anything except
+/// setWarden, and getting it right at deploy time is free.
+contract DeployPlan1 is Script {
+    function run() external {
+        uint256 key = vm.envUint(&quot;SPIKE_DEPLOYER_KEY&quot;);
+        address warden = vm.envAddress(&quot;WARDEN_ADDRESS&quot;);
+
+        vm.startBroadcast(key);
+        Renderer r = new Renderer();
+        MachineReadableOnly t = new MachineReadableOnly(address(r), warden);
+        vm.stopBroadcast();
+
+        console.log(&quot;Renderer            &quot;, address(r));
+        console.log(&quot;MachineReadableOnly &quot;, address(t));
+        console.log(&quot;warden              &quot;, warden);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Confirm the environment has what it needs</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+ls -la .env &amp;&amp; /bin/grep -c &quot;WARDEN_ADDRESS&quot; .env.example
+</code></pre>
+<p>Expected: <code>.env</code> exists at mode 600. If <code>WARDEN_ADDRESS</code> is not in <code>.env.example</code>, add it there (schema only, no value) and tell the operator he needs to set the real value via WinSCP. <strong>Do not read or print <code>.env</code> contents.</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Dry run against a fork, before spending any testnet gas</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+set -a; . ./.env; set +a
+forge script script/DeployPlan1.s.sol:DeployPlan1 --rpc-url base_sepolia
+</code></pre>
+<p>Expected: a simulation printing three addresses and a gas estimate, with no broadcast. Sourcing <code>.env</code> this way keeps the values in the shell only; never echo them.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Broadcast and verify</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/contracts
+export PATH=$HOME/.foundry/bin:$PATH
+set -a; . ./.env; set +a
+forge script script/DeployPlan1.s.sol:DeployPlan1 \
+  --rpc-url base_sepolia --broadcast --verify
+</code></pre>
+<p>Expected: both contracts deployed and verified on Basescan. Record the addresses and the gas paid, taken from <code>contracts/broadcast/</code>, into <code>docs/phase0-results.md</code>&#39;s deployment table -- or a new Plan 1 results section.</p>
+<p>This step spends Base <strong>Sepolia</strong> gas, which is free test ETH. It is not a real-funds step and needs no approval gate.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Read one token back over RPC</strong></li>
+</ul>
+<p>Mint a token as the Warden, then read the tokenURI back through a provider, proving the whole path works outside Foundry:</p>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only/tools
+source ~/.nvm/nvm.sh
+~/scripts/safe-build.sh node tools/verify-tokenuri.mjs &lt;token-address&gt; --ids 1
+</code></pre>
+<p>Expected: the tokenURI decodes, the QR scans, and the reported gas and byte figures sit inside 2,000,000 / 20,000.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/script/DeployPlan1.s.sol docs/
+git commit -m &quot;feat(deploy): Plan 1 on Base Sepolia
+
+The Warden address is a required env var rather than a default: a contract
+deployed with the wrong Warden can only be fixed by setWarden, and getting
+it right at deploy time costs nothing.&quot;
+</code></pre>
+<hr>
+<h2>Self-Review</h2>
+<p><strong>Spec coverage.</strong> Every function in spec section 7&#39;s table has a task: <code>mint</code> (2), <code>batchCheckIn</code> (3), <code>applyMark</code> (4), <code>rebind</code> and <code>rest</code> (5), <code>seed</code> (6), <code>checkInWithVoucher</code> (7), <code>sunset</code> and the dials (1), <code>tokenURI</code> (1, tested in 8). Section 13&#39;s contract test list is covered across Tasks 1-8, with the golden test and both deployability halves in Task 8.</p>
+<p><strong>Two gaps found and closed while reviewing:</strong></p>
+<ol>
+<li>The <code>Sunset</code> error and event share a name in the spec, which does not compile. Added as Task 0 Step 5.</li>
+<li>The wallet cap&#39;s &quot;holds 20 minted tokens&quot; is ambiguous between held and minted. Resolved toward ever-minted, with the reasoning, in Task 0 Step 6 and pinned by <code>test_walletCapCountsMintsNotHoldings</code>.</li>
+</ol>
+<p><strong>Type consistency.</strong> <code>Token</code> and <code>Upgrade</code> are declared once in Task 1 and referenced by the same names throughout. <code>_tokens</code>, <code>_marks</code>, <code>_parentOf</code>, <code>_agentKeyOf</code>, <code>_codeOf</code>, <code>_hasMinted</code>, <code>_firstMintDay</code>, <code>_seedsSpent</code>, <code>_upgrades</code> keep their names across Tasks 1-7. <code>today()</code>, <code>viewOf()</code>, <code>seedsAvailable()</code>, <code>voucherHash()</code>, <code>marksOf()</code>, <code>upgradeOf()</code> are used consistently. The <code>Resting(uint256)</code> error is declared in Task 3 and reused in Tasks 4, 6 and 7 -- it must not be re-declared there.</p>
+<p><strong>Known deferrals, deliberate:</strong> child token visuals (needs its own brainstorm), the Clock&#39;s chunking and sorting, and whether the spike contract is deleted afterwards, which needs the operator&#39;s explicit approval.</p>
+
+</body>
+</html>
