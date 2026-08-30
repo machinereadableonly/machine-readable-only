@@ -60,6 +60,36 @@ contract TokenUriGoldenTest is MroTestBase {
         );
     }
 
+    /// @dev A directly minted token has Generation and Parent BOTH zero (see
+    /// test_tokenUriCarriesTheCorrectAttributeValues above), so a renderer
+    /// that swapped those two fields would emit byte-identical output and
+    /// that test could not catch it. Seed a child from a parent whose id is
+    /// not 1, giving the child a non-zero, DISTINCT Generation (1) and
+    /// Parent (5) -- a swap between them is now visible in the rendered URI.
+    function test_tokenUriDistinguishesGenerationFromParent() public {
+        bytes32 otherKey = bytes32(uint256(0x5EED));
+        vm.prank(WARDEN);
+        t.mint(5, ALICE, otherKey, _code());
+        _makeWhole(5);
+        _warpOneYear();
+        assertEq(t.seedsAvailable(5), 1);
+
+        vm.prank(WARDEN);
+        t.seed(6, 5, ALICE, _code());
+        assertEq(t.viewOf(6).generation, 1);
+        assertEq(t.viewOf(6).parent, 5);
+
+        string memory uri = t.tokenURI(6);
+        assertTrue(
+            _contains(uri, string.concat('"trait_type":"Generation","value":', vm.toString(uint256(1)), "}")),
+            "Generation value is 1, distinct from Parent"
+        );
+        assertTrue(
+            _contains(uri, string.concat('"trait_type":"Parent","value":', vm.toString(uint256(5)), "}")),
+            "Parent value is 5, distinct from Generation"
+        );
+    }
+
     function test_tokenUriRevertsForANonexistentToken() public {
         vm.expectRevert();
         t.tokenURI(999);
