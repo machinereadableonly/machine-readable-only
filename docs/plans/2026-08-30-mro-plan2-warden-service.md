@@ -161,7 +161,7 @@ The mirror is the source of truth for every tool, so it comes first: nothing els
   "type": "module",
   "engines": { "node": ">=24" },
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test \"test/**/*.test.mjs\"",
     "start": "node src/server.mjs"
   },
   "dependencies": {
@@ -173,6 +173,12 @@ The mirror is the source of truth for every tool, so it comes first: nothing els
   }
 }
 ```
+
+**Why that exact test pattern**, measured on Node 24.14.1 on 2026-08-30 rather than assumed:
+
+- `node --test test/` FAILS. A bare directory path with no glob metacharacter is treated as a module specifier, not a directory, and the run dies with `Cannot find module .../warden/test`.
+- Bare `node --test` works, and is what `tools/package.json` uses -- but its default discovery runs **every** file under `test/`, including ones not named `*.test.mjs`. That would pull Task 8's ten-second, 532 MB bitmap decode check into the unit suite on every run.
+- `node --test "test/**/*.test.mjs"` does both jobs: it finds nested files such as Task 12's `test/e2e/join.test.mjs`, and it ignores anything not named `*.test.mjs`. Both behaviours were confirmed with a throwaway probe file.
 
 - [ ] **Step 2: Install and record the tree**
 
