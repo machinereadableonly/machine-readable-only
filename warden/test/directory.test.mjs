@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
-import { registerKey, guardedFetchDirectory, renderDirectory, isBlockedAddress } from "../src/door/directory.mjs";
+import { registerKey, guardedFetchDirectory, renderDirectory, isBlockedAddress, makeLookup } from "../src/door/directory.mjs";
+import { issueChallenge, verifyNonceMinted, CHALLENGE_MS } from "../src/door/challenge.mjs";
 
 const JWK = { kty: "OKP", crv: "Ed25519", x: "JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs" };
 
@@ -207,12 +208,95 @@ async function proofFor(nonce, privateKey) {
   return Buffer.from(sig).toString("base64url");
 }
 
+// The nonce must be one THIS server minted, and it is spent on use. Proof of
+// possession alone shows the caller holds the key, not that the exchange is
+// fresh: before this, an invented nonce was accepted and a captured triple
+// replayed verbatim.
+const alwaysFreshNonce = () => true;
+
+test("a nonce the caller invented is refused, and nothing is stored", async () => {
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const nonce = "i-made-this-up-myself";
+  const r = await registerRoute(
+    q,
+    { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) },
+    () => true,
+    () => false                                   // this server did not mint it
+  );
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "nonce");
+  assert.equal(q.allKeys().length, 0, "nothing may be stored on a bad nonce");
+});
+
+test("a captured registration cannot be replayed", async () => {
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const nonce = "server-issued-nonce";
+  const body = { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) };
+
+  // A nonce checker that spends what it accepts, like the real one.
+  const spent = new Set();
+  const checkNonce = (n) => (spent.has(n) ? false : (spent.add(n), true));
+
+  assert.equal((await registerRoute(q, body, () => true, checkNonce)).ok, true);
+  const replay = await registerRoute(q, body, () => true, checkNonce);
+  assert.equal(replay.ok, false);
+  assert.equal(replay.reason, "nonce");
+  assert.equal(q.allKeys().length, 1, "the replay must not rewrite the stored row");
+});
+
+test("verifyNonceMinted accepts only what this server issued", () => {
+  const now = 1_000_000;
+  const { challenge } = issueChallenge("a-secret", now);
+  assert.equal(verifyNonceMinted("a-secret", challenge, now).ok, true);
+  assert.equal(verifyNonceMinted("another-secret", challenge, now).ok, false);
+  assert.equal(verifyNonceMinted("a-secret", "made.up.nonce", now).ok, false);
+  assert.equal(verifyNonceMinted("a-secret", challenge, now + CHALLENGE_MS + 1).reason, "expired");
+});
+
+test("the directory owner is decided by exact hostname, not by substring", async () => {
+  // https://attacker.net/?x=our.domain was treated as ours, and a legitimate
+  // third party whose hostname contained our domain could never be fetched.
+  const q = queries(openDb(":memory:"));
+  let fetchedUrl = null;
+  const lookup = makeLookup(q, async (url) => { fetchedUrl = url; return { keys: [] }; }, "warden.example.com");
+
+  await lookup("some-key", '"https://attacker.net/?x=warden.example.com"');
+  assert.ok(fetchedUrl && fetchedUrl.startsWith("https://attacker.net/"),
+    "a foreign agent must be fetched, not read from our own store");
+
+  fetchedUrl = null;
+  await lookup("some-key", '"https://warden.example.com/"');
+  assert.equal(fetchedUrl, null, "our own domain must be served from the mirror");
+});
+
+test("the directory cache is bounded and remembers failures", async () => {
+  const q = queries(openDb(":memory:"));
+  let fetches = 0;
+  const cache = new Map();
+  const lookup = makeLookup(q, async () => { fetches += 1; throw new Error("unreachable"); },
+    "warden.example.com", cache);
+
+  // A failing directory is fetched once, not once per request: otherwise every
+  // unauthenticated call becomes an outbound request the caller aims.
+  await lookup("k", '"https://dead.example.com/"');
+  await lookup("k", '"https://dead.example.com/"');
+  assert.equal(fetches, 1, "a remembered failure must not be refetched");
+
+  // The cache key is caller-chosen, so it must not grow without bound.
+  for (let i = 0; i < 400; i++) await lookup("k", `"https://host${i}.example.com/"`);
+  assert.ok(cache.size <= 256, `cache grew to ${cache.size}`);
+});
+
 test("a registration with a valid proof of possession is accepted", async () => {
   const q = queries(openDb(":memory:"));
   const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
   const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
   const nonce = "server-issued-nonce";
-  const r = await registerRoute(q, { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) }, () => true);
+  const r = await registerRoute(q, { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) }, () => true, alwaysFreshNonce);
   assert.equal(r.ok, true);
   assert.ok(q.getKey(r.keyId));
 });
@@ -234,7 +318,8 @@ test("a proof over a different nonce is refused", async () => {
   const r = await registerRoute(
     q,
     { jwk, nonce: "server-issued-nonce", proof: await proofFor("some-other-nonce", pair.privateKey) },
-    () => true
+    () => true,
+    alwaysFreshNonce
   );
   assert.equal(r.ok, false);
   assert.equal(r.reason, "proof");
