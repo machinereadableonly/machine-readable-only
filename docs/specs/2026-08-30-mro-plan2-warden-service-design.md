@@ -65,8 +65,9 @@ Clock, the daily post, the reference client, `SKILL.md`, the seed agent.
 ## 3. Step 0: amend the spec before writing any JavaScript
 
 Plan 2 reads its requirements from the spec, so the spec must stop
-contradicting what was actually built and measured. Four amendments, the same
-discipline Plan 1 applied to section 7.
+contradicting what was actually built and measured. Seven amendments, the same
+discipline Plan 1 applied to section 7. The last two were found while reading
+the packages' own source to write the implementation plan, not from the spec.
 
 | Section, line | Currently says | Must say | Why |
 |---|---|---|---|
@@ -75,6 +76,8 @@ discipline Plan 1 applied to section 7.
 | 8, line 671 | Round-trip every bitmap through `jsqr` | ZXing is the oracle; `jsqr` is kept only to assert the two agree | Measured 2026-08-28: `jsqr` stops at the first non-text byte and reported a clean 24-character URL where ZXing returned all 101. Every tile on that sheet failed on a real phone while 25 repo tests passed. |
 | 4, line 182 | Clock runs as `node dist/clock.js` | Plain ESM, run directly, no build step | See section 5. |
 | 13, line 937 | Warden and client tested with Vitest | `node:test` | See section 5. |
+| 6 | Zod imported as `zod/v4` | `zod` | The version resolved under `@modelcontextprotocol/server` 2.0.0 is 4.5.4, so the compatibility subpath is unnecessary. |
+| 13 | RFC 9421 vectors ship with `web-bot-auth` | vendored from Cloudflare's repository | Checked 2026-08-30: the npm tarball is `dist/` and `README.md` only. |
 
 ---
 
@@ -303,9 +306,12 @@ values.
 
 `node:test`, run from `warden/`. Both existing suites stay green as well.
 
-- **Signature verification** against the RFC 9421 Ed25519 test vectors shipped
-  with `web-bot-auth`; rejection when a required component is missing; rejection
-  of a signature whose window exceeds five minutes.
+- **Signature verification** against the RFC 9421 Ed25519 test vectors from
+  Cloudflare's repository, VENDORED into `warden/test/vectors/` because the npm
+  tarball ships only `dist/` and `README.md`; rejection when a required
+  component is missing; rejection of a signature whose window exceeds five
+  minutes. Both of those last two are checks this project adds: `verify()`
+  enforces neither, confirmed by reading the library's source.
 - **Challenge**: validity, expiry at five seconds, single use, and that a
   challenge minted for one key does not answer for another.
 - **SSRF guard**: private, loopback, link-local and metadata ranges; a
@@ -359,6 +365,13 @@ Written in this plan, applied when a domain exists:
 - **No domain.** Deployment cannot be verified end to end until one exists,
   including whether Cloudflare's bot settings let a signed request through.
   Everything up to that point is verifiable locally.
+- **`@x402/mcp` 2.24.0 is built against the v1 MCP SDK and zod 3**, while this
+  service is on the v2 server and zod 4. Its `createPaymentWrapper` reads the
+  payment as `extra?._meta`, the v1 context shape; under v2 that data sits at
+  `ctx.mcpReq._meta`. Left alone it would silently never find a payment and
+  answer "payment required" forever, to paying agents included. A one-line
+  adapter fixes it and a test pins it. Found by reading the package's source
+  before the build rather than during it.
 - **`node:sqlite` is still flagged experimental.** Only `DatabaseSync` and
   `StatementSync` are used. If it ever breaks, `better-sqlite3` is the same
   API shape.
