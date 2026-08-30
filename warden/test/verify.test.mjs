@@ -65,6 +65,49 @@ async function smuggledRequest() {
   return { ...message, headers: { ...message.headers, ...headers } };
 }
 
+/// Critical bypass 3's exact shape, reproduced 2026-08-30. Signs four
+/// components, but two of them are the header names "a @method" and
+/// "b @path" -- ordinary quoted component names that happen to contain a
+/// space. @method and @path themselves are NOT covered. The extra headers
+/// have to exist on the message so the library can sign them.
+async function attackRequest(components) {
+  const signer = await signerFromJWK(ED.key);
+  const message = {
+    method: "POST",
+    url: "https://example.com/mcp",
+    headers: {
+      "signature-agent": '"https://example.com"',
+      host: "example.com",
+      "a @method": "x",
+      "b @path": "y",
+    },
+  };
+  const created = new Date();
+  const headers = await signatureHeaders(message, signer, {
+    created,
+    expires: new Date(created.getTime() + 60_000),
+    components,
+  });
+  return { ...message, headers: { ...message.headers, ...headers } };
+}
+
+const spacedNameRequest = () =>
+  attackRequest(["@authority", "signature-agent", "a @method", "b @path"]);
+
+/// The same bypass through component PARAMETERS rather than names: the
+/// parameter values sit on the same raw line and were split on spaces too.
+const parameterTextRequest = () =>
+  attackRequest([
+    "@authority",
+    {
+      name: "signature-agent",
+      parameters: new Map([
+        ["x", "a @method"],
+        ["y", "b @path"],
+      ]),
+    },
+  ]);
+
 /// Critical bypass 2's exact shape, reproduced 2026-08-30: a signature base
 /// built and signed BY HAND (not via signatureHeaders(), which always signs
 /// with signer.keyid and gives no way to inject a parameter ahead of it),
@@ -205,4 +248,29 @@ test("the verified key id is the one the signature covered, not a smuggled param
   assert.equal(r.ok, true, `expected admission, got ${JSON.stringify(r)}`);
   assert.equal(r.keyId, signer.keyid);
   assert.notEqual(r.keyId, "impostor-key-id");
+});
+
+test("a quoted component name containing a space does not count as covering that component", async () => {
+  // Critical bypass 3, reproduced 2026-08-30 against the committed code: the
+  // last line of a signature base is the caller's own raw Signature-Input
+  // value, so splitting that line on spaces turned the single component
+  // "a @method" into the two tokens `a` and `@method`. The covered set then
+  // appeared to contain @method and @path when it genuinely did not, and the
+  // identical headers replayed at DELETE /admin-evil. An RFC 8941 parser
+  // keeps "a @method" as ONE member, so it is simply not @method.
+  const req = await spacedNameRequest();
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "components");
+});
+
+test("component parameters carrying a component name do not count as covering it", async () => {
+  // The same bypass by its other route: the parameters attached to a covered
+  // component are part of that same raw line, so their VALUES were split on
+  // spaces too. Here signature-agent carries ;x="a @method";y="b @path" and
+  // nothing else covers method or path.
+  const req = await parameterTextRequest();
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "components");
 });

@@ -13,6 +13,7 @@
     "@modelcontextprotocol/server": "2.0.0",
     "@modelcontextprotocol/node": "2.0.0",
     "@x402/mcp": "2.24.0",
+    "structured-headers": "^2.0.2",
     "zod": "^4.2.0"
   }
 }
