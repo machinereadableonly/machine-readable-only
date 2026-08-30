@@ -381,4 +381,63 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
         emit Rested(id, today(), s.level, s.streak);
         emit MetadataUpdate(id);
     }
+
+    // ---------------------------------------------------------------------
+    // Lifecycle: seed
+    // ---------------------------------------------------------------------
+
+    error ParentNotWhole();
+    error NoSeedAvailable();
+
+    event Seeded(uint256 indexed parentId, uint256 indexed childId, uint32 generation);
+
+    /// @notice How many seeds the parent's KEY still has this tenure.
+    /// @dev Keyed by agent key, not by token. This is the "tenure, not depth"
+    /// rule: a lineage cannot accelerate by seeding children who immediately
+    /// seed further children, because every descendant shares the same key and
+    /// therefore the same budget.
+    function seedsAvailable(uint256 parentId) public view returns (uint32) {
+        bytes32 key = _agentKeyOf[parentId];
+        uint32 first = _firstMintDay[key];
+        if (first == 0 && !_hasMinted[key]) return 0;
+        uint32 budget = (today() - first) / 365;
+        uint32 spent = _seedsSpent[key];
+        return budget > spent ? budget - spent : 0;
+    }
+
+    /// @notice Create a child token from a whole parent. Free.
+    function seed(uint256 childId, uint256 parentId, address to, bytes calldata code)
+        external
+        onlyWarden
+        whenNotPaused
+        notSunset
+    {
+        Token storage p = _tokens[parentId];
+        if (p.resting) revert Resting(parentId);
+        if (p.level < 365) revert ParentNotWhole();
+        if (_ownerOf(childId) != address(0)) revert TokenExists(childId);
+        if (totalMinted >= supplyCap) revert SupplyCap();
+        if (mintedTo[to] >= walletCap) revert WalletCap();
+        if (code.length != CODE_BYTES) revert BadCodeLength(code.length);
+        if (seedsAvailable(parentId) == 0) revert NoSeedAvailable();
+
+        bytes32 key = _agentKeyOf[parentId];
+        uint32 d = today();
+
+        _tokens[childId] = Token(1, 1, d, d, p.generation + 1, 0, false, 0);
+        _parentOf[childId] = parentId;
+        _agentKeyOf[childId] = key;
+        _codeOf[childId] = code;
+
+        unchecked {
+            _seedsSpent[key] += 1;
+            p.seedsGiven += 1;
+            totalMinted += 1;
+            mintedTo[to] += 1;
+        }
+
+        _safeMint(to, childId);
+        emit Seeded(parentId, childId, p.generation + 1);
+        emit MetadataUpdate(parentId);
+    }
 }

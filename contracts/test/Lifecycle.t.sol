@@ -100,4 +100,134 @@ contract LifecycleTest is MroTestBase {
         vm.stopPrank();
         assertTrue(t.viewOf(1).resting);
     }
+
+    // -------------------------------------------------------------------
+    // seed and the per-year budget
+    // -------------------------------------------------------------------
+
+    /// @dev Put a token at an arbitrary level by checking it in repeatedly is
+    /// far too slow, so the budget tests warp the clock and check in once per
+    /// needed day instead. 365 check-ins is affordable in a test; a decade is
+    /// not, which is why seedsAvailable is asserted directly.
+    function _makeWhole(uint256 id) internal {
+        uint32 d = t.today();
+        uint32[] memory ids = new uint32[](364);
+        uint32[] memory ds = new uint32[](364);
+        for (uint32 i = 0; i < 364; i++) {
+            ids[i] = uint32(id);
+            ds[i] = d + 1 + i;
+        }
+        bytes memory packed;
+        for (uint32 i = 0; i < 364; i++) packed = abi.encodePacked(packed, ids[i]);
+        vm.prank(WARDEN);
+        t.batchCheckIn(packed, ds);
+        assertEq(t.viewOf(id).level, 365);
+    }
+
+    function test_seedRequiresAWholeParent() public {
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.ParentNotWhole.selector);
+        t.seed(2, 1, ALICE, _code());
+    }
+
+    function test_seedCreatesAChildWithTheParentsKeyAndNextGeneration() public {
+        _makeWhole(1);
+        // One year of tenure has passed on the key, so one seed is available.
+        _warpOneYear();
+        assertEq(t.seedsAvailable(1), 1);
+
+        vm.prank(WARDEN);
+        t.seed(2, 1, ALICE, _code());
+
+        assertEq(t.ownerOf(2), ALICE);
+        assertEq(t.viewOf(2).generation, 1);
+        assertEq(t.viewOf(2).parent, 1);
+        assertEq(t.viewOf(2).level, 1);
+        assertEq(t.viewOf(2).streak, 1);
+        assertEq(t.viewOf(2).agentKeyId, t.viewOf(1).agentKeyId);
+        assertEq(t.viewOf(1).seedsGiven, 1);
+    }
+
+    /// @dev Note 4 of the task brief: batchCheckIn's NoSuchToken guard reverts
+    /// when level == 0, so a child that seed() forgot to set level = 1 on
+    /// would be permanently uncheckable. Prove the child is a real, live
+    /// token by actually checking it in.
+    function test_seedChildCanBeCheckedInAfterward() public {
+        _makeWhole(1);
+        _warpOneYear();
+        vm.prank(WARDEN);
+        t.seed(2, 1, ALICE, _code());
+
+        uint32 day = t.today() + 1;
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(2), _days(day));
+
+        assertEq(t.viewOf(2).level, 2);
+        assertEq(t.viewOf(2).streak, 2);
+    }
+
+    function test_theBudgetIsOnePerYearOfKeyTenure() public {
+        _makeWhole(1);
+        _warpOneYear();
+        vm.prank(WARDEN);
+        t.seed(2, 1, ALICE, _code());
+
+        // The second seed in the same year has no budget.
+        assertEq(t.seedsAvailable(1), 0);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.NoSeedAvailable.selector);
+        t.seed(3, 1, ALICE, _code());
+
+        // A second year of tenure grants exactly one more.
+        _warpOneYear();
+        assertEq(t.seedsAvailable(1), 1);
+        vm.prank(WARDEN);
+        t.seed(3, 1, ALICE, _code());
+        assertEq(t.viewOf(1).seedsGiven, 2);
+    }
+
+    /// @dev Tenure, not depth: a child cannot accelerate the lineage, because
+    /// the budget is keyed by the AGENT KEY and the child shares its parent's.
+    function test_aChildSharesTheParentsBudgetAndCannotAccelerate() public {
+        _makeWhole(1);
+        _warpOneYear();
+        vm.prank(WARDEN);
+        t.seed(2, 1, ALICE, _code());
+
+        // The child is on the same key, so it sees the same exhausted budget
+        // even once it is itself whole.
+        assertEq(t.seedsAvailable(2), 0);
+    }
+
+    function test_seedRevertsForANonWarden() public {
+        _makeWhole(1);
+        _warpOneYear();
+        vm.expectRevert(MachineReadableOnly.NotWarden.selector);
+        t.seed(2, 1, ALICE, _code());
+    }
+
+    function test_seedRefusesARestingParent() public {
+        _makeWhole(1);
+        _warpOneYear();
+        vm.prank(ALICE);
+        t.rest(1);
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
+        t.seed(2, 1, ALICE, _code());
+    }
+
+    function test_seedIsBlockedBySunsetAndBySupplyCap() public {
+        _makeWhole(1);
+        _warpOneYear();
+        t.setSupplyCap(1);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.SupplyCap.selector);
+        t.seed(2, 1, ALICE, _code());
+
+        t.setSupplyCap(100);
+        t.sunset();
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.Sunset.selector);
+        t.seed(2, 1, ALICE, _code());
+    }
 }

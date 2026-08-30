@@ -58,4 +58,20 @@ abstract contract MroTestBase is Test {
         vm.prank(WARDEN);
         t.mint(1, ALICE, KEY, _code());
     }
+
+    /// @dev Advance the clock by one year. NEVER write `vm.warp(block.timestamp
+    /// + 365 days)` inline a second time in the same test function -- under
+    /// this project's `via_ir = true` (foundry.toml, load-bearing for gas),
+    /// solc's Yul common-subexpression pass treats `block.timestamp` as
+    /// invariant across a function body, which is true of the real opcode but
+    /// not of the out-of-band patch `vm.warp` performs. Two textually
+    /// identical `block.timestamp + 365 days` expressions in one function
+    /// collapse to the SAME computed value, so the second warp silently does
+    /// nothing -- confirmed with a minimal standalone repro (two bare
+    /// `vm.warp(block.timestamp + 365 days)` calls with nothing between them
+    /// still coalesce). Wrapping the expression in this helper and calling it
+    /// per year avoids the trap, because each call recomputes it fresh.
+    function _warpOneYear() internal {
+        vm.warp(block.timestamp + 365 days);
+    }
 }
