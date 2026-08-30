@@ -7,7 +7,7 @@ module.exports = {
   apps: [
     {
       name: "mro-warden",
-      script: "src/server.mjs",
+      script: "src/main.mjs",
       cwd: "~/projects/machine-readable-only/warden",
       interpreter: "~/.nvm/versions/node/v24.14.1/bin/node",
       exec_mode: "fork",

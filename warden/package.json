@@ -6,7 +6,7 @@
   "engines": { "node": ">=24" },
   "scripts": {
     "test": "node --test \"test/**/*.test.mjs\"",
-    "start": "node src/server.mjs"
+    "start": "node src/main.mjs"
   },
   "dependencies": {
     "web-bot-auth": "0.1.3",
