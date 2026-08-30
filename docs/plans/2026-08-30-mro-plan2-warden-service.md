@@ -1744,7 +1744,14 @@ In the router from Task 5, before the `admit` call (registration cannot require 
       // Unsigned by necessity, but never unproved: the body carries a signature
       // over a nonce this server issued, and that nonce is spent on use.
       if (req.method === "POST" && path === "/keys") {
-        const body = JSON.parse(await readBody(req, 64 * 1024));
+        const parsed = JSON.parse(await readBody(req, 64 * 1024));
+        // A JSON body may legitimately parse to null, a number or an array.
+        // registerRoute destructures its argument, so anything that is not an
+        // object is refused here rather than becoming a 500.
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return json(res, 400, { ok: false, reason: "malformed" });
+        }
+        const body = parsed;
         const result = await registerRoute(
           q,
           body,
@@ -1767,6 +1774,10 @@ In the router from Task 5, before the `admit` call (registration cannot require 
 ```
 
 Add a `readBody(req, cap)` helper that rejects a body over the cap rather than buffering it, and a `nonce` route (`GET /keys/nonce`) issuing the value the proof signs, reusing `issueChallenge` so there is one nonce mechanism rather than two.
+
+**`readBody` must answer before it hangs up.** Destroying the socket on an oversized body gives the caller a connection reset rather than the 413 the code goes on to write, so it looks like a network fault instead of a refusal. Write the status first, then end the response, then destroy.
+
+**`allowRegistration` has no safe default.** Registration is the one unsigned write this service accepts, so `createServer` must require the policy rather than defaulting to always-allow: `if (typeof config.allowRegistration !== "function") throw new Error("allowRegistration is required")`. The spec's dial is 20 per minute per source and per origin, 10,000 keys total.
 
 - [ ] **Step 8: Run the tests**
 
@@ -1860,11 +1871,28 @@ import { verifyRequest, headerOf } from "./verify.mjs";
  * trusting it would let a signature minted for another site verify here.
  */
 export function toRequestLike(req, domain) {
-  return {
-    method: req.method,
-    url: new URL(req.url, `https://${domain}`).toString(),
-    headers: req.headers,
-  };
+  return { method: req.method, url: pinnedUrl(req.url, domain).toString(), headers: req.headers };
+}
+
+/**
+ * Reduce a request target to a URL on OUR origin, whatever it claimed to be.
+ *
+ * THE TWO-STEP IS THE WHOLE POINT. Node passes the request target through
+ * verbatim, and a target may carry its own authority: "//evil.example/mcp" is
+ * protocol-relative and "http://evil.example/mcp" is absolute-form. Parsed
+ * against a base, that authority WINS -- measured 2026-08-30, both produced
+ * @authority = evil.example while pathname stayed /mcp. So the router still
+ * dispatched to /mcp while the signature was verified against somebody else's
+ * host, and a signature minted for any site at path /mcp was admitted here.
+ *
+ * Reducing to pathname + search first, then rebuilding on the configured
+ * origin, leaves nothing for a target to override. Pinning at the CALL SITES
+ * is what allowed this: it is done here, once, so no caller can forget.
+ */
+export function pinnedUrl(target, domain) {
+  const origin = `https://${domain}`;
+  const claimed = new URL(target, origin);
+  return new URL(claimed.pathname + claimed.search, origin);
 }
 
 /// The body of a 401. It tells an agent everything it needs to come back.
@@ -1956,13 +1984,20 @@ export function createServer(config) {
 
   return createHttpServer(async (req, res) => {
     try {
-      const path = new URL(req.url, `https://${config.domain}`).pathname;
+      // Same reduction the signature check uses, so the path the router
+      // dispatches on and the authority the signature is checked against can
+      // never come apart.
+      const path = pinnedUrl(req.url, config.domain).pathname;
 
       // Case 4: the QR's destination. Public, unsigned, JSON only. Gating this
       // would mean a scanned token leads nowhere, which is the one distribution
       // surface the artwork has.
       if (req.method === "GET" && path.startsWith("/t/")) {
-        const view = config.tokenView(q, Number(path.slice(3)));
+        // Strict decimal only. Number() accepts "0x1", which would alias
+        // /t/0x1 to token 1, and "" which would become token 0.
+        const raw = path.slice(3);
+        if (!/^[0-9]+$/.test(raw)) return json(res, 404, { ok: false, reason: "unknown-token" });
+        const view = config.tokenView(q, Number(raw));
         return view ? json(res, 200, view) : json(res, 404, { ok: false, reason: "unknown-token" });
       }
 
@@ -1977,7 +2012,11 @@ export function createServer(config) {
       const decision = await admit(req, { secret: config.challengeSecret, lookupKey, seen, domain: config.domain });
       if (!decision.ok) return json(res, decision.status, decision.body);
 
-      if (path === "/mcp") return config.mcp.nodeHandler(req, res, decision.keyId);
+      // `return await`, not `return`. A bare return hands the promise back
+      // outside this try, so a rejecting handler becomes an unhandled rejection
+      // -- which under Node's default takes the process down and leaves the
+      // caller hanging.
+      if (path === "/mcp") return await config.mcp.nodeHandler(req, res, decision.keyId);
 
       return json(res, 404, { ok: false, reason: "unknown-route" });
     } catch (err) {
