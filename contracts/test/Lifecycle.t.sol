@@ -105,25 +105,6 @@ contract LifecycleTest is MroTestBase {
     // seed and the per-year budget
     // -------------------------------------------------------------------
 
-    /// @dev Put a token at an arbitrary level by checking it in repeatedly is
-    /// far too slow, so the budget tests warp the clock and check in once per
-    /// needed day instead. 365 check-ins is affordable in a test; a decade is
-    /// not, which is why seedsAvailable is asserted directly.
-    function _makeWhole(uint256 id) internal {
-        uint32 d = t.today();
-        uint32[] memory ids = new uint32[](364);
-        uint32[] memory ds = new uint32[](364);
-        for (uint32 i = 0; i < 364; i++) {
-            ids[i] = uint32(id);
-            ds[i] = d + 1 + i;
-        }
-        bytes memory packed;
-        for (uint32 i = 0; i < 364; i++) packed = abi.encodePacked(packed, ids[i]);
-        vm.prank(WARDEN);
-        t.batchCheckIn(packed, ds);
-        assertEq(t.viewOf(id).level, 365);
-    }
-
     function test_seedRequiresAWholeParent() public {
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.ParentNotWhole.selector);
