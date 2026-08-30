@@ -1325,9 +1325,16 @@ the ERC-4906 refresh timing in Task 11 -- has to poll rather than read once.</p>
 wrong. OpenSea has had no testnet since 23 July 2025 -- confirmed live,
 <code>testnets.opensea.io</code> now 307-redirects to a shutdown notice -- but OpenSea is
 not the only party that parses a <code>tokenURI</code> and rasterises an on-chain SVG at
-dimensions it chooses. Alchemy&#39;s NFT API and Basescan both do, both run on Base
-Sepolia, and both are free. That reopened a large amount of testable ground
-before any real money is spent.</p>
+dimensions it chooses. Alchemy&#39;s NFT API does, it runs on Base Sepolia, and it
+is free. That reopened a large amount of testable ground before any real money
+is spent.</p>
+<p><strong>Corrected 2026-08-30.</strong> This paragraph originally read &quot;Alchemy&#39;s NFT API and
+Basescan both do&quot;. The Basescan half is false: measured with
+<code>tools/basescan-check.mjs</code>, Basescan ingests no <code>tokenURI</code> metadata at all on
+Base Sepolia and renders no artwork for any collection there, ours or anyone
+else&#39;s. Alchemy was the only third-party consumer this phase ever actually had.
+See the Basescan section of
+<code>docs/2026-08-29-mro-third-party-raster-finding.md</code>.</p>
 <p>Phase 1 was meant to close a blind spot. It found a defect instead.</p>
 <h3>First, the blind spot, which was real</h3>
 <p><code>DECODE_SIZES</code> stopped at 900px. The palette bug sweep C found on 2026-08-29 did
@@ -2238,6 +2245,74 @@ anything, so the Plan 3 step must verify <code>timeLastUpdated</code> moved rath
 fire and forget.</p>
 <p>And the artwork keeps its own escape hatch regardless. The QR encodes
 <code>https://&lt;domain&gt;/t/&lt;id&gt;</code>, so a stale thumbnail still scans to the live record.</p>
+<h2>ERC-4906: the decision, and what emitting actually costs</h2>
+<p>Decided by the operator on 2026-08-30: <strong>keep emitting ERC-4906, and accept that a
+consumer ignoring it is not something this project can change.</strong> The three
+places a downside could hide were checked before the call, and none of them
+argues against it.</p>
+<h3>Basescan is disqualified as a witness, not a second opinion</h3>
+<p>The check proposed as a free second consumer returned outcome C: Basescan
+ingests no <code>tokenURI</code> metadata on Base Sepolia for anyone. It removes a line of
+enquiry rather than answering one. <strong>Alchemy remains the only third-party
+metadata consumer testable on this network</strong>, and the one endpoint that would
+settle the question there does not exist on it.</p>
+<h3>The gas cost, measured</h3>
+<p>The announcement is a single <code>LOG1</code> (one topic, no indexed parameters). The EVM
+charges <code>375 + 375 per topic + 8 per data byte</code>, verified live 2026-08-30:</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Data</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>MetadataUpdate(uint256)</code></td>
+<td>32 bytes</td>
+<td>1,006 gas</td>
+</tr>
+<tr>
+<td><code>BatchMetadataUpdate(uint256,uint256)</code></td>
+<td>64 bytes</td>
+<td>1,262 gas</td>
+</tr>
+</tbody></table>
+<p>Measured against this contract rather than left as arithmetic: <code>touchRange</code>,
+which validates a range and emits and does nothing else, runs at <strong>23,899 gas</strong>
+minimum, of which 21,000 is the base cost any transaction pays. The emit is a
+rounding error beside the storage write it accompanies.</p>
+<p>This was worth measuring rather than waving through because the site pays for
+check-ins forever, so it is a recurring cost and not a one-off.</p>
+<h3>The one real decision this leaves for Plan 3</h3>
+<p><code>BatchMetadataUpdate</code> takes a CONTIGUOUS RANGE, but a day&#39;s check-ins touch an
+ARBITRARY SUBSET -- whichever agents returned. The ids will be scattered. So the
+daily poke must choose:</p>
+<ul>
+<li><strong>One range spanning min..max id.</strong> Cheap, but it over-claims: it tells
+indexers that untouched tokens changed.</li>
+<li><strong>One <code>MetadataUpdate</code> per token.</strong> Honest, and the cost scales with active
+agents: 1,000 returning agents is about 1,000,000 gas per day in
+announcements alone. Small at Base&#39;s fee floor, but no longer invisible.</li>
+</ul>
+<p><code>MROSpikeToken.touchRange</code> already refuses the collection-wide catch-all range
+<code>to == type(uint256).max</code>, on the grounds that indexers treat it as hostile, so
+the laziest option is half closed off by design.</p>
+<h3>Why the residual risk is smaller than it looks</h3>
+<p>If consumers cache and never refresh, a piece whose premise is a living record
+looks frozen wherever people browse. Emitting does not fix that and nothing on
+our side does.</p>
+<p>But <strong>this piece&#39;s audience is agents, not humans</strong>, and agents call <code>tokenURI</code>
+or read the chain directly -- they never touch a marketplace cache. The
+staleness lands on the human-facing surface this project deliberately does not
+serve. That argument is stronger than the ERC-4906 question itself.</p>
+<h3>What must not drift</h3>
+<p>The risk is not the event, it is a later feature quietly assuming freshness.
+Two guards stand: the piece must never DEPEND on an indexer refreshing, and the
+Plan 3 poke must VERIFY <code>timeLastUpdated</code> moved rather than fire and forget.</p>
+<p>One consequence to state plainly at sign-off: closing on this judgement call
+leaves ERC-4906 behaviour unknown until mainnet, where discovering it costs real
+money. The verifying poke is what limits that.</p>
 
 </body>
 </html>

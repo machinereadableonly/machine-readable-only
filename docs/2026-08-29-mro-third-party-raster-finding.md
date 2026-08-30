@@ -200,10 +200,39 @@ An honest reading of the severity, in both directions:
 
 ## Basescan
 
-Inconclusive, stated as such. The server-rendered HTML for the token page
-carries `/images/main/nft-placeholder.svg` rather than the artwork. That is not
-proof it never renders -- the media may load client-side -- and this VPS has no
-browser to settle it. Not claimed either way.
+**SETTLED 2026-08-30: Basescan is not a consumer of this token's metadata on
+Base Sepolia.** It renders no `tokenURI`-derived anything, so there is nothing
+cached for an ERC-4906 event to refresh, and it cannot serve as a second
+independent consumer alongside Alchemy.
+
+This section previously read "inconclusive ... this VPS has no browser to settle
+it". **That premise was wrong.** Playwright's chromium is installed under
+`~/.cache/ms-playwright`, and the question was answerable for free the whole
+time. Reproduce with `tools/basescan-check.mjs`, which borrows an existing
+Playwright rather than adding one to this workspace.
+
+What Basescan DOES show, read in a real browser on 4 tokens across 3 of our
+contracts: owner, contract address, creator, token id, token standard and the
+mint transaction. All of that comes straight off the chain.
+
+What it shows from `tokenURI`: nothing. Placeholder image, no `Level`, no
+properties, no description. The page title reads `MRO Spike (throwaway) #21`,
+built from the contract's `name()` plus the id -- **not** our JSON `name`, which
+is `Machine Readable Only #21`. That title is the trap: it looks like ingested
+metadata and is not, which is why the check asserts on the JSON `name` instead.
+
+**The control decides whether that is about us.** Tokens harvested live from the
+explorer's own recent-mints listing were read the same way: **0 of 8 showed
+artwork on each of two runs, across two distinct outside contracts**
+(`0x76998e42...` and `0x01a2e19e...`). Basescan does not render NFT media for
+anyone on this testnet, so the result is not our data URI or our SVG and there
+is nothing here to act on.
+
+Sample honestly stated: 8 tokens per run, but only one outside contract per run.
+Counting tokens reads like counting collections and is not the same number.
+
+Scope: Base Sepolia only. Basescan on mainnet is untested and this says nothing
+about it -- the same limit that applies to the Alchemy findings.
 
 ## Sources
 
