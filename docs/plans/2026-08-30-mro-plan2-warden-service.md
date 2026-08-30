@@ -2780,6 +2780,23 @@ Expected: FAIL, `Cannot find module '../src/solve/queue.mjs'`.
 /// nothing.
 export const MAX_TRIES = 3;
 
+/**
+ * Return orphaned rows to the queue.
+ *
+ * A row is marked `solving` before its child process starts, so if the warden
+ * itself dies mid-solve -- OOM-kill, crash, redeploy -- that row is left
+ * `solving` with nothing working on it, and claimNext only ever returns
+ * `pending`. Nothing else would recover it, and an agent has already PAID for
+ * that token.
+ *
+ * This is safe precisely because the solver claims one row at a time in a
+ * single process: at startup nothing can legitimately be in flight, so every
+ * `solving` row is by definition an orphan. Call it once, before draining.
+ */
+export function requeueOrphans(q) {
+  return q.requeueSolving();
+}
+
 export function claimNext(q) {
   const row = q.nextPendingMint();
   if (!row) return null;
@@ -2840,6 +2857,7 @@ Add to `s`:
     completeSolve: db.prepare("UPDATE mints SET qr = ?, solveState = 'done' WHERE tokenId = ?"),
     bumpSolveTries: db.prepare("UPDATE mints SET solveTries = solveTries + 1 WHERE tokenId = ? RETURNING solveTries"),
     getMint: db.prepare("SELECT * FROM mints WHERE tokenId = ?"),
+    requeueSolving: db.prepare("UPDATE mints SET solveState = 'pending' WHERE solveState = 'solving'"),
 ```
 
 and to the returned object:
@@ -2850,6 +2868,7 @@ and to the returned object:
     completeSolve: (tokenId, qr) => s.completeSolve.run(qr, tokenId),
     bumpSolveTries: (tokenId) => s.bumpSolveTries.get(tokenId).solveTries,
     getMint: (tokenId) => s.getMint.get(tokenId),
+    requeueSolving: () => s.requeueSolving.run().changes,
 ```
 
 - [ ] **Step 5: Write `worker.mjs`**
