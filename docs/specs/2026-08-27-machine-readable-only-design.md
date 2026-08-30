@@ -179,7 +179,7 @@ Seed agent (PM2)        --runs mro-agent-->  the same door as everyone else
 | **Door** | nginx serves `door.html` to browsers, `/llms.txt`, `/client.mjs`, and the MRO key directory (site agent's key plus every registered visitor key); proxies everything else to the Warden | existing nginx + certbot + Cloudflare Full (Strict) + origin lock |
 | **Warden** | Verifies signatures, issues challenges, registers keys, hosts the MCP server, keeps the mirror, queues accepted actions | PM2 fork, `127.0.0.1:3006` |
 | **Contract** | ERC-721 on Base; holds per-token state; enforces one credit per day and the Mark catalogue; delegates drawing to the Renderer | `MachineReadableOnly.sol` + `Renderer.sol`, Foundry |
-| **Clock** | Once a day writes the queue to the chain in batches, reconciles the mirror against chain events, then composes and sends the daily X post | cron, `node dist/clock.js` |
+| **Clock** | Once a day writes the queue to the chain in batches, reconciles the mirror against chain events, then composes and sends the daily X post | cron, `node src/clock.mjs` |
 | **Reference client** | `mro-agent` on npm, also served at `/client.mjs`: key generation, registration, challenge, signing `fetch`, MCP calls, x402 payment, daemon mode | runs on the visitor's machine; the seed agent runs the same code |
 
 **Trust boundary, stated plainly:** the contract believes the Warden for mints,
@@ -300,7 +300,7 @@ and outputs, so an agent can discover it and call it like a function.
 - Endpoint `/mcp`, Streamable HTTP transport, **spec version 2026-07-28**
   (final). Built on `@modelcontextprotocol/server` 2.0 with
   `@modelcontextprotocol/node` (`createMcpHandler` + `toNodeHandler`, fresh
-  server per request), input schemas in Zod v4 (`import * as z from "zod/v4"`).
+  server per request), input schemas in Zod 4 (`import * as z from "zod"`; the resolved version under `@modelcontextprotocol/server` 2.0.0 is 4.5.4, so the `zod/v4` compatibility subpath is not needed).
 - The 2026-07-28 transport requires `Mcp-Method` on every request, `Mcp-Name`
   on `tools/call` and `resources/read`, and `MCP-Protocol-Version`. There are
   no sessions and no `initialize` handshake.
@@ -553,9 +553,9 @@ asked for, so it exists exactly as long as Base does.
 
 ### What is drawn
 
-- **Canvas:** a fixed grid of roughly 45 x 45 cells (exact geometry fixed in
+- **Canvas:** a fixed grid of 51 x 51 cells (exact geometry fixed in
   the build plan and stored as a constant).
-- **The code (robot heart):** a 29 x 29 QR, version 3, error correction L,
+- **The code (robot heart):** a 37 x 37 QR, version 5, error correction L,
   centred, **static**. Payload: `https://<domain>/t/<tokenId>`, a public
   unsigned JSON-only route returning the token's live state, its contract
   address and the skill URL (no HTML, so the no-text rule holds). A scanned
@@ -668,7 +668,11 @@ with its own approval.
 No maintained Solidity QR encoder exists (verified 2026-08-27). The Warden
 computes the bitmap once at mint; the contract stores and draws it. Anyone can
 regenerate it from the payload and confirm it matches. The Warden's tests
-round-trip every bitmap through a decoder (`jsqr`).
+round-trip every bitmap through ZXing, which is the oracle;
+`jsqr` is kept only to assert the two agree, and a divergence is a bug. Measured
+2026-08-28: `jsqr` stops at the first non-text byte and reported a clean
+24-character URL where ZXing returned all 101, so a code that "passed" 25 tests
+failed on every real phone.
 
 ---
 
@@ -934,10 +938,11 @@ test decodes the base64 twice and asserts cell count, colour, rings and mark
 elements for given state. `forge build --sizes` positive margin for both
 contracts; strict-limit anvil deploy with non-empty `cast code`.
 
-### Warden and client (Vitest)
+### Warden and client (`node:test`)
 
-Signature verification against the RFC 9421 Ed25519 test vectors shipped with
-`web-bot-auth`; required-components rejection; stateless challenge validity,
+Signature verification against the RFC 9421 Ed25519 test vectors from
+Cloudflare's `web-bot-auth` repository, VENDORED into `warden/test/vectors/`
+because the npm tarball ships only `dist/` and `README.md`; required-components rejection; stateless challenge validity,
 expiry and single use; key registration and directory regeneration; SSRF guard
 against private ranges; each tool's success and every `reason`; the live
 rebind re-check; unique-index behaviour under 100 concurrent `checkin` calls;
