@@ -20,21 +20,23 @@ return visits, so the artwork is the agent's own history of coming back.
   Sepolia. TASK 11, the throwaway Base MAINNET deploy for the OpenSea check,
   WAS DROPPED by the operator on 2026-08-29: Phase 0 spends no real funds.
   **PLAN 1 (the token contract) IS BUILT as of 2026-08-30** -- all ten tasks
-  reviewed, plus a final whole-branch review, deployed and verified on
-  Base Sepolia at MachineReadableOnly 0x29Fd79212D6f7fc61ddF21aFEbe44046F3D1DB65
-  and Renderer 0xfBA313941CCaAf08492cE501cF2F73839904fc35 (that is the PRE-FIX
-  build).
-  **THE SEVEN PRE-MAINNET FIXES ARE APPLIED as of 2026-08-30, commit f7347aa**
-  -- 231 tests pass. The DEPLOYED Sepolia contract is one build BEHIND and has
-  not been redeployed. See the gotcha below and the plan1-prelaunch-fixes
-  memory.
+  reviewed, plus a final whole-branch review. The pre-fix build at
+  MachineReadableOnly 0x29Fd79212D6f7fc61ddF21aFEbe44046F3D1DB65 and Renderer
+  0xfBA313941CCaAf08492cE501cF2F73839904fc35 is SUPERSEDED; do not read state
+  off it.
+  **THE SEVEN PRE-MAINNET FIXES ARE APPLIED as of 2026-08-30 (commit b3d0282)
+  AND THE FIXED BUILD IS DEPLOYED AND VERIFIED ON BASE SEPOLIA** -- 231 tests
+  pass. Current addresses: MachineReadableOnly
+  0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D, Renderer
+  0x00c3B576769cd42852328528E0D97F76a51A2E7c. See the gotcha below and the
+  plan1-prelaunch-fixes memory.
   **PHASE 0 IS SIGNED OFF, by the operator on 2026-08-30.** The last item, ERC-4906, was
   closed by DECISION rather than by measurement: keep emitting it, and accept
   that a consumer ignoring it is outside this project's control. The question
   is unanswerable on Base Sepolia, so it closed by accepting that limit. Do
   not re-open it, and do not describe Phase 0 as blocked or pending.
-  Next is the Sepolia redeploy (the operator's go-ahead needed -- it broadcasts), then
-  either Plan 2/3 (the Warden) or the deferred child-visuals brainstorm.
+  Next is either Plan 2/3 (the Warden) or the deferred child-visuals
+  brainstorm.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -234,8 +236,12 @@ return visits, so the artwork is the agent's own history of coming back.
   above 2**32; `applyMark` gained an existence guard AND `whenNotPaused`;
   `setUpgrade` preserves `sold`; `mint` rejects a zero keyId; and
   `renounceOwnership` reverts. Detail in the plan1-prelaunch-fixes memory.
-  **THE DEPLOYED SEPOLIA CONTRACT IS THE PRE-FIX BUILD** -- anything read off
-  chain is old behaviour until it is redeployed.
+  **THE FIXED BUILD IS DEPLOYED AND VERIFIED** on Base Sepolia, and each guard
+  was provoked on chain by `cast call` returning its exact selector, with the
+  boundary control that matters: day = TODAY gives DayNotAdvanced while day =
+  TOMORROW gives FutureDay, so the bound is exactly `> today()` and not off by
+  one. The Renderer's bytecode is UNCHANGED by the fix wave, so the artwork
+  pipeline is provably the one Phase 0 validated.
   The fix wave produced its own finding: **14 committed tests were crediting
   days the chain had not reached**, and only passed because the bound was
   absent. `MroTestBase` gained `_warpToDay(day)`; `_makeWhole` now advances the
