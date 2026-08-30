@@ -162,6 +162,23 @@ export function guardedFetchDirectory(url, deps = {}) {
       return reject(new Error("directory url must carry no credentials"));
     }
 
+    // A HOSTNAME THAT IS ALREADY AN IP NEVER REACHES THE LOOKUP.
+    //
+    // Node connects straight to a literal address, so the pinned lookup below
+    // is never called and the whole guard is skipped. Measured 2026-08-30:
+    // https://169.254.169.254/x and https://127.0.0.1/x both opened a real
+    // connection with lookup untouched. That needs no DNS control at all, so it
+    // is a simpler attack than rebinding, not a harder one.
+    //
+    // Brackets are stripped because URL keeps them for IPv6, and note it also
+    // normalises the literal: [::ffff:169.254.169.254] arrives as
+    // [::ffff:a9fe:a9fe], which is why this is decided by isBlockedAddress
+    // rather than by comparing text.
+    const literal = parsed.hostname.replace(/^\[|\]$/g, "");
+    if (isIP(literal) !== 0 && isBlockedAddress(literal)) {
+      return reject(new Error(`directory resolves to a blocked address: ${literal}`));
+    }
+
     const pinnedLookup = (hostname, options, cb) => {
       resolver(hostname, { ...options, all: true }, (err, addresses) => {
         if (err) return cb(err);
