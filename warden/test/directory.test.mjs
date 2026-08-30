@@ -24,11 +24,48 @@ test("the directory renders every registered key as a JWKS", async () => {
 // Each of these is an address a fetch must never reach. Loopback and the
 // 169.254.169.254 metadata address are the two that turn a directory fetch
 // into a way to read this machine.
-for (const addr of ["127.0.0.1", "::1", "10.0.0.5", "192.168.1.1", "172.16.0.1", "169.254.169.254", "0.0.0.0"]) {
+//
+// The IPv6 spellings are not padding. A text-prefix version of this guard
+// shipped and let EVERY one of these through in ::ffff: form, with the fetch
+// genuinely made. An agent registering its own domain controls its own AAAA
+// records, so it picks the spelling.
+for (const addr of [
+  "127.0.0.1", "::1", "10.0.0.5", "192.168.1.1", "172.16.0.1", "169.254.169.254", "0.0.0.0",
+  "100.64.0.1", "224.0.0.1",
+  "::ffff:169.254.169.254", "::ffff:127.0.0.1", "::ffff:10.0.0.1",
+  "0:0:0:0:0:ffff:169.254.169.254", "::ffff:a9fe:a9fe", "::127.0.0.1",
+  "fe80::1", "fe80::1%eth0", "fc00::1", "fd12:3456::1", "ff02::1",
+  "64:ff9b::a9fe:a9fe", "2002:a9fe:a9fe::1", "::",
+]) {
   test(`${addr} is blocked`, () => assert.equal(isBlockedAddress(addr), true));
 }
 
-test("a public address is allowed", () => assert.equal(isBlockedAddress("93.184.216.34"), false));
+// A guard must fail CLOSED on what it cannot parse. The first version returned
+// "not blocked" for any string that was not a dotted quad.
+for (const junk of ["", "garbage", "not-an-ip", "999.999.999.999"]) {
+  test(`unparseable input ${JSON.stringify(junk)} is blocked`, () =>
+    assert.equal(isBlockedAddress(junk), true));
+}
+
+// The control: a guard that blocks everything is not a guard.
+for (const ok of ["93.184.216.34", "8.8.8.8", "2606:2800:220:1:248:1893:25c8:1946", "2001:4860:4860::8888"]) {
+  test(`public address ${ok} is allowed`, () => assert.equal(isBlockedAddress(ok), false));
+}
+
+test("a directory that resolves to an IPv4-mapped IPv6 metadata address is refused", async () => {
+  // End to end through the guard, not just the predicate: this is the exact
+  // shape that was measured getting through.
+  let fetched = false;
+  await assert.rejects(
+    () =>
+      guardedFetchDirectory("https://evil.example.com/x", {
+        resolve: async () => ["::ffff:169.254.169.254"],
+        fetch: async () => { fetched = true; return new Response("{}", { status: 200 }); },
+      }),
+    /address/i
+  );
+  assert.equal(fetched, false, "fetch must never be reached for a blocked address");
+});
 
 test("a non-https directory URL is refused", async () => {
   await assert.rejects(
