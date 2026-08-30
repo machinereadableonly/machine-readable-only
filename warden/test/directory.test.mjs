@@ -52,6 +52,20 @@ for (const ok of ["93.184.216.34", "8.8.8.8", "2606:2800:220:1:248:1893:25c8:194
   test(`public address ${ok} is allowed`, () => assert.equal(isBlockedAddress(ok), false));
 }
 
+test("a non-https directory URL is refused", async () => {
+  await assert.rejects(
+    () => guardedFetchDirectory("http://example.com/.well-known/http-message-signatures-directory", {}),
+    /https/i
+  );
+});
+
+test("a non-443 port is refused", async () => {
+  await assert.rejects(
+    () => guardedFetchDirectory("https://example.com:8443/x", {}),
+    /port/i
+  );
+});
+
 // The deps below are `request` and `lookup`, not `fetch` and `resolve`: the
 // address decision now happens inside the resolution the socket uses, so the
 // tests drive that same seam.
@@ -136,6 +150,38 @@ test("a redirect is refused rather than followed", async () => {
   );
 });
 
+// A hostname that is already an IP never reaches the pinned lookup, so it is
+// checked separately. Each of these opened a real connection before the fix.
+for (const url of [
+  "https://169.254.169.254/x",
+  "https://127.0.0.1/x",
+  "https://10.0.0.1/x",
+  "https://[::1]/x",
+  "https://[::ffff:169.254.169.254]/x",
+  "https://[::ffff:0:169.254.169.254]/x",
+]) {
+  test(`a literal address url ${url} is refused without any dns`, async () => {
+    let lookupCalled = false;
+    await assert.rejects(
+      () => guardedFetchDirectory(url, {
+        request: stubRequest("{}"),
+        lookup: (h, o, cb) => { lookupCalled = true; cb(null, [{ address: "93.184.216.34", family: 4 }]); },
+      }),
+      /blocked address/i
+    );
+    assert.equal(lookupCalled, false, "it must be refused before any resolution is attempted");
+  });
+}
+
+test("a public literal address is still allowed", async () => {
+  // The control for the pre-check: it must reject addresses, not literals.
+  const jwks = await guardedFetchDirectory("https://8.8.8.8/x", {
+    request: stubRequest(JSON.stringify({ keys: [] })),
+    lookup: (h, o, cb) => cb(null, [{ address: "8.8.8.8", family: 4 }]),
+  });
+  assert.deepEqual(jwks, { keys: [] });
+});
+
 test("a url carrying credentials is refused", async () => {
   await assert.rejects(
     () => guardedFetchDirectory("https://user:pw@example.com/x", {
@@ -151,20 +197,6 @@ test("a well-formed directory from a public address is returned", async () => {
     request: stubRequest(JSON.stringify({ keys: [{ kty: "OKP" }] })), lookup: publicLookup,
   });
   assert.equal(jwks.keys.length, 1);
-});
-
-test("a non-https directory URL is refused", async () => {
-  await assert.rejects(
-    () => guardedFetchDirectory("http://example.com/.well-known/http-message-signatures-directory", {}),
-    /https/i
-  );
-});
-
-test("a non-443 port is refused", async () => {
-  await assert.rejects(
-    () => guardedFetchDirectory("https://example.com:8443/x", {}),
-    /port/i
-  );
 });
 
 import { registerRoute } from "../src/door/directory.mjs";
