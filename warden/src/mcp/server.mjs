@@ -16,6 +16,8 @@ import { makeRebindTool } from "./tools/rebind.mjs";
 import { makeRestTool } from "./tools/rest.mjs";
 import { makeSeedTool } from "./tools/seed.mjs";
 import { makeChallengeTool } from "./tools/challenge.mjs";
+import { makeMintTool } from "./tools/mint.mjs";
+import { makeUpgradeTool } from "./tools/upgrade.mjs";
 import { registerResources } from "./resources.mjs";
 
 export function makeMcpHandler(deps) {
@@ -30,7 +32,19 @@ export function makeMcpHandler(deps) {
       // let one agent act as another.
       const keyId = ctx.authInfo?.extra?.keyId ?? null;
 
-      for (const make of [makeChallengeTool, makeStatusTool, makeCheckinTool, makeRebindTool, makeRestTool, makeSeedTool]) {
+      // EVERY tool this service has, the paid two included. They were built
+      // after this list and were never added to it, so `mint` and `upgrade`
+      // existed, were tested, and were unreachable: tools/list named six, and
+      // a call to either got JSON-RPC -32602 "Tool mint not found". Since
+      // minting is the only way in, that made the whole piece unenterable.
+      // Caught by the end-to-end test, which is the only one that reads the
+      // live tool surface rather than calling a tool factory directly.
+      // Both paid tools need `deps.paid` from makePaid(); without it they are
+      // registered but every call refuses.
+      for (const make of [
+        makeChallengeTool, makeStatusTool, makeCheckinTool, makeRebindTool,
+        makeRestTool, makeSeedTool, makeMintTool, makeUpgradeTool,
+      ]) {
         const tool = make(deps);
         server.registerTool(tool.name, tool.config, async (args, mcpCtx) => {
           deps.onToolCall?.(tool.name, keyId);
