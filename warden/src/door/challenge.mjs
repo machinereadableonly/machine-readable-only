@@ -36,15 +36,17 @@ export function issueChallenge(secret, now = Date.now()) {
 }
 
 /**
- * Check a challenge and the caller's answer.
+ * Is this a `nonce.unix-ms.hmac` triple THIS server minted, and is it still
+ * fresh?
  *
- * `seen` gives burn-after-use. It only ever holds challenges from the last five
- * seconds, so it stays small; the caller sweeps it.
+ * Split out of `checkChallenge` so the entry challenge and key registration
+ * share one minting-and-freshness check rather than two: registration reuses
+ * this exact function as its nonce, instead of inventing a second mechanism.
+ * It does not burn the nonce -- that is the caller's job, because the entry
+ * challenge and registration burn into different sets for different reasons.
  */
-export function checkChallenge(secret, challenge, answer, keyId, now = Date.now(), seen) {
-  if (typeof challenge !== "string" || typeof answer !== "string") {
-    return { ok: false, reason: "challenge" };
-  }
+export function verifyNonceMinted(secret, challenge, now = Date.now()) {
+  if (typeof challenge !== "string") return { ok: false, reason: "challenge" };
 
   const parts = challenge.split(".");
   if (parts.length !== 3) return { ok: false, reason: "challenge" };
@@ -58,6 +60,23 @@ export function checkChallenge(secret, challenge, answer, keyId, now = Date.now(
   if (!Number.isFinite(issuedAt) || now - issuedAt > CHALLENGE_MS || now < issuedAt) {
     return { ok: false, reason: "expired" };
   }
+
+  return { ok: true };
+}
+
+/**
+ * Check a challenge and the caller's answer.
+ *
+ * `seen` gives burn-after-use. It only ever holds challenges from the last five
+ * seconds, so it stays small; the caller sweeps it.
+ */
+export function checkChallenge(secret, challenge, answer, keyId, now = Date.now(), seen) {
+  if (typeof answer !== "string") {
+    return { ok: false, reason: "challenge" };
+  }
+
+  const minted = verifyNonceMinted(secret, challenge, now);
+  if (!minted.ok) return minted;
 
   if (seen.has(challenge)) return { ok: false, reason: "challenge" };
 

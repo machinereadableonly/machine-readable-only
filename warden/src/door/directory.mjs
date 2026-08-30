@@ -65,6 +65,10 @@ function blockedV4(a, b) {
   if (a === 192 && b === 168) return true;               // private
   if (a === 169 && b === 254) return true;               // link-local, and the metadata address
   if (a === 100 && b >= 64 && b <= 127) return true;     // carrier-grade NAT
+  if (a === 192 && b === 0) return true;                 // IETF protocol assignments, TEST-NET-1
+  if (a === 198 && (b === 18 || b === 19)) return true;  // benchmarking
+  if (a === 198 && b === 51) return true;                // TEST-NET-2
+  if (a === 203 && b === 0) return true;                 // TEST-NET-3
   if (a >= 224) return true;                             // multicast and reserved
   return false;
 }
@@ -109,14 +113,21 @@ export function isBlockedAddress(addr) {
   // and nothing globally routable does. Deciding the whole range at once by
   // reading the trailing IPv4 means no form can be forgotten, because no form
   // has to be named.
-  if (zeros(8)) {
+  // ALL OF ::/8 IS RESERVED SPACE, so it is decided in one place.
+  //
+  // ::/64 is the part that carries an embedded IPv4, and it is judged by that
+  // address. Everything else under ::/8 -- NAT64 at 64:ff9b::, the reserved
+  // ::ffff:0:0:a.b.c.d shape, and anything not yet invented -- is simply
+  // refused. Enumerating embedding forms one branch at a time was wrong twice
+  // on this project; refusing the whole reserved block means there is no next
+  // form to miss.
+  if (bytes[0] === 0x00) {
+    if (!zeros(8)) return true;                                  // reserved, and not a global address
     if (zeros(16)) return true;                                  // ::
     if (zeros(15) && bytes[15] === 1) return true;               // ::1
-    return blockedV4(bytes[12], bytes[13]);
+    return blockedV4(bytes[12], bytes[13]);                      // ::a.b.c.d, ::ffff:a.b.c.d
   }
-  if (bytes[0] === 0x00 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b) {
-    return true;                                                 // 64:ff9b::/96, NAT64
-  }
+  if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0xc0) return true; // fec0::/10, site-local
   if (bytes[0] === 0x20 && bytes[1] === 0x02) {
     return blockedV4(bytes[2], bytes[3]);                        // 2002::/16, 6to4
   }
@@ -287,10 +298,34 @@ export function renderDirectory(q) {
  * from the mirror. Otherwise the agent's own directory is fetched and cached
  * for an hour.
  */
+/// How many third-party directories are remembered at once. The key is a value
+/// an unauthenticated caller chooses, so it cannot be allowed to grow forever.
+const MAX_CACHED_DIRECTORIES = 256;
+
+/// Remember one directory result, evicting the oldest entry when full.
+function rememberDirectory(cache, url, entry) {
+  if (cache.size >= MAX_CACHED_DIRECTORIES && !cache.has(url)) {
+    cache.delete(cache.keys().next().value);
+  }
+  cache.set(url, entry);
+}
+
 export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map()) {
   return async function lookupKey(keyId, signatureAgent) {
     const agent = typeof signatureAgent === "string" ? signatureAgent.replace(/^"|"$/g, "") : null;
-    const isOurs = !agent || agent.includes(ourDomain);
+
+    // WHOSE DIRECTORY IS THIS? Decided by exact hostname, never by substring.
+    // `agent.includes(ourDomain)` treated https://attacker.net/?x=our.domain as
+    // ours, and refused a legitimate third party whose own hostname happened to
+    // contain our domain.
+    let isOurs = !agent;
+    if (agent) {
+      try {
+        isOurs = new URL(agent).hostname === ourDomain;
+      } catch {
+        return null;                                   // not a url: refuse, fail closed
+      }
+    }
 
     if (isOurs) {
       const row = q.getKey(keyId);
@@ -300,16 +335,27 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map()) {
     const url = new URL("/.well-known/http-message-signatures-directory", agent).toString();
     const hit = cache.get(url);
     const now = Date.now();
+
+    // A cached entry is trusted for an hour, so a key removed from an agent's
+    // own directory keeps verifying for up to that long. That is the deliberate
+    // revocation window, and it is the reason `rebind` exists on chain rather
+    // than here: identity changes are settled by the contract, not by this
+    // cache.
     let jwks;
     if (hit && now - hit.at < 3_600_000) {
+      if (hit.failed) return null;                     // a remembered failure
       jwks = hit.jwks;
     } else {
+      // Failures are remembered too. Without that, every unauthenticated
+      // request naming an unreachable directory becomes one outbound request,
+      // which is a timing-observable prober pointed wherever the caller likes.
       try {
         jwks = await fetchDirectory(url);
       } catch {
+        rememberDirectory(cache, url, { failed: true, at: now });
         return null;
       }
-      cache.set(url, { jwks, at: now });
+      rememberDirectory(cache, url, { jwks, at: now });
     }
 
     for (const jwk of jwks?.keys ?? []) {
@@ -330,11 +376,20 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map()) {
  * `allow` is the rate-limiting decision, passed in so the policy lives with the
  * route and the check stays testable without a clock.
  */
-export async function registerRoute(q, { jwk, nonce, proof }, allow) {
+export async function registerRoute(q, { jwk, nonce, proof }, allow, checkNonce) {
   if (!allow()) return { ok: false, reason: "rate-limited" };
   if (!jwk || typeof nonce !== "string" || typeof proof !== "string" || proof === "") {
     return { ok: false, reason: "proof" };
   }
+
+  // THE NONCE MUST BE ONE THIS SERVER ISSUED, AND IT IS SPENT HERE.
+  //
+  // Without this the proof shows only that the caller holds the key, not that
+  // the exchange is fresh: measured 2026-08-30, a nonce the caller invented was
+  // accepted, and a captured {jwk, nonce, proof} triple replayed verbatim. With
+  // INSERT OR REPLACE behind it, a replay also rewrites the stored directory
+  // and registration time.
+  if (!checkNonce(nonce)) return { ok: false, reason: "nonce" };
 
   let verified = false;
   try {
