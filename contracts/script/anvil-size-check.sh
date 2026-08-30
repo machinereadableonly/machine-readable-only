@@ -13,7 +13,8 @@ export PATH="$HOME/.foundry/bin:$PATH"
 cd "$(dirname "$0")/.."
 
 # Anvil's account 0. Published in Foundry's own documentation; it funds nothing
-# but a throwaway local chain that this script kills on the way out.
+# but a throwaway local chain that this script kills on the way out. Doubles
+# as the Warden below, so the same key that deploys can also check in.
 KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 anvil --silent --code-size-limit 24576 &
@@ -34,13 +35,19 @@ forge build >/dev/null
 #    come last on the line.
 addr() { sed -n '/^{/,$p' | jq -er '.deployedTo'; }
 
+WARDEN=$(cast wallet address --private-key "$KEY")
+
 R=$(forge create src/render/Renderer.sol:Renderer \
       --rpc-url local --private-key "$KEY" --broadcast --json | addr)
-T=$(forge create src/spike/MROSpikeToken.sol:MROSpikeToken \
+# MachineReadableOnly is the real, permanent collection contract -- the spike
+# (src/spike/MROSpikeToken.sol) was the Phase 0 rendering throwaway and is
+# superseded by this pair as of Task 8. The Warden here is account 0 itself,
+# so the one key that deployed the contract can also drive the check-in below.
+T=$(forge create src/MachineReadableOnly.sol:MachineReadableOnly \
       --rpc-url local --private-key "$KEY" --broadcast --json \
-      --constructor-args "$R" | addr)
+      --constructor-args "$R" "$WARDEN" | addr)
 
-for pair in "Renderer:$R" "MROSpikeToken:$T"; do
+for pair in "Renderer:$R" "MachineReadableOnly:$T"; do
   name=${pair%%:*}
   addr=${pair#*:}
   # cast code returns "0x" plus a trailing newline for an empty account, and
