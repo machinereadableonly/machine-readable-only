@@ -360,10 +360,33 @@ case is 10,066 bytes and Alchemy stored these SVGs at 7,818 to 8,302 bytes.
 This is the first third-party number this project has.</li>
 </ol>
 <h2>Basescan</h2>
-<p>Inconclusive, stated as such. The server-rendered HTML for the token page
-carries <code>/images/main/nft-placeholder.svg</code> rather than the artwork. That is not
-proof it never renders -- the media may load client-side -- and this VPS has no
-browser to settle it. Not claimed either way.</p>
+<p><strong>SETTLED 2026-08-30: Basescan is not a consumer of this token&#39;s metadata on
+Base Sepolia.</strong> It renders no <code>tokenURI</code>-derived anything, so there is nothing
+cached for an ERC-4906 event to refresh, and it cannot serve as a second
+independent consumer alongside Alchemy.</p>
+<p>This section previously read &quot;inconclusive ... this VPS has no browser to settle
+it&quot;. <strong>That premise was wrong.</strong> Playwright&#39;s chromium is installed under
+<code>~/.cache/ms-playwright</code>, and the question was answerable for free the whole
+time. Reproduce with <code>tools/basescan-check.mjs</code>, which borrows an existing
+Playwright rather than adding one to this workspace.</p>
+<p>What Basescan DOES show, read in a real browser on 4 tokens across 3 of our
+contracts: owner, contract address, creator, token id, token standard and the
+mint transaction. All of that comes straight off the chain.</p>
+<p>What it shows from <code>tokenURI</code>: nothing. Placeholder image, no <code>Level</code>, no
+properties, no description. The page title reads <code>MRO Spike (throwaway) #21</code>,
+built from the contract&#39;s <code>name()</code> plus the id -- <strong>not</strong> our JSON <code>name</code>, which
+is <code>Machine Readable Only #21</code>. That title is the trap: it looks like ingested
+metadata and is not, which is why the check asserts on the JSON <code>name</code> instead.</p>
+<p><strong>The control decides whether that is about us.</strong> Tokens harvested live from the
+explorer&#39;s own recent-mints listing were read the same way: <strong>0 of 8 showed
+artwork on each of two runs, across two distinct outside contracts</strong>
+(<code>0x76998e42...</code> and <code>0x01a2e19e...</code>). Basescan does not render NFT media for
+anyone on this testnet, so the result is not our data URI or our SVG and there
+is nothing here to act on.</p>
+<p>Sample honestly stated: 8 tokens per run, but only one outside contract per run.
+Counting tokens reads like counting collections and is not the same number.</p>
+<p>Scope: Base Sepolia only. Basescan on mainnet is untested and this says nothing
+about it -- the same limit that applies to the Alchemy findings.</p>
 <h2>Sources</h2>
 <ul>
 <li>Alchemy NFT API FAQ, image caching, <code>convert-png</code>, <code>w_NNN/scaled</code>, the
