@@ -19,10 +19,12 @@ return visits, so the artwork is the agent's own history of coming back.
   (see Gotchas) and the spike is deployed and Basescan-verified on Base
   Sepolia. TASK 11, the throwaway Base MAINNET deploy for the OpenSea check,
   WAS DROPPED by the operator on 2026-08-29: Phase 0 spends no real funds.
-  **Phase 0 is NOT signed off.** ERC-4906 (see Gotchas) is the one item left,
-  and it is now a JUDGEMENT CALL for the operator rather than more measurement: the
-  question is unanswerable on Base Sepolia, so it closes by accepting that
-  limit, not by testing further for free.
+  **PHASE 0 IS SIGNED OFF, by the operator on 2026-08-30.** The last item, ERC-4906, was
+  closed by DECISION rather than by measurement: keep emitting it, and accept
+  that a consumer ignoring it is outside this project's control. The question
+  is unanswerable on Base Sepolia, so it closed by accepting that limit. Do
+  not re-open it, and do not describe Phase 0 as blocked or pending.
+  **Plan 1 (the token contract) is what comes next; it has not been written.**
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -41,8 +43,10 @@ return visits, so the artwork is the agent's own history of coming back.
 3. **Read the spec before any MRO work:**
    `docs/specs/2026-08-27-machine-readable-only-design.md`. It is 60 KB;
    read the relevant sections, not a skim.
-4. **Phase 0 comes first.** The rendering spike gates every other plan.
-   Do not start the token contract, Warden, client or Clock until it passes.
+4. **Phase 0 GATE IS PASSED** (signed off 2026-08-30). The rendering spike
+   gated every other plan and no longer does. The token contract, Warden,
+   client and Clock are now open to start. The spike's measured limits still
+   bind the work that follows -- see Gotchas -- but the gate itself is done.
 5. **Do not re-open decided ground.** Free mint, per-token yearly seeding,
    Ethereum / Solana / Monad, and a human-facing gallery are all decided
    against. Do not re-propose them.
@@ -130,7 +134,9 @@ return visits, so the artwork is the agent's own history of coming back.
 - **OpenSea flattens the SVG image to PNG** and needs ERC-4906 events with
   the exact token range, emitted AFTER the write, plus a refresh API call.
   Alchemy's NFT API flattens the same way and DOES run on Base Sepolia, so
-  Task 10c Phase 2 rehearses the same mechanism against a free consumer.
+  Task 10c Phase 2 rehearsed the same mechanism against a free consumer.
+  Alchemy is the ONLY such consumer on that network -- Basescan is not one,
+  measured 2026-08-30. Do not repeat the old "Alchemy and Basescan both" claim.
 - **tokenURI gas WAS the live risk and is now settled.** Measured comparables:
   Loot 572k, Anonymice 24M. Phase 0 targets 1M gas / 5 KB and fails over at
   2M / 20 KB. Measured 2026-08-29 through the token contract on Base Sepolia,
@@ -152,8 +158,29 @@ return visits, so the artwork is the agent's own history of coming back.
   -- then upscales that bitmap, and 54% of the results would not decode.
   Declaring canvas * 16 took that to 3.6%. The grey-level count is the cheap
   diagnostic: the artwork has 3, a resampled copy has 150-208.
-- **ERC-4906 is UNANSWERABLE on Base Sepolia, not answered.** Corrected twice on
-  2026-08-29; do not restate either earlier version. What holds: MetadataUpdate(1)
+- **ERC-4906 is CLOSED BY DECISION (the operator, 2026-08-30): keep emitting it, and
+  accept that a consumer ignoring it is outside this project's control.** The
+  measurements below still stand and still inform Plan 3, but the question is
+  DECIDED and must not be re-opened as an open risk. Cost checked before the
+  call: 1,006 gas per MetadataUpdate, 1,262 batched, against touchRange measured
+  at 23,899 total of which 21,000 is the base any transaction pays.
+  THE ONE ITEM LEFT FOR PLAN 3: BatchMetadataUpdate takes a CONTIGUOUS RANGE
+  but a day's check-ins touch a SCATTERED SUBSET, so the poke must choose
+  between one over-claiming range and one MetadataUpdate per token (about 1M
+  gas/day at 1,000 agents). touchRange already refuses the collection-wide
+  catch-all. The reason the residual risk is small: the audience is AGENTS, who
+  call tokenURI directly and never touch a marketplace cache.
+- **BASESCAN IS NOT A METADATA CONSUMER on Base Sepolia** (measured 2026-08-30,
+  `tools/basescan-check.mjs`). It ingests no tokenURI metadata for anyone there
+  -- control was 0 of 8 tokens with artwork on each of two runs, across two
+  distinct outside contracts -- so ERC-4906 is moot for it and **Alchemy was the
+  only third-party metadata consumer this phase ever had.** Its page title is
+  the contract's name() plus the id, which LOOKS like ingested metadata and is
+  not; assert on the JSON `name`. Playwright chromium is at
+  `~/.cache/ms-playwright` -- borrow it, never install one. Base Sepolia only;
+  mainnet is untested.
+- **The measurements behind that decision, kept for Plan 3.** What holds:
+  MetadataUpdate(1)
   is on chain (blocks 46119616 and 46134224, correct topic), the EIP obliges
   nobody ("a third party CAN update"), and passive staleness of at least 8.2
   hours is confirmed. What is NEW: the dedicated refreshNftMetadata endpoint --

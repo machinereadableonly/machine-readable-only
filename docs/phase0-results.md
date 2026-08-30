@@ -1533,3 +1533,52 @@ Plan 3 poke must VERIFY `timeLastUpdated` moved rather than fire and forget.
 One consequence to state plainly at sign-off: closing on this judgement call
 leaves ERC-4906 behaviour unknown until mainnet, where discovering it costs real
 money. The verifying poke is what limits that.
+
+## Phase 0: SIGNED OFF
+
+**the operator signed Phase 0 off on 2026-08-30.**
+
+Every task in plan revision 2 is complete (Tasks 1-10, plus Task 10b, the state
+soak, and Task 10c Phases 1-3). Task 11, the throwaway Base mainnet deploy for
+the OpenSea check, was dropped on 2026-08-29, so Phase 0 spent no real funds at
+all.
+
+The last open item, ERC-4906, closed by DECISION rather than by measurement:
+keep emitting it, and accept that a consumer ignoring it is not something this
+project can change. See the section above for the costs checked before that
+call.
+
+### What is proven, and what is merely decided
+
+Worth separating, because the two age differently.
+
+PROVEN by measurement:
+
+- The worst-case `tokenURI` fits the 2,000,000 gas / 20,000 byte hard limit,
+  through a real provider. The 1,000,000 / 5,000 target is MISSED and is
+  reported as missed.
+- The artwork decodes through a rasteriser we do not own, at eight widths we
+  did not choose, across the full 26-state soak matrix.
+- Declaring an intrinsic SVG size takes third-party decode failures from 54%
+  to 3.6%, measured A/B on Sepolia.
+- Our ERC-4906 side is correct: the interface is declared, the events fire
+  after the write, and MetadataUpdate is on chain at two verified blocks.
+- Every contract is deployable, with positive runtime margin.
+
+DECIDED, not proven:
+
+- That an indexer ignoring ERC-4906 is acceptable. Alchemy's warm-entry
+  invalidation did nothing on Base Sepolia across three mechanisms, and the one
+  endpoint that reports whether a refresh was accepted does not exist on that
+  network. Mainnet behaviour is UNKNOWN.
+- That OpenSea's display and refresh behaviour is unverified and stays that way
+  until mainnet.
+
+### The standing obligations this hands to later plans
+
+1. The piece must never DEPEND on an indexer refreshing.
+2. The Plan 3 daily poke must VERIFY `timeLastUpdated` moved, not fire and
+   forget.
+3. Plan 3 must choose how to emit for a scattered daily subset.
+4. The QR escape hatch stays: it encodes `https://<domain>/t/<id>`, so a stale
+   thumbnail still scans to the live record.
