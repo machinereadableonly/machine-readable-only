@@ -7,6 +7,8 @@ import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC4906} from "@openzeppelin/contracts/interfaces/IERC4906.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 import {IRenderer} from "./render/IRenderer.sol";
 import {TokenView} from "./render/TokenView.sol";
@@ -19,7 +21,7 @@ import {TokenView} from "./render/TokenView.sol";
 ///
 /// The storage rule that decides the gas bill: the daily write OVERWRITES one
 /// `Token` slot. Nothing is ever keyed by day.
-contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
+contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906 {
     /// @dev Six uint32s (192 bits) plus a bool (8) plus 56 reserved = 256.
     /// Keeping this in one slot is what makes a check-in about 5,000 gas.
     struct Token {
@@ -104,6 +106,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
     constructor(address renderer_, address warden_)
         ERC721("Machine Readable Only", "MRO")
         Ownable(msg.sender)
+        EIP712("MachineReadableOnly", "1")
     {
         _setRenderer(renderer_);
         _setWarden(warden_);
@@ -296,6 +299,69 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
         for (uint256 i = 0; i < n; i++) {
             emit MetadataUpdate(uint256(uint32(bytes4(packedIds[i * 4:i * 4 + 4]))));
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Voucher check-ins: the durability path, shipped disabled
+    // ---------------------------------------------------------------------
+
+    error VouchersDisabled();
+    error BadVoucher();
+
+    event VouchersEnabledSet(bool enabled);
+
+    /// @dev The typed-data hash the Warden signs for one token on one day.
+    bytes32 internal constant VOUCHER_TYPEHASH = keccak256("CheckIn(uint256 id,uint32 day)");
+
+    function setVouchersEnabled(bool enabled) external onlyOwner {
+        vouchersEnabled = enabled;
+        emit VouchersEnabledSet(enabled);
+    }
+
+    /// @notice The digest a Warden signature must cover.
+    /// @dev Exposed so the reference client can build a voucher without
+    /// reimplementing the domain separator.
+    function voucherHash(uint256 id, uint32 day) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(VOUCHER_TYPEHASH, id, day)));
+    }
+
+    /// @notice The durability path: anyone may submit a Warden-signed check-in
+    /// and pay its own gas.
+    /// @dev Ships with `vouchersEnabled` false. It exists from day one because
+    /// the contract has no upgrade path, so a path left out now could never be
+    /// added, and the piece would die with the Warden.
+    ///
+    /// Existence is checked the same way `batchCheckIn` checks it: `level == 0`
+    /// means the id was never minted. Without that guard a voucher for a
+    /// never-minted id would still pass the `day > lastDay` rule against a
+    /// zero struct and silently create Token state for a token nobody owns.
+    ///
+    /// The signer is recovered from `warden`, read fresh from storage on every
+    /// call rather than captured at signing time, so rotating the Warden
+    /// invalidates every voucher the old key already signed.
+    function checkInWithVoucher(uint256 id, uint32 day, bytes calldata wardenSig)
+        external
+        whenNotPaused
+        notSunset
+    {
+        if (!vouchersEnabled) revert VouchersDisabled();
+
+        Token storage s = _tokens[id];
+        if (s.level == 0) revert NoSuchToken(id);
+        if (s.resting) revert Resting(id);
+
+        address signer = ECDSA.recoverCalldata(voucherHash(id, day), wardenSig);
+        if (signer != warden) revert BadVoucher();
+
+        if (day <= s.lastDay) revert DayNotAdvanced(id);
+
+        unchecked {
+            s.level += 1;
+            s.streak = (day == s.lastDay + 1) ? s.streak + 1 : 1;
+        }
+        s.lastDay = day;
+
+        emit MetadataUpdate(id);
     }
 
     // ---------------------------------------------------------------------
