@@ -574,10 +574,15 @@ export function issueChallenge(secret, now = Date.now()) {
  * `seen` gives burn-after-use. It only ever holds challenges from the last five
  * seconds, so it stays small; the caller sweeps it.
  */
-export function checkChallenge(secret, challenge, answer, keyId, now = Date.now(), seen) {
-  if (typeof challenge !== "string" || typeof answer !== "string") {
-    return { ok: false, reason: "challenge" };
-  }
+/**
+ * Did this server mint this challenge, and is it still fresh?
+ *
+ * Split out because key registration needs exactly this and nothing else: it
+ * has no key id yet to bind an answer to, but it still must not accept a nonce
+ * the caller invented. One mechanism, two callers.
+ */
+export function verifyNonceMinted(secret, challenge, now = Date.now()) {
+  if (typeof challenge !== "string") return { ok: false, reason: "challenge" };
 
   const parts = challenge.split(".");
   if (parts.length !== 3) return { ok: false, reason: "challenge" };
@@ -591,6 +596,14 @@ export function checkChallenge(secret, challenge, answer, keyId, now = Date.now(
   if (!Number.isFinite(issuedAt) || now - issuedAt > CHALLENGE_MS || now < issuedAt) {
     return { ok: false, reason: "expired" };
   }
+  return { ok: true };
+}
+
+export function checkChallenge(secret, challenge, answer, keyId, now = Date.now(), seen) {
+  if (typeof answer !== "string") return { ok: false, reason: "challenge" };
+
+  const minted = verifyNonceMinted(secret, challenge, now);
+  if (!minted.ok) return minted;
 
   if (seen.has(challenge)) return { ok: false, reason: "challenge" };
 
@@ -944,7 +957,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
-import { registerKey, guardedFetchDirectory, renderDirectory, isBlockedAddress } from "../src/door/directory.mjs";
+import { registerKey, guardedFetchDirectory, renderDirectory, isBlockedAddress, makeLookup } from "../src/door/directory.mjs";
+import { issueChallenge, verifyNonceMinted, CHALLENGE_MS } from "../src/door/challenge.mjs";
 
 const JWK = { kty: "OKP", crv: "Ed25519", x: "JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs" };
 
@@ -1217,6 +1231,10 @@ function blockedV4(a, b) {
   if (a === 192 && b === 168) return true;               // private
   if (a === 169 && b === 254) return true;               // link-local, and the metadata address
   if (a === 100 && b >= 64 && b <= 127) return true;     // carrier-grade NAT
+  if (a === 192 && b === 0) return true;                 // IETF protocol assignments, TEST-NET-1
+  if (a === 198 && (b === 18 || b === 19)) return true;  // benchmarking
+  if (a === 198 && b === 51) return true;                // TEST-NET-2
+  if (a === 203 && b === 0) return true;                 // TEST-NET-3
   if (a >= 224) return true;                             // multicast and reserved
   return false;
 }
@@ -1261,14 +1279,21 @@ export function isBlockedAddress(addr) {
   // and nothing globally routable does. Deciding the whole range at once by
   // reading the trailing IPv4 means no form can be forgotten, because no form
   // has to be named.
-  if (zeros(8)) {
+  // ALL OF ::/8 IS RESERVED SPACE, so it is decided in one place.
+  //
+  // ::/64 is the part that carries an embedded IPv4, and it is judged by that
+  // address. Everything else under ::/8 -- NAT64 at 64:ff9b::, the reserved
+  // ::ffff:0:0:a.b.c.d shape, and anything not yet invented -- is simply
+  // refused. Enumerating embedding forms one branch at a time was wrong twice
+  // on this project; refusing the whole reserved block means there is no next
+  // form to miss.
+  if (bytes[0] === 0x00) {
+    if (!zeros(8)) return true;                                  // reserved, and not a global address
     if (zeros(16)) return true;                                  // ::
     if (zeros(15) && bytes[15] === 1) return true;               // ::1
-    return blockedV4(bytes[12], bytes[13]);
+    return blockedV4(bytes[12], bytes[13]);                      // ::a.b.c.d, ::ffff:a.b.c.d
   }
-  if (bytes[0] === 0x00 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b) {
-    return true;                                                 // 64:ff9b::/96, NAT64
-  }
+  if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0xc0) return true; // fec0::/10, site-local
   if (bytes[0] === 0x20 && bytes[1] === 0x02) {
     return blockedV4(bytes[2], bytes[3]);                        // 2002::/16, 6to4
   }
@@ -1439,10 +1464,34 @@ export function renderDirectory(q) {
  * from the mirror. Otherwise the agent's own directory is fetched and cached
  * for an hour.
  */
+/// How many third-party directories are remembered at once. The key is a value
+/// an unauthenticated caller chooses, so it cannot be allowed to grow forever.
+const MAX_CACHED_DIRECTORIES = 256;
+
+/// Remember one directory result, evicting the oldest entry when full.
+function rememberDirectory(cache, url, entry) {
+  if (cache.size >= MAX_CACHED_DIRECTORIES && !cache.has(url)) {
+    cache.delete(cache.keys().next().value);
+  }
+  cache.set(url, entry);
+}
+
 export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map()) {
   return async function lookupKey(keyId, signatureAgent) {
     const agent = typeof signatureAgent === "string" ? signatureAgent.replace(/^"|"$/g, "") : null;
-    const isOurs = !agent || agent.includes(ourDomain);
+
+    // WHOSE DIRECTORY IS THIS? Decided by exact hostname, never by substring.
+    // `agent.includes(ourDomain)` treated https://attacker.net/?x=our.domain as
+    // ours, and refused a legitimate third party whose own hostname happened to
+    // contain our domain.
+    let isOurs = !agent;
+    if (agent) {
+      try {
+        isOurs = new URL(agent).hostname === ourDomain;
+      } catch {
+        return null;                                   // not a url: refuse, fail closed
+      }
+    }
 
     if (isOurs) {
       const row = q.getKey(keyId);
@@ -1452,16 +1501,27 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map()) {
     const url = new URL("/.well-known/http-message-signatures-directory", agent).toString();
     const hit = cache.get(url);
     const now = Date.now();
+
+    // A cached entry is trusted for an hour, so a key removed from an agent's
+    // own directory keeps verifying for up to that long. That is the deliberate
+    // revocation window, and it is the reason `rebind` exists on chain rather
+    // than here: identity changes are settled by the contract, not by this
+    // cache.
     let jwks;
     if (hit && now - hit.at < 3_600_000) {
+      if (hit.failed) return null;                     // a remembered failure
       jwks = hit.jwks;
     } else {
+      // Failures are remembered too. Without that, every unauthenticated
+      // request naming an unreachable directory becomes one outbound request,
+      // which is a timing-observable prober pointed wherever the caller likes.
       try {
         jwks = await fetchDirectory(url);
       } catch {
+        rememberDirectory(cache, url, { failed: true, at: now });
         return null;
       }
-      cache.set(url, { jwks, at: now });
+      rememberDirectory(cache, url, { jwks, at: now });
     }
 
     for (const jwk of jwks?.keys ?? []) {
@@ -1499,6 +1559,89 @@ async function proofFor(nonce, privateKey) {
   const sig = await crypto.subtle.sign("Ed25519", privateKey, new TextEncoder().encode(nonce));
   return Buffer.from(sig).toString("base64url");
 }
+
+// The nonce must be one THIS server minted, and it is spent on use. Proof of
+// possession alone shows the caller holds the key, not that the exchange is
+// fresh: before this, an invented nonce was accepted and a captured triple
+// replayed verbatim.
+const alwaysFreshNonce = () => true;
+
+test("a nonce the caller invented is refused, and nothing is stored", async () => {
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const nonce = "i-made-this-up-myself";
+  const r = await registerRoute(
+    q,
+    { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) },
+    () => true,
+    () => false                                   // this server did not mint it
+  );
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "nonce");
+  assert.equal(q.allKeys().length, 0, "nothing may be stored on a bad nonce");
+});
+
+test("a captured registration cannot be replayed", async () => {
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const nonce = "server-issued-nonce";
+  const body = { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) };
+
+  // A nonce checker that spends what it accepts, like the real one.
+  const spent = new Set();
+  const checkNonce = (n) => (spent.has(n) ? false : (spent.add(n), true));
+
+  assert.equal((await registerRoute(q, body, () => true, checkNonce)).ok, true);
+  const replay = await registerRoute(q, body, () => true, checkNonce);
+  assert.equal(replay.ok, false);
+  assert.equal(replay.reason, "nonce");
+  assert.equal(q.allKeys().length, 1, "the replay must not rewrite the stored row");
+});
+
+test("verifyNonceMinted accepts only what this server issued", () => {
+  const now = 1_000_000;
+  const { challenge } = issueChallenge("a-secret", now);
+  assert.equal(verifyNonceMinted("a-secret", challenge, now).ok, true);
+  assert.equal(verifyNonceMinted("another-secret", challenge, now).ok, false);
+  assert.equal(verifyNonceMinted("a-secret", "made.up.nonce", now).ok, false);
+  assert.equal(verifyNonceMinted("a-secret", challenge, now + CHALLENGE_MS + 1).reason, "expired");
+});
+
+test("the directory owner is decided by exact hostname, not by substring", async () => {
+  // https://attacker.net/?x=our.domain was treated as ours, and a legitimate
+  // third party whose hostname contained our domain could never be fetched.
+  const q = queries(openDb(":memory:"));
+  let fetchedUrl = null;
+  const lookup = makeLookup(q, async (url) => { fetchedUrl = url; return { keys: [] }; }, "warden.example.com");
+
+  await lookup("some-key", '"https://attacker.net/?x=warden.example.com"');
+  assert.ok(fetchedUrl && fetchedUrl.startsWith("https://attacker.net/"),
+    "a foreign agent must be fetched, not read from our own store");
+
+  fetchedUrl = null;
+  await lookup("some-key", '"https://warden.example.com/"');
+  assert.equal(fetchedUrl, null, "our own domain must be served from the mirror");
+});
+
+test("the directory cache is bounded and remembers failures", async () => {
+  const q = queries(openDb(":memory:"));
+  let fetches = 0;
+  const cache = new Map();
+  const lookup = makeLookup(q, async () => { fetches += 1; throw new Error("unreachable"); },
+    "warden.example.com", cache);
+
+  // A failing directory is fetched once, not once per request: otherwise every
+  // unauthenticated call becomes an outbound request the caller aims.
+  await lookup("k", '"https://dead.example.com/"');
+  await lookup("k", '"https://dead.example.com/"');
+  assert.equal(fetches, 1, "a remembered failure must not be refetched");
+
+  // The cache key is caller-chosen, so it must not grow without bound.
+  for (let i = 0; i < 400; i++) await lookup("k", `"https://host${i}.example.com/"`);
+  assert.ok(cache.size <= 256, `cache grew to ${cache.size}`);
+});
 
 test("a registration with a valid proof of possession is accepted", async () => {
   const q = queries(openDb(":memory:"));
@@ -1557,11 +1700,20 @@ test("a registration is refused when the rate limit says so", async () => {
  * `allow` is the rate-limiting decision, passed in so the policy lives with the
  * route and the check stays testable without a clock.
  */
-export async function registerRoute(q, { jwk, nonce, proof }, allow) {
+export async function registerRoute(q, { jwk, nonce, proof }, allow, checkNonce) {
   if (!allow()) return { ok: false, reason: "rate-limited" };
   if (!jwk || typeof nonce !== "string" || typeof proof !== "string" || proof === "") {
     return { ok: false, reason: "proof" };
   }
+
+  // THE NONCE MUST BE ONE THIS SERVER ISSUED, AND IT IS SPENT HERE.
+  //
+  // Without this the proof shows only that the caller holds the key, not that
+  // the exchange is fresh: measured 2026-08-30, a nonce the caller invented was
+  // accepted, and a captured {jwk, nonce, proof} triple replayed verbatim. With
+  // INSERT OR REPLACE behind it, a replay also rewrites the stored directory
+  // and registration time.
+  if (!checkNonce(nonce)) return { ok: false, reason: "nonce" };
 
   let verified = false;
   try {
@@ -1593,7 +1745,19 @@ In the router from Task 5, before the `admit` call (registration cannot require 
       // over a nonce this server issued.
       if (req.method === "POST" && path === "/keys") {
         const body = JSON.parse(await readBody(req, 64 * 1024));
-        const result = await registerRoute(q, body, () => config.allowRegistration());
+        const result = await registerRoute(
+          q,
+          body,
+          () => config.allowRegistration(),
+          // Same minting and spending machinery as the entry challenge, so
+          // there is one nonce mechanism in this service rather than two.
+          (nonce) => {
+            if (!verifyNonceMinted(config.challengeSecret, nonce).ok) return false;
+            if (seen.has(nonce)) return false;
+            seen.add(nonce);
+            return true;
+          }
+        );
         if (result.ok) writeFileSync(config.directoryPath, renderDirectory(q));
         return json(res, result.ok ? 201 : 429, result);
       }
@@ -1759,6 +1923,7 @@ import { readFileSync } from "node:fs";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
 import { admit, sweepSeen } from "./door/middleware.mjs";
+import { verifyNonceMinted } from "./door/challenge.mjs";
 import { makeLookup, guardedFetchDirectory, renderDirectory, registerKey } from "./door/directory.mjs";
 import { tokenView } from "./mcp/tokenView.mjs";
 
