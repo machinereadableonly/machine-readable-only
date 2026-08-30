@@ -252,11 +252,10 @@ return visits, so the artwork is the agent's own history of coming back.
   accepted-behaviour test in Lifecycle.t.sol so it is not re-audited as a
   defect.
 - **The two untracked files are resolved (2026-08-30).**
-  `contracts/script/MintOnePlan1.s.sol` is COMMITTED. `ZZReviewProbe.t.sol` is
-  SUPERSEDED by `contracts/test/Bounds.t.sol`, which inverts every probe to pin
-  the fix; the original was moved to the session scratchpad, not deleted,
-  pending the operator's word. **The true test count is 231.** The old "forge test reports
-  223" hazard no longer applies.
+  `contracts/script/MintOnePlan1.s.sol` is COMMITTED. `ZZReviewProbe.t.sol` was
+  superseded by `contracts/test/Bounds.t.sol`, which inverts every probe to pin
+  the fix, and then DELETED with the operator's approval. **The true test count is 231.**
+  The old "forge test reports 223" hazard no longer applies.
 - **Coinbase Agentic Wallets cannot sign NFT trades** -- this rules out an
   otherwise obvious integration.
 - **Distribution is the real risk, not the build.** Five of six early-2026
