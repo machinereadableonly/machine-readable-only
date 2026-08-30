@@ -2142,6 +2142,7 @@ import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeCheckinTool } from "../src/mcp/tools/checkin.mjs";
+import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
 
 // THE SECURITY CONTROL. A rebind may have been mined since the mirror was last
 // reconciled, so a caller the mirror does not recognise gets ONE live chain
@@ -2156,7 +2157,11 @@ test("a caller the mirror does not know is checked against the chain before refu
     boundKeyOf: async (tokenId) => {
       chainWasRead = true;
       assert.equal(tokenId, 1);
-      return "new-key";   // the rebind is on chain but not yet mirrored
+      // The chain holds the BYTES32, a one-way hash of the thumbprint, never
+      // the thumbprint itself. A stub returning the raw key id could never
+      // match what checkin compares against, so the test would fail while the
+      // code was right.
+      return keyIdToBytes32("new-key");   // on chain, not yet mirrored
     },
   };
 
@@ -2170,7 +2175,7 @@ test("a caller the mirror does not know is checked against the chain before refu
 test("a caller neither the mirror nor the chain knows is refused", async () => {
   const q = queries(openDb(":memory:"));
   q.insertToken({ tokenId: 1, keyId: "old-key", owner: "0xabc", lastDay: 100, mintDay: 100 });
-  const chain = { boundKeyOf: async () => "old-key" };
+  const chain = { boundKeyOf: async () => keyIdToBytes32("old-key") };
   const tool = makeCheckinTool({ q, chain, today: () => 101 });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "stranger" });
   assert.equal(r.accepted, false);
@@ -2191,10 +2196,17 @@ Expected: FAIL, `Cannot find module '../src/mcp/tools/checkin.mjs'`.
 // One JSON-RPC eth_call, hand-composed, because pulling a whole client library
 // in for a single view function would be the larger dependency.
 
-/// keccak256("agentKeyOf(uint256)")[0..4]. Fixed at build time in Task 6 by
-/// reading it off the contract ABI rather than being typed from memory:
-///   cd contracts && forge inspect MachineReadableOnly methods
-const SELECTOR = "0x00000000"; // REPLACE in step 5, see the command there
+/// `viewOf(uint256)`, selector 0x0fa4edbd, confirmed with `cast sig`.
+///
+/// THERE IS NO SINGLE-FIELD ACCESSOR. The contract exposes no agentKeyOf; the
+/// bound key is one field of the TokenView struct that viewOf returns, so it is
+/// decoded out of the tuple. TokenView carries a dynamic `bytes code`, which
+/// makes it a DYNAMIC tuple: the return is a 32-byte offset word, then the
+/// head, and agentKeyId is field index 11 (tokenId, level, streak, lastDay,
+/// mintDay, generation, seedsGiven, parent, resting, sunset, marks,
+/// agentKeyId, code, today). Checked by decoding a genuinely abi-encoded
+/// TokenView, not by counting fields in a header.
+const SELECTOR = "0x0fa4edbd";
 
 export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch }) {
   return {
