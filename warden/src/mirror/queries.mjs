@@ -34,6 +34,7 @@ export function queries(db) {
     tokenCount: db.prepare("SELECT COUNT(*) AS n FROM tokens"),
     insertMint: db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (?, ?, ?)"),
     reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId) VALUES (?, ?)"),
+    markSold: db.prepare("SELECT COUNT(*) AS n FROM mark_orders WHERE upgradeId = ?"),
     hasMinted: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE keyId = ?"),
   };
 
@@ -83,7 +84,42 @@ export function queries(db) {
     requeueSolving: () => s.requeueSolving.run().changes,
     tokenCount: () => s.tokenCount.get().n,
     insertMint: ({ tokenId, toAddress, keyId }) => s.insertMint.run(tokenId, toAddress, keyId),
-    reserveMark: (tokenId, upgradeId) => s.reserveMark.run(tokenId, upgradeId),
+
+    /// Returns true when the reservation was new, false when this token already
+    /// holds that mark. Any OTHER database error is rethrown -- the same
+    /// discrimination insertCredit makes, and for the same reason.
+    reserveMark(tokenId, upgradeId) {
+      try {
+        s.reserveMark.run(tokenId, upgradeId);
+        return true;
+      } catch (err) {
+        if (UNIQUE_VIOLATION.test(err.message)) return false;
+        throw err;
+      }
+    },
+    /// How many of a mark have actually been reserved. Read from the mirror,
+    /// never from the catalogue object: a static `sold` field is never
+    /// incremented by anything, so the sold-out gate would never fire and the
+    /// supply would be unlimited.
+    markSold: (upgradeId) => s.markSold.get(upgradeId).n,
     hasMinted: (keyId) => s.hasMinted.get(keyId).n > 0,
+
+    /// Run fn inside BEGIN/COMMIT, rolling back on any error. node:sqlite's
+    /// DatabaseSync has no .transaction() helper (checked directly against
+    /// this Node version), but BEGIN / COMMIT / ROLLBACK work and a rolled
+    /// back write leaves zero rows. This is what makes a multi-statement
+    /// write one fact instead of two separate ones a caller could observe
+    /// half-applied.
+    transact(fn) {
+      db.exec("BEGIN");
+      try {
+        const result = fn();
+        db.exec("COMMIT");
+        return result;
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+      }
+    },
   };
 }

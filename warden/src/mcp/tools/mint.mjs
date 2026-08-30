@@ -1,7 +1,7 @@
 // The way in. 0.10 USDC, paid inside the tool call, no account anywhere.
 import * as z from "zod";
 
-export function makeMintTool({ q, paid, supplyCap, today }) {
+export function makeMintTool({ q, paid, supplyCap, today, alert = console.error }) {
   return {
     name: "mint",
     config: {
@@ -21,14 +21,34 @@ export function makeMintTool({ q, paid, supplyCap, today }) {
       if (q.tokenCount() >= supplyCap) return { ok: false, reason: "supply-cap-reached" };
 
       return paid(async () => {
+        // Re-decided after settlement, for the same reason as upgrade: two
+        // concurrent settlements from one key both pass the check above. The
+        // unique index on mints.keyId is what actually holds it.
         // The id is assigned HERE, not by the contract. The contract takes it
         // as an argument and reverts if taken, so the id promised now is the id
         // that lands.
         const tokenId = q.nextTokenId();
         const day = today();
-        q.insertToken({ tokenId, keyId: ctx.keyId, owner: args.to, lastDay: day, mintDay: day });
-        // solveState 'pending' is what puts this token in front of the solver.
-        q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId });
+        try {
+          // The two rows are ONE FACT: a token with no mint record holds a
+          // supply-cap slot no mint will ever claim, and a mint with no token
+          // is unreachable. Writing them separately let a losing concurrent
+          // settlement insert its token, get refused by the guarded write,
+          // and leave that orphan behind. insertMint goes FIRST, inside the
+          // transaction, so the guarded write hits the unique index on
+          // mints.keyId before anything else is attempted; if it throws, the
+          // whole transaction rolls back and insertToken never lands either.
+          q.transact(() => {
+            // solveState 'pending' is what puts this token in front of the solver.
+            q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId });
+            q.insertToken({ tokenId, keyId: ctx.keyId, owner: args.to, lastDay: day, mintDay: day });
+          });
+        } catch (err) {
+          // The unique index refused a second mint for this key. The agent has
+          // PAID, so this is never silent.
+          alert(`mint settled for key ${ctx.keyId} but could not be recorded: ${err.message}`);
+          return { ok: false, reason: "paid-but-unavailable", detail: "already-minted" };
+        }
         return {
           ok: true,
           tokenId,

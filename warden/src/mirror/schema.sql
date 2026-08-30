@@ -41,6 +41,12 @@ CREATE TABLE IF NOT EXISTS mark_orders (
   status    TEXT NOT NULL DEFAULT 'queued'
 );
 
+-- One token can hold one reservation per mark. This is the final authority
+-- against two settlements racing to apply the same mark to the same token --
+-- a read-then-write check alone can be overtaken between the read and the
+-- write.
+CREATE UNIQUE INDEX IF NOT EXISTS mark_orders_token_upgrade ON mark_orders (tokenId, upgradeId);
+
 CREATE TABLE IF NOT EXISTS mints (
   tokenId   INTEGER PRIMARY KEY,
   toAddress TEXT NOT NULL,
@@ -51,3 +57,8 @@ CREATE TABLE IF NOT EXISTS mints (
   solveTries INTEGER NOT NULL DEFAULT 0,
   status    TEXT NOT NULL DEFAULT 'queued'
 );
+
+-- One mint per key. Same reasoning as mark_orders above: two settlements from
+-- the same key can both pass the pre-payment hasMinted check, so the index is
+-- what actually stops a second token from being recorded.
+CREATE UNIQUE INDEX IF NOT EXISTS mints_key ON mints (keyId);

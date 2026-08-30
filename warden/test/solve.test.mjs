@@ -41,7 +41,7 @@ test("runSolver drains every pending row, one claim at a time", async () => {
   const db = openDb(":memory:");
   const q = queries(db);
   db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (1, '0xabc', 'k1')").run();
-  db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (2, '0xabc', 'k1')").run();
+  db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (2, '0xabc', 'k2')").run();
 
   const claimed = [];
   const spawn = async (tokenId) => {
@@ -62,7 +62,7 @@ test("runSolver retries a failing row up to MAX_TRIES, then moves on without loo
   const db = openDb(":memory:");
   const q = queries(db);
   db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (1, '0xabc', 'k1')").run();
-  db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (2, '0xabc', 'k1')").run();
+  db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (2, '0xabc', 'k2')").run();
 
   let attempts = 0;
   const spawn = async (tokenId) => {
@@ -92,7 +92,7 @@ test("requeueOrphans does not touch 'done' or 'failed' rows", () => {
   const db = openDb(":memory:");
   const q = queries(db);
   db.prepare("INSERT INTO mints (tokenId, toAddress, keyId, solveState) VALUES (1, '0xabc', 'k1', 'done')").run();
-  db.prepare("INSERT INTO mints (tokenId, toAddress, keyId, solveState) VALUES (2, '0xabc', 'k1', 'failed')").run();
+  db.prepare("INSERT INTO mints (tokenId, toAddress, keyId, solveState) VALUES (2, '0xabc', 'k2', 'failed')").run();
 
   const changed = requeueOrphans(q);
 
