@@ -43,6 +43,29 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       const level = token.level + 1;
       const streak = day === token.lastDay + 1 ? token.streak + 1 : 1;
 
+      // THE CHAIN REFUSES THIS DAY, SO THE MIRROR MUST TOO.
+      //
+      // MachineReadableOnly.sol:249 mints with `Token(1, 1, d, d, ...)`, so a
+      // fresh token's lastDay IS its mint day, and :314 reverts
+      // DayNotAdvanced(id) on `day <= s.lastDay`. A check-in on the day of
+      // minting is therefore refused ON CHAIN. The unique (tokenId, day) index
+      // does not catch it, because on mint day that index is empty -- so
+      // without this guard the mirror credits a day the Clock's batchCheckIn
+      // will revert on, writes level 2, and every later day inherits the
+      // offset. The mirror is what agents are told; it must never run ahead of
+      // what is true. `seed` mints its child the same way
+      // (MachineReadableOnly.sol:545), so this covers seeded tokens too.
+      //
+      // The unique index STAYS -- it is the concurrency control, and this
+      // guard is about agreeing with the chain, not about racing callers.
+      if (day <= token.lastDay) {
+        return {
+          accepted: false,
+          reason: "already-credited-today",
+          nextWindowOpensAt: new Date((token.lastDay + 1) * 86_400_000).toISOString(),
+        };
+      }
+
       // ONE FACT, NOT TWO. The credit row and the token row it advances are
       // written inside a single transaction, so nothing can ever observe a
       // credited day whose level was not applied, or a level with no credit

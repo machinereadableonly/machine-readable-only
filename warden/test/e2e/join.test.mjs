@@ -58,6 +58,12 @@ function startJourney() {
   const q = queries(db);
   const paidCalls = [];
   const alerts = [];
+  // A CLOCK THE JOURNEY CAN ADVANCE. The contract mints with lastDay = today
+  // and batchCheckIn reverts on day <= lastDay, so a real agent's first
+  // check-in is the day AFTER it minted. Journeying entirely inside one UTC
+  // day would test a sequence the chain refuses -- and this test asserted
+  // exactly that until 2026-08-30.
+  const clock = { offset: 0 };
 
   const mcp = makeMcpHandler({
     q,
@@ -70,7 +76,7 @@ function startJourney() {
       return handler(args, ctx);
     },
     supplyCap: 5555,
-    today: utcDay,
+    today: () => utcDay() + clock.offset,
     catalogue: { 1: { name: "Vein", minLevel: 1, supply: 10 } },
     // A null from the chain means "could not be reached", which checkin treats
     // as a refusal. Our caller is the bound key, so this is never consulted.
@@ -100,6 +106,7 @@ function startJourney() {
         base: `http://127.0.0.1:${port}`,
         paidCalls,
         alerts,
+        clock,
         // The same handle the tools write through, so an assertion can read
         // the row a tool claims to have written rather than only its answer.
         db,
@@ -275,7 +282,35 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       tokenId = result.tokenId;
     });
 
-    await t.test("5. checkin credits today", async () => {
+    await t.test("5. checkin is refused on the mint day and credits the day after", async () => {
+      // THE MINT DAY IS NOT A CHECK-IN. The contract mints with
+      // lastDay = today (MachineReadableOnly.sol:249) and batchCheckIn reverts
+      // DayNotAdvanced on day <= lastDay (:314), so crediting today here would
+      // put the mirror a level ahead of a chain write that will revert. The
+      // unique (tokenId, day) index cannot catch this: on mint day it is empty.
+      const sameDay = await callMcp(base, privateJwk, {
+        method: "tools/call",
+        params: { name: "checkin", arguments: { tokenId } },
+      });
+      const refused = toolResult(sameDay.body);
+      assert.equal(refused.accepted, false, "a mint-day check-in must be refused");
+      assert.equal(refused.reason, "already-credited-today");
+
+      // Nothing moved, and nothing was written.
+      const untouched = journey.q.getToken(tokenId);
+      assert.equal(untouched.level, 1);
+      assert.equal(untouched.streak, 1);
+      assert.equal(untouched.lastDay, utcDay());
+      assert.equal(
+        journey.db.prepare("SELECT COUNT(*) AS n FROM credits WHERE tokenId = ?").get(tokenId).n,
+        0,
+        "a refused day must leave no credit row"
+      );
+
+      // A day passes. This is the first day an agent can actually claim.
+      journey.clock.offset = 1;
+      const firstDay = utcDay() + 1;
+
       const { status, body, sent } = await callMcp(base, privateJwk, {
         method: "tools/call",
         params: { name: "checkin", arguments: { tokenId } },
@@ -283,7 +318,8 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       assert.equal(status, 200);
       const result = toolResult(body);
       assert.equal(result.accepted, true, `checkin refused: ${JSON.stringify(result)}`);
-      assert.equal(result.creditedDay, utcDay());
+      assert.equal(result.creditedDay, firstDay);
+      assert.equal(result.streak, 2, "the day after the mint day continues the streak");
 
       // THE CREDIT NAMES THE REQUEST THAT BOUGHT IT. credits.sigHash was
       // written by nobody -- `ctx.sigHash ?? ""` into a NOT NULL column --
@@ -293,7 +329,7 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       // than from a copy of the rule.
       const stored = journey.db
         .prepare("SELECT sigHash FROM credits WHERE tokenId = ? AND day = ?")
-        .get(tokenId, utcDay());
+        .get(tokenId, firstDay);
       const expected = createHash("sha256").update(sentHeader(sent, "signature"), "utf8").digest("hex");
       assert.equal(stored.sigHash.length, 64);
       assert.notEqual(stored.sigHash, "", "the empty string is the bug this replaces");
@@ -305,12 +341,15 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       // seed's gates judged a value nothing moved.
       const token = journey.q.getToken(tokenId);
       assert.equal(token.level, 2, "the mint left level 1; one credited day makes it 2");
-      assert.equal(token.lastDay, utcDay());
+      assert.equal(token.lastDay, firstDay);
       assert.equal(result.level, token.level);
       assert.equal(result.streak, token.streak);
 
       // The credit is a fact in the mirror, not just a hopeful answer: a
-      // second call the same day is refused by the unique index.
+      // second call the same day is refused, now by the day guard (lastDay has
+      // advanced to today) rather than by the unique index. The index is still
+      // what decides a genuine race, which tools.test.mjs drives with 100
+      // simultaneous calls.
       const again = await callMcp(base, privateJwk, {
         method: "tools/call",
         params: { name: "checkin", arguments: { tokenId } },
