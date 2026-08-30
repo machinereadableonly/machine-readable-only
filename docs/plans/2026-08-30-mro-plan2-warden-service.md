@@ -659,9 +659,16 @@ const VECTORS = JSON.parse(
 /// one the door must handle; the RSA vectors are carried for completeness.
 const ED = VECTORS.find((v) => v.key.kty === "OKP");
 
+/// What a real MRO client signs. This MUST be passed explicitly: web-bot-auth's
+/// own default covers only ("@authority" "signature-agent") -- confirmed by
+/// capturing a Signature-Input header on 2026-08-30 -- and this project requires
+/// @method and @path on top of that, so a helper that omitted the list would
+/// sign too little and every happy-path test would be refused for "components".
+const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent"];
+
 /// Build a signed request the way a real client will, so the test exercises the
 /// same code path an agent hits rather than a hand-rolled header.
-async function signedRequest({ windowMs = 60_000, components } = {}) {
+async function signedRequest({ windowMs = 60_000, components = CLIENT_COMPONENTS } = {}) {
   const signer = await signerFromJWK(ED.key);
   const message = {
     method: "POST",
@@ -669,9 +676,11 @@ async function signedRequest({ windowMs = 60_000, components } = {}) {
     headers: { "signature-agent": '"https://example.com"', host: "example.com" },
   };
   const created = new Date();
-  const params = { created, expires: new Date(created.getTime() + windowMs) };
-  if (components) params.components = components;
-  const headers = await signatureHeaders(message, signer, params);
+  const headers = await signatureHeaders(message, signer, {
+    created,
+    expires: new Date(created.getTime() + windowMs),
+    components,
+  });
   return { ...message, headers: { ...message.headers, ...headers } };
 }
 
@@ -699,10 +708,11 @@ test("a signature window longer than five minutes is refused", async () => {
 });
 
 test("a signature that does not cover @path is refused", async () => {
-  // web-bot-auth's own default covers only @authority and signature-agent, so
-  // this is the LIBRARY DEFAULT being rejected, not an exotic case. The spec
-  // adds method and path so a captured signature cannot be replayed against a
-  // different tool.
+  // This is web-bot-auth's OWN DEFAULT component set being rejected, not an
+  // exotic case: measured 2026-08-30, signatureHeaders with no components
+  // option signs exactly ("@authority" "signature-agent"). The spec adds
+  // @method and @path so a signature captured from one tool call cannot be
+  // replayed against a different one, and that difference is what this asserts.
   const req = await signedRequest({ components: ["@authority", "signature-agent"] });
   const r = await verifyRequest(req, lookup);
   assert.equal(r.ok, false);
@@ -809,11 +819,26 @@ export async function verifyRequest(request, lookupKey) {
   return { ok: true, keyId };
 }
 
-/// Headers arrive either as a plain object (Node) or as a Headers instance.
-function headerOf(request, name) {
+/**
+ * Read one header, whatever case it was written in.
+ *
+ * HTTP header names are case-insensitive (RFC 9110), and the two sources that
+ * reach this function genuinely disagree: Node lowercases everything it
+ * receives, while web-bot-auth's own signatureHeaders() returns "Signature" and
+ * "Signature-Input" capitalized -- measured 2026-08-30. The library's verify()
+ * is case-blind and finds them either way; a case-sensitive lookup here would
+ * verify a signature successfully and then fail to read back its own key id.
+ * A Headers instance handles case itself; a plain object is matched manually.
+ */
+export function headerOf(request, name) {
   const h = request.headers;
-  if (h && typeof h.get === "function") return h.get(name);
-  return h?.[name] ?? h?.[name.toLowerCase()] ?? null;
+  if (!h) return null;
+  if (typeof h.get === "function") return h.get(name);
+  const want = name.toLowerCase();
+  for (const key of Object.keys(h)) {
+    if (key.toLowerCase() === want) return h[key];
+  }
+  return null;
 }
 
 /// The key id, read back off the Signature-Input header after verification has
@@ -1278,7 +1303,7 @@ Expected: FAIL, `Cannot find module '../src/door/middleware.mjs'`.
 ```js
 // Sorting a request into one of four cases.
 import { issueChallenge, checkChallenge, CHALLENGE_MS } from "./challenge.mjs";
-import { verifyRequest } from "./verify.mjs";
+import { verifyRequest, headerOf } from "./verify.mjs";
 
 /**
  * Adapt a Node request to the shape the signature library takes.
@@ -1338,6 +1363,10 @@ export async function admit(req, deps) {
   return { ok: true, keyId: verified.keyId };
 }
 
+// `headerOf` is imported from verify.mjs rather than written again here. It has
+// to be case-blind (see its own comment), and two copies of that rule is two
+// places for it to be got wrong.
+
 /// Sweep spent challenges. They are only ever valid for five seconds, so
 /// anything older than that window can go.
 export function sweepSeen(seen, issuedAt = new Map(), now = Date.now()) {
@@ -1347,11 +1376,6 @@ export function sweepSeen(seen, issuedAt = new Map(), now = Date.now()) {
   }
 }
 
-function headerOf(like, name) {
-  const h = like.headers;
-  if (h && typeof h.get === "function") return h.get(name);
-  return h?.[name] ?? null;
-}
 ```
 
 - [ ] **Step 4: Write `server.mjs`**
