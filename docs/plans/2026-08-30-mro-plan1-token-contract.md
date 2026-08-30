@@ -29,6 +29,7 @@
 | File | Responsibility |
 |---|---|
 | `contracts/src/MachineReadableOnly.sol` | Create. The whole token contract: state, mint, check-in, marks, rebind, rest, seed, vouchers, dials, `tokenURI` delegation. |
+| `contracts/test/MroTestBase.sol` | Create. Shared test base: the 172-byte code fixture, the id-packing helpers and the common addresses. Every test contract below extends it. The codebase already shares fixtures this way (`RenderFixture.sol`, `ColourFixture.sol`); six verbatim copies of one hex literal would be the alternative. |
 | `contracts/test/MachineReadableOnly.t.sol` | Create. Behaviour and access control for mint, dials, pause, `Ownable2Step`. |
 | `contracts/test/CheckIn.t.sol` | Create. `batchCheckIn` semantics, streak rules, per-token ERC-4906 emits, and the chunk gas guard. |
 | `contracts/test/Marks.t.sol` | Create. `applyMark` gates, supply, bitmask, `setUpgrade`. |
@@ -200,6 +201,69 @@ Everything the renderer needs, with no mutation yet. Ends with a contract that c
 - Consumes: `IRenderer.tokenURI(TokenView)` and the `TokenView` struct, both from `contracts/src/render/`.
 - Produces: `contract MachineReadableOnly`; `struct Token`; `struct Upgrade`; `today() returns (uint32)`; `viewOf(uint256) returns (TokenView memory)`; public state `warden`, `renderer`, `supplyCap`, `walletCap`, `totalMinted`, `sunsetDay`, `isSunset`, `vouchersEnabled`; errors `NotWarden`, `Sunset`, `AlreadySunset`, `ZeroRenderer`, `ZeroWarden`; events `RendererSet(address)`, `WardenSet(address)`, `SupplyCapSet(uint32)`, `WalletCapSet(uint32)`, `SunsetAt(uint32)`.
 
+- [ ] **Step 0: Create the shared test base**
+
+Every test file needs the same 172-byte code bitmap and the same id-packing
+helpers. The codebase already shares test data through library fixtures
+(`RenderFixture.sol`, `ColourFixture.sol`), so follow that rather than copying a
+hex literal into six files.
+
+Create `contracts/test/MroTestBase.sol`:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
+import {Renderer} from "../src/render/Renderer.sol";
+import {MroTestBase} from "./MroTestBase.sol";
+
+/// @notice What every MachineReadableOnly test needs: the contract pair, the
+/// standard addresses, the code bitmap and the calldata helpers.
+/// @dev Shared rather than copied. The same 172 bytes appear in six test
+/// files, and a second copy is a second thing to update when the fixture is
+/// regenerated.
+abstract contract MroTestBase is Test {
+    MachineReadableOnly internal t;
+    Renderer internal r;
+
+    address internal constant WARDEN = address(0x3A2D);
+    address internal constant ALICE = address(0xA11CE);
+    address internal constant MALLORY = address(0x4A11);
+
+    bytes32 internal constant KEY = bytes32(uint256(0xa9e));
+
+    /// @dev Token 1 on example.com, from tools/token-bitmap.mjs. The same 172
+    /// bytes the renderer tests use.
+    function _code() internal pure returns (bytes memory) {
+        return
+        hex"fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff"
+        hex"fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796"
+        hex"e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef"
+        hex"ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80";
+    }
+
+    /// @dev Ids travel as 4-byte big-endian values, which is what
+    /// batchCheckIn decodes.
+    function _packed(uint32[] memory ids) internal pure returns (bytes memory out) {
+        for (uint256 i = 0; i < ids.length; i++) out = abi.encodePacked(out, ids[i]);
+    }
+
+    /// @dev Deploy the pair and mint token 1 to ALICE, past day zero so that
+    /// `lastDay + 1` arithmetic is meaningful.
+    function _deployAndMintOne() internal {
+        r = new Renderer();
+        t = new MachineReadableOnly(address(r), WARDEN);
+        vm.warp(86_400 * 1000 + 1);
+        vm.prank(WARDEN);
+        t.mint(1, ALICE, KEY, _code());
+    }
+}
+```
+
+This file will not compile until Task 1 Step 3 creates the contract. That is
+expected: Step 2 runs the test and watches the whole thing fail.
+
 - [ ] **Step 1: Write the failing test**
 
 Create `contracts/test/MachineReadableOnly.t.sol`:
@@ -208,20 +272,14 @@ Create `contracts/test/MachineReadableOnly.t.sol`:
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test} from "forge-std/Test.sol";
-
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
+import {MroTestBase} from "./MroTestBase.sol";
 
 /// @notice Construction, dials, pause and Ownable2Step for the real contract.
 /// @dev Per the project's smart-contract rules, every owner function has an
 /// explicit test and every access-control revert has one too.
-contract MachineReadableOnlyTest is Test {
-    MachineReadableOnly t;
-    Renderer r;
-
-    address constant WARDEN = address(0x3A2D);
-
+contract MachineReadableOnlyTest is MroTestBase {
     function setUp() public {
         r = new Renderer();
         t = new MachineReadableOnly(address(r), WARDEN);
@@ -481,8 +539,6 @@ Expected: PASS, 4 tests.
 Append to `contracts/test/MachineReadableOnly.t.sol`, inside the contract:
 
 ```solidity
-    address constant MALLORY = address(0x4A11);
-
     function test_setRendererByOwner() public {
         Renderer r2 = new Renderer();
         t.setRenderer(address(r2));
@@ -570,12 +626,12 @@ Append to `contracts/test/MachineReadableOnly.t.sol`, inside the contract:
     }
 
     function test_ownable2StepHandover() public {
-        t.transferOwnership(ALICE_OWNER);
+        t.transferOwnership(ALICE);
         // The old owner still holds control until the new one accepts.
         assertEq(t.owner(), address(this));
-        vm.prank(ALICE_OWNER);
+        vm.prank(ALICE);
         t.acceptOwnership();
-        assertEq(t.owner(), ALICE_OWNER);
+        assertEq(t.owner(), ALICE);
     }
 
     function test_supportsErc4906AndErc721() public view {
@@ -583,7 +639,6 @@ Append to `contracts/test/MachineReadableOnly.t.sol`, inside the contract:
         assertTrue(t.supportsInterface(0x80ac58cd), "ERC-721");
     }
 
-    address constant ALICE_OWNER = address(0xA11CE);
 ```
 
 - [ ] **Step 6: Run and confirm green**
@@ -629,17 +684,6 @@ name, which does not compile."
 Append to `contracts/test/MachineReadableOnly.t.sol`:
 
 ```solidity
-    bytes32 constant KEY = bytes32(uint256(0xa9e));
-
-    /// @dev Token 1 on example.com, from tools/token-bitmap.mjs. The same 172
-    /// bytes the renderer tests use.
-    function _code() internal pure returns (bytes memory) {
-        return
-        hex"fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff"
-        hex"fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796"
-        hex"e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef"
-        hex"ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80";
-    }
 
     function _mint(uint256 id, address to, bytes32 key) internal {
         vm.prank(WARDEN);
@@ -647,9 +691,8 @@ Append to `contracts/test/MachineReadableOnly.t.sol`:
     }
 
     function test_mintSetsDayOneState() public {
-        _mint(1, ALICE_OWNER, KEY);
-        MachineReadableOnly.Token memory s;
-        assertEq(t.ownerOf(1), ALICE_OWNER);
+        _mint(1, ALICE, KEY);
+        assertEq(t.ownerOf(1), ALICE);
         assertEq(t.viewOf(1).level, 1);
         assertEq(t.viewOf(1).streak, 1);
         assertEq(t.viewOf(1).lastDay, t.today());
@@ -657,81 +700,80 @@ Append to `contracts/test/MachineReadableOnly.t.sol`:
         assertEq(t.viewOf(1).agentKeyId, KEY);
         assertEq(t.viewOf(1).code.length, 172);
         assertEq(t.totalMinted(), 1);
-        assertEq(t.mintedTo(ALICE_OWNER), 1);
-        s; // silence the unused local warning
+        assertEq(t.mintedTo(ALICE), 1);
     }
 
     function test_mintEmitsMintedAndMetadataUpdate() public {
         vm.expectEmit(true, true, false, true);
         emit MachineReadableOnly.Minted(1, KEY);
-        _mint(1, ALICE_OWNER, KEY);
+        _mint(1, ALICE, KEY);
     }
 
     function test_mintRevertsForANonWarden() public {
         vm.prank(MALLORY);
         vm.expectRevert(MachineReadableOnly.NotWarden.selector);
-        t.mint(1, ALICE_OWNER, KEY, _code());
+        t.mint(1, ALICE, KEY, _code());
     }
 
     function test_oneMintPerKeyEver() public {
-        _mint(1, ALICE_OWNER, KEY);
+        _mint(1, ALICE, KEY);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.AlreadyMinted.selector);
-        t.mint(2, ALICE_OWNER, KEY, _code());
+        t.mint(2, ALICE, KEY, _code());
     }
 
     function test_mintRejectsATakenId() public {
-        _mint(1, ALICE_OWNER, KEY);
+        _mint(1, ALICE, KEY);
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.TokenExists.selector, uint256(1)));
-        t.mint(1, ALICE_OWNER, bytes32(uint256(2)), _code());
+        t.mint(1, ALICE, bytes32(uint256(2)), _code());
     }
 
     function test_mintRejectsAWrongLengthCode() public {
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadCodeLength.selector, uint256(3)));
-        t.mint(1, ALICE_OWNER, KEY, hex"010203");
+        t.mint(1, ALICE, KEY, hex"010203");
     }
 
     function test_mintEnforcesTheSupplyCap() public {
         t.setSupplyCap(1);
-        _mint(1, ALICE_OWNER, KEY);
+        _mint(1, ALICE, KEY);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.SupplyCap.selector);
-        t.mint(2, ALICE_OWNER, bytes32(uint256(2)), _code());
+        t.mint(2, ALICE, bytes32(uint256(2)), _code());
     }
 
     /// @dev The cap counts tokens ever minted to an address, not tokens held,
     /// so transferring one out does not free a slot. Spec conflict 12.
     function test_walletCapCountsMintsNotHoldings() public {
         t.setWalletCap(1);
-        _mint(1, ALICE_OWNER, KEY);
-        vm.prank(ALICE_OWNER);
-        t.transferFrom(ALICE_OWNER, MALLORY, 1);
+        _mint(1, ALICE, KEY);
+        vm.prank(ALICE);
+        t.transferFrom(ALICE, MALLORY, 1);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.WalletCap.selector);
-        t.mint(2, ALICE_OWNER, bytes32(uint256(2)), _code());
+        t.mint(2, ALICE, bytes32(uint256(2)), _code());
     }
 
     function test_mintIsBlockedByPause() public {
         t.pause();
         vm.prank(WARDEN);
         vm.expectRevert();
-        t.mint(1, ALICE_OWNER, KEY, _code());
+        t.mint(1, ALICE, KEY, _code());
     }
 
     function test_mintIsBlockedBySunset() public {
         t.sunset();
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.Sunset.selector);
-        t.mint(1, ALICE_OWNER, KEY, _code());
+        t.mint(1, ALICE, KEY, _code());
     }
 
     function test_transferStillWorksWhenPaused() public {
-        _mint(1, ALICE_OWNER, KEY);
+        _mint(1, ALICE, KEY);
         t.pause();
-        vm.prank(ALICE_OWNER);
-        t.transferFrom(ALICE_OWNER, MALLORY, 1);
+        vm.prank(ALICE);
+        t.transferFrom(ALICE, MALLORY, 1);
         assertEq(t.ownerOf(1), MALLORY);
     }
 ```
@@ -875,52 +917,18 @@ Create `contracts/test/CheckIn.t.sol`:
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {IERC4906} from "@openzeppelin/contracts/interfaces/IERC4906.sol";
 
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
+import {MroTestBase} from "./MroTestBase.sol";
 
 /// @notice batchCheckIn semantics: the daily overwrite, streak rules, and the
 /// per-token ERC-4906 emits that replaced the impossible range form.
-contract CheckInTest is Test {
-    MachineReadableOnly t;
-    Renderer r;
-
-    address constant WARDEN = address(0x3A2D);
-    address constant ALICE = address(0xA11CE);
-
-    function _code() internal pure returns (bytes memory) {
-        return
-        hex"fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff"
-        hex"fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796"
-        hex"e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef"
-        hex"ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80";
-    }
+contract CheckInTest is MroTestBase {
 
     function setUp() public {
-        r = new Renderer();
-        t = new MachineReadableOnly(address(r), WARDEN);
-        // Start well past day zero so lastDay + 1 arithmetic is meaningful.
-        vm.warp(86_400 * 1000 + 1);
-        vm.prank(WARDEN);
-        t.mint(1, ALICE, bytes32(uint256(1)), _code());
-    }
-
-    /// @dev Ids are packed as 4-byte big-endian values.
-    function _packed(uint32[] memory ids) internal pure returns (bytes memory out) {
-        for (uint256 i = 0; i < ids.length; i++) out = abi.encodePacked(out, ids[i]);
-    }
-
-    function _one(uint32 id) internal pure returns (bytes memory) {
-        uint32[] memory ids = new uint32[](1);
-        ids[0] = id;
-        return _packed(ids);
-    }
-
-    function _days(uint32 d) internal pure returns (uint32[] memory out) {
-        out = new uint32[](1);
-        out[0] = d;
+        _deployAndMintOne();
     }
 
     function test_checkInIncrementsLevelAndContinuesTheStreak() public {
@@ -1166,28 +1174,14 @@ Create `contracts/test/Marks.t.sol`:
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {IERC4906} from "@openzeppelin/contracts/interfaces/IERC4906.sol";
 
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
+import {MroTestBase} from "./MroTestBase.sol";
 
 /// @notice applyMark's gates, supply and bitmask.
-contract MarksTest is Test {
-    MachineReadableOnly t;
-    Renderer r;
-
-    address constant WARDEN = address(0x3A2D);
-    address constant ALICE = address(0xA11CE);
-    address constant MALLORY = address(0x4A11);
-
-    function _code() internal pure returns (bytes memory) {
-        return
-        hex"fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff"
-        hex"fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796"
-        hex"e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef"
-        hex"ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80";
-    }
+contract MarksTest is MroTestBase {
 
     function setUp() public {
         r = new Renderer();
@@ -1403,44 +1397,17 @@ Create `contracts/test/Lifecycle.t.sol`:
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {IERC4906} from "@openzeppelin/contracts/interfaces/IERC4906.sol";
 
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
+import {MroTestBase} from "./MroTestBase.sol";
 
 /// @notice rebind and rest. Both are token-owner functions, not Warden ones.
-contract LifecycleTest is Test {
-    MachineReadableOnly t;
-    Renderer r;
-
-    address constant WARDEN = address(0x3A2D);
-    address constant ALICE = address(0xA11CE);
-    address constant MALLORY = address(0x4A11);
-
-    function _code() internal pure returns (bytes memory) {
-        return
-        hex"fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff"
-        hex"fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796"
-        hex"e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef"
-        hex"ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80";
-    }
-
-    function _one(uint32 id) internal pure returns (bytes memory) {
-        return abi.encodePacked(id);
-    }
-
-    function _days(uint32 d) internal pure returns (uint32[] memory out) {
-        out = new uint32[](1);
-        out[0] = d;
-    }
+contract LifecycleTest is MroTestBase {
 
     function setUp() public {
-        r = new Renderer();
-        t = new MachineReadableOnly(address(r), WARDEN);
-        vm.warp(86_400 * 1000 + 1);
-        vm.prank(WARDEN);
-        t.mint(1, ALICE, bytes32(uint256(1)), _code());
+        _deployAndMintOne();
     }
 
     function test_rebindByTheTokenOwnerKeepsLevelAndStreak() public {
@@ -1847,29 +1814,19 @@ Create `contracts/test/Vouchers.t.sol`:
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test} from "forge-std/Test.sol";
-
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
+import {MroTestBase} from "./MroTestBase.sol";
 
 /// @notice The durability path. Ships present and OFF, so a token can outlive
 /// the Warden if the operator ever switches to voucher-only mode.
-contract VouchersTest is Test {
-    MachineReadableOnly t;
-    Renderer r;
-
-    uint256 constant WARDEN_KEY = 0xA11CE5EED;
-    address wardenAddr;
-    address constant ALICE = address(0xA11CE);
-    address constant MALLORY = address(0x4A11);
-
-    function _code() internal pure returns (bytes memory) {
-        return
-        hex"fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff"
-        hex"fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796"
-        hex"e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef"
-        hex"ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80";
-    }
+contract VouchersTest is MroTestBase {
+    /// @dev This suite cannot use the base's `_deployAndMintOne`, because the
+    /// Warden here has to be an address we hold the private key for -- the
+    /// whole point is signing vouchers as it. Everything else comes from the
+    /// base.
+    uint256 internal constant WARDEN_KEY = 0xA11CE5EED;
+    address internal wardenAddr;
 
     function setUp() public {
         wardenAddr = vm.addr(WARDEN_KEY);
@@ -1877,7 +1834,7 @@ contract VouchersTest is Test {
         t = new MachineReadableOnly(address(r), wardenAddr);
         vm.warp(86_400 * 1000 + 1);
         vm.prank(wardenAddr);
-        t.mint(1, ALICE, bytes32(uint256(1)), _code());
+        t.mint(1, ALICE, KEY, _code());
     }
 
     function _sign(uint256 id, uint32 day) internal view returns (bytes memory) {
@@ -2100,37 +2057,19 @@ Create `contracts/test/TokenUriGolden.t.sol`:
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test} from "forge-std/Test.sol";
-
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
+import {MroTestBase} from "./MroTestBase.sol";
 
 /// @notice The contract and the Phase 0 renderer, end to end.
 ///
 /// @dev A STUBBED renderer would hide exactly the class of bug this exists to
 /// catch: the contract and the renderer disagreeing about a field's meaning.
 /// So this drives the real Renderer and asserts on what comes back.
-contract TokenUriGoldenTest is Test {
-    MachineReadableOnly t;
-    Renderer r;
-
-    address constant WARDEN = address(0x3A2D);
-    address constant ALICE = address(0xA11CE);
-
-    function _code() internal pure returns (bytes memory) {
-        return
-        hex"fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff"
-        hex"fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796"
-        hex"e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef"
-        hex"ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80";
-    }
+contract TokenUriGoldenTest is MroTestBase {
 
     function setUp() public {
-        r = new Renderer();
-        t = new MachineReadableOnly(address(r), WARDEN);
-        vm.warp(86_400 * 1000 + 1);
-        vm.prank(WARDEN);
-        t.mint(1, ALICE, bytes32(uint256(1)), _code());
+        _deployAndMintOne();
     }
 
     function _contains(string memory haystack, string memory needle) internal pure returns (bool) {
