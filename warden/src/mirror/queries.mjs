@@ -21,6 +21,7 @@ export function queries(db) {
       "INSERT OR REPLACE INTO keys (keyId, jwk, directory, registeredAt) VALUES (?, ?, ?, ?)"
     ),
     getKey: db.prepare("SELECT * FROM keys WHERE keyId = ?"),
+    allKeys: db.prepare("SELECT * FROM keys ORDER BY registeredAt ASC"),
   };
 
   return {
@@ -48,6 +49,7 @@ export function queries(db) {
     getToken: (tokenId) => s.getToken.get(tokenId),
     tokensForKey: (keyId) => s.tokensForKey.all(keyId),
     getKey: (keyId) => s.getKey.get(keyId),
+    allKeys: () => s.allKeys.all(),
     insertKey: ({ keyId, jwk, directory, registeredAt }) =>
       s.insertKey.run(keyId, JSON.stringify(jwk), directory ?? null, registeredAt),
 
