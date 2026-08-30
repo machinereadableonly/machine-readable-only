@@ -20,6 +20,34 @@ export const MAX_WINDOW_MS = 5 * 60 * 1000;
 const REQUIRED = ["@authority", "@method", "@path", "signature-agent"];
 
 /**
+ * The component list a signature ACTUALLY covered.
+ *
+ * Read from the base's own "@signature-params" line, never by searching the
+ * whole base for a component name. Searching the whole base is defeatable: a
+ * COVERED header whose value contains the text "@path" satisfies a substring
+ * test while leaving the real path unsigned, and the same headers then replay
+ * against any other method and path. Measured on 2026-08-30, that let a
+ * signature covering only @authority and signature-agent through, and the
+ * identical headers were then accepted at DELETE /admin-evil.
+ *
+ * lastIndexOf, because the parameters line is the LAST line of the base --
+ * text forged earlier in it must not be able to win.
+ */
+function coveredComponents(base) {
+  const marker = '"@signature-params": (';
+  const at = base.lastIndexOf(marker);
+  if (at === -1) return null;
+  const open = at + marker.length;
+  const close = base.indexOf(")", open);
+  if (close === -1) return null;
+  return base
+    .slice(open, close)
+    .split(" ")
+    .map((entry) => entry.split(";")[0].replace(/^"|"$/g, ""))
+    .filter(Boolean);
+}
+
+/**
  * Verify one request.
  *
  * `lookupKey(keyId, signatureAgent)` returns the public JWK or null. The key id
@@ -29,14 +57,17 @@ const REQUIRED = ["@authority", "@method", "@path", "signature-agent"];
 export async function verifyRequest(request, lookupKey) {
   const signatureAgent = headerOf(request, "signature-agent");
   let reason = "signature";
+  let verifiedKeyId = null;
 
   try {
     await verify(request, async (data, signature, params) => {
-      // `data` is the signature base: one line per covered component. Reading
-      // the covered set from it needs no parser and cannot disagree with what
-      // was actually signed.
+      const covered = coveredComponents(data);
+      if (!covered) {
+        reason = "components";
+        throw new Error("signature base carries no @signature-params line");
+      }
       for (const component of REQUIRED) {
-        if (!data.includes(`"${component}"`)) {
+        if (!covered.includes(component)) {
           reason = "components";
           throw new Error(`signature does not cover ${component}`);
         }
@@ -47,7 +78,16 @@ export async function verifyRequest(request, lookupKey) {
         throw new Error("signature window exceeds five minutes");
       }
 
-      const jwk = await lookupKey(params.keyid, signatureAgent);
+      let jwk;
+      try {
+        jwk = await lookupKey(params.keyid, signatureAgent);
+      } catch {
+        // The directory could not be reached. Fail CLOSED, but say so: telling
+        // an honest client its crypto is bad during an outage sends it to
+        // debug the wrong thing.
+        reason = "directory";
+        throw new Error("key lookup failed");
+      }
       if (!jwk) {
         reason = "unknown-key";
         throw new Error("no key for that key id");
@@ -55,6 +95,11 @@ export async function verifyRequest(request, lookupKey) {
 
       const verifier = await verifierFromJWK(jwk);
       await verifier(data, signature, params);
+
+      // The key id the library VERIFIED, captured here. Reading it back off the
+      // raw header afterwards would mean trusting a regex over attacker-shaped
+      // text to agree with what the cryptography actually checked.
+      verifiedKeyId = params.keyid;
       reason = null;
     });
   } catch {
@@ -64,9 +109,8 @@ export async function verifyRequest(request, lookupKey) {
     return { ok: false, reason: reason ?? "signature" };
   }
 
-  const keyId = keyIdFrom(request);
-  if (!keyId) return { ok: false, reason: "signature" };
-  return { ok: true, keyId };
+  if (!verifiedKeyId) return { ok: false, reason: "signature" };
+  return { ok: true, keyId: verifiedKeyId };
 }
 
 /**
@@ -89,12 +133,4 @@ export function headerOf(request, name) {
     if (key.toLowerCase() === want) return h[key];
   }
   return null;
-}
-
-/// The key id, read back off the Signature-Input header after verification has
-/// already proved the signature over it.
-function keyIdFrom(request) {
-  const input = headerOf(request, "signature-input");
-  const m = typeof input === "string" ? input.match(/keyid="([^"]+)"/) : null;
-  return m ? m[1] : null;
 }
