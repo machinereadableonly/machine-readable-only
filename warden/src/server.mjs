@@ -6,9 +6,11 @@ import { createServer as createHttpServer } from "node:http";
 import { writeFileSync } from "node:fs";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
-import { admit, sweepSeen } from "./door/middleware.mjs";
+import { admit, sweepSeen, pinnedUrl } from "./door/middleware.mjs";
 import { issueChallenge, verifyNonceMinted } from "./door/challenge.mjs";
 import { makeLookup, guardedFetchDirectory, renderDirectory, registerRoute } from "./door/directory.mjs";
+// tokenView and the MCP handler are NOT imported: they belong to Tasks 6 and 7
+// and arrive through config, so this router is runnable the day it is written.
 
 const json = (res, status, body) => {
   const text = JSON.stringify(body);
@@ -16,27 +18,50 @@ const json = (res, status, body) => {
   res.end(text);
 };
 
+/// Marks a rejection from readBody as "the body was too big" rather than some
+/// other stream failure, so the caller can answer with the right reason.
+class BodyTooLargeError extends Error {}
+
 /**
  * Read a request body, refusing anything over `cap`.
  *
  * Checked WHILE reading, not after: buffering an unbounded body and measuring
  * it afterward means the oversized body is already sitting in memory by the
  * time it gets refused. Same shape as the cap in guardedFetchDirectory.
+ *
+ * On overflow this does NOT destroy the socket itself -- it only stops
+ * listening and rejects. Destroying here, before the caller has written a
+ * response, sent the caller ECONNRESET instead of the 400 this code means to
+ * send. The caller answers first, then ends, then may cut the connection.
  */
 function readBody(req, cap) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
-    req.on("data", (chunk) => {
+    const cleanup = () => {
+      req.off("data", onData);
+      req.off("end", onEnd);
+      req.off("error", onError);
+    };
+    const onData = (chunk) => {
       size += chunk.length;
       if (size > cap) {
-        req.destroy();
-        return reject(new Error("body too large"));
+        cleanup();
+        return reject(new BodyTooLargeError("body too large"));
       }
       chunks.push(chunk);
-    });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    req.on("error", reject);
+    };
+    const onEnd = () => {
+      cleanup();
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    };
+    const onError = (err) => {
+      cleanup();
+      reject(err);
+    };
+    req.on("data", onData);
+    req.on("end", onEnd);
+    req.on("error", onError);
   });
 }
 
@@ -47,29 +72,46 @@ function readBody(req, cap) {
  * are supplied by the caller rather than imported here: neither module exists
  * yet in this repo (Task 6 builds the token view, Task 7 builds the MCP
  * handler), and importing a path that does not exist would make this module
- * fail to load at all. `config.allowRegistration` is an optional rate-limit
- * decision for POST /keys; it defaults to always-allow when the caller does
- * not supply one. `config.directoryPath`, if given, is where the served JWKS
- * is rewritten after a successful key registration.
+ * fail to load at all. `config.allowRegistration` is REQUIRED: it is the rate
+ * limit on the one unsigned write path this service has (POST /keys), and a
+ * default of always-allow would leave that path unlimited.
+ * `config.directoryPath`, if given, is where the served JWKS is rewritten
+ * after a successful key registration.
  */
 export function createServer(config) {
+  if (typeof config.allowRegistration !== "function") {
+    throw new Error("config.allowRegistration is required");
+  }
+
   const db = openDb(config.stateDbPath);
   const q = queries(db);
   const seen = new Set();
   const lookupKey = makeLookup(q, guardedFetchDirectory, config.domain);
-  const allowRegistration = config.allowRegistration ?? (() => true);
+  const allowRegistration = config.allowRegistration;
 
   setInterval(() => sweepSeen(seen), 10_000).unref();
 
   return createHttpServer(async (req, res) => {
     try {
-      const path = new URL(req.url, `https://${config.domain}`).pathname;
+      // The SAME reduction the signature check uses, so the path the router
+      // dispatches on and the authority the signature is checked against can
+      // never come apart. Node passes the request target through verbatim,
+      // and a target can carry its own authority ("//evil.example/mcp",
+      // "http://evil.example/mcp") that a plain `new URL(req.url, base)`
+      // would let win over the configured domain.
+      const path = pinnedUrl(req.url, config.domain).pathname;
 
       // Case 1: the QR's destination. Public, unsigned, JSON only. Gating this
       // would mean a scanned token leads nowhere, which is the one distribution
       // surface the artwork has.
       if (req.method === "GET" && path.startsWith("/t/")) {
-        const view = config.tokenView(q, Number(path.slice(3)));
+        // Strict decimal only. Number() accepts "0x1" (aliasing /t/0x1 to
+        // token 1) and "" (becoming token 0), so a route-shaped string that
+        // is not plain decimal digits is refused before it ever reaches
+        // tokenView.
+        const raw = path.slice(3);
+        if (!/^[0-9]+$/.test(raw)) return json(res, 404, { ok: false, reason: "unknown-token" });
+        const view = config.tokenView(q, Number(raw));
         return view ? json(res, 200, view) : json(res, 404, { ok: false, reason: "unknown-token" });
       }
 
@@ -93,12 +135,32 @@ export function createServer(config) {
       // signature over a nonce this server issued, checked inside
       // registerRoute.
       if (req.method === "POST" && path === "/keys") {
+        let raw;
+        try {
+          raw = await readBody(req, 64 * 1024);
+        } catch (err) {
+          // Answer FIRST, end, THEN cut the connection -- destroying it
+          // before responding is what turned this into an ECONNRESET.
+          json(res, 400, { ok: false, reason: err instanceof BodyTooLargeError ? "too-large" : "body" });
+          req.destroy();
+          return;
+        }
+
         let body;
         try {
-          body = JSON.parse(await readBody(req, 64 * 1024));
+          body = JSON.parse(raw);
         } catch {
-          return json(res, 400, { ok: false, reason: "body" });
+          return json(res, 400, { ok: false, reason: "malformed" });
         }
+        // registerRoute destructures { jwk, nonce, proof } off this. A null
+        // body throws there; a number, string or array body destructures to
+        // all-undefined fields and is refused by registerRoute's own checks
+        // -- but neither of those is the 400 an obviously malformed body
+        // deserves, so it is refused here, before registerRoute ever sees it.
+        if (typeof body !== "object" || body === null || Array.isArray(body)) {
+          return json(res, 400, { ok: false, reason: "malformed" });
+        }
+
         const result = await registerRoute(
           q,
           body,
@@ -126,7 +188,11 @@ export function createServer(config) {
       const decision = await admit(req, { secret: config.challengeSecret, lookupKey, seen, domain: config.domain });
       if (!decision.ok) return json(res, decision.status, decision.body);
 
-      if (path === "/mcp") return config.mcp.nodeHandler(req, res, decision.keyId);
+      // `return await`, not a bare `return`. A bare return hands the promise
+      // back OUTSIDE this try, so a rejecting handler becomes an unhandled
+      // rejection -- which under Node's default takes the process down and
+      // leaves the caller hanging rather than getting the 500 below.
+      if (path === "/mcp") return await config.mcp.nodeHandler(req, res, decision.keyId);
 
       return json(res, 404, { ok: false, reason: "unknown-route" });
     } catch (err) {
