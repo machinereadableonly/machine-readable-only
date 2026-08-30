@@ -12,6 +12,23 @@
 /// nothing.
 export const MAX_TRIES = 3;
 
+/**
+ * Return orphaned rows to the queue.
+ *
+ * A row is marked `solving` before its child process starts, so if the warden
+ * itself dies mid-solve -- OOM-kill, crash, redeploy -- that row is left
+ * `solving` with nothing working on it, and claimNext only ever returns
+ * `pending`. Nothing else would recover it, and an agent has already PAID for
+ * that token.
+ *
+ * This is safe precisely because the solver claims one row at a time in a
+ * single process: at startup nothing can legitimately be in flight, so every
+ * `solving` row is by definition an orphan. Call it once, before draining.
+ */
+export function requeueOrphans(q) {
+  return q.requeueSolving();
+}
+
 export function claimNext(q) {
   const row = q.nextPendingMint();
   if (!row) return null;

@@ -30,6 +30,7 @@ export function queries(db) {
     completeSolve: db.prepare("UPDATE mints SET qr = ?, solveState = 'done' WHERE tokenId = ?"),
     bumpSolveTries: db.prepare("UPDATE mints SET solveTries = solveTries + 1 WHERE tokenId = ? RETURNING solveTries"),
     getMint: db.prepare("SELECT * FROM mints WHERE tokenId = ?"),
+    requeueSolving: db.prepare("UPDATE mints SET solveState = 'pending' WHERE solveState = 'solving'"),
   };
 
   return {
@@ -75,5 +76,6 @@ export function queries(db) {
     completeSolve: (tokenId, qr) => s.completeSolve.run(qr, tokenId),
     bumpSolveTries: (tokenId) => s.bumpSolveTries.get(tokenId).solveTries,
     getMint: (tokenId) => s.getMint.get(tokenId),
+    requeueSolving: () => s.requeueSolving.run().changes,
   };
 }
