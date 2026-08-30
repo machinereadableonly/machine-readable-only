@@ -157,9 +157,9 @@ identity primitive.</p>
 <td>The same gate family, plus the daily growth mechanic, plus a distribution plan (section 13), because mechanism alone got BLINK one mint</td>
 </tr>
 <tr>
-<td>OpenSea ERC-8257 / agent tools</td>
-<td>Agent-to-agent NFT trading</td>
-<td>Used, not rebuilt: MRO tokens are plain ERC-721s</td>
+<td>OpenSea ERC-8257 (Draft, Standards Track)</td>
+<td><strong>Agent Tool Registry</strong>: a permissionless on-chain registry where agent tools are listed, origin-bound and discovered, with an <code>accessPredicate</code> contract gating who may use each one. Live on Ethereum mainnet and Base; <code>ToolRegistry</code> <code>0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1</code> returned <code>toolCount() = 570</code> on Base mainnet, measured 2026-08-30</td>
+<td>Corrected 2026-08-30: the earlier entry called this &quot;agent-to-agent NFT trading&quot;, which it is not. It is a discovery channel MRO should register in (section 13), not a competitor. MRO&#39;s tokens stay plain ERC-721s</td>
 </tr>
 </tbody></table>
 <p>The unclaimed ground is the combination: cryptographic proof of agent at the
@@ -189,12 +189,12 @@ heart) that a human recognises but cannot produce, and machine-only payments
 <tr>
 <td>3</td>
 <td>Proof of agent</td>
-<td>Any valid RFC 9421 (Web Bot Auth) signed request, plus one theatrical challenge that only code can pass. Two ways to publish a key: self-hosted directory (the standard) or MRO-hosted directory (the easy path). A human driving an agent is a non-issue by design</td>
+<td>Any valid RFC 9421 (Web Bot Auth) signed request, plus one theatrical challenge that only code can pass. Two ways to publish a key: self-hosted directory (the standard) or MRO-hosted directory (the easy path). A human driving an agent is a non-issue by design. <strong>Amended 2026-08-30:</strong> the mechanism is unchanged, the framing is corrected. This is MRO&#39;s own self-contained proof-of-code gate; it does NOT ride on signing that the major agent runtimes already do, because most of them do not do it yet (section 5)</td>
 </tr>
 <tr>
 <td>4</td>
 <td>Whose wallet</td>
-<td>Token minted to whatever Base address the agent names. Maintenance bound to the agent&#39;s signing key id. Owner can rebind on-chain. A key may mint once but may maintain any number of tokens. Selling is via normal marketplaces</td>
+<td>Token minted to whatever Base address the agent names. Maintenance bound to the agent&#39;s signing key id. Owner can rebind on-chain. A key may mint once but may maintain any number of tokens. Selling is via normal marketplaces. <strong>Amended 2026-08-30: smart-account wallets are in scope and are handled</strong> -- see section 7, &quot;Smart accounts and agent wallets&quot;</td>
 </tr>
 <tr>
 <td>5</td>
@@ -209,7 +209,7 @@ heart) that a human recognises but cannot produce, and machine-only payments
 <tr>
 <td>7</td>
 <td>Discovery</td>
-<td>In evidence order: <code>SKILL.md</code> + <code>npx skills add &lt;github-user&gt;/mro</code> + ClawHub/openclaw listings; a human X account with reach plus the automated daily post; early access for wallets that already run mint skills; the x402 Bazaar listing; the seed agent as token #1; MCP registry and ERC-8004 for legitimacy; <code>/llms.txt</code> as hygiene</td>
+<td>In evidence order: <code>SKILL.md</code> + <code>npx skills add &lt;github-user&gt;/mro</code> + ClawHub/openclaw listings; a human X account with reach plus the automated daily post; early access for wallets that already run mint skills; <strong>ERC-8257 tool-registry registration</strong> (a plain on-chain write on Base, 570 entries as at 2026-08-30, so a land-grab window rather than a crowded directory); the seed agent as token #1; MCP registry and ERC-8004 for legitimacy; <strong>the x402 Bazaar listing, best-effort only</strong> (amended 2026-08-30, see section 13 -- cataloguing cannot be verified from the response, so it is never counted on); <code>/llms.txt</code> as hygiene</td>
 </tr>
 <tr>
 <td>8</td>
@@ -360,6 +360,28 @@ web request with its own private key (an Ed25519 key, like a wax seal only it
 can make) and publishes the matching public key at a well-known URL so the site
 can check the seal. It proves <em>which</em> key sent the request. It cannot prove
 there is no human behind it, and MRO does not try to.</p>
+<p><strong>What this gate does and does not rely on (added 2026-08-30).</strong> The protocol
+is real and standards-track, but its adoption <em>among AI runtimes specifically</em>
+is narrower than a casual reading suggests, and the design must not imply
+otherwise. Verified 2026-08-30 against primary sources: Cloudflare&#39;s signed-
+agents cohort names <strong>ChatGPT agent (OpenAI), Goose (Block), Browserbase,
+Anchor Browser and Cloudflare&#39;s own Browser Rendering</strong> -- announced
+2025-08-28, and <strong>Anthropic is not among them</strong>. Cloudflare&#39;s Web Bot Auth
+documentation names no signing operator at all beyond one <code>Forwarded: for=&quot;openai&quot;</code>
+example, and Cloudflare Radar&#39;s live bot directory returns HTTP 403 to
+automated fetches, so it cannot settle the question either way. The May 2026
+&quot;Claude Managed Agents on Cloudflare&quot; announcement is about running agent code
+on Cloudflare infrastructure and says nothing about request signing; do not
+read it as evidence that Claude signs.</p>
+<p><strong>This changes nothing mechanically, because MRO never assumed it.</strong> Every
+participant generates and publishes its own key -- <code>mro-agent</code> does so by
+default, with the self-hosted directory as the standard path and the MRO-hosted
+directory as the easy path. So the correct description of the door is: a
+deliberate, self-contained proof-of-code challenge that an agent satisfies by
+minting its own identity, <strong>not</strong> a turnstile that existing signed agents walk
+straight through. That is also the better story for an art piece about
+machines. Anywhere this document or the client copy implies &quot;the major agents
+can already do this&quot;, it is wrong; name the agents that demonstrably can.</p>
 <h3>Publishing a key (two paths, one rule)</h3>
 <ul>
 <li><strong>Standard path:</strong> the agent hosts
@@ -436,6 +458,23 @@ server per request), input schemas in Zod v4 (<code>import * as z from &quot;zod
 <li>The 2026-07-28 transport requires <code>Mcp-Method</code> on every request, <code>Mcp-Name</code>
 on <code>tools/call</code> and <code>resources/read</code>, and <code>MCP-Protocol-Version</code>. There are
 no sessions and no <code>initialize</code> handshake.</li>
+<li><strong>Do not implement Roots, Sampling or Logging</strong> (verified against the
+2026-07-28 changelog, 2026-08-30). All three are Deprecated under the new
+feature-lifecycle policy with a minimum twelve-month removal window, and new
+implementations are told not to adopt them. Also deprecated: the HTTP+SSE
+transport, and OAuth 2.0 Dynamic Client Registration in favour of Client ID
+Metadata Documents. Removed outright in this revision and therefore absent
+from any implementation: <code>ping</code>, <code>logging/setLevel</code>,
+<code>notifications/roots/list_changed</code>, SSE stream resumability
+(<code>Last-Event-ID</code>), and <code>resources/subscribe</code> / <code>resources/unsubscribe</code>
+(replaced by <code>subscriptions/listen</code>). Servers <strong>MUST</strong> implement
+<code>server/discover</code>; every result carries a <code>resultType</code>; and list results
+carry <code>ttlMs</code> and <code>cacheScope</code>, which suits MRO because the tool list never
+changes between calls.</li>
+<li>Tool descriptions carry <code>readOnlyHint</code> / <code>openWorldHint</code> annotations, and any
+field that echoes agent-supplied text -- names, key ids -- carries an
+explicit prompt-injection warning. Copied from base-200&#39;s working server,
+which answers the same spec revision.</li>
 <li>Every tool reads the caller&#39;s key id from the already-verified request,
 never from a parameter.</li>
 <li>All tools read and write the Warden&#39;s <strong>mirror</strong> (section 11), not the
@@ -571,17 +610,17 @@ mapping(address =&gt; uint32) mintedTo;      // tokens ever MINTED to an address
 <tbody><tr>
 <td><code>mint(uint256 tokenId, address to, bytes32 keyId, bytes qr)</code></td>
 <td><code>onlyWarden</code>, <code>whenNotPaused</code></td>
-<td>Reverts <code>AlreadyMinted</code> if the key has minted, <code>TokenExists</code> if the id is taken, <code>SupplyCap</code> if <code>totalMinted &gt;= supplyCap</code>, <code>WalletCap</code> if <code>mintedTo[to] &gt;= walletCap</code>, counting tokens ever MINTED to that address, not tokens currently held. Amended 2026-08-30: &quot;holds&quot; was ambiguous. Counting current holdings would let the cap be defeated by transferring out before re-minting, and would wrongly block someone who bought on the secondary market. Seeded children are counted the same way. The dial starts at 20. Records <code>firstMintDay[key]</code>. Sets <code>level = 1</code>, <code>streak = 1</code>, <code>lastDay = mintDay = today</code>. Emits <code>Minted(tokenId, keyId)</code></td>
+<td>Reverts <code>AlreadyMinted</code> if the key has minted, <code>TokenExists</code> if the id is taken, <code>SupplyCap</code> if <code>totalMinted &gt;= supplyCap</code>, <code>WalletCap</code> if <code>mintedTo[to] &gt;= walletCap</code>, counting tokens ever MINTED to that address, not tokens currently held. Amended 2026-08-30: &quot;holds&quot; was ambiguous. Counting current holdings would let the cap be defeated by transferring out before re-minting, and would wrongly block someone who bought on the secondary market. Seeded children are counted the same way. The dial starts at 20. Amended 2026-08-30: reverts <code>IdTooLarge</code> if <code>tokenId &gt; 2**32 - 1</code>, because <code>batchCheckIn</code> addresses ids in four packed bytes and a larger id could mint and render but never be checked in; and <code>ZeroKeyId</code> if <code>keyId</code> is zero, because a Warden serialising a missing thumbprint to zero would permanently burn the zero key and create a seed budget shared by every token that rebinds to it. Records <code>firstMintDay[key]</code>. Sets <code>level = 1</code>, <code>streak = 1</code>, <code>lastDay = mintDay = today</code>. Emits <code>Minted(tokenId, keyId)</code></td>
 </tr>
 <tr>
 <td><code>batchCheckIn(bytes packedIds, uint32[] days)</code></td>
 <td><code>onlyWarden</code>, <code>whenNotPaused</code></td>
-<td>Ids packed as 4-byte values. Per entry: <code>require(day &gt; lastDay)</code> else <code>DayNotAdvanced</code>; <code>level += 1</code>; <code>streak = (day == lastDay + 1) ? streak + 1 : 1</code>; <code>lastDay = day</code>. Events: <code>BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count)</code>, then one ERC-4906 <code>MetadataUpdate(id)</code> per token written, emitted after the storage writes. Amended 2026-08-30: the range form was impossible, because a day&#39;s check-ins are a scattered subset and <code>minId..maxId</code> is therefore never the exact set written. Per-token emits are also reuse rather than a new cost -- the Clock already has to emit per token for paling-step crossers. Entries for the same token in ascending day order are legal (late writes after an outage)</td>
+<td>Ids packed as 4-byte values. Per entry: <code>require(day &lt;= today())</code> else <code>FutureDay</code> -- amended 2026-08-30, because a day index is bounded ABOVE as well as below: a Warden passing a timestamp where a day index belongs would set <code>lastDay</code> to roughly 4.7M and every later check-in would revert <code>DayNotAdvanced</code> forever, with no admin path to reset it and no upgrade path to fix it; then <code>require(day &gt; lastDay)</code> else <code>DayNotAdvanced</code>; <code>level += 1</code>; <code>streak = (day == lastDay + 1) ? streak + 1 : 1</code>; <code>lastDay = day</code>. Events: <code>BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count)</code>, then one ERC-4906 <code>MetadataUpdate(id)</code> per token written, emitted after the storage writes. Amended 2026-08-30: the range form was impossible, because a day&#39;s check-ins are a scattered subset and <code>minId..maxId</code> is therefore never the exact set written. Per-token emits are also reuse rather than a new cost -- the Clock already has to emit per token for paling-step crossers. Entries for the same token in ascending day order are legal (late writes after an outage)</td>
 </tr>
 <tr>
 <td><code>applyMark(uint256 id, uint8 upgradeId)</code></td>
-<td><code>onlyWarden</code></td>
-<td>Checks <code>active</code>, bit unset, <code>sold &lt; maxSupply</code> (if capped), <code>level &gt;= minLevel</code>, <code>streak &gt;= minStreak</code>, <code>requiresWhole =&gt; level &gt;= 365</code>. Increments <code>sold</code>. Emits <code>MarkApplied(id, upgradeId)</code></td>
+<td><code>onlyWarden</code>, <code>whenNotPaused</code></td>
+<td>Checks <code>active</code>, bit unset, <code>sold &lt; maxSupply</code> (if capped), <code>level &gt;= minLevel</code>, <code>streak &gt;= minStreak</code>, <code>requiresWhole =&gt; level &gt;= 365</code>. Increments <code>sold</code>. Emits <code>MarkApplied(id, upgradeId)</code>. Amended 2026-08-30 on two counts. First, <code>whenNotPaused</code> was MISSING from the implementation while the <code>pause()</code> row below claimed marks were blocked; the row now states it and the contract enforces it, because mark bits are unclearable and a compromised Warden could otherwise deface every token while the contract read as paused. Second, it now reverts <code>NoSuchToken</code> when <code>level == 0</code>: <code>minLevel</code> is an owner-settable dial, and at 0 a mark could be written to a never-minted id, consuming a capped supply slot, and <code>mint</code> does not clear <code>marks</code>, so that id would later mint already marked</td>
 </tr>
 <tr>
 <td><code>rebind(uint256 id, bytes32 newKeyId)</code></td>
@@ -591,7 +630,7 @@ mapping(address =&gt; uint32) mintedTo;      // tokens ever MINTED to an address
 <tr>
 <td><code>seed(uint256 childId, uint256 parentId, address to, bytes qr)</code></td>
 <td><code>onlyWarden</code>, <code>whenNotPaused</code>, not sunset</td>
-<td>Requires parent <code>level &gt;= 365</code>, not resting, <code>seedsSpent[key] &lt; (today - firstMintDay[key]) / 365</code> where <code>key</code> is the parent&#39;s bound key, <code>totalMinted &lt; supplyCap</code>. Increments <code>seedsSpent[key]</code> and parent <code>seedsGiven</code>; child gets <code>generation = parent.generation + 1</code>, <code>parentOf[child] = parentId</code>, the parent&#39;s bound key, <code>level = 1</code>, <code>streak = 1</code>. No fee. Emits <code>Seeded(parentId, childId, generation)</code></td>
+<td>Reverts <code>IdTooLarge</code> if <code>childId &gt; 2**32 - 1</code>, the same ceiling <code>mint</code> enforces and for the same reason (amended 2026-08-30). Requires parent <code>level &gt;= 365</code>, not resting, <code>seedsSpent[key] &lt; (today - firstMintDay[key]) / 365</code> where <code>key</code> is the parent&#39;s bound key, <code>totalMinted &lt; supplyCap</code>. Increments <code>seedsSpent[key]</code> and parent <code>seedsGiven</code>; child gets <code>generation = parent.generation + 1</code>, <code>parentOf[child] = parentId</code>, the parent&#39;s bound key, <code>level = 1</code>, <code>streak = 1</code>. No fee. Emits <code>Seeded(parentId, childId, generation)</code></td>
 </tr>
 <tr>
 <td><code>rest(uint256 id)</code></td>
@@ -601,7 +640,7 @@ mapping(address =&gt; uint32) mintedTo;      // tokens ever MINTED to an address
 <tr>
 <td><code>checkInWithVoucher(uint256 id, uint32 day, bytes wardenSig)</code></td>
 <td>anyone, <code>whenVouchersEnabled</code> (off at launch)</td>
-<td>The durability path: the bound agent submits its own check-in with a Warden-signed EIP-712 voucher and pays its own gas. Ships paused so tokens can outlive the operator if the Warden is ever switched to voucher-only mode. Same <code>day &gt; lastDay</code> rule</td>
+<td>The durability path: the bound agent submits its own check-in with a Warden-signed EIP-712 voucher and pays its own gas. Ships paused so tokens can outlive the operator if the Warden is ever switched to voucher-only mode. Same <code>day &gt; lastDay</code> rule, and since 2026-08-30 the same <code>day &lt;= today()</code> upper bound as <code>batchCheckIn</code>: the path ships disabled but can never be ADDED later either, so it cannot be left with a hole</td>
 </tr>
 <tr>
 <td><code>sunset()</code></td>
@@ -611,12 +650,17 @@ mapping(address =&gt; uint32) mintedTo;      // tokens ever MINTED to an address
 <tr>
 <td><code>setWarden(address)</code>, <code>setRenderer(address)</code>, <code>setSupplyCap(uint32)</code>, <code>setUpgrade(uint8, Upgrade)</code></td>
 <td>contract owner</td>
-<td>Dials. Emits an event each</td>
+<td>Dials. Emits an event each. Amended 2026-08-30: <code>setUpgrade</code> PRESERVES the stored <code>sold</code> and ignores the value in calldata. <code>sold</code> is owned by <code>applyMark</code>; taking it from calldata meant editing a Mark&#39;s price required re-supplying the current count by hand, and getting it wrong silently reset scarcity and re-opened a sold-out Mark. Halo x1000, Crown x100 and Singularity x10 are stated product properties, not conventions</td>
 </tr>
 <tr>
 <td><code>pause()</code> / <code>unpause()</code></td>
 <td>contract owner</td>
 <td>Blocks mint, check-in and marks; never transfers or <code>rebind</code></td>
+</tr>
+<tr>
+<td><code>renounceOwnership()</code></td>
+<td>disabled</td>
+<td>Added 2026-08-30. Always reverts <code>RenounceDisabled</code>. OpenZeppelin ships it live and <code>Ownable2Step</code> does not override it, so it was reachable: renouncing WHILE PAUSED would freeze the piece forever -- no mint, no check-in, no seed, no unpause, and no upgrade path to recover. <code>sunset()</code> is the designed operator ending and leaves transfers, <code>rebind</code> and every token&#39;s art intact, so renounce had no legitimate use here and exactly one catastrophic failure mode. Ownership can still be TRANSFERRED via <code>Ownable2Step</code></td>
 </tr>
 <tr>
 <td><code>tokenURI(uint256 id)</code></td>
@@ -628,7 +672,9 @@ mapping(address =&gt; uint32) mintedTo;      // tokens ever MINTED to an address
 <code>DayNotAdvanced</code>, <code>MarkInactive</code>, <code>MarkAlreadyApplied</code>, <code>MarkSoldOut</code>,
 <code>MarkGate</code>, <code>NotTokenOwner</code>, <code>EnforcedPause</code>, <code>Resting</code>, <code>Sunset</code>,
 <code>AlreadySunset</code>, <code>ParentNotWhole</code>, <code>NoSeedAvailable</code>, <code>WalletCap</code>,
-<code>VouchersDisabled</code>.</p>
+<code>VouchersDisabled</code>, and added 2026-08-30: <code>FutureDay</code>, <code>IdTooLarge</code>,
+<code>ZeroKeyId</code>, <code>RenounceDisabled</code>, plus <code>NoSuchToken</code> which the implementation
+already carried and this list omitted.</p>
 <p>Errors: <code>Sunset()</code> when the piece is closed, and <code>AlreadySunset()</code> when
 <code>sunset()</code> is called twice. Event: <code>SunsetAt(uint32 day)</code>. Amended 2026-08-30:
 the spec previously used <code>Sunset</code> for both an error and an event, which does
@@ -693,6 +739,40 @@ choice. The durability commitments require the voucher path on chain from
 day one, and CLAUDE.md&#39;s locked decisions say it ships paused. With no
 upgrade path, a voucher path omitted now could never be added.</li>
 </ul>
+<hr>
+<h3>Smart accounts and agent wallets (added 2026-08-30)</h3>
+<p>Practically every wallet built <em>for agents</em> is a smart contract account rather
+than a plain EOA: Coinbase CDP smart wallets (Base-only, which is this chain),
+Coinbase Agentic Wallets, MetaMask&#39;s Agent Wallet on ERC-7715 / ERC-7710, and
+anything on ERC-4337. Base is adding native account abstraction at chain level
+during 2026. A piece whose entire premise is that only agents participate
+cannot afford to reject the wallets agents actually use.</p>
+<p><strong>MRO is already safe here, and it is worth writing down why, so the question
+is not re-opened.</strong> The usual failure -- a route that verifies a <em>wallet</em>
+signature with plain ECDSA recovery and so rejects every contract account --
+does not exist in this design:</p>
+<ul>
+<li><strong>MRO never verifies a visitor&#39;s wallet signature.</strong> Identity at the door is
+the RFC 9421 agent key, not a wallet. The only <code>ECDSA.recover</code> in the
+contract checks the <strong>Warden&#39;s own</strong> signature on a check-in voucher, and the
+Warden is an EOA MRO controls.</li>
+<li><strong><code>rebind</code> and <code>rest</code> are submitted by the owner&#39;s own wallet</strong>, and the
+contract authorises them with <code>msg.sender == ownerOf(id)</code>. A smart account
+satisfies that natively, with no signature-verification path involved.</li>
+</ul>
+<p>One real touchpoint remains: <strong><code>mint</code> and <code>seed</code> use <code>_safeMint</code></strong>, so a
+contract recipient must implement <code>onERC721Received</code>. Every mainstream smart
+account does, but a bespoke one may not, and the revert is opaque to an agent
+that just paid. The Warden therefore pre-flights the <code>to</code> address before
+charging: if it has code and does not answer the ERC-721 receiver interface,
+refuse the mint with a plain reason instead of taking the fee and reverting.</p>
+<p>If a future route ever does need to check a wallet signature, the rule is
+viem&#39;s <strong>public-client</strong> <code>verifyMessage</code> (not the standalone export, which is
+ECDSA-only), which covers ERC-1271 for deployed accounts and ERC-6492 for
+ones not yet deployed. Base&#39;s own documentation recommends exactly that, and
+Base Account signatures carry the ERC-6492 wrapper. base-200 has already paid
+for this lesson in full; read <code>docs/2026-08-29-agent-readiness-audit.md</code> in
+that repo before writing any such path.</p>
 <hr>
 <h2>8. The image: robot heart to human heart</h2>
 <p>Plain English: an NFT&#39;s picture normally lives on a web server that can go
@@ -1168,17 +1248,61 @@ Warden, seed agent, testnet facilitator with test USDC. Soak <strong>7 days</str
 seed agent checking in daily, one paid mint from a second key, one Mark.</li>
 <li>Base mainnet deploy (the operator approval; irreversible). Seed agent mints token #1.</li>
 <li>Distribution, in the order the evidence ranks it: publish <code>mro-agent</code> and
-its <code>SKILL.md</code> (npm, <code>/skill.md</code>, ClawHub, openclaw/skills); the x402
-Bazaar listing that comes free with the CDP facilitator; early access for
-wallets holding Claws, Shellborn, Base Buds or BLOKS (the only wallets
+its <code>SKILL.md</code> (npm, <code>/skill.md</code>, ClawHub, openclaw/skills); early access
+for wallets holding Claws, Shellborn, Base Buds or BLOKS (the only wallets
 known to run mint skills); the X account out of dry-run plus the human
-launch post; the Moltbook post by the seed agent; ERC-8004 registration
-of the seed agent (Identity Registry on Base
-<code>0x8004A169FB4a3325136EB29fA0ceB6D2e539a432</code>) and the MCP registry
-<code>server.json</code>, both for legitimacy rather than traffic. Base case without
-a secured channel is single-digit mints; the launch is timed to a news
-moment, not shipped quietly.</li>
+launch post; the Moltbook post by the seed agent; then the on-chain
+registrations in the checklist below, all of which are for legitimacy and
+discovery rather than traffic. Base case without a secured channel is
+single-digit mints; the launch is timed to a news moment, not shipped
+quietly.</li>
 </ol>
+<h3>Mainnet registration checklist (added 2026-08-30)</h3>
+<p>Four items, each verified live on 2026-08-30. <strong>Every one spends real funds or
+touches an outward-facing account, so each is an explicit operator-approval gate --
+there is no standing approval.</strong> They are listed here so none is retrofitted.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>When</th>
+<th>Why, and what was verified</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><strong>Builder Code (ERC-8021)</strong></td>
+<td><strong>BEFORE the first mainnet write</strong></td>
+<td>Registered at <code>base.dev</code> under Settings -&gt; Builder Code (a browser login, so the operator does this by hand). The code is appended as a <strong>calldata suffix</strong> -- <code>TX_DATA + [CODES_LENGTH][CODES] + [SCHEMA_ID] + [ERC_MARKER]</code>, parsed backwards -- which contracts ignore and off-chain indexers extract, at 16 gas per non-zero byte. Base calls Builder Codes &quot;a key input for future rewards programs&quot;, and there is a schema specifically for attributing x402 payments. MRO is an unusually good fit: minting, the nightly <code>batchCheckIn</code> and Mark purchases are all recurring machine-originated Base transactions. <strong>This must be done first</strong>, because the suffix belongs in the calldata the Warden composes rather than being bolted on afterwards. Implementation is a library call, not hand-rolled bytes: <code>ox</code> ships <code>ox/erc8021</code> with <code>Attribution.toDataSuffix</code> / <code>fromData</code> / <code>getSchemaId</code>, and <code>ox</code> is already present in <code>tools/</code> (0.14.34, checked 2026-08-30) as a viem dependency</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>ERC-8257 tool-registry entry</strong></td>
+<td>at mainnet</td>
+<td><code>registerTool(string metadataURI, bytes32 manifestHash, address accessPredicate)</code> on <code>ToolRegistry</code> <code>0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1</code>. Confirmed live: <code>toolCount()</code> returned <strong>570</strong> on Base mainnet, 2026-08-30. Discovery is four steps -- fetch the on-chain metadata URI, confirm origin-binding at <code>/.well-known/ai-tool/&lt;slug&gt;.json</code>, verify the manifest bytes hash to the on-chain commitment (JCS canonicalisation then keccak256), and confirm the declared creator matches the registrant. <strong>The <code>accessPredicate</code> field is the interesting part for MRO</strong>: it is a contract that decides who may use the tool, and the ERC&#39;s own example of a predicate is an NFT holding. Pointing it at the MRO token would make &quot;only agents, and only ones that have shown up&quot; legible on-chain rather than only in the door sign. Draft status, but deployed and in use on Ethereum mainnet and Base</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>ERC-8004 identity for the seed agent</strong></td>
+<td>at mainnet</td>
+<td>One transaction, gas only. Confirmed live on Base mainnet 2026-08-30: IdentityRegistry <code>0x8004A169FB4a3325136EB29fA0ceB6D2e539a432</code> returns <code>name() = &quot;AgentIdentity&quot;</code>, <code>symbol() = &quot;AGENT&quot;</code>; ReputationRegistry <code>0x8004BAa17C55a88189AE136b182e5fdA19dE9b63</code> has code. <strong>The ValidationRegistry is deployed nowhere</strong> -- that part of the spec is still under discussion with the TEE community, so nothing may depend on it. Keep ERC-8004 as a legitimacy flag, never as a channel, and keep the reputation layer at arm&#39;s length: peer-reviewed work found 59-91% of reviewers showing coordinated Sybil behaviour across the three chains studied</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>x402 Bazaar -- best-effort, and verified rather than assumed</strong></td>
+<td>at mainnet</td>
+<td>Keep x402 for <strong>payment</strong>, which works and is the right choice. Do not count on the Bazaar for <strong>discovery</strong>. Cataloguing happens only when a facilitator processes a <code>PaymentPayload</code> carrying the echoed bazaar extension -- a server-side <code>declareDiscoveryExtension</code> catalogues nothing on its own -- and there is no <code>.well-known/x402</code> submission form. Issue <code>x402-foundation/x402#2112</code> was closed &quot;completed&quot; on 2026-07-16 but drew <strong>five independent reproductions across three chain stacks and four runtimes</strong>, the most recent on 2026-08-28: settlements succeed, the documented <code>EXTENSION-RESPONSES</code> header is never emitted, and records either never appear or appear un-enriched. <strong>Two things to get right if we do it:</strong> <code>serviceName</code>, <code>tags</code> and <code>iconUrl</code> are fields of <code>RouteConfig</code>, <strong>not</strong> of <code>extensions.bazaar</code> -- put them in the wrong object and they survive into the 402 header and are echoed back by <code>/x402/validate</code>, which looks like confirmation and is not (a contributor nearly filed a false bug report on that echo, 2026-08-29; moving them fixed cataloguing within seconds of the next settlement). And <strong><code>echo is not validation</code></strong>: verify by querying <code>/platform/v2/x402/discovery</code> for our own routes, never by reading back our own declaration. Sober sizing: despite headline figures of ~165M transactions and ~$600M annualised, on-chain analysis puts real daily x402 volume near <strong>$28,000</strong>, much of it testing</td>
+</tr>
+</tbody></table>
+<p><strong>Watch item, not scheduled:</strong> ERC-7715 / ERC-7710 delegation (MetaMask Agent
+Wallet&#39;s Early Access Program opened 2026-06-08). MRO&#39;s daily check-in is the
+closest thing in the portfolio to an agent acting repeatedly without a human,
+so this becomes relevant eventually -- but not before Plan 1 ships. EIP-7702
+carries a live caution worth remembering if delegation is ever adopted: a
+peer-reviewed study associated attacker-linked contracts with 63% of 3.66M
+authorisations across seven chains through mid-July 2025, which is an argument
+for vetting delegation targets, not for avoiding the standard.</p>
 <hr>
 <h2>14. Costs (verified live 2026-08-27, revised for revision 2)</h2>
 <p>Base gas was at its protocol floor (0.005-0.006 gwei) and ETH at $2,494 when
@@ -1275,6 +1399,18 @@ only pays it if the spike outlasts the deferral.</p>
 <td>gas only</td>
 </tr>
 <tr>
+<td>ERC-8257 tool registration</td>
+<td>&lt; $0.01</td>
+<td>--</td>
+<td>gas only; one <code>registerTool</code> write</td>
+</tr>
+<tr>
+<td>Builder Code (ERC-8021) suffix</td>
+<td>$0 to register</td>
+<td>16 gas per non-zero byte, per transaction</td>
+<td>Registration is free at base.dev</td>
+</tr>
+<tr>
 <td>MCP registry, npm publish</td>
 <td>$0</td>
 <td>$0</td>
@@ -1334,7 +1470,36 @@ are the gallery; the owner acts via Foundry <code>cast</code> from the PC).</li>
 <li><code>/llms-full.txt</code> (not part of the llms.txt spec).</li>
 </ul>
 <hr>
-<h2>17. Standards and sources checked (2026-08-27)</h2>
+<h2>17. Standards and sources checked (2026-08-27, re-verified 2026-08-30)</h2>
+<h3>Re-verified 2026-08-30 (the agent-readiness pass)</h3>
+<p>Prompted by the hub&#39;s cross-project sweep note. Every claim below was checked
+against a primary source or read directly off Base mainnet on the day, not
+taken from the note.</p>
+<ul>
+<li><strong>Read off Base mainnet with <code>cast</code>:</strong> ERC-8257 <code>ToolRegistry</code>
+<code>0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1</code> -&gt; <code>toolCount() = 570</code>;
+ERC-8004 IdentityRegistry <code>0x8004A169FB4a3325136EB29fA0ceB6D2e539a432</code> -&gt;
+<code>name() = &quot;AgentIdentity&quot;</code>, <code>symbol() = &quot;AGENT&quot;</code>; ReputationRegistry
+<code>0x8004BAa17C55a88189AE136b182e5fdA19dE9b63</code> -&gt; code present.</li>
+<li><strong>ERC-8257 Agent Tool Registry</strong> (Draft, Standards Track), including the
+<code>accessPredicate</code> semantics: <a href="https://eips.ethereum.org/EIPS/eip-8257">https://eips.ethereum.org/EIPS/eip-8257</a></li>
+<li><strong>Web Bot Auth adoption.</strong> Cloudflare&#39;s signed-agents post (2025-08-28) names
+ChatGPT agent, Goose, Browserbase, Anchor Browser and Cloudflare Browser
+Rendering, and does not name Anthropic:
+<a href="https://blog.cloudflare.com/signed-agents/">https://blog.cloudflare.com/signed-agents/</a> . Cloudflare&#39;s Web Bot Auth
+documentation names no signing operator beyond a <code>Forwarded: for=&quot;openai&quot;</code>
+example. Cloudflare Radar&#39;s bot directory returns HTTP 403 to automated
+fetches and could not settle the question. The Claude Managed Agents
+announcement (2026-05-19) is unrelated to request signing:
+<a href="https://blog.cloudflare.com/claude-managed-agents/">https://blog.cloudflare.com/claude-managed-agents/</a></li>
+<li><strong>MCP 2026-07-28 changelog</strong>, for the deprecation list in section 6:
+<a href="https://modelcontextprotocol.io/specification/2026-07-28/changelog">https://modelcontextprotocol.io/specification/2026-07-28/changelog</a></li>
+<li><strong>x402 Bazaar discovery mechanism</strong>: <a href="https://docs.x402.org/extensions/bazaar">https://docs.x402.org/extensions/bazaar</a>
+and the reproduction thread <code>x402-foundation/x402#2112</code> (closed &quot;completed&quot;
+2026-07-16; five independent reproductions, latest comment 2026-08-29).</li>
+<li><strong>ERC-8021 Builder Codes</strong>: <a href="https://blog.base.dev/builder-codes-and-erc-8021-fixing-onchain-attribution">https://blog.base.dev/builder-codes-and-erc-8021-fixing-onchain-attribution</a></li>
+</ul>
+<h3>Checked 2026-08-27</h3>
 <ul>
 <li>Web Bot Auth: <code>draft-meunier-webbotauth-httpsig-protocol-02</code> (2026-08-18);
 IETF <code>webbotauth</code> WG chartered 2025-10-23, no adopted documents yet.

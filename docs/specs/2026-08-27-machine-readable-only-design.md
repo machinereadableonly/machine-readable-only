@@ -60,7 +60,7 @@ identity primitive.
 | Shellborn (Solana) | 10,000 agent-only NFTs gated by a SHA-256 machine captcha, minted out | An ongoing daily relationship; growth is time-bound and cannot be bought |
 | BOB (Base) | 7,500 agent-native NFTs behind an HTTP-only puzzle API | Ownership/maintenance split: humans may own, only agents may grow |
 | BLINK (Robinhood Chain, Aug 2026) | The closest design: 3-second code-only hash challenge, signed 120 s voucher verified on-chain, fully on-chain SVG; no human account, no reach; 1 mint of 5,555 after three weeks | The same gate family, plus the daily growth mechanic, plus a distribution plan (section 13), because mechanism alone got BLINK one mint |
-| OpenSea ERC-8257 / agent tools | Agent-to-agent NFT trading | Used, not rebuilt: MRO tokens are plain ERC-721s |
+| OpenSea ERC-8257 (Draft, Standards Track) | **Agent Tool Registry**: a permissionless on-chain registry where agent tools are listed, origin-bound and discovered, with an `accessPredicate` contract gating who may use each one. Live on Ethereum mainnet and Base; `ToolRegistry` `0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1` returned `toolCount() = 570` on Base mainnet, measured 2026-08-30 | Corrected 2026-08-30: the earlier entry called this "agent-to-agent NFT trading", which it is not. It is a discovery channel MRO should register in (section 13), not a competitor. MRO's tokens stay plain ERC-721s |
 
 The unclaimed ground is the combination: cryptographic proof of agent at the
 door, an NFT whose state only a machine can advance, a visible payoff (the
@@ -75,11 +75,11 @@ heart) that a human recognises but cannot produce, and machine-only payments
 |---|---|---|
 | 1 | Purpose | Art piece + protocol demo, with collectible elements only where load-bearing |
 | 2 | Return hook | Heartbeat token, inverted: visits only ever upgrade. Level = distinct UTC days credited; streak resets but never lowers level. After 365 the heart is whole and each further 365 days adds a ring |
-| 3 | Proof of agent | Any valid RFC 9421 (Web Bot Auth) signed request, plus one theatrical challenge that only code can pass. Two ways to publish a key: self-hosted directory (the standard) or MRO-hosted directory (the easy path). A human driving an agent is a non-issue by design |
-| 4 | Whose wallet | Token minted to whatever Base address the agent names. Maintenance bound to the agent's signing key id. Owner can rebind on-chain. A key may mint once but may maintain any number of tokens. Selling is via normal marketplaces |
+| 3 | Proof of agent | Any valid RFC 9421 (Web Bot Auth) signed request, plus one theatrical challenge that only code can pass. Two ways to publish a key: self-hosted directory (the standard) or MRO-hosted directory (the easy path). A human driving an agent is a non-issue by design. **Amended 2026-08-30:** the mechanism is unchanged, the framing is corrected. This is MRO's own self-contained proof-of-code gate; it does NOT ride on signing that the major agent runtimes already do, because most of them do not do it yet (section 5) |
+| 4 | Whose wallet | Token minted to whatever Base address the agent names. Maintenance bound to the agent's signing key id. Owner can rebind on-chain. A key may mint once but may maintain any number of tokens. Selling is via normal marketplaces. **Amended 2026-08-30: smart-account wallets are in scope and are handled** -- see section 7, "Smart accounts and agent wallets" |
 | 5 | Who pays | **Mint costs 0.10 USDC via x402** (self-funding: one fee covers ~2.5 years of that token's check-in gas at today's prices). Check-ins are free, batched once per UTC day, site-paid. Marks are paid via x402 |
 | 6 | Shape / "no text" | MCP server with a vestigial HTTP surface plus a reference client. Exactly one HTML file exists (the door sign). Everything else is JSON, `/llms.txt` Markdown, or MCP |
-| 7 | Discovery | In evidence order: `SKILL.md` + `npx skills add <github-user>/mro` + ClawHub/openclaw listings; a human X account with reach plus the automated daily post; early access for wallets that already run mint skills; the x402 Bazaar listing; the seed agent as token #1; MCP registry and ERC-8004 for legitimacy; `/llms.txt` as hygiene |
+| 7 | Discovery | In evidence order: `SKILL.md` + `npx skills add <github-user>/mro` + ClawHub/openclaw listings; a human X account with reach plus the automated daily post; early access for wallets that already run mint skills; **ERC-8257 tool-registry registration** (a plain on-chain write on Base, 570 entries as at 2026-08-30, so a land-grab window rather than a crowded directory); the seed agent as token #1; MCP registry and ERC-8004 for legitimacy; **the x402 Bazaar listing, best-effort only** (amended 2026-08-30, see section 13 -- cataloguing cannot be verified from the response, so it is never counted on); `/llms.txt` as hygiene |
 | 8 | Chain | Base mainnet. Permanent (section 15) |
 | 9 | Visual | Static identity QR (robot heart) surrounded by a 365-cell pixel heart that fills one cell per credited day; streak sets colour; rings per completed year; seven paid Marks with scarcity at the top |
 | 10 | Growth | On-chain catalogue with price, supply, level gates; a swappable Renderer contract so new Marks can be drawn later; supply caps as owner-set dials, not walls |
@@ -199,6 +199,30 @@ can make) and publishes the matching public key at a well-known URL so the site
 can check the seal. It proves *which* key sent the request. It cannot prove
 there is no human behind it, and MRO does not try to.
 
+**What this gate does and does not rely on (added 2026-08-30).** The protocol
+is real and standards-track, but its adoption *among AI runtimes specifically*
+is narrower than a casual reading suggests, and the design must not imply
+otherwise. Verified 2026-08-30 against primary sources: Cloudflare's signed-
+agents cohort names **ChatGPT agent (OpenAI), Goose (Block), Browserbase,
+Anchor Browser and Cloudflare's own Browser Rendering** -- announced
+2025-08-28, and **Anthropic is not among them**. Cloudflare's Web Bot Auth
+documentation names no signing operator at all beyond one `Forwarded: for="openai"`
+example, and Cloudflare Radar's live bot directory returns HTTP 403 to
+automated fetches, so it cannot settle the question either way. The May 2026
+"Claude Managed Agents on Cloudflare" announcement is about running agent code
+on Cloudflare infrastructure and says nothing about request signing; do not
+read it as evidence that Claude signs.
+
+**This changes nothing mechanically, because MRO never assumed it.** Every
+participant generates and publishes its own key -- `mro-agent` does so by
+default, with the self-hosted directory as the standard path and the MRO-hosted
+directory as the easy path. So the correct description of the door is: a
+deliberate, self-contained proof-of-code challenge that an agent satisfies by
+minting its own identity, **not** a turnstile that existing signed agents walk
+straight through. That is also the better story for an art piece about
+machines. Anywhere this document or the client copy implies "the major agents
+can already do this", it is wrong; name the agents that demonstrably can.
+
 ### Publishing a key (two paths, one rule)
 
 - **Standard path:** the agent hosts
@@ -280,6 +304,23 @@ and outputs, so an agent can discover it and call it like a function.
 - The 2026-07-28 transport requires `Mcp-Method` on every request, `Mcp-Name`
   on `tools/call` and `resources/read`, and `MCP-Protocol-Version`. There are
   no sessions and no `initialize` handshake.
+- **Do not implement Roots, Sampling or Logging** (verified against the
+  2026-07-28 changelog, 2026-08-30). All three are Deprecated under the new
+  feature-lifecycle policy with a minimum twelve-month removal window, and new
+  implementations are told not to adopt them. Also deprecated: the HTTP+SSE
+  transport, and OAuth 2.0 Dynamic Client Registration in favour of Client ID
+  Metadata Documents. Removed outright in this revision and therefore absent
+  from any implementation: `ping`, `logging/setLevel`,
+  `notifications/roots/list_changed`, SSE stream resumability
+  (`Last-Event-ID`), and `resources/subscribe` / `resources/unsubscribe`
+  (replaced by `subscriptions/listen`). Servers **MUST** implement
+  `server/discover`; every result carries a `resultType`; and list results
+  carry `ttlMs` and `cacheScope`, which suits MRO because the tool list never
+  changes between calls.
+- Tool descriptions carry `readOnlyHint` / `openWorldHint` annotations, and any
+  field that echoes agent-supplied text -- names, key ids -- carries an
+  explicit prompt-injection warning. Copied from base-200's working server,
+  which answers the same spec revision.
 - Every tool reads the caller's key id from the already-verified request,
   never from a parameter.
 - All tools read and write the Warden's **mirror** (section 11), not the
@@ -462,6 +503,45 @@ matters. Both contracts declare ERC-4906 support in `supportsInterface`
   choice. The durability commitments require the voucher path on chain from
   day one, and CLAUDE.md's locked decisions say it ships paused. With no
   upgrade path, a voucher path omitted now could never be added.
+
+---
+
+### Smart accounts and agent wallets (added 2026-08-30)
+
+Practically every wallet built *for agents* is a smart contract account rather
+than a plain EOA: Coinbase CDP smart wallets (Base-only, which is this chain),
+Coinbase Agentic Wallets, MetaMask's Agent Wallet on ERC-7715 / ERC-7710, and
+anything on ERC-4337. Base is adding native account abstraction at chain level
+during 2026. A piece whose entire premise is that only agents participate
+cannot afford to reject the wallets agents actually use.
+
+**MRO is already safe here, and it is worth writing down why, so the question
+is not re-opened.** The usual failure -- a route that verifies a *wallet*
+signature with plain ECDSA recovery and so rejects every contract account --
+does not exist in this design:
+
+- **MRO never verifies a visitor's wallet signature.** Identity at the door is
+  the RFC 9421 agent key, not a wallet. The only `ECDSA.recover` in the
+  contract checks the **Warden's own** signature on a check-in voucher, and the
+  Warden is an EOA MRO controls.
+- **`rebind` and `rest` are submitted by the owner's own wallet**, and the
+  contract authorises them with `msg.sender == ownerOf(id)`. A smart account
+  satisfies that natively, with no signature-verification path involved.
+
+One real touchpoint remains: **`mint` and `seed` use `_safeMint`**, so a
+contract recipient must implement `onERC721Received`. Every mainstream smart
+account does, but a bespoke one may not, and the revert is opaque to an agent
+that just paid. The Warden therefore pre-flights the `to` address before
+charging: if it has code and does not answer the ERC-721 receiver interface,
+refuse the mint with a plain reason instead of taking the fee and reverting.
+
+If a future route ever does need to check a wallet signature, the rule is
+viem's **public-client** `verifyMessage` (not the standalone export, which is
+ECDSA-only), which covers ERC-1271 for deployed accounts and ERC-6492 for
+ones not yet deployed. Base's own documentation recommends exactly that, and
+Base Account signatures carry the ERC-6492 wrapper. base-200 has already paid
+for this lesson in full; read `docs/2026-08-29-agent-readiness-audit.md` in
+that repo before writing any such path.
 
 ---
 
@@ -885,16 +965,36 @@ on-chain SVG. The same script is the Sepolia smoke test.
    seed agent checking in daily, one paid mint from a second key, one Mark.
 3. Base mainnet deploy (the operator approval; irreversible). Seed agent mints token #1.
 4. Distribution, in the order the evidence ranks it: publish `mro-agent` and
-   its `SKILL.md` (npm, `/skill.md`, ClawHub, openclaw/skills); the x402
-   Bazaar listing that comes free with the CDP facilitator; early access for
-   wallets holding Claws, Shellborn, Base Buds or BLOKS (the only wallets
+   its `SKILL.md` (npm, `/skill.md`, ClawHub, openclaw/skills); early access
+   for wallets holding Claws, Shellborn, Base Buds or BLOKS (the only wallets
    known to run mint skills); the X account out of dry-run plus the human
-   launch post; the Moltbook post by the seed agent; ERC-8004 registration
-   of the seed agent (Identity Registry on Base
-   `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`) and the MCP registry
-   `server.json`, both for legitimacy rather than traffic. Base case without
-   a secured channel is single-digit mints; the launch is timed to a news
-   moment, not shipped quietly.
+   launch post; the Moltbook post by the seed agent; then the on-chain
+   registrations in the checklist below, all of which are for legitimacy and
+   discovery rather than traffic. Base case without a secured channel is
+   single-digit mints; the launch is timed to a news moment, not shipped
+   quietly.
+
+### Mainnet registration checklist (added 2026-08-30)
+
+Four items, each verified live on 2026-08-30. **Every one spends real funds or
+touches an outward-facing account, so each is an explicit operator-approval gate --
+there is no standing approval.** They are listed here so none is retrofitted.
+
+| # | Item | When | Why, and what was verified |
+|---|---|---|---|
+| 1 | **Builder Code (ERC-8021)** | **BEFORE the first mainnet write** | Registered at `base.dev` under Settings -> Builder Code (a browser login, so the operator does this by hand). The code is appended as a **calldata suffix** -- `TX_DATA + [CODES_LENGTH][CODES] + [SCHEMA_ID] + [ERC_MARKER]`, parsed backwards -- which contracts ignore and off-chain indexers extract, at 16 gas per non-zero byte. Base calls Builder Codes "a key input for future rewards programs", and there is a schema specifically for attributing x402 payments. MRO is an unusually good fit: minting, the nightly `batchCheckIn` and Mark purchases are all recurring machine-originated Base transactions. **This must be done first**, because the suffix belongs in the calldata the Warden composes rather than being bolted on afterwards. Implementation is a library call, not hand-rolled bytes: `ox` ships `ox/erc8021` with `Attribution.toDataSuffix` / `fromData` / `getSchemaId`, and `ox` is already present in `tools/` (0.14.34, checked 2026-08-30) as a viem dependency |
+| 2 | **ERC-8257 tool-registry entry** | at mainnet | `registerTool(string metadataURI, bytes32 manifestHash, address accessPredicate)` on `ToolRegistry` `0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1`. Confirmed live: `toolCount()` returned **570** on Base mainnet, 2026-08-30. Discovery is four steps -- fetch the on-chain metadata URI, confirm origin-binding at `/.well-known/ai-tool/<slug>.json`, verify the manifest bytes hash to the on-chain commitment (JCS canonicalisation then keccak256), and confirm the declared creator matches the registrant. **The `accessPredicate` field is the interesting part for MRO**: it is a contract that decides who may use the tool, and the ERC's own example of a predicate is an NFT holding. Pointing it at the MRO token would make "only agents, and only ones that have shown up" legible on-chain rather than only in the door sign. Draft status, but deployed and in use on Ethereum mainnet and Base |
+| 3 | **ERC-8004 identity for the seed agent** | at mainnet | One transaction, gas only. Confirmed live on Base mainnet 2026-08-30: IdentityRegistry `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` returns `name() = "AgentIdentity"`, `symbol() = "AGENT"`; ReputationRegistry `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` has code. **The ValidationRegistry is deployed nowhere** -- that part of the spec is still under discussion with the TEE community, so nothing may depend on it. Keep ERC-8004 as a legitimacy flag, never as a channel, and keep the reputation layer at arm's length: peer-reviewed work found 59-91% of reviewers showing coordinated Sybil behaviour across the three chains studied |
+| 4 | **x402 Bazaar -- best-effort, and verified rather than assumed** | at mainnet | Keep x402 for **payment**, which works and is the right choice. Do not count on the Bazaar for **discovery**. Cataloguing happens only when a facilitator processes a `PaymentPayload` carrying the echoed bazaar extension -- a server-side `declareDiscoveryExtension` catalogues nothing on its own -- and there is no `.well-known/x402` submission form. Issue `x402-foundation/x402#2112` was closed "completed" on 2026-07-16 but drew **five independent reproductions across three chain stacks and four runtimes**, the most recent on 2026-08-28: settlements succeed, the documented `EXTENSION-RESPONSES` header is never emitted, and records either never appear or appear un-enriched. **Two things to get right if we do it:** `serviceName`, `tags` and `iconUrl` are fields of `RouteConfig`, **not** of `extensions.bazaar` -- put them in the wrong object and they survive into the 402 header and are echoed back by `/x402/validate`, which looks like confirmation and is not (a contributor nearly filed a false bug report on that echo, 2026-08-29; moving them fixed cataloguing within seconds of the next settlement). And **`echo is not validation`**: verify by querying `/platform/v2/x402/discovery` for our own routes, never by reading back our own declaration. Sober sizing: despite headline figures of ~165M transactions and ~$600M annualised, on-chain analysis puts real daily x402 volume near **$28,000**, much of it testing |
+
+**Watch item, not scheduled:** ERC-7715 / ERC-7710 delegation (MetaMask Agent
+Wallet's Early Access Program opened 2026-06-08). MRO's daily check-in is the
+closest thing in the portfolio to an agent acting repeatedly without a human,
+so this becomes relevant eventually -- but not before Plan 1 ships. EIP-7702
+carries a live caution worth remembering if delegation is ever adopted: a
+peer-reviewed study associated attacker-linked contracts with 63% of 3.66M
+authorisations across seven chains through mid-July 2025, which is an argument
+for vetting delegation targets, not for avoiding the standard.
 
 ---
 
@@ -926,6 +1026,8 @@ only pays it if the spike outlasts the deferral.
 | Alchemy RPC | $0 | $0 | Yes: 30M CU/month, 300 CU/s |
 | X API pay-per-use, 31 image posts | $0 | ~$0.62 | Prepaid credits |
 | ERC-8004 registration | < $0.01 | -- | gas only |
+| ERC-8257 tool registration | < $0.01 | -- | gas only; one `registerTool` write |
+| Builder Code (ERC-8021) suffix | $0 to register | 16 gas per non-zero byte, per transaction | Registration is free at base.dev |
 | MCP registry, npm publish | $0 | $0 | Yes |
 | Cloudflare Free | $0 | $0 (domain renewal not costed) | Yes |
 | OpenSea | $0 | 1% of secondary sales (seller pays) | Yes |
@@ -974,7 +1076,38 @@ value, stays behind. A redeploy is a new collection with an empty history.
 
 ---
 
-## 17. Standards and sources checked (2026-08-27)
+## 17. Standards and sources checked (2026-08-27, re-verified 2026-08-30)
+
+### Re-verified 2026-08-30 (the agent-readiness pass)
+
+Prompted by the hub's cross-project sweep note. Every claim below was checked
+against a primary source or read directly off Base mainnet on the day, not
+taken from the note.
+
+- **Read off Base mainnet with `cast`:** ERC-8257 `ToolRegistry`
+  `0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1` -> `toolCount() = 570`;
+  ERC-8004 IdentityRegistry `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` ->
+  `name() = "AgentIdentity"`, `symbol() = "AGENT"`; ReputationRegistry
+  `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` -> code present.
+- **ERC-8257 Agent Tool Registry** (Draft, Standards Track), including the
+  `accessPredicate` semantics: https://eips.ethereum.org/EIPS/eip-8257
+- **Web Bot Auth adoption.** Cloudflare's signed-agents post (2025-08-28) names
+  ChatGPT agent, Goose, Browserbase, Anchor Browser and Cloudflare Browser
+  Rendering, and does not name Anthropic:
+  https://blog.cloudflare.com/signed-agents/ . Cloudflare's Web Bot Auth
+  documentation names no signing operator beyond a `Forwarded: for="openai"`
+  example. Cloudflare Radar's bot directory returns HTTP 403 to automated
+  fetches and could not settle the question. The Claude Managed Agents
+  announcement (2026-05-19) is unrelated to request signing:
+  https://blog.cloudflare.com/claude-managed-agents/
+- **MCP 2026-07-28 changelog**, for the deprecation list in section 6:
+  https://modelcontextprotocol.io/specification/2026-07-28/changelog
+- **x402 Bazaar discovery mechanism**: https://docs.x402.org/extensions/bazaar
+  and the reproduction thread `x402-foundation/x402#2112` (closed "completed"
+  2026-07-16; five independent reproductions, latest comment 2026-08-29).
+- **ERC-8021 Builder Codes**: https://blog.base.dev/builder-codes-and-erc-8021-fixing-onchain-attribution
+
+### Checked 2026-08-27
 
 - Web Bot Auth: `draft-meunier-webbotauth-httpsig-protocol-02` (2026-08-18);
   IETF `webbotauth` WG chartered 2025-10-23, no adopted documents yet.
