@@ -17,6 +17,7 @@ contract CheckInTest is MroTestBase {
 
     function test_checkInIncrementsLevelAndContinuesTheStreak() public {
         uint32 d = t.today();
+        _warpToDay(d + 1);
         vm.prank(WARDEN);
         t.batchCheckIn(_one(1), _days(d + 1));
         assertEq(t.viewOf(1).level, 2);
@@ -26,6 +27,7 @@ contract CheckInTest is MroTestBase {
 
     function test_aGapResetsTheStreakButNotTheLevel() public {
         uint32 d = t.today();
+        _warpToDay(d + 5);
         vm.prank(WARDEN);
         t.batchCheckIn(_one(1), _days(d + 5));
         assertEq(t.viewOf(1).level, 2);
@@ -47,6 +49,7 @@ contract CheckInTest is MroTestBase {
         ids[0] = 1; ids[1] = 1; ids[2] = 1;
         uint32[] memory ds = new uint32[](3);
         ds[0] = d + 1; ds[1] = d + 2; ds[2] = d + 3;
+        _warpToDay(d + 3);
         vm.prank(WARDEN);
         t.batchCheckIn(_packed(ids), ds);
         assertEq(t.viewOf(1).level, 4);
@@ -57,6 +60,7 @@ contract CheckInTest is MroTestBase {
     /// written, never a range. A range would claim untouched tokens changed.
     function test_emitsOneMetadataUpdatePerTokenWritten() public {
         uint32 d = t.today();
+        _warpToDay(d + 1);
         vm.expectEmit(false, false, false, true);
         emit IERC4906.MetadataUpdate(1);
         vm.prank(WARDEN);
@@ -114,6 +118,7 @@ contract CheckInTest is MroTestBase {
         ids[0] = 1; ids[1] = 2;
         uint32[] memory ds = new uint32[](2);
         ds[0] = d + 1; ds[1] = d + 3;
+        _warpToDay(d + 3);
         bytes memory packed = _packed(ids);
         vm.expectEmit(false, false, false, true);
         emit MachineReadableOnly.BatchCheckedIn(d + 1, d + 3, 2);
@@ -147,6 +152,9 @@ contract CheckInTest is MroTestBase {
         // gasleft() window it swamps the number with test-only overhead that
         // has nothing to do with what batchCheckIn actually costs on chain.
         bytes memory packed = _packed(ids);
+
+        // Outside the gasleft() window: this is harness setup, not contract work.
+        _warpToDay(d);
 
         vm.prank(WARDEN);
         uint256 before = gasleft();

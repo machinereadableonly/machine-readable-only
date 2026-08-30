@@ -45,6 +45,7 @@ contract VouchersTest is MroTestBase {
     function test_anyoneCanSubmitAValidVoucherOnceEnabled() public {
         t.setVouchersEnabled(true);
         uint32 d = t.today() + 1;
+        _warpToDay(d);
         bytes memory sig = _sign(1, d);
         // Mallory pays the gas; the signature is what authorises it.
         vm.prank(MALLORY);
@@ -78,12 +79,27 @@ contract VouchersTest is MroTestBase {
     function test_theSameVoucherTwiceFailsOnTheDayRule() public {
         t.setVouchersEnabled(true);
         uint32 d = t.today() + 1;
+        _warpToDay(d);
         bytes memory sig = _sign(1, d);
         vm.startPrank(MALLORY);
         t.checkInWithVoucher(1, d, sig);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.DayNotAdvanced.selector, uint256(1)));
         t.checkInWithVoucher(1, d, sig);
         vm.stopPrank();
+    }
+
+    /// @dev The durability path carries the same upper bound on `day` as
+    /// batchCheckIn. It ships disabled, but it can never be ADDED later either,
+    /// so it cannot be left with a hole: a voucher for a nonsense future day
+    /// would set lastDay beyond any reachable day and brick the token forever.
+    function test_aVoucherForAFutureDayIsRejected() public {
+        t.setVouchersEnabled(true);
+        uint32 far = t.today() + 5_000;
+        bytes memory sig = _sign(1, far);
+        vm.prank(MALLORY);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.FutureDay.selector, far));
+        t.checkInWithVoucher(1, far, sig);
+        assertEq(t.viewOf(1).lastDay, t.today(), "lastDay was never corrupted");
     }
 
     function test_setVouchersEnabledRevertsForANonOwner() public {
@@ -162,6 +178,7 @@ contract VouchersTest is MroTestBase {
         t.mint(2, MALLORY, bytes32(uint256(2)), _code());
 
         uint32 d = t.today() + 1;
+        _warpToDay(d);
         bytes memory sigForToken1 = _sign(1, d);
 
         vm.prank(MALLORY);
