@@ -43,7 +43,8 @@
 | `warden/src/pay/x402.mjs` | Create. The payment wrapper and its v2 context adapter. |
 | `warden/src/solve/queue.mjs` | Create. Claim, complete, retry, alert. |
 | `warden/src/solve/worker.mjs` | Create. The child process: one payload in, one bitmap out. |
-| `warden/src/server.mjs` | Create. The HTTP server and router. PM2 entry point. |
+| `warden/src/server.mjs` | Create. `createServer(config)`: the HTTP server and router. A pure factory, so tests can build one without touching the environment. |
+| `warden/src/main.mjs` | Create. The PM2 entry point: reads configuration, assembles every dependency, calls `createServer` and listens. `createServer` alone starts nothing -- without this the service cannot be run at all. |
 | `warden/public/door.html` | Create. The one HTML file the piece has. |
 | `warden/public/llms.txt` | Create. What the piece is, in the agent's own channel. |
 | `warden/test/vectors/web_bot_auth_architecture_v1.json` | Create. Vendored from Cloudflare's repo; not shipped on npm. |
@@ -2627,6 +2628,14 @@ import { makeChallengeTool } from "./tools/challenge.mjs";
 import { registerResources } from "./resources.mjs";
 
 export function makeMcpHandler(deps) {
+  // The paid tools are registered unconditionally, so a missing wrapper would
+  // advertise mint and upgrade and then refuse every call. createServer guards
+  // allowRegistration the same way and for the same reason: a dependency that
+  // is required is checked at construction, not discovered at the first call.
+  if (typeof deps.paid !== "function") {
+    throw new Error("makeMcpHandler requires a paid wrapper");
+  }
+
   const handler = createMcpHandler(
     (ctx) => {
       const server = new McpServer({ name: "machine-readable-only", version: "1.0.0" });
@@ -3424,6 +3433,30 @@ cd ~/projects/machine-readable-only
 git add warden/ecosystem.config.cjs warden/nginx.conf.example warden/DEPLOY.md
 git commit -m "feat(warden): deployment configuration, domain read from the environment"
 ```
+
+---
+
+## Task 11b: The bootstrap
+
+`createServer(config)` is a factory. Nothing calls it outside the tests, so `npm start` runs a module that defines a server and never starts one. The plan's finish line is "the Warden runs on 127.0.0.1:3006", and until this exists it does not run at all.
+
+**Files:**
+- Create: `warden/src/main.mjs`
+- Modify: `warden/package.json` (start script), `warden/ecosystem.config.cjs` (script path)
+
+**Interfaces:**
+- Consumes: `createServer`, `openDb`, `queries`, `makeMcpHandler`, `tokenView`, `makeChainReader`, `makePaid`, `runSolver`, `requeueOrphans`.
+- Produces: a process that listens on 127.0.0.1:3006.
+
+`main.mjs` must:
+
+- Read every value from the environment and FAIL LOUDLY on a missing one. A warden that starts with no `CHALLENGE_SECRET` would issue forgeable challenges; a missing `MRO_DOMAIN` would pin the signature authority to `undefined`. Name the variable in the error.
+- Supply `allowRegistration`, which `createServer` requires: the spec's dial is 20 per minute per source and 10,000 keys total.
+- Call `requeueOrphans(q)` once at startup, before anything else. Any row still marked `solving` is by definition abandoned by a previous process.
+- Bind to `127.0.0.1` only. Public traffic arrives through nginx; binding `0.0.0.0` would expose the service directly.
+- Handle SIGTERM and SIGINT by closing the server and the database, so PM2 restarts do not leave a half-written mirror.
+
+It must NOT be imported by any test. Tests build their own server through `createServer`, which is why that factory stays pure.
 
 ---
 
