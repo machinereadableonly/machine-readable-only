@@ -31,6 +31,10 @@ export function queries(db) {
     bumpSolveTries: db.prepare("UPDATE mints SET solveTries = solveTries + 1 WHERE tokenId = ? RETURNING solveTries"),
     getMint: db.prepare("SELECT * FROM mints WHERE tokenId = ?"),
     requeueSolving: db.prepare("UPDATE mints SET solveState = 'pending' WHERE solveState = 'solving'"),
+    tokenCount: db.prepare("SELECT COUNT(*) AS n FROM tokens"),
+    insertMint: db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (?, ?, ?)"),
+    reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId) VALUES (?, ?)"),
+    hasMinted: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE keyId = ?"),
   };
 
   return {
@@ -77,5 +81,9 @@ export function queries(db) {
     bumpSolveTries: (tokenId) => s.bumpSolveTries.get(tokenId).solveTries,
     getMint: (tokenId) => s.getMint.get(tokenId),
     requeueSolving: () => s.requeueSolving.run().changes,
+    tokenCount: () => s.tokenCount.get().n,
+    insertMint: ({ tokenId, toAddress, keyId }) => s.insertMint.run(tokenId, toAddress, keyId),
+    reserveMark: (tokenId, upgradeId) => s.reserveMark.run(tokenId, upgradeId),
+    hasMinted: (keyId) => s.hasMinted.get(keyId).n > 0,
   };
 }
