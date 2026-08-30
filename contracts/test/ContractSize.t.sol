@@ -26,10 +26,12 @@ contract ContractSizeTest is Test {
 
     function test_everyDeployedContractFitsWithMargin() public {
         uint256 renderer = _check("Renderer.sol:Renderer");
-        uint256 token = _check("MROSpikeToken.sol:MROSpikeToken");
+        uint256 spike = _check("MROSpikeToken.sol:MROSpikeToken");
+        uint256 real = _check("MachineReadableOnly.sol:MachineReadableOnly");
 
         // Both land on the same chain, so the pair is worth logging even though
         // the limit is per contract, not per deployment.
-        console.log("pair total", renderer + token);
+        console.log("pair total", renderer + real);
+        spike; // the spike is still measured while it exists
     }
 }
