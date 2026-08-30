@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan 2 design: the Warden service</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan 2 design: the Warden service</h1>
+<p>Status: APPROVED by the operator on 2026-08-30, in the brainstorm that produced it.
+Implements sections 5, 6 and 11 of
+<code>docs/specs/2026-08-27-machine-readable-only-design.md</code>, with the amendments
+listed in step 0 below.</p>
+<hr>
+<h2>1. Why this, and why now</h2>
+<p>Plan 1 built a contract that nobody can reach.</p>
+<p>Every write path on <code>MachineReadableOnly.sol</code> is <code>onlyWarden</code>: <code>mint</code>,
+<code>batchCheckIn</code> and <code>applyMark</code> all revert for any other caller, and the Warden
+address on the Sepolia deployment is the deployer key with nothing running
+behind it. The contract is finished, tested at 231 green tests, deployed and
+verified, and completely inert. An agent cannot mint, cannot check in, and
+cannot buy a Mark, because there is no door to knock on.</p>
+<p>Plan 2 builds the door and the service behind it. When it is done, an agent can
+sign a request, satisfy the challenge, call a tool, and have its action accepted
+and queued. What it CANNOT yet do is reach the chain, because writing to the
+chain is Plan 3&#39;s job. That boundary is deliberate and it is the single most
+useful property of this plan: <strong>Plan 2 holds no private key.</strong></p>
+<p>What it unblocks:</p>
+<ul>
+<li><strong>Plan 3 (the Clock)</strong> drains the queue this plan fills. Without the mirror
+and the queue there is nothing for a Clock to write.</li>
+<li><strong>Plan 4 (the client)</strong> speaks to the endpoints this plan defines. Writing
+<code>mro-agent</code> before the server it talks to would be writing against a guess.</li>
+</ul>
+<hr>
+<h2>2. Scope</h2>
+<p>The spec files five separate subsystems under the heading &quot;the Warden&quot;. Trying
+to build them as one plan would be roughly three times the size of Plan 1, so
+the work is split three ways. the operator chose this split on 2026-08-30.</p>
+<table>
+<thead>
+<tr>
+<th>Plan</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Plan 2 (this one)</strong></td>
+<td>The door, the mirror, the MCP server, x402 payments, the bitmap solver. The whole request side. Nothing reaches the chain.</td>
+</tr>
+<tr>
+<td><strong>Plan 3</strong></td>
+<td>The Clock: batched chain writes, reconciliation, the ERC-4906 poke, the daily post.</td>
+</tr>
+<tr>
+<td><strong>Plan 4</strong></td>
+<td>The reference client <code>mro-agent</code>, <code>SKILL.md</code>, and the seed agent.</td>
+</tr>
+</tbody></table>
+<p><strong>Where Plan 2 finishes:</strong> the Warden runs on <code>127.0.0.1:3006</code> with the full
+test suite green and an end-to-end signed-request test driving it. The nginx
+vhost, the PM2 config, the certbot command, the Cloudflare checklist and the
+port-3006 registration are all WRITTEN, with the domain read from the
+environment file.</p>
+<p>They are not APPLIED, because the project has no domain. Six domains are served
+from this VPS and none of them is MRO&#39;s. Registering one spends money and needs
+a browser login, so it is a the operator gate, and it is the one thing that unblocks
+deployment. Nothing else is deferred: the deployment configuration is written
+now precisely so that none of it is retrofitted later.</p>
+<p>Out of scope, and named so the boundary is not argued later: chain writes, the
+Clock, the daily post, the reference client, <code>SKILL.md</code>, the seed agent.</p>
+<hr>
+<h2>3. Step 0: amend the spec before writing any JavaScript</h2>
+<p>Plan 2 reads its requirements from the spec, so the spec must stop
+contradicting what was actually built and measured. Four amendments, the same
+discipline Plan 1 applied to section 7.</p>
+<table>
+<thead>
+<tr>
+<th>Section, line</th>
+<th>Currently says</th>
+<th>Must say</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>8, line 559</td>
+<td>The code is a 29 x 29 QR, version 3</td>
+<td>37 x 37, version 5</td>
+<td>Phase 0 built version 5. The spec predates the build.</td>
+</tr>
+<tr>
+<td>8, line 556</td>
+<td>Canvas is roughly 45 x 45 cells</td>
+<td>51 x 51</td>
+<td>The deployed Renderer emits <code>viewBox=&quot;0 0 51 51&quot;</code>. Same cause.</td>
+</tr>
+<tr>
+<td>8, line 671</td>
+<td>Round-trip every bitmap through <code>jsqr</code></td>
+<td>ZXing is the oracle; <code>jsqr</code> is kept only to assert the two agree</td>
+<td>Measured 2026-08-28: <code>jsqr</code> stops at the first non-text byte and reported a clean 24-character URL where ZXing returned all 101. Every tile on that sheet failed on a real phone while 25 repo tests passed.</td>
+</tr>
+<tr>
+<td>4, line 182</td>
+<td>Clock runs as <code>node dist/clock.js</code></td>
+<td>Plain ESM, run directly, no build step</td>
+<td>See section 5.</td>
+</tr>
+<tr>
+<td>13, line 937</td>
+<td>Warden and client tested with Vitest</td>
+<td><code>node:test</code></td>
+<td>See section 5.</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>4. Process shape, decided by measurement</h2>
+<p>The Warden computes each token&#39;s QArt bitmap at mint. That fact is in the spec
+(section 8, &quot;why the QR bitmap is stored, not computed&quot;) and it is the single
+biggest constraint on the service&#39;s shape, so it was measured before anything
+was designed around it.</p>
+<p><strong>One robust solve: 9,695 ms and 532 MB resident.</strong> Measured 2026-08-30 through
+<code>tools/robust-solve.mjs</code> at <code>robustSolveFor(&quot;machinereadableonly.art&quot;, 1)</code>,
+under <code>~/scripts/safe-build.sh</code>.</p>
+<p>Two consequences, neither optional:</p>
+<ul>
+<li><strong>It cannot run inside a request.</strong> Node runs one thread. A ten-second solve
+on the event loop freezes every other agent&#39;s request for ten seconds, and
+<code>mint</code> is the one tool an agent hits first.</li>
+<li><strong>It cannot run in the web process at all.</strong> 532 MB is a real number on a
+7.8 GB box that normally carries eight Claude sessions and three
+<code>next-server</code> processes. This project has already destroyed its own tmux
+session once with a bulk render.</li>
+</ul>
+<p><strong>The shape: one web process, plus a short-lived solver CHILD PROCESS.</strong>
+<code>mint</code> writes a row to a solve queue and returns the token id immediately. A
+child process claims one row, solves it, writes the bitmap hex back, and exits.
+One at a time, memory-capped by <code>--max-old-space-size</code> on the child.</p>
+<p>The child process is not fussiness. <code>tools/payload-length-check.mjs</code> records
+the reason in its own header: resvg&#39;s buffers are native, and <strong>only a process
+exit returns them</strong>. That is a measured property of this project&#39;s own code.</p>
+<p>The Clock does not need a bitmap until 00:05 UTC, so a solve has hours of
+slack. A row still unsolved when the Clock runs is held back to the next day
+rather than minted without artwork, and raises an alert.</p>
+<p>Two alternatives were considered and rejected:</p>
+<ul>
+<li><strong><code>worker_threads</code>.</strong> Threads share the process heap, so the native buffers
+are not returned on thread exit. This is the same failure the bulk sweep hit.</li>
+<li><strong>A long-lived solver daemon.</strong> It would hold 532 MB resident permanently for
+work that happens a few times a day.</li>
+</ul>
+<hr>
+<h2>5. Structure on disk</h2>
+<pre><code>warden/
+  src/server.mjs              PM2 entry: HTTP server, router, 127.0.0.1:3006
+  src/door/verify.mjs         RFC 9421 verification via web-bot-auth
+  src/door/challenge.mjs      stateless HMAC challenge: issue, check, burn
+  src/door/directory.mjs      key registry, JWKS regeneration, SSRF-guarded fetch
+  src/mirror/db.mjs           node:sqlite open, WAL, migrations
+  src/mirror/schema.sql       the five tables
+  src/mirror/queries.mjs      every statement the tools use, in one place
+  src/mcp/server.mjs          createMcpHandler, resultType / ttlMs / cacheScope
+  src/mcp/tools/*.mjs         one file per tool, eight of them
+  src/mcp/resources.mjs       the three read-only resources
+  src/pay/x402.mjs            @x402/mcp wrapping for mint and upgrade
+  src/solve/queue.mjs         claim, complete, retry, alert
+  src/solve/worker.mjs        the child process: one payload in, bitmap hex out
+  src/chain/read.mjs          read-only RPC: the rebind re-check and reconciliation reads
+  public/door.html            the one HTML file the piece has
+  public/llms.txt             what the piece is, in the agent&#39;s own channel
+  test/                       node:test, mirroring src/
+  ecosystem.config.cjs        PM2, written not applied
+  nginx.conf.example          vhost, written not applied
+</code></pre>
+<p>The environment schema is committed as an example file carrying names and no
+values, following the project&#39;s existing convention.</p>
+<p><strong>Plain JavaScript, ESM, no build step. Tests with <code>node:test</code>.</strong></p>
+<p>Reasons, in the order they matter:</p>
+<ol>
+<li>It matches what this repo already does. <code>tools/</code> is plain <code>.mjs</code> with 56
+<code>node --test</code> tests, and the reference client is specified as plain
+commented JavaScript so an agent can read it before running it.</li>
+<li>PM2 points at the real file. There is no <code>dist/</code> to go stale, and no build
+step between an edit and a restart.</li>
+<li>It adds no dependency. Vitest would be a new one for mocking that
+<code>node:test</code> already does with <code>mock.fn</code> and <code>mock.method</code>.</li>
+</ol>
+<p>The cost, stated plainly: no compile-time type checking on a security boundary.
+That is answered by tests against the RFC 9421 vectors rather than by types.</p>
+<p>Files stay small and single-purpose. <code>door/verify.mjs</code> should be readable in
+one sitting, because it is the rule the whole piece rests on.</p>
+<hr>
+<h2>6. The door</h2>
+<p>The entry rule is an ACCESS CONDITION for an art piece: you get in by proving a
+program sent the request. It is not an anti-abuse system and the code comments
+must not describe it as one.</p>
+<p><strong>Four request cases, not the spec&#39;s three.</strong> The fourth is <code>/t/&lt;id&gt;</code>, and it
+is easy to lose because it is the only route that must NOT be gated.</p>
+<ol>
+<li><strong>Browser at <code>/</code>.</strong> No <code>Signature</code> header, <code>Accept</code> includes <code>text/html</code>:
+nginx serves <code>door.html</code> from disk. The Warden never sees it.</li>
+<li><strong>Unsigned, or signed with no valid challenge answer.</strong> <code>401</code> carrying a
+fresh challenge, the MCP URL, the docs URL, the client URL and a one-word
+<code>reason</code>. The challenge is <code>nonce.unix-ms.hmac</code>, stateless, five seconds,
+with a burn-after-use set. Nothing is keyed by IP, so agents behind one
+cloud NAT never collide.</li>
+<li><strong>Signed request with a correct challenge answer.</strong> Verified through
+<code>web-bot-auth</code>&#39;s <code>verify()</code> with a verifier from <code>verifierFromJWK()</code>. The
+signature must cover <code>@authority</code>, <code>@method</code>, <code>@path</code> and <code>signature-agent</code>,
+carry <code>tag=web-bot-auth</code>, and have <code>expires - created</code> no more than five
+minutes. The key id is admitted for the rest of the UTC day and the request
+proceeds to <code>/mcp</code>.</li>
+<li><strong><code>GET /t/&lt;id&gt;</code>.</strong> Public, unsigned, JSON only. This is where the token&#39;s QR
+points. Gating it would mean a scanned token leads nowhere, which destroys
+the one distribution surface the artwork has.</li>
+</ol>
+<p><strong>The SSRF guard on directory fetches</strong> is its own module with its own tests:
+HTTPS only, port 443 only, resolve the host and reject private, loopback,
+link-local and metadata ranges, three-second timeout, 64 KB body cap, no
+cross-host redirects.</p>
+<p><strong>Key registration</strong> (<code>POST /keys</code>) takes a public JWK plus a signature over a
+server nonce, proving possession. The key id is the RFC 7638 thumbprint. On
+each registration the JWKS at
+<code>/.well-known/http-message-signatures-directory</code> is regenerated as a static
+file for nginx to serve. The count of registered keys is never published;
+mints are the only public number.</p>
+<hr>
+<h2>7. The mirror</h2>
+<p><code>state.db</code>, <code>node:sqlite</code>, WAL mode. Five tables: <code>keys</code>, <code>tokens</code>, <code>credits</code>
+(with a unique index on <code>(tokenId, day)</code>), <code>mark_orders</code>, <code>mints</code>.</p>
+<p>The mirror is the source of truth for the tools, so a token exists to an agent
+from the moment it is queued rather than from the moment it is mined. Token ids
+are assigned from <code>max(id) + 1</code>; the contract takes the id as an argument and
+reverts if it is taken, so the id promised at mint is the id that lands.</p>
+<p>Concurrency is handled by WAL plus the unique index, not by a lock. Two
+simultaneous check-ins for one token produce one credit and one
+<code>already-credited-today</code>.</p>
+<p><code>node:sqlite</code> still prints an experimental warning on Node 24.14.1, verified
+2026-08-30. It loads with no flag and the API used here is <code>DatabaseSync</code> and
+<code>StatementSync</code> only, both of which have been stable across the 24.x line.</p>
+<hr>
+<h2>8. The MCP server</h2>
+<p>Endpoint <code>/mcp</code>, Streamable HTTP, spec version 2026-07-28, on
+<code>@modelcontextprotocol/server</code> 2.0.0 with <code>@modelcontextprotocol/node</code> 2.0.0
+(both verified live 2026-08-30, both published the day the spec revision
+landed). A fresh server per request; no sessions, no <code>initialize</code> handshake.</p>
+<p>Eight tools: <code>challenge</code>, <code>status</code>, <code>mint</code>, <code>checkin</code>, <code>upgrade</code>, <code>rebind</code>,
+<code>seed</code>, <code>rest</code>. Three resources: <code>mro://llms.txt</code>, <code>mro://contract</code>,
+<code>mro://token/{id}</code>.</p>
+<p>Rules that hold for every tool:</p>
+<ul>
+<li><strong>The caller&#39;s key id comes from the verified request, never from a
+parameter.</strong> A tool that accepts a key id as input is a tool that lets one
+agent act as another.</li>
+<li><strong>Tools read and write the mirror, not the chain.</strong></li>
+<li><strong><code>rebind</code> and <code>rest</code> never submit anything.</strong> They return the exact call the
+token OWNER&#39;s wallet must sign. <code>rest</code> carries <code>&quot;irreversible&quot;: true</code>.</li>
+<li>Errors are structured and returned, never thrown.</li>
+<li>Any field echoing agent-supplied text carries an explicit prompt-injection
+warning, as base-200&#39;s server does.</li>
+</ul>
+<p><strong>Do not implement Roots, Sampling or Logging</strong>, and do not implement <code>ping</code>,
+<code>logging/setLevel</code>, <code>notifications/roots/list_changed</code>, SSE resumability or
+<code>resources/subscribe</code>. All are deprecated or removed in 2026-07-28.
+<code>server/discover</code> is mandatory, every result carries a <code>resultType</code>, and list
+results carry <code>ttlMs</code> and <code>cacheScope</code>.</p>
+<hr>
+<h2>9. Payments</h2>
+<p><code>mint</code> at <code>$0.10</code> and <code>upgrade</code> at the catalogue price, wrapped with
+<code>@x402/mcp</code> 2.24.0 (verified live 2026-08-30), <code>payTo</code> the treasury ADDRESS.</p>
+<p>Every gate is checked BEFORE payment is requested. An agent must never pay for
+an <code>upgrade</code> that was already sold out, already applied, or whose level gate it
+does not meet. The pre-check reasons are part of the tool contract.</p>
+<p>In tests the facilitator is mocked, including the sold-out reservation race.</p>
+<p><strong>Ordering, and what happens when it breaks.</strong> An agent pays, the mint row is
+written, the solve is queued. If the solve then fails, the agent has paid and
+has no artwork. That row retries, and after three failures it alerts rather
+than failing silently. This is the one place in Plan 2 where money and a
+fallible ten-second computation meet, and it gets an explicit test.</p>
+<hr>
+<h2>10. Security posture</h2>
+<p><strong>Plan 2 holds no private key.</strong> Chain writes belong to Plan 3, so the Warden
+in this plan needs the challenge secret, a read-only RPC URL, and the treasury
+ADDRESS, which is an address and not a key. If this service were fully
+compromised, an attacker could issue challenges and write to a local SQLite
+file. That small blast radius is a reason to build it in this order.</p>
+<p><strong>The rebind re-check reads the chain, never the mirror.</strong> When a tool would
+answer <code>not-bound-to-caller</code>, the Warden makes one live <code>eth_call</code> for the
+token&#39;s bound key first, because a rebind may have just been mined. This is a
+security control, not an optimisation, and it is pinned by a test that fails if
+the read is served from the mirror.</p>
+<p>Real environment files stay chmod 600, WinSCP-edited, never committed, and
+never in the PM2 dump. The committed example file carries the schema and no
+values.</p>
+<hr>
+<h2>11. Testing</h2>
+<p><code>node:test</code>, run from <code>warden/</code>. Both existing suites stay green as well.</p>
+<ul>
+<li><strong>Signature verification</strong> against the RFC 9421 Ed25519 test vectors shipped
+with <code>web-bot-auth</code>; rejection when a required component is missing; rejection
+of a signature whose window exceeds five minutes.</li>
+<li><strong>Challenge</strong>: validity, expiry at five seconds, single use, and that a
+challenge minted for one key does not answer for another.</li>
+<li><strong>SSRF guard</strong>: private, loopback, link-local and metadata ranges; a
+cross-host redirect; an oversized body; a timeout.</li>
+<li><strong>Key registration</strong>: proof of possession required, thumbprint correctness,
+directory regeneration.</li>
+<li><strong>Every tool</strong>: the success path and every <code>reason</code> string it can return.</li>
+<li><strong>The rebind re-check</strong> reads the chain, asserted by a failing mock.</li>
+<li><strong>Concurrency</strong>: 100 simultaneous <code>checkin</code> calls produce exactly one credit.</li>
+<li><strong>Payments</strong>: mocked facilitator, sold-out reservation, and the paid-but-
+unsolved retry path.</li>
+<li><strong>MCP</strong>: 2026-07-28 header handling, <code>server/discover</code>, <code>resultType</code>.</li>
+<li><strong>Bitmaps</strong>: every solved bitmap round-tripped through ZXing, with <code>jsqr</code>
+asserted to agree. A plain control code is included in any decode sweep.</li>
+</ul>
+<p>The end-to-end test is a script that signs a real request against the local
+server, answers the challenge, mints with a mocked facilitator, checks in,
+and reads <code>/t/&lt;id&gt;</code> back.</p>
+<hr>
+<h2>12. Deployment, written but not applied</h2>
+<p>Written in this plan, applied when a domain exists:</p>
+<ul>
+<li><code>ecosystem.config.cjs</code>: PM2 fork, <code>-H 127.0.0.1</code>, port 3006, pointing at the
+real binary path.</li>
+<li><code>nginx.conf.example</code>: static routes for <code>door.html</code>, <code>/llms.txt</code>,
+<code>/client.mjs</code> and the JWKS; everything else proxied to 3006.</li>
+<li>The certbot command, and the Cloudflare checklist: proxy on, Full (Strict),
+origin lock, <strong>Bot Fight Mode OFF</strong> (it runs outside the ruleset engine,
+ignores Allow rules, and may challenge API traffic), AI bot &quot;Agent&quot; policy
+Allow, legacy &quot;Block AI bots&quot; off.</li>
+<li>UFW deny on 3006.</li>
+<li>Port 3006 registered in <code>~/.claude/templates/port-allocation.md</code>. Confirmed
+free on 2026-08-30: 3000 to 3005 are taken and 3006 is the next.</li>
+</ul>
+<hr>
+<h2>13. Risks</h2>
+<ul>
+<li><strong><code>web-bot-auth</code> is at 0.1.3, last published 2026-03-09.</strong> It is Cloudflare&#39;s
+own reference implementation for a draft standard, at 105,132 weekly
+downloads, so it is stable rather than abandoned. The risk is that the draft
+moves and the package does not. Mitigation: the verification call sits behind
+<code>door/verify.mjs</code> so replacing it touches one module, and the RFC 9421 test
+vectors are the contract that module is held to.</li>
+<li><strong>The solve is ten seconds and half a gigabyte.</strong> Handled by the child
+process, but the retry path is where a paid agent could be left without a
+token, so it is tested rather than assumed.</li>
+<li><strong>No domain.</strong> Deployment cannot be verified end to end until one exists,
+including whether Cloudflare&#39;s bot settings let a signed request through.
+Everything up to that point is verifiable locally.</li>
+<li><strong><code>node:sqlite</code> is still flagged experimental.</strong> Only <code>DatabaseSync</code> and
+<code>StatementSync</code> are used. If it ever breaks, <code>better-sqlite3</code> is the same
+API shape.</li>
+</ul>
+<hr>
+<h2>14. Sequence</h2>
+<p>Step 0, the spec amendments, comes first because everything after reads from
+the spec. Then the door before the tools, because a tool with no gate in front
+of it is a tool that ships ungated if the plan is interrupted. Then the mirror,
+then the tools, then payments, then the solver, then deployment configuration.</p>
+<hr>
+<h2>15. What this design does NOT decide</h2>
+<ul>
+<li><strong>The domain.</strong> Read from the environment everywhere. Phase 0 measured that a
+realistic domain costs about 0.8 points of heart match, so the choice is
+artistically cheap, but it is permanent per token once minting starts.</li>
+<li><strong>The door sign&#39;s copy and <code>/llms.txt</code>.</strong> Both get drafted in the plan and
+reviewed by the operator. Words in the piece&#39;s own voice are the operator&#39;s call, not a
+build decision.</li>
+<li><strong>Anything about the Clock</strong>, including how the ERC-4906 poke handles a
+scattered daily subset. That is Plan 3&#39;s open item and it stays there.</li>
+</ul>
+
+</body>
+</html>
