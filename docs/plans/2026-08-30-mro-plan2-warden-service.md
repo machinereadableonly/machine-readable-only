@@ -238,7 +238,13 @@ CREATE TABLE IF NOT EXISTS mark_orders (
   paymentTx TEXT,
   status    TEXT NOT NULL DEFAULT 'queued'
 );
+-- One mark of a kind per token, enforced HERE rather than by a pre-check.
+-- Settlement takes seconds, so anything checked before payment is stale by the
+-- time the row is written; the constraint is the only thing that holds.
+CREATE UNIQUE INDEX IF NOT EXISTS mark_orders_token_upgrade ON mark_orders (tokenId, upgradeId);
 
+-- One mint per agent key, again enforced by the index and not by the check
+-- that runs before payment: two concurrent settlements both pass a pre-check.
 CREATE TABLE IF NOT EXISTS mints (
   tokenId   INTEGER PRIMARY KEY,
   toAddress TEXT NOT NULL,
@@ -249,6 +255,7 @@ CREATE TABLE IF NOT EXISTS mints (
   solveTries INTEGER NOT NULL DEFAULT 0,
   status    TEXT NOT NULL DEFAULT 'queued'
 );
+CREATE UNIQUE INDEX IF NOT EXISTS mints_key ON mints (keyId);
 ```
 
 - [ ] **Step 4: Write the failing test**
@@ -3108,7 +3115,7 @@ export const UPGRADE_REASONS = [
   "mark-needs-whole", "mark-needs-streak", "mark-sold-out", "mark-already-applied",
 ];
 
-export function makeUpgradeTool({ q, catalogue, paid }) {
+export function makeUpgradeTool({ q, catalogue, paid, alert = console.error }) {
   return {
     name: "upgrade",
     config: {
@@ -3116,7 +3123,10 @@ export function makeUpgradeTool({ q, catalogue, paid }) {
       description: "Apply a paid Mark to a token bound to your key. Gates are checked before any payment is requested.",
       inputSchema: z.object({
         tokenId: z.number().int().positive(),
-        upgradeId: z.number().int().positive(),
+        // BOUNDED, because the bitmask below is a 32-bit shift. There are seven
+        // marks; an unbounded id wraps -- 1 << 32 is 1 and 1 << 33 is 2, so a
+        // high id aliases a low one -- and 1 << 31 is negative.
+        upgradeId: z.number().int().min(1).max(7),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
@@ -3132,13 +3142,36 @@ export function makeUpgradeTool({ q, catalogue, paid }) {
       if (token.level < mark.minLevel) return { ok: false, reason: "mark-level-too-low" };
       if (mark.needsWhole && token.level < 365) return { ok: false, reason: "mark-needs-whole" };
       if (mark.minStreak && token.streak < mark.minStreak) return { ok: false, reason: "mark-needs-streak" };
-      if (mark.sold >= mark.supply) return { ok: false, reason: "mark-sold-out" };
+      if (q.markSold(upgradeId) >= mark.supply) return { ok: false, reason: "mark-sold-out" };
       if (token.marks & (1 << upgradeId)) return { ok: false, reason: "mark-already-applied" };
 
       // Only now is payment requested.
       return paid(async () => {
-        q.reserveMark(tokenId, upgradeId);
-        return { accepted: true, upgradeId, appliedBy: "the next Clock run" };
+        // EVERYTHING ABOVE IS NOW STALE. Settling a payment takes seconds, and
+        // in that window another buyer can take the last unit or the same token
+        // can be marked. So the decision is made again here, against the
+        // database, with the unique index as the final authority rather than a
+        // read that could itself be overtaken.
+        const fresh = q.getToken(tokenId);
+        const blocked =
+          !fresh ? "unknown-token"
+          : fresh.keyId !== ctx.keyId ? "not-bound-to-caller"
+          : fresh.marks & (1 << upgradeId) ? "mark-already-applied"
+          : q.markSold(upgradeId) >= mark.supply ? "mark-sold-out"
+          : null;
+
+        // reserveMark returns false when this token already holds the mark, so
+        // two settlements racing for the same token cannot both reserve.
+        if (!blocked && q.reserveMark(tokenId, upgradeId)) {
+          return { accepted: true, upgradeId, appliedBy: "the next Clock run" };
+        }
+
+        // MONEY HAS ALREADY CHANGED HANDS. This must never be a quiet refusal:
+        // the agent has paid for something it cannot be given, and somebody has
+        // to see that. Alert, and say plainly what happened.
+        const detail = blocked ?? "mark-already-applied";
+        alert(`upgrade ${upgradeId} for token ${tokenId} settled but cannot be applied: ${detail}`);
+        return { ok: false, reason: "paid-but-unavailable", detail };
       })(args, ctx);
     },
   };
@@ -3151,7 +3184,7 @@ export function makeUpgradeTool({ q, catalogue, paid }) {
 // The way in. 0.10 USDC, paid inside the tool call, no account anywhere.
 import * as z from "zod";
 
-export function makeMintTool({ q, paid, supplyCap, today }) {
+export function makeMintTool({ q, paid, supplyCap, today, alert = console.error }) {
   return {
     name: "mint",
     config: {
@@ -3171,14 +3204,25 @@ export function makeMintTool({ q, paid, supplyCap, today }) {
       if (q.tokenCount() >= supplyCap) return { ok: false, reason: "supply-cap-reached" };
 
       return paid(async () => {
+        // Re-decided after settlement, for the same reason as upgrade: two
+        // concurrent settlements from one key both pass the check above. The
+        // unique index on mints.keyId is what actually holds it, and insertMint
+        // throwing is the signal -- see below.
         // The id is assigned HERE, not by the contract. The contract takes it
         // as an argument and reverts if taken, so the id promised now is the id
         // that lands.
         const tokenId = q.nextTokenId();
         const day = today();
-        q.insertToken({ tokenId, keyId: ctx.keyId, owner: args.to, lastDay: day, mintDay: day });
-        // solveState 'pending' is what puts this token in front of the solver.
-        q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId });
+        try {
+          q.insertToken({ tokenId, keyId: ctx.keyId, owner: args.to, lastDay: day, mintDay: day });
+          // solveState 'pending' is what puts this token in front of the solver.
+          q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId });
+        } catch (err) {
+          // The unique index refused a second mint for this key. The agent has
+          // PAID, so this is never silent.
+          alert(`mint settled for key ${ctx.keyId} but could not be recorded: ${err.message}`);
+          return { ok: false, reason: "paid-but-unavailable", detail: "already-minted" };
+        }
         return {
           ok: true,
           tokenId,
@@ -3210,13 +3254,30 @@ Two more statements in `queries.mjs`:
 
 ```js
     reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId) VALUES (?, ?)"),
+    markSold: db.prepare("SELECT COUNT(*) AS n FROM mark_orders WHERE upgradeId = ?"),
     hasMinted: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE keyId = ?"),
 ```
 
 and:
 
 ```js
-    reserveMark: (tokenId, upgradeId) => s.reserveMark.run(tokenId, upgradeId),
+    /// Returns true when the reservation was new, false when this token already
+    /// holds that mark. Any OTHER database error is rethrown -- the same
+    /// discrimination insertCredit makes, and for the same reason.
+    reserveMark(tokenId, upgradeId) {
+      try {
+        s.reserveMark.run(tokenId, upgradeId);
+        return true;
+      } catch (err) {
+        if (UNIQUE_VIOLATION.test(err.message)) return false;
+        throw err;
+      }
+    },
+    /// How many of a mark have actually been reserved. Read from the mirror,
+    /// never from the catalogue object: a static `sold` field is never
+    /// incremented by anything, so the sold-out gate would never fire and the
+    /// supply would be unlimited.
+    markSold: (upgradeId) => s.markSold.get(upgradeId).n,
     hasMinted: (keyId) => s.hasMinted.get(keyId).n > 0,
 ```
 
