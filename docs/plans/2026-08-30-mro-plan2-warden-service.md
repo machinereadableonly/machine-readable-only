@@ -994,21 +994,6 @@ for (const ok of ["93.184.216.34", "8.8.8.8", "2606:2800:220:1:248:1893:25c8:194
   test(`public address ${ok} is allowed`, () => assert.equal(isBlockedAddress(ok), false));
 }
 
-test("a directory that resolves to an IPv4-mapped IPv6 metadata address is refused", async () => {
-  // End to end through the guard, not just the predicate: this is the exact
-  // shape that was measured getting through.
-  let fetched = false;
-  await assert.rejects(
-    () =>
-      guardedFetchDirectory("https://evil.example.com/x", {
-        resolve: async () => ["::ffff:169.254.169.254"],
-        fetch: async () => { fetched = true; return new Response("{}", { status: 200 }); },
-      }),
-    /address/i
-  );
-  assert.equal(fetched, false, "fetch must never be reached for a blocked address");
-});
-
 test("a non-https directory URL is refused", async () => {
   await assert.rejects(
     () => guardedFetchDirectory("http://example.com/.well-known/http-message-signatures-directory", {}),
@@ -1105,6 +1090,38 @@ test("a redirect is refused rather than followed", async () => {
     }),
     /redirect/i
   );
+});
+
+// A hostname that is already an IP never reaches the pinned lookup, so it is
+// checked separately. Each of these opened a real connection before the fix.
+for (const url of [
+  "https://169.254.169.254/x",
+  "https://127.0.0.1/x",
+  "https://10.0.0.1/x",
+  "https://[::1]/x",
+  "https://[::ffff:169.254.169.254]/x",
+  "https://[::ffff:0:169.254.169.254]/x",
+]) {
+  test(`a literal address url ${url} is refused without any dns`, async () => {
+    let lookupCalled = false;
+    await assert.rejects(
+      () => guardedFetchDirectory(url, {
+        request: stubRequest("{}"),
+        lookup: (h, o, cb) => { lookupCalled = true; cb(null, [{ address: "93.184.216.34", family: 4 }]); },
+      }),
+      /blocked address/i
+    );
+    assert.equal(lookupCalled, false, "it must be refused before any resolution is attempted");
+  });
+}
+
+test("a public literal address is still allowed", async () => {
+  // The control for the pre-check: it must reject addresses, not literals.
+  const jwks = await guardedFetchDirectory("https://8.8.8.8/x", {
+    request: stubRequest(JSON.stringify({ keys: [] })),
+    lookup: (h, o, cb) => cb(null, [{ address: "8.8.8.8", family: 4 }]),
+  });
+  assert.deepEqual(jwks, { keys: [] });
 });
 
 test("a url carrying credentials is refused", async () => {
@@ -1295,6 +1312,23 @@ export function guardedFetchDirectory(url, deps = {}) {
     // which host is being addressed.
     if (parsed.username || parsed.password) {
       return reject(new Error("directory url must carry no credentials"));
+    }
+
+    // A HOSTNAME THAT IS ALREADY AN IP NEVER REACHES THE LOOKUP.
+    //
+    // Node connects straight to a literal address, so the pinned lookup below
+    // is never called and the whole guard is skipped. Measured 2026-08-30:
+    // https://169.254.169.254/x and https://127.0.0.1/x both opened a real
+    // connection with lookup untouched. That needs no DNS control at all, so it
+    // is a simpler attack than rebinding, not a harder one.
+    //
+    // Brackets are stripped because URL keeps them for IPv6, and note it also
+    // normalises the literal: [::ffff:169.254.169.254] arrives as
+    // [::ffff:a9fe:a9fe], which is why this is decided by isBlockedAddress
+    // rather than by comparing text.
+    const literal = parsed.hostname.replace(/^\[|\]$/g, "");
+    if (isIP(literal) !== 0 && isBlockedAddress(literal)) {
+      return reject(new Error(`directory resolves to a blocked address: ${literal}`));
     }
 
     const pinnedLookup = (hostname, options, cb) => {
