@@ -91,6 +91,36 @@ contract CheckInTest is MroTestBase {
         t.batchCheckIn(_one(1), _days(d));
     }
 
+    function test_checkInRevertsForAnUnmintedToken() public {
+        uint32 d = t.today() + 1;
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.NoSuchToken.selector, uint256(999)));
+        t.batchCheckIn(_one(999), _days(d));
+    }
+
+    function test_anEmptyBatchReverts() public {
+        uint32[] memory none = new uint32[](0);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.EmptyBatch.selector);
+        t.batchCheckIn("", none);
+    }
+
+    /// @dev The review noted nothing asserted this event's payload.
+    function test_batchCheckedInReportsTheDayRangeAndCount() public {
+        uint32 d = t.today();
+        vm.prank(WARDEN);
+        t.mint(2, MALLORY, bytes32(uint256(2)), _code());
+        uint32[] memory ids = new uint32[](2);
+        ids[0] = 1; ids[1] = 2;
+        uint32[] memory ds = new uint32[](2);
+        ds[0] = d + 1; ds[1] = d + 3;
+        bytes memory packed = _packed(ids);
+        vm.expectEmit(false, false, false, true);
+        emit MachineReadableOnly.BatchCheckedIn(d + 1, d + 3, 2);
+        vm.prank(WARDEN);
+        t.batchCheckIn(packed, ds);
+    }
+
     /// @notice A full 1,500-token chunk, per-token emits included, must fit the
     /// 15M guard the Clock uses -- and well inside EIP-7825's 16,777,216 cap.
     /// @dev This is the number the whole batching design rests on. If it fails,

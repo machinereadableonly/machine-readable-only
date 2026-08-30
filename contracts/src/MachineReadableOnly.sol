@@ -239,6 +239,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
     error DayNotAdvanced(uint256 id);
     error LengthMismatch();
     error Resting(uint256 id);
+    error NoSuchToken(uint256 id);
+    error EmptyBatch();
 
     event BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count);
 
@@ -259,6 +261,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
     {
         uint256 n = days_.length;
         if (packedIds.length != n * 4) revert LengthMismatch();
+        if (n == 0) revert EmptyBatch();
 
         uint32 lo = type(uint32).max;
         uint32 hi = 0;
@@ -268,6 +271,11 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
             uint32 day = days_[i];
 
             Token storage s = _tokens[id];
+            // level is 1 from the moment a token exists (mint and seed both set
+            // it), so a zero here means this id was never minted. Checked off
+            // the struct we already loaded rather than via _ownerOf, which
+            // reads a different mapping and would cost a cold SLOAD per entry.
+            if (s.level == 0) revert NoSuchToken(id);
             if (s.resting) revert Resting(id);
             if (day <= s.lastDay) revert DayNotAdvanced(id);
 
