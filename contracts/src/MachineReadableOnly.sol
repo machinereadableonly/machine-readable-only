@@ -297,4 +297,53 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
             emit MetadataUpdate(uint256(uint32(bytes4(packedIds[i * 4:i * 4 + 4]))));
         }
     }
+
+    // ---------------------------------------------------------------------
+    // Marks
+    // ---------------------------------------------------------------------
+
+    error MarkInactive();
+    error MarkAlreadyApplied();
+    error MarkSoldOut();
+    error MarkGate();
+
+    event MarkApplied(uint256 indexed id, uint8 indexed upgradeId);
+    event UpgradeSet(uint8 indexed upgradeId);
+
+    function marksOf(uint256 id) external view returns (uint256) {
+        return _marks[id];
+    }
+
+    function upgradeOf(uint8 upgradeId) external view returns (Upgrade memory) {
+        return _upgrades[upgradeId];
+    }
+
+    function setUpgrade(uint8 upgradeId, Upgrade calldata u) external onlyOwner {
+        _upgrades[upgradeId] = u;
+        emit UpgradeSet(upgradeId);
+    }
+
+    /// @notice Apply a paid Mark to a token.
+    /// @dev Payment settles off chain through x402 before the Warden calls
+    /// this, which is why there is no value transfer here.
+    function applyMark(uint256 id, uint8 upgradeId) external onlyWarden notSunset {
+        Upgrade storage u = _upgrades[upgradeId];
+        if (!u.active) revert MarkInactive();
+
+        uint256 bit = 1 << upgradeId;
+        if (_marks[id] & bit != 0) revert MarkAlreadyApplied();
+        if (u.maxSupply != 0 && u.sold >= u.maxSupply) revert MarkSoldOut();
+
+        Token storage s = _tokens[id];
+        if (s.resting) revert Resting(id);
+        if (s.level < u.minLevel) revert MarkGate();
+        if (s.streak < u.minStreak) revert MarkGate();
+        if (u.requiresWhole && s.level < 365) revert MarkGate();
+
+        _marks[id] |= bit;
+        unchecked { u.sold += 1; }
+
+        emit MarkApplied(id, upgradeId);
+        emit MetadataUpdate(id);
+    }
 }
