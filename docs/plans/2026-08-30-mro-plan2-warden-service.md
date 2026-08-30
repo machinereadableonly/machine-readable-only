@@ -2612,7 +2612,24 @@ export function makeMcpHandler(deps) {
         const tool = make(deps);
         server.registerTool(tool.name, tool.config, async (args, mcpCtx) => {
           deps.onToolCall?.(tool.name, keyId);
-          const result = await tool.handler(args, { keyId, mcpCtx });
+          let result;
+          try {
+            result = await tool.handler(args, { keyId, mcpCtx });
+          } catch (err) {
+            // THE SDK FORWARDS A THROWN MESSAGE VERBATIM. Measured on
+            // 2026-07-28's server 2.0.0: createToolError puts Error.message
+            // straight into the tool result, so a SQLite or RPC failure would
+            // hand the caller its file path or connection string. The tools
+            // return structured refusals for everything they expect, so a throw
+            // here is by definition unexpected: log it, and say nothing.
+            console.error(`tool ${tool.name} failed:`, err.message);
+            const failure = { ok: false, reason: "internal" };
+            return {
+              content: [{ type: "text", text: JSON.stringify(failure) }],
+              structuredContent: failure,
+              isError: true,
+            };
+          }
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         });
       }
