@@ -395,6 +395,23 @@ Errors: `Sunset()` when the piece is closed, and `AlreadySunset()` when
 the spec previously used `Sunset` for both an error and an event, which does
 not compile. The spike already resolved it this way.
 
+**The `rebind` trust boundary (decided 2026-08-30, during Plan 1).** `rebind`
+takes an arbitrary `bytes32` and proves nothing about possession of that key,
+and it is the ONE token-owner-callable function that writes identity. Once
+`seed` keys its budget on the agent key, a token owner can therefore point a
+whole token at another key's earned seed budget. This is ACCEPTED, not
+overlooked. The gate is the Warden: `seed` is `onlyWarden`, and the Warden
+re-checks the RFC 9421 signature against the CURRENT on-chain binding before it
+acts, so spending another key's budget needs that key's signature. The contract
+already trusts the Warden for mint, check-in, marks and seeding; this is the
+same boundary, not a new one. The alternatives were rejected on cost: requiring
+an EIP-712 proof of possession would strand a token whose agent lost its key,
+and making `rebind` Warden-only would mean a token could never be rebound if
+the Warden died, which is the durability failure the voucher path exists to
+prevent. THE CONSEQUENCE IS BINDING ON THE WARDEN: its rebind re-check is a
+security control, not a convenience, and must never be relaxed to trusting its
+own database over the chain.
+
 **Effective streak (a Renderer rule that matters):** on-chain `streak` only
 changes at a check-in, so a token that stops checking in would keep its colour
 forever. The Renderer therefore computes
