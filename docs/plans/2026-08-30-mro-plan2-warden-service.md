@@ -3531,6 +3531,18 @@ git commit -m "test(warden): the end-to-end join, from unsigned 401 to a credite
 
 No chain writes, no Clock, no daily post, no reference client, no `SKILL.md`, no seed agent. All of those are Plans 3 and 4.
 
+**And its gates do not yet mirror the contract's.** Found by the final review and confirmed against `MachineReadableOnly.sol`. The Warden queues actions the chain will reject, which means an agent can pay for, or be promised, something the Clock cannot write:
+
+| Contract gate | Where it reverts | Warden |
+|---|---|---|
+| `WalletCap` (default 20 per address) | mint :246, seed :538 | checked in neither |
+| `Resting` | batchCheckIn :308, applyMark :454 | checked in `seed` only |
+| `Sunset` | the `whenLive` modifier, :103 | checked nowhere |
+
+And the mirror cannot represent two of those states: `tokens.status` holds only `queued` or `written`, so `tokenView`'s `resting: t.status === "resting"` is **always false**. The column would have to gain the state before any check could read it.
+
+This is one defect class, not three: the Warden's gates were written from the design rather than from the contract's reverts. Closing it needs a decision about where `resting` and `sunset` come from before the Clock exists to reconcile them -- a live chain read per call, a column the Clock maintains, or accepting the divergence until Plan 3. That decision is the operator's, and it is recorded here rather than guessed at.
+
 **And it does not COLLECT money.** The payment path is built and tested against a mocked facilitator, but the running service cannot settle a real payment: `@x402/evm`, which carries the scheme that accepts USDC on Base, is not installed, and settlement also needs a facilitator endpoint and a treasury that exist only once there is a deployment. So `paid` FAILS CLOSED -- `mint` and `upgrade` refuse with `payment-not-configured` rather than crashing at startup or, far worse, giving tokens away for nothing.
 
 The consequence, stated plainly so nobody reads "Plan 2 complete" as more than it is: **an agent cannot yet enter the piece.** Minting is the only way in and it cannot take money. Wiring it needs three decisions that belong with the deployment, not with this plan: which facilitator (the spec names `https://facilitator.x402.org` for testnet and Coinbase's hosted one for mainnet), the treasury address, and vetting `@x402/evm` before installing it. The Mark catalogue is empty for the same reason -- its per-Mark prices and gates are the contract's to declare, not this service's to invent.
