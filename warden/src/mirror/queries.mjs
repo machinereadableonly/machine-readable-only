@@ -25,6 +25,11 @@ export function queries(db) {
     firstMintDay: db.prepare("SELECT MIN(mintDay) AS d FROM tokens WHERE keyId = ?"),
     seedsSpent: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE keyId = ? AND parentId IS NOT NULL"),
     setLineage: db.prepare("UPDATE tokens SET generation = ?, parentId = ? WHERE tokenId = ?"),
+    nextPendingMint: db.prepare("SELECT * FROM mints WHERE solveState = 'pending' ORDER BY tokenId ASC LIMIT 1"),
+    setSolveState: db.prepare("UPDATE mints SET solveState = ? WHERE tokenId = ?"),
+    completeSolve: db.prepare("UPDATE mints SET qr = ?, solveState = 'done' WHERE tokenId = ?"),
+    bumpSolveTries: db.prepare("UPDATE mints SET solveTries = solveTries + 1 WHERE tokenId = ? RETURNING solveTries"),
+    getMint: db.prepare("SELECT * FROM mints WHERE tokenId = ?"),
   };
 
   return {
@@ -64,5 +69,11 @@ export function queries(db) {
     firstMintDay: (keyId) => s.firstMintDay.get(keyId).d ?? 0,
     seedsSpent: (keyId) => s.seedsSpent.get(keyId).n,
     setLineage: (tokenId, generation, parentId) => s.setLineage.run(generation, parentId, tokenId),
+
+    nextPendingMint: () => s.nextPendingMint.get() ?? null,
+    setSolveState: (tokenId, state) => s.setSolveState.run(state, tokenId),
+    completeSolve: (tokenId, qr) => s.completeSolve.run(qr, tokenId),
+    bumpSolveTries: (tokenId) => s.bumpSolveTries.get(tokenId).solveTries,
+    getMint: (tokenId) => s.getMint.get(tokenId),
   };
 }
