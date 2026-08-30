@@ -169,6 +169,7 @@ The mirror is the source of truth for every tool, so it comes first: nothing els
     "@modelcontextprotocol/server": "2.0.0",
     "@modelcontextprotocol/node": "2.0.0",
     "@x402/mcp": "2.24.0",
+    "structured-headers": "^2.0.2",
     "zod": "^4.2.0"
   }
 }
@@ -759,6 +760,7 @@ Expected: FAIL, `Cannot find module '../src/door/verify.mjs'`.
 // enforced here.
 import { verify } from "web-bot-auth";
 import { verifierFromJWK } from "web-bot-auth/crypto";
+import { parseDictionary } from "structured-headers";
 
 /// The spec's window bound. The standard sets no maximum, so a signature could
 /// otherwise be minted valid for a year and replayed for a year.
@@ -772,29 +774,38 @@ const REQUIRED = ["@authority", "@method", "@path", "signature-agent"];
 /**
  * The component list a signature ACTUALLY covered.
  *
- * Read from the base's own "@signature-params" line, never by searching the
- * whole base for a component name. Searching the whole base is defeatable: a
- * COVERED header whose value contains the text "@path" satisfies a substring
- * test while leaving the real path unsigned, and the same headers then replay
- * against any other method and path. Measured on 2026-08-30, that let a
- * signature covering only @authority and signature-agent through, and the
- * identical headers were then accepted at DELETE /admin-evil.
+ * PARSED, never string-matched. Two bypasses were measured here on 2026-08-30
+ * and both came from treating this structured field as text:
  *
- * lastIndexOf, because the parameters line is the LAST line of the base --
- * text forged earlier in it must not be able to win.
+ *  1. Searching the whole base for `"@path"` was satisfied by a COVERED header
+ *     whose VALUE contained that text, leaving the real path unsigned. The same
+ *     headers then replayed at DELETE /admin-evil.
+ *  2. Splitting the parameters line on spaces was satisfied by a quoted
+ *     component NAME containing a space -- `"a @method"` splits into `a` and
+ *     `@method` -- with the same replay available. Component PARAMETERS
+ *     carrying the text did it too.
+ *
+ * An RFC 8941 parser has none of those seams: `"a @method"` stays one member,
+ * so it is simply not `@method`. Read from the base's own @signature-params
+ * line (with lastIndexOf, so text forged earlier cannot win) because that line
+ * belongs to the signature that was actually verified -- the Signature-Input
+ * header may carry several.
+ *
+ * Returns null on anything unparseable, and the caller refuses on null.
  */
 function coveredComponents(base) {
-  const marker = '"@signature-params": (';
+  const marker = '"@signature-params": ';
   const at = base.lastIndexOf(marker);
   if (at === -1) return null;
-  const open = at + marker.length;
-  const close = base.indexOf(")", open);
-  if (close === -1) return null;
-  return base
-    .slice(open, close)
-    .split(" ")
-    .map((entry) => entry.split(";")[0].replace(/^"|"$/g, ""))
-    .filter(Boolean);
+  try {
+    // parseDictionary wants `label=value`; the label is discarded.
+    const entry = parseDictionary("sig=" + base.slice(at + marker.length));
+    const [members] = entry.get("sig");
+    if (!Array.isArray(members)) return null;
+    return members.map(([name]) => String(name));
+  } catch {
+    return null;
+  }
 }
 
 /**
