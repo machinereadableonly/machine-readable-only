@@ -230,7 +230,7 @@ return visits, so the artwork is the agent's own history of coming back.
   died). THE WARDEN'S REBIND RE-CHECK IS A SECURITY CONTROL: it must read the
   chain, never its own database.
 - **THE SEVEN PRE-MAINNET CONTRACT FIXES ARE APPLIED** (2026-08-30, commit
-  `f7347aa`). All were missing bounds on inputs the Warden supplies, which is
+  `b3d0282`). All were missing bounds on inputs the Warden supplies, which is
   why ten task-level reviews passed and only the whole-branch read caught them.
   Both check-in paths now reject `day > today()`; `mint` and `seed` reject ids
   above 2**32; `applyMark` gained an existence guard AND `whenNotPaused`;
