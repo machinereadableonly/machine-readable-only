@@ -802,7 +802,14 @@ function coveredComponents(base) {
     const entry = parseDictionary("sig=" + base.slice(at + marker.length));
     const [members] = entry.get("sig");
     if (!Array.isArray(members)) return null;
-    return members.map(([name]) => String(name));
+    // Only genuine strings count. A structured-headers Token or DisplayString
+    // stringifies back to its plain text, so String() would read %"@method" as
+    // @method. Upstream rejects non-string components today, but this check
+    // must not depend on that surviving a dependency bump -- it is the third
+    // implementation of this rule, and the first two were both defeated.
+    const names = members.map(([name]) => name);
+    if (names.some((name) => typeof name !== "string")) return null;
+    return names;
   } catch {
     return null;
   }
