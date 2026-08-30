@@ -52,19 +52,105 @@ for (const ok of ["93.184.216.34", "8.8.8.8", "2606:2800:220:1:248:1893:25c8:194
   test(`public address ${ok} is allowed`, () => assert.equal(isBlockedAddress(ok), false));
 }
 
-test("a directory that resolves to an IPv4-mapped IPv6 metadata address is refused", async () => {
-  // End to end through the guard, not just the predicate: this is the exact
-  // shape that was measured getting through.
-  let fetched = false;
+// The deps below are `request` and `lookup`, not `fetch` and `resolve`: the
+// address decision now happens inside the resolution the socket uses, so the
+// tests drive that same seam.
+import { Readable } from "node:stream";
+import { EventEmitter } from "node:events";
+
+/// A stand-in for https.request that replies with one body and never touches a
+/// network. `lookup` is still exercised, because the real code calls it.
+function stubRequest(body, status = 200) {
+  return (opts, cb) => {
+    const req = new EventEmitter();
+    req.end = () => {
+      // Drive the pinned lookup exactly as a real connection would.
+      opts.lookup("host.example", { all: true }, (err) => {
+        if (err) return req.emit("error", err);
+        const res = Readable.from([Buffer.from(body)]);
+        res.statusCode = status;
+        cb(res);
+      });
+    };
+    req.destroy = () => {};
+    return req;
+  };
+}
+
+const publicLookup = (h, o, cb) => cb(null, [{ address: "93.184.216.34", family: 4 }]);
+const lookupOf = (addr) => (h, o, cb) =>
+  cb(null, [{ address: addr, family: addr.includes(":") ? 6 : 4 }]);
+
+test("a directory that resolves to a private address is refused", async () => {
   await assert.rejects(
-    () =>
-      guardedFetchDirectory("https://evil.example.com/x", {
-        resolve: async () => ["::ffff:169.254.169.254"],
-        fetch: async () => { fetched = true; return new Response("{}", { status: 200 }); },
-      }),
-    /address/i
+    () => guardedFetchDirectory("https://internal.example.com/x", {
+      request: stubRequest("{}"), lookup: lookupOf("10.1.2.3"),
+    }),
+    /blocked address/i
   );
-  assert.equal(fetched, false, "fetch must never be reached for a blocked address");
+});
+
+// Each of these got through a previous version of the guard. They are kept as
+// end-to-end cases, not just predicate cases, because the bug that mattered was
+// always "the connection still happened".
+for (const addr of ["::ffff:169.254.169.254", "::ffff:0:169.254.169.254", "::127.0.0.1", "64:ff9b::a9fe:a9fe", "2002:a9fe:a9fe::1"]) {
+  test(`a directory resolving to ${addr} is refused end to end`, async () => {
+    await assert.rejects(
+      () => guardedFetchDirectory("https://evil.example.com/x", {
+        request: stubRequest("{}"), lookup: lookupOf(addr),
+      }),
+      /blocked address/i
+    );
+  });
+}
+
+test("one bad address among several refuses the whole connection", async () => {
+  // A resolver that returns a good address and a bad one must get nothing.
+  await assert.rejects(
+    () => guardedFetchDirectory("https://mixed.example.com/x", {
+      request: stubRequest("{}"),
+      lookup: (h, o, cb) => cb(null, [
+        { address: "93.184.216.34", family: 4 },
+        { address: "169.254.169.254", family: 4 },
+      ]),
+    }),
+    /blocked address/i
+  );
+});
+
+test("a body over the cap is refused", async () => {
+  await assert.rejects(
+    () => guardedFetchDirectory("https://example.com/x", {
+      request: stubRequest("x".repeat(70_000)), lookup: publicLookup,
+    }),
+    /too large/i
+  );
+});
+
+test("a redirect is refused rather than followed", async () => {
+  await assert.rejects(
+    () => guardedFetchDirectory("https://example.com/x", {
+      request: stubRequest("", 302), lookup: publicLookup,
+    }),
+    /redirect/i
+  );
+});
+
+test("a url carrying credentials is refused", async () => {
+  await assert.rejects(
+    () => guardedFetchDirectory("https://user:pw@example.com/x", {
+      request: stubRequest("{}"), lookup: publicLookup,
+    }),
+    /credentials/i
+  );
+});
+
+test("a well-formed directory from a public address is returned", async () => {
+  // The control. A guard that refuses everything would pass every test above.
+  const jwks = await guardedFetchDirectory("https://example.com/x", {
+    request: stubRequest(JSON.stringify({ keys: [{ kty: "OKP" }] })), lookup: publicLookup,
+  });
+  assert.equal(jwks.keys.length, 1);
 });
 
 test("a non-https directory URL is refused", async () => {
@@ -78,42 +164,6 @@ test("a non-443 port is refused", async () => {
   await assert.rejects(
     () => guardedFetchDirectory("https://example.com:8443/x", {}),
     /port/i
-  );
-});
-
-test("a directory that resolves to a private address is refused", async () => {
-  await assert.rejects(
-    () =>
-      guardedFetchDirectory("https://internal.example.com/x", {
-        resolve: async () => ["10.1.2.3"],
-      }),
-    /address/i
-  );
-});
-
-test("a body over the cap is refused", async () => {
-  const big = "x".repeat(70_000);
-  await assert.rejects(
-    () =>
-      guardedFetchDirectory("https://example.com/x", {
-        resolve: async () => ["93.184.216.34"],
-        fetch: async () => new Response(big, { status: 200 }),
-      }),
-    /too large/i
-  );
-});
-
-test("a redirect is not followed", async () => {
-  await assert.rejects(
-    () =>
-      guardedFetchDirectory("https://example.com/x", {
-        resolve: async () => ["93.184.216.34"],
-        fetch: async (url, opts) => {
-          assert.equal(opts.redirect, "error", "fetch must be called with redirect: error");
-          throw new TypeError("redirect");
-        },
-      }),
-    /redirect/i
   );
 });
 
