@@ -22,6 +22,9 @@ export function queries(db) {
     ),
     getKey: db.prepare("SELECT * FROM keys WHERE keyId = ?"),
     allKeys: db.prepare("SELECT * FROM keys ORDER BY registeredAt ASC"),
+    firstMintDay: db.prepare("SELECT MIN(mintDay) AS d FROM tokens WHERE keyId = ?"),
+    seedsSpent: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE keyId = ? AND parentId IS NOT NULL"),
+    setLineage: db.prepare("UPDATE tokens SET generation = ?, parentId = ? WHERE tokenId = ?"),
   };
 
   return {
@@ -57,5 +60,9 @@ export function queries(db) {
     /// id as an argument and reverts if it is taken, so the id promised to an
     /// agent at mint is the id that lands.
     nextTokenId: () => (s.maxTokenId.get().maxId ?? 0) + 1,
+
+    firstMintDay: (keyId) => s.firstMintDay.get(keyId).d ?? 0,
+    seedsSpent: (keyId) => s.seedsSpent.get(keyId).n,
+    setLineage: (tokenId, generation, parentId) => s.setLineage.run(generation, parentId, tokenId),
   };
 }
