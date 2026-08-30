@@ -346,4 +346,39 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, IERC4906 {
         emit MarkApplied(id, upgradeId);
         emit MetadataUpdate(id);
     }
+
+    // ---------------------------------------------------------------------
+    // Lifecycle: rebind and rest
+    // ---------------------------------------------------------------------
+
+    error NotTokenOwner();
+
+    event Rebound(uint256 indexed id, bytes32 indexed newKeyId);
+    event Rested(uint256 indexed id, uint32 day, uint32 level, uint32 streak);
+
+    modifier onlyTokenOwner(uint256 id) {
+        if (_ownerOf(id) != msg.sender) revert NotTokenOwner();
+        _;
+    }
+
+    /// @notice Point a token at a new agent key. Level, streak and marks are
+    /// untouched.
+    /// @dev Deliberately does NOT clear `_hasMinted` for either key. Minting is
+    /// once per key forever; binding is unlimited. Clearing it would turn
+    /// rebind into an unlimited mint.
+    function rebind(uint256 id, bytes32 newKeyId) external onlyTokenOwner(id) {
+        _agentKeyOf[id] = newKeyId;
+        emit Rebound(id, newKeyId);
+        emit MetadataUpdate(id);
+    }
+
+    /// @notice Seal a token forever. The image stops changing.
+    /// @dev Irreversible, and deliberately does not block transfer or rebind:
+    /// a sealed token can still be owned and traded, which is the point.
+    function rest(uint256 id) external onlyTokenOwner(id) {
+        Token storage s = _tokens[id];
+        s.resting = true;
+        emit Rested(id, today(), s.level, s.streak);
+        emit MetadataUpdate(id);
+    }
 }
