@@ -90,7 +90,18 @@ export async function writeCheckInChunk(writer, entries, { maxAttempts = 12, log
     );
 
     if (result.ok) {
-      return { written: remaining, dropped, aborted: null, attempts, hash: result.hash };
+      return {
+        written: remaining,
+        dropped,
+        aborted: null,
+        attempts,
+        hash: result.hash,
+        // The block this landed in. A caller that VERIFIES the write has to
+        // wait for a node that has imported it -- a public RPC is load
+        // balanced, and a read straight after a receipt can hit a node that is
+        // still behind. Measured on the live rehearsal, 2026-08-31.
+        blockNumber: result.receipt?.blockNumber ?? null,
+      };
     }
 
     // A transaction that reverted ON CHAIN has already cost gas and consumed a
