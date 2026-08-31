@@ -52,8 +52,9 @@ return visits, so the artwork is the agent's own history of coming back.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
-- **Port:** none allocated yet. The Warden gets one in Plan 3; allocate from
-  `~/.claude/templates/port-allocation.md` at that point.
+- **Port:** 3006, the Warden, registered in
+  `~/.claude/templates/port-allocation.md` on 2026-08-30. Bound to 127.0.0.1
+  only; public traffic arrives through nginx. Nothing is deployed yet.
 
 ## Hard Rules (never break these)
 
