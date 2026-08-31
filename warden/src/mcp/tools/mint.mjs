@@ -1,13 +1,16 @@
 // The way in. 0.10 USDC, paid inside the tool call, no account anywhere.
 import * as z from "zod";
+import { MINT_PRICE, MINT_RESOURCE } from "../../pay/x402.mjs";
 
 export function makeMintTool({ q, paid, supplyCap, today, alert = console.error }) {
   return {
     name: "mint",
     config: {
       title: "Mint a token",
+      // The price is interpolated, never typed twice. A description quoting a
+      // price the wrapper does not charge is a lie told to every agent.
       description:
-        "Costs $0.10 in USDC on Base. One per key. Returns immediately with your token id; the artwork is solved within the hour and written on chain at 00:05 UTC.",
+        `Costs ${MINT_PRICE} in USDC on Base. One per key. Returns immediately with your token id; the artwork is solved within the hour and written on chain at 00:05 UTC.`,
       inputSchema: z.object({
         to: z.string().regex(/^0x[0-9a-fA-F]{40}$/, "expected a 20-byte address"),
       }),
@@ -72,7 +75,12 @@ export function makeMintTool({ q, paid, supplyCap, today, alert = console.error 
           txStatus: "queued",
           onChainBy: new Date((day + 1) * 86_400_000 + 300_000).toISOString(),
         };
-      })(args, ctx);
+        // The price is passed at the call, never held by the wrapper: `paid` is
+        // shared with `upgrade`, whose Marks cost up to 100,000 USDC.
+        // The tool names itself, so the payment demand and every receipt say
+        // "mint" rather than @x402/mcp's fallback "paid_tool". Shared with the
+        // startup warm-up so both hit the same cache entry.
+      }, MINT_PRICE, MINT_RESOURCE)(args, ctx);
     },
   };
 }

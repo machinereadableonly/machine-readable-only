@@ -157,7 +157,7 @@ test("upgrade under the production paid stub refuses and reserves no mark", asyn
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
   const tool = makeUpgradeTool({
     q,
-    catalogue: { 1: { name: "Vein", minLevel: 1, supply: 10 } },
+    catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     paid: makePaidStub(),
   });
 

@@ -48,7 +48,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## 4. Create the configuration file -- [the operator ONLY]
 
-`src/main.mjs` requires SEVEN environment variables and refuses to start,
+`src/main.mjs` requires EIGHT environment variables and refuses to start,
 naming the first one missing, if any is absent. They come from a
 configuration file in `warden/` that is never committed and that Claude never
 reads, creates or prints.
@@ -67,9 +67,9 @@ chmod 600 ~/projects/machine-readable-only/warden/.env
 Claude can run that `chmod`, and can confirm the file exists and its mode with
 `ls -la`, but must never display its contents.
 
-The seven, all required: `MRO_DOMAIN`, `CHALLENGE_SECRET`, `BASE_RPC_URL`,
-`MRO_CONTRACT_ADDRESS`, `MRO_CHAIN_ID`, `TREASURY_ADDRESS` and
-`STATE_DB_PATH`. `PORT` is optional and `ecosystem.config.cjs` supplies it;
+The eight, all required: `MRO_DOMAIN`, `CHALLENGE_SECRET`, `BASE_RPC_URL`,
+`MRO_CONTRACT_ADDRESS`, `MRO_CHAIN_ID`, `TREASURY_ADDRESS`,
+`X402_FACILITATOR_URL` and `STATE_DB_PATH`. `PORT` is optional and `ecosystem.config.cjs` supplies it;
 the bind address is NOT read from the environment at all, it is hardcoded to
 127.0.0.1 in `main.mjs` so no misconfiguration anywhere can expose this port
 directly.
@@ -77,7 +77,37 @@ directly.
 `MRO_CHAIN_ID` must match the chain `MRO_CONTRACT_ADDRESS` is deployed on:
 8453 for Base mainnet, 84532 for Base Sepolia. It is published to agents at
 `mro://contract`, so a mismatch tells every caller the token lives somewhere
-it does not.
+it does not. It ALSO decides where payment is taken -- the x402 network is
+derived from it as `eip155:<chainId>`, so a price is always quoted on the
+chain the token lives on and the two can never drift apart.
+
+`X402_FACILITATOR_URL` is the service that verifies and settles USDC:
+
+| | URL | Auth | Networks |
+|---|---|---|---|
+| testnet | `https://x402.org/facilitator` | none | Base Sepolia only |
+| mainnet | `https://api.cdp.coinbase.com/platform/v2/x402` | CDP API key | Base mainnet |
+
+Measured 2026-08-31, not quoted from the spec: the testnet host's `/supported`
+lists `exact` on `eip155:84532` and NO mainnet, and the CDP host answers 401
+without a key. The spec's `https://facilitator.x402.org` does not resolve at
+all -- use the path form above.
+
+`TREASURY_ADDRESS` receives every payment. The zero address and `0x...dEaD`
+are treated as PLACEHOLDERS: the Warden starts with them on Base Sepolia and
+REFUSES TO START with them on any other chain, because USDC settled to either
+is unrecoverable.
+
+Nothing here contacts the facilitator at startup. The gateway builds itself on
+the first paid call, so an unreachable facilitator refuses `mint` and `upgrade`
+with `payment-unavailable` and leaves the door, check-ins and status working.
+The boot log still says which way it went: `warden: payment ready (...)` or
+`warden: payment NOT ready`. To check a configuration before deploying it:
+
+```
+cd ~/projects/machine-readable-only/warden
+node tools/x402-live-check.mjs <facilitatorUrl> <chainId> <treasuryAddress>
+```
 
 ## 5. Start the Warden under PM2
 

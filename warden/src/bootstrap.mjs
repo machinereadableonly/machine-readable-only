@@ -74,39 +74,23 @@ export function makeAllowRegistration(q, now = Date.now) {
 }
 
 /**
- * The paid-tool wrapper `mint` and `upgrade` call through, when there is no
- * payment path yet.
+ * A `paid()` that refuses everything, for tests and for a deliberately
+ * payment-less build.
  *
- * `makePaid()` in src/pay/x402.mjs is this project's real, tested seam for
- * this: it needs an x402ResourceServer and an `accepts` list. Building a real
- * one was attempted and abandoned, for two reasons checked by hand on
- * 2026-08-30, not guessed:
+ * SUPERSEDED IN PRODUCTION on 2026-08-31: main.mjs now wires the real
+ * makePaymentGateway() from src/pay/x402.mjs, and @x402/evm is installed. The
+ * two obstacles this stub was written around were both real and both are
+ * handled there rather than avoided -- the server-side scheme lives at
+ * `@x402/evm/exact/server` (the root export is the client one), and
+ * initialize()'s live HTTP call is made lazily on the first paid call instead
+ * of at startup, so an unreachable facilitator refuses mints rather than
+ * killing the process.
  *
- * 1. x402ResourceServer needs a payment SCHEME registered before it can build
- *    requirements for a network. @x402/evm's ExactEvmScheme is what knows how
- *    to accept USDC on an EVM chain (Base) -- it is a devDependency of
- *    @x402/mcp in this project's own lockfile, not an installed runtime
- *    dependency here: `import("@x402/evm")` throws ERR_MODULE_NOT_FOUND, and
- *    node_modules/@x402/evm does not exist. Adding a new npm dependency is not
- *    the bootstrap's call to make.
- * 2. Even reaching that point is worse than skipping it.
- *    x402ResourceServer.initialize() makes a LIVE HTTP call to the facilitator
- *    to fetch its supported payment kinds, and THROWS if that call fails (read
- *    directly out of @x402/core's initialize()) -- which would make the WHOLE
- *    PROCESS's startup, not just the two paid tools, depend on reaching a
- *    specific third-party host. And with no scheme registered,
- *    buildPaymentRequirements() returns an EMPTY accepts array rather than
- *    throwing, while createPaymentWrapper THROWS SYNCHRONOUSLY on an empty
- *    accepts array ("PaymentWrapperConfig.accepts must have at least one
- *    payment requirement" -- reproduced by hand). So the real path crashes the
- *    process at startup either way.
- *
- * So this fails closed, locally, with no network call: every paid tool call is
- * REFUSED, and refused as a structured value rather than a throw, because a
- * throw would be reported to the agent as "internal" and tell it nothing. Never
- * a crash, and never a free mint or Mark. Wiring the real path needs @x402/evm
- * added as a dependency and its ExactEvmScheme registered on a resourceServer
- * -- left for whoever picks up real payment collection.
+ * It stays because the tool tests use it: it is the smallest possible stand-in
+ * that proves `mint` and `upgrade` REFUSE rather than run their bodies when
+ * payment is unavailable. It fails closed, locally, with no network call, and
+ * answers a structured value rather than throwing -- a throw would be reported
+ * to the agent as "internal" and tell it nothing. Never a free mint or Mark.
  */
 export function makePaidStub() {
   return (_handler) => async () => ({ ok: false, reason: "payment-not-configured" });

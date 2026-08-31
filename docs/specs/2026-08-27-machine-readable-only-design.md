@@ -725,7 +725,11 @@ a direct USDC transfer to the Treasury verified by the Warden instead.
   (`https://api.cdp.coinbase.com/platform/v2/x402`, CDP API key; first 1,000
   settlements a month free, then $0.001; verification always free). The
   facilitator submits the USDC transfer (EIP-3009), so the paying agent needs
-  no ETH. Testnet facilitator for the soak: `https://facilitator.x402.org`.
+  no ETH. Testnet facilitator for the soak: `https://x402.org/facilitator`.
+  CORRECTED 2026-08-31: this read `https://facilitator.x402.org`, which
+  does not resolve. The working host was confirmed by its own
+  `/supported`, which lists `exact` on `eip155:84532` and no mainnet, so
+  it is testnet-only and mainnet must use the CDP host above.
 - Money goes to `TREASURY_ADDRESS`; its private key is not on the VPS. The
   Warden never holds funds. Fees and Mark income are small but are income;
   keeping them in one separate wallet makes them easy to account for.

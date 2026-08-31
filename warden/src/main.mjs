@@ -18,7 +18,8 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createServer } from "./server.mjs";
-import { makeAllowRegistration, makePaidStub, makeSpawnSolve } from "./bootstrap.mjs";
+import { makeAllowRegistration, makeSpawnSolve } from "./bootstrap.mjs";
+import { makePaymentGateway, warmUp } from "./pay/x402.mjs";
 import { makeMcpHandler } from "./mcp/server.mjs";
 import { tokenView } from "./mcp/tokenView.mjs";
 import { openDb } from "./mirror/db.mjs";
@@ -58,12 +59,11 @@ const domain = requireEnv("MRO_DOMAIN");
 const challengeSecret = requireEnv("CHALLENGE_SECRET");
 const rpcUrl = requireEnv("BASE_RPC_URL");
 const contract = requireEnv("MRO_CONTRACT_ADDRESS");
-// Not consumed by anything below yet -- see makePaidStub()'s comment in
-// bootstrap.mjs for why -- but it is still required here and validated the
-// same way the others are. The day real payment collection is wired, this is
-// the address x402's `payTo` must use, and failing loudly now means it is
-// never discovered missing only once that wiring lands.
+// Where every USDC payment lands. x402's `payTo`.
 const treasuryAddress = requireEnv("TREASURY_ADDRESS");
+if (!/^0x[0-9a-fA-F]{40}$/.test(treasuryAddress)) {
+  throw new Error("TREASURY_ADDRESS must be a 20-byte hex address");
+}
 const stateDbPath = requireEnv("STATE_DB_PATH");
 
 // The chain the contract above is deployed on, published to agents at
@@ -77,6 +77,42 @@ const chainId = Number(requireEnv("MRO_CHAIN_ID"));
 if (!Number.isInteger(chainId) || chainId <= 0) {
   throw new Error("MRO_CHAIN_ID must be a positive integer, for example 8453 for Base mainnet");
 }
+
+// BASE SEPOLIA, the only chain a placeholder treasury is allowed on.
+const BASE_SEPOLIA = 84_532;
+
+// Addresses that are stand-ins, not destinations. TREASURY_ADDRESS carries a
+// placeholder while the real one is being decided, and a placeholder is
+// harmless on a testnet and unrecoverable on mainnet: USDC sent to either of
+// these is gone, and x402 settles to whatever `payTo` says without asking. So
+// the placeholder is allowed to run the piece on Base Sepolia and refuses to
+// start anywhere else.
+const PLACEHOLDER_TREASURIES = new Set([
+  "0x0000000000000000000000000000000000000000",
+  "0x000000000000000000000000000000000000dead",
+]);
+if (chainId !== BASE_SEPOLIA && PLACEHOLDER_TREASURIES.has(treasuryAddress.toLowerCase())) {
+  throw new Error(
+    `TREASURY_ADDRESS is a placeholder (${treasuryAddress}) and chain ${chainId} is not Base Sepolia: ` +
+      "set the real treasury address before running anywhere real money can arrive"
+  );
+}
+
+// The facilitator that verifies and settles USDC payments. Required, never
+// defaulted: a wrong default here charges agents into the void.
+//   testnet: https://x402.org/facilitator (no API key; Base Sepolia only --
+//            its /supported lists eip155:84532 and no mainnet, measured
+//            2026-08-31)
+//   mainnet: https://api.cdp.coinbase.com/platform/v2/x402 (CDP API key)
+// NOTE the spec's `https://facilitator.x402.org` does not resolve; the working
+// testnet host is the path form above.
+const facilitatorUrl = requireEnv("X402_FACILITATOR_URL");
+
+// CAIP-2, derived from the chain the contract is on rather than configured
+// separately. Two settings that must agree are one setting: quoting a price on
+// a different chain than the token lives on is the same class of bug as the
+// address/chain mismatch this file already removed once.
+const paymentNetwork = `eip155:${chainId}`;
 
 // The three policies this process runs on -- the registration limiter, the
 // paid-tool stub and the solver spawn -- are built in ./bootstrap.mjs and
@@ -96,7 +132,28 @@ async function main() {
   requeueOrphans(q);
 
   const chain = makeChainReader({ rpcUrl, contract });
-  const paid = makePaidStub();
+
+  // Payment. NOTHING here talks to the facilitator yet -- the gateway builds
+  // itself on the first paid call, because initialize() is a live HTTP call
+  // that throws, and the whole process must not fail to boot because a third
+  // party is down. See src/pay/x402.mjs.
+  const paid = makePaymentGateway({
+    facilitatorUrl,
+    network: paymentNetwork,
+    payTo: treasuryAddress,
+  });
+
+  // Ask it to build now anyway, and carry on regardless. Without this a
+  // misconfigured facilitator or an unsupported network stays invisible until
+  // the first paying agent hits it; with it, the boot log says so. warmUp
+  // never rejects and never blocks the listen below.
+  warmUp(paid).then((ready) => {
+    console.log(
+      ready
+        ? `warden: payment ready (${paymentNetwork} via ${facilitatorUrl}, to ${treasuryAddress})`
+        : "warden: payment NOT ready -- mint and upgrade will refuse until the facilitator answers"
+    );
+  });
 
   // The static JWKS nginx serves from
   // public/.well-known/http-message-signatures-directory is a file on disk,
