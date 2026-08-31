@@ -96,7 +96,11 @@ return visits, so the artwork is the agent's own history of coming back.
    bind the work that follows -- see Gotchas -- but the gate itself is done.
 5. **Do not re-open decided ground.** Free mint, per-token yearly seeding,
    Ethereum / Solana / Monad, and a human-facing gallery are all decided
-   against. Do not re-propose them.
+   against. Do not re-propose them. **Payment stays USDC** (reaffirmed by the operator
+   2026-08-31): x402's exact scheme handles ERC-20 only, so native ETH is not
+   available at all, and WETH would need a Permit2 approval -- an on-chain
+   transaction and a gas balance the paying agent currently does not need. It
+   would also untether the Marks ladder, which is priced in dollars.
 6. **Frame proof-of-agent as an access rule**, which is what it is: an entry
    condition for an art piece ("a program minted this"). It is not an
    anti-abuse or bot-defence system, and describing it that way invites a
