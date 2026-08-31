@@ -50,6 +50,11 @@ export async function runClock({
     stuck: [],
     aborted: null,
     reconciled: null,
+    /// The block the last successful write landed in, or null. Anything that
+    /// reads state back to verify a write must wait for a node that has this
+    /// block: the public RPC is load balanced and a read issued straight after
+    /// a receipt can land on one that has not imported it yet.
+    lastBlock: null,
   };
 
   // 1. THE GAS GUARD, BEFORE ANYTHING IS SENT. Stopping the whole run rather
@@ -86,6 +91,7 @@ export async function runClock({
     if (result.ok) {
       q.markMintWritten(mint.tokenId);
       summary.minted.push(mint.tokenId);
+      summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
       continue;
     }
     // TokenExists means somebody already minted this id -- the row is settled
@@ -111,6 +117,7 @@ export async function runClock({
       q.markCreditWritten(entry.tokenId, entry.day);
       summary.credited.push(entry);
     }
+    if (result.blockNumber) summary.lastBlock = result.blockNumber;
     for (const drop of result.dropped) {
       summary.dropped.push(drop);
       alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was refused (${drop.reason}) and stays queued`);
@@ -130,6 +137,7 @@ export async function runClock({
     if (result.ok) {
       q.markOrderWritten(order.tokenId, order.upgradeId);
       summary.marks.push(order);
+      summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
       continue;
     }
     alert(`clock: applyMark ${order.upgradeId} on ${order.tokenId} failed (${result.errorName ?? result.reason})`);
