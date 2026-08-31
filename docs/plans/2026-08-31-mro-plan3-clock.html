@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan 3: the Clock</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan 3: the Clock</h1>
+<p><strong>Status:</strong> approved 2026-08-31. Follows Plan 2.</p>
+<h2>Why</h2>
+<p>Plan 2 built a service that takes an agent&#39;s money and writes its intent into
+a SQLite queue. Nothing drains that queue. No token minted through the Warden
+has ever reached the chain, and no check-in has ever been credited on chain.</p>
+<p>The Clock is the other half. Once a day it reads the queue, writes it to Base,
+reconciles the mirror against what actually landed, and nudges the metadata
+consumers. Until it exists the piece is a shop with a till and no stockroom.</p>
+<h2>Scope</h2>
+<p><strong>In:</strong> the chain writer, the gas guard, chunking, receipt verification, event
+reconcile, the retry and alert rules, the scheduled run, and a live rehearsal
+on Base Sepolia that lands real transactions.</p>
+<p><strong>Out: the daily X post.</strong> The spec (section 12) bundles it under &quot;the Clock&quot;,
+but it needs X API credentials only the operator has, it publishes publicly, and it
+shares no code with the writer. It gets its own plan. Shipping a working Clock
+beats shipping half a poster.</p>
+<p><strong>Out: mainnet.</strong> Everything here is Base Sepolia. Mainnet is a separate,
+explicit, real-funds gate.</p>
+<hr>
+<h2>What was measured before this document was written</h2>
+<p>Plan 2&#39;s document carried 31 defects, every one in code that was written into
+the plan and never executed. So each load-bearing assumption below was run
+against the deployed contract on 2026-08-31 first.</p>
+<table>
+<thead>
+<tr>
+<th>Fact</th>
+<th>Value</th>
+<th>Why it matters</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>viem</code></td>
+<td>2.56.0, already on disk</td>
+<td>Pulled in by <code>@x402/evm</code>; no new dependency, but declare it directly rather than lean on a transitive</td>
+</tr>
+<tr>
+<td>Chain</td>
+<td><code>84532</code>, gas price <strong>0.006 gwei</strong></td>
+<td>The Base floor. The spec&#39;s <code>MAX_GAS_GWEI</code> default of 0.05 is about 8x headroom</td>
+</tr>
+<tr>
+<td>Id packing</td>
+<td><code>ids.map(n =&gt; hex(n,8)).join(&quot;&quot;)</code></td>
+<td>Byte-identical to viem&#39;s <code>encodePacked([&quot;uint32&quot;,...])</code>. Verified, not assumed</td>
+</tr>
+<tr>
+<td><code>simulateContract</code> on a revert</td>
+<td>throws, and <strong>names the custom error</strong>: <code>FutureDay(uint32 day)</code>, <code>DayNotAdvanced(uint256 id)</code></td>
+<td>This is what makes the re-chunk rule implementable: the Clock can tell WHY a chunk failed</td>
+</tr>
+<tr>
+<td><code>simulateContract().request.gas</code></td>
+<td><strong><code>undefined</code></strong></td>
+<td>A trap. The spec says assert <code>estimateGas &lt; 15M</code>; the gas is NOT on the simulate result and must come from <code>estimateContractGas</code> separately</td>
+</tr>
+<tr>
+<td><code>estimateContractGas(mint)</code></td>
+<td>322,601 gas</td>
+<td>About 0.0000019 ETH at the floor</td>
+</tr>
+<tr>
+<td><strong><code>eth_getLogs</code> range</strong></td>
+<td><strong>capped at 10,000 blocks</strong> by the public RPC</td>
+<td>Base blocks are 2s, so 10,000 blocks is about 5.5 hours. <strong>A day is about 43,200 blocks.</strong> Reconcile MUST page, or it silently reads a fraction of the day</td>
+</tr>
+<tr>
+<td>Deploy block</td>
+<td><code>46163891</code></td>
+<td>Reconcile&#39;s floor. A rolling window is wrong; the contract had zero logs in the last 9,000 blocks</td>
+</tr>
+<tr>
+<td><code>warden</code> / <code>owner</code></td>
+<td>both <code>0x9749...6aE5</code></td>
+<td>The separation problem below</td>
+</tr>
+</tbody></table>
+<p>The last two are the ones that would have shipped broken.</p>
+<hr>
+<h2>The key separation problem</h2>
+<p>The contract&#39;s <code>warden</code> and <code>owner</code> are the same address. <code>onlyWarden</code> gates
+<code>mint</code>, <code>batchCheckIn</code>, <code>applyMark</code> and <code>seed</code>; <code>onlyOwner</code> gates
+<code>setRenderer</code>, <code>setWarden</code>, <code>setSunset</code>, <code>pause</code> and ownership transfer.</p>
+<p>If the Clock signed with that key, a compromised Clock could close the piece
+permanently. So:</p>
+<ul>
+<li>A <strong>dedicated Clock key</strong> is generated, holding only gas ETH.</li>
+<li><code>setWarden(clockAddress)</code> points the contract at it. Reversible by the owner.</li>
+<li>The owner key is not on the Clock&#39;s path at all.</li>
+</ul>
+<p>This matches the spec&#39;s own key table, which says <code>WARDEN_PRIVATE_KEY</code> &quot;holds
+only gas ETH&quot;.</p>
+<p><strong>The key never passes through a conversation or a transcript.</strong> A script
+generates it directly into the environment file, which Claude cannot read.</p>
+<hr>
+<h2>Tasks</h2>
+<h3>Task 1 - the signer, and its separation</h3>
+<ol>
+<li><code>scripts/make-clock-key.sh</code> generates a key with <code>cast wallet new</code>, appends
+<code>CLOCK_PRIVATE_KEY</code> to the Warden&#39;s environment file, and prints ONLY the
+address. the operator runs it; the private half never reaches stdout, a log, or this
+repository.</li>
+<li>Fund that address with Base Sepolia ETH from the deployer.</li>
+<li><code>setWarden(clockAddress)</code> from the owner key, via a Foundry script that
+reads the contracts environment file itself.</li>
+<li>Verify on chain: <code>warden()</code> is the Clock address and <code>owner()</code> is unchanged.</li>
+</ol>
+<p><strong>Gate:</strong> steps 2 and 3 are on-chain writes. Testnet only, and reversible.</p>
+<h3>Task 2 - the chain client</h3>
+<p><code>clock/src/chain/write.mjs</code>. A viem wallet client on Base Sepolia.</p>
+<ul>
+<li><strong>The gas guard first.</strong> Read <code>eth_gasPrice</code>; above <code>MAX_GAS_GWEI</code> (default
+0.05), log, alert, stop. Pending rows keep their own day numbers, so levels
+and streaks are identical whenever the write lands.</li>
+<li><strong><code>estimateContractGas</code> separately from <code>simulateContract</code></strong>, because the
+simulate result carries no gas. Assert under 15M before sending.</li>
+<li><strong><code>receipt.status === &quot;success&quot;</code> or it did not happen.</strong> viem RESOLVES on a
+reverted transaction rather than throwing; a row marked <code>written</code> on a
+resolved promise alone is a lie. This is a standing rule across these
+projects, and it is the single most expensive mistake available here.</li>
+<li>Nonces managed explicitly, so a stuck transaction cannot silently reorder a
+batch.</li>
+</ul>
+<h3>Task 3 - what to write, in order</h3>
+<p>Read pending rows with <code>day &lt;= yesterday</code>; a check-in at 00:03 belongs to the
+next batch.</p>
+<ol>
+<li><strong><code>mint</code></strong> for every queued token whose <code>solveState = &#39;done&#39;</code>.<ul>
+<li>A token at <code>solveState = &#39;failed&#39;</code> is <strong>alerted and left pending, never
+minted with placeholder art.</strong> The contract writes <code>code</code> once and
+permanently, so a placeholder is a permanently broken artwork rather than
+a delayed one. Decided by the operator, 2026-08-31.</li>
+</ul>
+</li>
+<li><strong><code>batchCheckIn</code></strong> in chunks.</li>
+<li><strong><code>applyMark</code></strong> for every reserved Mark.</li>
+</ol>
+<h3>Task 4 - the all-or-nothing rule</h3>
+<p><code>batchCheckIn</code> reverts the WHOLE chunk on one bad entry. The rule, inherited
+from Plan 1&#39;s fix wave:</p>
+<blockquote>
+<p><strong>Re-chunk with the offending ids removed. Never retry the whole chunk.</strong></p>
+</blockquote>
+<p>The decoded error name says which rule was broken (<code>DayNotAdvanced(uint256 id)</code>
+carries the id; <code>FutureDay(uint32 day)</code> carries the day). Bisect only when the
+error does not identify the entry.</p>
+<p>A chunk that has already landed must never be resent: that is what
+<code>receipt.status</code> plus the mirror&#39;s <code>status</code> column are for.</p>
+<h3>Task 5 - reconcile</h3>
+<p>After every run, read the events and make the mirror agree with the chain.</p>
+<ul>
+<li><strong>Page <code>eth_getLogs</code> in 10,000-block windows.</strong> This is the measured cap. A
+day is about 43,200 blocks, so a run pages about 5 times. A single unpaged
+call reads five hours and silently reports success.</li>
+<li>Floor at the deploy block, <code>46163891</code>, not a rolling window.</li>
+<li>Events: <code>Minted</code>, <code>BatchCheckedIn</code>, <code>MarkApplied</code>, <code>Rebound</code>, <code>Transfer</code>,
+<code>Rested</code>.</li>
+<li><code>Rested</code> is how the mirror&#39;s <code>resting</code> column gets maintained properly rather
+than learned lazily by the Warden&#39;s gates.</li>
+</ul>
+<h3>Task 6 - the metadata poke</h3>
+<p>The on-chain half is <strong>already done</strong>: <code>batchCheckIn</code> emits one
+<code>MetadataUpdate</code> per token after the writes (<code>MachineReadableOnly.sol:331</code>).
+The &quot;scattered subset versus contiguous range&quot; question recorded as an open
+Plan 3 item does not apply to this contract.</p>
+<p>What remains is the off-chain refresh call, and it comes with a hard limit:</p>
+<ul>
+<li><strong>It cannot be rehearsed on Base Sepolia.</strong> Alchemy&#39;s dedicated
+<code>refreshNftMetadata</code> endpoint returns HTTP 400 there (&quot;isn&#39;t enabled for that
+chain or network just yet&quot;). Measured 2026-08-30.</li>
+<li>So it ships <strong>written and unproven</strong>, clearly labelled, and must never be
+described otherwise.</li>
+<li><strong>It verifies <code>timeLastUpdated</code> moved</strong> rather than firing and forgetting.</li>
+<li>The piece must never DEPEND on an indexer refreshing. The audience is agents,
+who call <code>tokenURI</code> directly.</li>
+</ul>
+<h3>Task 7 - the runner</h3>
+<ul>
+<li>A systemd timer at 00:05 UTC. Not cron: the timer gives <code>Persistent=true</code>, so
+a run missed while the box was down happens on the next boot.</li>
+<li><code>~/logs/mro-clock.log</code>.</li>
+<li>A row still pending after <strong>three</strong> runs raises an alert carrying the
+transaction hash and the revert reason.</li>
+<li>A run must be safe to execute twice. Every write is keyed on mirror state
+that the previous run marked <code>written</code>.</li>
+</ul>
+<h3>Task 8 - the live rehearsal</h3>
+<p>Real transactions on Base Sepolia, not a simulation:</p>
+<ol>
+<li>A queued mint through the whole path, ending in a token on chain.</li>
+<li>A real <code>batchCheckIn</code> crediting a day.</li>
+<li><strong>A deliberately poisoned chunk</strong> - one id the chain will refuse - proving
+the re-chunk path removes it and lands the rest.</li>
+<li>A reconcile run over a window wider than 10,000 blocks, proving the paging.</li>
+<li><code>tokenURI</code> read back and decoded, proving the artwork survives the round
+trip.</li>
+</ol>
+<hr>
+<h2>Risks</h2>
+<ul>
+<li><strong>A key on the VPS for the first time.</strong> Mitigated by separation from the
+owner, a gas-only balance, and testnet scope. It is still the largest change
+in this plan.</li>
+<li><strong>The RPC is now load-bearing twice over</strong> - the Warden&#39;s gates already
+depend on it, and the Clock cannot write without it. A public endpoint is
+fine to start; refusals in the log are the signal to upgrade.</li>
+<li><strong>Chunk size is unverified.</strong> The spec&#39;s 1,500 comes from arithmetic
+(about 7k gas per check-in), not measurement: only one token exists, so a
+full chunk cannot be estimated yet. Task 8 measures the real per-entry cost
+and the figure is adjusted then, rather than trusted now.</li>
+</ul>
+<h2>Out of scope, recorded so it is not lost</h2>
+<ul>
+<li>The daily X post (its own plan).</li>
+<li>Mainnet deployment and the mainnet facilitator.</li>
+<li>The Marks catalogue, which is still empty, so <code>applyMark</code> has nothing to
+write until it is filled.</li>
+</ul>
+
+</body>
+</html>
