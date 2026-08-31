@@ -35,7 +35,19 @@ return visits, so the artwork is the agent's own history of coming back.
   that a consumer ignoring it is outside this project's control. The question
   is unanswerable on Base Sepolia, so it closed by accepting that limit. Do
   not re-open it, and do not describe Phase 0 as blocked or pending.
-  Next is either Plan 2/3 (the Warden) or the deferred child-visuals
+  **PLAN 2 (the Warden service) IS BUILT as of 2026-08-31** -- 54 commits,
+  `33e5b31` to `30e0af2`, on main with the operator's consent. warden/ holds the door
+  (RFC 9421 + the 5s challenge + the key directory and its SSRF guard), the
+  node:sqlite mirror, the 2026-07-28 MCP server with eight tools, the bitmap
+  solve queue, the x402 adapter and the bootstrap. **196 warden tests; 231
+  contracts and 56 tools unchanged.** It holds NO private key -- every chain
+  write is Plan 3's.
+  THREE THINGS NEED the operator BEFORE IT GOES ANYWHERE, see the plan2-status memory:
+  (1) the Warden's gates DO NOT MIRROR the contract's reverts -- WalletCap,
+  Resting and Sunset -- and the mirror cannot represent two of them; (2) it
+  CANNOT TAKE PAYMENT, so no agent can enter yet; (3) there is still no domain,
+  so deployment is written and never applied.
+  Next is that decision, then Plan 3 (the Clock) or the deferred child-visuals
   brainstorm.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
