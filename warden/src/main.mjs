@@ -46,6 +46,23 @@ function requireEnv(name) {
   return value;
 }
 
+// THE CLOCK'S KEY IS NOT THIS PROCESS'S BUSINESS, so it is removed from the
+// environment before anything else runs.
+//
+// Both processes read the same configuration file, because they share a
+// database, a contract and a chain id -- one file with one truth in it. But
+// this process is the internet-facing one, and any bug that serialises
+// process.env into an error page, a debug route or a crash dump would hand out
+// the key that can mint every token in the collection. The Clock re-reads the
+// file itself and is not reachable from outside.
+//
+// This is defence in depth, not a boundary: anyone who can run code as this
+// user can read the file directly. It closes the cheap accident, not the
+// determined attacker, and the boundary that actually matters is the one on
+// chain -- the Clock is the warden and NOT the owner, so even the key itself
+// cannot sunset the piece or change its renderer.
+delete process.env.CLOCK_PRIVATE_KEY;
+
 const PORT = Number(process.env.PORT) || 3006;
 // Loopback only, ALWAYS -- never read from the environment. Public traffic
 // reaches this process through nginx (see nginx.conf.example and DEPLOY.md);
