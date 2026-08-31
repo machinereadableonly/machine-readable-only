@@ -18,7 +18,8 @@
 # lock the Clock out of its own contract until setWarden was called again.
 set -euo pipefail
 
-ENV_FILE="$HOME/projects/machine-readable-only/warden/.env"
+# Overridable ONLY so this can be exercised against a scratch copy first.
+ENV_FILE="${MRO_PROJECT_DIR:-$HOME/projects/machine-readable-only}/warden/.env"
 export PATH="$HOME/.foundry/bin:$PATH"
 
 if ! command -v cast >/dev/null 2>&1; then
