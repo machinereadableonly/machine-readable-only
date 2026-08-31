@@ -39,6 +39,32 @@ export function queries(db) {
     reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId) VALUES (?, ?)"),
     markSold: db.prepare("SELECT COUNT(*) AS n FROM mark_orders WHERE upgradeId = ?"),
     hasMinted: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE keyId = ?"),
+
+    // --- the Clock's statements. Everything below is written by Plan 3 only;
+    // the Warden queues rows and never marks one written.
+    pendingMints: db.prepare(
+      "SELECT m.tokenId, m.toAddress, m.keyId, m.qr, t.keyId AS agentKeyId FROM mints m " +
+        "JOIN tokens t ON t.tokenId = m.tokenId " +
+        "WHERE m.status = 'queued' AND m.solveState = 'done' ORDER BY m.tokenId ASC"
+    ),
+    stuckMints: db.prepare(
+      "SELECT tokenId, solveState, solveTries FROM mints WHERE status = 'queued' AND solveState = 'failed'"
+    ),
+    pendingCredits: db.prepare(
+      "SELECT tokenId, day FROM credits WHERE status = 'queued' AND day <= ? ORDER BY day ASC, tokenId ASC"
+    ),
+    pendingMarkOrders: db.prepare(
+      "SELECT tokenId, upgradeId FROM mark_orders WHERE status = 'queued' ORDER BY tokenId ASC"
+    ),
+    markMintWritten: db.prepare("UPDATE mints SET status = 'written' WHERE tokenId = ?"),
+    markTokenWritten: db.prepare("UPDATE tokens SET status = 'written' WHERE tokenId = ?"),
+    markCreditWritten: db.prepare("UPDATE credits SET status = 'written' WHERE tokenId = ? AND day = ?"),
+    markOrderWritten: db.prepare(
+      "UPDATE mark_orders SET status = 'written' WHERE tokenId = ? AND upgradeId = ?"
+    ),
+    setOwner: db.prepare("UPDATE tokens SET owner = ? WHERE tokenId = ?"),
+    setKeyId: db.prepare("UPDATE tokens SET keyId = ? WHERE tokenId = ?"),
+    setMarkBit: db.prepare("UPDATE tokens SET marks = marks | ? WHERE tokenId = ?"),
   };
 
   return {
@@ -134,6 +160,44 @@ export function queries(db) {
     /// supply would be unlimited.
     markSold: (upgradeId) => s.markSold.get(upgradeId).n,
     hasMinted: (keyId) => s.hasMinted.get(keyId).n > 0,
+
+    // --- the Clock's surface ------------------------------------------------
+
+    /// Mints ready to be written: paid for, and their artwork solved. A mint
+    /// whose solve has NOT finished is deliberately absent -- the contract
+    /// writes `code` once and permanently, so a token minted without its
+    /// bitmap is broken forever rather than merely late.
+    pendingMints: () => s.pendingMints.all(),
+
+    /// Mints that can never proceed on their own. The agent has paid and has
+    /// nothing, so a human has to see these.
+    stuckMints: () => s.stuckMints.all(),
+
+    /// Credits for days that have CLOSED. A check-in at 00:03 belongs to
+    /// tomorrow's batch, which is why this is bounded rather than "everything".
+    pendingCredits: (throughDay) => s.pendingCredits.all(throughDay),
+
+    pendingMarkOrders: () => s.pendingMarkOrders.all(),
+
+    /// A mint landed: both rows move together, because a written token with a
+    /// queued mint (or the reverse) is a state nothing else in this service
+    /// knows how to read.
+    markMintWritten(tokenId) {
+      s.markMintWritten.run(tokenId);
+      s.markTokenWritten.run(tokenId);
+    },
+    markCreditWritten: (tokenId, day) => s.markCreditWritten.run(tokenId, day),
+
+    /// A Mark landed. The bit is set here rather than by the Warden, because
+    /// until the chain has it the token does not really carry the Mark.
+    markOrderWritten(tokenId, upgradeId) {
+      s.markOrderWritten.run(tokenId, upgradeId);
+      s.setMarkBit.run(1 << upgradeId, tokenId);
+    },
+
+    /// Facts only the chain knows: a transfer or a rebind the Warden never saw.
+    setOwner: (tokenId, owner) => s.setOwner.run(owner, tokenId),
+    setKeyId: (tokenId, keyId) => s.setKeyId.run(keyId, tokenId),
 
     /// Run fn inside BEGIN/COMMIT, rolling back on any error. node:sqlite's
     /// DatabaseSync has no .transaction() helper (checked directly against
