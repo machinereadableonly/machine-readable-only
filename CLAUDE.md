@@ -48,11 +48,16 @@ return visits, so the artwork is the agent's own history of coming back.
   tests are now 214.** SETTLEMENT IS STILL UNPROVEN (it needs testnet USDC
   from a captcha-gated faucet) and the treasury is a PLACEHOLDER. See the
   plan2-payment memory.
-  TWO THINGS STILL NEED the operator, see the plan2-status memory: (1) the Warden's
-  gates DO NOT MIRROR the contract's reverts -- WalletCap, Resting and Sunset
-  -- and the mirror cannot represent two of them; (2) there is still no
-  domain, so deployment is written and never applied. A real TREASURY_ADDRESS
-  is also outstanding.
+  **THE GATES NOW MIRROR THE CONTRACT as of 2026-08-31 (commit `df8d012`)** --
+  WalletCap, Resting, notSunset AND whenNotPaused (a fourth gate no document
+  had recorded) are read live from the chain, the paid tools re-read them after
+  settlement, and an unreadable RPC REFUSES rather than admits. **Warden tests
+  are now 240.** `BASE_RPC_URL` is load-bearing for every write now, not just
+  the rebind re-check.
+  WHAT IS LEFT FOR the operator: (1) there is still no domain, so deployment is written
+  and never applied; (2) a real TREASURY_ADDRESS -- a placeholder is in use and
+  refuses to start on any chain but Base Sepolia; (3) settlement is still
+  unproven and needs testnet USDC.
   Next is that decision, then Plan 3 (the Clock) or the deferred child-visuals
   brainstorm.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
