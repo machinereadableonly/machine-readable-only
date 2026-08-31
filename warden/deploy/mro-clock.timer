@@ -1,0 +1,23 @@
+[Unit]
+Description=Run the Machine Readable Only Clock at 00:05 UTC
+
+[Timer]
+# 00:05 UTC, five minutes after the day rolls over. The gap matters: the Clock
+# writes days that have CLOSED, and a check-in arriving at 00:03 belongs to the
+# day that just began, not the one being written.
+OnCalendar=*-*-* 00:05:00 UTC
+
+# A run missed while the box was down happens at the next boot instead of being
+# skipped. This is the whole reason for a timer rather than cron: a skipped run
+# is a day of check-ins the agents earned and never got. They are not lost --
+# every pending row keeps its own day number, so a late write produces exactly
+# the same levels and streaks -- but only if something eventually runs.
+Persistent=true
+
+# Nothing else on this box runs at 00:05, but a fixed second on a shared
+# machine is how several jobs end up contending. A minute of jitter costs
+# nothing here.
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
