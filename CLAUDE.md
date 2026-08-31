@@ -42,11 +42,17 @@ return visits, so the artwork is the agent's own history of coming back.
   solve queue, the x402 adapter and the bootstrap. **196 warden tests; 231
   contracts and 56 tools unchanged.** It holds NO private key -- every chain
   write is Plan 3's.
-  THREE THINGS NEED the operator BEFORE IT GOES ANYWHERE, see the plan2-status memory:
-  (1) the Warden's gates DO NOT MIRROR the contract's reverts -- WalletCap,
-  Resting and Sunset -- and the mirror cannot represent two of them; (2) it
-  CANNOT TAKE PAYMENT, so no agent can enter yet; (3) there is still no domain,
-  so deployment is written and never applied.
+  **PAYMENT IS WIRED as of 2026-08-31 (commit `f4de22a`)** -- `@x402/evm`
+  2.24.0 installed, `makePaymentGateway` live, and a real agent through the
+  real door is handed a correct 0.10 USDC demand on Base Sepolia. **Warden
+  tests are now 214.** SETTLEMENT IS STILL UNPROVEN (it needs testnet USDC
+  from a captcha-gated faucet) and the treasury is a PLACEHOLDER. See the
+  plan2-payment memory.
+  TWO THINGS STILL NEED the operator, see the plan2-status memory: (1) the Warden's
+  gates DO NOT MIRROR the contract's reverts -- WalletCap, Resting and Sunset
+  -- and the mirror cannot represent two of them; (2) there is still no
+  domain, so deployment is written and never applied. A real TREASURY_ADDRESS
+  is also outstanding.
   Next is that decision, then Plan 3 (the Clock) or the deferred child-visuals
   brainstorm.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
@@ -121,7 +127,11 @@ return visits, so the artwork is the agent's own history of coming back.
 
 - **Entry:** RFC 9421 / Web Bot Auth signed request, plus a 5-second
   stateless code-only challenge.
-- **Mint:** 0.10 USDC via x402 inside MCP (`@x402/mcp`).
+- **Mint:** 0.10 USDC via x402 inside MCP (`@x402/mcp` + `@x402/evm`). The
+  testnet facilitator is `https://x402.org/facilitator` -- the spec's
+  `https://facilitator.x402.org` DOES NOT RESOLVE and was corrected
+  2026-08-31. That host is testnet-only; mainnet is the CDP one and needs an
+  API key.
 - **Check-ins:** free to the agent, paid by the site, batched into one
   transaction per UTC day at 00:05.
 - **Token art:** static identity QR (payload `https://<domain>/t/<id>`,
