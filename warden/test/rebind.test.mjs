@@ -4,6 +4,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeCheckinTool } from "../src/mcp/tools/checkin.mjs";
 import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
+import { openChain } from "./chain-stub.mjs";
 
 // THE SECURITY CONTROL. A rebind may have been mined since the mirror was last
 // reconciled, so a caller the mirror does not recognise gets ONE live chain
@@ -14,7 +15,7 @@ test("a caller the mirror does not know is checked against the chain before refu
   q.insertToken({ tokenId: 1, keyId: "old-key", owner: "0xabc", lastDay: 100, mintDay: 100 });
 
   let chainWasRead = false;
-  const chain = {
+  const chain = openChain({
     boundKeyOf: async (tokenId) => {
       chainWasRead = true;
       assert.equal(tokenId, 1);
@@ -24,7 +25,7 @@ test("a caller the mirror does not know is checked against the chain before refu
       // is one-way.
       return keyIdToBytes32("new-key");   // the rebind is on chain but not yet mirrored
     },
-  };
+  });
 
   const tool = makeCheckinTool({ q, chain, today: () => 101 });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "new-key" });
@@ -36,7 +37,7 @@ test("a caller the mirror does not know is checked against the chain before refu
 test("a caller neither the mirror nor the chain knows is refused", async () => {
   const q = queries(openDb(":memory:"));
   q.insertToken({ tokenId: 1, keyId: "old-key", owner: "0xabc", lastDay: 100, mintDay: 100 });
-  const chain = { boundKeyOf: async () => keyIdToBytes32("old-key") };
+  const chain = openChain({ boundKeyOf: async () => keyIdToBytes32("old-key") });
   const tool = makeCheckinTool({ q, chain, today: () => 101 });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "stranger" });
   assert.equal(r.accepted, false);

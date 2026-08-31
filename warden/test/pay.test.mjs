@@ -5,6 +5,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeUpgradeTool } from "../src/mcp/tools/upgrade.mjs";
 import { makeMintTool } from "../src/mcp/tools/mint.mjs";
+import { openChain } from "./chain-stub.mjs";
 
 // A `paid` stub for the success path. It settles synchronously (no gap
 // between the pre-check and the write), which is fine for a single call.
@@ -44,6 +45,7 @@ test("an upgrade gate is checked BEFORE payment is requested", async () => {
   let paymentWasRequested = false;
   const tool = makeUpgradeTool({
     q,
+    chain: openChain(),
     catalogue: { 5: { name: "Halo", price: "$100", minLevel: 100, supply: 1000 } },
     paid: () => { paymentWasRequested = true; throw new Error("payment must not be requested"); },
   });
@@ -67,6 +69,7 @@ test("a sold-out mark is refused before payment, counted from the mirror not the
 
   const tool = makeUpgradeTool({
     q,
+    chain: openChain(),
     catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 1 } },
     paid: () => { throw new Error("payment must not be requested"); },
   });
@@ -91,6 +94,7 @@ test("CONTROL: a legitimate upgrade still succeeds and reserves exactly one row"
 
   const tool = makeUpgradeTool({
     q,
+    chain: openChain(),
     catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     paid: settleNow,
   });
@@ -111,6 +115,7 @@ test("the same token cannot reserve the same mark twice even when both calls pas
   const alerts = [];
   const tool = makeUpgradeTool({
     q,
+    chain: openChain(),
     catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     paid: settleAfterBothGated,
     alert: (msg) => alerts.push(msg),
@@ -135,7 +140,7 @@ test("the same token cannot reserve the same mark twice even when both calls pas
 test("CONTROL: a legitimate mint still succeeds and writes exactly one token and one mint row", async () => {
   const db = openDb(":memory:");
   const q = queries(db);
-  const tool = makeMintTool({ q, paid: settleNow, supplyCap: 10, today: () => 100 });
+  const tool = makeMintTool({ q, chain: openChain(), paid: settleNow, supplyCap: 10, today: () => 100 });
 
   const r = await tool.handler({ to: "0x" + "1".repeat(40) }, { keyId: "k1" });
   assert.equal(r.ok, true);
@@ -152,6 +157,7 @@ test("two mints from the same key: exactly one succeeds, the second is paid-but-
   const alerts = [];
   const tool = makeMintTool({
     q,
+    chain: openChain(),
     paid: settleAfterBothGated,
     supplyCap: 10,
     today: () => 100,
@@ -178,6 +184,7 @@ test("two mints from the same key: exactly one succeeds, the second is paid-but-
 test("upgradeId 8, 0, 32 and 33 are rejected by the schema", () => {
   const tool = makeUpgradeTool({
     q: {},
+    chain: openChain(),
     catalogue: {},
     paid: () => { throw new Error("payment must not be requested"); },
   });
@@ -204,6 +211,7 @@ test("a mint whose supply cap is taken during settlement is paid-but-unavailable
 
   const tool = makeMintTool({
     q,
+    chain: openChain(),
     paid: takeLastSlotMidSettlement,
     supplyCap: 1,
     today: () => 100,
@@ -229,6 +237,7 @@ test("a successful upgrade answers ok:true as well as accepted:true", async () =
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
   const tool = makeUpgradeTool({
     q,
+    chain: openChain(),
     catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     paid: settleNow,
   });
@@ -456,6 +465,7 @@ test("mint asks for exactly the price its own description quotes", async () => {
   let askedPrice;
   const tool = makeMintTool({
     q,
+    chain: openChain(),
     paid: (fn, price) => { askedPrice = price; return fn; },
     supplyCap: 10,
     today: () => 100,
@@ -471,6 +481,7 @@ test("upgrade asks for the MARK's price, not the mint price", async () => {
   let askedPrice;
   const tool = makeUpgradeTool({
     q,
+    chain: openChain(),
     catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     paid: (fn, price) => { askedPrice = price; return fn; },
   });
@@ -489,6 +500,7 @@ test("a catalogue entry with no usable price refuses before any payment is reque
   for (const price of [undefined, 1, "1 USDC", ""]) {
     const tool = makeUpgradeTool({
       q,
+      chain: openChain(),
       catalogue: { 1: { name: "Vein", price, minLevel: 1, supply: 10 } },
       paid: () => { throw new Error("payment must not be requested"); },
       alert: (m) => alerts.push(m),
@@ -555,6 +567,7 @@ test("the mint tool passes its own name and mint description through to the dema
   let opts;
   const tool = makeMintTool({
     q,
+    chain: openChain(),
     paid: (fn, _price, o) => { opts = o; return fn; },
     supplyCap: 10,
     today: () => 100,
@@ -570,6 +583,7 @@ test("the upgrade tool names the Mark and the token in its demand", async () => 
   let opts;
   const tool = makeUpgradeTool({
     q,
+    chain: openChain(),
     catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     paid: (fn, _price, o) => { opts = o; return fn; },
   });
@@ -610,7 +624,7 @@ test("the warm-up builds the same cache entry the mint tool will use", async () 
 
   assert.equal(await warmUp(paid, MINT_PRICE, () => {}), true);
   const q = queries(openDb(":memory:"));
-  const tool = makeMintTool({ q, paid, supplyCap: 10, today: () => 100 });
+  const tool = makeMintTool({ q, chain: openChain(), paid, supplyCap: 10, today: () => 100 });
   await tool.handler({ to: "0x" + "6".repeat(40) }, { keyId: "k1" });
 
   assert.equal(builds, 1);

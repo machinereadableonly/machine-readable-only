@@ -1,5 +1,6 @@
 // warden/src/mcp/tools/upgrade.mjs
 import * as z from "zod";
+import { paidWriteBlock, requireChain } from "../gates.mjs";
 
 // There was an exported UPGRADE_REASONS array here, listing the eight
 // pre-payment refusals. Nothing imported it, nothing validated against it, and
@@ -8,7 +9,8 @@ import * as z from "zod";
 // checks is not a constraint, it is a second place for the truth to live and
 // drift; the reasons below are the only list. Deleted 2026-08-30.
 
-export function makeUpgradeTool({ q, catalogue, paid, alert = console.error }) {
+export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.error }) {
+  requireChain(chain, "upgrade");
   return {
     name: "upgrade",
     config: {
@@ -47,6 +49,13 @@ export function makeUpgradeTool({ q, catalogue, paid, alert = console.error }) {
         return { ok: false, reason: "mark-inactive", detail: "no-price" };
       }
 
+      // THE CONTRACT'S OWN GATES. applyMark carries whenNotPaused and
+      // notSunset, and reverts Resting(id) at :454 -- and `resting` is set by
+      // the token OWNER calling rest() directly, so this mirror can never learn
+      // it without asking. Before payment, always.
+      const blocked = await paidWriteBlock(chain, { tokenId, q });
+      if (blocked) return { ok: false, reason: blocked };
+
       // Only now is payment requested.
       return paid(async () => {
         // EVERYTHING ABOVE IS NOW STALE. Settling a payment takes seconds, and
@@ -54,6 +63,15 @@ export function makeUpgradeTool({ q, catalogue, paid, alert = console.error }) {
         // can be marked. So the decision is made again here, against the
         // database, with the unique index as the final authority rather than a
         // read that could itself be overtaken.
+        // The chain gates are re-read after settlement for the same reason the
+        // mirror ones are: settling takes seconds, and the piece can be paused
+        // or the token sealed inside that window.
+        const nowBlocked = await paidWriteBlock(chain, { tokenId, q });
+        if (nowBlocked) {
+          alert(`upgrade ${upgradeId} for token ${tokenId} settled but the chain now refuses it: ${nowBlocked}`);
+          return { ok: false, reason: "paid-but-unavailable", detail: nowBlocked };
+        }
+
         const fresh = q.getToken(tokenId);
         const blocked =
           !fresh ? "unknown-token"

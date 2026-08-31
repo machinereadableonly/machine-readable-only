@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeMcpHandler } from "../src/mcp/server.mjs";
+import { openChain } from "./chain-stub.mjs";
 
 test("the caller's key id reaches a tool from authInfo, never from an argument", async () => {
   const q = queries(openDb(":memory:"));
@@ -11,7 +12,7 @@ test("the caller's key id reaches a tool from authInfo, never from an argument",
   const seen = [];
   const { handler } = makeMcpHandler({
     q,
-    chain: { boundKeyOf: async () => null },
+    chain: openChain(),
     contract: "0xcontract",
     onToolCall: (name, ctxKeyId) => seen.push([name, ctxKeyId]),
   });
@@ -51,7 +52,7 @@ test("an unexpected throw from a tool handler never leaks its message to the cal
 
   const { handler } = makeMcpHandler({
     q,
-    chain: { boundKeyOf: async () => null },
+    chain: openChain(),
     contract: "0xcontract",
   });
 
@@ -85,7 +86,7 @@ test("CONTROL: a tool that returns normally still delivers its real structured r
 
   const { handler } = makeMcpHandler({
     q,
-    chain: { boundKeyOf: async () => null },
+    chain: openChain(),
     contract: "0xcontract",
   });
 
@@ -143,7 +144,7 @@ test("the sigHash the door computed reaches the tool through authInfo, and is st
 
   const { handler } = makeMcpHandler({
     q,
-    chain: { boundKeyOf: async () => null },
+    chain: openChain(),
     contract: "0xcontract",
     today: () => 200,
   });
@@ -168,7 +169,7 @@ test("mro://contract publishes the configured chain id, not a hardcoded mainnet 
   const q = queries(openDb(":memory:"));
   const { handler } = makeMcpHandler({
     q,
-    chain: { boundKeyOf: async () => null },
+    chain: openChain(),
     contract: "0xsepolia-contract",
     chainId: 84532,
     llmsTxt: "# machine readable only",

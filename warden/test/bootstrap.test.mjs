@@ -32,6 +32,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeMintTool } from "../src/mcp/tools/mint.mjs";
 import { makeUpgradeTool } from "../src/mcp/tools/upgrade.mjs";
+import { openChain } from "./chain-stub.mjs";
 
 // -- the registration limiter ---------------------------------------------
 
@@ -142,7 +143,7 @@ test("the paid stub refuses as a value rather than throwing", async () => {
 test("mint under the production paid stub refuses and writes nothing", async () => {
   const db = openDb(":memory:");
   const q = queries(db);
-  const tool = makeMintTool({ q, paid: makePaidStub(), supplyCap: 10, today: () => 100 });
+  const tool = makeMintTool({ q, chain: openChain(), paid: makePaidStub(), supplyCap: 10, today: () => 100 });
 
   const r = await tool.handler({ to: "0x" + "1".repeat(40) }, { keyId: "k1" });
   assert.equal(r.ok, false);
@@ -157,6 +158,7 @@ test("upgrade under the production paid stub refuses and reserves no mark", asyn
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
   const tool = makeUpgradeTool({
     q,
+    chain: openChain(),
     catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     paid: makePaidStub(),
   });

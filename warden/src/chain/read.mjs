@@ -1,79 +1,201 @@
 // Read-only chain access. There is no signer here and no private key in this
 // process: every write belongs to the Clock (Plan 3).
 //
-// One JSON-RPC eth_call, hand-composed, because pulling a whole client library
-// in for a single view function would be the larger dependency.
+// JSON-RPC eth_call, hand-composed, because pulling a whole client library in
+// for four view functions would be the larger dependency.
+//
+// WHY THE WARDEN READS THE CHAIN AT ALL, rather than trusting its own mirror.
+// Three of the contract's gates are invisible to this service:
+//
+//   Resting   - set by the TOKEN OWNER calling rest(id) directly on chain. The
+//               Warden is never told. The mirror's `status` column holds only
+//               'queued' | 'written' (the write-pipeline state), so it can not
+//               represent this at all.
+//   Sunset    - set by the contract OWNER. Same: never routed through here.
+//   Paused    - OpenZeppelin Pausable, also the owner's. Found by reading the
+//               modifiers rather than the design doc: every write carries
+//               `whenNotPaused` AND `notSunset`, and only the second was ever
+//               written down as a gate.
+//   WalletCap - mintedTo[] counts what the CHAIN has minted to an address,
+//               which is not what this mirror queued: tokens transfer, and
+//               `seed` mints to the same addresses from a different path.
+//
+// Every one of them reverts a transaction the Warden would otherwise queue,
+// and two of them (mint, upgrade) revert AFTER the agent has paid. So they are
+// read from the chain, at the point of decision.
+//
+// The selectors below were confirmed against the DEPLOYED contract on Base
+// Sepolia (0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D) on 2026-08-31 with
+// `cast call`, not computed and hoped for.
 
-/// viewOf(uint256), selector 0x0fa4edbd. Read off the deployed ABI at build
-/// time in Task 6:
-///   cd contracts && forge inspect MachineReadableOnly abi | grep -i viewOf
-/// There is no single-field "agentKeyOf" accessor on the contract -- the only
-/// view that exposes a token's bound agent key is viewOf, which returns it as
-/// one field of the TokenView struct (src/render/TokenView.sol). That struct
-/// ends in a dynamic `bytes code` field, so the whole return is ABI-encoded as
-/// a dynamic tuple: a leading 32-byte offset word, then the tuple's static
-/// fields in order, then the dynamic field's bytes. agentKeyId is the 12th
-/// field (index 11) of that tuple, counting from tokenId:
-///   tokenId, level, streak, lastDay, mintDay, generation, seedsGiven,
-///   parent, resting, sunset, marks, agentKeyId, code, today
-const SELECTOR = "0x0fa4edbd";
-const AGENT_KEY_ID_FIELD_INDEX = 11;
+/// viewOf(uint256). The struct ends in a dynamic `bytes code` field, so the
+/// return is ABI-encoded as a dynamic tuple: a leading 32-byte offset word,
+/// then the tuple's static fields in order, then the dynamic bytes. Field
+/// order, from src/render/TokenView.sol:
+///   0 tokenId, 1 level, 2 streak, 3 lastDay, 4 mintDay, 5 generation,
+///   6 seedsGiven, 7 parent, 8 resting, 9 sunset, 10 marks, 11 agentKeyId,
+///   12 code, 13 today
+const VIEW_OF = "0x0fa4edbd";
+const FIELD = { level: 1, lastDay: 3, resting: 8, sunset: 9, agentKeyId: 11 };
+const MINTED_TO = "0x118033bc"; // mintedTo(address) -> uint32
+const WALLET_CAP = "0x58950c22"; // walletCap() -> uint32
+const IS_SUNSET = "0x90b8b0c8"; // isSunset() -> bool
+const IS_PAUSED = "0x5c975abb"; // paused() -> bool
 const WORD_HEX_CHARS = 64; // 32 bytes, as hex
+const CALL_TIMEOUT_MS = 3000;
 
-/**
- * Pick the `agentKeyId` field out of a `viewOf` return.
- *
- * `hex` is the full `eth_call` result, "0x" + the ABI-encoded return data.
- * Returns null if the data is too short to contain the field -- this is
- * distinct from "not bound"; the caller in boundKeyOf() below treats any null
- * the same way, as "could not be read".
- */
-function decodeAgentKeyId(hex) {
+/// How long a `true` sunset is trusted without re-asking. Only sunset is
+/// cached, and only its `true` -- see writesOpen() for why pause is not.
+export const SUNSET_CACHE_MS = 60_000;
+
+/// One static field of a dynamic-tuple return, as a hex word, or null when the
+/// data is too short to contain it. Null always means "could not read", never
+/// a value.
+function tupleField(hex, index) {
   const data = hex.slice(2);
   const offsetWord = data.slice(0, WORD_HEX_CHARS);
   if (offsetWord.length !== WORD_HEX_CHARS) return null;
   const offsetBytes = parseInt(offsetWord, 16);
   if (!Number.isFinite(offsetBytes)) return null;
-  const start = offsetBytes * 2 + AGENT_KEY_ID_FIELD_INDEX * WORD_HEX_CHARS;
+  const start = offsetBytes * 2 + index * WORD_HEX_CHARS;
   const field = data.slice(start, start + WORD_HEX_CHARS);
-  if (field.length !== WORD_HEX_CHARS) return null;
-  return "0x" + field;
+  return field.length === WORD_HEX_CHARS ? field : null;
 }
 
-export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch }) {
+/// A single non-tuple return word (uint32, bool), or null.
+function singleWord(hex) {
+  const data = hex.slice(2);
+  return data.length >= WORD_HEX_CHARS ? data.slice(0, WORD_HEX_CHARS) : null;
+}
+
+const asNumber = (word) => (word === null ? null : Number(BigInt("0x" + word)));
+const asBool = (word) => (word === null ? null : BigInt("0x" + word) !== 0n);
+const addressArg = (address) => address.replace(/^0x/, "").toLowerCase().padStart(64, "0");
+
+export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch, now = () => Date.now() }) {
+  /**
+   * One eth_call. Returns the result hex, or null on ANY failure.
+   *
+   * A JSON-RPC error arrives as an object on a 200 response, not as a thrown
+   * exception, so it is checked explicitly: that check is the difference
+   * between "the answer is no" and "we could not ask", and every caller here
+   * treats the second as a refusal rather than an admission.
+   */
+  async function ethCall(data) {
+    let res;
+    try {
+      res = await fetchImpl(rpcUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "eth_call",
+          params: [{ to: contract, data }, "latest"],
+        }),
+        signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+      });
+    } catch {
+      return null;
+    }
+    if (!res.ok) return null;
+    const body = await res.json();
+    if (body.error || typeof body.result !== "string") return null;
+    return body.result;
+  }
+
+  const viewOf = (tokenId) => ethCall(VIEW_OF + BigInt(tokenId).toString(16).padStart(64, "0"));
+
+  // Only a TRUE sunset is ever cached. Caching a false would keep the door open
+  // for up to a minute after the operator closed the piece, and every write
+  // admitted in that window is one the chain will refuse. Caching the true is
+  // safe in a way the false is not, because sunset is one-way: setSunset
+  // reverts with AlreadySunset, so a piece that is closed can never reopen.
+  let sunsetUntil = 0;
+
   return {
     /**
      * The key id currently bound to a token, straight from the chain.
      *
      * Returns the 32-byte value as a lowercase hex string, or null if the call
-     * fails or the response cannot be decoded. A failure is NOT treated as
-     * "not bound": the caller refuses on null rather than admitting on it.
+     * fails or cannot be decoded. A failure is NOT "not bound": the caller
+     * refuses on null rather than admitting on it.
      */
     async boundKeyOf(tokenId) {
-      const data = SELECTOR + BigInt(tokenId).toString(16).padStart(64, "0");
-      let res;
-      try {
-        res = await fetchImpl(rpcUrl, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "eth_call",
-            params: [{ to: contract, data }, "latest"],
-          }),
-          signal: AbortSignal.timeout(3000),
-        });
-      } catch {
-        return null;
+      const result = await viewOf(tokenId);
+      if (result === null) return null;
+      const field = tupleField(result, FIELD.agentKeyId);
+      return field ? ("0x" + field).toLowerCase() : null;
+    },
+
+    /**
+     * The lifecycle facts the Warden cannot know on its own, in ONE call.
+     *
+     * Returns `{ exists, resting, sunset, level, lastDay }`, or null when the
+     * chain could not be read. `exists` is level > 0, which is exactly how the
+     * contract itself decides NoSuchToken.
+     *
+     * One call rather than three: `resting` and `sunset` and the level a Mark
+     * gate compares against all come out of the same `viewOf`, so a tool that
+     * needs any of them pays for one round trip, not several.
+     */
+    async lifecycleOf(tokenId) {
+      const result = await viewOf(tokenId);
+      if (result === null) return null;
+      const level = asNumber(tupleField(result, FIELD.level));
+      const resting = asBool(tupleField(result, FIELD.resting));
+      const sunset = asBool(tupleField(result, FIELD.sunset));
+      const lastDay = asNumber(tupleField(result, FIELD.lastDay));
+      if (level === null || resting === null || sunset === null || lastDay === null) return null;
+      return { exists: level > 0, resting, sunset, level, lastDay };
+    },
+
+    /**
+     * Will the contract accept a write at all?
+     *
+     * Returns "sunset", "paused", null (open), or the string "unreadable" when
+     * the chain could not be asked. Those last two are NOT the same and a
+     * caller must refuse on "unreadable" rather than treat it as open.
+     *
+     * SUNSET IS CACHED AND PAUSE IS NOT, which is a difference in the contract,
+     * not an optimisation. `setSunset` reverts with AlreadySunset, so sunset is
+     * one-way and a cached `true` can never become wrong. Pause is `_pause` /
+     * `_unpause`, so a cached `true` would go on refusing writes after the
+     * owner reopened the piece. Neither `false` is ever cached: caching that
+     * would hold the door open for a minute after it was shut.
+     */
+    async writesOpen() {
+      if (sunsetUntil > now()) return "sunset";
+      const [sunsetHex, pausedHex] = await Promise.all([ethCall(IS_SUNSET), ethCall(IS_PAUSED)]);
+      if (sunsetHex === null || pausedHex === null) return "unreadable";
+      const sunset = asBool(singleWord(sunsetHex));
+      const paused = asBool(singleWord(pausedHex));
+      if (sunset === null || paused === null) return "unreadable";
+      if (sunset) {
+        sunsetUntil = now() + SUNSET_CACHE_MS;
+        return "sunset";
       }
-      if (!res.ok) return null;
-      const body = await res.json();
-      // A JSON-RPC error is an object on the response, not a thrown exception.
-      // Checking it is the difference between "not bound" and "we could not ask".
-      if (body.error || typeof body.result !== "string") return null;
-      const agentKeyId = decodeAgentKeyId(body.result);
-      return agentKeyId ? agentKeyId.toLowerCase() : null;
+      return paused ? "paused" : null;
+    },
+
+    /**
+     * How many more tokens the chain will mint to an address.
+     *
+     * Returns the remaining allowance (0 when full), or null when either read
+     * failed. Both halves are read rather than assuming the default of 20:
+     * walletCap is an owner dial (setWalletCap), so a hardcoded 20 here would
+     * silently disagree with the chain the moment it is turned.
+     */
+    async walletRoomFor(address) {
+      const [mintedHex, capHex] = await Promise.all([
+        ethCall(MINTED_TO + addressArg(address)),
+        ethCall(WALLET_CAP),
+      ]);
+      if (mintedHex === null || capHex === null) return null;
+      const minted = asNumber(singleWord(mintedHex));
+      const cap = asNumber(singleWord(capHex));
+      if (minted === null || cap === null) return null;
+      return Math.max(0, cap - minted);
     },
   };
 }

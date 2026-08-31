@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeCheckinTool } from "../src/mcp/tools/checkin.mjs";
+import { openChain } from "./chain-stub.mjs";
 
 function withToken({ keyId = "k1", lastDay = 100 } = {}) {
   const db = openDb(":memory:");
@@ -21,7 +22,13 @@ const creditsFor = (db, tokenId) =>
 
 /// The chain read must never be needed on the happy path. A stub that throws
 /// proves the tool did not reach for it.
-const noChainRead = { boundKeyOf: async () => { throw new Error("chain must not be read here"); } };
+// The gates DO read the chain now (sunset, pause, resting), so this stub is an
+// open chain with only the REBIND re-check poisoned: these tests assert that a
+// caller the mirror already recognises is never re-checked against the chain
+// for its binding, which is a different read from the gates.
+const noChainRead = openChain({
+  boundKeyOf: async () => { throw new Error("the binding must not be re-read here"); },
+});
 
 test("a bound caller checking in on a new day is credited", async () => {
   const { q } = withToken();

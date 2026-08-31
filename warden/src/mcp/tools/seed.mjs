@@ -1,7 +1,9 @@
 // Lineage. One seed per agent-year, free, and the child is bound to the caller.
 import * as z from "zod";
+import { chainBlock, tokenBlock, walletCapBlock, requireChain } from "../gates.mjs";
 
-export function makeSeedTool({ q, today, supplyCap }) {
+export function makeSeedTool({ q, chain, today, supplyCap }) {
+  requireChain(chain, "seed");
   return {
     name: "seed",
     config: {
@@ -26,7 +28,17 @@ export function makeSeedTool({ q, today, supplyCap }) {
       const parent = q.getToken(parentId);
       if (!parent) return { ok: false, reason: "unknown-token" };
       if (parent.keyId !== ctx.keyId) return { ok: false, reason: "not-bound-to-caller" };
-      if (parent.status === "resting") return { ok: false, reason: "resting" };
+      // WAS `parent.status === "resting"`, WHICH COULD NEVER BE TRUE.
+      // tokens.status holds only 'queued' | 'written' -- the write-pipeline
+      // state -- so this read like a working gate and was dead code. seed
+      // reverts Resting(parentId) at :532, and carries whenNotPaused and
+      // notSunset like every other write, and WalletCap at :538 against the
+      // CHILD's recipient.
+      const blocked =
+        (await chainBlock(chain)) ??
+        (await tokenBlock(chain, parentId, q)) ??
+        (await walletCapBlock(chain, to));
+      if (blocked) return { ok: false, reason: blocked };
       if (parent.level < 365) return { ok: false, reason: "parent-not-whole" };
 
       // One seed per completed agent-year. seedsSpent is counted from the rows
