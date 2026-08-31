@@ -38,6 +38,15 @@ export function makeUpgradeTool({ q, catalogue, paid, alert = console.error }) {
       if (q.markSold(upgradeId) >= mark.supply) return { ok: false, reason: "mark-sold-out" };
       if (token.marks & (1 << upgradeId)) return { ok: false, reason: "mark-already-applied" };
 
+      // THE PRICE COMES FROM THE MARK, and a catalogue entry without one is
+      // refused rather than defaulted. The seven Marks run from 1 to 100,000
+      // USDC against a mint's 0.10; anything that silently substituted a
+      // default here would sell a Crown for the price of a mint.
+      if (typeof mark.price !== "string" || !/^\$\d/.test(mark.price)) {
+        alert(`mark ${upgradeId} has no usable price in the catalogue`);
+        return { ok: false, reason: "mark-inactive", detail: "no-price" };
+      }
+
       // Only now is payment requested.
       return paid(async () => {
         // EVERYTHING ABOVE IS NOW STALE. Settling a payment takes seconds, and
@@ -71,6 +80,11 @@ export function makeUpgradeTool({ q, catalogue, paid, alert = console.error }) {
         const detail = blocked ?? "mark-already-applied";
         alert(`upgrade ${upgradeId} for token ${tokenId} settled but cannot be applied: ${detail}`);
         return { ok: false, reason: "paid-but-unavailable", detail };
+      }, mark.price, {
+        tool: "upgrade",
+        // The MARK'S OWN NAME, because this is the demand an agent reads before
+        // spending up to 100,000 USDC. "a paid tool" is not good enough.
+        description: `Apply the ${mark.name} Mark to token ${tokenId}`,
       })(args, ctx);
     },
   };

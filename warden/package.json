@@ -3,17 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "test": "node --test \"test/**/*.test.mjs\"",
     "start": "node src/main.mjs"
   },
   "dependencies": {
-    "web-bot-auth": "0.1.3",
-    "@modelcontextprotocol/server": "2.0.0",
     "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "@x402/evm": "2.24.0",
     "@x402/mcp": "2.24.0",
     "structured-headers": "^2.0.2",
+    "web-bot-auth": "0.1.3",
     "zod": "^4.2.0"
   }
 }

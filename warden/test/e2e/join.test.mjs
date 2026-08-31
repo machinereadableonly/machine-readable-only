@@ -77,7 +77,7 @@ function startJourney() {
     },
     supplyCap: 5555,
     today: () => utcDay() + clock.offset,
-    catalogue: { 1: { name: "Vein", minLevel: 1, supply: 10 } },
+    catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     // A null from the chain means "could not be reached", which checkin treats
     // as a refusal. Our caller is the bound key, so this is never consulted.
     chain: { boundKeyOf: async () => null },

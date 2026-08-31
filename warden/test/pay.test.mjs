@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adaptContext } from "../src/pay/x402.mjs";
+import { adaptContext, makePaymentGateway, warmUp, MINT_PRICE, MINT_RESOURCE } from "../src/pay/x402.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeUpgradeTool } from "../src/mcp/tools/upgrade.mjs";
@@ -44,7 +44,7 @@ test("an upgrade gate is checked BEFORE payment is requested", async () => {
   let paymentWasRequested = false;
   const tool = makeUpgradeTool({
     q,
-    catalogue: { 5: { name: "Halo", minLevel: 100, supply: 1000 } },
+    catalogue: { 5: { name: "Halo", price: "$100", minLevel: 100, supply: 1000 } },
     paid: () => { paymentWasRequested = true; throw new Error("payment must not be requested"); },
   });
 
@@ -67,7 +67,7 @@ test("a sold-out mark is refused before payment, counted from the mirror not the
 
   const tool = makeUpgradeTool({
     q,
-    catalogue: { 1: { name: "Vein", minLevel: 1, supply: 1 } },
+    catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 1 } },
     paid: () => { throw new Error("payment must not be requested"); },
   });
   const r = await tool.handler({ tokenId: 1, upgradeId: 1 }, { keyId: "k1" });
@@ -91,7 +91,7 @@ test("CONTROL: a legitimate upgrade still succeeds and reserves exactly one row"
 
   const tool = makeUpgradeTool({
     q,
-    catalogue: { 1: { name: "Vein", minLevel: 1, supply: 10 } },
+    catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     paid: settleNow,
   });
   const r = await tool.handler({ tokenId: 1, upgradeId: 1 }, { keyId: "k1" });
@@ -111,7 +111,7 @@ test("the same token cannot reserve the same mark twice even when both calls pas
   const alerts = [];
   const tool = makeUpgradeTool({
     q,
-    catalogue: { 1: { name: "Vein", minLevel: 1, supply: 10 } },
+    catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     paid: settleAfterBothGated,
     alert: (msg) => alerts.push(msg),
   });
@@ -229,7 +229,7 @@ test("a successful upgrade answers ok:true as well as accepted:true", async () =
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
   const tool = makeUpgradeTool({
     q,
-    catalogue: { 1: { name: "Vein", minLevel: 1, supply: 10 } },
+    catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     paid: settleNow,
   });
   const r = await tool.handler({ tokenId: 1, upgradeId: 1 }, { keyId: "k1" });
@@ -239,4 +239,382 @@ test("a successful upgrade answers ok:true as well as accepted:true", async () =
   // same way: this is the assertion that would catch a success with no `ok`.
   const refused = await tool.handler({ tokenId: 99, upgradeId: 1 }, { keyId: "k1" });
   assert.equal(refused.ok, false);
+});
+
+// ---------------------------------------------------------------------------
+// The gateway: makePaymentGateway. Every branch is driven through injected
+// `build` and `wrapFactory`, so this file never opens a socket. The live
+// facilitator is checked separately by tools/x402-live-check.mjs, which is not
+// part of the suite -- a unit test that fails when a third party is down is a
+// test that teaches everyone to ignore it.
+// ---------------------------------------------------------------------------
+
+/// A fake resource server. Records what requirements were asked for.
+function fakeServer(asked = []) {
+  return {
+    asked,
+    async buildPaymentRequirements(resource) {
+      asked.push(resource);
+      return [{ scheme: "exact", network: resource.network, amount: "1", payTo: resource.payTo }];
+    },
+  };
+}
+
+/// A wrapFactory that runs the handler instead of demanding payment, and
+/// records the context it was handed.
+function fakeWrap(seen = []) {
+  return (server, { accepts }) => {
+    seen.push(accepts);
+    return (handler) => (args, ctx) => handler(args, ctx);
+  };
+}
+
+test("the gateway does not touch the facilitator until the first paid call", async () => {
+  let builds = 0;
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xdead",
+    build: async () => { builds += 1; return fakeServer(); },
+    wrapFactory: fakeWrap(),
+  });
+  // Constructing it is free. This is the whole reason it is lazy: initialize()
+  // is a live HTTP call that throws, and the door must boot without it.
+  assert.equal(builds, 0);
+
+  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
+  assert.equal(builds, 1);
+});
+
+test("an unreachable facilitator refuses the call, never throws, and never runs the handler", async () => {
+  const alerts = [];
+  let handlerRan = false;
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://facilitator.invalid.example/",
+    network: "eip155:84532",
+    payTo: "0xdead",
+    alert: (m) => alerts.push(m),
+    build: async () => { throw new Error("Failed to initialize: no supported payment kinds"); },
+    wrapFactory: fakeWrap(),
+  });
+
+  const r = await paid(async () => { handlerRan = true; return { ok: true }; }, "$0.10")({}, { mcpCtx: {} });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "payment-unavailable");
+  // The free mint this prevents: the handler is what writes the token row.
+  assert.equal(handlerRan, false);
+  assert.equal(alerts.length, 1);
+  assert.match(alerts[0], /payment unavailable/);
+});
+
+test("a failed build is retried on the next call rather than disabling payment for the process", async () => {
+  let builds = 0;
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xdead",
+    alert: () => {},
+    build: async () => {
+      builds += 1;
+      if (builds === 1) throw new Error("facilitator down");
+      return fakeServer();
+    },
+    wrapFactory: fakeWrap(),
+  });
+
+  const first = await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
+  assert.equal(first.reason, "payment-unavailable");
+
+  // A facilitator down for a minute must not need a process restart.
+  const second = await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
+  assert.equal(second.ok, true);
+  assert.equal(builds, 2);
+});
+
+test("the resource server is built once and the wrapper cached per price", async () => {
+  let builds = 0;
+  const asked = [];
+  const wrapped = [];
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xtreasury",
+    build: async () => { builds += 1; return fakeServer(asked); },
+    wrapFactory: fakeWrap(wrapped),
+  });
+
+  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
+  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
+  assert.equal(builds, 1);
+  assert.equal(wrapped.length, 1, "the same price must not rebuild its requirements");
+});
+
+// THE MONEY BUG THIS PREVENTS. `paid` is shared by mint ($0.10) and upgrade
+// (1 to 100,000 USDC). One wrapper holding one price would charge $0.10 for a
+// Crown the day the Mark catalogue is wired.
+test("two prices produce two sets of requirements, each carrying its own price", async () => {
+  const asked = [];
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xtreasury",
+    build: async () => fakeServer(asked),
+    wrapFactory: fakeWrap(),
+  });
+
+  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
+  await paid(async () => ({ ok: true }), "$5000")({}, { mcpCtx: {} });
+
+  assert.deepEqual(asked.map((a) => a.price), ["$0.10", "$5000"]);
+  assert.deepEqual([...new Set(asked.map((a) => a.payTo))], ["0xtreasury"]);
+  assert.deepEqual([...new Set(asked.map((a) => a.network))], ["eip155:84532"]);
+});
+
+test("an empty accepts list refuses rather than reaching createPaymentWrapper, which throws on it", async () => {
+  let handlerRan = false;
+  const alerts = [];
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:8453",
+    payTo: "0xdead",
+    alert: (m) => alerts.push(m),
+    build: async () => ({ buildPaymentRequirements: async () => [] }),
+    wrapFactory: () => { throw new Error("wrapFactory must not be reached"); },
+  });
+
+  const r = await paid(async () => { handlerRan = true; }, "$0.10")({}, { mcpCtx: {} });
+  assert.equal(r.reason, "payment-unavailable");
+  assert.equal(handlerRan, false);
+  assert.match(alerts[0], /no payment requirements for \$0\.10 on eip155:8453/);
+});
+
+// A missing price is a WIRING error. It must never fall back to a default:
+// a default price is how the wrong amount gets charged in silence.
+test("a missing or malformed price refuses without contacting the facilitator", async () => {
+  let builds = 0;
+  const alerts = [];
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xdead",
+    alert: (m) => alerts.push(m),
+    build: async () => { builds += 1; return fakeServer(); },
+    wrapFactory: fakeWrap(),
+  });
+
+  for (const price of [undefined, null, "", "free", "0.10", 0.1, "$"]) {
+    const r = await paid(async () => ({ ok: true }), price)({}, { mcpCtx: {} });
+    assert.equal(r.reason, "payment-unavailable", `price ${JSON.stringify(price)} must refuse`);
+    assert.equal(r.detail, "no-price");
+  }
+  assert.equal(builds, 0, "a wiring error must not be sent to a third party");
+  assert.equal(alerts.length, 7);
+});
+
+test("the handler is invoked with the ADAPTED v2 context, not the raw tool context", async () => {
+  let seenCtx;
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xdead",
+    build: async () => fakeServer(),
+    wrapFactory: fakeWrap(),
+  });
+
+  const meta = { "x402/payment": { scheme: "exact" } };
+  await paid(async (_args, ctx) => { seenCtx = ctx; return { ok: true }; }, "$0.10")(
+    {},
+    { mcpCtx: { mcpReq: { id: 1, method: "tools/call", _meta: meta } } }
+  );
+  assert.deepEqual(seenCtx._meta, meta);
+});
+
+test("warmUp reports readiness and never rejects when the facilitator is down", async () => {
+  const alerts = [];
+  const down = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xdead",
+    build: async () => { throw new Error("facilitator down"); },
+    wrapFactory: fakeWrap(),
+  });
+  assert.equal(await warmUp(down, "$0.10", (m) => alerts.push(m)), false);
+  assert.match(alerts[0], /payment is not ready/);
+
+  const up = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xdead",
+    build: async () => fakeServer(),
+    wrapFactory: fakeWrap(),
+  });
+  assert.equal(await warmUp(up, "$0.10", () => {}), true);
+});
+
+test("mint asks for exactly the price its own description quotes", async () => {
+  const q = queries(openDb(":memory:"));
+  let askedPrice;
+  const tool = makeMintTool({
+    q,
+    paid: (fn, price) => { askedPrice = price; return fn; },
+    supplyCap: 10,
+    today: () => 100,
+  });
+  await tool.handler({ to: "0x" + "4".repeat(40) }, { keyId: "k1" });
+  assert.equal(askedPrice, MINT_PRICE);
+  assert.ok(tool.config.description.includes(MINT_PRICE));
+});
+
+test("upgrade asks for the MARK's price, not the mint price", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  let askedPrice;
+  const tool = makeUpgradeTool({
+    q,
+    catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
+    paid: (fn, price) => { askedPrice = price; return fn; },
+  });
+  const r = await tool.handler({ tokenId: 1, upgradeId: 1 }, { keyId: "k1" });
+  assert.equal(r.ok, true);
+  assert.equal(askedPrice, "$1");
+  assert.notEqual(askedPrice, MINT_PRICE);
+});
+
+// A catalogue wired later without prices must fail loudly, not sell a 100,000
+// USDC Mark for whatever the shared wrapper happened to hold.
+test("a catalogue entry with no usable price refuses before any payment is requested", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  const alerts = [];
+  for (const price of [undefined, 1, "1 USDC", ""]) {
+    const tool = makeUpgradeTool({
+      q,
+      catalogue: { 1: { name: "Vein", price, minLevel: 1, supply: 10 } },
+      paid: () => { throw new Error("payment must not be requested"); },
+      alert: (m) => alerts.push(m),
+    });
+    const r = await tool.handler({ tokenId: 1, upgradeId: 1 }, { keyId: "k1" });
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "mark-inactive");
+    assert.equal(r.detail, "no-price");
+  }
+  assert.equal(alerts.length, 4);
+});
+
+// @x402/mcp falls back to the literal string "paid_tool" when no resource url
+// is given, so both paid tools would demand payment for `mcp://tool/paid_tool`
+// -- an agent about to spend 100,000 USDC on a Singularity told only that it is
+// paying for "a paid tool". Seen in the live journey check before it was fixed.
+test("each paid tool names itself in the payment demand", async () => {
+  const configs = [];
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xtreasury",
+    build: async () => fakeServer(),
+    wrapFactory: (server, config) => {
+      configs.push(config);
+      return (handler) => (args, ctx) => handler(args, ctx);
+    },
+  });
+
+  await paid(async () => ({ ok: true }), "$0.10", { tool: "mint", description: "Mint a token" })({}, { mcpCtx: {} });
+  await paid(async () => ({ ok: true }), "$5000", { tool: "upgrade", description: "Apply the Crown Mark" })({}, { mcpCtx: {} });
+
+  assert.deepEqual(configs.map((c) => c.resource.url), ["mcp://tool/mint", "mcp://tool/upgrade"]);
+  assert.deepEqual(configs.map((c) => c.resource.description), ["Mint a token", "Apply the Crown Mark"]);
+  for (const c of configs) assert.equal(c.resource.serviceName, "machine-readable-only");
+});
+
+test("two Marks sharing a price still get their own demand, because the description differs", async () => {
+  const configs = [];
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xtreasury",
+    build: async () => fakeServer(),
+    wrapFactory: (server, config) => {
+      configs.push(config);
+      return (handler) => (args, ctx) => handler(args, ctx);
+    },
+  });
+  const call = (description) =>
+    paid(async () => ({ ok: true }), "$100", { tool: "upgrade", description })({}, { mcpCtx: {} });
+
+  await call("Apply the Halo Mark to token 1");
+  await call("Apply the Halo Mark to token 2");
+  await call("Apply the Halo Mark to token 1");
+
+  // Three calls, two distinct demands: the cache key is the whole triple, so a
+  // second token does not inherit the first one's demand.
+  assert.equal(configs.length, 2);
+});
+
+test("the mint tool passes its own name and mint description through to the demand", async () => {
+  const q = queries(openDb(":memory:"));
+  let opts;
+  const tool = makeMintTool({
+    q,
+    paid: (fn, _price, o) => { opts = o; return fn; },
+    supplyCap: 10,
+    today: () => 100,
+  });
+  await tool.handler({ to: "0x" + "5".repeat(40) }, { keyId: "k1" });
+  assert.equal(opts.tool, "mint");
+  assert.match(opts.description, /Machine Readable Only/);
+});
+
+test("the upgrade tool names the Mark and the token in its demand", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 7, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  let opts;
+  const tool = makeUpgradeTool({
+    q,
+    catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
+    paid: (fn, _price, o) => { opts = o; return fn; },
+  });
+  await tool.handler({ tokenId: 7, upgradeId: 1 }, { keyId: "k1" });
+  assert.equal(opts.tool, "upgrade");
+  assert.equal(opts.description, "Apply the Vein Mark to token 7");
+});
+
+// The facilitator is told what every agent must pay and is trusted to report
+// that a payment settled. Over plain HTTP a network attacker could rewrite the
+// treasury in a demand, or forge a settlement.
+test("a non-https facilitator is refused rather than used", async () => {
+  const alerts = [];
+  for (const url of ["http://x402.org/facilitator", "ftp://x402.org/", "x402.org/facilitator"]) {
+    const paid = makePaymentGateway({
+      facilitatorUrl: url,
+      network: "eip155:84532",
+      payTo: "0xdead",
+      alert: (m) => alerts.push(m),
+    });
+    const r = await paid(async () => ({ ok: true }), "$0.10", MINT_RESOURCE)({}, { mcpCtx: {} });
+    assert.equal(r.reason, "payment-unavailable");
+  }
+  assert.equal(alerts.length, 3);
+  for (const a of alerts) assert.match(a, /must be https/);
+});
+
+test("the warm-up builds the same cache entry the mint tool will use", async () => {
+  let builds = 0;
+  const wrapped = [];
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xtreasury",
+    build: async () => { builds += 1; return fakeServer(); },
+    wrapFactory: fakeWrap(wrapped),
+  });
+
+  assert.equal(await warmUp(paid, MINT_PRICE, () => {}), true);
+  const q = queries(openDb(":memory:"));
+  const tool = makeMintTool({ q, paid, supplyCap: 10, today: () => 100 });
+  await tool.handler({ to: "0x" + "6".repeat(40) }, { keyId: "k1" });
+
+  assert.equal(builds, 1);
+  // One wrapper, not two: warming up under a different name would leave the
+  // first paying agent waiting on a second round trip anyway.
+  assert.equal(wrapped.length, 1);
 });

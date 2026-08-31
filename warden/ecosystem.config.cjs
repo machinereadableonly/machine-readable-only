@@ -11,7 +11,7 @@ module.exports = {
       cwd: "~/projects/machine-readable-only/warden",
       interpreter: "~/.nvm/versions/node/v24.14.1/bin/node",
       // HOW THE CONFIGURATION ACTUALLY REACHES THE PROCESS. main.mjs requires
-      // seven environment variables by name, and nothing in this repository
+      // eight environment variables by name, and nothing in this repository
       // loaded them: `env` below supplies NODE_ENV and PORT, and none of the
       // seven, so without this the Warden refused to start -- loudly, but it
       // refused.
