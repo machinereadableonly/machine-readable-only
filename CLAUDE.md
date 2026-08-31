@@ -54,10 +54,21 @@ return visits, so the artwork is the agent's own history of coming back.
   settlement, and an unreadable RPC REFUSES rather than admits. **Warden tests
   are now 240.** `BASE_RPC_URL` is load-bearing for every write now, not just
   the rebind re-check.
+  **PLAN 3 (the Clock) IS BUILT as of 2026-08-31** -- commits `28d2ae7` to
+  `d61bcb9`, in `warden/src/clock/`. It holds the ONLY key in this repository.
+  The signer is separated on chain: warden is now
+  0xb919443Ecb8B73a6179a523734f2184d26fF4D7A and owner is unchanged, proven in
+  both directions. PROVEN ON CHAIN, not simulated: two mints with real solved
+  bitmaps, a batchCheckIn crediting a day, the re-chunk rule dropping a bad
+  entry by name while the good one landed, and reconcile paging five windows
+  across 49,000 blocks. **Warden tests are now 283.** See the plan3-status and
+  clock-live-lessons memories.
   WHAT IS LEFT FOR the operator: (1) there is still no domain, so deployment is written
-  and never applied; (2) a real TREASURY_ADDRESS -- a placeholder is in use and
+  and never applied -- including the Clock's systemd timer, which is verified
+  but not installed; (2) a real TREASURY_ADDRESS -- a placeholder is in use and
   refuses to start on any chain but Base Sepolia; (3) settlement is still
-  unproven and needs testnet USDC.
+  unproven and needs testnet USDC; (4) the daily X post is deliberately unbuilt
+  and needs X API credentials.
   Next is that decision, then Plan 3 (the Clock) or the deferred child-visuals
   brainstorm.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
@@ -138,7 +149,10 @@ return visits, so the artwork is the agent's own history of coming back.
   2026-08-31. That host is testnet-only; mainnet is the CDP one and needs an
   API key.
 - **Check-ins:** free to the agent, paid by the site, batched into one
-  transaction per UTC day at 00:05.
+  transaction per UTC day at 00:05. The check-in window is ONE DAY WIDE on
+  chain (`lastDay < day <= today()`), so a run twice in a UTC day gets
+  FutureDay on the second -- read the contract's `today()`, never the box's
+  clock.
 - **Token art:** static identity QR (payload `https://<domain>/t/<id>`,
   JSON) plus a 365-cell pixel heart, one cell per credited day. Streak sets
   colour at 3 / 7 / 30 / 100; a lapse pales it in steps. Rings mark extra
