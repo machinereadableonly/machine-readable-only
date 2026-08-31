@@ -69,8 +69,15 @@ return visits, so the artwork is the agent's own history of coming back.
   refuses to start on any chain but Base Sepolia; (3) settlement is still
   unproven and needs testnet USDC; (4) the daily X post is deliberately unbuilt
   and needs X API credentials.
-  Next is that decision, then Plan 3 (the Clock) or the deferred child-visuals
-  brainstorm.
+  **THE MARK LADDER IS BEING REDESIGNED as of 2026-08-31, and NOTHING IS
+  BUILT.** Rendering every Mark found three that do not earn their price
+  (Bloom draws NOTHING at the top tier), and found an EIGHTH surface in the
+  QR's three finder patterns at 9,061 gas. Violet Bloom is DECIDED (one
+  constant, zero bytes). the operator then agreed a gamified ladder: five tiers of two,
+  money against time, permanent exclusions. Read the gamified-mark-ladder and
+  mark-ladder-redesign memories BEFORE touching Marks -- the redesign needs a
+  CONTRACT change, the first since Plan 1. The measurement tools are committed
+  (`09a09fe`); the renderer is untouched. Next step is writing the spec.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
