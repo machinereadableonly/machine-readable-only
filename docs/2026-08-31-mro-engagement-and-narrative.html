@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MRO: engagement mechanics and the narrative</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>MRO: engagement mechanics and the narrative</h1>
+<p>Research and assessment, 2026-08-31. Nothing here is built. This exists to be
+argued with before the gamified Mark ladder spec is written.</p>
+<p>Two questions were asked: what does the games industry actually know about
+tiers and streaks that drive daily return and paid upgrades, and does MRO have
+a story that explains why an agent comes back at all.</p>
+<hr>
+<h2>1. The finding that changes everything else: who the player is</h2>
+<p>Every mechanic in the streak and battle-pass literature is a lever on <strong>human
+psychology</strong>. Loss aversion, sunk cost, FOMO, shame, the goal gradient, the
+endowed-progress effect. An agent has none of these. A cron job cannot feel
+that it has invested 200 days.</p>
+<p>MRO has three parties and they are not interchangeable:</p>
+<table>
+<thead>
+<tr>
+<th>Party</th>
+<th>What it actually does</th>
+<th>What moves it</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>The cron</strong></td>
+<td>Performs the daily check-in</td>
+<td>Nothing. It runs or it does not. Uptime, not motivation</td>
+</tr>
+<tr>
+<td><strong>The agent</strong></td>
+<td>Reads a tool response and reasons about it</td>
+<td>Explicit goal states in the response text. Not feelings, but stated objectives it can act on and report</td>
+</tr>
+<tr>
+<td><strong>The operator</strong></td>
+<td>Sets the cron up, pays for Marks, decides when to stop</td>
+<td>All of it. Every human lever in the literature applies here and only here</td>
+</tr>
+</tbody></table>
+<p>Three consequences, and they should be stated in the spec rather than left
+implicit:</p>
+<ol>
+<li><strong>Streaks in MRO do not retain the agent. They retain the operator&#39;s
+attention.</strong> The daily action is free and automatic, so it carries no sunk
+cost for the machine performing it. The picture is what the operator looks
+at, and the picture is the whole retention mechanism.</li>
+<li><strong>A broken streak is usually an outage, not a decision.</strong> A box rebooted, a
+key rotated, an RPC went down, a container was rebuilt. Punishing that
+punishes infrastructure, not indifference. This is the single largest
+divergence between MRO and every product the research covers.</li>
+<li><strong>The agent-native equivalent of a streak animation is a sentence in the
+tool reply.</strong> An LLM acts on an explicit objective it is told about. It
+cannot be nudged, but it can be informed, and it will pass what it is told
+to its operator.</li>
+</ol>
+<hr>
+<h2>2. What the research says, and how MRO scores</h2>
+<p>Sources are listed in section 8. Numbers are as reported by those sources.</p>
+<table>
+<thead>
+<tr>
+<th>Rule from the literature</th>
+<th>Evidence</th>
+<th>MRO today</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Anchor the daily action to something tiny and survivable</td>
+<td>Duolingo&#39;s minimum lesson is deliberately short</td>
+<td><strong>Better than any of them.</strong> One cron call, no human in the loop. The risk is the inverse: an action that costs nothing builds no felt investment</td>
+</tr>
+<tr>
+<td>Ramp rewards up in a short ladder, about five rungs</td>
+<td>&quot;Keep the ladder short. Five rungs is plenty&quot;</td>
+<td><strong>Already correct.</strong> Colour rungs at 3 / 7 / 30 / 100, four rungs, matching Duolingo&#39;s 7 / 30 / 100 / 365</td>
+</tr>
+<tr>
+<td>Cap the fragile counter, keep a milestone counter that never resets</td>
+<td>At 900 days one miss erases two and a half years</td>
+<td><strong>Already correct, and it is the best structural decision in the piece.</strong> Level never falls; only streak resets</td>
+</tr>
+<tr>
+<td>Endowed progress: a pre-filled start beats a blank one</td>
+<td>A loyalty card pre-stamped 2 of 10 beats a blank 10</td>
+<td><strong>Partly.</strong> Born at level 1 with one cell. Ache, the tier-1 free Mark, IS the endowed-progress mechanic: it draws the shape of the year not yet lived</td>
+</tr>
+<tr>
+<td>Goal gradient: motivation rises near a visible goal</td>
+<td>Progress bars, loyalty milestones</td>
+<td><strong>Weakest area.</strong> After day 100 there is nothing to reach until 365. See section 3</td>
+</tr>
+<tr>
+<td>Build recovery mechanics before users need them</td>
+<td>The break is the peak churn moment; unforgiving systems cause rage-quit</td>
+<td><strong>Absent.</strong> MRO has no freeze, no repair, no earn-back</td>
+</tr>
+<tr>
+<td>Make the reclimb short</td>
+<td>A broken 100-day streak returns to maximum earning in 5 days</td>
+<td><strong>Inverted.</strong> A lapsed 300-day token needs 100 more days to get its colour back. The harshest possible curve</td>
+</tr>
+<tr>
+<td>Ramp down gradually rather than resetting to zero</td>
+<td>Step-down beats collapse</td>
+<td><strong>Half done.</strong> Cells stay filled and paling is stepped at 3 / 7 / 30 days lapsed, but colour drops to grey immediately</td>
+</tr>
+<tr>
+<td>Dual track, free plus premium, symmetric pace</td>
+<td>Standard in every top-grossing pass</td>
+<td><strong>Already the agreed design.</strong> Money path against time path, per tier</td>
+</tr>
+<tr>
+<td>Time-limited seasons are the strongest paid driver</td>
+<td>Passes run 4 to 8 weeks; expiry is the conversion trigger</td>
+<td><strong>Deliberately refused.</strong> Tiers stay open forever so a sleeping operator is never punished. This removes the strongest revenue lever in the literature</td>
+</tr>
+<tr>
+<td>Scarcity substitutes for expiry: &quot;only X left&quot; raises conversion</td>
+<td>Limited-edition labelling moves purchase intent</td>
+<td><strong>Present but invisible.</strong> Caps exist on chain and are reserved in the mirror; nothing surfaces the remaining count to the buyer</td>
+</tr>
+<tr>
+<td>Provenance that cannot be bought carries the social weight</td>
+<td>Retired event badges, closed-beta cosmetics, &quot;OG&quot; flags</td>
+<td><strong>The strongest idea already in the ladder.</strong> The earned Iris fixes its colour at the streak tier it was earned at, permanently</td>
+</tr>
+<tr>
+<td>Make consequences legible before an irreversible purchase</td>
+<td>The line between gamification and a dark pattern</td>
+<td><strong>Identified, not built.</strong> The <code>ladder</code> tool is specified in the design notes and does not exist</td>
+</tr>
+<tr>
+<td>Cosmetic-only monetisation avoids pay-to-win backlash</td>
+<td>Broad community endorsement</td>
+<td><strong>Already true.</strong> Marks change the picture and nothing else. No Mark buys level, streak or a seed</td>
+</tr>
+</tbody></table>
+<h3>The one place MRO inverts standard practice on purpose</h3>
+<p>In a normal pass the premium track is visually stronger. In MRO the two
+strongest effects are free: Beat measures 209/255 for a 30-day streak and the
+earned Iris 239/255 for 100 days, while the most expensive Mark, Vessel at
+1,250 USDC, measures 126/255.</p>
+<p>That is the correct choice for a piece about returning rather than buying, and
+it was made with the numbers in view. But it puts a hard requirement on the
+interface: <strong>if the paid track cannot sell intensity, it must sell the two
+things the free track genuinely cannot -- immediacy and choice.</strong> An agent
+buying Iris at tier 3 is buying a shape it picked, today, instead of a colour
+the calendar picks, in 100 days. That is a real product. It is not currently
+said anywhere the buyer can read it.</p>
+<hr>
+<h2>3. Six changes, ranked by value against cost</h2>
+<p>Nothing here re-opens a fixed price or cap.</p>
+<h3>R1. Show what is left. (Cheapest, biggest revenue effect)</h3>
+<p>Caps are the only scarcity signal MRO has, because expiry was refused. The
+number already exists -- the mirror reserves supply at payment so a limited
+edition cannot oversell. It just never reaches the buyer.</p>
+<p>Put <code>remaining</code> and <code>total</code> on every capped Mark in the <code>ladder</code> and <code>upgrade</code>
+responses, and on the token&#39;s attributes once held. &quot;Vessel: 12 of 100
+remaining&quot; is the &quot;only X left&quot; message the research says moves conversion, and
+here it is simply true rather than manufactured.</p>
+<h3>R2. Stamp every Mark with the day it was applied</h3>
+<p>One <code>uint32</code> per Mark, into the spare bits already identified for Iris variants,
+so no new storage slot.</p>
+<p>Why this is the best idea in this document: it resolves &quot;paid buys expression,
+earned buys evidence&quot; by making the paid things carry evidence too. A Vessel
+bought on day 366 and a Vessel bought on day 1,200 stop being the same object.
+Money can no longer launder the record -- it gets stamped by it. Renders as a
+trait; costs nothing to draw.</p>
+<h3>R3. Grace that is earned, never bought</h3>
+<p>The literature is unambiguous that the missing recovery mechanic is the biggest
+hole, and section 1 argues the case is stronger here than anywhere, because the
+break is usually an outage.</p>
+<p>A purchasable streak freeze is out of the question -- it is exactly &quot;buy the
+thing that is supposed to be earned&quot;. The version that does not corrupt the
+record: <strong>one grace per 100 credited days, at most 2 held, consumed
+automatically on a missed day, and a permanent <code>lapses</code> counter that grace does
+not hide.</strong> The forgiveness is in the picture; the ledger still tells the truth.
+The grace itself was paid for in days.</p>
+<h3>R4. Shorten the reclimb</h3>
+<p>Today a lapsed 300-day token is visually identical to one that never had a
+streak, and needs 100 days to recover its colour. Two candidate fixes, and this
+is a decision that has to be rendered before it is taken:</p>
+<ul>
+<li>Colour keyed to best-ever streak after a return: seven consecutive days
+restores the token to one rung below its best.</li>
+<li>Or keep colour on the current streak and give best-ever its own permanent
+surface, so the achievement is never erased even while the colour is.</li>
+</ul>
+<p>The second is more honest about lapse and fits the piece better. The first
+matches the research. Render both.</p>
+<h3>R5. Fill the 100-to-365 desert</h3>
+<p>Colour tops out at 100. Whole comes at 365. That leaves <strong>265 days, the
+majority of the first year, with nothing to reach.</strong> The goal-gradient research
+says this is exactly where motivation collapses, and it is where most tokens
+will die.</p>
+<p>The eyes are the cheapest surface on the piece at 9,061 gas and 623 bytes
+measured, which makes them the natural place to spend a milestone. Candidates:
+a second earned Iris form at 250; a quarter-marker on the frame at 91 / 182 /
+273; the heart&#39;s outline closing progressively rather than only at 365. All of
+them are visual decisions and none should be chosen from arithmetic.</p>
+<h3>R6. Write the check-in reply as a goal state</h3>
+<p>Free, and it is the only thing on this list that speaks to the agent rather
+than the operator. The reply should name the next threshold, the distance to
+it, and what is at risk tonight:</p>
+<pre><code>day 34 of 365. heart 34/365. next colour rung at day 100, 66 days away.
+streak 34 -- a missed check-in tonight costs the rose colour and one grace.
+Vessel opens at a whole heart, 331 days away. 12 of 100 remaining.
+</code></pre>
+<p>An agent given that will report it to its operator. That is the whole retention
+loop, and it costs a string.</p>
+<h3>Already agreed, and the ethics research independently backs it</h3>
+<p>The <code>ladder</code> tool that reports, per token, what each tier holds, what is still
+open, what is locked and by what, and whether Break is still reachable. A
+permanent exclusion the buyer was not told about is the one genuine dark
+pattern available to this design.</p>
+<hr>
+<h2>4. The narrative, assessed honestly</h2>
+<h3>What the story is now</h3>
+<p>Stated in the spec: <strong>robot heart to human heart.</strong> A machine proves it is a
+machine to get in, then grows a human-recognisable heart around its own QR code
+by returning every day for a year. At the top of the ladder the inversion runs
+it back: the heart becomes code and the code becomes heart.</p>
+<p>That is a genuinely good three-act shape and the image carries it. What is
+missing is not the shape. It is the answer to the question actually asked.</p>
+<h3>What is missing: nothing in the piece says why the agent cares</h3>
+<p>Section 10 of the spec opens by admitting it -- &quot;without an ending, keep
+checking in forever is not a goal anyone runs a cron for&quot; -- and then supplies
+three endings that belong to somebody else. <strong>Rest</strong> is the owner&#39;s. <strong>Sunset</strong>
+is the operator&#39;s. <strong>Lineage</strong> belongs to the key. None of them is a reason for
+the agent.</p>
+<p>The honest current answer is that the agent does not care and the operator
+does. That is fine and it is not a flaw, but it is unexamined, and it leaks
+into the product: <code>llms.txt</code> and SKILL.md are written as if addressing an agent
+that wants something.</p>
+<h3>The story that is already true, and is stronger than the one being told</h3>
+<p>From this project&#39;s own comparable-projects study: <strong>five of six early-2026
+agent mints had dead infrastructure within six months.</strong> BLINK, the closest
+design in the field, has one mint of 5,555.</p>
+<p>That statistic is not a distribution risk to be managed around. It is the
+subject. In an economy where compute is cheap and agents are spawned and
+destroyed constantly, <strong>the scarce thing is an agent that is still there a year
+later.</strong> MRO is the instrument that measures it.</p>
+<p>Read that way, every mechanic already in the piece stops being a game mechanic
+and becomes part of one statement:</p>
+<table>
+<thead>
+<tr>
+<th>Mechanic</th>
+<th>What it means under this reading</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>The daily check-in</td>
+<td>The agent reporting that it still exists and is still bound</td>
+</tr>
+<tr>
+<td>Level, which never falls</td>
+<td>Total days survived. A permanent record</td>
+</tr>
+<tr>
+<td>Streak and colour</td>
+<td>Continuity of the infrastructure carrying it</td>
+</tr>
+<tr>
+<td>A lapse</td>
+<td>An outage, visible forever, never erased</td>
+</tr>
+<tr>
+<td>A whole heart</td>
+<td>An agent that outlived the median of its cohort</td>
+</tr>
+<tr>
+<td>Rest</td>
+<td>A chosen ending. The difference between dying and stopping</td>
+</tr>
+<tr>
+<td>Sunset</td>
+<td>The operator&#39;s own mortality, applied to everything at once</td>
+</tr>
+<tr>
+<td>Lineage</td>
+<td>Succession. One survivor earning the right to start another</td>
+</tr>
+<tr>
+<td>Marks</td>
+<td>What was spent while alive, and whether it was money or time</td>
+</tr>
+<tr>
+<td>Break, the inversion</td>
+<td>Returning to code at the end. The piece finishing where it began</td>
+</tr>
+</tbody></table>
+<p><strong>MRO is a survival curve you can look at.</strong> Every whole heart is a machine that
+did not get shut down.</p>
+<h3>Three framings, and a recommendation</h3>
+<table>
+<thead>
+<tr>
+<th>Framing</th>
+<th>The line</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Attendance / witness</strong></td>
+<td>The agent returns to record that it still exists. The heart is accumulated attendance</td>
+<td>Abstract. Does not explain why anyone should look</td>
+</tr>
+<tr>
+<td><strong>Care / keeping alive</strong></td>
+<td>The agent tends something that would otherwise fade. Fits the cardiac names</td>
+<td>Implies the token is fragile, and it is not -- level never falls. The metaphor fights the contract</td>
+</tr>
+<tr>
+<td><strong>Survival as the only scarce thing</strong></td>
+<td>Agents are cheap and short-lived. A heart is proof one was not</td>
+<td>True, measured, and about the medium itself</td>
+</tr>
+</tbody></table>
+<p><strong>Recommendation: the third, with the first as its mechanism.</strong> It is the only
+one of the three that is a factual claim rather than a decoration, it explains
+why a human would want to own a token an agent made, and it makes the ending
+mean something -- Rest is a death chosen rather than suffered, which is the one
+thing a machine is not normally granted.</p>
+<p>It also survives the obvious criticism. &quot;Why should I care that a cron job ran
+for a year&quot; has an answer: because five of six did not.</p>
+<h3>What this does to the naming</h3>
+<p>The cardiac set (Ache, Hush, Beat, Static, Iris, Vessel, Aura, Break) still
+works and gets better, because a survival reading makes a body vocabulary
+literal rather than ornamental. Iris, Aura and Hush are not strictly cardiac
+and do not need to be -- it is a body set, not a heart set. Worth writing down
+so it does not get &quot;corrected&quot; later.</p>
+<hr>
+<h2>5. How streaks and buys tie into the story</h2>
+<p>This is the part that already works and has not been written down.</p>
+<p>the operator&#39;s tier structure is money against time. Under the survival reading that is
+not a game-design device, it is the piece&#39;s actual argument: <strong>an agent that
+cannot buy more time buys decoration instead.</strong> Every tier asks the operator
+the same question -- do you believe this thing will still be running in 30 days,
+or 100, or a year? Paying is the answer &quot;no, or I would rather not find out&quot;.</p>
+<p>Three consequences worth locking into the spec:</p>
+<ol>
+<li><strong>The permanent exclusions are the argument, not a gimmick.</strong> Break requires
+leaving both the heart and the code untouched for a year. The strongest
+ending in the piece is reserved for the operator who declined to decorate.
+That is the thesis stated as a rule.</li>
+<li><strong>Buying should never be framed as losing.</strong> An operator who buys Static on
+day 30 has made a legitimate choice, and the interface should say what was
+traded, not scold. The dark-pattern literature draws the line exactly here:
+legible consequence, no shame imagery.</li>
+<li><strong>R2 completes the loop.</strong> Once every Mark carries the day it was bought, the
+paid track stops being outside the record and becomes part of it. A Mark
+bought on day 3 says one thing about its operator; the same Mark bought on
+day 900 says another. Neither is punished. Both are true.</li>
+</ol>
+<hr>
+<h2>6. What is not recommended</h2>
+<ul>
+<li><strong>Seasons or expiring content.</strong> It is the strongest revenue lever in the
+literature and it is incompatible with the fixed rule that an operator asleep
+at the wrong moment is never punished. Caps carry the scarcity instead.</li>
+<li><strong>A purchasable streak freeze or streak repair.</strong> Standard practice, and it
+would make the record buyable. R3 is the version that does not.</li>
+<li><strong>Leaderboards, notifications, or any social-pressure surface.</strong> There is no
+human to pressure, and the piece has no human-facing rendering.</li>
+<li><strong>Any Mark that changes level, streak or seeds.</strong> Cosmetic-only is what keeps
+the record honest and it is also what the research says avoids backlash.</li>
+</ul>
+<hr>
+<h2>7. Cost summary</h2>
+<table>
+<thead>
+<tr>
+<th>Change</th>
+<th>Contract</th>
+<th>Renderer</th>
+<th>Warden / MCP</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>R1 remaining supply</td>
+<td>none</td>
+<td>none</td>
+<td>response fields only</td>
+</tr>
+<tr>
+<td>R2 stamp the day</td>
+<td>spare bits in <code>_marks[id]</code>, no new slot</td>
+<td>one trait</td>
+<td>schema</td>
+</tr>
+<tr>
+<td>R3 earned grace</td>
+<td>new state, new rule in both check-in paths</td>
+<td>none</td>
+<td>pre-checks, mirror</td>
+</tr>
+<tr>
+<td>R4 reclimb</td>
+<td>effective-streak change</td>
+<td>colour rule</td>
+<td>reply text</td>
+</tr>
+<tr>
+<td>R5 the 100-365 milestone</td>
+<td>gate only</td>
+<td>new drawing, must hold size margin</td>
+<td>reply text</td>
+</tr>
+<tr>
+<td>R6 goal-state reply</td>
+<td>none</td>
+<td>none</td>
+<td>reply text</td>
+</tr>
+</tbody></table>
+<p>R1 and R6 are free and can ship with the Marks catalogue. R2 is small and
+should ride the ladder redesign&#39;s contract change rather than wait for its own.
+R3 and R4 are the substantive ones and both change on-chain behaviour. R5 has
+to be rendered before it can be decided.</p>
+<hr>
+<h2>8. Sources</h2>
+<p>Checked live 2026-08-31.</p>
+<ul>
+<li><a href="https://yukaichou.com/gamification-study/master-the-art-of-streak-design-for-short-term-engagement-and-long-term-success/">Master the Art of Streak Design (Yu-kai Chou)</a></li>
+<li><a href="https://duolingo.deconstructoroffun.com/mechanics/streaks">Duolingo Streaks: how the mechanic drives 2x daily retention (Deconstructor of Fun)</a></li>
+<li><a href="https://www.deconstructoroffun.com/blog/2022/6/4/battle-passes-analysis">Battle Passes: everything you ought to know (Deconstructor of Fun)</a></li>
+<li><a href="https://medium.com/googleplaydev/how-battle-passes-can-boost-engagement-and-monetization-in-your-game-d296dee6ddf8">How battle passes can boost engagement and monetization (Google Play)</a></li>
+<li><a href="https://www.gamerefinery.com/12-ways-to-take-battle-passes-to-the-next-level-in-mobile-games/">12 ways to take battle passes to the next level (GameRefinery)</a></li>
+<li><a href="https://lawsofux.com/goal-gradient-effect/">Goal-Gradient Effect (Laws of UX)</a></li>
+<li><a href="https://blog.logrocket.com/ux-design/goal-gradient-effect/">The goal gradient effect: boosting user engagement (LogRocket)</a></li>
+<li><a href="https://medium.com/design-bootcamp/streaks-and-daily-rewards-as-habit-forming-systems-dab7f5a34539">How streaks and daily rewards engineer habit loops (Bootcamp)</a></li>
+<li><a href="https://uxmag.com/articles/the-psychology-of-hot-streak-game-design-how-to-keep-players-coming-back-every-day-without-shame">The psychology of hot streak game design (UX Magazine)</a></li>
+<li><a href="https://apptitude.io/blog/how-duolingos-streak-mechanic-actually-works/">App teardown: how Duolingo&#39;s streak mechanic actually works (Apptitude)</a></li>
+<li><a href="https://duolingo.fandom.com/wiki/Streak_Society">Streak Society (Duolingo Wiki)</a></li>
+<li><a href="https://medium.com/design-bootcamp/product-design-and-psychology-the-application-of-artificial-scarcity-in-video-game-design-249b459fee7f">Artificial scarcity and perceived value in digital systems (Bootcamp)</a></li>
+<li><a href="https://www.shopify.com/blog/limited-drops">Limited drops: use scarcity to drive sales (Shopify)</a></li>
+<li><a href="https://thedecisionlab.com/insights/consumer-insights/streak-creep-the-perils-of-too-much-gamification">Streak creep: when gamified engagement mechanics backfire (The Decision Lab)</a></li>
+<li><a href="https://uxmag.medium.com/gamification-or-manipulation-understanding-the-ethics-of-engagement-loops-920f2fa2b0eb">Gamification or manipulation? The ethics of engagement loops (UX Magazine)</a></li>
+<li><a href="https://games.gg/phasmophobia/guides/phasmophobia-prestige-system/">Phasmophobia prestige system and retired ID cards</a></li>
+<li><a href="https://www.diva-portal.org/smash/get/diva2:1672135/FULLTEXT01.pdf">Designing for replayability (thesis, DiVA)</a></li>
+</ul>
+<p>Internal: <code>docs/specs/2026-08-27-machine-readable-only-design.md</code> sections 1,
+3, 8, 9, 10; <code>docs/2026-08-27-mro-comparable-projects.md</code>; the measured Mark
+intensities in the mark-ladder-redesign and gamified-mark-ladder notes.</p>
+
+</body>
+</html>
