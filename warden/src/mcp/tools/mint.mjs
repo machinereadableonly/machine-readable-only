@@ -1,8 +1,10 @@
 // The way in. 0.10 USDC, paid inside the tool call, no account anywhere.
 import * as z from "zod";
 import { MINT_PRICE, MINT_RESOURCE } from "../../pay/x402.mjs";
+import { paidWriteBlock, requireChain } from "../gates.mjs";
 
-export function makeMintTool({ q, paid, supplyCap, today, alert = console.error }) {
+export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console.error }) {
+  requireChain(chain, "mint");
   return {
     name: "mint",
     config: {
@@ -23,6 +25,13 @@ export function makeMintTool({ q, paid, supplyCap, today, alert = console.error 
       if (q.hasMinted(ctx.keyId)) return { ok: false, reason: "already-minted" };
       if (q.tokenCount() >= supplyCap) return { ok: false, reason: "supply-cap-reached" };
 
+      // THE CONTRACT'S OWN GATES, read from the chain. Sunset, pause and the
+      // per-address WalletCap are all invisible to this mirror, and every one
+      // of them reverts a mint. Checked BEFORE payment: charging for a mint the
+      // chain will refuse is the worst failure this tool has.
+      const blocked = await paidWriteBlock(chain, { to: args.to });
+      if (blocked) return { ok: false, reason: blocked };
+
       return paid(async () => {
         // BOTH GATES ARE RE-DECIDED AFTER SETTLEMENT, because settling takes
         // seconds and everything checked before it is now stale.
@@ -39,6 +48,16 @@ export function makeMintTool({ q, paid, supplyCap, today, alert = console.error 
         if (q.tokenCount() >= supplyCap) {
           alert(`mint settled for key ${ctx.keyId} but the supply cap was reached during settlement`);
           return { ok: false, reason: "paid-but-unavailable", detail: "supply-cap-reached" };
+        }
+
+        // THE CHAIN GATES ARE RE-READ TOO, for the same reason the cap is: the
+        // piece can be paused or sunset, or the wallet cap filled by another
+        // mint, while this payment was settling. A pre-payment check is stale
+        // by the time the row is written.
+        const stillBlocked = await paidWriteBlock(chain, { to: args.to });
+        if (stillBlocked) {
+          alert(`mint settled for key ${ctx.keyId} but the chain now refuses it: ${stillBlocked}`);
+          return { ok: false, reason: "paid-but-unavailable", detail: stillBlocked };
         }
 
         // The id is assigned HERE, not by the contract. The contract takes it

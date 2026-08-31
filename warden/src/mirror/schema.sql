@@ -20,7 +20,14 @@ CREATE TABLE IF NOT EXISTS tokens (
   marks      INTEGER NOT NULL DEFAULT 0,   -- the bitmask, one bit per mark id
   generation INTEGER NOT NULL DEFAULT 0,
   parentId   INTEGER,
-  status     TEXT NOT NULL DEFAULT 'queued'  -- queued | written
+  status     TEXT NOT NULL DEFAULT 'queued',  -- queued | written (the WRITE pipeline)
+  -- Set by the token OWNER calling rest(id) straight on chain, so this service
+  -- is never told. It is learned lazily: every gated tool call reads the
+  -- token's lifecycle from the chain anyway, and records a true here when it
+  -- sees one. Plan 3's Clock will maintain it properly from Rested events.
+  -- NOTE this used to be read off `status`, which holds only queued|written,
+  -- so `resting` was ALWAYS FALSE -- dead code that looked like a live gate.
+  resting    INTEGER NOT NULL DEFAULT 0
 );
 
 -- The unique index is the concurrency control for check-ins. Two simultaneous

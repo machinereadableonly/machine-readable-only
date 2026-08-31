@@ -34,6 +34,7 @@ export function queries(db) {
     getMint: db.prepare("SELECT * FROM mints WHERE tokenId = ?"),
     requeueSolving: db.prepare("UPDATE mints SET solveState = 'pending' WHERE solveState = 'solving'"),
     tokenCount: db.prepare("SELECT COUNT(*) AS n FROM tokens"),
+    setResting: db.prepare("UPDATE tokens SET resting = 1 WHERE tokenId = ?"),
     insertMint: db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (?, ?, ?)"),
     reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId) VALUES (?, ?)"),
     markSold: db.prepare("SELECT COUNT(*) AS n FROM mark_orders WHERE upgradeId = ?"),
@@ -63,6 +64,10 @@ export function queries(db) {
     },
 
     getToken: (tokenId) => s.getToken.get(tokenId),
+
+    /// Record that the chain says this token is sealed. One way only: `rest` is
+    /// irreversible on chain, so there is deliberately no way to clear it.
+    setResting: (tokenId) => s.setResting.run(tokenId),
     tokensForKey: (keyId) => s.tokensForKey.all(keyId),
     getKey: (keyId) => s.getKey.get(keyId),
     allKeys: () => s.allKeys.all(),

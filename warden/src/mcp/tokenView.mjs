@@ -15,7 +15,11 @@ export function tokenView(q, tokenId) {
     lastDay: t.lastDay,
     generation: t.generation,
     parentId: t.parentId,
-    resting: t.status === "resting",
+    // The real column, not `status`. This read `t.status === "resting"` until
+    // 2026-08-31, and status holds only 'queued' | 'written', so every token
+    // ever served -- to a scanner at /t/<id> and to an agent through `status`
+    // -- was reported as not resting, sealed ones included.
+    resting: t.resting === 1,
     pendingOnChain: t.status === "queued",
     owner: t.owner,
   };

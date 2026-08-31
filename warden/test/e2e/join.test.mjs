@@ -32,6 +32,7 @@ import { tokenView } from "../../src/mcp/tokenView.mjs";
 import { openDb } from "../../src/mirror/db.mjs";
 import { queries } from "../../src/mirror/queries.mjs";
 import { utcDay } from "../../src/mcp/tools/checkin.mjs";
+import { openChain } from "../chain-stub.mjs";
 
 const DOMAIN = "example.com";
 const SECRET = "e2e-secret";
@@ -80,7 +81,7 @@ function startJourney() {
     catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
     // A null from the chain means "could not be reached", which checkin treats
     // as a refusal. Our caller is the bound key, so this is never consulted.
-    chain: { boundKeyOf: async () => null },
+    chain: openChain(),
     contract: "0xcontract",
     llmsTxt: "# machine readable only",
     challengeSecret: SECRET,

@@ -81,6 +81,16 @@ it does not. It ALSO decides where payment is taken -- the x402 network is
 derived from it as `eip155:<chainId>`, so a price is always quoted on the
 chain the token lives on and the two can never drift apart.
 
+`BASE_RPC_URL` became load-bearing on 2026-08-31. It was added for the rebind
+re-check; every write tool now also reads the contract's own gates through it
+-- `notSunset`, `whenNotPaused`, `Resting` and `WalletCap` -- because none of
+them is visible to the mirror and each one reverts a queued write, two of them
+after the agent has paid. When it is unreachable, `mint`, `checkin`, `upgrade`
+and `seed` answer `chain-unavailable` and queue nothing. That is deliberate:
+refusing costs an agent a retry, admitting costs it a payment for a transaction
+that was always going to revert. A public endpoint is fine to start; if refusals
+appear in the logs, that is the thing to upgrade.
+
 `X402_FACILITATOR_URL` is the service that verifies and settles USDC:
 
 | | URL | Auth | Networks |

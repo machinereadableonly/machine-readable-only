@@ -29,6 +29,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { utcDay } from "../src/mcp/tools/checkin.mjs";
 import { makePaymentGateway, MINT_PRICE } from "../src/pay/x402.mjs";
+import { makeChainReader } from "../src/chain/read.mjs";
 
 const DOMAIN = "example.com";
 const SECRET = "live-check-secret";
@@ -38,6 +39,8 @@ const TREASURY = process.argv[4] ?? "0x000000000000000000000000000000000000dEaD"
 const NETWORK = `eip155:${CHAIN_ID}`;
 const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent"];
+const CONTRACT = "0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D";
+const RPC = process.env.BASE_RPC_URL ?? "https://sepolia.base.org";
 
 const dir = mkdtempSync(join(tmpdir(), "mro-live-"));
 const db = openDb(join(dir, "mirror.db"));
@@ -47,11 +50,20 @@ const q = queries(db);
 // which mocks `paid` at this exact seam.
 const paid = makePaymentGateway({ facilitatorUrl: FACILITATOR, network: NETWORK, payTo: TREASURY });
 
+// THE REAL CHAIN READER, against the deployed contract. mint now checks the
+// contract's own gates -- sunset, pause, wallet cap -- before it will ask for
+// money, so this journey only reaches a payment demand if those really pass.
+const chain = makeChainReader({ rpcUrl: RPC, contract: CONTRACT });
+console.log("0. chain gates:", JSON.stringify({
+  writesOpen: await chain.writesOpen(),
+  walletRoom: await chain.walletRoomFor("0x" + "a1".repeat(20)),
+}), "(writesOpen null means open)");
+
 const mcp = makeMcpHandler({
   q,
-  chain: { agentKeyOf: async () => null },
+  chain,
   today: utcDay,
-  contract: "0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D",
+  contract: CONTRACT,
   chainId: CHAIN_ID,
   challengeSecret: SECRET,
   domain: DOMAIN,

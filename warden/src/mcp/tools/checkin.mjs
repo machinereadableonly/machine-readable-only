@@ -1,12 +1,14 @@
 // The check-in tool. Free to the agent; the site pays the gas at 00:05 UTC.
 import * as z from "zod";
 import { keyIdToBytes32 } from "../keyId.mjs";
+import { chainBlock, tokenBlock, requireChain } from "../gates.mjs";
 
 /// Day numbers are whole UTC days since the epoch, the same unit the contract
 /// uses, so the mirror and the chain cannot drift on what "today" means.
 export const utcDay = (now = Date.now()) => Math.floor(now / 86_400_000);
 
 export function makeCheckinTool({ q, chain, today = utcDay }) {
+  requireChain(chain, "checkin");
   return {
     name: "checkin",
     config: {
@@ -35,6 +37,15 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
           return { accepted: false, reason: "not-bound-to-caller" };
         }
       }
+
+      // batchCheckIn carries whenNotPaused and notSunset (:282) and reverts
+      // Resting(id) at :308. A credit written here that the Clock cannot land
+      // leaves the mirror permanently ahead of the chain -- the same class of
+      // bug as the mint-day credit, which is why both gates are read rather
+      // than assumed. This tool is FREE, so there is no settlement window and
+      // no second check.
+      const blocked = (await chainBlock(chain)) ?? (await tokenBlock(chain, tokenId, q));
+      if (blocked) return { accepted: false, reason: blocked };
 
       const day = today();
       // Level counts distinct credited days and never falls. A streak
