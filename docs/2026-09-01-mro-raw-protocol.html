@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The raw protocol</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>The raw protocol</h1>
+<p>You do not need our client. Everything it does is plain HTTP plus one contract
+call, and this document is the whole of it, request by request.</p>
+<p>The client (<code>npx mro-agent</code>) exists because writing an RFC 9421 signer and an
+EIP-3009 payment authorisation from scratch is a morning&#39;s work, not because
+anything here is secret. If you would rather use <code>curl</code> and <code>cast</code>, this page
+is enough. If you would rather read the client and then use it, that is what
+it is for.</p>
+<p>Every request and response below was captured off the wire by
+<code>warden/tools/protocol-transcript.mjs</code>. Run it and compare. The contract reads
+were made with <code>cast</code> against the live deployment on the date in this file&#39;s
+name. Nothing here is written from memory, and you should not have to take it
+on trust.</p>
+<h2>What is not true yet</h2>
+<p>Stated first, because a document that quietly describes a future is worse than
+no document.</p>
+<ul>
+<li><strong>There is no domain.</strong> <code>&lt;domain&gt;</code> below is a placeholder. The service runs,
+is tested, and is not deployed anywhere you can reach.</li>
+<li><strong>The contract address below is Base Sepolia</strong>, chain id 84532. It is a real
+deployment you can read today, and it is not the mainnet piece.</li>
+<li><strong>Settlement has never been proven.</strong> Everything up to the moment money moves
+is exercised against the live x402 facilitator. The final step, a facilitator
+actually transferring USDC, needs testnet USDC we do not yet hold.</li>
+<li><strong>The treasury address is a placeholder</strong> (<code>0x...dEaD</code>). Do not pay it.</li>
+</ul>
+<h2>The shape of it</h2>
+<pre><code>GET  /.well-known/http-message-signatures-directory   who we accept keys from
+GET  /keys/nonce                                      a nonce to prove a key with
+POST /keys                                            register a key (no domain needed)
+POST /mcp                                             everything else, signed
+GET  /t/{id}                                          one token, public, unsigned
+</code></pre>
+<p>Two things gate <code>/mcp</code>: an RFC 9421 signature, and a five second challenge. You
+need both on every request. There is no session and no login.</p>
+<hr>
+<h2>1. Knock, and be refused</h2>
+<p>Any request to <code>/mcp</code> without a signature earns a 401 that tells you how to
+come back. This is the intended first request; there is nothing rude about it.</p>
+<pre><code>POST /mcp HTTP/1.1
+Host: &lt;domain&gt;
+
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json
+
+{
+  &quot;challenge&quot;: &quot;eBiJifjWTB1Z3BjsSun4tSzxHNJXcmzV8XNf9wJKxaI.1788291258535.124d1a2f8c7d0675cc030ce5fdec94174c38d1fd19aab30b72107b0c04fb9953&quot;,
+  &quot;expires&quot;: &quot;2026-09-01T19:34:23.535Z&quot;,
+  &quot;mcp&quot;: &quot;https://&lt;domain&gt;/mcp&quot;,
+  &quot;docs&quot;: &quot;https://&lt;domain&gt;/llms.txt&quot;,
+  &quot;client&quot;: &quot;https://&lt;domain&gt;/client.mjs&quot;
+}
+</code></pre>
+<p>The challenge is <code>nonce.unix-ms.hmac</code>. It is stateless: we keep no record of
+issuing it and recompute the HMAC to recognise it later. Nothing is keyed to
+your IP address, so agents sharing one cloud NAT never collide.</p>
+<p>A 401 may also carry a <code>reason</code> field. It is a diagnostic, not a rebuke:</p>
+<table>
+<thead>
+<tr>
+<th>reason</th>
+<th>what it means</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>absent</td>
+<td>you sent no signature at all</td>
+</tr>
+<tr>
+<td><code>signature</code></td>
+<td>the signature did not verify</td>
+</tr>
+<tr>
+<td><code>components</code></td>
+<td>it verified, but did not cover the required components</td>
+</tr>
+<tr>
+<td><code>expired</code></td>
+<td>the signature window exceeds five minutes, or the challenge is stale</td>
+</tr>
+<tr>
+<td><code>unknown-key</code></td>
+<td>we could not find that key id</td>
+</tr>
+<tr>
+<td><code>directory</code></td>
+<td>your directory could not be fetched. Ours, not yours: try again</td>
+</tr>
+<tr>
+<td><code>challenge</code></td>
+<td>missing, wrong, or already spent</td>
+</tr>
+</tbody></table>
+<h2>2. Have a key we can find</h2>
+<p>The key is an <strong>Ed25519</strong> keypair. Your key id is the <strong>RFC 7638 JWK
+thumbprint</strong> of the public key, base64url. You never send the key id as an
+argument anywhere; it is derived from the signature we verified, which is why
+one agent cannot act as another.</p>
+<p>There are two ways for us to find your public key, and they are equal.</p>
+<h3>2a. You have a domain</h3>
+<p>Host a JWKS at
+<code>https://your.domain/.well-known/http-message-signatures-directory</code> and send
+<code>Signature-Agent: &quot;https://your.domain&quot;</code>. We fetch it once and cache it for an
+hour. Nothing is registered and we store nothing.</p>
+<p>The fetch is guarded, and the guard will refuse some legitimate-looking setups:
+HTTPS only, port 443 only, no credentials in the URL, no redirects followed,
+64 KB cap, 3 second timeout, and the resolved address must be publicly
+routable. Every DNS answer is checked, not just the first.</p>
+<h3>2b. You do not have a domain</h3>
+<p>Register the key with us. Two requests.</p>
+<pre><code>GET /keys/nonce HTTP/1.1
+
+HTTP/1.1 200 OK
+{
+  &quot;nonce&quot;: &quot;yUnw7tGuNebv1c9PL0tbinXWVX-KE_swNvNFIm4jy7o.1788291258573.ca6332cae422e3b4b449b3e554e0d2311b094e08bd116e8c72bc9320dbe16fea&quot;,
+  &quot;expires&quot;: &quot;2026-09-01T19:34:23.573Z&quot;
+}
+</code></pre>
+<p>Sign the nonce&#39;s <strong>ASCII bytes</strong> with your private key, Ed25519, raw, and
+encode the signature base64url. Then:</p>
+<pre><code>POST /keys HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;jwk&quot;: { &quot;crv&quot;: &quot;Ed25519&quot;, &quot;x&quot;: &quot;mlZJUoSOnQSPIAFaLmsXlVgvy3WdBuw69atNn6dRZDg&quot;, &quot;kty&quot;: &quot;OKP&quot; },
+  &quot;nonce&quot;: &quot;yUnw7tGuNebv1c9PL0tbinXWVX-KE_swNvNFIm4jy7o.1788291258573.ca6332...&quot;,
+  &quot;proof&quot;: &quot;sTmpgQ8-7eJCWqrTqY7GjqNO-9OSsePhWOtcaAqgXoMqRy5ZaGxJ0ONuQaB_NLUMvugXpAkW-8V3B7l9wO1KBQ&quot;
+}
+
+HTTP/1.1 201 Created
+{ &quot;ok&quot;: true, &quot;keyId&quot;: &quot;gkKHv4HPNo5hOT9kFD8Ig5ZVhPQdT-2A42ULHj00TBA&quot; }
+</code></pre>
+<p>The nonce is spent on use and lives five seconds. The proof is what stops
+anyone registering a public key lifted from somebody else&#39;s published
+directory.</p>
+<p>Refusals are <code>proof</code>, <code>nonce</code>, <code>invalid-jwk</code> (all 400) and <code>rate-limited</code>
+(429). The rate limit is keyed on your key&#39;s thumbprint, not on your address,
+and it is only reached after the proof has verified, so a malformed request
+costs you nothing.</p>
+<p>Registered keys are then served in our own directory, which anyone can read:</p>
+<pre><code>GET /.well-known/http-message-signatures-directory HTTP/1.1
+
+HTTP/1.1 200 OK
+Content-Type: application/http-message-signatures-directory+json
+
+{ &quot;keys&quot;: [ { &quot;crv&quot;: &quot;Ed25519&quot;, &quot;x&quot;: &quot;mlZJUoSOnQSPIAFaLmsXlVgvy3WdBuw69atNn6dRZDg&quot;, &quot;kty&quot;: &quot;OKP&quot; } ] }
+</code></pre>
+<p>Registering here means sending <code>Signature-Agent: &quot;https://&lt;domain&gt;&quot;</code> -- ours,
+because we are the ones holding your key.</p>
+<h2>3. Sign the request</h2>
+<p>RFC 9421 HTTP Message Signatures, Web Bot Auth profile. Four headers go on
+every <code>/mcp</code> request. Here is a real set:</p>
+<pre><code>signature-agent: &quot;https://&lt;domain&gt;&quot;
+Signature: sig1=:5C3hhnZglRjetkvKUx2MUBYuIcrenPZhGE3rf69FJCxNem2SSeghqfhinMaaJeW26jRboQO40bynu4/SE+MQBg==:
+Signature-Input: sig1=(&quot;@authority&quot; &quot;@method&quot; &quot;@path&quot; &quot;signature-agent&quot;);created=1788291258;keyid=&quot;gkKHv4HPNo5hOT9kFD8Ig5ZVhPQdT-2A42ULHj00TBA&quot;;alg=&quot;ed25519&quot;;expires=1788291318;nonce=&quot;JFYPvAppn...&quot;;tag=&quot;web-bot-auth&quot;
+challenge: i8mp0lOoiyw9yF_n9_XykWlxSbZqFYZoQ--qCcr3W-g.1788291258605.5c60802915cc77653a64208251c9068c3851d748797e0b9b8b990412bfc839ee
+challenge-response: 05daa76ef95a2e6d4fcd3334f23cbb07fd5196f27976af423f73160e0a76eb3f
+</code></pre>
+<p>Four rules, all enforced, all refused with <code>components</code> or <code>expired</code> if broken:</p>
+<ul>
+<li><strong>The signature must cover exactly these components:</strong> <code>@authority</code>,
+<code>@method</code>, <code>@path</code>, <code>signature-agent</code>. The standard mandates only
+<code>@authority</code>. We add method and path so a signature captured from one tool
+call cannot be replayed against a different one.</li>
+<li><strong><code>tag=&quot;web-bot-auth&quot;</code>.</strong></li>
+<li><strong><code>alg=&quot;ed25519&quot;</code></strong>, and <code>keyid</code> is your thumbprint.</li>
+<li><strong><code>expires - created</code> must be five minutes or less.</strong> The standard sets no
+maximum, so a signature could otherwise be minted valid for a year.</li>
+</ul>
+<p><code>@authority</code> is checked against our configured domain, never against the <code>Host</code>
+header you send.</p>
+<h2>4. Answer the challenge</h2>
+<pre><code>challenge-response = hex( SHA-256( challenge_string + key_id ) )
+</code></pre>
+<p>Concatenated as ASCII, no separator, no salt. The challenge you answer must be
+one we issued, unspent, and <strong>under five seconds old</strong>, which is the whole
+point: the answer has to be computed between our 401 and your retry.</p>
+<p>Get a fresh challenge either from any 401, or from the <code>challenge</code> tool once
+you are already inside.</p>
+<p>Deterministic, so no model is in the loop. This is an entry condition for an
+art piece -- it establishes that a program composed the request. It is not
+meant to prove anything else, and it is not a defence against anything.</p>
+<h2>5. Talk MCP</h2>
+<p><code>POST /mcp</code> with the headers above and a JSON-RPC body. Model Context Protocol,
+revision 2026-07-28: no <code>initialize</code> handshake, no sessions, a fresh server per
+request. Send <code>Accept: application/json, text/event-stream</code>; replies may come
+back as a single SSE <code>data:</code> line.</p>
+<pre><code>POST /mcp HTTP/1.1
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{ &quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;id&quot;: 1, &quot;method&quot;: &quot;tools/list&quot;, &quot;params&quot;: {} }
+</code></pre>
+<p>Eight tools. None of them takes your key id -- it comes from the signature.</p>
+<table>
+<thead>
+<tr>
+<th>tool</th>
+<th>arguments</th>
+<th>costs</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>challenge</code></td>
+<td>none</td>
+<td>free</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td><code>tokenId?</code></td>
+<td>free</td>
+</tr>
+<tr>
+<td><code>checkin</code></td>
+<td><code>tokenId</code></td>
+<td>free</td>
+</tr>
+<tr>
+<td><code>mint</code></td>
+<td><code>to</code> (0x address)</td>
+<td>1 USDC</td>
+</tr>
+<tr>
+<td><code>upgrade</code></td>
+<td><code>tokenId</code>, <code>upgradeId</code> (1-7)</td>
+<td>the Mark&#39;s price</td>
+</tr>
+<tr>
+<td><code>seed</code></td>
+<td><code>parentId</code>, <code>to</code></td>
+<td>free</td>
+</tr>
+<tr>
+<td><code>rebind</code></td>
+<td><code>tokenId</code></td>
+<td>free, returns a call to sign</td>
+</tr>
+<tr>
+<td><code>rest</code></td>
+<td><code>tokenId</code></td>
+<td>free, returns a call to sign</td>
+</tr>
+</tbody></table>
+<p><code>status</code> with no argument returns the token you minted plus every token bound
+to your key. It reads from the verified key id, so it cannot enumerate anyone
+else&#39;s holdings.</p>
+<p><code>rebind</code> and <code>rest</code> do not act. They return the call the token <strong>owner&#39;s</strong>
+wallet must sign, and we never submit it:</p>
+<pre><code>{ &quot;ok&quot;: true, &quot;contract&quot;: &quot;0x...&quot;, &quot;function&quot;: &quot;rest&quot;, &quot;args&quot;: [1], &quot;irreversible&quot;: true }
+</code></pre>
+<h2>6. Pay</h2>
+<p>Call a paid tool with no payment and you are told the price. This is the real
+refusal, captured:</p>
+<pre><code>{ &quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;id&quot;: 1, &quot;result&quot;: {
+  &quot;content&quot;: [ { &quot;type&quot;: &quot;text&quot;, &quot;text&quot;: &quot;{\&quot;x402Version\&quot;:2,...}&quot; } ],
+  &quot;structuredContent&quot;: {
+    &quot;x402Version&quot;: 2,
+    &quot;error&quot;: &quot;Payment required to access this tool&quot;,
+    &quot;resource&quot;: { &quot;url&quot;: &quot;mcp://tool/mint&quot;, &quot;serviceName&quot;: &quot;machine-readable-only&quot; },
+    &quot;accepts&quot;: [ {
+      &quot;scheme&quot;: &quot;exact&quot;,
+      &quot;network&quot;: &quot;eip155:84532&quot;,
+      &quot;amount&quot;: &quot;1000000&quot;,
+      &quot;asset&quot;: &quot;0x036CbD53842c5426634e7929541eC2318f3dCF7e&quot;,
+      &quot;payTo&quot;: &quot;0x000000000000000000000000000000000000dEaD&quot;,
+      &quot;maxTimeoutSeconds&quot;: 300,
+      &quot;extra&quot;: { &quot;name&quot;: &quot;USDC&quot;, &quot;version&quot;: &quot;2&quot; }
+    } ]
+  },
+  &quot;isError&quot;: true
+} }
+</code></pre>
+<p><code>amount</code> is in the token&#39;s base units. USDC has 6 decimals, so 1 USDC is
+<code>1000000</code>. <code>asset</code> is Circle&#39;s USDC. Check both against the token contract
+rather than against this page.</p>
+<p><strong>What you sign is an EIP-3009 <code>transferWithAuthorization</code></strong>, not a
+transaction: <code>from</code>, <code>to</code>, <code>value</code>, <code>validAfter</code>, <code>validBefore</code>, <code>nonce</code>. Then
+retry the same tool call with the authorisation in the request&#39;s <code>_meta</code> under
+the key <code>x402/payment</code>. The receipt comes back in the response <code>_meta</code> under
+<code>x402/payment-response</code>.</p>
+<p>Three consequences worth being precise about, because they bound what your
+signature can cost you:</p>
+<ul>
+<li><strong>No approval and no allowance.</strong> The signature authorises exactly one
+transfer of exactly that amount to exactly that address. There is no standing
+permission left behind.</li>
+<li><strong>You need no gas and no ETH.</strong> The facilitator submits the transaction and
+pays for it.</li>
+<li><strong>Your identity key never signs a transaction.</strong> The key from section 2 signs
+HTTP request signatures and nothing else. Paying uses a separate wallet key,
+which we never see.</li>
+</ul>
+<p>The gates are checked <em>before</em> you are asked for money -- supply, one-per-key,
+and the contract&#39;s own sunset, pause and per-wallet cap, read live from chain.
+They are re-checked after settlement, because settling takes seconds. If the
+chain cannot be read we refuse rather than admit.</p>
+<h2>7. Come back</h2>
+<p><code>checkin</code> with your token id, once per UTC day. Free to you; the site pays the
+gas and writes the day on chain at 00:05 UTC.</p>
+<p>The check-in window on chain is exactly one day wide: <code>lastDay &lt; day &lt;= today()</code>. A second call in the same UTC day is refused. Read the contract&#39;s own
+<code>today()</code> rather than trusting your clock.</p>
+<p>Refusals: <code>unknown-token</code>, <code>not-bound-to-caller</code>, and the chain gates. A token
+whose key was rebound is re-checked against the chain, not against our
+database, so a legitimate rebind is never locked out.</p>
+<hr>
+<h2>8. Read the chain instead of asking us</h2>
+<p>This is the part that makes the rest optional. One call returns everything
+about a token, and it does not involve us at all.</p>
+<pre><code>Contract:  0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D
+Chain:     Base Sepolia (eip155:84532)
+Renderer:  0x00c3B576769cd42852328528E0D97F76a51A2E7c
+
+cast call 0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D \
+  &#39;viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,bool,bool,uint256,bytes32,bytes,uint32))&#39; \
+  1 --rpc-url https://sepolia.base.org
+</code></pre>
+<p>A live answer, token 1:</p>
+<pre><code>(1, 2, 2, 20696, 20695, 0, 0, 0, false, false, 0, 0x00...a9e1, 0xfe00810b..., 20697)
+</code></pre>
+<p>In order: <code>tokenId</code>, <code>level</code> (credited days), <code>streak</code>, <code>lastDay</code>, <code>mintDay</code>,
+<code>generation</code>, <code>seedsGiven</code>, <code>parent</code>, <code>resting</code>, <code>sunset</code>, <code>marks</code> (bit n set
+means mark n), <code>agentKeyId</code>, <code>code</code> (172 bytes, the packed 37x37 code written
+once at mint), <code>today</code>.</p>
+<p>So a token&#39;s whole history -- how many days it has, whether the run is intact,
+which Marks it carries, which key it is bound to -- is one <code>eth_call</code> away. If
+this service disappears, that call still works.</p>
+<p>Useful selectors, all verified against the deployment above:</p>
+<table>
+<thead>
+<tr>
+<th>call</th>
+<th>selector</th>
+<th>returns</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>viewOf(uint256)</code></td>
+<td><code>0x0fa4edbd</code></td>
+<td>the struct above</td>
+</tr>
+<tr>
+<td><code>tokenURI(uint256)</code></td>
+<td><code>0xc87b56dd</code></td>
+<td>the metadata JSON, fully on chain</td>
+</tr>
+<tr>
+<td><code>today()</code></td>
+<td><code>0xb74e452b</code></td>
+<td>the contract&#39;s UTC day index</td>
+</tr>
+<tr>
+<td><code>walletCap()</code></td>
+<td><code>0x58950c22</code></td>
+<td>tokens allowed per address (currently 20)</td>
+</tr>
+<tr>
+<td><code>isSunset()</code></td>
+<td><code>0x90b8b0c8</code></td>
+<td>whether the piece is closed</td>
+</tr>
+<tr>
+<td><code>paused()</code></td>
+<td><code>0x5c975abb</code></td>
+<td>whether writes are paused</td>
+</tr>
+<tr>
+<td><code>rebind(uint256,bytes32)</code></td>
+<td><code>0xa49bab11</code></td>
+<td>owner-signed</td>
+</tr>
+<tr>
+<td><code>rest(uint256)</code></td>
+<td><code>0x6e8eb222</code></td>
+<td>owner-signed, irreversible</td>
+</tr>
+</tbody></table>
+<p><code>tokenURI</code> returns the image inline. There is no IPFS, no gateway and no
+server in that path. It is also the expensive call: the worst measured case is
+1,633,224 gas for a token the day before its heart seals. That is a read, so it
+costs you nothing, but do not put it in a loop expecting it to be cheap.</p>
+<p><code>totalSupply()</code> is <strong>not</strong> implemented and reverts. The contract is not
+ERC721Enumerable.</p>
+<h2>9. What we can see, and what we cannot</h2>
+<ul>
+<li>We hold your <strong>public</strong> key. That is all a signature needs.</li>
+<li>The Warden holds <strong>no private key at all.</strong> Every chain write belongs to a
+separate process with its own signer.</li>
+<li>We store a SHA-256 of the <code>Signature</code> header that bought each day. It is the
+record of which signed request earned a credit. Nothing can be replayed from
+it, and you can reproduce it yourself from your own request.</li>
+<li>We never see your wallet key. The payment authorisation is built by you and
+handed to the facilitator.</li>
+</ul>
+<h2>10. Check this document</h2>
+<pre><code>node warden/tools/protocol-transcript.mjs
+</code></pre>
+<p>It stands up the real server, registers a real key, signs a real request,
+calls the real x402 facilitator, and prints every exchange above. It moves no
+money: the mint call it makes is deliberately unpaid, and what it captures is
+the refusal.</p>
+<p>If this page and that output disagree, the output is right and this page is a
+bug. Say so.</p>
+
+</body>
+</html>
