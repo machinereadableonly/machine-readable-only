@@ -28,6 +28,7 @@ import { tokenView } from "../src/mcp/tokenView.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { utcDay } from "../src/mcp/tools/checkin.mjs";
+import { x402MCPClient } from "@x402/mcp";
 import { makePaymentGateway, MINT_PRICE } from "../src/pay/x402.mjs";
 import { makeChainReader } from "../src/chain/read.mjs";
 
@@ -151,11 +152,17 @@ try {
     "the gateway did not build: mint refused instead of demanding payment"
   );
 
-  // The requirements the agent is handed, dug out of wherever the error carries
-  // them, and checked field by field. This is the number that costs money.
-  const accepts = JSON.parse(payload.match(/\{"scheme":"exact".*?\}\}/)?.[0] ?? "null")
-    ?? minted.body.error?.data?.accepts?.[0]
-    ?? minted.body.error?.data?.paymentRequired?.accepts?.[0];
+  // THE REQUIREMENTS, READ THE WAY A PAYING AGENT READS THEM.
+  //
+  // This used to be a regex over the raw JSON, and that is exactly how a real
+  // defect got past it on 2026-09-01: the refusal was double-wrapped, so the
+  // official client's extractor returned null and no agent could pay, while
+  // the regex still matched the bytes happily. A check that looks at the
+  // payload instead of at the thing that has to work proves nothing.
+  const client = Object.create(x402MCPClient.prototype);
+  const required = client.extractPaymentRequiredFromResult(minted.body.result ?? {});
+  assert.ok(required, `the official x402 client found no payment demand in: ${payload}`);
+  const accepts = required.accepts[0];
   assert.ok(accepts, `no payment requirements found in the refusal: ${payload}`);
   console.log("4. requirements handed to the agent:", JSON.stringify(accepts, null, 1));
 

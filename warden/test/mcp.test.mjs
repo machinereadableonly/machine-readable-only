@@ -185,3 +185,81 @@ test("mro://contract publishes the configured chain id, not a hardcoded mainnet 
   assert.deepEqual(published, { address: "0xsepolia-contract", chainId: 84532 });
   assert.notEqual(published.chainId, 8453, "the mainnet id must not survive a testnet configuration");
 });
+
+// THE MONEY BUG THIS PINS, and why it needs the official client to catch it.
+//
+// The paid tools' handlers are wrapped by @x402/mcp, which returns a COMPLETE
+// MCP tool result: { structuredContent, content, isError: true }. The generic
+// wrapper in server.mjs used to wrap that a second time, which buried isError
+// one level down and left the outer result with none at all.
+//
+// x402MCPClient.extractPaymentRequiredFromResult opens with
+// `if (!result.isError) return null`, so a paying agent using the official
+// client was told the call SUCCEEDED and never saw the demand. Minting is the
+// only way in, so that made the piece unenterable.
+//
+// Asserted through the LIBRARY's own extractor rather than by reading fields.
+// The live check that was meant to prove payment worked used a regex over the
+// raw JSON, which passes happily on a double-wrapped payload -- the check was
+// looking at bytes instead of at the thing that has to work.
+test("a payment demand survives the tool wrapper intact for the official x402 client", async () => {
+  const { x402MCPClient } = await import("@x402/mcp");
+  const q = queries(openDb(":memory:"));
+
+  // Exactly what @x402/mcp's createPaymentWrapper hands back when a paid tool
+  // is called with no payment attached.
+  const demand = {
+    x402Version: 2,
+    error: "Payment required to access this tool",
+    resource: { url: "mcp://tool/mint", serviceName: "machine-readable-only" },
+    accepts: [{
+      scheme: "exact",
+      network: "eip155:84532",
+      amount: "1000000",
+      asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      payTo: "0x000000000000000000000000000000000000dEaD",
+      maxTimeoutSeconds: 300,
+      extra: { name: "USDC", version: "2" },
+    }],
+  };
+  const wrapperResult = {
+    structuredContent: demand,
+    content: [{ type: "text", text: JSON.stringify(demand) }],
+    isError: true,
+  };
+
+  const { handler } = makeMcpHandler({
+    q,
+    chain: openChain(),
+    contract: "0xcontract",
+    supplyCap: 10_000,
+    // Stand in for the real gateway at the same seam pay.test.mjs uses: the
+    // handler is never called, because an unpaid call is refused before it.
+    paid: () => async () => wrapperResult,
+  });
+
+  const req = new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "mint", arguments: { to: "0x" + "a1".repeat(20) } },
+    }),
+  });
+
+  const res = await handler.fetch(req, {
+    authInfo: { token: "n/a", clientId: "payer", scopes: [], extra: { keyId: "payer" } },
+  });
+  const text = await res.text();
+  const line = text.split("\n").find((l) => l.startsWith("data:"));
+  const body = JSON.parse((line ?? text).replace(/^data:\s*/, ""));
+
+  const client = Object.create(x402MCPClient.prototype);
+  const found = client.extractPaymentRequiredFromResult(body.result);
+
+  assert.ok(found, "the official x402 client must find a payment demand in the refusal");
+  assert.equal(found.accepts[0].amount, "1000000");
+  assert.equal(found.accepts[0].payTo, "0x000000000000000000000000000000000000dEaD");
+});
