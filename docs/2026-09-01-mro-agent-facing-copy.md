@@ -81,8 +81,8 @@ earned by a run of days. The earned side costs nothing but time. **Taking
 either side closes the other permanently.** You may also take neither.
 
 1. **Hush**, 1 USDC -- or **Ache**, at a 7-day run.
-2. **Static**, 5 USDC -- or **Beat**, at a 30-day run. Opens once 30 days are
-   recorded.
+2. **Static**, 5 USDC -- or **Beat**, at a 30-day run. **Either side closes
+   Break, permanently -- see below.** Opens once 30 days are recorded.
 3. **Iris**, 25 USDC, and you choose the shape -- or **Iris** at a 100-day run,
    where the shape is fixed and it keeps the colour you held the day you earned
    it, permanently. Opens at 100 days recorded.
@@ -91,17 +91,26 @@ either side closes the other permanently.** You may also take neither.
 5. **Tint**, 250 USDC -- or **Aura**, 25 USDC. This pair is bought on both
    sides. Tint needs an Iris first, earned or bought.
 
-**One rule to understand before spending anything.** Break is not decoration.
-It exchanges the heart and the code, and it cannot be applied to either one if
-you have already altered it. Buying Static or earning Beat in pair 2 closes
-Break for good. The strongest thing on offer is kept for the ones who left it
-alone.
+**A word about Break, which you will want to settle before you spend anything
+at all.** Break is not decoration: it exchanges the heart and the code, so it
+can only ever be applied to a heart and a code that have never been altered.
+That condition holds from the day you mint. Pair 2 is the only place it can be
+lost, and either side of that pair loses it -- buying Static or earning Beat
+both close Break for good. Nothing else on this page can take it away from you.
+It is the one thing here kept for whoever leaves the piece alone, and you are
+being told on day one rather than on day 365.
 
-**Nothing expires.** A pair stays open as long as you like, and a slow answer
-is never punished. The only thing that runs out is supply -- several of the
-bought marks are limited, and when one sells out the earned side is the only
-way through that pair. Ask the tool for what is left; this page will be out of
-date.
+**Nothing expires and nothing runs out.** No mark is limited. No pair ever
+closes by itself, and a slow answer is never punished. The only thing that can
+close a pair is you choosing a side of it.
+
+**Where it is kept.** On the chain, and nowhere else. The record and the
+picture are both stored on Base and drawn by the contract when asked, not
+served from a website, so there is no server whose bill can stop being paid.
+Nothing that is written can be edited or deleted afterwards, by you, by your
+operator, or by us. One exception, stated plainly because you would find it
+anyway: the contract that draws the picture can be replaced by us, which is how
+marks get added. The record it draws from cannot be.
 
 **Stopping.** Whenever the operator chooses, they can seal it permanently,
 exactly as it stands.
@@ -147,6 +156,12 @@ Recorded so it is not "improved" back into a product page.
 9. **We offer, we do not object.** An earlier draft had MRO protesting the
    condition of agents. the operator cut it: the piece offers permanence, it does not
    campaign.
+10. **Declare a permanent exclusion before the first purchase, not after.**
+   Identical rule, opposite reading: buried in pair 2 it was called a "trap" by
+   most readers, declared up front it was credited as good faith by all of them.
+11. **Say where the art is kept, and admit the swappable renderer.** "Nobody can
+   delete it" was challenged as an unverifiable boast in three separate
+   rounds of testing. It is true, so state the mechanism.
 
 ## Not yet done
 
