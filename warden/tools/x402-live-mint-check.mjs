@@ -162,7 +162,7 @@ try {
   assert.equal(accepts.scheme, "exact");
   assert.equal(accepts.network, NETWORK);
   assert.equal(accepts.payTo, TREASURY);
-  assert.equal(accepts.amount, "100000", `${MINT_PRICE} must be 100000 units of 6-decimal USDC`);
+  assert.equal(accepts.amount, "1000000", `${MINT_PRICE} must be 1000000 units of 6-decimal USDC`);
   if (CHAIN_ID === 84_532) assert.equal(accepts.asset.toLowerCase(), USDC_BASE_SEPOLIA.toLowerCase());
 
   // Nothing was written: an unpaid mint must not leave a token behind.

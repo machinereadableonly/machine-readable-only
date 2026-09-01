@@ -18,7 +18,7 @@ const payTo = payToArg ?? "0x000000000000000000000000000000000000dEaD";
 const network = `eip155:${chainId}`;
 
 // Circle's own published addresses (developers.circle.com, checked 2026-08-31).
-// The scheme resolves "$0.10" to an asset on its own; this is what says the
+// The scheme resolves "$1.00" to an asset on its own; this is what says the
 // asset it picked is the real USDC and not something that merely looks like it.
 const USDC = {
   84532: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
@@ -56,9 +56,9 @@ assert.equal(accepts.length, 1);
 assert.equal(row.scheme, "exact");
 assert.equal(row.network, network);
 assert.equal(row.payTo, payTo, "the treasury must be exactly what was configured");
-// $0.10 of a 6-decimal token. Getting this wrong by a factor of ten is the
+// $1.00 of a 6-decimal token. Getting this wrong by a factor of ten is the
 // single most expensive silent error this file can catch.
-assert.equal(row.amount, "100000", "$0.10 must be 100000 units of a 6-decimal USDC");
+assert.equal(row.amount, "1000000", "$1.00 must be 1000000 units of a 6-decimal USDC");
 if (USDC[chainId]) {
   assert.equal(row.asset.toLowerCase(), USDC[chainId].toLowerCase(), "asset must be Circle's USDC");
 }

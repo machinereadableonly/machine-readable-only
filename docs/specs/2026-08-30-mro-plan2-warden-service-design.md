@@ -265,7 +265,7 @@ results carry `ttlMs` and `cacheScope`.
 
 ## 9. Payments
 
-`mint` at `$0.10` and `upgrade` at the catalogue price, wrapped with
+`mint` at `$1.00` and `upgrade` at the catalogue price, wrapped with
 `@x402/mcp` 2.24.0 (verified live 2026-08-30), `payTo` the treasury ADDRESS.
 
 Every gate is checked BEFORE payment is requested. An agent must never pay for

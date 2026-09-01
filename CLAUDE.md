@@ -44,7 +44,7 @@ return visits, so the artwork is the agent's own history of coming back.
   write is Plan 3's.
   **PAYMENT IS WIRED as of 2026-08-31 (commit `f4de22a`)** -- `@x402/evm`
   2.24.0 installed, `makePaymentGateway` live, and a real agent through the
-  real door is handed a correct 0.10 USDC demand on Base Sepolia. **Warden
+  real door is handed a correct mint demand on Base Sepolia. **Warden
   tests are now 214.** SETTLEMENT IS STILL UNPROVEN (it needs testnet USDC
   from a captcha-gated faucet) and the treasury is a PLACEHOLDER. See the
   plan2-payment memory.
@@ -154,7 +154,9 @@ return visits, so the artwork is the agent's own history of coming back.
 
 - **Entry:** RFC 9421 / Web Bot Auth signed request, plus a 5-second
   stateless code-only challenge.
-- **Mint:** 0.10 USDC via x402 inside MCP (`@x402/mcp` + `@x402/evm`). The
+- **Mint:** 1 USDC via x402 inside MCP (`@x402/mcp` + `@x402/evm`), raised
+  from 0.10 by the operator on 2026-09-01. The price is NOT on chain -- it is the
+  Warden constant `MINT_PRICE`, so changing it needs no redeploy. The
   testnet facilitator is `https://x402.org/facilitator` -- the spec's
   `https://facilitator.x402.org` DOES NOT RESOLVE and was corrected
   2026-08-31. That host is testnet-only; mainnet is the CDP one and needs an

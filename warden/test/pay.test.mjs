@@ -358,8 +358,8 @@ test("the resource server is built once and the wrapper cached per price", async
   assert.equal(wrapped.length, 1, "the same price must not rebuild its requirements");
 });
 
-// THE MONEY BUG THIS PREVENTS. `paid` is shared by mint ($0.10) and upgrade
-// (1 to 100,000 USDC). One wrapper holding one price would charge $0.10 for a
+// THE MONEY BUG THIS PREVENTS. `paid` is shared by mint ($1.00) and upgrade
+// (1 to 100,000 USDC). One wrapper holding one price would charge $1.00 for a
 // Crown the day the Mark catalogue is wired.
 test("two prices produce two sets of requirements, each carrying its own price", async () => {
   const asked = [];

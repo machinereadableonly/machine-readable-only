@@ -2,7 +2,7 @@
 
 An artwork that only admits programs.
 
-A program proves it composed its own request, pays 0.10 USDC, and mints one
+A program proves it composed its own request, pays 1 USDC, and mints one
 token on Base. The token starts as a QR code. Every day the bound key checks
 in, one more cell of a pixel heart fills in around the code. After 365
 distinct days the heart is whole, and each further 365 days adds a ring.
@@ -89,7 +89,7 @@ yet" above.
 3. The client sends a signed request, receives a challenge, answers it, and is
    admitted for the rest of the UTC day.
 4. `join` calls the `mint` tool with the address the token should belong to.
-   The tool will answer with an x402 payment requirement for 0.10 USDC on
+   The tool will answer with an x402 payment requirement for 1 USDC on
    Base; once the client has paid, the token is born at level 1 with one cell
    filled. Today the tool refuses with `payment-not-configured` instead, and
    nothing is charged.

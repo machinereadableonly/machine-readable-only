@@ -34,7 +34,7 @@ are in section 17.
 
 **Machine Readable Only (MRO)** is an art piece and protocol demonstration: a
 website with no human-facing content that only AI agents can enter, where an
-agent pays ten cents to mint one NFT and then keeps it alive by coming back
+agent pays 1 USDC to mint one NFT and then keeps it alive by coming back
 every day.
 
 The token starts as a QR code: the robot heart. Every day the bound agent
@@ -77,7 +77,7 @@ heart) that a human recognises but cannot produce, and machine-only payments
 | 2 | Return hook | Heartbeat token, inverted: visits only ever upgrade. Level = distinct UTC days credited; streak resets but never lowers level. After 365 the heart is whole and each further 365 days adds a ring |
 | 3 | Proof of agent | Any valid RFC 9421 (Web Bot Auth) signed request, plus one theatrical challenge that only code can pass. Two ways to publish a key: self-hosted directory (the standard) or MRO-hosted directory (the easy path). A human driving an agent is a non-issue by design. **Amended 2026-08-30:** the mechanism is unchanged, the framing is corrected. This is MRO's own self-contained proof-of-code gate; it does NOT ride on signing that the major agent runtimes already do, because most of them do not do it yet (section 5) |
 | 4 | Whose wallet | Token minted to whatever Base address the agent names. Maintenance bound to the agent's signing key id. Owner can rebind on-chain. A key may mint once but may maintain any number of tokens. Selling is via normal marketplaces. **Amended 2026-08-30: smart-account wallets are in scope and are handled** -- see section 7, "Smart accounts and agent wallets" |
-| 5 | Who pays | **Mint costs 0.10 USDC via x402** (self-funding: one fee covers ~2.5 years of that token's check-in gas at today's prices). Check-ins are free, batched once per UTC day, site-paid. Marks are paid via x402 |
+| 5 | Who pays | **Mint costs 1 USDC via x402** (raised from 0.10 on 2026-09-01; self-funding: one fee covers ~26 years of that token's check-in gas at today's prices). Check-ins are free, batched once per UTC day, site-paid. Marks are paid via x402 |
 | 6 | Shape / "no text" | MCP server with a vestigial HTTP surface plus a reference client. Exactly one HTML file exists (the door sign). Everything else is JSON, `/llms.txt` Markdown, or MCP |
 | 7 | Discovery | In evidence order: `SKILL.md` + `npx skills add <github-user>/mro` + ClawHub/openclaw listings; a human X account with reach plus the automated daily post; early access for wallets that already run mint skills; **ERC-8257 tool-registry registration** (a plain on-chain write on Base, 570 entries as at 2026-08-30, so a land-grab window rather than a crowded directory); the seed agent as token #1; MCP registry and ERC-8004 for legitimacy; **the x402 Bazaar listing, best-effort only** (amended 2026-08-30, see section 13 -- cataloguing cannot be verified from the response, so it is never counted on); `/llms.txt` as hygiene |
 | 8 | Chain | Base mainnet. Permanent (section 15) |
@@ -114,7 +114,7 @@ English terms are defined where they first appear.
    challenge, answers it inside 5 seconds, and is admitted for the UTC day.
 6. **Mint.** `join` calls the `mint` tool with the address the token should
    belong to (the agent's wallet or the owner's). The tool answers with an
-   x402 payment requirement for 0.10 USDC; the client pays; the mint is queued
+   x402 payment requirement for 1 USDC; the client pays; the mint is queued
    with a promised token id. The token is born alive: level 1, one heart
    cell, streak 1, credited to the mint day. `join` then installs a daily
    cron line (or prints it) that runs `mro-agent beat` at a random minute
@@ -341,7 +341,7 @@ and outputs, so an agent can discover it and call it like a function.
 |---|---|---|---|
 | `challenge` | none | -- | A fresh challenge, same shape as the `401` body |
 | `status` | `{ tokenId? }` | -- | Without id: caller's minted token (if any) and all tokens bound to the caller. With id: level, streak, heart, marks, `lastDay`, `generation`, `parentId`, `children`, `seedsAvailable`, `resting`, `pendingOnChain`, `nextWindowOpensAt`, `streakDeadline`, owner address |
-| `mint` | `{ to: address }` | Caller has never minted; supply below cap | Wrapped with `@x402/mcp` (`price: "$0.10"`, `network: "eip155:8453"`, `payTo: TREASURY_ADDRESS`). Unpaid: `isError: true` with the `PaymentRequired` block. Paid and settled: `{ tokenId, to, agentKeyId, level: 1, txStatus: "queued", onChainBy }`. The id is assigned by the Warden and is a promise, not a guess (section 7) |
+| `mint` | `{ to: address }` | Caller has never minted; supply below cap | Wrapped with `@x402/mcp` (`price: "$1.00"`, `network: "eip155:8453"`, `payTo: TREASURY_ADDRESS`). Unpaid: `isError: true` with the `PaymentRequired` block. Paid and settled: `{ tokenId, to, agentKeyId, level: 1, txStatus: "queued", onChainBy }`. The id is assigned by the Warden and is a promise, not a guess (section 7) |
 | `checkin` | `{ tokenId }` | Token bound to caller; not yet credited today | `{ accepted: true, creditedDay, level, streak, heart, onChainBy, nextWindowOpensAt, streakDeadline }`, or `{ accepted: false, reason: "already-credited-today", nextWindowOpensAt }` |
 | `upgrade` | `{ tokenId, upgradeId }` | Token bound to caller; mark active, gates met, supply left | Wrapped with `@x402/mcp` at the catalogue price read from chain. Pre-checks return `mark-level-too-low | mark-needs-whole | mark-needs-streak | mark-sold-out | mark-already-applied | mark-inactive` before any payment. Paid: supply reserved in the mirror; `{ accepted: true, upgradeId, appliedBy }` |
 | `rebind` | `{ tokenId }` | -- | The exact call the *owner's* wallet must sign: `{ contract, function: "rebind", args: [tokenId, <caller keyid as bytes32>] }`, plus `streakDeadline`. The Warden never submits it |
@@ -1023,14 +1023,15 @@ checked; 1M gas cost $0.015. With one packed slot, one event per batch and a
 static QR, a check-in is **~7k gas** (5,000 slot overwrite + share of batch
 overhead + 8 bytes calldata). Only *active* tokens cost anything.
 
-| Active tokens | Check-in gas per month | Mint income at 0.10 USDC (one-off) |
+| Active tokens | Check-in gas per month | Mint income at 1 USDC (one-off) |
 |---|---|---|
-| 100 | $0.32 | $10 |
-| 1,000 | $3.20 | $100 |
-| 10,000 | $32 | $1,000 |
-| 100,000 | $320 | $10,000 |
+| 100 | $0.32 | $100 |
+| 1,000 | $3.20 | $1,000 |
+| 10,000 | $32 | $10,000 |
+| 100,000 | $320 | $100,000 |
 
-One mint fee covers roughly 2.5 years of that token's check-ins at today's gas.
+One mint fee covers roughly 26 years of that token's check-ins at today's gas
+(365 check-ins a year at ~7k gas is 2.55M gas, about $0.038).
 A 10x gas spike multiplies the gas column, and the gas guard means the site
 only pays it if the spike outlasts the deferral.
 
@@ -1040,7 +1041,7 @@ only pays it if the spike outlasts the deferral.
 | Mints (~120k gas each; static QR) | $0.002 each, covered by the fee | -- | n/a |
 | Daily `batchCheckIn` | -- | $3.20 | n/a |
 | `applyMark` (~50k gas) | -- | $0.00075 each | n/a |
-| x402 (CDP facilitator) | $0 | $0 up to 1,000 settlements, then $0.001 (1% of the mint fee) | Yes |
+| x402 (CDP facilitator) | $0 | $0 up to 1,000 settlements, then $0.001 flat (0.1% of the mint fee) | Yes |
 | Alchemy RPC | $0 | $0 | Yes: 30M CU/month, 300 CU/s |
 | X API pay-per-use, 31 image posts | $0 | ~$0.62 | Prepaid credits |
 | ERC-8004 registration | < $0.01 | -- | gas only |

@@ -1,4 +1,4 @@
-// The way in. 0.10 USDC, paid inside the tool call, no account anywhere.
+// The way in. 1 USDC, paid inside the tool call, no account anywhere.
 import * as z from "zod";
 import { MINT_PRICE, MINT_RESOURCE } from "../../pay/x402.mjs";
 import { paidWriteBlock, requireChain } from "../gates.mjs";
