@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan 4: the reference client, and making the piece auditable</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan 4: the reference client, and making the piece auditable</h1>
+<p>Draft 2026-09-01. Not started.</p>
+<p><strong>operator-manual steps live in tasks 1, 3, 6 and 8.</strong> After completing any operator-only
+step, tell Claude so memory updates immediately.</p>
+<hr>
+<h2>Why this exists</h2>
+<p>The agent-facing copy is finished and tested (<code>docs/2026-09-01-mro-agent-facing-copy.md</code>,
+24 cold agent reads). Getting it to work required promising things the project
+does not yet have.</p>
+<p>Across every version tested, <strong>24 of 24 agents refused to run
+<code>npx mro-agent join</code> on trust.</strong> Several would not even fetch a second page
+without permission. The reference client is the product -- built-in MCP clients
+cannot sign, so <code>npx mro-agent</code> is how agents actually arrive -- and it is
+currently a wall.</p>
+<p>The version that worked did not argue past that refusal. It gave the agent
+things to check, and the behaviour changed: <strong>3 of 3 readers offered to go and
+audit the contract and the package before advising their operator.</strong> That is
+the arrival path. This plan builds what those agents would find.</p>
+<p>It also fixes three claims the page makes that are not yet true, because
+shipping the page before the claims are true would be the one failure the
+testing says is unrecoverable: a discovered omission read far worse than any
+disclosed caveat.</p>
+<p><strong>What it unblocks:</strong> the page can ship. Distribution (spec section 13 step 4)
+depends on the client being runnable by an agent that has been told, correctly,
+to verify things before executing them.</p>
+<p><strong>What it does not cover:</strong> the Mark ladder contract change (separate work, see
+the gamified-mark-ladder note) and the daily X post (its own plan, needs the operator&#39;s
+credentials).</p>
+<hr>
+<h2>The trade-off, stated up front</h2>
+<p>Telling agents to audit us means the contract, the package and the docs have to
+survive an audit. The first agent that reads the contract will find
+<code>setRenderer</code>. That is deliberate and disclosed by the contract itself rather
+than apologised for in prose -- the testing showed an apologetic sentence read
+as a trust dependency, while an invitation to check did not. But it does mean
+the answer has to be defensible on the merits, not just honestly labelled.</p>
+<hr>
+<h2>Tasks</h2>
+<h3>1. Publish the repository (operator-manual, then Claude)</h3>
+<p>Public GitHub repo. Per the global rules this needs a <strong>history scrub first</strong>:
+author identity and message content, <code>git log --all --format=&#39;%an &lt;%ae&gt;&#39; | sort -u</code>.
+Nothing personal in the tree either -- the identifier rules apply to internal
+files, and this repo has never been public.</p>
+<p>The page tells agents the client is open source. Until this is done, that claim
+is false.</p>
+<h3>2. Split the client into its own publishable package</h3>
+<p><code>mro-agent</code> currently exists only as the reference client inside this repo. It
+needs to be a package an agent can inspect in isolation: small, readable,
+no build step that obscures what runs, and a <code>README</code> that states what it
+signs and what it never signs.</p>
+<p>Acceptance: a reader can follow key generation, request signing, the challenge
+answer and the payment path end to end without running it.</p>
+<h3>3. Publish to npm with provenance (operator-manual for the account, Claude for the wiring)</h3>
+<p>Verified live 2026-09-01: provenance ties the published tarball to a named
+commit and workflow run, shows a badge on npmjs.com, is checkable with
+<code>npm view mro-agent --json</code> -&gt; <code>dist.attestations</code>, and is logged in Sigstore&#39;s
+Rekor transparency log so later tampering is detectable.</p>
+<ul>
+<li>Publish from GitHub Actions using npm <strong>trusted publishing</strong> (OIDC), which
+generates provenance automatically -- no <code>--provenance</code> flag needed.</li>
+<li>The page tells agents to check the badge and the attestations. Verify both
+yourself after the first publish rather than assuming.</li>
+</ul>
+<p>Docs: <a href="https://docs.npmjs.com/trusted-publishers/">https://docs.npmjs.com/trusted-publishers/</a>,
+<a href="https://docs.npmjs.com/generating-provenance-statements/">https://docs.npmjs.com/generating-provenance-statements/</a></p>
+<h3>4. Document the raw protocol so the client is genuinely optional</h3>
+<p>The page claims: &quot;You do not need our client at all. The whole thing is plain
+HTTP plus one contract call, documented request by request.&quot;</p>
+<p>Write that documentation: the signed request, the challenge, the 402 and its
+payment payload, and the contract call. An agent that would rather use <code>curl</code>
+and <code>cast</code> than execute an npm package must be able to.</p>
+<p>This is the single most valuable item here. It converts &quot;trust our package&quot;
+into &quot;our package is a convenience&quot;, which is what an auditing agent wants to
+hear.</p>
+<h3>5. State the key scope and the payment scope, and keep them true</h3>
+<p>Both claims are already on the page and both are currently correct. Pin them
+with tests so they stay correct:</p>
+<ul>
+<li>The agent&#39;s identity key signs HTTP request signatures only. It never signs a
+transaction and cannot move funds.</li>
+<li>The payment authorises exactly one transfer. Verified against the x402 exact
+scheme EVM spec, 2026-09-01: the payer signs EIP-3009
+<code>transferWithAuthorization</code> over <code>from</code>, <code>to</code>, <code>value</code>, <code>validAfter</code>,
+<code>validBefore</code>, <code>nonce</code>; <strong>no approval or allowance is required</strong>; the
+facilitator submits and pays the gas.</li>
+</ul>
+<p>Source: <a href="https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_evm.md">https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_evm.md</a></p>
+<h3>6. Fix the three untrue things on the page (Claude, except the deploy)</h3>
+<ul>
+<li><strong>The contract address is the Base Sepolia one</strong>
+(<code>0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D</code>), used so test agents had
+something real to check. It must become the mainnet address, and the page must
+say which chain it means. The mainnet deploy is a operator-approval gate.</li>
+<li><strong>Bound the permanence claim.</strong> A reader put it exactly right: &quot;It is a token
+on Base; its permanence is the permanence of Base.&quot; The page currently implies
+more than that. Say the bounded version.</li>
+<li><strong>Verify the contract&#39;s source on the explorer</strong> at the mainnet address, since
+the page tells agents to read it there.</li>
+</ul>
+<h3>7. Give the project an identity (Claude drafts, the operator decides)</h3>
+<p>Two readers asked who &quot;us&quot; is; combined with the renderer disclosure one called
+it &quot;a meaningful trust dependency on an anonymous party&quot;. A repo, a contract
+address and a project account answer this <strong>without any personal identifier</strong> --
+see the global identifier rules, which permit the functional GitHub alias in a
+URL and nothing else.</p>
+<h3>8. Re-test cold, then ship (Claude)</h3>
+<p>Re-run the established rig against the finished page and a real published
+package: fresh agents, told their operator fetched the page and asked for a
+report, no other context.</p>
+<p>The bar this time is higher than before, because the agents can actually
+check: <strong>the target is an agent that performs the audit and reports back that
+it verified the contract and the package and found them consistent with the
+page.</strong> Every previous round could only measure willingness.</p>
+<p>Note the rig&#39;s known limits: all readers so far are one model family, and the
+page has always been handed over as a saved file rather than fetched live.</p>
+<hr>
+<h2>Design option raised by the testing, not scheduled</h2>
+<p>Once the Mark ladder is built and the renderer is final, permanently giving up
+the ability to replace the renderer would convert a disclosed caveat into a
+claim no wording can match. It is irreversible and it forecloses new Marks
+forever, so it is a decision for after the ladder ships -- but design toward
+keeping it possible rather than precluding it.</p>
+<hr>
+<h2>Order</h2>
+<p>1, 2, 4 and 5 can proceed now and are independent of any deploy. 3 needs 1.
+6 needs the mainnet deploy, which is a the operator gate. 7 is a decision, cheap once
+made. 8 is last and gates shipping the page.</p>
+<p>Nothing here spends real funds except the mainnet deploy in task 6, which is
+already an explicit approval gate and carries no standing approval.</p>
+
+</body>
+</html>
