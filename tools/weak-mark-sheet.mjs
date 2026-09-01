@@ -34,7 +34,7 @@ const DEST = PAYLOAD.slice(0, -1);
 const CODE = solve(PAYLOAD, 7);            // mask 7: the shipped bitmap for token 1
 const TARGET = heartTarget(CODE.size);
 const SIZES = [256, 500, 848, 1080, 1600];
-const OUT = "~/projects/machine-readable-only/tools/out/marks";
+const OUT = new URL("./out/marks", import.meta.url).pathname;
 
 /// BT.601, the weighting ZXing's RGBLuminanceSource uses.
 const luma = h => {

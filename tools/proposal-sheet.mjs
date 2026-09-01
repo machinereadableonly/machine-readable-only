@@ -28,7 +28,7 @@ const PAYLOAD = payloadFor(DOMAIN, 1);
 const DEST = PAYLOAD.slice(0, -1);
 const CODE = solve(PAYLOAD, 7);
 const TARGET = heartTarget(CODE.size);
-const OUT = "~/projects/machine-readable-only/tools/out/marks";
+const OUT = new URL("./out/marks", import.meta.url).pathname;
 const SIZES = [256, 500, 848, 1080, 1600];
 
 const PANEL = 520;   // rendered size of each half-and-half panel

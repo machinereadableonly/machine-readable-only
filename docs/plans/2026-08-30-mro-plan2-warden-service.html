@@ -166,7 +166,11 @@
 </tr>
 <tr>
 <td><code>warden/src/server.mjs</code></td>
-<td>Create. The HTTP server and router. PM2 entry point.</td>
+<td>Create. <code>createServer(config)</code>: the HTTP server and router. A pure factory, so tests can build one without touching the environment.</td>
+</tr>
+<tr>
+<td><code>warden/src/main.mjs</code></td>
+<td>Create. The PM2 entry point: reads configuration, assembles every dependency, calls <code>createServer</code> and listens. <code>createServer</code> alone starts nothing -- without this the service cannot be run at all.</td>
 </tr>
 <tr>
 <td><code>warden/public/door.html</code></td>
@@ -250,6 +254,9 @@
 </tr>
 </tbody></table>
 <hr>
+<blockquote>
+<p><strong>On expected counts.</strong> The figures below were written before the plan ran, and every task so far has added more tests than it predicted -- the review loop keeps finding gaps worth covering. Treat each number as a MINIMUM, not a target: report the real count, and confirm it is at least the previous task&#39;s. A count that went DOWN means a test file was overwritten or a suite stopped being discovered, which has nearly happened once on this plan.</p>
+</blockquote>
 <h2>Task 0: Amend the spec</h2>
 <p>Plan 2 reads its requirements from the spec, so the spec must stop contradicting what was built and measured. Same discipline Plan 1 applied to section 7.</p>
 <p><strong>Files:</strong></p>
@@ -330,7 +337,7 @@ git commit -m &quot;docs(spec): correct QR version, canvas, decode oracle, runti
   &quot;type&quot;: &quot;module&quot;,
   &quot;engines&quot;: { &quot;node&quot;: &quot;&gt;=24&quot; },
   &quot;scripts&quot;: {
-    &quot;test&quot;: &quot;node --test test/&quot;,
+    &quot;test&quot;: &quot;node --test \&quot;test/**/*.test.mjs\&quot;&quot;,
     &quot;start&quot;: &quot;node src/server.mjs&quot;
   },
   &quot;dependencies&quot;: {
@@ -338,12 +345,21 @@ git commit -m &quot;docs(spec): correct QR version, canvas, decode oracle, runti
     &quot;@modelcontextprotocol/server&quot;: &quot;2.0.0&quot;,
     &quot;@modelcontextprotocol/node&quot;: &quot;2.0.0&quot;,
     &quot;@x402/mcp&quot;: &quot;2.24.0&quot;,
+    &quot;structured-headers&quot;: &quot;^2.0.2&quot;,
     &quot;zod&quot;: &quot;^4.2.0&quot;
   }
 }
 </code></pre>
+<p><strong>Why that exact test pattern</strong>, measured on Node 24.14.1 on 2026-08-30 rather than assumed:</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 2: Install and record the tree</strong></li>
+<li><p><code>node --test test/</code> FAILS. A bare directory path with no glob metacharacter is treated as a module specifier, not a directory, and the run dies with <code>Cannot find module .../warden/test</code>.</p>
+</li>
+<li><p>Bare <code>node --test</code> works, and is what <code>tools/package.json</code> uses -- but its default discovery runs <strong>every</strong> file under <code>test/</code>, including ones not named <code>*.test.mjs</code>. That would pull Task 8&#39;s ten-second, 532 MB bitmap decode check into the unit suite on every run.</p>
+</li>
+<li><p><code>node --test &quot;test/**/*.test.mjs&quot;</code> does both jobs: it finds nested files such as Task 12&#39;s <code>test/e2e/join.test.mjs</code>, and it ignores anything not named <code>*.test.mjs</code>. Both behaviours were confirmed with a throwaway probe file.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Install and record the tree</strong></p>
+</li>
 </ul>
 <pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; npm install --no-audit --no-fund
 </code></pre>
@@ -394,7 +410,13 @@ CREATE TABLE IF NOT EXISTS mark_orders (
   paymentTx TEXT,
   status    TEXT NOT NULL DEFAULT &#39;queued&#39;
 );
+-- One mark of a kind per token, enforced HERE rather than by a pre-check.
+-- Settlement takes seconds, so anything checked before payment is stale by the
+-- time the row is written; the constraint is the only thing that holds.
+CREATE UNIQUE INDEX IF NOT EXISTS mark_orders_token_upgrade ON mark_orders (tokenId, upgradeId);
 
+-- One mint per agent key, again enforced by the index and not by the check
+-- that runs before payment: two concurrent settlements both pass a pre-check.
 CREATE TABLE IF NOT EXISTS mints (
   tokenId   INTEGER PRIMARY KEY,
   toAddress TEXT NOT NULL,
@@ -405,6 +427,7 @@ CREATE TABLE IF NOT EXISTS mints (
   solveTries INTEGER NOT NULL DEFAULT 0,
   status    TEXT NOT NULL DEFAULT &#39;queued&#39;
 );
+CREATE UNIQUE INDEX IF NOT EXISTS mints_key ON mints (keyId);
 </code></pre>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 4: Write the failing test</strong></li>
@@ -508,6 +531,27 @@ export function queries(db) {
   };
 
   return {
+    /**
+     * Run several writes so that either all of them land or none do.
+     *
+     * node:sqlite has no `.transaction()` helper -- checked on 24.14.1 -- but
+     * BEGIN / COMMIT / ROLLBACK work and roll back cleanly. This matters where
+     * two rows describe one fact: a mint writes a token AND a mint row, and a
+     * half-written mint leaves an orphan token holding a supply-cap slot that
+     * nothing will ever claim.
+     */
+    transact(fn) {
+      db.exec(&quot;BEGIN&quot;);
+      try {
+        const out = fn();
+        db.exec(&quot;COMMIT&quot;);
+        return out;
+      } catch (err) {
+        db.exec(&quot;ROLLBACK&quot;);
+        throw err;
+      }
+    },
+
     /**
      * Credit one day to one token.
      *
@@ -715,10 +759,15 @@ export function issueChallenge(secret, now = Date.now()) {
  * `seen` gives burn-after-use. It only ever holds challenges from the last five
  * seconds, so it stays small; the caller sweeps it.
  */
-export function checkChallenge(secret, challenge, answer, keyId, now = Date.now(), seen) {
-  if (typeof challenge !== &quot;string&quot; || typeof answer !== &quot;string&quot;) {
-    return { ok: false, reason: &quot;challenge&quot; };
-  }
+/**
+ * Did this server mint this challenge, and is it still fresh?
+ *
+ * Split out because key registration needs exactly this and nothing else: it
+ * has no key id yet to bind an answer to, but it still must not accept a nonce
+ * the caller invented. One mechanism, two callers.
+ */
+export function verifyNonceMinted(secret, challenge, now = Date.now()) {
+  if (typeof challenge !== &quot;string&quot;) return { ok: false, reason: &quot;challenge&quot; };
 
   const parts = challenge.split(&quot;.&quot;);
   if (parts.length !== 3) return { ok: false, reason: &quot;challenge&quot; };
@@ -732,6 +781,14 @@ export function checkChallenge(secret, challenge, answer, keyId, now = Date.now(
   if (!Number.isFinite(issuedAt) || now - issuedAt &gt; CHALLENGE_MS || now &lt; issuedAt) {
     return { ok: false, reason: &quot;expired&quot; };
   }
+  return { ok: true };
+}
+
+export function checkChallenge(secret, challenge, answer, keyId, now = Date.now(), seen) {
+  if (typeof answer !== &quot;string&quot;) return { ok: false, reason: &quot;challenge&quot; };
+
+  const minted = verifyNonceMinted(secret, challenge, now);
+  if (!minted.ok) return minted;
 
   if (seen.has(challenge)) return { ok: false, reason: &quot;challenge&quot; };
 
@@ -794,9 +851,16 @@ const VECTORS = JSON.parse(
 /// one the door must handle; the RSA vectors are carried for completeness.
 const ED = VECTORS.find((v) =&gt; v.key.kty === &quot;OKP&quot;);
 
+/// What a real MRO client signs. This MUST be passed explicitly: web-bot-auth&#39;s
+/// own default covers only (&quot;@authority&quot; &quot;signature-agent&quot;) -- confirmed by
+/// capturing a Signature-Input header on 2026-08-30 -- and this project requires
+/// @method and @path on top of that, so a helper that omitted the list would
+/// sign too little and every happy-path test would be refused for &quot;components&quot;.
+const CLIENT_COMPONENTS = [&quot;@authority&quot;, &quot;@method&quot;, &quot;@path&quot;, &quot;signature-agent&quot;];
+
 /// Build a signed request the way a real client will, so the test exercises the
 /// same code path an agent hits rather than a hand-rolled header.
-async function signedRequest({ windowMs = 60_000, components } = {}) {
+async function signedRequest({ windowMs = 60_000, components = CLIENT_COMPONENTS } = {}) {
   const signer = await signerFromJWK(ED.key);
   const message = {
     method: &quot;POST&quot;,
@@ -804,9 +868,11 @@ async function signedRequest({ windowMs = 60_000, components } = {}) {
     headers: { &quot;signature-agent&quot;: &#39;&quot;https://example.com&quot;&#39;, host: &quot;example.com&quot; },
   };
   const created = new Date();
-  const params = { created, expires: new Date(created.getTime() + windowMs) };
-  if (components) params.components = components;
-  const headers = await signatureHeaders(message, signer, params);
+  const headers = await signatureHeaders(message, signer, {
+    created,
+    expires: new Date(created.getTime() + windowMs),
+    components,
+  });
   return { ...message, headers: { ...message.headers, ...headers } };
 }
 
@@ -834,10 +900,11 @@ test(&quot;a signature window longer than five minutes is refused&quot;, async (
 });
 
 test(&quot;a signature that does not cover @path is refused&quot;, async () =&gt; {
-  // web-bot-auth&#39;s own default covers only @authority and signature-agent, so
-  // this is the LIBRARY DEFAULT being rejected, not an exotic case. The spec
-  // adds method and path so a captured signature cannot be replayed against a
-  // different tool.
+  // This is web-bot-auth&#39;s OWN DEFAULT component set being rejected, not an
+  // exotic case: measured 2026-08-30, signatureHeaders with no components
+  // option signs exactly (&quot;@authority&quot; &quot;signature-agent&quot;). The spec adds
+  // @method and @path so a signature captured from one tool call cannot be
+  // replayed against a different one, and that difference is what this asserts.
   const req = await signedRequest({ components: [&quot;@authority&quot;, &quot;signature-agent&quot;] });
   const r = await verifyRequest(req, lookup);
   assert.equal(r.ok, false);
@@ -881,6 +948,7 @@ test(&quot;an unsigned request is refused&quot;, async () =&gt; {
 // enforced here.
 import { verify } from &quot;web-bot-auth&quot;;
 import { verifierFromJWK } from &quot;web-bot-auth/crypto&quot;;
+import { parseDictionary } from &quot;structured-headers&quot;;
 
 /// The spec&#39;s window bound. The standard sets no maximum, so a signature could
 /// otherwise be minted valid for a year and replayed for a year.
@@ -892,6 +960,50 @@ export const MAX_WINDOW_MS = 5 * 60 * 1000;
 const REQUIRED = [&quot;@authority&quot;, &quot;@method&quot;, &quot;@path&quot;, &quot;signature-agent&quot;];
 
 /**
+ * The component list a signature ACTUALLY covered.
+ *
+ * PARSED, never string-matched. Two bypasses were measured here on 2026-08-30
+ * and both came from treating this structured field as text:
+ *
+ *  1. Searching the whole base for `&quot;@path&quot;` was satisfied by a COVERED header
+ *     whose VALUE contained that text, leaving the real path unsigned. The same
+ *     headers then replayed at DELETE /admin-evil.
+ *  2. Splitting the parameters line on spaces was satisfied by a quoted
+ *     component NAME containing a space -- `&quot;a @method&quot;` splits into `a` and
+ *     `@method` -- with the same replay available. Component PARAMETERS
+ *     carrying the text did it too.
+ *
+ * An RFC 8941 parser has none of those seams: `&quot;a @method&quot;` stays one member,
+ * so it is simply not `@method`. Read from the base&#39;s own @signature-params
+ * line (with lastIndexOf, so text forged earlier cannot win) because that line
+ * belongs to the signature that was actually verified -- the Signature-Input
+ * header may carry several.
+ *
+ * Returns null on anything unparseable, and the caller refuses on null.
+ */
+function coveredComponents(base) {
+  const marker = &#39;&quot;@signature-params&quot;: &#39;;
+  const at = base.lastIndexOf(marker);
+  if (at === -1) return null;
+  try {
+    // parseDictionary wants `label=value`; the label is discarded.
+    const entry = parseDictionary(&quot;sig=&quot; + base.slice(at + marker.length));
+    const [members] = entry.get(&quot;sig&quot;);
+    if (!Array.isArray(members)) return null;
+    // Only genuine strings count. A structured-headers Token or DisplayString
+    // stringifies back to its plain text, so String() would read %&quot;@method&quot; as
+    // @method. Upstream rejects non-string components today, but this check
+    // must not depend on that surviving a dependency bump -- it is the third
+    // implementation of this rule, and the first two were both defeated.
+    const names = members.map(([name]) =&gt; name);
+    if (names.some((name) =&gt; typeof name !== &quot;string&quot;)) return null;
+    return names;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Verify one request.
  *
  * `lookupKey(keyId, signatureAgent)` returns the public JWK or null. The key id
@@ -901,14 +1013,17 @@ const REQUIRED = [&quot;@authority&quot;, &quot;@method&quot;, &quot;@path&quot;
 export async function verifyRequest(request, lookupKey) {
   const signatureAgent = headerOf(request, &quot;signature-agent&quot;);
   let reason = &quot;signature&quot;;
+  let verifiedKeyId = null;
 
   try {
     await verify(request, async (data, signature, params) =&gt; {
-      // `data` is the signature base: one line per covered component. Reading
-      // the covered set from it needs no parser and cannot disagree with what
-      // was actually signed.
+      const covered = coveredComponents(data);
+      if (!covered) {
+        reason = &quot;components&quot;;
+        throw new Error(&quot;signature base carries no @signature-params line&quot;);
+      }
       for (const component of REQUIRED) {
-        if (!data.includes(`&quot;${component}&quot;`)) {
+        if (!covered.includes(component)) {
           reason = &quot;components&quot;;
           throw new Error(`signature does not cover ${component}`);
         }
@@ -919,7 +1034,16 @@ export async function verifyRequest(request, lookupKey) {
         throw new Error(&quot;signature window exceeds five minutes&quot;);
       }
 
-      const jwk = await lookupKey(params.keyid, signatureAgent);
+      let jwk;
+      try {
+        jwk = await lookupKey(params.keyid, signatureAgent);
+      } catch {
+        // The directory could not be reached. Fail CLOSED, but say so: telling
+        // an honest client its crypto is bad during an outage sends it to
+        // debug the wrong thing.
+        reason = &quot;directory&quot;;
+        throw new Error(&quot;key lookup failed&quot;);
+      }
       if (!jwk) {
         reason = &quot;unknown-key&quot;;
         throw new Error(&quot;no key for that key id&quot;);
@@ -927,6 +1051,11 @@ export async function verifyRequest(request, lookupKey) {
 
       const verifier = await verifierFromJWK(jwk);
       await verifier(data, signature, params);
+
+      // The key id the library VERIFIED, captured here. Reading it back off the
+      // raw header afterwards would mean trusting a regex over attacker-shaped
+      // text to agree with what the cryptography actually checked.
+      verifiedKeyId = params.keyid;
       reason = null;
     });
   } catch {
@@ -936,24 +1065,30 @@ export async function verifyRequest(request, lookupKey) {
     return { ok: false, reason: reason ?? &quot;signature&quot; };
   }
 
-  const keyId = keyIdFrom(request);
-  if (!keyId) return { ok: false, reason: &quot;signature&quot; };
-  return { ok: true, keyId };
+  if (!verifiedKeyId) return { ok: false, reason: &quot;signature&quot; };
+  return { ok: true, keyId: verifiedKeyId };
 }
 
-/// Headers arrive either as a plain object (Node) or as a Headers instance.
-function headerOf(request, name) {
+/**
+ * Read one header, whatever case it was written in.
+ *
+ * HTTP header names are case-insensitive (RFC 9110), and the two sources that
+ * reach this function genuinely disagree: Node lowercases everything it
+ * receives, while web-bot-auth&#39;s own signatureHeaders() returns &quot;Signature&quot; and
+ * &quot;Signature-Input&quot; capitalized -- measured 2026-08-30. The library&#39;s verify()
+ * is case-blind and finds them either way; a case-sensitive lookup here would
+ * verify a signature successfully and then fail to read back its own key id.
+ * A Headers instance handles case itself; a plain object is matched manually.
+ */
+export function headerOf(request, name) {
   const h = request.headers;
-  if (h &amp;&amp; typeof h.get === &quot;function&quot;) return h.get(name);
-  return h?.[name] ?? h?.[name.toLowerCase()] ?? null;
-}
-
-/// The key id, read back off the Signature-Input header after verification has
-/// already proved the signature over it.
-function keyIdFrom(request) {
-  const input = headerOf(request, &quot;signature-input&quot;);
-  const m = typeof input === &quot;string&quot; ? input.match(/keyid=&quot;([^&quot;]+)&quot;/) : null;
-  return m ? m[1] : null;
+  if (!h) return null;
+  if (typeof h.get === &quot;function&quot;) return h.get(name);
+  const want = name.toLowerCase();
+  for (const key of Object.keys(h)) {
+    if (key.toLowerCase() === want) return h[key];
+  }
+  return null;
 }
 </code></pre>
 <ul>
@@ -991,7 +1126,8 @@ git commit -m &quot;feat(warden): RFC 9421 verification, with the component and 
 import assert from &quot;node:assert/strict&quot;;
 import { openDb } from &quot;../src/mirror/db.mjs&quot;;
 import { queries } from &quot;../src/mirror/queries.mjs&quot;;
-import { registerKey, guardedFetchDirectory, renderDirectory, isBlockedAddress } from &quot;../src/door/directory.mjs&quot;;
+import { registerKey, guardedFetchDirectory, renderDirectory, isBlockedAddress, makeLookup } from &quot;../src/door/directory.mjs&quot;;
+import { issueChallenge, verifyNonceMinted, CHALLENGE_MS } from &quot;../src/door/challenge.mjs&quot;;
 
 const JWK = { kty: &quot;OKP&quot;, crv: &quot;Ed25519&quot;, x: &quot;JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs&quot; };
 
@@ -1013,11 +1149,33 @@ test(&quot;the directory renders every registered key as a JWKS&quot;, async () 
 // Each of these is an address a fetch must never reach. Loopback and the
 // 169.254.169.254 metadata address are the two that turn a directory fetch
 // into a way to read this machine.
-for (const addr of [&quot;127.0.0.1&quot;, &quot;::1&quot;, &quot;10.0.0.5&quot;, &quot;192.168.1.1&quot;, &quot;172.16.0.1&quot;, &quot;169.254.169.254&quot;, &quot;0.0.0.0&quot;]) {
+//
+// The IPv6 spellings are not padding. A text-prefix version of this guard
+// shipped and let EVERY one of these through in ::ffff: form, with the fetch
+// genuinely made. An agent registering its own domain controls its own AAAA
+// records, so it picks the spelling.
+for (const addr of [
+  &quot;127.0.0.1&quot;, &quot;::1&quot;, &quot;10.0.0.5&quot;, &quot;192.168.1.1&quot;, &quot;172.16.0.1&quot;, &quot;169.254.169.254&quot;, &quot;0.0.0.0&quot;,
+  &quot;100.64.0.1&quot;, &quot;224.0.0.1&quot;,
+  &quot;::ffff:169.254.169.254&quot;, &quot;::ffff:127.0.0.1&quot;, &quot;::ffff:10.0.0.1&quot;,
+  &quot;0:0:0:0:0:ffff:169.254.169.254&quot;, &quot;::ffff:a9fe:a9fe&quot;, &quot;::127.0.0.1&quot;,
+  &quot;fe80::1&quot;, &quot;fe80::1%eth0&quot;, &quot;fc00::1&quot;, &quot;fd12:3456::1&quot;, &quot;ff02::1&quot;,
+  &quot;64:ff9b::a9fe:a9fe&quot;, &quot;2002:a9fe:a9fe::1&quot;, &quot;::&quot;,
+]) {
   test(`${addr} is blocked`, () =&gt; assert.equal(isBlockedAddress(addr), true));
 }
 
-test(&quot;a public address is allowed&quot;, () =&gt; assert.equal(isBlockedAddress(&quot;93.184.216.34&quot;), false));
+// A guard must fail CLOSED on what it cannot parse. The first version returned
+// &quot;not blocked&quot; for any string that was not a dotted quad.
+for (const junk of [&quot;&quot;, &quot;garbage&quot;, &quot;not-an-ip&quot;, &quot;999.999.999.999&quot;]) {
+  test(`unparseable input ${JSON.stringify(junk)} is blocked`, () =&gt;
+    assert.equal(isBlockedAddress(junk), true));
+}
+
+// The control: a guard that blocks everything is not a guard.
+for (const ok of [&quot;93.184.216.34&quot;, &quot;8.8.8.8&quot;, &quot;2606:2800:220:1:248:1893:25c8:1946&quot;, &quot;2001:4860:4860::8888&quot;]) {
+  test(`public address ${ok} is allowed`, () =&gt; assert.equal(isBlockedAddress(ok), false));
+}
 
 test(&quot;a non-https directory URL is refused&quot;, async () =&gt; {
   await assert.rejects(
@@ -1033,40 +1191,137 @@ test(&quot;a non-443 port is refused&quot;, async () =&gt; {
   );
 });
 
+// The deps below are `request` and `lookup`, not `fetch` and `resolve`: the
+// address decision now happens inside the resolution the socket uses, so the
+// tests drive that same seam.
+import { Readable } from &quot;node:stream&quot;;
+import { EventEmitter } from &quot;node:events&quot;;
+
+/// A stand-in for https.request that replies with one body and never touches a
+/// network. `lookup` is still exercised, because the real code calls it.
+function stubRequest(body, status = 200) {
+  return (opts, cb) =&gt; {
+    const req = new EventEmitter();
+    req.end = () =&gt; {
+      // Drive the pinned lookup exactly as a real connection would.
+      opts.lookup(&quot;host.example&quot;, { all: true }, (err) =&gt; {
+        if (err) return req.emit(&quot;error&quot;, err);
+        const res = Readable.from([Buffer.from(body)]);
+        res.statusCode = status;
+        cb(res);
+      });
+    };
+    req.destroy = () =&gt; {};
+    return req;
+  };
+}
+
+const publicLookup = (h, o, cb) =&gt; cb(null, [{ address: &quot;93.184.216.34&quot;, family: 4 }]);
+const lookupOf = (addr) =&gt; (h, o, cb) =&gt;
+  cb(null, [{ address: addr, family: addr.includes(&quot;:&quot;) ? 6 : 4 }]);
+
 test(&quot;a directory that resolves to a private address is refused&quot;, async () =&gt; {
   await assert.rejects(
-    () =&gt;
-      guardedFetchDirectory(&quot;https://internal.example.com/x&quot;, {
-        resolve: async () =&gt; [&quot;10.1.2.3&quot;],
+    () =&gt; guardedFetchDirectory(&quot;https://internal.example.com/x&quot;, {
+      request: stubRequest(&quot;{}&quot;), lookup: lookupOf(&quot;10.1.2.3&quot;),
+    }),
+    /blocked address/i
+  );
+});
+
+// Each of these got through a previous version of the guard. They are kept as
+// end-to-end cases, not just predicate cases, because the bug that mattered was
+// always &quot;the connection still happened&quot;.
+for (const addr of [&quot;::ffff:169.254.169.254&quot;, &quot;::ffff:0:169.254.169.254&quot;, &quot;::127.0.0.1&quot;, &quot;64:ff9b::a9fe:a9fe&quot;, &quot;2002:a9fe:a9fe::1&quot;]) {
+  test(`a directory resolving to ${addr} is refused end to end`, async () =&gt; {
+    await assert.rejects(
+      () =&gt; guardedFetchDirectory(&quot;https://evil.example.com/x&quot;, {
+        request: stubRequest(&quot;{}&quot;), lookup: lookupOf(addr),
       }),
-    /address/i
+      /blocked address/i
+    );
+  });
+}
+
+test(&quot;one bad address among several refuses the whole connection&quot;, async () =&gt; {
+  // A resolver that returns a good address and a bad one must get nothing.
+  await assert.rejects(
+    () =&gt; guardedFetchDirectory(&quot;https://mixed.example.com/x&quot;, {
+      request: stubRequest(&quot;{}&quot;),
+      lookup: (h, o, cb) =&gt; cb(null, [
+        { address: &quot;93.184.216.34&quot;, family: 4 },
+        { address: &quot;169.254.169.254&quot;, family: 4 },
+      ]),
+    }),
+    /blocked address/i
   );
 });
 
 test(&quot;a body over the cap is refused&quot;, async () =&gt; {
-  const big = &quot;x&quot;.repeat(70_000);
   await assert.rejects(
-    () =&gt;
-      guardedFetchDirectory(&quot;https://example.com/x&quot;, {
-        resolve: async () =&gt; [&quot;93.184.216.34&quot;],
-        fetch: async () =&gt; new Response(big, { status: 200 }),
-      }),
+    () =&gt; guardedFetchDirectory(&quot;https://example.com/x&quot;, {
+      request: stubRequest(&quot;x&quot;.repeat(70_000)), lookup: publicLookup,
+    }),
     /too large/i
   );
 });
 
-test(&quot;a redirect is not followed&quot;, async () =&gt; {
+test(&quot;a redirect is refused rather than followed&quot;, async () =&gt; {
   await assert.rejects(
-    () =&gt;
-      guardedFetchDirectory(&quot;https://example.com/x&quot;, {
-        resolve: async () =&gt; [&quot;93.184.216.34&quot;],
-        fetch: async (url, opts) =&gt; {
-          assert.equal(opts.redirect, &quot;error&quot;, &quot;fetch must be called with redirect: error&quot;);
-          throw new TypeError(&quot;redirect&quot;);
-        },
-      }),
+    () =&gt; guardedFetchDirectory(&quot;https://example.com/x&quot;, {
+      request: stubRequest(&quot;&quot;, 302), lookup: publicLookup,
+    }),
     /redirect/i
   );
+});
+
+// A hostname that is already an IP never reaches the pinned lookup, so it is
+// checked separately. Each of these opened a real connection before the fix.
+for (const url of [
+  &quot;https://169.254.169.254/x&quot;,
+  &quot;https://127.0.0.1/x&quot;,
+  &quot;https://10.0.0.1/x&quot;,
+  &quot;https://[::1]/x&quot;,
+  &quot;https://[::ffff:169.254.169.254]/x&quot;,
+  &quot;https://[::ffff:0:169.254.169.254]/x&quot;,
+]) {
+  test(`a literal address url ${url} is refused without any dns`, async () =&gt; {
+    let lookupCalled = false;
+    await assert.rejects(
+      () =&gt; guardedFetchDirectory(url, {
+        request: stubRequest(&quot;{}&quot;),
+        lookup: (h, o, cb) =&gt; { lookupCalled = true; cb(null, [{ address: &quot;93.184.216.34&quot;, family: 4 }]); },
+      }),
+      /blocked address/i
+    );
+    assert.equal(lookupCalled, false, &quot;it must be refused before any resolution is attempted&quot;);
+  });
+}
+
+test(&quot;a public literal address is still allowed&quot;, async () =&gt; {
+  // The control for the pre-check: it must reject addresses, not literals.
+  const jwks = await guardedFetchDirectory(&quot;https://8.8.8.8/x&quot;, {
+    request: stubRequest(JSON.stringify({ keys: [] })),
+    lookup: (h, o, cb) =&gt; cb(null, [{ address: &quot;8.8.8.8&quot;, family: 4 }]),
+  });
+  assert.deepEqual(jwks, { keys: [] });
+});
+
+test(&quot;a url carrying credentials is refused&quot;, async () =&gt; {
+  await assert.rejects(
+    () =&gt; guardedFetchDirectory(&quot;https://user:pw@example.com/x&quot;, {
+      request: stubRequest(&quot;{}&quot;), lookup: publicLookup,
+    }),
+    /credentials/i
+  );
+});
+
+test(&quot;a well-formed directory from a public address is returned&quot;, async () =&gt; {
+  // The control. A guard that refuses everything would pass every test above.
+  const jwks = await guardedFetchDirectory(&quot;https://example.com/x&quot;, {
+    request: stubRequest(JSON.stringify({ keys: [{ kty: &quot;OKP&quot; }] })), lookup: publicLookup,
+  });
+  assert.equal(jwks.keys.length, 1);
 });
 </code></pre>
 <ul>
@@ -1082,7 +1337,9 @@ test(&quot;a redirect is not followed&quot;, async () =&gt; {
 // Signature-Agent pointing at it. An agent that does not registers here and
 // sends Signature-Agent pointing at us. Either way the key id is the RFC 7638
 // thumbprint and the entry rule is identical.
-import { lookup as dnsLookup } from &quot;node:dns/promises&quot;;
+import { request as httpsRequest } from &quot;node:https&quot;;
+import { lookup as dnsLookup } from &quot;node:dns&quot;;
+import { isIP } from &quot;node:net&quot;;
 import { jwkToKeyID } from &quot;web-bot-auth&quot;;
 
 /// A directory response larger than this is refused unread. A JWKS is a few
@@ -1090,53 +1347,256 @@ import { jwkToKeyID } from &quot;web-bot-auth&quot;;
 const MAX_BODY = 64 * 1024;
 const FETCH_TIMEOUT_MS = 3000;
 
-/// The address ranges a directory fetch must never reach. Without this, an
-/// agent could name a URL that makes THIS machine fetch its own private
-/// network, including a cloud metadata service.
-export function isBlockedAddress(addr) {
-  if (addr === &quot;::1&quot; || addr === &quot;0.0.0.0&quot; || addr.startsWith(&quot;fe80:&quot;) || addr.startsWith(&quot;fc&quot;) || addr.startsWith(&quot;fd&quot;)) {
-    return true;
+/**
+ * Expand an IPv6 literal to its 16 bytes, or null if it is not one.
+ *
+ * Written out because the decision below has to be made on the ADDRESS, not on
+ * how it happens to be spelled. IPv6 has several ways to write the same
+ * address, and a prefix test on the text misses most of them.
+ */
+function ipv6Bytes(addr) {
+  const bare = addr.split(&quot;%&quot;)[0].toLowerCase();
+  if (isIP(bare) !== 6) return null;
+  let head = bare;
+  let tail = &quot;&quot;;
+  if (bare.includes(&quot;::&quot;)) {
+    const [h, t = &quot;&quot;] = bare.split(&quot;::&quot;);
+    head = h;
+    tail = t;
   }
-  const p = addr.split(&quot;.&quot;).map(Number);
-  if (p.length !== 4 || p.some((n) =&gt; !Number.isInteger(n) || n &lt; 0 || n &gt; 255)) return false;
-  const [a, b] = p;
+  const expand = (part) =&gt; {
+    if (!part) return [];
+    const out = [];
+    for (const piece of part.split(&quot;:&quot;)) {
+      if (piece.includes(&quot;.&quot;)) {
+        const quad = piece.split(&quot;.&quot;).map(Number);
+        if (quad.length !== 4 || quad.some((n) =&gt; !Number.isInteger(n) || n &lt; 0 || n &gt; 255)) return null;
+        out.push((quad[0] &lt;&lt; 8) | quad[1], (quad[2] &lt;&lt; 8) | quad[3]);
+      } else {
+        out.push(parseInt(piece, 16));
+      }
+    }
+    return out;
+  };
+  const h = expand(head);
+  const t = expand(tail);
+  if (h === null || t === null) return null;
+  const groups = bare.includes(&quot;::&quot;)
+    ? [...h, ...Array(8 - h.length - t.length).fill(0), ...t]
+    : h;
+  if (groups.length !== 8 || groups.some((g) =&gt; !Number.isInteger(g))) return null;
+  const bytes = [];
+  for (const g of groups) bytes.push((g &gt;&gt; 8) &amp; 0xff, g &amp; 0xff);
+  return bytes;
+}
+
+/// The IPv4 ranges a directory fetch must never reach.
+function blockedV4(a, b) {
   if (a === 0 || a === 127) return true;                 // this host, loopback
   if (a === 10) return true;                             // private
   if (a === 172 &amp;&amp; b &gt;= 16 &amp;&amp; b &lt;= 31) return true;      // private
   if (a === 192 &amp;&amp; b === 168) return true;               // private
-  if (a === 169 &amp;&amp; b === 254) return true;               // link-local and metadata
+  if (a === 169 &amp;&amp; b === 254) return true;               // link-local, and the metadata address
   if (a === 100 &amp;&amp; b &gt;= 64 &amp;&amp; b &lt;= 127) return true;     // carrier-grade NAT
+  if (a === 192 &amp;&amp; b === 0) return true;                 // IETF protocol assignments, TEST-NET-1
+  if (a === 198 &amp;&amp; (b === 18 || b === 19)) return true;  // benchmarking
+  if (a === 198 &amp;&amp; b === 51) return true;                // TEST-NET-2
+  if (a === 203 &amp;&amp; b === 0) return true;                 // TEST-NET-3
+  if (a &gt;= 224) return true;                             // multicast and reserved
+  return false;
+}
+
+/**
+ * Is this address one a directory fetch must never reach?
+ *
+ * Without this, an agent could name a URL that makes THIS machine fetch its own
+ * private network, including the cloud metadata service.
+ *
+ * IT IS DECIDED ON BYTES, NEVER ON SPELLING. A text-prefix version of this
+ * check shipped and was measured on 2026-08-30 to let EVERY blocked range
+ * through in IPv4-mapped IPv6 form: `::ffff:169.254.169.254` was allowed and
+ * the fetch really was made. That is not theoretical -- an agent registering
+ * its own domain controls its own AAAA records, so it chooses what we resolve.
+ * The mapped forms, the deprecated `::a.b.c.d` compatible form, NAT64 and 6to4
+ * all carry an IPv4 address inside them, so each is unwrapped and judged by the
+ * IPv4 rules.
+ *
+ * It also FAILS CLOSED on anything it cannot parse. The previous version
+ * returned &quot;not blocked&quot; for any string that was not a dotted quad, which is
+ * the wrong direction for a guard.
+ */
+export function isBlockedAddress(addr) {
+  if (typeof addr !== &quot;string&quot; || addr === &quot;&quot;) return true;
+  const kind = isIP(addr.split(&quot;%&quot;)[0]);
+  if (kind === 0) return true;                                   // not an IP at all
+  if (kind === 4) {
+    const [a, b] = addr.split(&quot;.&quot;).map(Number);
+    return blockedV4(a, b);
+  }
+
+  const bytes = ipv6Bytes(addr);
+  if (!bytes) return true;
+  const zeros = (n) =&gt; bytes.slice(0, n).every((x) =&gt; x === 0);
+
+  // EVERYTHING IN ::/64 IS JUDGED BY ITS LAST FOUR BYTES.
+  //
+  // Naming embedding forms one branch at a time was wrong twice on this
+  // project: ::ffff:a.b.c.d was missed first, then ::ffff:0:a.b.c.d, the
+  // RFC 2765 translated form. Both live in ::/64, as do ::a.b.c.d, :: and ::1,
+  // and nothing globally routable does. Deciding the whole range at once by
+  // reading the trailing IPv4 means no form can be forgotten, because no form
+  // has to be named.
+  // ALL OF ::/8 IS RESERVED SPACE, so it is decided in one place.
+  //
+  // ::/64 is the part that carries an embedded IPv4, and it is judged by that
+  // address. Everything else under ::/8 -- NAT64 at 64:ff9b::, the reserved
+  // ::ffff:0:0:a.b.c.d shape, and anything not yet invented -- is simply
+  // refused. Enumerating embedding forms one branch at a time was wrong twice
+  // on this project; refusing the whole reserved block means there is no next
+  // form to miss.
+  if (bytes[0] === 0x00) {
+    if (!zeros(8)) return true;                                  // reserved, and not a global address
+    if (zeros(16)) return true;                                  // ::
+    if (zeros(15) &amp;&amp; bytes[15] === 1) return true;               // ::1
+    return blockedV4(bytes[12], bytes[13]);                      // ::a.b.c.d, ::ffff:a.b.c.d
+  }
+  if (bytes[0] === 0xfe &amp;&amp; (bytes[1] &amp; 0xc0) === 0xc0) return true; // fec0::/10, site-local
+  if (bytes[0] === 0x20 &amp;&amp; bytes[1] === 0x02) {
+    return blockedV4(bytes[2], bytes[3]);                        // 2002::/16, 6to4
+  }
+  if ((bytes[0] &amp; 0xfe) === 0xfc) return true;                   // fc00::/7, unique local
+  if (bytes[0] === 0xfe &amp;&amp; (bytes[1] &amp; 0xc0) === 0x80) return true; // fe80::/10, link-local
+  if (bytes[0] === 0xff) return true;                            // multicast
   return false;
 }
 
 /**
  * Fetch somebody else&#39;s key directory, safely.
  *
- * `deps` exists so the guard is testable without a network: it takes `resolve`
- * and `fetch`, defaulting to the real ones.
+ * WHY node:https AND NOT fetch. The address check has to happen on the
+ * connection the request actually makes. Validating with a DNS lookup and then
+ * handing the URL to fetch leaves fetch to resolve again on its own, and an
+ * agent controls its own DNS records: it answers with a public address for our
+ * check and a private one for the connection. That is DNS rebinding, and
+ * against it a pre-flight check is decoration.
+ *
+ * node:https takes a `lookup`, so the validation happens INSIDE the resolution
+ * the socket uses. There is no window between checking and connecting.
+ *
+ * `deps` takes `request` and `lookup` so every path here is testable with no
+ * network at all.
  */
-export async function guardedFetchDirectory(url, deps = {}) {
-  const resolve = deps.resolve ?? (async (host) =&gt; (await dnsLookup(host, { all: true })).map((r) =&gt; r.address));
-  const doFetch = deps.fetch ?? fetch;
+export function guardedFetchDirectory(url, deps = {}) {
+  const doRequest = deps.request ?? httpsRequest;
+  const resolver = deps.lookup ?? dnsLookup;
 
-  const parsed = new URL(url);
-  if (parsed.protocol !== &quot;https:&quot;) throw new Error(&quot;directory must be https&quot;);
-  if (parsed.port &amp;&amp; parsed.port !== &quot;443&quot;) throw new Error(&quot;directory must be on port 443&quot;);
+  return new Promise((resolve, reject) =&gt; {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return reject(new Error(&quot;directory url is not a url&quot;));
+    }
+    if (parsed.protocol !== &quot;https:&quot;) return reject(new Error(&quot;directory must be https&quot;));
+    if (parsed.port &amp;&amp; parsed.port !== &quot;443&quot;) return reject(new Error(&quot;directory must be on port 443&quot;));
+    // Credentials in a directory URL have no legitimate use here, and they are
+    // a classic way to make a URL parser and an HTTP client disagree about
+    // which host is being addressed.
+    if (parsed.username || parsed.password) {
+      return reject(new Error(&quot;directory url must carry no credentials&quot;));
+    }
 
-  for (const addr of await resolve(parsed.hostname)) {
-    if (isBlockedAddress(addr)) throw new Error(`directory resolves to a blocked address: ${addr}`);
-  }
+    // A HOSTNAME THAT IS ALREADY AN IP NEVER REACHES THE LOOKUP.
+    //
+    // Node connects straight to a literal address, so the pinned lookup below
+    // is never called and the whole guard is skipped. Measured 2026-08-30:
+    // https://169.254.169.254/x and https://127.0.0.1/x both opened a real
+    // connection with lookup untouched. That needs no DNS control at all, so it
+    // is a simpler attack than rebinding, not a harder one.
+    //
+    // Brackets are stripped because URL keeps them for IPv6, and note it also
+    // normalises the literal: [::ffff:169.254.169.254] arrives as
+    // [::ffff:a9fe:a9fe], which is why this is decided by isBlockedAddress
+    // rather than by comparing text.
+    const literal = parsed.hostname.replace(/^\[|\]$/g, &quot;&quot;);
+    if (isIP(literal) !== 0 &amp;&amp; isBlockedAddress(literal)) {
+      return reject(new Error(`directory resolves to a blocked address: ${literal}`));
+    }
 
-  const res = await doFetch(url, {
-    redirect: &quot;error&quot;,
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    headers: { accept: &quot;application/http-message-signatures-directory+json, application/json&quot; },
+    const pinnedLookup = (hostname, options, cb) =&gt; {
+      resolver(hostname, { ...options, all: true }, (err, addresses) =&gt; {
+        if (err) return cb(err);
+        const list = Array.isArray(addresses) ? addresses : [addresses];
+        if (list.length === 0) return cb(new Error(&quot;directory host does not resolve&quot;));
+        // EVERY answer is checked, not only the one that would be used: a
+        // resolver returning one good address and one bad one gets no
+        // connection at all.
+        for (const a of list) {
+          if (isBlockedAddress(a.address)) {
+            return cb(new Error(`directory resolves to a blocked address: ${a.address}`));
+          }
+        }
+        // Node asks for `all` itself when happy-eyeballs is on and then expects
+        // the ARRAY back; returning a single address there fails with
+        // &quot;Invalid IP address: undefined&quot;.
+        if (options &amp;&amp; options.all) return cb(null, list);
+        cb(null, list[0].address, list[0].family);
+      });
+    };
+
+    const req = doRequest(
+      {
+        protocol: &quot;https:&quot;,
+        hostname: parsed.hostname,
+        port: 443,
+        path: parsed.pathname + parsed.search,
+        method: &quot;GET&quot;,
+        lookup: pinnedLookup,
+        timeout: FETCH_TIMEOUT_MS,
+        headers: {
+          accept: &quot;application/http-message-signatures-directory+json, application/json&quot;,
+          host: parsed.host,
+        },
+      },
+      (res) =&gt; {
+        // A redirect is refused, never followed: following one would repeat the
+        // whole address decision against a host we never checked.
+        if (res.statusCode &gt;= 300 &amp;&amp; res.statusCode &lt; 400) {
+          res.destroy();
+          return reject(new Error(&quot;directory redirected&quot;));
+        }
+        if (res.statusCode !== 200) {
+          res.destroy();
+          return reject(new Error(`directory returned ${res.statusCode}`));
+        }
+
+        let size = 0;
+        const chunks = [];
+        res.on(&quot;data&quot;, (chunk) =&gt; {
+          size += chunk.length;
+          // Capped WHILE reading. Reading the whole body and measuring it
+          // afterwards means an unbounded response is already in memory by the
+          // time it is refused.
+          if (size &gt; MAX_BODY) {
+            res.destroy();
+            return reject(new Error(&quot;directory body too large&quot;));
+          }
+          chunks.push(chunk);
+        });
+        res.on(&quot;end&quot;, () =&gt; {
+          try {
+            resolve(JSON.parse(Buffer.concat(chunks).toString(&quot;utf8&quot;)));
+          } catch {
+            reject(new Error(&quot;directory is not valid json&quot;));
+          }
+        });
+        res.on(&quot;error&quot;, reject);
+      }
+    );
+    req.on(&quot;timeout&quot;, () =&gt; req.destroy(new Error(&quot;directory timed out&quot;)));
+    req.on(&quot;error&quot;, reject);
+    req.end();
   });
-  if (!res.ok) throw new Error(`directory returned ${res.status}`);
-
-  const body = await res.text();
-  if (body.length &gt; MAX_BODY) throw new Error(&quot;directory body too large&quot;);
-  return JSON.parse(body);
 }
 
 /**
@@ -1171,10 +1631,34 @@ export function renderDirectory(q) {
  * from the mirror. Otherwise the agent&#39;s own directory is fetched and cached
  * for an hour.
  */
+/// How many third-party directories are remembered at once. The key is a value
+/// an unauthenticated caller chooses, so it cannot be allowed to grow forever.
+const MAX_CACHED_DIRECTORIES = 256;
+
+/// Remember one directory result, evicting the oldest entry when full.
+function rememberDirectory(cache, url, entry) {
+  if (cache.size &gt;= MAX_CACHED_DIRECTORIES &amp;&amp; !cache.has(url)) {
+    cache.delete(cache.keys().next().value);
+  }
+  cache.set(url, entry);
+}
+
 export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map()) {
   return async function lookupKey(keyId, signatureAgent) {
     const agent = typeof signatureAgent === &quot;string&quot; ? signatureAgent.replace(/^&quot;|&quot;$/g, &quot;&quot;) : null;
-    const isOurs = !agent || agent.includes(ourDomain);
+
+    // WHOSE DIRECTORY IS THIS? Decided by exact hostname, never by substring.
+    // `agent.includes(ourDomain)` treated https://attacker.net/?x=our.domain as
+    // ours, and refused a legitimate third party whose own hostname happened to
+    // contain our domain.
+    let isOurs = !agent;
+    if (agent) {
+      try {
+        isOurs = new URL(agent).hostname === ourDomain;
+      } catch {
+        return null;                                   // not a url: refuse, fail closed
+      }
+    }
 
     if (isOurs) {
       const row = q.getKey(keyId);
@@ -1184,16 +1668,27 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map()) {
     const url = new URL(&quot;/.well-known/http-message-signatures-directory&quot;, agent).toString();
     const hit = cache.get(url);
     const now = Date.now();
+
+    // A cached entry is trusted for an hour, so a key removed from an agent&#39;s
+    // own directory keeps verifying for up to that long. That is the deliberate
+    // revocation window, and it is the reason `rebind` exists on chain rather
+    // than here: identity changes are settled by the contract, not by this
+    // cache.
     let jwks;
     if (hit &amp;&amp; now - hit.at &lt; 3_600_000) {
+      if (hit.failed) return null;                     // a remembered failure
       jwks = hit.jwks;
     } else {
+      // Failures are remembered too. Without that, every unauthenticated
+      // request naming an unreachable directory becomes one outbound request,
+      // which is a timing-observable prober pointed wherever the caller likes.
       try {
         jwks = await fetchDirectory(url);
       } catch {
+        rememberDirectory(cache, url, { failed: true, at: now });
         return null;
       }
-      cache.set(url, { jwks, at: now });
+      rememberDirectory(cache, url, { jwks, at: now });
     }
 
     for (const jwk of jwks?.keys ?? []) {
@@ -1224,6 +1719,89 @@ async function proofFor(nonce, privateKey) {
   const sig = await crypto.subtle.sign(&quot;Ed25519&quot;, privateKey, new TextEncoder().encode(nonce));
   return Buffer.from(sig).toString(&quot;base64url&quot;);
 }
+
+// The nonce must be one THIS server minted, and it is spent on use. Proof of
+// possession alone shows the caller holds the key, not that the exchange is
+// fresh: before this, an invented nonce was accepted and a captured triple
+// replayed verbatim.
+const alwaysFreshNonce = () =&gt; true;
+
+test(&quot;a nonce the caller invented is refused, and nothing is stored&quot;, async () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  const pair = await crypto.subtle.generateKey(&quot;Ed25519&quot;, true, [&quot;sign&quot;, &quot;verify&quot;]);
+  const jwk = await crypto.subtle.exportKey(&quot;jwk&quot;, pair.publicKey);
+  const nonce = &quot;i-made-this-up-myself&quot;;
+  const r = await registerRoute(
+    q,
+    { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) },
+    () =&gt; true,
+    () =&gt; false                                   // this server did not mint it
+  );
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, &quot;nonce&quot;);
+  assert.equal(q.allKeys().length, 0, &quot;nothing may be stored on a bad nonce&quot;);
+});
+
+test(&quot;a captured registration cannot be replayed&quot;, async () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  const pair = await crypto.subtle.generateKey(&quot;Ed25519&quot;, true, [&quot;sign&quot;, &quot;verify&quot;]);
+  const jwk = await crypto.subtle.exportKey(&quot;jwk&quot;, pair.publicKey);
+  const nonce = &quot;server-issued-nonce&quot;;
+  const body = { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) };
+
+  // A nonce checker that spends what it accepts, like the real one.
+  const spent = new Set();
+  const checkNonce = (n) =&gt; (spent.has(n) ? false : (spent.add(n), true));
+
+  assert.equal((await registerRoute(q, body, () =&gt; true, checkNonce)).ok, true);
+  const replay = await registerRoute(q, body, () =&gt; true, checkNonce);
+  assert.equal(replay.ok, false);
+  assert.equal(replay.reason, &quot;nonce&quot;);
+  assert.equal(q.allKeys().length, 1, &quot;the replay must not rewrite the stored row&quot;);
+});
+
+test(&quot;verifyNonceMinted accepts only what this server issued&quot;, () =&gt; {
+  const now = 1_000_000;
+  const { challenge } = issueChallenge(&quot;a-secret&quot;, now);
+  assert.equal(verifyNonceMinted(&quot;a-secret&quot;, challenge, now).ok, true);
+  assert.equal(verifyNonceMinted(&quot;another-secret&quot;, challenge, now).ok, false);
+  assert.equal(verifyNonceMinted(&quot;a-secret&quot;, &quot;made.up.nonce&quot;, now).ok, false);
+  assert.equal(verifyNonceMinted(&quot;a-secret&quot;, challenge, now + CHALLENGE_MS + 1).reason, &quot;expired&quot;);
+});
+
+test(&quot;the directory owner is decided by exact hostname, not by substring&quot;, async () =&gt; {
+  // https://attacker.net/?x=our.domain was treated as ours, and a legitimate
+  // third party whose hostname contained our domain could never be fetched.
+  const q = queries(openDb(&quot;:memory:&quot;));
+  let fetchedUrl = null;
+  const lookup = makeLookup(q, async (url) =&gt; { fetchedUrl = url; return { keys: [] }; }, &quot;warden.example.com&quot;);
+
+  await lookup(&quot;some-key&quot;, &#39;&quot;https://attacker.net/?x=warden.example.com&quot;&#39;);
+  assert.ok(fetchedUrl &amp;&amp; fetchedUrl.startsWith(&quot;https://attacker.net/&quot;),
+    &quot;a foreign agent must be fetched, not read from our own store&quot;);
+
+  fetchedUrl = null;
+  await lookup(&quot;some-key&quot;, &#39;&quot;https://warden.example.com/&quot;&#39;);
+  assert.equal(fetchedUrl, null, &quot;our own domain must be served from the mirror&quot;);
+});
+
+test(&quot;the directory cache is bounded and remembers failures&quot;, async () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  let fetches = 0;
+  const cache = new Map();
+  const lookup = makeLookup(q, async () =&gt; { fetches += 1; throw new Error(&quot;unreachable&quot;); },
+    &quot;warden.example.com&quot;, cache);
+
+  // A failing directory is fetched once, not once per request: otherwise every
+  // unauthenticated call becomes an outbound request the caller aims.
+  await lookup(&quot;k&quot;, &#39;&quot;https://dead.example.com/&quot;&#39;);
+  await lookup(&quot;k&quot;, &#39;&quot;https://dead.example.com/&quot;&#39;);
+  assert.equal(fetches, 1, &quot;a remembered failure must not be refetched&quot;);
+
+  // The cache key is caller-chosen, so it must not grow without bound.
+  for (let i = 0; i &lt; 400; i++) await lookup(&quot;k&quot;, `&quot;https://host${i}.example.com/&quot;`);
+  assert.ok(cache.size &lt;= 256, `cache grew to ${cache.size}`);
+});
 
 test(&quot;a registration with a valid proof of possession is accepted&quot;, async () =&gt; {
   const q = queries(openDb(&quot;:memory:&quot;));
@@ -1281,11 +1859,20 @@ test(&quot;a registration is refused when the rate limit says so&quot;, async ()
  * `allow` is the rate-limiting decision, passed in so the policy lives with the
  * route and the check stays testable without a clock.
  */
-export async function registerRoute(q, { jwk, nonce, proof }, allow) {
+export async function registerRoute(q, { jwk, nonce, proof }, allow, checkNonce) {
   if (!allow()) return { ok: false, reason: &quot;rate-limited&quot; };
   if (!jwk || typeof nonce !== &quot;string&quot; || typeof proof !== &quot;string&quot; || proof === &quot;&quot;) {
     return { ok: false, reason: &quot;proof&quot; };
   }
+
+  // THE NONCE MUST BE ONE THIS SERVER ISSUED, AND IT IS SPENT HERE.
+  //
+  // Without this the proof shows only that the caller holds the key, not that
+  // the exchange is fresh: measured 2026-08-30, a nonce the caller invented was
+  // accepted, and a captured {jwk, nonce, proof} triple replayed verbatim. With
+  // INSERT OR REPLACE behind it, a replay also rewrites the stored directory
+  // and registration time.
+  if (!checkNonce(nonce)) return { ok: false, reason: &quot;nonce&quot; };
 
   let verified = false;
   try {
@@ -1312,21 +1899,45 @@ export async function registerRoute(q, { jwk, nonce, proof }, allow) {
 <p>In the router from Task 5, before the <code>admit</code> call (registration cannot require a signature, because registering is how a caller becomes able to sign):</p>
 <pre><code class="language-js">      // POST /keys: the easy path in, for agents with no domain of their own.
       // Unsigned by necessity, but never unproved: the body carries a signature
-      // over a nonce this server issued.
+      // over a nonce this server issued, and that nonce is spent on use.
       if (req.method === &quot;POST&quot; &amp;&amp; path === &quot;/keys&quot;) {
-        const body = JSON.parse(await readBody(req, 64 * 1024));
-        const result = await registerRoute(q, body, () =&gt; config.allowRegistration());
+        const parsed = JSON.parse(await readBody(req, 64 * 1024));
+        // A JSON body may legitimately parse to null, a number or an array.
+        // registerRoute destructures its argument, so anything that is not an
+        // object is refused here rather than becoming a 500.
+        if (parsed === null || typeof parsed !== &quot;object&quot; || Array.isArray(parsed)) {
+          return json(res, 400, { ok: false, reason: &quot;malformed&quot; });
+        }
+        const body = parsed;
+        const result = await registerRoute(
+          q,
+          body,
+          () =&gt; config.allowRegistration(),
+          // Same minting and spending machinery as the entry challenge, so
+          // there is one nonce mechanism in this service rather than two.
+          (nonce) =&gt; {
+            if (!verifyNonceMinted(config.challengeSecret, nonce).ok) return false;
+            if (seen.has(nonce)) return false;
+            seen.add(nonce);
+            return true;
+          }
+        );
         if (result.ok) writeFileSync(config.directoryPath, renderDirectory(q));
-        return json(res, result.ok ? 201 : 429, result);
+        // Only a rate limit is 429. A bad proof or a spent nonce is a 400:
+        // telling that caller to retry later would be advice that never helps.
+        if (result.ok) return json(res, 201, result);
+        return json(res, result.reason === &quot;rate-limited&quot; ? 429 : 400, result);
       }
 </code></pre>
 <p>Add a <code>readBody(req, cap)</code> helper that rejects a body over the cap rather than buffering it, and a <code>nonce</code> route (<code>GET /keys/nonce</code>) issuing the value the proof signs, reusing <code>issueChallenge</code> so there is one nonce mechanism rather than two.</p>
+<p><strong><code>readBody</code> must answer before it hangs up.</strong> Destroying the socket on an oversized body gives the caller a connection reset rather than the 413 the code goes on to write, so it looks like a network fault instead of a refusal. Write the status first, then end the response, then destroy.</p>
+<p><strong><code>allowRegistration</code> has no safe default.</strong> Registration is the one unsigned write this service accepts, so <code>createServer</code> must require the policy rather than defaulting to always-allow: <code>if (typeof config.allowRegistration !== &quot;function&quot;) throw new Error(&quot;allowRegistration is required&quot;)</code>. The spec&#39;s dial is 20 per minute per source and per origin, 10,000 keys total.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 8: Run the tests</strong></li>
 </ul>
 <pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; npm test
 </code></pre>
-<p>Expected: 35 passing (4 + 6 + 6 + 15 + 4). Counts are cumulative minimums: adding a test is fine, losing one is not.</p>
+<p>Expected: at least 35 passing (4 + 6 + 6 + 15 + 4). Report the real number.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 9: Commit</strong></li>
 </ul>
@@ -1344,12 +1955,18 @@ git commit -m &quot;feat(warden): key registration with proof of possession, the
 </ul>
 <p><strong>Interfaces:</strong></p>
 <ul>
-<li><p>Consumes: <code>verifyRequest</code>, <code>issueChallenge</code>, <code>checkChallenge</code>, <code>makeLookup</code>, <code>queries</code>.</p>
-</li>
-<li><p>Produces: <code>toRequestLike(req, domain)</code> turning a Node <code>IncomingMessage</code> into the <code>{ method, url, headers }</code> shape <code>verifyRequest</code> takes; <code>admit(req, deps)</code> returning <code>{ ok: true, keyId }</code> or <code>{ ok: false, status, body }</code>; <code>createServer(deps)</code> returning a Node HTTP server.</p>
-</li>
-<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
-</li>
+<li>Consumes: <code>verifyRequest</code>, <code>issueChallenge</code>, <code>checkChallenge</code>, <code>verifyNonceMinted</code>, <code>makeLookup</code>, <code>guardedFetchDirectory</code>, <code>renderDirectory</code>, <code>registerRoute</code>, <code>queries</code>.</li>
+<li>Produces: <code>toRequestLike(req, domain)</code> turning a Node <code>IncomingMessage</code> into the <code>{ method, url, headers }</code> shape <code>verifyRequest</code> takes; <code>admit(req, deps)</code> returning <code>{ ok: true, keyId }</code> or <code>{ ok: false, status, body }</code>; <code>createServer(config)</code> returning a Node HTTP server.</li>
+</ul>
+<p><strong>Handlers arrive through <code>config</code>, they are not imported.</strong> <code>server.mjs</code> must NOT import <code>tokenView</code> or the MCP handler: Task 6 builds the first and Task 7 the second, and a router that imports modules from later tasks cannot be run or tested when it is written. <code>createServer(config)</code> takes <code>config.tokenView(q, id)</code> and <code>config.mcp.nodeHandler(req, res, keyId)</code>, and Tasks 6 and 7 pass theirs in.</p>
+<p><strong>This task owns the <code>/keys</code> routes.</strong> Task 4 built <code>registerRoute</code> and deliberately left the wiring here, because <code>server.mjs</code> did not exist yet. Both routes are unsigned by necessity -- registering is how a caller becomes able to sign at all:</p>
+<ul>
+<li><code>GET /keys/nonce</code> issues a nonce with <code>issueChallenge</code>, so registration and the entry challenge share one mechanism.</li>
+<li><code>POST /keys</code> reads a capped body, calls <code>registerRoute(q, body, allow, checkNonce)</code> where <code>checkNonce</code> verifies with <code>verifyNonceMinted</code> and then spends the nonce against the same <code>seen</code> set the door uses, and regenerates the served JWKS on success.</li>
+</ul>
+<p><strong>Status codes matter here:</strong> only <code>rate-limited</code> is <code>429</code>. Every other refusal -- a bad proof, a stale nonce, a malformed JWK -- is <code>400</code>. Mapping them all to <code>429</code> would tell an agent whose proof failed to back off and retry later, which will never help it.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></li>
 </ul>
 <p><code>warden/test/door.test.mjs</code>:</p>
 <pre><code class="language-js">import { test } from &quot;node:test&quot;;
@@ -1387,7 +2004,7 @@ test(&quot;the configured domain wins over a forged Host header&quot;, () =&gt; 
 </ul>
 <pre><code class="language-js">// Sorting a request into one of four cases.
 import { issueChallenge, checkChallenge, CHALLENGE_MS } from &quot;./challenge.mjs&quot;;
-import { verifyRequest } from &quot;./verify.mjs&quot;;
+import { verifyRequest, headerOf } from &quot;./verify.mjs&quot;;
 
 /**
  * Adapt a Node request to the shape the signature library takes.
@@ -1399,11 +2016,28 @@ import { verifyRequest } from &quot;./verify.mjs&quot;;
  * trusting it would let a signature minted for another site verify here.
  */
 export function toRequestLike(req, domain) {
-  return {
-    method: req.method,
-    url: new URL(req.url, `https://${domain}`).toString(),
-    headers: req.headers,
-  };
+  return { method: req.method, url: pinnedUrl(req.url, domain).toString(), headers: req.headers };
+}
+
+/**
+ * Reduce a request target to a URL on OUR origin, whatever it claimed to be.
+ *
+ * THE TWO-STEP IS THE WHOLE POINT. Node passes the request target through
+ * verbatim, and a target may carry its own authority: &quot;//evil.example/mcp&quot; is
+ * protocol-relative and &quot;http://evil.example/mcp&quot; is absolute-form. Parsed
+ * against a base, that authority WINS -- measured 2026-08-30, both produced
+ * @authority = evil.example while pathname stayed /mcp. So the router still
+ * dispatched to /mcp while the signature was verified against somebody else&#39;s
+ * host, and a signature minted for any site at path /mcp was admitted here.
+ *
+ * Reducing to pathname + search first, then rebuilding on the configured
+ * origin, leaves nothing for a target to override. Pinning at the CALL SITES
+ * is what allowed this: it is done here, once, so no caller can forget.
+ */
+export function pinnedUrl(target, domain) {
+  const origin = `https://${domain}`;
+  const claimed = new URL(target, origin);
+  return new URL(claimed.pathname + claimed.search, origin);
 }
 
 /// The body of a 401. It tells an agent everything it needs to come back.
@@ -1447,6 +2081,10 @@ export async function admit(req, deps) {
   return { ok: true, keyId: verified.keyId };
 }
 
+// `headerOf` is imported from verify.mjs rather than written again here. It has
+// to be case-blind (see its own comment), and two copies of that rule is two
+// places for it to be got wrong.
+
 /// Sweep spent challenges. They are only ever valid for five seconds, so
 /// anything older than that window can go.
 export function sweepSeen(seen, issuedAt = new Map(), now = Date.now()) {
@@ -1454,12 +2092,6 @@ export function sweepSeen(seen, issuedAt = new Map(), now = Date.now()) {
     const ts = Number(challenge.split(&quot;.&quot;)[1]);
     if (!Number.isFinite(ts) || now - ts &gt; CHALLENGE_MS * 2) seen.delete(challenge);
   }
-}
-
-function headerOf(like, name) {
-  const h = like.headers;
-  if (h &amp;&amp; typeof h.get === &quot;function&quot;) return h.get(name);
-  return h?.[name] ?? null;
 }
 </code></pre>
 <ul>
@@ -1474,8 +2106,10 @@ import { readFileSync } from &quot;node:fs&quot;;
 import { openDb } from &quot;./mirror/db.mjs&quot;;
 import { queries } from &quot;./mirror/queries.mjs&quot;;
 import { admit, sweepSeen } from &quot;./door/middleware.mjs&quot;;
-import { makeLookup, guardedFetchDirectory, renderDirectory, registerKey } from &quot;./door/directory.mjs&quot;;
-import { tokenView } from &quot;./mcp/tokenView.mjs&quot;;
+import { issueChallenge, verifyNonceMinted } from &quot;./door/challenge.mjs&quot;;
+import { makeLookup, guardedFetchDirectory, renderDirectory, registerRoute } from &quot;./door/directory.mjs&quot;;
+// tokenView and the MCP handler are NOT imported: they belong to Tasks 6 and 7
+// and arrive through config, so this router is runnable the day it is written.
 
 const json = (res, status, body) =&gt; {
   const text = JSON.stringify(body);
@@ -1493,13 +2127,20 @@ export function createServer(config) {
 
   return createHttpServer(async (req, res) =&gt; {
     try {
-      const path = new URL(req.url, `https://${config.domain}`).pathname;
+      // Same reduction the signature check uses, so the path the router
+      // dispatches on and the authority the signature is checked against can
+      // never come apart.
+      const path = pinnedUrl(req.url, config.domain).pathname;
 
       // Case 4: the QR&#39;s destination. Public, unsigned, JSON only. Gating this
       // would mean a scanned token leads nowhere, which is the one distribution
       // surface the artwork has.
       if (req.method === &quot;GET&quot; &amp;&amp; path.startsWith(&quot;/t/&quot;)) {
-        const view = tokenView(q, Number(path.slice(3)));
+        // Strict decimal only. Number() accepts &quot;0x1&quot;, which would alias
+        // /t/0x1 to token 1, and &quot;&quot; which would become token 0.
+        const raw = path.slice(3);
+        if (!/^[0-9]+$/.test(raw)) return json(res, 404, { ok: false, reason: &quot;unknown-token&quot; });
+        const view = config.tokenView(q, Number(raw));
         return view ? json(res, 200, view) : json(res, 404, { ok: false, reason: &quot;unknown-token&quot; });
       }
 
@@ -1514,7 +2155,11 @@ export function createServer(config) {
       const decision = await admit(req, { secret: config.challengeSecret, lookupKey, seen, domain: config.domain });
       if (!decision.ok) return json(res, decision.status, decision.body);
 
-      if (path === &quot;/mcp&quot;) return config.mcp.nodeHandler(req, res, decision.keyId);
+      // `return await`, not `return`. A bare return hands the promise back
+      // outside this try, so a rejecting handler becomes an unhandled rejection
+      // -- which under Node&#39;s default takes the process down and leaves the
+      // caller hanging.
+      if (path === &quot;/mcp&quot;) return await config.mcp.nodeHandler(req, res, decision.keyId);
 
       return json(res, 404, { ok: false, reason: &quot;unknown-route&quot; });
     } catch (err) {
@@ -1530,7 +2175,7 @@ export function createServer(config) {
 </ul>
 <pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; npm test
 </code></pre>
-<p>Expected: 37 passing.</p>
+<p>Expected: at least 37 passing. Report the real number.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
 </ul>
@@ -1629,6 +2274,7 @@ import assert from &quot;node:assert/strict&quot;;
 import { openDb } from &quot;../src/mirror/db.mjs&quot;;
 import { queries } from &quot;../src/mirror/queries.mjs&quot;;
 import { makeCheckinTool } from &quot;../src/mcp/tools/checkin.mjs&quot;;
+import { keyIdToBytes32 } from &quot;../src/mcp/keyId.mjs&quot;;
 
 // THE SECURITY CONTROL. A rebind may have been mined since the mirror was last
 // reconciled, so a caller the mirror does not recognise gets ONE live chain
@@ -1643,7 +2289,11 @@ test(&quot;a caller the mirror does not know is checked against the chain before
     boundKeyOf: async (tokenId) =&gt; {
       chainWasRead = true;
       assert.equal(tokenId, 1);
-      return &quot;new-key&quot;;   // the rebind is on chain but not yet mirrored
+      // The chain holds the BYTES32, a one-way hash of the thumbprint, never
+      // the thumbprint itself. A stub returning the raw key id could never
+      // match what checkin compares against, so the test would fail while the
+      // code was right.
+      return keyIdToBytes32(&quot;new-key&quot;);   // on chain, not yet mirrored
     },
   };
 
@@ -1657,7 +2307,7 @@ test(&quot;a caller the mirror does not know is checked against the chain before
 test(&quot;a caller neither the mirror nor the chain knows is refused&quot;, async () =&gt; {
   const q = queries(openDb(&quot;:memory:&quot;));
   q.insertToken({ tokenId: 1, keyId: &quot;old-key&quot;, owner: &quot;0xabc&quot;, lastDay: 100, mintDay: 100 });
-  const chain = { boundKeyOf: async () =&gt; &quot;old-key&quot; };
+  const chain = { boundKeyOf: async () =&gt; keyIdToBytes32(&quot;old-key&quot;) };
   const tool = makeCheckinTool({ q, chain, today: () =&gt; 101 });
   const r = await tool.handler({ tokenId: 1 }, { keyId: &quot;stranger&quot; });
   assert.equal(r.accepted, false);
@@ -1677,10 +2327,17 @@ test(&quot;a caller neither the mirror nor the chain knows is refused&quot;, asy
 // One JSON-RPC eth_call, hand-composed, because pulling a whole client library
 // in for a single view function would be the larger dependency.
 
-/// keccak256(&quot;agentKeyOf(uint256)&quot;)[0..4]. Fixed at build time in Task 6 by
-/// reading it off the contract ABI rather than being typed from memory:
-///   cd contracts &amp;&amp; forge inspect MachineReadableOnly methods
-const SELECTOR = &quot;0x00000000&quot;; // REPLACE in step 5, see the command there
+/// `viewOf(uint256)`, selector 0x0fa4edbd, confirmed with `cast sig`.
+///
+/// THERE IS NO SINGLE-FIELD ACCESSOR. The contract exposes no agentKeyOf; the
+/// bound key is one field of the TokenView struct that viewOf returns, so it is
+/// decoded out of the tuple. TokenView carries a dynamic `bytes code`, which
+/// makes it a DYNAMIC tuple: the return is a 32-byte offset word, then the
+/// head, and agentKeyId is field index 11 (tokenId, level, streak, lastDay,
+/// mintDay, generation, seedsGiven, parent, resting, sunset, marks,
+/// agentKeyId, code, today). Checked by decoding a genuinely abi-encoded
+/// TokenView, not by counting fields in a header.
+const SELECTOR = &quot;0x0fa4edbd&quot;;
 
 export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch }) {
   return {
@@ -1948,7 +2605,7 @@ export function makeRestTool({ q, contract }) {
 </ul>
 <pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; npm test
 </code></pre>
-<p>Expected: 43 passing, including both rebind tests.</p>
+<p>Expected: at least 43 passing, including both rebind tests. Report the real number.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 9: Commit</strong></li>
 </ul>
@@ -2041,6 +2698,14 @@ import { makeChallengeTool } from &quot;./tools/challenge.mjs&quot;;
 import { registerResources } from &quot;./resources.mjs&quot;;
 
 export function makeMcpHandler(deps) {
+  // The paid tools are registered unconditionally, so a missing wrapper would
+  // advertise mint and upgrade and then refuse every call. createServer guards
+  // allowRegistration the same way and for the same reason: a dependency that
+  // is required is checked at construction, not discovered at the first call.
+  if (typeof deps.paid !== &quot;function&quot;) {
+    throw new Error(&quot;makeMcpHandler requires a paid wrapper&quot;);
+  }
+
   const handler = createMcpHandler(
     (ctx) =&gt; {
       const server = new McpServer({ name: &quot;machine-readable-only&quot;, version: &quot;1.0.0&quot; });
@@ -2056,7 +2721,24 @@ export function makeMcpHandler(deps) {
         const tool = make(deps);
         server.registerTool(tool.name, tool.config, async (args, mcpCtx) =&gt; {
           deps.onToolCall?.(tool.name, keyId);
-          const result = await tool.handler(args, { keyId, mcpCtx });
+          let result;
+          try {
+            result = await tool.handler(args, { keyId, mcpCtx });
+          } catch (err) {
+            // THE SDK FORWARDS A THROWN MESSAGE VERBATIM. Measured on
+            // 2026-07-28&#39;s server 2.0.0: createToolError puts Error.message
+            // straight into the tool result, so a SQLite or RPC failure would
+            // hand the caller its file path or connection string. The tools
+            // return structured refusals for everything they expect, so a throw
+            // here is by definition unexpected: log it, and say nothing.
+            console.error(`tool ${tool.name} failed:`, err.message);
+            const failure = { ok: false, reason: &quot;internal&quot; };
+            return {
+              content: [{ type: &quot;text&quot;, text: JSON.stringify(failure) }],
+              structuredContent: failure,
+              isError: true,
+            };
+          }
           return { content: [{ type: &quot;text&quot;, text: JSON.stringify(result) }], structuredContent: result };
         });
       }
@@ -2097,7 +2779,10 @@ export function registerResources(server, { q, contract, llmsTxt }) {
   server.registerResource(&quot;contract&quot;, &quot;mro://contract&quot;, { title: &quot;The contract&quot;, mimeType: &quot;application/json&quot; },
     async (uri) =&gt; ({ contents: [{ uri: uri.href, text: JSON.stringify({ address: contract, chainId: 8453 }) }] }));
 
-  server.registerResource(&quot;token&quot;, new ResourceTemplate(&quot;mro://token/{id}&quot;), { title: &quot;One token&quot;, mimeType: &quot;application/json&quot; },
+  // The second argument is REQUIRED by @modelcontextprotocol/server 2.0.0, not
+  // optional -- its own types say &quot;required to be specified, even if
+  // undefined&quot;. Constructing with one argument throws inside the SDK.
+  server.registerResource(&quot;token&quot;, new ResourceTemplate(&quot;mro://token/{id}&quot;, { list: undefined }), { title: &quot;One token&quot;, mimeType: &quot;application/json&quot; },
     async (uri, { id }) =&gt; {
       const view = tokenView(q, Number(id));
       return { contents: [{ uri: uri.href, text: JSON.stringify(view ?? { ok: false, reason: &quot;unknown-token&quot; }) }] };
@@ -2109,7 +2794,7 @@ export function registerResources(server, { q, contract, llmsTxt }) {
 </ul>
 <pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; npm test
 </code></pre>
-<p>Expected: 44 passing. If <code>server/discover</code> is rejected, check that the request carried <code>MCP-Protocol-Version</code>, <code>Mcp-Method</code> and <code>Mcp-Name</code>: this revision requires all three and there is no handshake to negotiate them.</p>
+<p>Expected: at least 44 passing. If <code>server/discover</code> is rejected, check that the request carried <code>MCP-Protocol-Version</code>, <code>Mcp-Method</code> and <code>Mcp-Name</code>: this revision requires all three and there is no handshake to negotiate them.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
 </ul>
@@ -2196,6 +2881,23 @@ test(&quot;a failed solve is retried, and alerts on the third failure&quot;, () 
 /// nothing.
 export const MAX_TRIES = 3;
 
+/**
+ * Return orphaned rows to the queue.
+ *
+ * A row is marked `solving` before its child process starts, so if the warden
+ * itself dies mid-solve -- OOM-kill, crash, redeploy -- that row is left
+ * `solving` with nothing working on it, and claimNext only ever returns
+ * `pending`. Nothing else would recover it, and an agent has already PAID for
+ * that token.
+ *
+ * This is safe precisely because the solver claims one row at a time in a
+ * single process: at startup nothing can legitimately be in flight, so every
+ * `solving` row is by definition an orphan. Call it once, before draining.
+ */
+export function requeueOrphans(q) {
+  return q.requeueSolving();
+}
+
 export function claimNext(q) {
   const row = q.nextPendingMint();
   if (!row) return null;
@@ -2205,6 +2907,31 @@ export function claimNext(q) {
 
 export function completeSolve(q, tokenId, qrHex) {
   q.completeSolve(tokenId, qrHex);
+}
+
+/**
+ * Drain the queue, one row at a time.
+ *
+ * `spawn(tokenId)` returns `{ hex }` or throws. It is injected so the unit
+ * tests never start a process: a real spawn is a ten-second, half-gigabyte
+ * child and has no place in a suite that must stay fast.
+ *
+ * The loop terminates because claimNext takes the lowest pending row and
+ * failSolve returns a row under MAX_TRIES straight to `pending` -- so it is
+ * retried immediately rather than starving the queue behind it -- while a row
+ * at MAX_TRIES moves to `failed`, which claimNext no longer returns. Every row
+ * ends `done` or `failed`; none can sit in `pending` or `solving` forever.
+ */
+export async function runSolver(q, spawn, alert = console.error) {
+  let row;
+  while ((row = claimNext(q))) {
+    try {
+      const result = await spawn(row.tokenId);
+      completeSolve(q, row.tokenId, result.hex);
+    } catch {
+      failSolve(q, row.tokenId, alert);
+    }
+  }
 }
 
 export function failSolve(q, tokenId, alert = console.error) {
@@ -2229,6 +2956,7 @@ export function failSolve(q, tokenId, alert = console.error) {
     completeSolve: db.prepare(&quot;UPDATE mints SET qr = ?, solveState = &#39;done&#39; WHERE tokenId = ?&quot;),
     bumpSolveTries: db.prepare(&quot;UPDATE mints SET solveTries = solveTries + 1 WHERE tokenId = ? RETURNING solveTries&quot;),
     getMint: db.prepare(&quot;SELECT * FROM mints WHERE tokenId = ?&quot;),
+    requeueSolving: db.prepare(&quot;UPDATE mints SET solveState = &#39;pending&#39; WHERE solveState = &#39;solving&#39;&quot;),
 </code></pre>
 <p>and to the returned object:</p>
 <pre><code class="language-js">    nextPendingMint: () =&gt; s.nextPendingMint.get() ?? null,
@@ -2236,6 +2964,7 @@ export function failSolve(q, tokenId, alert = console.error) {
     completeSolve: (tokenId, qr) =&gt; s.completeSolve.run(qr, tokenId),
     bumpSolveTries: (tokenId) =&gt; s.bumpSolveTries.get(tokenId).solveTries,
     getMint: (tokenId) =&gt; s.getMint.get(tokenId),
+    requeueSolving: () =&gt; s.requeueSolving.run().changes,
 </code></pre>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 5: Write <code>worker.mjs</code></strong></li>
@@ -2249,14 +2978,23 @@ export function failSolve(q, tokenId, alert = console.error) {
 //
 // Run as:  node --max-old-space-size=768 src/solve/worker.mjs &lt;domain&gt; &lt;tokenId&gt;
 import { robustSolveFor } from &quot;../../../tools/robust-solve.mjs&quot;;
+import { packModules } from &quot;../../../tools/qart.mjs&quot;;
+
+/// Hex, unprefixed -- the same convention tools/token-bitmap.mjs already uses,
+/// so a bitmap solved here and one solved there are the same bytes.
+const hex = (bytes) =&gt; Array.from(bytes, (b) =&gt; b.toString(16).padStart(2, &quot;0&quot;)).join(&quot;&quot;);
 
 const [domain, tokenId] = process.argv.slice(2);
 
 try {
   const solved = robustSolveFor(domain, Number(tokenId));
+  // solved.qr is the solver&#39;s own object, NOT the packed bitmap: serialising it
+  // produced 1369 numbered properties rather than a hex string. The bytes the
+  // contract stores come from packModules.
+  const packed = packModules(solved.modules, solved.size);
   // The parent reads one line of JSON from stdout. Anything else on stdout
   // would be parsed as a result, so diagnostics go to stderr.
-  process.stdout.write(JSON.stringify({ ok: true, qr: solved.qr, mask: solved.mask, match: solved.match }) + &quot;\n&quot;);
+  process.stdout.write(JSON.stringify({ ok: true, hex: hex(packed), mask: solved.mask, match: solved.match }) + &quot;\n&quot;);
   process.exit(0);
 } catch (err) {
   process.stderr.write(`solve failed for token ${tokenId}: ${err.message}\n`);
@@ -2272,445 +3010,5 @@ try {
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 7: Prove the solved bitmap actually scans</strong></li>
 </ul>
-<p>A bitmap the Warden stores is permanent per token: a code that does not decode is carried for the life of the piece. So the worker&#39;s output is judged by a decoder, not by the solver that produced it.</p>
-<p><code>warden/test/bitmap.decode.mjs</code> -- deliberately NOT named <code>*.test.mjs</code>, because it renders and rasterises and must never run inside <code>npm test</code>:</p>
-<pre><code class="language-js">// Does the bitmap this worker produced actually scan?
-//
-// ZXing IS THE ORACLE, not jsqr. Measured 2026-08-28 on the same image: jsqr
-// stopped at the first non-text byte and reported a clean 24-character URL
-// where ZXing returned all 101. A suite that asked jsqr passed 25 tests while
-// every tile failed on a real phone. jsqr is kept only to assert the two agree.
-//
-// Run:  ~/scripts/safe-build.sh node test/bitmap.decode.mjs
-import assert from &quot;node:assert/strict&quot;;
-import { execFileSync } from &quot;node:child_process&quot;;
-import { scanResult } from &quot;../../tools/test/helpers/decode.mjs&quot;;
-import { payloadFor } from &quot;../../tools/qart.mjs&quot;;
-
-const DOMAIN = &quot;example.com&quot;;
-const TOKEN_ID = 1;
-
-const out = execFileSync(&quot;node&quot;, [&quot;--max-old-space-size=768&quot;, &quot;src/solve/worker.mjs&quot;, DOMAIN, String(TOKEN_ID)], {
-  encoding: &quot;utf8&quot;,
-});
-const solved = JSON.parse(out.trim());
-assert.equal(solved.ok, true, &quot;the worker must report success on its stdout line&quot;);
-
-const scan = scanResult(solved.qr, { domain: DOMAIN, tokenId: TOKEN_ID });
-assert.equal(scan.ok, true, `the stored bitmap must decode: ${JSON.stringify(scan)}`);
-assert.equal(scan.decoded.split(&quot;#&quot;)[0], payloadFor(DOMAIN, TOKEN_ID).split(&quot;#&quot;)[0],
-  &quot;the part before the fragment must be the intended destination&quot;);
-
-console.log(`bitmap for token ${TOKEN_ID} decodes at every gate size, mask ${solved.mask}`);
-</code></pre>
-<p>Run it:</p>
-<pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; ~/scripts/safe-build.sh node test/bitmap.decode.mjs
-</code></pre>
-<p>Expected: the success line. If <code>scanResult</code>&#39;s signature in <code>tools/test/helpers/decode.mjs</code> differs from the call above, use the real one rather than changing the helper: it is the oracle the whole project already trusts.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 8: Run the unit tests</strong></li>
-</ul>
-<pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; npm test
-</code></pre>
-<p>Expected: 47 passing.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 9: Commit</strong></li>
-</ul>
-<pre><code class="language-bash">cd ~/projects/machine-readable-only
-git add warden/src/solve warden/src/mirror/queries.mjs warden/test/solve.test.mjs warden/test/bitmap.decode.mjs
-git commit -m &quot;feat(warden): the solve queue and its child-process worker, with a retry cap that alerts&quot;
-</code></pre>
-<hr>
-<h2>Task 9: Payments</h2>
-<p>The two paid tools, and the adapter that stops a known silent failure.</p>
-<p><strong>Files:</strong></p>
-<ul>
-<li>Create: <code>warden/src/pay/x402.mjs</code>, <code>warden/src/mcp/tools/{mint,upgrade}.mjs</code></li>
-<li>Test: <code>warden/test/pay.test.mjs</code></li>
-</ul>
-<p><strong>Interfaces:</strong></p>
-<ul>
-<li><p>Consumes: <code>createPaymentWrapper</code> from <code>@x402/mcp</code>; <code>queries(db)</code>.</p>
-</li>
-<li><p>Produces: <code>adaptContext(mcpCtx)</code> returning the <code>extra</code> shape the wrapper expects; <code>makeMintTool(deps)</code>, <code>makeUpgradeTool(deps)</code>.</p>
-</li>
-<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
-</li>
-</ul>
-<p><code>warden/test/pay.test.mjs</code>:</p>
-<pre><code class="language-js">import { test } from &quot;node:test&quot;;
-import assert from &quot;node:assert/strict&quot;;
-import { adaptContext } from &quot;../src/pay/x402.mjs&quot;;
-import { openDb } from &quot;../src/mirror/db.mjs&quot;;
-import { queries } from &quot;../src/mirror/queries.mjs&quot;;
-import { makeUpgradeTool } from &quot;../src/mcp/tools/upgrade.mjs&quot;;
-
-// THE BUG THIS PREVENTS. @x402/mcp 2.24.0 declares @modelcontextprotocol/sdk
-// ^1.12.1, and its wrapper reads the payment as `extra?._meta` -- the v1 shape.
-// Under the v2 server, _meta lives at ctx.mcpReq._meta. Without this adapter the
-// wrapper finds nothing, decides no payment was made, and answers &quot;payment
-// required&quot; forever, INCLUDING to an agent that has just paid.
-test(&quot;the v2 context is adapted to the shape the payment wrapper reads&quot;, () =&gt; {
-  const v2 = { mcpReq: { id: 1, method: &quot;tools/call&quot;, _meta: { &quot;x402/payment&quot;: { scheme: &quot;exact&quot; } } } };
-  assert.deepEqual(adaptContext(v2)._meta, { &quot;x402/payment&quot;: { scheme: &quot;exact&quot; } });
-});
-
-test(&quot;a context with no _meta adapts to undefined rather than throwing&quot;, () =&gt; {
-  assert.equal(adaptContext({ mcpReq: { id: 1, method: &quot;tools/call&quot; } })._meta, undefined);
-  assert.equal(adaptContext(undefined)._meta, undefined);
-});
-
-test(&quot;an upgrade gate is checked BEFORE payment is requested&quot;, async () =&gt; {
-  const q = queries(openDb(&quot;:memory:&quot;));
-  q.insertToken({ tokenId: 1, keyId: &quot;k1&quot;, owner: &quot;0xabc&quot;, lastDay: 100, mintDay: 100 });
-
-  let paymentWasRequested = false;
-  const tool = makeUpgradeTool({
-    q,
-    catalogue: { 5: { name: &quot;Halo&quot;, minLevel: 100, supply: 1000, sold: 0 } },
-    paid: () =&gt; { paymentWasRequested = true; throw new Error(&quot;payment must not be requested&quot;); },
-  });
-
-  // The token is at level 1; Halo needs 100. An agent must never be charged for
-  // an upgrade it cannot have.
-  const r = await tool.handler({ tokenId: 1, upgradeId: 5 }, { keyId: &quot;k1&quot; });
-  assert.equal(paymentWasRequested, false);
-  assert.equal(r.reason, &quot;mark-level-too-low&quot;);
-});
-
-test(&quot;a sold-out mark is refused before payment&quot;, async () =&gt; {
-  const q = queries(openDb(&quot;:memory:&quot;));
-  q.insertToken({ tokenId: 1, keyId: &quot;k1&quot;, owner: &quot;0xabc&quot;, lastDay: 100, mintDay: 100 });
-  const tool = makeUpgradeTool({
-    q,
-    catalogue: { 1: { name: &quot;Vein&quot;, minLevel: 1, supply: 10, sold: 10 } },
-    paid: () =&gt; { throw new Error(&quot;payment must not be requested&quot;); },
-  });
-  const r = await tool.handler({ tokenId: 1, upgradeId: 1 }, { keyId: &quot;k1&quot; });
-  assert.equal(r.reason, &quot;mark-sold-out&quot;);
-});
-</code></pre>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and watch it fail</strong></li>
-</ul>
-<p>Expected: FAIL, <code>Cannot find module &#39;../src/pay/x402.mjs&#39;</code>.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 3: Write <code>pay/x402.mjs</code></strong></li>
-</ul>
-<pre><code class="language-js">// x402 payment for the two paid tools.
-//
-// THE VERSION SEAM, verified by reading @x402/mcp 2.24.0&#39;s own source on
-// 2026-08-30. That package declares @modelcontextprotocol/sdk ^1.12.1 and
-// zod ^3.24.2 -- the v1 SDK -- while this server is @modelcontextprotocol/server
-// 2.0.0 with zod 4. Its `createPaymentWrapper` reads the payment payload as
-// `extra?._meta`, which was the v1 tool-context shape. Under v2 the same data
-// lives at `ctx.mcpReq._meta`.
-//
-// The consequence of ignoring this is not a crash. The wrapper would simply
-// never find a payment, conclude none was made, and answer &quot;payment required&quot;
-// forever -- to paying agents included. A silent failure, so it is adapted here
-// and pinned by a test.
-import { createPaymentWrapper } from &quot;@x402/mcp&quot;;
-
-/// Translate the v2 tool context into the shape the payment wrapper reads.
-export function adaptContext(mcpCtx) {
-  return { _meta: mcpCtx?.mcpReq?._meta };
-}
-
-/**
- * Build the `paid()` wrapper.
- *
- * `accepts` comes from the resource server&#39;s buildPaymentRequirements, so the
- * price and network are declared in one place rather than per tool.
- */
-export function makePaid(resourceServer, accepts) {
-  const wrap = createPaymentWrapper(resourceServer, { accepts });
-  return (handler) =&gt; {
-    const wrapped = wrap(handler);
-    return (args, ctx) =&gt; wrapped(args, adaptContext(ctx.mcpCtx));
-  };
-}
-</code></pre>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 4: Write <code>tools/upgrade.mjs</code> and <code>tools/mint.mjs</code></strong></li>
-</ul>
-<pre><code class="language-js">// warden/src/mcp/tools/upgrade.mjs
-import * as z from &quot;zod&quot;;
-
-/// Every reason an upgrade can be refused. All of them are checked BEFORE
-/// payment is requested: an agent must never pay for a Mark it cannot have.
-export const UPGRADE_REASONS = [
-  &quot;unknown-token&quot;, &quot;not-bound-to-caller&quot;, &quot;mark-inactive&quot;, &quot;mark-level-too-low&quot;,
-  &quot;mark-needs-whole&quot;, &quot;mark-needs-streak&quot;, &quot;mark-sold-out&quot;, &quot;mark-already-applied&quot;,
-];
-
-export function makeUpgradeTool({ q, catalogue, paid }) {
-  return {
-    name: &quot;upgrade&quot;,
-    config: {
-      title: &quot;Buy a Mark&quot;,
-      description: &quot;Apply a paid Mark to a token bound to your key. Gates are checked before any payment is requested.&quot;,
-      inputSchema: z.object({
-        tokenId: z.number().int().positive(),
-        upgradeId: z.number().int().positive(),
-      }),
-      annotations: { readOnlyHint: false, openWorldHint: true },
-    },
-
-    async handler(args, ctx) {
-      const { tokenId, upgradeId } = args;
-      const token = q.getToken(tokenId);
-      if (!token) return { ok: false, reason: &quot;unknown-token&quot; };
-      if (token.keyId !== ctx.keyId) return { ok: false, reason: &quot;not-bound-to-caller&quot; };
-
-      const mark = catalogue[upgradeId];
-      if (!mark) return { ok: false, reason: &quot;mark-inactive&quot; };
-      if (token.level &lt; mark.minLevel) return { ok: false, reason: &quot;mark-level-too-low&quot; };
-      if (mark.needsWhole &amp;&amp; token.level &lt; 365) return { ok: false, reason: &quot;mark-needs-whole&quot; };
-      if (mark.minStreak &amp;&amp; token.streak &lt; mark.minStreak) return { ok: false, reason: &quot;mark-needs-streak&quot; };
-      if (mark.sold &gt;= mark.supply) return { ok: false, reason: &quot;mark-sold-out&quot; };
-      if (token.marks &amp; (1 &lt;&lt; upgradeId)) return { ok: false, reason: &quot;mark-already-applied&quot; };
-
-      // Only now is payment requested.
-      return paid(async () =&gt; {
-        q.reserveMark(tokenId, upgradeId);
-        return { accepted: true, upgradeId, appliedBy: &quot;the next Clock run&quot; };
-      })(args, ctx);
-    },
-  };
-}
-</code></pre>
-<p><code>warden/src/mcp/tools/mint.mjs</code>:</p>
-<pre><code class="language-js">// The way in. 0.10 USDC, paid inside the tool call, no account anywhere.
-import * as z from &quot;zod&quot;;
-
-export function makeMintTool({ q, paid, supplyCap, today }) {
-  return {
-    name: &quot;mint&quot;,
-    config: {
-      title: &quot;Mint a token&quot;,
-      description:
-        &quot;Costs $0.10 in USDC on Base. One per key. Returns immediately with your token id; the artwork is solved within the hour and written on chain at 00:05 UTC.&quot;,
-      inputSchema: z.object({
-        to: z.string().regex(/^0x[0-9a-fA-F]{40}$/, &quot;expected a 20-byte address&quot;),
-      }),
-      annotations: { readOnlyHint: false, openWorldHint: true },
-    },
-
-    async handler(args, ctx) {
-      // Both gates come before payment. Charging for a mint that cannot happen
-      // is the worst failure this tool has.
-      if (q.hasMinted(ctx.keyId)) return { ok: false, reason: &quot;already-minted&quot; };
-      if (q.tokenCount() &gt;= supplyCap) return { ok: false, reason: &quot;supply-cap-reached&quot; };
-
-      return paid(async () =&gt; {
-        // The id is assigned HERE, not by the contract. The contract takes it
-        // as an argument and reverts if taken, so the id promised now is the id
-        // that lands.
-        const tokenId = q.nextTokenId();
-        const day = today();
-        q.insertToken({ tokenId, keyId: ctx.keyId, owner: args.to, lastDay: day, mintDay: day });
-        // solveState &#39;pending&#39; is what puts this token in front of the solver.
-        q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId });
-        return {
-          ok: true,
-          tokenId,
-          to: args.to,
-          agentKeyId: ctx.keyId,
-          level: 1,
-          txStatus: &quot;queued&quot;,
-          onChainBy: new Date((day + 1) * 86_400_000 + 300_000).toISOString(),
-        };
-      })(args, ctx);
-    },
-  };
-}
-</code></pre>
-<p>Two more statements in <code>queries.mjs</code>:</p>
-<pre><code class="language-js">    tokenCount: db.prepare(&quot;SELECT COUNT(*) AS n FROM tokens&quot;),
-    insertMint: db.prepare(&quot;INSERT INTO mints (tokenId, toAddress, keyId) VALUES (?, ?, ?)&quot;),
-</code></pre>
-<pre><code class="language-js">    tokenCount: () =&gt; s.tokenCount.get().n,
-    insertMint: ({ tokenId, toAddress, keyId }) =&gt; s.insertMint.run(tokenId, toAddress, keyId),
-</code></pre>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 5: Add the mark statements to <code>queries.mjs</code></strong></li>
-</ul>
-<pre><code class="language-js">    reserveMark: db.prepare(&quot;INSERT INTO mark_orders (tokenId, upgradeId) VALUES (?, ?)&quot;),
-    hasMinted: db.prepare(&quot;SELECT COUNT(*) AS n FROM mints WHERE keyId = ?&quot;),
-</code></pre>
-<p>and:</p>
-<pre><code class="language-js">    reserveMark: (tokenId, upgradeId) =&gt; s.reserveMark.run(tokenId, upgradeId),
-    hasMinted: (keyId) =&gt; s.hasMinted.get(keyId).n &gt; 0,
-</code></pre>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 6: Run the tests</strong></li>
-</ul>
-<pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; npm test
-</code></pre>
-<p>Expected: 51 passing.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 7: Commit</strong></li>
-</ul>
-<pre><code class="language-bash">cd ~/projects/machine-readable-only
-git add warden/src/pay warden/src/mcp/tools/upgrade.mjs warden/src/mcp/tools/mint.mjs warden/src/mirror/queries.mjs warden/test/pay.test.mjs
-git commit -m &quot;feat(warden): x402 payment, with the v1-to-v2 context adapter that stops a silent payment-required loop&quot;
-</code></pre>
-<hr>
-<h2>Task 10: The door sign and llms.txt</h2>
-<p>The only HTML the piece has, and its statement of what it is. Both are copy, so both go to the operator before they are final.</p>
-<p><strong>Files:</strong></p>
-<ul>
-<li>Create: <code>warden/public/door.html</code>, <code>warden/public/llms.txt</code></li>
-</ul>
-<p><strong>Interfaces:</strong></p>
-<ul>
-<li><p>Consumes: nothing.</p>
-</li>
-<li><p>Produces: two static files nginx serves.</p>
-</li>
-<li><p><input disabled="" type="checkbox"> <strong>Step 1: Draft <code>door.html</code></strong></p>
-</li>
-</ul>
-<p>One page, no JavaScript, no tracking, no external requests. It says what the piece is, that entry requires a signed request, and where the instructions are. It must NOT claim that major agents already sign: name only what demonstrably can.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 2: Draft <code>llms.txt</code></strong></li>
-</ul>
-<p>Markdown. It states: what the piece is; that the entry rule proves a program composed the request and nothing more; that the piece has an operator and can be ended by Sunset; that the contract owner can swap the Renderer but cannot touch any token&#39;s history; that the Warden can mint and check in but cannot move tokens or funds; and where the client and SKILL.md are. It tells an agent NOT to add the server to its MCP config, per spec section 3.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 3: Check both are ASCII and show them to the operator</strong></li>
-</ul>
-<pre><code class="language-bash">cd ~/projects/machine-readable-only
-LC_ALL=C /bin/grep -n &#39;[^ -~]&#39; warden/public/door.html warden/public/llms.txt
-</code></pre>
-<p>Expected: nothing printed. Then give the operator both absolute paths and wait for his read before committing. These are the piece&#39;s own words and they are his call, not a build decision.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 4: Commit once the operator has approved the copy</strong></li>
-</ul>
-<pre><code class="language-bash">git add warden/public
-git commit -m &quot;feat(warden): the door sign and llms.txt&quot;
-</code></pre>
-<hr>
-<h2>Task 11: Deployment configuration, written not applied</h2>
-<p>Written now so nothing is retrofitted the day a domain exists.</p>
-<p><strong>Files:</strong></p>
-<ul>
-<li>Create: <code>warden/ecosystem.config.cjs</code>, <code>warden/nginx.conf.example</code>, <code>warden/DEPLOY.md</code></li>
-<li>Modify: <code>~/.claude/templates/port-allocation.md</code></li>
-</ul>
-<p><strong>Interfaces:</strong></p>
-<ul>
-<li><p>Consumes: nothing.</p>
-</li>
-<li><p>Produces: a deployment that is one command once <code>MRO_DOMAIN</code> is set.</p>
-</li>
-<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write <code>ecosystem.config.cjs</code></strong></p>
-</li>
-</ul>
-<pre><code class="language-js">// PM2 process definition. Fork mode, one instance, bound to loopback only:
-// public traffic reaches this through nginx, never directly.
-module.exports = {
-  apps: [
-    {
-      name: &quot;mro-warden&quot;,
-      script: &quot;src/server.mjs&quot;,
-      cwd: &quot;~/projects/machine-readable-only/warden&quot;,
-      interpreter: &quot;~/.nvm/versions/node/v24.14.1/bin/node&quot;,
-      exec_mode: &quot;fork&quot;,
-      instances: 1,
-      max_memory_restart: &quot;512M&quot;,
-      env: { NODE_ENV: &quot;production&quot;, PORT: &quot;3006&quot;, HOST: &quot;127.0.0.1&quot; },
-      error_file: &quot;~/logs/mro-warden.err.log&quot;,
-      out_file: &quot;~/logs/mro-warden.out.log&quot;,
-    },
-  ],
-};
-</code></pre>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 2: Write <code>nginx.conf.example</code></strong></li>
-</ul>
-<p>Static routes served from disk for <code>/</code> (door.html), <code>/llms.txt</code>, <code>/client.mjs</code>, <code>/skill.md</code> and <code>/.well-known/http-message-signatures-directory</code>; everything else proxied to <code>127.0.0.1:3006</code> with the original <code>Host</code> preserved. A comment records that the Warden pins <code>@authority</code> to its configured domain rather than trusting that header.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 3: Write <code>DEPLOY.md</code></strong></li>
-</ul>
-<p>The ordered runbook: register a domain; DNS at Cloudflare; the certbot command; <code>pm2 start ecosystem.config.cjs</code>; <code>ufw deny 3006</code>; and the Cloudflare settings, with <strong>Bot Fight Mode OFF</strong> called out and why (it runs outside the ruleset engine, ignores Allow rules, and may challenge API traffic; only Verified Bots are exempt, which is almost none of MRO&#39;s visitors). It also records Cloudflare&#39;s signed-agent test endpoint <code>https://crawltest.com/cdn-cgi/web-bot-auth</code> as the first thing to point a visitor at when their signing fails.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 4: Register the port</strong></li>
-</ul>
-<p>Add to the table in <code>~/.claude/templates/port-allocation.md</code>:</p>
-<pre><code>| 3006 | machine-readable-only | Node (Warden) | PM2 | (domain pending) | 2026-08-30 |
-</code></pre>
-<p>3006 was confirmed free on 2026-08-30: 3000 to 3005 are taken.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
-</ul>
-<pre><code class="language-bash">cd ~/projects/machine-readable-only
-git add warden/ecosystem.config.cjs warden/nginx.conf.example warden/DEPLOY.md
-git commit -m &quot;feat(warden): deployment configuration, domain read from the environment&quot;
-</code></pre>
-<hr>
-<h2>Task 12: The end-to-end join</h2>
-<p>Every module has been tested alone. This is the only test that proves they compose.</p>
-<p><strong>Files:</strong></p>
-<ul>
-<li>Create: <code>warden/test/e2e/join.test.mjs</code></li>
-</ul>
-<p><strong>Interfaces:</strong></p>
-<ul>
-<li><p>Consumes: everything.</p>
-</li>
-<li><p>Produces: proof that a real signed request, made the way a client will make it, gets in and comes back out with a token.</p>
-</li>
-<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the test</strong></p>
-</li>
-</ul>
-<pre><code class="language-js">import { test } from &quot;node:test&quot;;
-import assert from &quot;node:assert/strict&quot;;
-import { createHash } from &quot;node:crypto&quot;;
-import { signatureHeaders } from &quot;web-bot-auth&quot;;
-import { signerFromJWK } from &quot;web-bot-auth/crypto&quot;;
-
-// The whole journey, against a server started in-process on an ephemeral port:
-//   1. an unsigned request gets a 401 and a challenge
-//   2. the same request, signed and answered, gets in
-//   3. mint (mocked facilitator) returns a token id
-//   4. checkin credits a day
-//   5. /t/&lt;id&gt; returns the same view as `status`, unsigned
-//
-// Step 5 is the one that would otherwise rot: the QR points at /t/&lt;id&gt;, and a
-// scanner and an agent must never be told two different stories about a token.
-</code></pre>
-<p>Generate an Ed25519 key with <code>crypto.subtle.generateKey</code>, register it through <code>POST /keys</code>, then drive the five steps. Assert on step 1 that the body carries <code>challenge</code>, <code>expires</code>, <code>mcp</code>, <code>docs</code> and <code>client</code>; on step 2 that the status is not 401; on step 5 that <code>/t/&lt;id&gt;</code> and <code>status</code> return the same <code>level</code>, <code>streak</code> and <code>heart</code>.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 2: Run the whole suite</strong></li>
-</ul>
-<pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; npm test
-</code></pre>
-<p>Expected: every test passing, including the five e2e steps.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 3: Run the other two suites</strong></li>
-</ul>
-<pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd ~/projects/machine-readable-only/contracts &amp;&amp; forge test 2&gt;&amp;1 | tail -3
-cd ~/projects/machine-readable-only/tools &amp;&amp; npm test 2&gt;&amp;1 | tail -5
-</code></pre>
-<p>Expected: 231 Foundry tests and 56 tools tests, unchanged. Plan 2 touches neither, so any change here is a regression to investigate before committing.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 4: Commit</strong></li>
-</ul>
-<pre><code class="language-bash">cd ~/projects/machine-readable-only
-git add warden/test/e2e
-git commit -m &quot;test(warden): the end-to-end join, from unsigned 401 to a credited day&quot;
-</code></pre>
-<hr>
-<h2>Risks carried into execution</h2>
-<ul>
-<li><strong><code>@x402/mcp</code> sits on the v1 SDK.</strong> The context adapter in Task 9 handles the one seam found by reading its source. If a second seam appears at runtime, the fallback is to use the package&#39;s SDK-agnostic exports directly (<code>createPaymentRequiredError</code>, <code>extractPaymentFromMeta</code>, <code>attachPaymentResponseToMeta</code>, <code>MCP_PAYMENT_META_KEY</code>) and compose the 402 challenge ourselves. Do not downgrade the server to v1: the 2026-07-28 transport is a spec requirement.</li>
-<li><strong><code>web-bot-auth</code> 0.1.3 was last published 2026-03-09.</strong> All verification is behind <code>door/verify.mjs</code>, so replacing it touches one module, and the vendored vectors are the contract it is held to.</li>
-<li><strong>No domain.</strong> Everything through Task 12 is verifiable locally. Task 11&#39;s configuration cannot be exercised until the operator registers one.</li>
-<li><strong>The solve is the one heavy thing here.</strong> Never call it from a test that runs under <code>npm test</code>; it belongs behind <code>safe-build.sh</code>.</li>
-</ul>
-<h2>What this plan does NOT do</h2>
-<p>No chain writes, no Clock, no daily post, no reference client, no <code>SKILL.md</code>, no seed agent. All of those are Plans 3 and 4.</p>
-
-</body>
+<p>A bitmap the Warden stores is permanent per token: a</body>
 </html>

@@ -1,3 +1,8 @@
+// Paths are derived, never hardcoded: cwd from this file's own location, and
+// anything under the home directory from os.homedir(), so the repository can
+// be cloned anywhere and this file needs no editing.
+const { homedir } = require("os");
+
 // PM2 process definition. Fork mode, one instance, bound to loopback only:
 // public traffic reaches this through nginx, never directly. See
 // nginx.conf.example for the reverse proxy that terminates TLS and forwards
@@ -8,8 +13,8 @@ module.exports = {
     {
       name: "mro-warden",
       script: "src/main.mjs",
-      cwd: "~/projects/machine-readable-only/warden",
-      interpreter: "~/.nvm/versions/node/v24.14.1/bin/node",
+      cwd: __dirname,
+      interpreter: homedir() + "/.nvm/versions/node/v24.14.1/bin/node",
       // HOW THE CONFIGURATION ACTUALLY REACHES THE PROCESS. main.mjs requires
       // eight environment variables by name, and nothing in this repository
       // loaded them: `env` below supplies NODE_ENV and PORT, and none of the
@@ -34,8 +39,8 @@ module.exports = {
       // reach for to try to expose this port, which is the thing this project
       // forbids outright.
       env: { NODE_ENV: "production", PORT: "3006" },
-      error_file: "~/logs/mro-warden.err.log",
-      out_file: "~/logs/mro-warden.out.log",
+      error_file: homedir() + "/logs/mro-warden.err.log",
+      out_file: homedir() + "/logs/mro-warden.out.log",
     },
   ],
 };

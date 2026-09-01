@@ -26,7 +26,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/<domain>/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/<domain>/privkey.pem;
 
-    root ~/projects/machine-readable-only/warden/public;
+    root /srv/mro/warden/public;
 
     # Static routes served straight from disk -- no need to round-trip
     # through the Warden process for content that never changes per request.

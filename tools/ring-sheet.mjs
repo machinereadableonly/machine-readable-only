@@ -57,6 +57,6 @@ tiles.forEach((t, i) => {
     + `${t.cells} cells, heart ${((45 / t.cells) * 100).toFixed(0)}%</text>`;
 });
 sheet += "</svg>";
-writeFileSync("~/projects/machine-readable-only/docs/year-rings.png",
+writeFileSync(new URL("../docs/year-rings.png", import.meta.url).pathname,
   new Resvg(sheet, { fitTo: { mode: "width", value: W } }).render().asPng());
 console.log(`\nsheet written: ${W}x${H}`);

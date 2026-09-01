@@ -30,7 +30,7 @@ const DEST = PAYLOAD.slice(0, -1);
 const CODE = solve(PAYLOAD, 7);
 const TARGET = heartTarget(CODE.size);
 const SIZES = [256, 500, 848, 1080, 1600];
-const OUT = "~/projects/machine-readable-only/tools/out/marks";
+const OUT = new URL("./out/marks", import.meta.url).pathname;
 
 const luma = ([r, g, b]) => 0.299 * r + 0.587 * g + 0.114 * b;
 const chromaOf = ([r, g, b]) => Math.max(r, g, b) - Math.min(r, g, b);
