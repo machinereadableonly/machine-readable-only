@@ -35,7 +35,7 @@ const DEST = PAYLOAD.slice(0, -1);
 const CODE = solve(PAYLOAD, 7);
 const TARGET = heartTarget(CODE.size);
 const S = CODE.size;
-const OUT = "~/projects/machine-readable-only/tools/out/marks";
+const OUT = new URL("./out/marks", import.meta.url).pathname;
 const FULL = process.argv[2] === "full";
 const SIZES = FULL ? [256, 500, 848, 1080, 1600] : [848];
 

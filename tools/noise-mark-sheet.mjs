@@ -135,7 +135,7 @@ tiles.forEach((t, i) => {
 });
 sheet += "</svg>";
 
-const OUT = "~/projects/machine-readable-only/docs/noise-mark.png";
+const OUT = new URL("../docs/noise-mark.png", import.meta.url).pathname;
 writeFileSync(OUT, new Resvg(sheet, { fitTo: { mode: "width", value: W } }).render().asPng());
 console.log("\nwrote " + OUT);
 
@@ -211,6 +211,6 @@ sweep.forEach((t, i) => {
 });
 sheet2 += "</svg>";
 
-const OUT2 = "~/projects/machine-readable-only/docs/noise-mark-intensity.png";
+const OUT2 = new URL("../docs/noise-mark-intensity.png", import.meta.url).pathname;
 writeFileSync(OUT2, new Resvg(sheet2, { fitTo: { mode: "width", value: W } }).render().asPng());
 console.log("wrote " + OUT2);

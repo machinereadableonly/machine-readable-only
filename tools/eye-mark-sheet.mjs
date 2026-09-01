@@ -32,7 +32,7 @@ const DEST = PAYLOAD.slice(0, -1);
 const CODE = solve(PAYLOAD, 7);
 const TARGET = heartTarget(CODE.size);
 const SIZES = [256, 500, 848, 1080, 1600];
-const OUT = "~/projects/machine-readable-only/tools/out/marks";
+const OUT = new URL("./out/marks", import.meta.url).pathname;
 const STREAK = 150;
 
 /// The three finder patterns, in MODULE coordinates. Standard QR: 7x7 at the

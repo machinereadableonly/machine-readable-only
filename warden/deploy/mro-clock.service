@@ -1,6 +1,6 @@
 [Unit]
 Description=Machine Readable Only -- the Clock, writing the day's queue to Base
-Documentation=file://~/projects/machine-readable-only/docs/plans/2026-08-31-mro-plan3-clock.md
+Documentation=file://%h/projects/machine-readable-only/docs/plans/2026-08-31-mro-plan3-clock.md
 # The mirror is a local SQLite file and the chain is remote, so a run started
 # before the network is up would fail its very first eth_gasPrice.
 After=network-online.target
@@ -8,12 +8,12 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=~/projects/machine-readable-only/warden
+WorkingDirectory=%h/projects/machine-readable-only/warden
 # --env-file, not EnvironmentFile=: the file holds CLOCK_PRIVATE_KEY, and this
 # way it is read by node itself rather than by systemd, so the key never
 # appears in `systemctl show`, in the journal's unit metadata, or in a
 # `systemd-analyze dump`.
-ExecStart=~/.nvm/versions/node/v24.14.1/bin/node --env-file=.env src/clock/main.mjs
+ExecStart=%h/.nvm/versions/node/v24.14.1/bin/node --env-file=.env src/clock/main.mjs
 # One run is a handful of transactions plus a paged log read. Ten minutes is
 # generous; a run still going after that is stuck, and killing it is correct
 # because the next run re-reads the world rather than resuming a plan.
@@ -24,7 +24,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=~/projects/machine-readable-only/warden ~/logs
+ReadWritePaths=%h/projects/machine-readable-only/warden %h/logs
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
@@ -36,5 +36,5 @@ LockPersonality=true
 OOMPolicy=continue
 MemoryMax=1G
 
-StandardOutput=append:~/logs/mro-clock.log
-StandardError=append:~/logs/mro-clock.log
+StandardOutput=append:%h/logs/mro-clock.log
+StandardError=append:%h/logs/mro-clock.log
