@@ -89,6 +89,21 @@ const authors = new Set(
 );
 const badAuthors = [...authors].filter((a) => !a.endsWith("users.noreply.github.com"));
 
+// A GitHub noreply address takes one of two documented forms and BOTH carry
+// the account username: "ID+USERNAME@users.noreply.github.com" (accounts after
+// 2017-07-18) and "USERNAME@users.noreply.github.com" (older accounts). There
+// is no documented ID-only form. So publishing under a personal account always
+// exposes the username in every commit -- which is expected, because the
+// account name is in the repository URL too. This is a notice, not a failure:
+// it is only a problem if the repository is meant to be unattributable.
+const carriesUsername = [...authors].filter((a) => a.includes("+") || !/^\d/.test(a));
+if (carriesUsername.length) {
+  console.log(
+    `prepublish-check: notice -- ${carriesUsername.length} commit identity carries the ` +
+      `account username (expected when publishing under that account; the URL shows it too)`,
+  );
+}
+
 if (findings.length === 0 && badAuthors.length === 0) {
   console.log(`prepublish-check: clean (${tracked.length} tracked files, ${authors.size} identity)`);
   process.exit(0);
