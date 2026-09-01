@@ -20,6 +20,19 @@ import { makeMintTool } from "./tools/mint.mjs";
 import { makeUpgradeTool } from "./tools/upgrade.mjs";
 import { registerResources } from "./resources.mjs";
 
+/**
+ * Is this already an MCP tool result, rather than a plain value to wrap?
+ *
+ * The marker is `content`: an array of content blocks is the one field the
+ * MCP tool-result shape requires and no tool of ours returns. `isError` alone
+ * would be too weak -- our own structured refusals carry `ok: false` and could
+ * gain one -- and a tool-name allowlist would go stale the moment another
+ * wrapped tool is added.
+ */
+function isToolResult(value) {
+  return typeof value === "object" && value !== null && Array.isArray(value.content);
+}
+
 export function makeMcpHandler(deps) {
   const handler = createMcpHandler(
     (ctx) => {
@@ -72,6 +85,21 @@ export function makeMcpHandler(deps) {
               isError: true,
             };
           }
+          // A RESULT THAT IS ALREADY AN MCP TOOL RESULT IS PASSED THROUGH.
+          //
+          // The paid tools' handlers are wrapped by @x402/mcp, which returns a
+          // COMPLETE result -- { structuredContent, content, isError } -- and
+          // wrapping that again buried `isError` one level down, leaving the
+          // outer result without one. x402MCPClient's extractor opens with
+          // `if (!result.isError) return null`, so a paying agent using the
+          // official client was told the call SUCCEEDED and never saw the
+          // demand. Minting is the only way in, so that made the piece
+          // unenterable through its own documented path.
+          //
+          // Detected by SHAPE, not by tool name: any handler that already
+          // speaks MCP is passed through, so this cannot come apart the next
+          // time a wrapped tool is added.
+          if (isToolResult(result)) return result;
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         });
       }
