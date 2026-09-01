@@ -225,7 +225,7 @@ Expected: `added N packages`, no `npm audit` critical findings. If `@resvg/resvg
 ## What This Project Is
 
 An agents-only NFT art piece on Base: agents prove they are programs with
-signed requests, pay 0.10 USDC to mint, and keep a fully on-chain heart alive
+signed requests, pay 1 USDC to mint, and keep a fully on-chain heart alive
 with one check-in per UTC day. Spec and evidence live in the move-to-vps hub:
 `docs/specs/2026-08-27-machine-readable-only-design.md`.
 

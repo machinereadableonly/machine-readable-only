@@ -42,8 +42,8 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
 
       // THE PRICE COMES FROM THE MARK, and a catalogue entry without one is
       // refused rather than defaulted. The seven Marks run from 1 to 100,000
-      // USDC against a mint's 0.10; anything that silently substituted a
-      // default here would sell a Crown for the price of a mint.
+      // USDC against a mint's single dollar; anything that silently
+      // substituted a default here would sell a Crown for the price of a mint.
       if (typeof mark.price !== "string" || !/^\$\d/.test(mark.price)) {
         alert(`mark ${upgradeId} has no usable price in the catalogue`);
         return { ok: false, reason: "mark-inactive", detail: "no-price" };

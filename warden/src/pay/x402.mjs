@@ -16,7 +16,7 @@ import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
 
 /// What a mint costs. One place, because the tool's own description quotes it.
-export const MINT_PRICE = "$0.10";
+export const MINT_PRICE = "$1.00";
 
 /// How `mint` names itself in a payment demand. Shared with the startup warm-up
 /// so both build the SAME cache entry -- warming up under a different name
@@ -82,9 +82,9 @@ async function initResourceServer(facilitatorUrl, network) {
  * call retries. A facilitator that is down for a minute must not disable
  * minting until someone restarts the process.
  *
- * WHY THE PRICE IS PER CALL, not baked into one wrapper. `mint` costs $0.10 and
+ * WHY THE PRICE IS PER CALL, not baked into one wrapper. `mint` costs $1.00 and
  * the seven Marks cost from 1 to 100,000 USDC. A single fixed-price wrapper
- * shared by both tools would silently charge $0.10 for a Crown the day the Mark
+ * shared by both tools would silently charge $1.00 for a Crown the day the Mark
  * catalogue is wired -- a money bug sitting in the seam between two correct
  * tasks, which is exactly where this project has found its worst defects.
  * Requirements are built and cached per (tool, price, description).

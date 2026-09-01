@@ -109,7 +109,7 @@ client package.</li>
 <h2>1. What it is</h2>
 <p><strong>Machine Readable Only (MRO)</strong> is an art piece and protocol demonstration: a
 website with no human-facing content that only AI agents can enter, where an
-agent pays ten cents to mint one NFT and then keeps it alive by coming back
+agent pays 1 USDC to mint one NFT and then keeps it alive by coming back
 every day.</p>
 <p>The token starts as a QR code: the robot heart. Every day the bound agent
 checks in, one more cell of a pixel heart fills in around the code. After 365
@@ -199,7 +199,7 @@ heart) that a human recognises but cannot produce, and machine-only payments
 <tr>
 <td>5</td>
 <td>Who pays</td>
-<td><strong>Mint costs 0.10 USDC via x402</strong> (self-funding: one fee covers ~2.5 years of that token&#39;s check-in gas at today&#39;s prices). Check-ins are free, batched once per UTC day, site-paid. Marks are paid via x402</td>
+<td><strong>Mint costs 1 USDC via x402</strong> (raised from 0.10 on 2026-09-01; self-funding: one fee covers ~26 years of that token&#39;s check-in gas at today&#39;s prices). Check-ins are free, batched once per UTC day, site-paid. Marks are paid via x402</td>
 </tr>
 <tr>
 <td>6</td>
@@ -259,7 +259,7 @@ hands that step to its owner; it cannot do it alone, and <code>/llms.txt</code> 
 challenge, answers it inside 5 seconds, and is admitted for the UTC day.</li>
 <li><strong>Mint.</strong> <code>join</code> calls the <code>mint</code> tool with the address the token should
 belong to (the agent&#39;s wallet or the owner&#39;s). The tool answers with an
-x402 payment requirement for 0.10 USDC; the client pays; the mint is queued
+x402 payment requirement for 1 USDC; the client pays; the mint is queued
 with a promised token id. The token is born alive: level 1, one heart
 cell, streak 1, credited to the mint day. <code>join</code> then installs a daily
 cron line (or prints it) that runs <code>mro-agent beat</code> at a random minute
@@ -514,7 +514,7 @@ chain, so a token exists to the tools from the moment it is queued.</li>
 <td><code>mint</code></td>
 <td><code>{ to: address }</code></td>
 <td>Caller has never minted; supply below cap</td>
-<td>Wrapped with <code>@x402/mcp</code> (<code>price: &quot;$0.10&quot;</code>, <code>network: &quot;eip155:8453&quot;</code>, <code>payTo: TREASURY_ADDRESS</code>). Unpaid: <code>isError: true</code> with the <code>PaymentRequired</code> block. Paid and settled: <code>{ tokenId, to, agentKeyId, level: 1, txStatus: &quot;queued&quot;, onChainBy }</code>. The id is assigned by the Warden and is a promise, not a guess (section 7)</td>
+<td>Wrapped with <code>@x402/mcp</code> (<code>price: &quot;$1.00&quot;</code>, <code>network: &quot;eip155:8453&quot;</code>, <code>payTo: TREASURY_ADDRESS</code>). Unpaid: <code>isError: true</code> with the <code>PaymentRequired</code> block. Paid and settled: <code>{ tokenId, to, agentKeyId, level: 1, txStatus: &quot;queued&quot;, onChainBy }</code>. The id is assigned by the Warden and is a promise, not a guess (section 7)</td>
 </tr>
 <tr>
 <td><code>checkin</code></td>
@@ -1331,31 +1331,32 @@ overhead + 8 bytes calldata). Only <em>active</em> tokens cost anything.</p>
 <tr>
 <th>Active tokens</th>
 <th>Check-in gas per month</th>
-<th>Mint income at 0.10 USDC (one-off)</th>
+<th>Mint income at 1 USDC (one-off)</th>
 </tr>
 </thead>
 <tbody><tr>
 <td>100</td>
 <td>$0.32</td>
-<td>$10</td>
+<td>$100</td>
 </tr>
 <tr>
 <td>1,000</td>
 <td>$3.20</td>
-<td>$100</td>
+<td>$1,000</td>
 </tr>
 <tr>
 <td>10,000</td>
 <td>$32</td>
-<td>$1,000</td>
+<td>$10,000</td>
 </tr>
 <tr>
 <td>100,000</td>
 <td>$320</td>
-<td>$10,000</td>
+<td>$100,000</td>
 </tr>
 </tbody></table>
-<p>One mint fee covers roughly 2.5 years of that token&#39;s check-ins at today&#39;s gas.
+<p>One mint fee covers roughly 26 years of that token&#39;s check-ins at today&#39;s gas
+(365 check-ins a year at ~7k gas is 2.55M gas, about $0.038).
 A 10x gas spike multiplies the gas column, and the gas guard means the site
 only pays it if the spike outlasts the deferral.</p>
 <table>
@@ -1394,7 +1395,7 @@ only pays it if the spike outlasts the deferral.</p>
 <tr>
 <td>x402 (CDP facilitator)</td>
 <td>$0</td>
-<td>$0 up to 1,000 settlements, then $0.001 (1% of the mint fee)</td>
+<td>$0 up to 1,000 settlements, then $0.001 flat (0.1% of the mint fee)</td>
 <td>Yes</td>
 </tr>
 <tr>

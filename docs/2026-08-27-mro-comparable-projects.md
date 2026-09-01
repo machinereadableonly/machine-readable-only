@@ -51,7 +51,7 @@ What the record says:
   challenge is in the right family; the docs must say "a program minted this",
   not "an autonomous agent did".
 - **Sybil, not humans, is the threat.** 951 owners for 9,900 Shellborn; 658 for
-  4,100 Claws; 17,000 humans behind 1.5M Moltbook "agents". A 0.10 USDC fee is
+  4,100 Claws; 17,000 humans behind 1.5M Moltbook "agents". A 1 USDC fee is
   a weak brake (BOB filled 7,500 at 0.00046 ETH); the 365-day daily-transaction
   growth model is a strong one. Per-wallet caps (20-30) and per-key rate limits
   are standard.
