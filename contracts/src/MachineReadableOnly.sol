@@ -428,9 +428,29 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// alias the shape bits exactly and silently corrupt every token's variant.
     /// Refused where the record is written, so the bad record cannot exist.
     error MarkIdOutOfRange(uint8 upgradeId);
+    error BadVariant(uint8 got);
 
-    event MarkApplied(uint256 indexed id, uint8 indexed upgradeId);
+    /// @dev The variant is part of what was bought, so it belongs in the event
+    /// the Clock and any indexer read. Not indexed: nobody filters by shape.
+    event MarkApplied(uint256 indexed id, uint8 indexed upgradeId, uint8 variant);
     event UpgradeSet(uint8 indexed upgradeId);
+
+    /// @dev How many variants a Mark accepts. PER MARK AND IN THE CONTRACT, not
+    /// a field on `Upgrade`, because a dial that can be turned up past what the
+    /// renderer can draw is a dial that can brick a token's image. The renderer
+    /// and this bound move together or not at all.
+    ///
+    ///   Mark 5, the bought Iris: three shapes -- target, squircle, leaf.
+    ///   Mark 9, Tint: two inks -- violet, gold. (Three until 2026-09-02, when
+    ///   near-black was measured as the default appearance of a QR eye and
+    ///   dropped: a paid Mark must not offer the unmarked look.)
+    ///
+    /// Every other Mark accepts only variant 0.
+    function _variantCount(uint8 upgradeId) private pure returns (uint8) {
+        if (upgradeId == 5) return 3;
+        if (upgradeId == 9) return 2;
+        return 1;
+    }
 
     function marksOf(uint256 id) external view returns (uint256) {
         return _marks[id];
@@ -452,10 +472,12 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         emit UpgradeSet(upgradeId);
     }
 
-    /// @notice Apply a paid Mark to a token.
+    /// @notice Apply a Mark to a token.
+    /// @param variant the shape or ink index, 0 for every Mark that has none.
     /// @dev Payment settles off chain through x402 before the Warden calls
-    /// this, which is why there is no value transfer here.
-    function applyMark(uint256 id, uint8 upgradeId)
+    /// this, which is why there is no value transfer here. Four of the ten
+    /// Marks are free and settle nothing at all.
+    function applyMark(uint256 id, uint8 upgradeId, uint8 variant)
         external
         onlyWarden
         whenNotPaused
@@ -465,7 +487,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (!u.active) revert MarkInactive();
 
         uint256 bit = 1 << upgradeId;
-        if (_marks[id] & bit != 0) revert MarkAlreadyApplied();
+        uint256 held = _marks[id];
+        if (held & bit != 0) revert MarkAlreadyApplied();
         if (u.maxSupply != 0 && u.sold >= u.maxSupply) revert MarkSoldOut();
 
         Token storage s = _tokens[id];
@@ -479,16 +502,28 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (s.streak < u.minStreak) revert MarkGate();
         if (u.requiresWhole && s.level < 365) revert MarkGate();
 
-        uint256 held = _marks[id];
         if (u.excludes != 0 && held & u.excludes != 0) {
             revert MarkExcluded(_lowestMark(held & u.excludes));
         }
         if (u.requiresAny != 0 && held & u.requiresAny == 0) revert MarkRequires();
+        if (variant >= _variantCount(upgradeId)) revert BadVariant(variant);
 
-        _marks[id] |= bit;
+        uint256 next = held | bit;
+        // The variant bytes and the run are written from the SAME word, so a
+        // Mark that carries neither costs exactly what it cost before.
+        if (upgradeId == 5) next |= uint256(variant) << 16;
+        if (upgradeId == 9) next |= uint256(variant) << 24;
+        // The earned Iris stores the RUN, read from the token here rather than
+        // supplied by the Warden, so it cannot be forged. Not the rung (which
+        // breaks if minStreak is ever turned down with setUpgrade) and not the
+        // colour (which would freeze a swappable renderer's decision into token
+        // state forever).
+        if (upgradeId == 6) next |= uint256(s.streak) << 32;
+        _marks[id] = next;
+
         unchecked { u.sold += 1; }
 
-        emit MarkApplied(id, upgradeId);
+        emit MarkApplied(id, upgradeId, variant);
         emit MetadataUpdate(id);
     }
 

@@ -127,7 +127,7 @@ contract BoundsTest is MroTestBase {
         t.setUpgrade(2, _upg(0)); // minLevel 0 -- the dial value that exposed it
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.NoSuchToken.selector, uint256(999)));
-        t.applyMark(999, 2);
+        t.applyMark(999, 2, 0);
 
         assertEq(t.marksOf(999), 0, "no phantom mark");
         assertEq(t.upgradeOf(2).sold, 0, "and no capped supply slot consumed");
@@ -142,12 +142,12 @@ contract BoundsTest is MroTestBase {
         t.pause();
         vm.prank(WARDEN);
         vm.expectRevert();
-        t.applyMark(1, 1);
+        t.applyMark(1, 1, 0);
         assertEq(t.marksOf(1), 0, "no mark applied while paused");
 
         t.unpause();
         vm.prank(WARDEN);
-        t.applyMark(1, 1);
+        t.applyMark(1, 1, 0);
         assertEq(t.marksOf(1), 2, "and it works again once unpaused");
     }
 
@@ -165,7 +165,7 @@ contract BoundsTest is MroTestBase {
         t.setUpgrade(3, u);
 
         vm.prank(WARDEN);
-        t.applyMark(1, 3);
+        t.applyMark(1, 3, 0);
         assertEq(t.upgradeOf(3).sold, 1, "sold out");
 
         // The owner edits the price, supplying sold = 0 as calldata naturally
@@ -181,7 +181,7 @@ contract BoundsTest is MroTestBase {
         t.mint(2, MALLORY, bytes32(uint256(2)), _code());
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.MarkSoldOut.selector);
-        t.applyMark(2, 3);
+        t.applyMark(2, 3, 0);
     }
 
     // -------------------------------------------------------------------
