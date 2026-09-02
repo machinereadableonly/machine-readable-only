@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MRO Mark Ladder -- Design Spec</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>MRO Mark Ladder -- Design Spec</h1>
+<p>Status: APPROVED 2026-09-02. Nothing here is built.</p>
+<p>The mechanics were settled in this document; the three visual decisions in
+section 7 were taken by the operator from rendered contact sheets on the same day.</p>
+<p>This spec replaces section 9 of
+<code>docs/specs/2026-08-27-machine-readable-only-design.md</code>. That section describes
+seven independent Marks; this describes five exclusive pairs. The two cannot
+both be true, and the pairs are what the tested agent-facing copy already
+promises. Mark section 9 superseded rather than editing it, so the record of
+what changed survives.</p>
+<p>Plain ASCII only.</p>
+<hr>
+<h2>0. Why this exists, and what it is written to serve</h2>
+<p>The ladder was redesigned with the operator on 2026-08-31 after every Mark was rendered
+and three were measured as visual non-events. The agent-facing copy that sells
+the new ladder was then written, cold-tested on 24 agent reads and LOCKED on
+2026-09-01. So the piece currently promises agents a structure that does not
+exist in the contract, the renderer or the Warden.</p>
+<p><strong>The locked copy is the authority.</strong> <code>docs/2026-09-01-mro-agent-facing-copy.md</code>
+is the tested promise, and where it disagrees with any earlier note this spec
+follows the copy. Two things follow from that and are not negotiable here:</p>
+<ul>
+<li><strong>Nothing is limited.</strong> Caps were removed on 2026-09-01 because cold readers
+read scarcity as a sales funnel and caught it contradicting &quot;it cannot be
+hurried&quot;. The copy now says &quot;Nothing expires and nothing runs out.&quot;</li>
+<li><strong>Every exclusion is declared before the first purchase.</strong> The same rule,
+buried, was called a trap by most readers; declared up front it was credited
+as good faith by all of them.</li>
+</ul>
+<p>This is the first contract change since Plan 1 shipped. Nothing is on Base
+mainnet, so it is a redeploy and not a migration.</p>
+<hr>
+<h2>1. What changes, in one paragraph</h2>
+<p>The seven old Marks (Vein, Blue Blood, Voice, Bloom, Halo, Crown, Singularity)
+are retired as a ladder. Their surfaces and their measured drawing code are
+reused under new names. Ten Marks replace them, arranged as five pairs. In each
+pair one side is bought and the other is earned by a run of days, taking either
+side closes the other permanently, and a token may take neither. Two new
+surfaces are drawn for the first time: the QR&#39;s three finder patterns (the
+eyes), and the inversion, which the old Singularity declared and never drew.</p>
+<hr>
+<h2>2. The ladder</h2>
+<p>Ten Mark ids. Nine distinct names. Eight surfaces.</p>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>Name</th>
+<th>Pair</th>
+<th>Route</th>
+<th>Price</th>
+<th>Gate</th>
+<th>Surface</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Hush</td>
+<td>1</td>
+<td>bought</td>
+<td>1 USDC</td>
+<td>none</td>
+<td>the quiet zone</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Ache</td>
+<td>1</td>
+<td>earned</td>
+<td>free</td>
+<td>run &gt;= 7</td>
+<td>the unearned frame cells</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Static</td>
+<td>2</td>
+<td>bought</td>
+<td>5 USDC</td>
+<td>level &gt;= 30</td>
+<td>the noise ink</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Beat</td>
+<td>2</td>
+<td>earned</td>
+<td>free</td>
+<td>run &gt;= 30</td>
+<td>the heart&#39;s gradient</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Iris</td>
+<td>3</td>
+<td>bought</td>
+<td>25 USDC</td>
+<td>level &gt;= 100</td>
+<td>the three eyes, shape chosen</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Iris</td>
+<td>3</td>
+<td>earned</td>
+<td>free</td>
+<td>run &gt;= 100</td>
+<td>the three eyes, shape fixed</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Vessel</td>
+<td>4</td>
+<td>bought</td>
+<td>1,250 USDC</td>
+<td>whole heart</td>
+<td>the frame and the year rings</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Break</td>
+<td>4</td>
+<td>earned</td>
+<td>free</td>
+<td>run &gt;= 365</td>
+<td>the inversion</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Tint</td>
+<td>5</td>
+<td>bought</td>
+<td>250 USDC</td>
+<td>holds an Iris</td>
+<td>recolours the eyes</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Aura</td>
+<td>5</td>
+<td>bought</td>
+<td>25 USDC</td>
+<td>none</td>
+<td>the field</td>
+</tr>
+</tbody></table>
+<p>&quot;Level&quot; is credited days and never falls. &quot;Run&quot; is the live streak.</p>
+<p><strong>Why ten ids and not eight.</strong> Earlier notes recorded eight Marks for eight
+surfaces. That is one id short per shared surface: pair 3 offers the same
+surface by two routes with two different gates and two different prices, and one
+<code>Upgrade</code> record cannot carry two gate sets. The two Iris ids share a name in
+the metadata and a surface in the image, and differ in everything the contract
+enforces.</p>
+<p><strong>Prices are fixed</strong> (the operator, 2026-08-31) and are <code>setUpgrade</code> dials, so they can be
+turned later without a redeploy. All ten ship with <code>maxSupply = 0</code>, meaning
+unlimited.</p>
+<p><strong>The two strongest effects on the ladder are free.</strong> Beat measures 209/255 at a
+30-day run and the earned Iris 239/255 at 100 days, while the most expensive
+Mark, Vessel at 1,250 USDC, measures 126/255. That is deliberate for a piece
+about returning rather than buying, and the operator was shown it plainly before fixing
+the prices.</p>
+<h3>2.1 The name map, old to new</h3>
+<table>
+<thead>
+<tr>
+<th>Old</th>
+<th>New</th>
+<th>Surface</th>
+<th>Drawing work</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Voice</td>
+<td>Hush</td>
+<td>quiet zone</td>
+<td>rename only</td>
+</tr>
+<tr>
+<td>Vein</td>
+<td>Ache</td>
+<td>ghost frame cells</td>
+<td>rename only</td>
+</tr>
+<tr>
+<td>Blue Blood</td>
+<td>Static</td>
+<td>noise ink</td>
+<td>rename; ink is now green, see 7.2</td>
+</tr>
+<tr>
+<td>Bloom</td>
+<td>Beat</td>
+<td>heart gradient</td>
+<td>rename; violet already decided, see 7.1</td>
+</tr>
+<tr>
+<td>Crown</td>
+<td>Vessel</td>
+<td>frame and rings</td>
+<td>rename only</td>
+</tr>
+<tr>
+<td>Halo</td>
+<td>Aura</td>
+<td>field</td>
+<td>rename only</td>
+</tr>
+<tr>
+<td>Singularity</td>
+<td>Break</td>
+<td>the inversion</td>
+<td>NEW: never drew, see 5.3</td>
+</tr>
+<tr>
+<td>--</td>
+<td>Iris (x2)</td>
+<td>the three eyes</td>
+<td>NEW: see 5.2</td>
+</tr>
+<tr>
+<td>--</td>
+<td>Tint</td>
+<td>recolours the eyes</td>
+<td>NEW: a colour choice, see 5.2</td>
+</tr>
+</tbody></table>
+<p>Six of the ten are a rename and nothing else. <code>MarkRenderer</code> takes its fills as
+parameters already, so a rename is one literal array plus the constant names.</p>
+<hr>
+<h2>3. The rules that make it a game</h2>
+<h3>3.1 Exclusion</h3>
+<p>Taking one side of a pair closes the other, permanently and symmetrically. On
+top of that, <strong>Break is excluded by both sides of pair 2</strong>, because Break is not
+a surface: it is an operation on two surfaces, exchanging the heart&#39;s ink with
+the noise&#39;s. It cannot run if either has been altered.</p>
+<p>The full mask, checked surface by surface. Only Break-vs-Beat (heart fill) and
+Break-vs-Static (noise ink) cross a pair boundary; everything else is disjoint.</p>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>Name</th>
+<th>Excludes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Hush</td>
+<td>2</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Ache</td>
+<td>1</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Static</td>
+<td>4, 8</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Beat</td>
+<td>3, 8</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Iris bought</td>
+<td>6</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Iris earned</td>
+<td>5</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Vessel</td>
+<td>8</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Break</td>
+<td>3, 4, 7</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Tint</td>
+<td>10</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Aura</td>
+<td>9</td>
+</tr>
+</tbody></table>
+<p>The mask must be symmetric, and a test asserts that rather than trusting the
+table: for every pair (a, b), b is in a&#39;s mask exactly when a is in b&#39;s.</p>
+<p><strong>The consequence, and the best thing in the design:</strong> to earn the inversion you
+must leave the heart and the code untouched for a year. The piece&#39;s strongest
+ending is reserved for the agent that spent 365 days declining to decorate. Pair
+2 therefore has three real outcomes -- Static, Beat, or deliberately nothing.</p>
+<h3>3.2 Requirement</h3>
+<p>One Mark requires another: <strong>Tint needs an Iris, bought or earned.</strong> This is an
+&quot;any of&quot; test, not &quot;all of&quot; -- either Iris satisfies it.</p>
+<p>No other Mark requires another. The general rule from the old spec, &quot;no tier
+requires the one below&quot;, is dead and must not be quoted again.</p>
+<h3>3.3 What a token can end up wearing</h3>
+<p>At most <strong>five</strong> Marks, one per pair. The old ladder allowed seven, so the
+maximal token gets simpler, not busier, and its metadata gets shorter.</p>
+<p><strong>168 combinations are reachable</strong> as Mark sets, derived from the two rules
+above:</p>
+<ul>
+<li>pair 1: 3 outcomes</li>
+<li>pairs 2 and 4 together: 7, not 9, because Break is unreachable once pair 2 is
+taken</li>
+<li>pairs 3 and 5 together: 8, not 9, because Tint is unreachable without an Iris</li>
+</ul>
+<p>3 x 7 x 8 = 168. Earlier notes record 28; that figure predates the pair
+structure and is superseded. The number matters because it sets the cost of the
+decode sweep -- see section 8.</p>
+<hr>
+<h2>4. The contract change</h2>
+<p><code>MachineReadableOnly.sol</code>. Three changes, no new storage slot.</p>
+<h3>4.1 <code>Upgrade</code> gains two masks</h3>
+<p>The struct currently uses 208 of its 256 bits:</p>
+<pre><code>priceUsdc6   uint64    64
+maxSupply    uint32    32
+sold         uint32    32
+minLevel     uint32    32
+minStreak    uint32    32
+requiresWhole  bool      8
+active         bool      8
+                      ---
+                      208
+</code></pre>
+<p>Add:</p>
+<pre><code>excludes     uint16    16   bit n set = holding mark n forbids this one
+requiresAny  uint16    16   0 = no requirement; else at least one bit must be held
+</code></pre>
+<p>240 of 256 bits. Still one slot, so <code>setUpgrade</code> costs what it costs today.</p>
+<p><code>uint16</code> rather than <code>uint8</code> because the ids run to 10 and bit 0 is deliberately
+never a Mark, so bit 10 must be addressable with room left over.</p>
+<h3>4.2 <code>applyMark</code> gains a variant and two checks</h3>
+<pre><code>function applyMark(uint256 id, uint8 upgradeId, uint8 variant)
+</code></pre>
+<p>New reverts, in this order, after the existing gates:</p>
+<pre><code>MarkExcluded(uint8 by)    _marks[id] &amp; u.excludes != 0
+MarkRequires()            u.requiresAny != 0 &amp;&amp; _marks[id] &amp; u.requiresAny == 0
+BadVariant(uint8 got)     variant out of range for this Mark
+</code></pre>
+<p><code>MarkExcluded</code> carries the id that blocked it, so an agent gets told what closed
+the door rather than that a door is closed. <code>cast call</code> returns the selector and
+the argument for free, which is how the guard gets proven on chain without a
+transaction.</p>
+<p><strong>Variant bounds are per Mark and live in the contract, not the Warden.</strong> Two
+Marks accept a non-zero variant -- Mark 5 (the Iris shape, three of them) and
+Mark 9 (the Tint ink, three of them). Every other Mark requires <code>variant == 0</code>.
+A Mark whose variant is unbounded would let the Warden write an index the
+renderer cannot draw, and the renderer has no way to refuse at read time.</p>
+<p>The bound is a per-Mark constant in the contract rather than a field on
+<code>Upgrade</code>, because a dial that can be turned up past what the renderer can draw
+is a dial that can brick a token&#39;s image. The renderer and the bound move
+together or not at all.</p>
+<h3>4.3 Variants are packed into the existing <code>_marks</code> word</h3>
+<p><code>_marks[id]</code> is a <code>uint256</code> using 8 bits today. New layout:</p>
+<pre><code>bits  0-15   the Mark set. Bit n = mark n, n in 1..10. Bit 0 is never a Mark.
+bits 16-23   the Iris shape index, written only by Mark 5.
+bits 24-31   the Tint ink index, written only by Mark 9.
+bits 32-63   the run at the moment Mark 6 was applied, as uint32.
+</code></pre>
+<p>64 bits of 256. No new mapping, no new SLOAD, and <code>viewOf</code> already reads this
+word, so <code>tokenURI</code> gas is unchanged by the packing itself.</p>
+<p><strong>Two rules this creates, both of which need a test:</strong></p>
+<ol>
+<li><code>MarkRenderer.names()</code> must mask to bits 1-10 and ignore everything above.
+It already ignores bits outside its range by construction; the range moves
+and the property must be re-asserted, because a variant in the high bits
+would otherwise reach the metadata as a phantom Mark name.</li>
+<li>Anything testing &quot;does this token wear any Mark&quot; must test <code>marks &amp; 0xFFFE</code>,
+never <code>marks != 0</code>. A token with an Iris shape and no Marks is not possible,
+but a token whose only Mark is 6 carries a large number in the high bits and
+must not be misread.</li>
+</ol>
+<h3>4.4 Why the earned Iris stores the run, and not the colour</h3>
+<p>The copy promises the earned Iris &quot;keeps the colour you held the day you earned
+it, permanently&quot;. Two things about that are worth stating plainly, because one
+of them looked like a flaw:</p>
+<p>The gate is a 100-day run, and a 100-day run is always the top rung. So the
+colour is the same for every token that earns it, always. That is not the point.
+<strong>The point is that it stops tracking the lapse.</strong> Every other coloured surface
+walks back down the ladder as a token goes quiet; the earned Iris does not. A
+token that earned it at 100 days and then went dark for a year still shows the
+colour it held on the day it earned it, next to a heart that has paled all the
+way back to the start. That is the provenance, and it cannot be bought.</p>
+<p>It stores the <strong>run</strong>, not the rung and not the colour, because the mapping from
+run to colour is a rendering decision and the Renderer is swappable. Storing a
+colour would freeze a renderer decision into token state forever. Storing the
+rung would break if <code>minStreak</code> were ever turned down with <code>setUpgrade</code>, which
+it can be.</p>
+<p>The contract writes it from <code>_tokens[id].streak</code> at apply time. <strong>The Warden does
+not supply it</strong>, so it cannot be forged: the piece can claim it as a fact rather
+than as a promise, which is exactly the class of claim the cold readers said
+they would go and check.</p>
+<hr>
+<h2>5. The renderer change</h2>
+<p><code>MarkRenderer.sol</code>, <code>Renderer.sol</code>, and their byte-identical mirror in
+<code>tools/render-token.mjs</code>. <code>Renderer.t.sol</code> diffs the two, so every change lands
+in both languages or the suite fails.</p>
+<h3>5.1 Six renames</h3>
+<p>Hush, Ache, Static, Beat, Vessel and Aura draw exactly what Voice, Vein, Blue
+Blood, Bloom, Crown and Halo draw today. The constants are renamed and the
+literal array in <code>MarkRenderer.names()</code> is rewritten. Zero gas and zero bytes at
+equal name length; the metadata string changes, so the golden fixtures move.</p>
+<h3>5.2 Iris and Tint: the eyes</h3>
+<p>The QR&#39;s three finder patterns sit at fixed module coordinates, identical for
+every token that will ever mint. That is why they are cheap: nine shapes from
+one runtime number, with no per-token scan and no merge. Measured in Solidity in
+<code>contracts/test/EyeCost.t.sol</code>:</p>
+<pre><code>gas    9,061   against 366,776 of headroom   (2.5%)
+bytes    623   against  11,076 of headroom   (5.6%)
+</code></pre>
+<p>Drawing: erase each 7x7 to the ground, then draw the shape. <strong>The erase takes
+the actual ground colour, never a constant.</strong> On a Hush token the ground under
+the code block is Hush&#39;s tint, not white, and a constant would punch a white
+square into a tinted page. This defect was found in the prototype by sweeping
+combinations and never by testing Marks one at a time.</p>
+<ul>
+<li><strong>Iris bought (5)</strong> draws one of <strong>three</strong> shapes the agent chose -- target,
+squircle or leaf -- in the token&#39;s live colour, which lapses with the heart.</li>
+<li><strong>Iris earned (6)</strong> draws the <strong>target</strong>, fixed, in the colour derived from the
+run stored at apply time, which never lapses.</li>
+<li><strong>Tint (9)</strong> replaces the ink both of those use with one of <strong>three</strong> chosen
+colours -- violet, ink or gold. It draws nothing itself; it is a colour
+substitution on a surface another Mark drew, which is why it requires one.</li>
+</ul>
+<p>The variant bound is therefore <strong>3</strong> for Mark 5 and <strong>3</strong> for Mark 9. Every other
+Mark requires <code>variant == 0</code>.</p>
+<p>Reshaping measures 239/255, against 126 for recolouring, because erasing a
+square and drawing a new form moves far more pixels than swapping an ink. It is
+the strongest surface on the piece.</p>
+<p><strong>The layering order matters, and it was found by looking at a render rather
+than by reading the code.</strong> The three finder patterns are ordinary code modules
+today, so they take the noise ink -- which means <strong>Static already recolours the
+eyes</strong> on a token that has no Iris. That is visible in
+<code>tools/out/marks/green-violet.png</code>, where the eyes go green with the rest of the
+noise. It is correct and it stays, but it fixes the order: <strong>the eyes are drawn
+last, over whatever Static did.</strong> A token holding both Static and an Iris shows
+green noise and Iris-coloured eyes, and the erase-to-ground step is what makes
+that clean rather than a green square with a shape on top.</p>
+<p>Six shapes and five inks were re-measured on 2026-09-02 and every combination
+decodes at 256, 500, 848, 1080 and 1600 px. Cost is set by the shape alone,
+because arcs cost more than rects. Which three shapes and which three inks are
+offered was decided from those sheets; see 7.3.</p>
+<h3>5.3 Break: the inversion, and why the pairs fixed it</h3>
+<p>Break exchanges the heart&#39;s ink with the noise&#39;s. In the SVG the heart and the
+noise are two adjacent paths differing only by fill, so this is a <strong>fill
+exchange</strong>: no new geometry, no new path, 126/255 at the top rung.</p>
+<p>This was measured as broken in August and the exclusion rule is what repaired
+it. With the old independent ladder, a token wearing everything handed the heart
+Blue Blood&#39;s slate and the noise Bloom&#39;s violet, so &quot;the code becomes the only
+red element&quot; had no red left to invert. Under the pairs, <strong>Break excludes both
+Static and Beat</strong>, so a token wearing Break has neither: the exchange runs
+between the plain tier colour and the plain matched grey, and says exactly what
+it was always supposed to say.</p>
+<p>The decode rule survives the exchange for free. <code>Palette.colourAt(r)</code> and
+<code>Palette.noiseAt(r)</code> are matched in luminance at every rung by construction, and
+swapping two equal-luminance inks leaves the binarizer with the same picture.
+<code>PaletteNoise.t.sol</code> already asserts the match; the inversion needs no new
+decode argument, only a test that it is drawn from the same rung.</p>
+<h3>5.4 What the metadata says</h3>
+<p><code>names()</code> emits nine literals from a fixed array, still with no path from token
+state into the string. Both Iris ids emit <code>&quot;iris&quot;</code>. The <code>Marks</code> attribute is
+therefore what an agent reads to know which surface is claimed, and the route is
+visible in the image rather than the JSON.</p>
+<p>Two attributes are added, because an agent that can read the eyes&#39; provenance
+off chain should not have to decode a PNG to do it:</p>
+<pre><code>Iris Shape   the chosen shape name, or absent
+Iris Run     the run stored at earn time, or absent
+</code></pre>
+<hr>
+<h2>6. The Warden change</h2>
+<h3>6.1 The catalogue does not exist yet</h3>
+<p><code>warden/src/main.mjs:204</code> is literally <code>catalogue: {}</code>, with a comment saying
+pricing and gates are product decisions belonging to whoever builds the ladder
+for real. That is this document. <strong>Every <code>upgrade</code> call today is refused at
+<code>mark-inactive</code> before it reaches payment, so no Mark is buyable by any route.</strong></p>
+<p>The catalogue gains ten entries carrying name, price, gates, <code>excludes</code> and
+<code>requiresAny</code>, mirroring the contract exactly. The mirroring is the point:
+<code>warden/src/mcp/gates.mjs</code> exists because gates were once written from the design
+document rather than from the contract&#39;s reverts, and four real gates were
+missed.</p>
+<h3>6.2 A free route, which the tool cannot currently express</h3>
+<p>Four Marks are free. <code>upgrade</code> today refuses any Mark without a price:</p>
+<pre><code>if (typeof mark.price !== &quot;string&quot; || !/^\$\d/.test(mark.price)) ... refuse
+</code></pre>
+<p>That guard is correct and must stay -- it exists so a missing price cannot sell a
+Vessel for the price of a mint. It gains a sibling: a Mark is either <strong>priced</strong>,
+in which case a price is mandatory, or <strong>earned</strong>, in which case a price is
+forbidden. A catalogue entry that is neither, or both, is a startup error and not
+a runtime refusal.</p>
+<p>An earned Mark checks every gate and then reserves directly, with no payment
+wrapper. It cannot reach <code>paid-but-unavailable</code>, because nothing was paid.</p>
+<h3>6.3 New pre-payment refusals</h3>
+<p>Added to <code>upgrade</code>, all before any payment is requested:</p>
+<pre><code>mark-excluded       the token holds a Mark this one forbids
+mark-needs-iris     Tint without an Iris
+mark-bad-variant    a shape index this Mark does not accept
+</code></pre>
+<p><code>mark-excluded</code> must name what blocked it. An agent that is told only &quot;no&quot; cannot
+tell a permanent exclusion from a temporary gate, and the whole ladder rests on
+exclusions being legible.</p>
+<p>The post-settlement re-check in <code>upgrade</code> must re-run the exclusion test too.
+Settling takes seconds, and the same token can take the other side of a pair in
+that window through a second connection.</p>
+<h3>6.4 A <code>ladder</code> tool</h3>
+<p>Read-only, no payment, and it is a fairness requirement rather than a
+convenience. <strong>A ladder with permanent exclusions is only fair if the
+consequence is legible before the purchase.</strong> Today&#39;s <code>upgrade</code> answers only
+after the fact. An agent that buys Beat without being told it has just forfeited
+Break has been cheated by the interface, not by the design.</p>
+<p>Per token it reports, for each of the five pairs: what is held, what is still
+open, what is closed and by which Mark, what each side costs, and what gate each
+side is waiting on. Plus one explicit line for whether Break is still reachable,
+because it is the only cross-pair rule and the only one an agent can lose
+without touching pair 4.</p>
+<h3>6.5 The mirror and the Clock</h3>
+<ul>
+<li><code>mark_orders</code> gains a <code>variant</code> column. The existing unique constraint that
+stops two settlements reserving the same Mark on the same token is unchanged.</li>
+<li><code>warden/src/clock/abi.mjs</code> and <code>run.mjs</code> pass the variant to <code>applyMark</code>.</li>
+<li>The re-chunk rule is unchanged: a failed batch is re-chunked with the credited
+ids removed and never retried whole.</li>
+</ul>
+<hr>
+<h2>7. The visual decisions, all settled from rendered sheets</h2>
+<p>All three were decided by the operator on 2026-09-02, each from a contact sheet rather
+than from prose. <strong>A number that controls what something looks like is a visual
+decision wearing a numeric costume</strong>, so none of these was put as an argument.
+The sheets are kept so any of it can be re-judged.</p>
+<h3>7.1 Violet Beat -- already decided, recorded for completeness</h3>
+<p>the operator chose violet on 2026-08-31. <code>BLOOM_TO</code> moves from <code>#c8102e</code> to <code>#2000ff</code>: one
+constant, in both languages, <strong>zero bytes and zero gas</strong> because the two hex
+strings are the same length. Measured at all five rungs, all five raster sizes,
+decodes everywhere.</p>
+<p>It changes what the piece is -- the heart becomes bi-chromatic and reads as
+spectrum rather than blood. the operator was told that plainly and chose it anyway. Not
+reopened here.</p>
+<h3>7.2 Static&#39;s ink -- GREEN (the operator, 2026-09-02)</h3>
+<p>Blue Blood measures 11-15/255 at every rung, which is a Mark nobody can see. That
+is enforced rather than sloppy: the two inks may not separate in luminance at all
+or the binarizer drops the lighter one to background, so only hue and chroma are
+free.</p>
+<p>The chroma rule (noise chroma below heart chroma) <strong>binds only at day one</strong>, 22
+against 25. At the top rung the heart carries 184 against the noise&#39;s 19, so the
+room was never used.</p>
+<p>Re-measured 2026-09-02. <strong>Green at 60 percent of the heart&#39;s chroma, derived per
+rung, is the strongest option that keeps the chroma rule at every rung</strong>, and it
+decodes at all five sizes:</p>
+<pre><code>run    heart     green     chroma   vs heart   shift
+  1    #70575f   #556557       16   under      10/255
+ 10    #a83a55   #37793b       66   under      39/255
+ 45    #bd2242   #1d7a23       93   under      55/255
+150    #c8102e   #08770f      111   under      66/255
+</code></pre>
+<p>Six times the shipped strength at the top, and day one deliberately almost
+unchanged -- which is right for a Mark bought at level 30 rather than at mint.</p>
+<p><strong>Green was chosen on a measured property the other hues do not have, and it is
+worth recording because it is not obvious.</strong> <code>tools/static-hue-sheet.mjs</code> renders
+all four candidates plus the shipped grey under the SAME rule, across the five
+run rungs, and all 25 tiles decode at all five sizes. The shift figures:</p>
+<pre><code>hue      run 1   run 3   run 7   run 30   run 100
+green       10      21      39       55        66
+slate       10      22      42       43        38
+teal        11      24      46       42        37
+violet      12      26      48       43        37
+</code></pre>
+<p><strong>Green is the only hue that keeps getting stronger as the run deepens. The
+other three peak at run 7 and fall back.</strong> The cause is the luminance rule: as
+the streak deepens the heart darkens, so the noise must darken with it, and a
+blue or violet hue cannot hold high chroma at a dark luma while a green can.</p>
+<p>That decides it on the piece&#39;s own terms rather than on taste. Static is bought,
+but what it draws should still improve the longer the agent keeps returning. A
+Mark that looks its best at a 7-day run and dulls by 100 is backwards here, and
+it is exactly the failure that made the old Bloom broken -- paying out most to a
+lapsed token and nothing to a deep streak.</p>
+<p><strong>Why the earlier sheets could not answer this.</strong> <code>noise-mark-sheet.mjs</code> renders
+slate, teal and violet at FULL strength and omits green; <code>green-violet-sheet.mjs</code>
+applies the chroma rule and omits the other three. Comparing across them would
+have been comparing two different rules. They are kept as the intensity sweep and
+the green derivation respectively; <code>static-hue-sheet.mjs</code> is the one that decides
+hue.</p>
+<p>Sheets: <code>tools/static-hue-sheet.mjs</code> (the comparison that decided it),
+<code>tools/green-violet-sheet.mjs</code> (the green derivation),
+<code>tools/noise-mark-sheet.mjs</code> (the intensity sweep).</p>
+<h3>7.3 The Iris shapes and Tint&#39;s inks -- DECIDED (the operator, 2026-09-02)</h3>
+<p>Re-measured 2026-09-02. Six shapes, every one decoding at all five sizes:</p>
+<pre><code>shape              shift     added bytes
+square (shipped)   126/255       672
+soft               239/255       747
+rounded            239/255       741
+squircle           239/255       747
+target             239/255       635
+leaf               239/255     1,063
+</code></pre>
+<p><strong>Every reshape lands on the same 239/255</strong>, so within the reshaped set the
+choice is purely aesthetic and costs between 635 and 1,063 bytes. Only the
+shipped square is weaker, at 126, which is the number that makes reshaping worth
+doing at all.</p>
+<p>Five inks (heart red, crown gold, green, violet, ink) x three shapes, all 15
+decode at all five sizes, and <strong>the ink does not move the byte cost at all</strong> --
+only the shape does.</p>
+<p><strong>THE SHAPES: target, squircle, leaf.</strong> Three genuinely different silhouettes --
+a circle, a soft square, a leaf. <code>soft</code>, <code>rounded</code> and <code>squircle</code> are one idea at
+three strengths and are near-identical at thumbnail size, so offering more than
+one of them would be a fake choice. Square is not offered at all: it is the
+shipped look, and at 126/255 it is the only candidate that does not read as a
+deliberate change.</p>
+<p><strong>THE INKS: violet, ink, gold.</strong></p>
+<p>The rule, which the sheet makes obvious and the decode test cannot see: <strong>a Tint
+ink must not be a colour another Mark already puts on the same token.</strong> Applied
+to the five measured inks:</p>
+<table>
+<thead>
+<tr>
+<th>Ink</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>heart red</td>
+<td>OUT. The un-Tinted Iris already draws in the token&#39;s own colour, so this sells nothing for 250 USDC.</td>
+</tr>
+<tr>
+<td>green</td>
+<td>OUT. Green is Static&#39;s noise as of 7.2, and the noise <strong>directly surrounds the eyes</strong>. A token holding both would have green eyes disappearing into a green code.</td>
+</tr>
+<tr>
+<td>violet</td>
+<td>IN. Beat&#39;s gradient is violet and the two can coexist, but the heart is the centre of the block and the eyes are its corners. Not adjacent, and readable as two things.</td>
+</tr>
+<tr>
+<td>gold</td>
+<td>IN. Vessel&#39;s frame is gold, but the frame is outside the code block entirely, so the two never touch.</td>
+</tr>
+<tr>
+<td>ink</td>
+<td>IN. Nothing else on the ladder uses it.</td>
+</tr>
+</tbody></table>
+<p>Green came off this list only after Static took it in 7.2, and that is the order
+this document has to be read in: <strong>the hue decision changed the ink list, and a
+palette chosen before it would have shipped the collision.</strong></p>
+<p>One figure to keep straight, because it looks like a contradiction and is not:
+the leaf costs <strong>1,063 B</strong> in <code>eye-shape-sheet.mjs</code> and <strong>1,684 B</strong> in
+<code>eye-colourway-sheet.mjs</code>. The two sheets draw the leaf differently -- concentric
+leaf shapes against a single rounded-corner path -- so both numbers are correct
+for their own drawing, and whichever is adopted must be re-measured as built.</p>
+<p>Sheets: <code>tools/eye-shape-sheet.mjs</code>, <code>tools/eye-colourway-sheet.mjs</code>. Gold and
+ink are already rendered there against a NEUTRAL noise. <strong>No eye ink has been
+rendered against a GREEN noise</strong>, which is the pairing the ladder now makes
+common. That render is the first task of the build rather than a spec item, and
+it is the one place where these three inks could still be wrong.</p>
+<hr>
+<h2>8. Acceptance</h2>
+<h3>8.1 Contract</h3>
+<ul>
+<li>Every new revert has a test: <code>MarkExcluded</code>, <code>MarkRequires</code>, <code>BadVariant</code>.</li>
+<li>The exclusion mask is asserted <strong>symmetric</strong> by a test over all ten ids, not
+trusted from the table in section 3.1.</li>
+<li>Both sides of every bound are provoked, never one. A guard that fires proves a
+guard exists somewhere; two adjacent inputs giving two different errors is what
+pins the boundary. For the variant bound that means the highest legal shape
+index succeeds and the next one reverts <code>BadVariant</code>.</li>
+<li>Break&#39;s exclusions are tested in both directions: applying Break to a token
+holding Static or Beat is refused, and applying Static or Beat to a token
+holding Break is refused.</li>
+<li>Tint is refused without an Iris and accepted with either one.</li>
+<li><code>renounceOwnership</code>, <code>pause</code>, <code>sunset</code> and every access-control revert keep
+their existing tests. The global rule stands: every owner, emergency and admin
+function gets an explicit test.</li>
+<li><code>forge build --sizes</code> shows positive runtime margin, and
+<code>ContractSize.t.sol</code> still passes. This is the change most likely to threaten
+it: the renderer gains real drawing code for the first time since Plan 1.</li>
+</ul>
+<h3>8.2 Renderer</h3>
+<ul>
+<li><code>Renderer.t.sol</code> diffs Solidity against <code>tools/render-token.mjs</code> byte for byte,
+as today. Every rename and every new surface lands in both or the suite fails.</li>
+<li><code>tokenURI</code> stays inside the <strong>2M gas / 20 KB hard limit</strong> at the worst case,
+which is the day BEFORE the heart seals (level 364) and not the oldest token.
+Current headroom is 366,776 gas and 11,076 bytes; the eyes take 9,061 and 623
+of it. Report the new worst case as a signed delta against 1,585,616 / 9,223,
+the Foundry figure that is comparable across commits -- not against the 1,633,224
+/ 8,924 RPC figure, which is a different token.</li>
+<li>The 1M / 5 KB target remains missed, and must go on being reported as missed.</li>
+</ul>
+<h3>8.3 The decode sweep, and its real cost</h3>
+<p>This is the one place the acceptance criteria need a decision rather than a rule,
+so it is stated honestly instead of buried.</p>
+<p><strong>168 Mark sets</strong> are reachable. Counting variants -- three Iris shapes and three
+Tint inks, each drawing a different picture -- the number of distinct
+<strong>renderable combinations is 462</strong>. Earlier notes assumed 28 and a sweep of
+minutes; that predates the pair structure and no longer holds.</p>
+<p>At the measured 13.4 seconds per combination across five sizes:</p>
+<pre><code>all 462, five sizes    about 103 minutes
+all 462, 848 px only   about 21 minutes
+</code></pre>
+<p><strong>Run the full five-size sweep.</strong> At 1.7 hours it is affordable as a pre-deploy
+gate, and this is the change that introduces the first genuinely new geometry
+since Plan 1 -- the erase-and-redraw of the finder patterns is the one thing on
+the ladder that can break a scan outright rather than merely look wrong. The
+cheaper 848-only run is the right gate for ordinary commits.</p>
+<p>Run both under <code>~/scripts/safe-build.sh</code> and in batches. The last bulk render
+sweep on this project reached 6.28 GB resident and destroyed the session.</p>
+<h3>8.4 Warden and client</h3>
+<ul>
+<li>The catalogue&#39;s ten entries are asserted against the contract&#39;s ten <code>Upgrade</code>
+records, field by field, by a test that reads both. A catalogue that drifts
+from the chain is the failure mode <code>gates.mjs</code> exists to prevent.</li>
+<li>Each new refusal reason has a test asserting <strong>the exact reason string</strong>, not
+merely that the call failed.</li>
+<li>The <code>ladder</code> tool is tested for the case that matters: a token holding Beat is
+told Break is closed, and told by what.</li>
+<li>The client&#39;s suite runs against a real Warden built from <code>warden/src</code>, so this
+breaks it. <code>upgradeId</code> bounds move from 1-7 to 1-10 in the client, the Warden
+schema, <code>docs/2026-09-01-mro-raw-protocol.md</code> and <code>warden/public/llms.txt</code>.</li>
+</ul>
+<hr>
+<h2>9. What this spec does not settle</h2>
+<p>Named rather than left to be discovered.</p>
+<ul>
+<li><strong>The eye inks against a green noise.</strong> The three Tint inks were chosen against
+a neutral noise, and Static&#39;s green is new. First task of the build, named in
+7.3.</li>
+<li><strong>Whether the agent-facing copy needs any change.</strong> It should not: the copy
+describes five pairs, exclusions and free earned sides, and this spec is
+written to it. The one line that will need editing afterwards is the contract
+address, since this is a redeploy and the copy prints the current one as the
+thing agents are invited to audit.</li>
+<li><strong><code>llms.txt</code> is separately wrong today</strong> and not fixed by this spec. Line 20
+and <code>door.html</code> line 37 say payment is not wired, which stopped being true at
+<code>f4de22a</code>; line 117 says &quot;The top two are limited in supply&quot;, which stopped
+being true when caps were removed. That is Plan 4 task 6.</li>
+<li><strong>Child token visuals and the lineage narrative</strong> stay deferred, as in spec
+section 10.</li>
+<li><strong>When the redeploy happens</strong>, and whether it waits for the domain. The
+contract change and the deployment are separate decisions.</li>
+</ul>
+<hr>
+<h2>10. Sources</h2>
+<ul>
+<li><code>docs/2026-09-01-mro-agent-facing-copy.md</code> -- the locked, tested promise. The
+authority for everything in section 2 and 3.</li>
+<li><code>docs/specs/2026-08-27-machine-readable-only-design.md</code> section 9 -- superseded
+by this document.</li>
+<li><code>contracts/test/EyeCost.t.sol</code> -- the measured cost of the eyes.</li>
+<li><code>tools/static-hue-sheet.mjs</code> -- written for this spec; the comparison that
+decided Static&#39;s hue, and the only sheet that puts every candidate under one
+rule.</li>
+<li><code>tools/eye-shape-sheet.mjs</code>, <code>tools/eye-colourway-sheet.mjs</code>,
+<code>tools/green-violet-sheet.mjs</code>, <code>tools/noise-mark-sheet.mjs</code>,
+<code>tools/stronger-inks.mjs</code>, <code>tools/combination-sweep.mjs</code> -- the rest of the
+sheets behind section 7.</li>
+<li><code>docs/phase0-results.md</code> -- the gas and byte budget the renderer must stay
+inside.</li>
+</ul>
+
+</body>
+</html>
