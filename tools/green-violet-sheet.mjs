@@ -21,7 +21,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
-  renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
+  renderSvg, canvasFor, STATIC_BY_TIER, TIERS, colourAt, rungOf, staticAt,
   STATIC, BEAT,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
@@ -47,23 +47,12 @@ const toward = ([r, g, b], t) => {
   return [r + (m - r) * t, g + (m - g) * t, b + (m - b) * t];
 };
 
-const GREEN = [0, 124, 8];      // the strongest green found at the noise luma
 const VIOLET = [28, 0, 252];    // the strongest violet at half the heart's luma
 
-/// Green for the noise, one ink per rung: pulled toward grey until its chroma
-/// is 60% of that rung's heart, then put back on that rung's exact luma.
+/// Green for the noise, one ink per rung: read from the shipped derivation
+/// rather than recomputed here -- one derivation, in render-token.mjs.
 function greenInks() {
-  return TIERS.map((_, i) => {
-    const rung = TIERS.length - 1 - i;
-    const wanted = chromaOf(rgbOf(colourAt(rung))) * 0.60;
-    const target = luma(rgbOf(noiseAt(rung)));
-    let ink = atLuma(toward(GREEN, 0.95), target);
-    for (let m = 0.95; m >= 0; m -= 0.01) {
-      ink = atLuma(toward(GREEN, m), target);
-      if (chromaOf(ink) >= wanted) break;
-    }
-    return hex(ink);
-  });
+  return TIERS.map((_, i) => staticAt(TIERS.length - 1 - i));
 }
 
 const stateFor = (streak, marks) => ({
@@ -92,9 +81,9 @@ const tiles = [];
 
 console.log("BLUE BLOOD in green -- chroma 60% of the heart's, luma unchanged");
 console.log("streak  heart    green    chroma  vs heart  shift    decodes");
-const keep = [...BLUEBLOOD_BY_TIER];
+const keep = [...STATIC_BY_TIER];
 const inks = greenInks();
-for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = inks[i];
+for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = inks[i];
 for (const s of STREAKS) {
   const rung = rungOf(s);
   const ink = inks[TIERS.length - 1 - rung];
@@ -108,7 +97,7 @@ for (const s of STREAKS) {
     + `${ok.length === SIZES.length ? "ALL" : "FAILS " + (SIZES.length - ok.length)}`);
   tiles.push({ label: `green noise, streak ${s}`, svg, shift: d, ok, all: ok.length === SIZES.length });
 }
-for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = keep[i];
+for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = keep[i];
 
 console.log("\nBLOOM in violet -- gradient far end at half the heart's luma");
 console.log("streak  heart    far      shift    decodes");

@@ -84,37 +84,26 @@ contract PaletteNoiseTest is Test {
         assertEq(_luma(Palette.noiseAt(idx)), _luma(Palette.colourAt(idx)));
     }
 
-    /// @dev Blue Blood tints the noise, so it must clear the SAME luminance bar
-    /// the neutral palette does. The Mark may move the ink in hue; it may not
-    /// move it in weight, because weight is the thing the binarizer resolves on.
-    function test_everyBluebloodInkMatchesItsTierInLuminance() public pure {
-        for (uint256 i; i < Palette.TIER_COUNT; ++i) {
-            uint256 heart = _luma(Palette.colourAt(i));
-            uint256 noise = _luma(Palette.bluebloodAt(i));
-            console.log("tier", i);
-            console.log("  heart luma     ", heart);
-            console.log("  blueblood luma ", noise);
-            uint256 gap = heart > noise ? heart - noise : noise - heart;
-            assertLe(gap, 1, "a Blue Blood ink must match its tier in luminance");
+    /// @dev The pairing rule does not bend for a Mark: the binarizer does not care
+    /// WHY an ink is lighter. Only the hue moves. Asserted rather than eyeballed,
+    /// because five values picked by eye would be five chances to break the match.
+    function test_staticMatchesTheHeartsLuminanceAtEveryRung() public pure {
+        for (uint256 rung = 0; rung < Palette.TIER_COUNT; rung++) {
+            uint256 heart = _luma(Palette.colourAt(rung));
+            uint256 green = _luma(Palette.staticAt(rung));
+            assertApproxEqAbs(green, heart, 1, "Static's green is off its rung's luma");
         }
     }
 
-    /// @dev The rule that sets the intensity, and it is not about decoding --
-    /// every intensity measured decodes. It is about which element is the
-    /// subject. The start-tier heart carries chroma 25, the least on the
-    /// ladder, so a vivid noise out-saturates the heart it surrounds and the
-    /// noise becomes the picture. Day one is therefore the binding case and the
-    /// margin there is deliberately the narrowest.
-    function test_bluebloodNeverOutChromasItsHeart() public pure {
-        for (uint256 i; i < Palette.TIER_COUNT; ++i) {
-            uint256 heart = _chroma(Palette.colourAt(i));
-            uint256 noise = _chroma(Palette.bluebloodAt(i));
-            console.log("tier", i);
-            console.log("  heart chroma    ", heart);
-            console.log("  blueblood chroma", noise);
+    /// @dev The rule that is NOT about decoding: the noise must stay less saturated
+    /// than the heart it surrounds, or the noise becomes the subject of the picture.
+    /// The start rung binds it hardest, 16 against 25.
+    function test_staticStaysLessSaturatedThanTheHeart() public pure {
+        for (uint256 rung = 0; rung < Palette.TIER_COUNT; rung++) {
             assertLt(
-                noise, heart,
-                "the noise must stay less saturated than the heart it surrounds"
+                _chroma(Palette.staticAt(rung)),
+                _chroma(Palette.colourAt(rung)),
+                "the noise is more saturated than the heart"
             );
         }
     }

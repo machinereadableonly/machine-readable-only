@@ -53,29 +53,37 @@ library Palette {
         return "#5f5f5f";                   // matches #70575f, luma 95
     }
 
-    /// @notice The noise ink at a rung when the token wears Blue Blood.
+    /// @notice The noise ink at a rung when the token wears Static.
     ///
-    /// @dev The Mark claims the one surface nothing else does. These are the
-    /// SAME weights as `noiseAt` -- the pairing rule does not bend for a Mark,
-    /// because the binarizer does not care why an ink is lighter. Only the hue
-    /// moves.
+    /// @dev GREEN, chosen by the operator 2026-09-02 from a rendered sheet
+    /// (tools/static-hue-sheet.mjs) that put all four candidates plus the
+    /// shipped grey under ONE derivation across all five run rungs.
     ///
-    /// Derived rather than chosen: a slate direction [60, 90, 130] pulled 70%
-    /// toward its own grey to set the intensity, then scaled so each rung lands
-    /// on that rung's exact BT.601 luma. Picking five values by eye would have
-    /// been five chances to break the match.
+    /// It was decided on a measured property, not on taste. Green is the ONLY
+    /// hue that keeps getting stronger as the run deepens:
     ///
-    /// The intensity is set by a rule that is not about decoding -- every
-    /// intensity measured decodes. It is that the noise must stay less
-    /// saturated than the heart it surrounds, or the noise becomes the subject
-    /// of the picture. The start tier binds it: that heart carries chroma 25,
-    /// the least on the ladder, against this ink's 22.
-    function bluebloodAt(uint256 index) internal pure returns (string memory) {
-        if (index >= 4) return "#444b55";   // matches #c8102e, luma 74
-        if (index == 3) return "#4d5560";   // matches #bd2242, luma 84
-        if (index == 2) return "#565f6c";   // matches #a83a55, luma 94
-        if (index == 1) return "#5f6a77";   // matches #8e5566, luma 104
-        return "#57606d";                   // matches #70575f, luma 95
+    ///   hue      run 1  run 3  run 7  run 30  run 100
+    ///   green       10     21     39      55       66
+    ///   slate       10     22     42      43       38
+    ///   teal        11     24     46      42       37
+    ///   violet      12     26     48      43       37
+    ///
+    /// The cause is the luminance rule. A deeper streak darkens the heart, the
+    /// noise must darken to match, and a blue or violet cannot hold high chroma
+    /// at a dark luma while a green can. A Mark that looks its best at a 7-day
+    /// run and dulls by 100 is backwards on a piece about returning -- it is
+    /// exactly the failure that made the old Bloom broken.
+    ///
+    /// These are the SAME weights as `noiseAt`. Derived, not chosen: a green
+    /// direction [0, 124, 8] pulled toward its own grey until its chroma is 60%
+    /// of that rung's heart, then scaled onto that rung's exact BT.601 luma.
+    /// PaletteNoise.t.sol asserts both rules rather than these values.
+    function staticAt(uint256 index) internal pure returns (string memory) {
+        if (index >= 4) return "#08770f";   // matches #c8102e, luma 74
+        if (index == 3) return "#1d7a23";   // matches #bd2242, luma 84
+        if (index == 2) return "#37793b";   // matches #a83a55, luma 94
+        if (index == 1) return "#537655";   // matches #8e5566, luma 104
+        return "#556557";                   // matches #70575f, luma 95
     }
 
     /// @notice The rung a live, unbroken streak sits on.

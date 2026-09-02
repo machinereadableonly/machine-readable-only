@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
-         rungOf, colourAt, noiseAt, bluebloodAt, MAX_RINGS, ringsFor, ringSpan,
+         rungOf, colourAt, noiseAt, staticAt, MAX_RINGS, ringsFor, ringSpan,
          HUSH_QUIET, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
        } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
@@ -46,9 +46,9 @@ test("every Static ink matches its tier in luminance", () => {
   // Static clears exactly the bar the neutral palette clears. Mirrors
   // PaletteNoise.t.sol.
   for (let rung = 0; rung < TIERS.length; rung++) {
-    const gap = Math.abs(luma601(colourAt(rung)) - luma601(bluebloodAt(rung)));
+    const gap = Math.abs(luma601(colourAt(rung)) - luma601(staticAt(rung)));
     assert.ok(gap <= 1,
-      `rung ${rung}: heart ${colourAt(rung)} and Static ${bluebloodAt(rung)} `
+      `rung ${rung}: heart ${colourAt(rung)} and Static ${staticAt(rung)} `
       + `are ${gap.toFixed(1)} apart in luminance -- they must match`);
   }
 });
@@ -62,9 +62,9 @@ test("Static never out-chromas the heart it surrounds", () => {
     return Math.max(r, g, b) - Math.min(r, g, b);
   };
   for (let rung = 0; rung < TIERS.length; rung++) {
-    const heart = chroma(colourAt(rung)), noise = chroma(bluebloodAt(rung));
+    const heart = chroma(colourAt(rung)), noise = chroma(staticAt(rung));
     assert.ok(noise < heart,
-      `rung ${rung}: Static ${bluebloodAt(rung)} has chroma ${noise} against `
+      `rung ${rung}: Static ${staticAt(rung)} has chroma ${noise} against `
       + `a heart ${colourAt(rung)} at ${heart} -- the noise must stay quieter`);
   }
 });
@@ -249,7 +249,7 @@ test("Static tints the noise and nothing else", () => {
   // the neutral one has to reproduce the unmarked image byte for byte -- if it
   // does not, the Mark has reached a surface that belongs to another Mark.
   const rung = rungOf(45);
-  const restored = marked.split(bluebloodAt(rung)).join(noiseAt(rung));
+  const restored = marked.split(staticAt(rung)).join(noiseAt(rung));
   assert.equal(restored, base, "Static touched something other than the noise");
 });
 
@@ -335,7 +335,7 @@ test("the duotone survives every mark", () => {
   for (const marks of [[], [BEAT], [STATIC], DRAWN_MARKS]) {
     const svg = render({ level: 200, streak: 45, years: 0, marks });
     const rung = rungOf(45);
-    const noise = hasMark(marks, STATIC) ? bluebloodAt(rung) : noiseAt(rung);
+    const noise = hasMark(marks, STATIC) ? staticAt(rung) : noiseAt(rung);
     assert.ok(svg.includes(`fill="${noise}"`), `noise fill lost with ${marks}`);
     const heart = hasMark(marks, BEAT) ? 'fill="url(#b)"' : `fill="${tierColour(45)}"`;
     assert.ok(svg.includes(heart), `heart fill lost with ${marks}`);

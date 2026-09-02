@@ -29,7 +29,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
-  renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
+  renderSvg, canvasFor, STATIC_BY_TIER, TIERS, colourAt, rungOf, noiseAt, staticAt,
   QUIET, FIELD, AURA_FIELD, HUSH_QUIET,
   ACHE, STATIC, HUSH, BEAT, AURA, VESSEL, BREAK,
 } from "./render-token.mjs";
@@ -54,31 +54,11 @@ const HEART = colourAt(rung);
 const NEUTRAL = noiseAt(rung);
 
 const VIOLET = "#2000ff";   // DECIDED: Beat's far end
-const GREEN_MIX = 0.60;     // proposed: Static's chroma, as a share of the heart's
 
-const luma = ([r, g, b]) => 0.299 * r + 0.587 * g + 0.114 * b;
-const chromaOf = ([r, g, b]) => Math.max(r, g, b) - Math.min(r, g, b);
-const rgbOf = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-const hex = ([r, g, b]) => "#" + [r, g, b].map(v =>
-  Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
-const atLuma = (c, t) => { const k = t / luma(c); return c.map(v => v * k); };
-const toward = ([r, g, b], t) => {
-  const m = luma([r, g, b]);
-  return [r + (m - r) * t, g + (m - g) * t, b + (m - b) * t];
-};
-const GREEN = [0, 124, 8];
+/// Static's green per rung, read from the shipped derivation rather than
+/// recomputed here -- one derivation, in render-token.mjs.
 function greenInks() {
-  return TIERS.map((_, i) => {
-    const r = TIERS.length - 1 - i;
-    const wanted = chromaOf(rgbOf(colourAt(r))) * GREEN_MIX;
-    const target = luma(rgbOf(noiseAt(r)));
-    let ink = atLuma(toward(GREEN, 0.95), target);
-    for (let m = 0.95; m >= 0; m -= 0.01) {
-      ink = atLuma(toward(GREEN, m), target);
-      if (chromaOf(ink) >= wanted) break;
-    }
-    return hex(ink);
-  });
+  return TIERS.map((_, i) => staticAt(TIERS.length - 1 - i));
 }
 
 const canvas = canvasFor(STATE.years);
@@ -97,16 +77,16 @@ function build(set) {
   const has = m => set.includes(m);
 
   // Green noise, if Static is on. Written into the palette and restored.
-  const keep = [...BLUEBLOOD_BY_TIER];
+  const keep = [...STATIC_BY_TIER];
   if (has(STATIC)) {
     const inks = greenInks();
-    for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = inks[i];
+    for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = inks[i];
   }
   // `eyes` is not a Mark the reference renderer knows, so it is stripped before
   // the call and drawn afterwards.
   let svg = renderSvg(CODE.modules, TARGET.want, CODE.size,
     { ...STATE, marks: set.filter(m => m !== "eyes") });
-  for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = keep[i];
+  for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = keep[i];
 
   // Violet Beat: one constant, same length as the one it replaces.
   if (has(BEAT)) svg = svg.replace(
