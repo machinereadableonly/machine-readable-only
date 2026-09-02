@@ -127,9 +127,20 @@ Content-Type: application/json
   &quot;client&quot;: &quot;https://&lt;domain&gt;/client.mjs&quot;
 }
 </code></pre>
-<p>The challenge is <code>nonce.unix-ms.hmac</code>. It is stateless: we keep no record of
-issuing it and recompute the HMAC to recognise it later. Nothing is keyed to
-your IP address, so agents sharing one cloud NAT never collide.</p>
+<p>The challenge is <code>nonce.unix-ms.hmac</code>. <strong>Issuing is stateless</strong>: we keep no
+record of what we handed out, and recognise a challenge later by recomputing
+the HMAC over its own nonce and timestamp. Nothing is keyed to your IP address,
+so agents sharing one cloud NAT never collide.</p>
+<p><strong>Spending is not stateless</strong>, and it cannot be. Burn-after-use needs somewhere
+to remember the burn, so there is a replay cache: an in-memory set of
+challenges already answered, swept every 10 seconds, holding nothing older than
+twice the five second window. It is bounded by that window rather than by
+traffic -- roughly ten seconds&#39; worth of challenges at any moment, never a
+growing list.</p>
+<p>The distinction matters if you are reasoning about what a restart loses. A
+restart forgets which challenges were spent, so a challenge captured in the
+preceding five seconds could in principle be replayed across it. The signature
+is what authenticates; this is the freshness check on top.</p>
 <p>A 401 may also carry a <code>reason</code> field. It is a diagnostic, not a rebuke:</p>
 <table>
 <thead>
@@ -206,13 +217,19 @@ Content-Type: application/json
 HTTP/1.1 201 Created
 { &quot;ok&quot;: true, &quot;keyId&quot;: &quot;gkKHv4HPNo5hOT9kFD8Ig5ZVhPQdT-2A42ULHj00TBA&quot; }
 </code></pre>
-<p>The nonce is spent on use and lives five seconds. The proof is what stops
-anyone registering a public key lifted from somebody else&#39;s published
-directory.</p>
+<p>The nonce is spent on use (same replay cache as section 1) and lives five
+seconds. The proof is what stops anyone registering a public key lifted from
+somebody else&#39;s published directory.</p>
 <p>Refusals are <code>proof</code>, <code>nonce</code>, <code>invalid-jwk</code> (all 400) and <code>rate-limited</code>
 (429). The rate limit is keyed on your key&#39;s thumbprint, not on your address,
 and it is only reached after the proof has verified, so a malformed request
 costs you nothing.</p>
+<p><strong>That ordering is a deliberate trade, and it cuts both ways.</strong> It was the
+other way round once: the budget was spent before any field was checked, so 21
+junk bodies exhausted the minute&#39;s allowance and closed the only entrance an
+agent without a domain has. Charging only verified requests fixes that, and the
+cost is that unverified <code>POST /keys</code> traffic is unmetered here, paying one
+Ed25519 verify each. Rate limiting that is nginx&#39;s job, not this handler&#39;s.</p>
 <p>Registered keys are then served in our own directory, which anyone can read:</p>
 <pre><code>GET /.well-known/http-message-signatures-directory HTTP/1.1
 
@@ -252,7 +269,7 @@ header you send.</p>
 one we issued, unspent, and <strong>under five seconds old</strong>, which is the whole
 point: the answer has to be computed between our 401 and your retry.</p>
 <p>Get a fresh challenge either from any 401, or from the <code>challenge</code> tool once
-you are already inside.</p>
+you are already inside. Each one answers exactly once.</p>
 <p>Deterministic, so no model is in the loop. This is an entry condition for an
 art piece -- it establishes that a program composed the request. It is not
 meant to prove anything else, and it is not a defence against anything.</p>
@@ -366,6 +383,21 @@ pays for it.</li>
 HTTP request signatures and nothing else. Paying uses a separate wallet key,
 which we never see.</li>
 </ul>
+<h3>Do not take the address you pay from this page, or from us</h3>
+<p>The honest limit of everything above. EIP-3009 bounds what your signature can
+do -- one transfer, one amount, one recipient, no allowance left behind -- but
+it does not decide WHO the recipient is. That comes out of the 402 response,
+and the 402 response comes from whatever server answered you. A server that
+was replaced, spoofed, or simply hostile puts a different <code>payTo</code> in the quote,
+and an agent that signs what it is handed signs that too.</p>
+<p>So before signing, check <code>payTo</code>, <code>amount</code>, <code>asset</code> and <code>network</code> against
+values your operator gave you out of band -- not against this page, and not
+against the response. This page is fetched over the same internet as the quote
+is; it is not a second source. If the four do not match what you were told to
+expect, refuse, and say why.</p>
+<p>That advice is against our interest, in the sense that it makes us one more
+thing to be suspicious of. It is still the correct advice, and an agent that
+follows it is the kind of counterparty this piece wants.</p>
 <p>The gates are checked <em>before</em> you are asked for money -- supply, one-per-key,
 and the contract&#39;s own sunset, pause and per-wallet cap, read live from chain.
 They are re-checked after settlement, because settling takes seconds. If the
@@ -453,7 +485,11 @@ this service disappears, that call still works.</p>
 <p><code>tokenURI</code> returns the image inline. There is no IPFS, no gateway and no
 server in that path. It is also the expensive call: the worst measured case is
 1,633,224 gas for a token the day before its heart seals. That is a read, so it
-costs you nothing, but do not put it in a loop expecting it to be cheap.</p>
+costs you nothing in fees -- but some RPC providers cap the gas an <code>eth_call</code>
+may consume, and a token near that worst case can exceed the cap and come back
+as an error rather than an image. If that happens, it is your provider&#39;s
+ceiling, not a broken token: use a provider with a higher cap, or read
+<code>viewOf</code> instead and render the art yourself. Do not put it in a loop.</p>
 <p><code>totalSupply()</code> is <strong>not</strong> implemented and reverts. The contract is not
 ERC721Enumerable.</p>
 <h2>9. What we can see, and what we cannot</h2>
