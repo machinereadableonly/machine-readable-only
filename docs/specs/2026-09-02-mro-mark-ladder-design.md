@@ -408,26 +408,52 @@ side of pair 2 -- never both, because they exclude each other.
 its rung's exact luma, so it is luminance-matched to the heart exactly as the
 grey it replaces. Exchanging gives a green heart and a red code.
 
-**Break + Beat is the one case that is NOT safe by argument, and must be
-measured.** Beat replaces the heart's flat fill with a gradient running to violet
-at roughly half the heart's luma. A naive fill exchange hands that gradient to
-the NOISE -- and the noise is the surface the luminance rule binds hardest on. A
-gradient has varying luminance by definition, so the dark end could fall below
-the heart and resolve to background at large rasters, which is precisely the
-failure that once stopped a bare token decoding at 1200px.
+**Break + Beat: MEASURED 2026-09-02, `tools/break-sheet.mjs`.** Both candidate
+definitions were rendered at every rung and decoded at all five sizes. The two
+are:
 
-**The definition adopted, which sidesteps it:** Break exchanges the two RUNG
-COLOURS, not the fills. The warm region and the neutral region swap; Beat's
-gradient continues to apply to whichever region is now the heart. The noise stays
-flat and luminance-matched, so the decode argument above holds unchanged, and
-Break + Beat reads as a grey-to-violet heart against a red code.
+- **A, the naive fill exchange** -- swap what the two paths are filled with. With
+  Beat that hands the GRADIENT to the noise.
+- **B, the rung-colour exchange** -- swap which rung colour each region takes, and
+  let Beat go on gradienting whichever region is now the heart. The noise stays
+  flat.
 
-The simpler naive fill exchange is preferred IF it measures safe. **Render both
-and decode them at all five sizes before choosing** -- this is a decode question,
-and a decode question is never settled by reasoning about it. Whichever wins, a
-test pins that Break + Beat decodes at every size, because it is the only
-combination on the ladder that can put a gradient near the code's luminance
-floor.
+**All 25 tiles decode at all five sizes, including every def-A tile. THE SAFETY
+CONCERN THAT MOTIVATED B WAS WRONG, and the reason is worth keeping:** the
+luminance rule punishes an ink that is LIGHTER than its partner, because that is
+the one the binarizer drops to background. Beat's gradient runs from the tier
+colour DOWN to violet -- 74.4 to 38.6 in BT.601 luma at the top rung -- so putting
+it on the noise makes the noise darker, never lighter. It was never at risk in
+that direction. The earlier paragraph here stated the rule as "varying luminance
+is dangerous", which is not what was ever measured.
+
+**Definition B is adopted anyway, on three grounds that are not about decoding:**
+
+1. **A inverts the wrong thing.** Under A the heart goes flat grey and the noise
+   carries the violet, so the code becomes the coloured subject and the heart
+   reads as a hole. That is the exact outcome `Palette`'s chroma rule exists to
+   prevent -- "the noise becomes the subject of the picture".
+2. **A contradicts the spec's own sentence for this Mark.** The inversion is
+   defined as the code becoming the only red element. Under A the code is violet
+   and nothing is red; under B the code is red.
+3. **B rewards the deeper run and A does not.** Measured shift against the bare
+   token: A runs 160 / 151 / 161 / 171 / 180 up the rungs, essentially flat; B
+   runs 160 / 153 / 170 / 189 / 209. The same property that decided Static's hue
+   in 7.2, and the same reason.
+
+Measured shifts for the rest, all decoding at all five sizes:
+
+    Break alone       17 / 38 /  74 / 105 / 126
+    Break + Static    27 / 59 / 113 / 160 / 192
+    Break + Beat (B) 160 / 153 / 170 / 189 / 209
+
+**Break + Static is stronger than Break alone at every rung** (192 against 126 at
+the top), which is the opposite of the old ladder's assumption that a second Mark
+on the code block would muddy the inversion. A green heart against a red code is
+the second most emphatic picture the piece can produce.
+
+A test still pins that Break + Beat decodes at every size. It is the only
+combination on the ladder that puts a gradient anywhere near the code.
 
 ### 5.4 What the metadata says
 
@@ -720,9 +746,9 @@ the ladder that can break a scan outright rather than merely look wrong. The
 cheaper 848-only run is the right gate for ordinary commits.
 
 **Two combinations must be in the sweep by name**, because both were unreachable
-before 3.1.1 removed the cross-pair exclusion and neither has ever been rendered:
-**Break + Static** and **Break + Beat**. The second is the riskiest picture the
-ladder can produce -- see 5.3.
+before 3.1.1 removed the cross-pair exclusion: **Break + Static** and **Break +
+Beat**. Both were rendered and decoded on 2026-09-02 and both pass at all five
+sizes (5.3), so this is regression cover rather than an open question.
 
 Run both under `~/scripts/safe-build.sh` and in batches. The last bulk render
 sweep on this project reached 6.28 GB resident and destroyed the session.
@@ -748,7 +774,8 @@ Named rather than left to be discovered.
 
 - **The eye inks against a green noise.** The three Tint inks were chosen against
   a neutral noise, and Static's green is new. First task of the build, named in
-  7.3.
+  7.3. Break's combinations were the other open render and are now CLOSED -- see
+  5.3.
 - **Whether the agent-facing copy needs any change.** It should not: the copy
   describes five pairs, exclusions and free earned sides, and this spec is
   written to it. The one line that will need editing afterwards is the contract

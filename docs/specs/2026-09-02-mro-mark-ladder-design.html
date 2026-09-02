@@ -590,24 +590,49 @@ side of pair 2 -- never both, because they exclude each other.</p>
 <p><strong>Break + Static is safe by the same argument.</strong> Static&#39;s green is derived onto
 its rung&#39;s exact luma, so it is luminance-matched to the heart exactly as the
 grey it replaces. Exchanging gives a green heart and a red code.</p>
-<p><strong>Break + Beat is the one case that is NOT safe by argument, and must be
-measured.</strong> Beat replaces the heart&#39;s flat fill with a gradient running to violet
-at roughly half the heart&#39;s luma. A naive fill exchange hands that gradient to
-the NOISE -- and the noise is the surface the luminance rule binds hardest on. A
-gradient has varying luminance by definition, so the dark end could fall below
-the heart and resolve to background at large rasters, which is precisely the
-failure that once stopped a bare token decoding at 1200px.</p>
-<p><strong>The definition adopted, which sidesteps it:</strong> Break exchanges the two RUNG
-COLOURS, not the fills. The warm region and the neutral region swap; Beat&#39;s
-gradient continues to apply to whichever region is now the heart. The noise stays
-flat and luminance-matched, so the decode argument above holds unchanged, and
-Break + Beat reads as a grey-to-violet heart against a red code.</p>
-<p>The simpler naive fill exchange is preferred IF it measures safe. <strong>Render both
-and decode them at all five sizes before choosing</strong> -- this is a decode question,
-and a decode question is never settled by reasoning about it. Whichever wins, a
-test pins that Break + Beat decodes at every size, because it is the only
-combination on the ladder that can put a gradient near the code&#39;s luminance
-floor.</p>
+<p><strong>Break + Beat: MEASURED 2026-09-02, <code>tools/break-sheet.mjs</code>.</strong> Both candidate
+definitions were rendered at every rung and decoded at all five sizes. The two
+are:</p>
+<ul>
+<li><strong>A, the naive fill exchange</strong> -- swap what the two paths are filled with. With
+Beat that hands the GRADIENT to the noise.</li>
+<li><strong>B, the rung-colour exchange</strong> -- swap which rung colour each region takes, and
+let Beat go on gradienting whichever region is now the heart. The noise stays
+flat.</li>
+</ul>
+<p><strong>All 25 tiles decode at all five sizes, including every def-A tile. THE SAFETY
+CONCERN THAT MOTIVATED B WAS WRONG, and the reason is worth keeping:</strong> the
+luminance rule punishes an ink that is LIGHTER than its partner, because that is
+the one the binarizer drops to background. Beat&#39;s gradient runs from the tier
+colour DOWN to violet -- 74.4 to 38.6 in BT.601 luma at the top rung -- so putting
+it on the noise makes the noise darker, never lighter. It was never at risk in
+that direction. The earlier paragraph here stated the rule as &quot;varying luminance
+is dangerous&quot;, which is not what was ever measured.</p>
+<p><strong>Definition B is adopted anyway, on three grounds that are not about decoding:</strong></p>
+<ol>
+<li><strong>A inverts the wrong thing.</strong> Under A the heart goes flat grey and the noise
+carries the violet, so the code becomes the coloured subject and the heart
+reads as a hole. That is the exact outcome <code>Palette</code>&#39;s chroma rule exists to
+prevent -- &quot;the noise becomes the subject of the picture&quot;.</li>
+<li><strong>A contradicts the spec&#39;s own sentence for this Mark.</strong> The inversion is
+defined as the code becoming the only red element. Under A the code is violet
+and nothing is red; under B the code is red.</li>
+<li><strong>B rewards the deeper run and A does not.</strong> Measured shift against the bare
+token: A runs 160 / 151 / 161 / 171 / 180 up the rungs, essentially flat; B
+runs 160 / 153 / 170 / 189 / 209. The same property that decided Static&#39;s hue
+in 7.2, and the same reason.</li>
+</ol>
+<p>Measured shifts for the rest, all decoding at all five sizes:</p>
+<pre><code>Break alone       17 / 38 /  74 / 105 / 126
+Break + Static    27 / 59 / 113 / 160 / 192
+Break + Beat (B) 160 / 153 / 170 / 189 / 209
+</code></pre>
+<p><strong>Break + Static is stronger than Break alone at every rung</strong> (192 against 126 at
+the top), which is the opposite of the old ladder&#39;s assumption that a second Mark
+on the code block would muddy the inversion. A green heart against a red code is
+the second most emphatic picture the piece can produce.</p>
+<p>A test still pins that Break + Beat decodes at every size. It is the only
+combination on the ladder that puts a gradient anywhere near the code.</p>
 <h3>5.4 What the metadata says</h3>
 <p><code>names()</code> emits nine literals from a fixed array, still with no path from token
 state into the string. Both Iris ids emit <code>&quot;iris&quot;</code>. The <code>Marks</code> attribute is
@@ -865,9 +890,9 @@ since Plan 1 -- the erase-and-redraw of the finder patterns is the one thing on
 the ladder that can break a scan outright rather than merely look wrong. The
 cheaper 848-only run is the right gate for ordinary commits.</p>
 <p><strong>Two combinations must be in the sweep by name</strong>, because both were unreachable
-before 3.1.1 removed the cross-pair exclusion and neither has ever been rendered:
-<strong>Break + Static</strong> and <strong>Break + Beat</strong>. The second is the riskiest picture the
-ladder can produce -- see 5.3.</p>
+before 3.1.1 removed the cross-pair exclusion: <strong>Break + Static</strong> and <strong>Break +
+Beat</strong>. Both were rendered and decoded on 2026-09-02 and both pass at all five
+sizes (5.3), so this is regression cover rather than an open question.</p>
 <p>Run both under <code>~/scripts/safe-build.sh</code> and in batches. The last bulk render
 sweep on this project reached 6.28 GB resident and destroyed the session.</p>
 <h3>8.4 Warden and client</h3>
@@ -889,7 +914,8 @@ schema, <code>docs/2026-09-01-mro-raw-protocol.md</code> and <code>warden/public
 <ul>
 <li><strong>The eye inks against a green noise.</strong> The three Tint inks were chosen against
 a neutral noise, and Static&#39;s green is new. First task of the build, named in
-7.3.</li>
+7.3. Break&#39;s combinations were the other open render and are now CLOSED -- see
+5.3.</li>
 <li><strong>Whether the agent-facing copy needs any change.</strong> It should not: the copy
 describes five pairs, exclusions and free earned sides, and this spec is
 written to it. The one line that will need editing afterwards is the contract
