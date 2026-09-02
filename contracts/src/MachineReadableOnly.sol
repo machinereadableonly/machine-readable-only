@@ -35,7 +35,14 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         uint56 reserved;
     }
 
-    /// @dev One paid Mark tier.
+    /// @dev One Mark tier. 240 of 256 bits, so still ONE storage slot and
+    /// `setUpgrade` costs what it always did.
+    ///
+    ///   priceUsdc6 64, maxSupply 32, sold 32, minLevel 32, minStreak 32,
+    ///   requiresWhole 8, active 8, excludes 16, requiresAny 16 = 240.
+    ///
+    /// uint16 rather than uint8 because the ids run to 10 and bit 0 is
+    /// deliberately never a Mark, so bit 10 must be addressable with room left.
     struct Upgrade {
         uint64 priceUsdc6;
         uint32 maxSupply; // 0 = unlimited
@@ -44,6 +51,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         uint32 minStreak;
         bool requiresWhole;
         bool active;
+        uint16 excludes;     // bit n set = holding mark n forbids this one
+        uint16 requiresAny;  // 0 = no requirement; else at least one bit must be held
     }
 
     mapping(uint256 => Token) internal _tokens;
@@ -75,6 +84,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
     /// @dev The packed code bitmap is a fixed 172 bytes: 37 x 37 modules.
     uint256 internal constant CODE_BYTES = 172;
+
+    /// @dev Ten Marks in five pairs. Bit 0 is never a Mark.
+    uint8 internal constant MAX_MARK_ID = 10;
 
     /// @dev ERC-4906's interface id. OpenZeppelin ships the interface, not a mixin.
     bytes4 internal constant ERC4906_ID = 0x49064906;
@@ -406,6 +418,16 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     error MarkAlreadyApplied();
     error MarkSoldOut();
     error MarkGate();
+    /// @dev Carries the id that blocked it, so an agent is told WHAT closed the
+    /// door rather than that a door is closed. `cast call` returns the selector
+    /// and the argument for free, so the guard is provable without a transaction.
+    error MarkExcluded(uint8 by);
+    error MarkRequires();
+    /// @dev `applyMark` computes `1 << upgradeId`, and `_marks` packs the Iris
+    /// shape at bit 16 and the Tint ink at bit 24. An id of 16 would therefore
+    /// alias the shape bits exactly and silently corrupt every token's variant.
+    /// Refused where the record is written, so the bad record cannot exist.
+    error MarkIdOutOfRange(uint8 upgradeId);
 
     event MarkApplied(uint256 indexed id, uint8 indexed upgradeId);
     event UpgradeSet(uint8 indexed upgradeId);
@@ -423,6 +445,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// the current count, and getting it wrong silently reset scarcity and
     /// re-opened a sold-out Mark. Scarcity is a stated property of the ladder.
     function setUpgrade(uint8 upgradeId, Upgrade calldata u) external onlyOwner {
+        if (upgradeId == 0 || upgradeId > MAX_MARK_ID) revert MarkIdOutOfRange(upgradeId);
         uint32 sold = _upgrades[upgradeId].sold;
         _upgrades[upgradeId] = u;
         _upgrades[upgradeId].sold = sold;
@@ -456,11 +479,26 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (s.streak < u.minStreak) revert MarkGate();
         if (u.requiresWhole && s.level < 365) revert MarkGate();
 
+        uint256 held = _marks[id];
+        if (u.excludes != 0 && held & u.excludes != 0) {
+            revert MarkExcluded(_lowestMark(held & u.excludes));
+        }
+        if (u.requiresAny != 0 && held & u.requiresAny == 0) revert MarkRequires();
+
         _marks[id] |= bit;
         unchecked { u.sold += 1; }
 
         emit MarkApplied(id, upgradeId);
         emit MetadataUpdate(id);
+    }
+
+    /// @dev The lowest Mark id set in a mask. Only ever called on a non-zero
+    /// mask confined to bits 1..10, so the loop terminates.
+    function _lowestMark(uint256 mask) private pure returns (uint8) {
+        for (uint8 i = 1; i <= MAX_MARK_ID; ++i) {
+            if (mask & (1 << i) != 0) return i;
+        }
+        return 0;
     }
 
     // ---------------------------------------------------------------------

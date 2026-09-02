@@ -28,7 +28,9 @@ contract BoundsTest is MroTestBase {
             minLevel: minLevel,
             minStreak: 0,
             requiresWhole: false,
-            active: true
+            active: true,
+            excludes: 0,
+            requiresAny: 0
         });
     }
 

@@ -19,7 +19,8 @@ contract MarksTest is MroTestBase {
         // Vein: cheap, uncapped, no gates.
         t.setUpgrade(1, MachineReadableOnly.Upgrade({
             priceUsdc6: 1_000_000, maxSupply: 0, sold: 0,
-            minLevel: 0, minStreak: 0, requiresWhole: false, active: true
+            minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+            excludes: 0, requiresAny: 0
         }));
     }
 
@@ -62,7 +63,8 @@ contract MarksTest is MroTestBase {
     function test_aSoldOutMarkReverts() public {
         t.setUpgrade(2, MachineReadableOnly.Upgrade({
             priceUsdc6: 1, maxSupply: 1, sold: 0,
-            minLevel: 0, minStreak: 0, requiresWhole: false, active: true
+            minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+            excludes: 0, requiresAny: 0
         }));
         vm.prank(WARDEN);
         t.mint(2, MALLORY, bytes32(uint256(2)), _code());
@@ -76,7 +78,8 @@ contract MarksTest is MroTestBase {
     function test_theLevelGateReverts() public {
         t.setUpgrade(3, MachineReadableOnly.Upgrade({
             priceUsdc6: 1, maxSupply: 0, sold: 0,
-            minLevel: 50, minStreak: 0, requiresWhole: false, active: true
+            minLevel: 50, minStreak: 0, requiresWhole: false, active: true,
+            excludes: 0, requiresAny: 0
         }));
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.MarkGate.selector);
@@ -86,7 +89,8 @@ contract MarksTest is MroTestBase {
     function test_theStreakGateReverts() public {
         t.setUpgrade(4, MachineReadableOnly.Upgrade({
             priceUsdc6: 1, maxSupply: 0, sold: 0,
-            minLevel: 0, minStreak: 7, requiresWhole: false, active: true
+            minLevel: 0, minStreak: 7, requiresWhole: false, active: true,
+            excludes: 0, requiresAny: 0
         }));
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.MarkGate.selector);
@@ -96,7 +100,8 @@ contract MarksTest is MroTestBase {
     function test_theWholenessGateReverts() public {
         t.setUpgrade(5, MachineReadableOnly.Upgrade({
             priceUsdc6: 1, maxSupply: 0, sold: 0,
-            minLevel: 0, minStreak: 0, requiresWhole: true, active: true
+            minLevel: 0, minStreak: 0, requiresWhole: true, active: true,
+            excludes: 0, requiresAny: 0
         }));
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.MarkGate.selector);
@@ -108,7 +113,8 @@ contract MarksTest is MroTestBase {
         vm.expectRevert();
         t.setUpgrade(9, MachineReadableOnly.Upgrade({
             priceUsdc6: 1, maxSupply: 0, sold: 0,
-            minLevel: 0, minStreak: 0, requiresWhole: false, active: true
+            minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+            excludes: 0, requiresAny: 0
         }));
     }
 
@@ -127,5 +133,82 @@ contract MarksTest is MroTestBase {
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
         t.applyMark(1, 1);
+    }
+
+    /// @dev Mark 2 excludes mark 1 and vice versa: the pair rule, in miniature.
+    function _pair(uint8 a, uint8 b, uint32 minLevel, uint32 minStreak) internal {
+        t.setUpgrade(a, MachineReadableOnly.Upgrade({
+            priceUsdc6: 1_000_000, maxSupply: 0, sold: 0,
+            minLevel: minLevel, minStreak: 0, requiresWhole: false, active: true,
+            excludes: uint16(1 << b), requiresAny: 0
+        }));
+        t.setUpgrade(b, MachineReadableOnly.Upgrade({
+            priceUsdc6: 0, maxSupply: 0, sold: 0,
+            minLevel: 0, minStreak: minStreak, requiresWhole: false, active: true,
+            excludes: uint16(1 << a), requiresAny: 0
+        }));
+    }
+
+    function test_anExcludedMarkRevertsAndNamesWhatBlockedIt() public {
+        _pair(1, 2, 0, 0);
+        vm.startPrank(WARDEN);
+        t.applyMark(1, 1);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkExcluded.selector, uint8(1)));
+        t.applyMark(1, 2);
+        vm.stopPrank();
+    }
+
+    function test_exclusionIsSymmetricInPractice() public {
+        _pair(1, 2, 0, 0);
+        vm.startPrank(WARDEN);
+        t.applyMark(1, 2);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkExcluded.selector, uint8(2)));
+        t.applyMark(1, 1);
+        vm.stopPrank();
+    }
+
+    function test_aMarkWithNoExclusionIsUnaffected() public {
+        _pair(1, 2, 0, 0);
+        t.setUpgrade(3, MachineReadableOnly.Upgrade({
+            priceUsdc6: 1_000_000, maxSupply: 0, sold: 0,
+            minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+            excludes: 0, requiresAny: 0
+        }));
+        vm.startPrank(WARDEN);
+        t.applyMark(1, 1);
+        t.applyMark(1, 3);   // the control: an unexcluded mark still lands
+        vm.stopPrank();
+        assertEq(t.marksOf(1) & 0xFFFE, (1 << 1) | (1 << 3));
+    }
+
+    function test_aRequirementIsAnyOfNotAllOf() public {
+        _pair(5, 6, 0, 0);
+        t.setUpgrade(9, MachineReadableOnly.Upgrade({
+            priceUsdc6: 250_000_000, maxSupply: 0, sold: 0,
+            minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+            excludes: uint16(1 << 10), requiresAny: uint16((1 << 5) | (1 << 6))
+        }));
+        vm.startPrank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.MarkRequires.selector);
+        t.applyMark(1, 9);
+        t.applyMark(1, 6);   // the OTHER side of the pair satisfies it
+        t.applyMark(1, 9);
+        vm.stopPrank();
+        assertEq(t.marksOf(1) & (1 << 9), 1 << 9);
+    }
+
+    function test_setUpgradeRefusesAnIdThatWouldAliasTheVariantBits() public {
+        MachineReadableOnly.Upgrade memory u = MachineReadableOnly.Upgrade({
+            priceUsdc6: 0, maxSupply: 0, sold: 0,
+            minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+            excludes: 0, requiresAny: 0
+        });
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkIdOutOfRange.selector, uint8(16)));
+        t.setUpgrade(16, u);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkIdOutOfRange.selector, uint8(0)));
+        t.setUpgrade(0, u);
+        // Both sides of the bound: 10 is the highest legal id and must succeed.
+        t.setUpgrade(10, u);
+        assertTrue(t.upgradeOf(10).active);
     }
 }
