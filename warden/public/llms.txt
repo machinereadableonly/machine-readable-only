@@ -25,13 +25,15 @@ testnet USDC faucet is behind a captcha -- and it means the paid path is
 written and tested but not demonstrated. Treat "you can mint" as unproven
 rather than as promised.
 
-**Four Marks work; six are as unproven as minting.** The ladder below is real:
-the catalogue is wired and the contract holds all ten records. The four EARNED
-Marks take no payment at all, so `upgrade` applies them outright -- except
-Break, which the tool still refuses by id until the gates guarding the last
-three Marks are built. The six BOUGHT Marks go through the same x402 settlement
-as a mint, so the same caveat applies to them: written, tested, never
-demonstrated with real money.
+**The four earned Marks work; the six bought ones are as unproven as minting.**
+The whole ladder is reachable now: `upgrade` accepts every id from 1 to 10, the
+catalogue is wired, and the contract holds all ten records. The four EARNED
+Marks -- Ache, Beat, the earned Iris and Break -- take no payment at all, so
+`upgrade` applies one outright to a token whose run has reached it. The six
+BOUGHT Marks go through the same x402 settlement as a mint, so the same caveat
+applies to them: written, tested, never demonstrated with real money. No Mark
+has ever been bought. Every gate is checked before payment is requested,
+including the Iris that both sides of the last pair need.
 
 **The client is not published, and DO NOT RUN `npx mro-agent` UNTIL IT IS.**
 `mro-agent` exists in the repository and is not on npm. The name is therefore
@@ -132,11 +134,17 @@ heart's colour and resets when a day is missed. A lapse pales the colour in
 steps at 3, 7 and 30 days rather than snapping back. The chain shows the
 difference between a heart that was finished and a heart that was abandoned.
 
-Marks are optional and come in five pairs. In each pair one side is bought and
-the other is earned by a run of returning days, and taking either side closes
-the other permanently. You may take neither. Nothing is limited, nothing
-expires, and nothing you choose in one pair can close anything in another.
-Nothing about a Mark shortens the 365 days.
+Marks are optional and come in five pairs. In four of the pairs one side is
+bought and the other is earned by a run of returning days; the fifth pair is
+bought on both sides, and both of its sides wait on the token already holding
+an Iris. Taking either side of a pair closes the other permanently. You may
+take neither. Nothing is limited, nothing expires, and nothing you choose in
+one pair can close anything in another. Nothing about a Mark shortens the 365
+days.
+
+The `ladder` tool reads all of that back for any token, free: what it wears,
+what that has closed, what each side costs and what it is still short of. Ask
+before you buy, because an exclusion cannot be undone.
 
 The artwork is rendered on chain. There is no image server to outlive.
 
@@ -192,7 +200,7 @@ same key, starting at level 1, carrying `parent` and `generation` as traits.
 - One token, public and unsigned, which is where each token's QR points:
   `https://<domain>/t/<id>`
 
-Tools at `/mcp`: `challenge`, `status`, `mint`, `checkin`, `upgrade`,
+Tools at `/mcp`: `challenge`, `status`, `ladder`, `mint`, `checkin`, `upgrade`,
 `rebind`, `seed`, `rest`. Resources: `mro://llms.txt`, `mro://contract`,
 `mro://token/{id}`. Errors are returned as structured values with a `reason`,
 never thrown.

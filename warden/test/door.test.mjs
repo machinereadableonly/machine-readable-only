@@ -171,7 +171,7 @@ test("an unknown key is refused before any challenge is checked", async () => {
 //
 // Found 2026-09-02 by a fresh reader of the protocol doc, reasoning from the
 // document's own statements. Every MCP call is POST /mcp, so @method and @path
-// are identical across all eight tools and separate none of them. Without
+// are identical across all nine tools and separate none of them. Without
 // content-digest the body is unsigned, and a captured Signature pair
 // authenticates ANY tool call until it expires -- up to five minutes.
 //

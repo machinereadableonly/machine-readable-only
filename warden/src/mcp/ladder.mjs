@@ -8,9 +8,11 @@
 // tools/ladder-fixture.mjs. A catalogue that drifts from the chain sells an
 // agent something the chain will refuse -- after it has paid.
 //
-// Five pairs. In each, one side is bought and one earned by a run of days;
-// taking either closes the other permanently; a token may take neither. EVERY
-// EXCLUSION IS PAIR-INTERNAL. Nothing is limited.
+// Five pairs. In four of them one side is bought and one earned by a run of
+// days; pair five is BOUGHT ON BOTH SIDES and both sides are gated on holding an
+// Iris, which is what stops a cheap day-one Aura forfeiting a Tint that needs
+// 100 days. Taking either side closes the other permanently; a token may take
+// neither. EVERY EXCLUSION IS PAIR-INTERNAL. Nothing is limited.
 //
 // TWO FIELDS HOLD THE PRICE, deliberately. `price` is the x402 demand string an
 // agent is charged; `priceUsdc6` is what the contract publishes and what the
