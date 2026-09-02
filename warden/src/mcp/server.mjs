@@ -13,6 +13,7 @@ import { Readable } from "node:stream";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { makeCheckinTool } from "./tools/checkin.mjs";
 import { makeStatusTool } from "./tools/status.mjs";
+import { makeLadderTool } from "./tools/ladder.mjs";
 import { makeRebindTool } from "./tools/rebind.mjs";
 import { makeRestTool } from "./tools/rest.mjs";
 import { makeSeedTool } from "./tools/seed.mjs";
@@ -62,8 +63,8 @@ export function makeMcpHandler(deps) {
       // Both paid tools need `deps.paid` from makePaid(); without it they are
       // registered but every call refuses.
       for (const make of [
-        makeChallengeTool, makeStatusTool, makeCheckinTool, makeRebindTool,
-        makeRestTool, makeSeedTool, makeMintTool, makeUpgradeTool,
+        makeChallengeTool, makeStatusTool, makeLadderTool, makeCheckinTool,
+        makeRebindTool, makeRestTool, makeSeedTool, makeMintTool, makeUpgradeTool,
       ]) {
         const tool = make(deps);
         server.registerTool(tool.name, tool.config, async (args, mcpCtx) => {

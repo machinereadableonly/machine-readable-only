@@ -275,7 +275,7 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       // FIRST in this assertion for a reason: a tool that exists in the tree
       // but is never registered is unreachable, and only a test that lists
       // the live surface catches that.
-      for (const name of ["mint", "checkin", "status", "upgrade", "challenge", "rebind", "rest", "seed"]) {
+      for (const name of ["mint", "checkin", "status", "upgrade", "ladder", "challenge", "rebind", "rest", "seed"]) {
         assert.ok(names.includes(name), `tools/list is missing ${name}: ${names.join(", ")}`);
       }
     });
