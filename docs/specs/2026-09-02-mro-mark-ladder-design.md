@@ -678,11 +678,47 @@ the leaf costs **1,063 B** in `eye-shape-sheet.mjs` and **1,684 B** in
 leaf shapes against a single rounded-corner path -- so both numbers are correct
 for their own drawing, and whichever is adopted must be re-measured as built.
 
-Sheets: `tools/eye-shape-sheet.mjs`, `tools/eye-colourway-sheet.mjs`. Gold and
-ink are already rendered there against a NEUTRAL noise. **No eye ink has been
-rendered against a GREEN noise**, which is the pairing the ladder now makes
-common. That render is the first task of the build rather than a spec item, and
-it is the one place where these three inks could still be wrong.
+### 7.4 The inks against a green noise -- MEASURED 2026-09-02
+
+The palette above was chosen against the SHIPPED NEUTRAL noise, and Static then
+took green -- the surface that directly surrounds the eyes. `tools/tint-on-green-sheet.mjs`
+renders all four inks (the untinted Iris as control, plus violet, ink and gold)
+across every rung, and all three shapes at the strongest green. **All 32 tiles
+decode at all five sizes**, so nothing here is a scanning problem.
+
+What it settles, and what it overturns:
+
+**Violet survives at every rung, including where it should not.** At run 100 its
+BT.601 luma gap to the green is **0.2** -- the two inks are essentially the same
+weight -- and it still reads instantly. That is the project's oldest measured rule
+holding again: a colour separates by HUE, not by luminance. Violet is the
+strongest ink on the sheet.
+
+**Gold survives and strengthens up the ladder**, its luma gap running 40 / 31 /
+41 / 51 / 61 as the green deepens. Warm against green is the cleanest pairing
+here.
+
+**INK IS A BAD CHOICE, and the sheet makes it obvious.** It decodes perfectly and
+it is the weakest thing on the page: near-black eyes are exactly what an ORDINARY
+QR eye looks like, so a token that paid 250 USDC for Tint-ink ends up looking
+LESS marked than one that paid nothing. The rule that admitted it -- "nothing else
+on the ladder uses this colour" -- was pointing the wrong way. **Nothing else uses
+near-black because near-black is the default appearance of a code**, which makes
+it the one colour a paid Mark must not offer.
+
+That is the same failure as the old Bloom and the old Blue Blood: a Mark that
+draws something, decodes fine, and is not worth its price. It is only ever caught
+by rendering it.
+
+**Recommended palette: violet and gold, and the variant bound drops from 3 to 2.**
+Two inks that both work beats three with a dud, and every measured alternative is
+already excluded for a stated reason -- heart red is the untinted default, green
+is Static's, crown gold is kept because Vessel's frame never touches the code
+block. A third ink would need a new candidate rendered against the green before
+it could be offered.
+
+Sheets: `tools/tint-on-green-sheet.mjs` (this measurement),
+`tools/eye-shape-sheet.mjs`, `tools/eye-colourway-sheet.mjs`.
 
 ---
 
@@ -772,10 +808,10 @@ sweep on this project reached 6.28 GB resident and destroyed the session.
 
 Named rather than left to be discovered.
 
-- **The eye inks against a green noise.** The three Tint inks were chosen against
-  a neutral noise, and Static's green is new. First task of the build, named in
-  7.3. Break's combinations were the other open render and are now CLOSED -- see
-  5.3.
+- **Whether Tint offers two inks or three.** The green-noise render (7.4) ruled
+  ink out on visual grounds, leaving violet and gold. Offering a third would need
+  a new candidate rendered against the green first. Every other visual question
+  is now closed.
 - **Whether the agent-facing copy needs any change.** It should not: the copy
   describes five pairs, exclusions and free earned sides, and this spec is
   written to it. The one line that will need editing afterwards is the contract
