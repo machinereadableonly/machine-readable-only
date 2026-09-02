@@ -155,3 +155,70 @@ test("an earned side never carries a price and a bought side always does", async
     }
   }
 });
+
+// --- what the tool has to see that the mirror's mask does not ----------------
+
+/// The same fixture, with Marks RESERVED rather than written. tokens.marks is
+/// set by markOrderWritten, which only the Clock calls after a successful
+/// on-chain applyMark, so this is the state a token is actually in for most of
+/// the day after a purchase.
+function ladderWithReservations({ reserved = [], marks = 0, level = 1, streak = 1, resting = 0 } = {}) {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  db.exec(`UPDATE tokens SET marks = ${marks}, level = ${level}, streak = ${streak}, resting = ${resting} WHERE tokenId = 1`);
+  for (const id of reserved) q.reserveMark(1, id, 0);
+  return makeLadderTool({ q, catalogue: LADDER });
+}
+
+// A ladder that showed Aura open to a token that bought Tint an hour ago would
+// invite the purchase `upgrade` now refuses -- and, before that refusal existed,
+// it took $275.00 for a pair that can only ever wear one side.
+test("a Mark bought but not yet written already closes its partner", async () => {
+  const tool = ladderWithReservations({ marks: 1 << 6, reserved: [9], level: 200, streak: 200 });
+  const res = await tool.handler({ tokenId: 1 }, ctx);
+  const pair5 = res.pairs.find(p => p.pair === 5);
+  assert.equal(pair5.held, "tint");
+  assert.equal(pair5.closed, "aura");
+  assert.equal(pair5.closedBy, "tint");
+  assert.equal(pair5.sides.find(s => s.id === 10).state, "closed");
+});
+
+// rest() is irreversible and applyMark reverts Resting(id), so `upgrade`
+// refuses all ten. Quoting $1,250.00 beside a side that cannot be bought at any
+// price is the opposite of what this tool is for.
+test("a sealed token is shown no open side at all, and told why", async () => {
+  const tool = ladderWithReservations({ level: 400, streak: 400, resting: 1 });
+  const res = await tool.handler({ tokenId: 1 }, ctx);
+  assert.equal(res.resting, true);
+  for (const pair of res.pairs) {
+    for (const side of pair.sides) {
+      assert.equal(side.state, "closed", `${side.name} is still offered to a sealed token`);
+      assert.equal(side.waitingOn, undefined, `${side.name} quotes a gate it can never pass`);
+    }
+  }
+});
+
+// THE CONTROL. Without it the test above passes for a tool that closes
+// everything for everybody.
+test("an unsealed token says so and keeps its open sides", async () => {
+  const res = await ladderWithReservations({ level: 400, streak: 400 }).handler({ tokenId: 1 }, ctx);
+  assert.equal(res.resting, false);
+  assert.equal(res.pairs.flatMap(p => p.sides).filter(s => s.state === "open").length, 10);
+});
+
+// Nothing in the shipped ladder produces a pair with one side, and
+// assertLadderSane does not check that nothing ever will. A free, read-only tool
+// answering a question about a stub catalogue should not be the thing that
+// crashes.
+test("a pair with only one side reports what is held and closes nothing", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  db.exec("UPDATE tokens SET marks = 2 WHERE tokenId = 1");            // holds mark 1
+  const lone = { 1: { ...LADDER[1], excludes: 0 } };
+  const res = await makeLadderTool({ q, catalogue: lone }).handler({ tokenId: 1 }, ctx);
+  assert.equal(res.pairs.length, 1);
+  assert.equal(res.pairs[0].held, "hush");
+  assert.equal(res.pairs[0].closed, undefined);
+});

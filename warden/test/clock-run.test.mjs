@@ -286,3 +286,94 @@ test("reconcile refuses to guess at its history on an unknown chain", async () =
     /no deploy block recorded for chain 1/
   );
 });
+
+// --- a mark order the chain will never accept --------------------------------
+//
+// Before this, a refused order stayed 'queued' forever: every run re-sent the
+// same doomed applyMark and alerted again, so a real problem arrived nightly
+// and looked identical to the night before. `mints` already had 'failed' plus
+// stuckMints for exactly this; mark_orders had neither.
+
+/// A token that exists on chain with one Mark queued for it.
+function queueMark(q, db, { tokenId = 1, upgradeId = 3, variant = 0 } = {}) {
+  queueMint(q, db, tokenId);
+  db.exec(`UPDATE mints SET status = 'written' WHERE tokenId = ${tokenId}`);
+  q.reserveMark(tokenId, upgradeId, variant);
+}
+
+/// A writer that refuses one named function on SIMULATION, the way the chain
+/// refuses a call it can already see will revert.
+const refusingWriter = (errorName, functionName = "applyMark") => okWriter({
+  async send(fn, args, opts) {
+    if (fn !== functionName) return { ok: true, hash: "0x1" };
+    this.sent.push({ functionName: fn, args, label: opts?.label });
+    return { ok: false, reason: "reverted-on-simulate", errorName, detail: errorName };
+  },
+});
+
+test("a mark order the chain refuses is failed once, not retried nightly", async () => {
+  const { db, q } = mirror();
+  queueMark(q, db, {});
+  const alerts = [];
+  const first = refusingWriter("MarkExcluded");
+  const summary = await runClock({ ...baseArgs(q), writer: first, alert: (m) => alerts.push(m) });
+
+  assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "failed");
+  assert.equal(summary.stuckMarks.length, 1);
+  assert.equal(summary.stuckMarks[0].upgradeId, 3);
+  assert.equal(alerts.filter((a) => /needs a human/.test(a)).length, 1);
+
+  // The next run neither re-sends it nor alerts again. It is still reported --
+  // in the summary and at log level -- so it cannot be forgotten either.
+  const logs = [];
+  const laterAlerts = [];
+  const second = refusingWriter("MarkExcluded");
+  const again = await runClock({
+    ...baseArgs(q), writer: second, alert: (m) => laterAlerts.push(m), log: (m) => logs.push(m),
+  });
+  assert.equal(second.sent.filter((s) => s.functionName === "applyMark").length, 0,
+    "the doomed call was sent a second time");
+  assert.deepEqual(laterAlerts, [], "a standing failure alerted again and told nobody anything new");
+  assert.equal(again.stuckMarks.length, 1, "and it is still reported");
+  assert.equal(logs.filter((l) => /waiting for a human/.test(l)).length, 1);
+});
+
+// THE CONTROL. A refusal that is not the chain's own verdict -- a public RPC
+// having a bad minute -- must NOT be terminal, or a token that paid $1,250.00
+// for a Vessel loses it to a dropped connection.
+test("a transient send failure leaves the order queued and it is retried", async () => {
+  const { db, q } = mirror();
+  queueMark(q, db, { upgradeId: 7 });
+  const flaky = okWriter({
+    async send(fn, args, opts) {
+      if (fn !== "applyMark") return { ok: true, hash: "0x1" };
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      return { ok: false, reason: "send-failed", detail: "socket hang up" };
+    },
+  });
+  const summary = await runClock({ ...baseArgs(q), writer: flaky });
+
+  assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "queued");
+  assert.deepEqual(summary.stuckMarks, []);
+
+  const second = okWriter();
+  await runClock({ ...baseArgs(q), writer: second });
+  assert.equal(second.sent.filter((s) => s.functionName === "applyMark").length, 1,
+    "the retry never happened");
+  assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "written");
+});
+
+// The chain already has it, so the agent has what it paid for and only the
+// mirror was behind. Same answer as TokenExists gives a mint.
+test("MarkAlreadyApplied catches the mirror up instead of failing the order", async () => {
+  const { db, q } = mirror();
+  queueMark(q, db, { upgradeId: 4 });
+  const alerts = [];
+  const writer = refusingWriter("MarkAlreadyApplied");
+  const summary = await runClock({ ...baseArgs(q), writer, alert: (m) => alerts.push(m) });
+
+  assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "written");
+  assert.equal(q.getToken(1).marks, 1 << 4, "the mirror's mask caught up");
+  assert.deepEqual(summary.stuckMarks, []);
+  assert.equal(alerts.filter((a) => /already on token/.test(a)).length, 1);
+});

@@ -451,7 +451,7 @@ already wears Ache:</p>
   &quot;params&quot;: { &quot;name&quot;: &quot;ladder&quot;, &quot;arguments&quot;: { &quot;tokenId&quot;: 1 } } }
 
 {
-  &quot;ok&quot;: true, &quot;tokenId&quot;: 1, &quot;level&quot;: 120, &quot;streak&quot;: 120,
+  &quot;ok&quot;: true, &quot;tokenId&quot;: 1, &quot;level&quot;: 120, &quot;streak&quot;: 120, &quot;resting&quot;: false,
   &quot;pairs&quot;: [
     { &quot;pair&quot;: 1,
       &quot;sides&quot;: [
@@ -482,6 +482,16 @@ already wears Ache:</p>
 a side can still be taken. <code>waitingOn</code> appears only on an open side that is
 gated, so its absence means the gate is met. A decided pair also carries
 <code>held</code>, <code>closed</code> and <code>closedBy</code> at the top level.</p>
+<p><strong>A Mark you have bought counts from the moment you buy it</strong>, not from the
+moment it reaches the chain. A purchase is reserved at this door and written on
+chain by the next Clock run, so <code>state</code> reads <code>held</code> for a Mark that is still
+queued and its partner reads <code>closed</code> -- and <code>upgrade</code> refuses that partner with
+<code>mark-excluded</code> for the same reason. The one place this does not apply is pair
+five&#39;s Iris requirement: an Iris that is not yet on chain does not satisfy the
+contract either, so both sides still report <code>waitingOn</code> an Iris until it lands.</p>
+<p><strong><code>resting</code> is true when the token has been sealed by its owner.</strong> <code>rest</code> is
+irreversible and the contract refuses every Mark on a sealed token, so when it
+is true every side reads <code>closed</code> and no price on the page can be paid.</p>
 <p><strong>Every gate is checked before any payment is requested</strong>, and the refusal says
 which one. The two worth showing, both captured from the token above:</p>
 <pre><code>upgrade { &quot;tokenId&quot;: 1, &quot;upgradeId&quot;: 1 }

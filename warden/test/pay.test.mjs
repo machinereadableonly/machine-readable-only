@@ -839,12 +839,17 @@ test("the variant is named in the payment demand an agent reads", async () => {
 // Settling takes seconds, and the same token can take the OTHER side of a pair
 // in that window through a second connection. The pre-payment check is stale by
 // the time the money lands, so the decision is made again against the database.
+//
+// THE RACING MARK IS ONLY RESERVED, never written. This test used to call
+// markOrderWritten too, which put Beat into tokens.marks and so tested the state
+// that exists for a few minutes a day instead of the state that exists for the
+// rest of it -- and that is why it passed against a tool that read tokens.marks
+// alone. A reservation is what a competing connection actually leaves behind.
 test("the exclusion is re-checked AFTER settlement", async () => {
   const q = tokenWearing({ level: 40, streak: 40 });
   const alerts = [];
   const racing = (fn) => async (args, ctx) => {
-    q.reserveMark(1, 4, 0);        // Beat lands mid-settlement
-    q.markOrderWritten(1, 4);      // and reaches the mirror's mask
+    q.reserveMark(1, 4, 0);        // Beat is bought mid-settlement
     return fn(args, ctx);
   };
   const tool = makeUpgradeTool({
@@ -882,4 +887,95 @@ test("the schema now accepts the whole ladder, ids 8 to 10 included", () => {
   assert.equal(schema.safeParse({ tokenId: 1, upgradeId: 1, variant: 3 }).success, false);
   // The default is what lets an agent omit it entirely.
   assert.equal(schema.parse({ tokenId: 1, upgradeId: 1 }).variant, 0);
+});
+
+// --- a reservation is a decided pair ----------------------------------------
+//
+// THE HOLE THESE CLOSE. tokens.marks is written by markOrderWritten alone,
+// which only the Clock calls after a successful on-chain applyMark. So between
+// a purchase and the next 00:05 UTC run -- up to 24 hours -- the column the
+// exclusion check reads does not include what this token has already bought.
+// Measured against the real tool and the real catalogue before the fix: Tint
+// ($250.00) and Aura ($25.00) were BOTH accepted for one token, $275.00 taken
+// for a pair that can only ever wear one side. The Clock writes Tint and
+// applyMark(1, 10, 0) reverts MarkExcluded(9) a day later, with the agent
+// refused nothing and told nothing.
+//
+// `tokenWearing` above pushes its Marks all the way through markOrderWritten,
+// so every test using it exercises the WRITTEN state. These use reserveMark
+// alone, which is the state that actually exists for most of a day.
+
+/// A token that has RESERVED Marks: paid for, queued, not yet on chain. The
+/// deliberate difference from `tokenWearing` is the missing markOrderWritten.
+function tokenReserving({ level, streak, marks = [] }) {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 100, level, streak);
+  for (const id of marks) q.reserveMark(1, id, 0);
+  return q;
+}
+
+// The Iris here is WRITTEN, not merely reserved, because `requiresAny` still
+// reads tokens.marks on purpose: an unwritten Iris under-satisfying a
+// requirement only refuses, which is the safe direction and matches what the
+// chain would do with a Tint whose Iris is not on chain yet.
+test("both sides of pair five cannot be bought inside one Clock cycle", async () => {
+  const q = tokenWearing({ level: 200, streak: 200, marks: [6] });   // earned Iris opens pair 5
+  const charged = [];
+  const buy = (upgradeId) => makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER),
+    paid: (fn, price) => { charged.push(price); return fn; },
+  }).handler({ tokenId: 1, upgradeId }, { keyId: "k1" });
+
+  const tint = await buy(9);
+  assert.equal(tint.ok, true, "the first side of the pair is buyable");
+
+  const aura = await buy(10);
+  assert.equal(aura.ok, false);
+  assert.equal(aura.reason, "mark-excluded");
+  assert.equal(aura.detail, "tint", "the refusal names the side already bought");
+  assert.deepEqual(charged, ["$250.00"], "the second side was refused before payment");
+  assert.equal(q.markSold(10), 0, "nothing was reserved for the closed side");
+});
+
+// The same hole across the free/bought boundary, where it loses money in the
+// other direction: take free Ache first, then pay $1.00 for Hush, and it is the
+// PAID side the chain refuses.
+test("a reserved earned Mark closes the paid side of its own pair", async () => {
+  const q = tokenReserving({ level: 40, streak: 40, marks: [2] });     // Ache, free and queued
+  const r = await ladderTool(q).handler({ tokenId: 1, upgradeId: 1 }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "mark-excluded");
+  assert.equal(r.detail, "ache");
+});
+
+// The already-applied check reads the same mask. Without this a token could be
+// told its own queued Mark is available, and only the unique index would stop
+// the second sale -- after the payment.
+test("a Mark already reserved is refused as applied, before payment", async () => {
+  const q = tokenReserving({ level: 40, streak: 40, marks: [3] });     // Static, bought and queued
+  const r = await ladderTool(q).handler({ tokenId: 1, upgradeId: 3 }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "mark-already-applied");
+});
+
+// The free route reads the chain, and that read is a yield. A paid call for the
+// other side of the pair can reserve inside it, and the earned side's decision
+// was taken before the await -- so the decision is taken again after it. The
+// unique index cannot cover this: the two sides are different upgradeIds.
+test("a free Mark re-reads the pair after its chain read, not before", async () => {
+  const q = tokenReserving({ level: 40, streak: 40 });
+  // Static, the bought side of pair 2, is reserved while the chain is read.
+  const racingChain = openChain({
+    writesOpen: async () => { q.reserveMark(1, 3, 0); return null; },
+  });
+  const tool = makeUpgradeTool({
+    q, chain: racingChain, catalogue: assertLadderSane(LADDER), paid: paidMustNotBeCalled,
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 4 }, { keyId: "k1" });   // Beat
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "mark-excluded");
+  assert.equal(r.detail, "static");
+  assert.equal(q.markSold(4), 0, "the earned side was reserved anyway");
 });

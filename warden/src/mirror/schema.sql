@@ -46,6 +46,12 @@ CREATE TABLE IF NOT EXISTS mark_orders (
   upgradeId INTEGER NOT NULL,
   variant   INTEGER NOT NULL DEFAULT 0,   -- the Iris shape or the Tint ink; 0 for every other Mark
   paymentTx TEXT,
+  -- queued | written | failed. 'failed' is the terminal state for an order the
+  -- chain refused on simulation: the same call against the same state will be
+  -- refused every night, so retrying it is noise and the row waits for a human
+  -- instead. It is deliberately NOT deleted -- the unique index below is what
+  -- stops a second reservation of the same Mark, and a Mark the chain refused
+  -- should stay refused until somebody has looked at it.
   status    TEXT NOT NULL DEFAULT 'queued'
 );
 

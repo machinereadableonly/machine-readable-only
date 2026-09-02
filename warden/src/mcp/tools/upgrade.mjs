@@ -49,14 +49,36 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       if (mark.needsWhole && token.level < 365) return { ok: false, reason: "mark-needs-whole" };
       if (mark.minStreak && token.streak < mark.minStreak) return { ok: false, reason: "mark-needs-streak" };
       if (q.markSold(upgradeId) >= mark.supply) return { ok: false, reason: "mark-sold-out" };
-      if (token.marks & (1 << upgradeId)) return { ok: false, reason: "mark-already-applied" };
+
+      // WHAT THIS TOKEN HAS TAKEN, which is not the same thing as what the
+      // chain says it wears. `tokens.marks` is set by markOrderWritten, and only
+      // the Clock calls that, after a successful applyMark -- so a Mark bought
+      // at noon is invisible to that column until 00:05 UTC. Deciding an
+      // exclusion from it alone sold Tint ($250.00) and Aura ($25.00) to one
+      // token in one cycle: the Clock writes Tint, applyMark(id, 10, 0) then
+      // reverts MarkExcluded(9) a day later, and the agent was refused nothing
+      // and told nothing. A reservation decides the pair the moment it is made,
+      // so it has to be read here.
+      //
+      // WHAT THE UNIQUE INDEX STILL GUARANTEES, so the two are not confused.
+      // mark_orders_token_upgrade is one row per (tokenId, upgradeId) and it is
+      // enforced by the database across every process that opens the file --
+      // that is the final authority against two settlements racing for the SAME
+      // Mark, and reserveMark returning false is how that arrives. It cannot
+      // help across a PAIR, because the two sides are different upgradeIds and
+      // no index expresses "either of these two". So this read is a check and
+      // not an authority: what makes it sound within this service is that
+      // node:sqlite is synchronous and there is no `await` between reading the
+      // mask and inserting the row, so no other request can interleave.
+      const held = token.marks | q.reservedMask(tokenId);
+      if (held & (1 << upgradeId)) return { ok: false, reason: "mark-already-applied" };
 
       // THE EXCLUSION, before any payment. An agent told only "no" cannot tell a
       // permanent exclusion from a temporary gate, and the whole ladder rests on
       // exclusions being legible -- so the refusal NAMES what closed the door.
       // It can only ever name the same pair's other side, which is why a name is
       // enough: every exclusion is pair-internal.
-      const blocking = token.marks & mark.excludes;
+      const blocking = held & mark.excludes;
       if (blocking) {
         const by = Object.values(catalogue).find((m) => blocking & (1 << m.id));
         return { ok: false, reason: "mark-excluded", detail: by?.name.toLowerCase() };
@@ -65,6 +87,13 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       // Both sides of pair five wait on an Iris, by either route. Aura was
       // ungated once, and being buyable on day one silently forfeited Tint --
       // which needs an Iris, and therefore 100 days.
+      //
+      // THIS ONE READS `token.marks` AND NOT `held`, deliberately. A reservation
+      // that has not reached the chain does not satisfy the contract either:
+      // applyMark would revert MarkGate on a Tint whose Iris is still queued.
+      // Counting an unwritten Iris here would sell the Tint that refusal is
+      // about. Under-satisfying a requirement only refuses, which is the safe
+      // direction; over-satisfying an exclusion sells a forfeit, which is not.
       if (mark.requiresAny && !(token.marks & mark.requiresAny)) {
         return { ok: false, reason: "mark-needs-iris" };
       }
@@ -83,12 +112,26 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       // route reads it twice because settlement takes seconds and the piece can
       // be paused or the token sealed inside that window; nothing settles here,
       // so a settled-then-refused state cannot arise and one read is the whole
-      // of it. reserveMark's unique index is still the final authority, so two
-      // calls racing for the same token cannot both reserve.
+      // of it. reserveMark's unique index is still the final authority for THIS
+      // Mark, so two calls racing for the same one cannot both reserve.
       if (mark.route === "earned") {
         const blocked = await paidWriteBlock(chain, { tokenId, q });
         if (blocked) return { ok: false, reason: blocked };
-        if (!q.reserveMark(tokenId, upgradeId, variant)) {
+
+        // THE MASK IS RE-READ ON THIS SIDE OF THE await. What the chain read
+        // costs in milliseconds is still a yield, and a paid call for the other
+        // side of this pair can reserve inside it -- after which the Clock sends
+        // both and the chain refuses whichever it sends second, which may well
+        // be the one somebody paid for. The index cannot catch that: the two
+        // sides are different upgradeIds. Nothing between this read and the
+        // insert below yields, so together they are one decision.
+        const nowHeld = (q.getToken(tokenId)?.marks ?? 0) | q.reservedMask(tokenId);
+        const nowBlocking = nowHeld & mark.excludes;
+        if (nowBlocking) {
+          const by = Object.values(catalogue).find((m) => nowBlocking & (1 << m.id));
+          return { ok: false, reason: "mark-excluded", detail: by?.name.toLowerCase() };
+        }
+        if (nowHeld & (1 << upgradeId) || !q.reserveMark(tokenId, upgradeId, variant)) {
           return { ok: false, reason: "mark-already-applied" };
         }
         return { ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock run" };
@@ -126,12 +169,19 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
           return { ok: false, reason: "paid-but-unavailable", detail: nowBlocked };
         }
 
+        // The same union as before payment, re-read: the window this block
+        // exists for is exactly long enough for another connection to buy the
+        // other side of the pair, and that purchase lands in mark_orders and
+        // nowhere else until the Clock runs. Reading only fresh.marks here read
+        // straight past it -- and this is the path where the money has already
+        // moved, so it is the one that must not be blind.
         const fresh = q.getToken(tokenId);
+        const heldNow = fresh ? fresh.marks | q.reservedMask(tokenId) : 0;
         const blocked =
           !fresh ? "unknown-token"
           : fresh.keyId !== ctx.keyId ? "not-bound-to-caller"
-          : fresh.marks & (1 << upgradeId) ? "mark-already-applied"
-          : fresh.marks & mark.excludes ? "mark-excluded"
+          : heldNow & (1 << upgradeId) ? "mark-already-applied"
+          : heldNow & mark.excludes ? "mark-excluded"
           : q.markSold(upgradeId) >= mark.supply ? "mark-sold-out"
           : null;
 
@@ -159,6 +209,12 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         // spending up to $1,250.00. "a paid tool" is not good enough -- and for
         // the two Marks with a choice, neither is the name alone: Tint costs
         // $250.00 and the ink is the whole of what is bought.
+        //
+        // VARIANT_NAMES[upgradeId] is indexed unguarded on purpose: assertLadderSane
+        // refuses to start on a Mark that offers variants without naming them, so
+        // by the time a catalogue reaches this tool the table is complete. A guard
+        // here would turn a wiring error into a runtime refusal for one agent
+        // mid-payment, which is precisely the wrong place to discover it.
         description: mark.variants > 1
           ? `Apply the ${mark.name} Mark (${VARIANT_NAMES[upgradeId][variant]}) to token ${tokenId}`
           : `Apply the ${mark.name} Mark to token ${tokenId}`,

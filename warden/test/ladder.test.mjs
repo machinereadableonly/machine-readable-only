@@ -110,3 +110,28 @@ test("both sides of pair five wait on an Iris", () => {
     if (m.id !== 9 && m.id !== 10) assert.equal(m.requiresAny, 0, `${m.name} should need nothing`);
   }
 });
+
+// A Mark that offers a choice and does not name it used to reach an agent as a
+// raw TypeError out of the PAID `upgrade` tool: the payment demand indexes
+// VARIANT_NAMES[id][variant] to say WHICH shape or ink is being bought, and the
+// most expensive Mark with a choice costs $250.00. A missing name table is a
+// wiring error of exactly the same kind as a missing price, so it belongs at
+// boot, where it stops the service instead of one agent's purchase.
+test("a Mark offering variants it cannot name is a startup error", () => {
+  const broken = structuredClone(LADDER);
+  broken[1].variants = 2;                 // Hush has one look and no name table
+  assert.throws(() => assertLadderSane(broken), /VARIANT_NAMES/);
+
+  const short = structuredClone(LADDER);
+  short[5].variants = 4;                  // the Iris names three shapes, not four
+  assert.throws(() => assertLadderSane(short), /VARIANT_NAMES/);
+});
+
+// The control: the real ladder satisfies the obligation, so `upgrade` may index
+// the table without a guard.
+test("every Mark with a choice names exactly as many options as it offers", () => {
+  for (const m of Object.values(LADDER)) {
+    if (m.variants > 1) assert.equal(VARIANT_NAMES[m.id].length, m.variants, `mark ${m.id}`);
+    else assert.equal(VARIANT_NAMES[m.id], undefined, `mark ${m.id} names variants it does not offer`);
+  }
+});

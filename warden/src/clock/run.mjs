@@ -48,6 +48,10 @@ export async function runClock({
     dropped: [],
     marks: [],
     stuck: [],
+    /// Mark orders in their terminal state: paid for, refused by the chain, and
+    /// waiting for a human. Separate from `stuck`, which is mints whose artwork
+    /// never solved -- the two need different answers from whoever reads them.
+    stuckMarks: [],
     aborted: null,
     reconciled: null,
     /// The block the last successful write landed in, or null. Anything that
@@ -130,6 +134,21 @@ export async function runClock({
   }
 
   // 5. MARKS.
+  //
+  // Orders already known to be refused are reported once per run at log level
+  // and NOT re-sent. They are not alerted again: the alert fired at the moment
+  // the chain refused the order, which is the only moment it told a human
+  // anything new. This is where marks differ from stuckMints above -- a solve
+  // fails inside another loop entirely, so the Clock's own run is the first
+  // place it can be raised at all, while a mark order fails here.
+  for (const stuck of q.stuckMarkOrders()) {
+    summary.stuckMarks.push(stuck);
+  }
+  if (summary.stuckMarks.length > 0) {
+    log(`clock: ${summary.stuckMarks.length} mark order(s) the chain refused are waiting for a human: ` +
+      summary.stuckMarks.map((o) => `${o.upgradeId} on ${o.tokenId}`).join(", "));
+  }
+
   for (const order of q.pendingMarkOrders()) {
     // THREE arguments. The variant is the shape or ink the agent chose and paid
     // for, and it exists nowhere else -- the contract writes it into the token's
@@ -144,10 +163,36 @@ export async function runClock({
       summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
       continue;
     }
+    // The chain already has this Mark and the mirror was behind. Same shape as
+    // TokenExists above: the row is settled whatever this run thinks, and the
+    // agent has what it paid for, so it moves to written -- which also sets the
+    // mirror's mask -- rather than to failed.
+    if (result.errorName === "MarkAlreadyApplied") {
+      q.markOrderWritten(order.tokenId, order.upgradeId);
+      alert(`clock: mark ${order.upgradeId} was already on token ${order.tokenId}; the mirror was behind and is now caught up`);
+      continue;
+    }
     alert(`clock: applyMark ${order.upgradeId} on ${order.tokenId} failed (${result.errorName ?? result.reason})`);
     if (isRunLevel(result)) {
       summary.aborted = result.errorName ?? result.reason;
       return summary;
+    }
+    // A SIMULATED REVERT IS FINAL FOR THIS ROW. It means the chain, reading its
+    // own current state, refuses this exact call: an exclusion (permanent), a
+    // seal (irreversible), a gate the ladder and the contract disagree about (a
+    // wiring error), or -- until the ladder's contract is deployed -- a
+    // three-argument applyMark that does not exist on the address the Clock
+    // talks to. None of those fix themselves overnight, and re-sending them
+    // nightly buries the alert that matters under one that never changes.
+    //
+    // EVERY OTHER FAILURE STAYS QUEUED, deliberately. send-failed,
+    // gas-estimate-failed and reverted-on-chain can all be a public RPC having
+    // a bad minute, and a token that paid $1,250.00 for a Vessel must not lose
+    // it to one. The row is retried on the next run exactly as it always was.
+    if (result.reason === "reverted-on-simulate") {
+      q.failMarkOrder(order.tokenId, order.upgradeId);
+      summary.stuckMarks.push(order);
+      alert(`clock: mark ${order.upgradeId} on token ${order.tokenId} is paid for and the chain refuses it (${result.errorName ?? "no named error"}) -- it will not be retried and needs a human`);
     }
   }
 
