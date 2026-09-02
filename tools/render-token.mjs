@@ -425,10 +425,14 @@ export function renderSvg(modules, want, size, state) {
     // The EARNED Iris does not lapse: its rung comes from the run stored at
     // apply time, not the live rung, which is the whole point of the Mark --
     // it stops tracking the lapse. Break's exchange is then applied at THAT
-    // rung through inks(), not the token's live rung: the earned Iris is
-    // frozen at a top-tier run, and under Break the live noise is also
-    // top-tier red, so computing the eye's ink at the live rung would collide
-    // the eye into the noise it sits on. Mirrors Renderer._eyes in Solidity.
+    // rung through inks(), not the token's live rung. That is NOT for
+    // contrast against the noise: at the live rung the eye ink would be
+    // luminance-matched to the noise and still read fine, separated by hue
+    // the same way the heart and noise already are. The real reason is that
+    // reading the live rung would let the earned Iris's ink walk back down
+    // the ladder as the streak fades, starting the one Mark that cannot be
+    // bought lapsing again -- exactly the property it exists to be free of.
+    // Mirrors Renderer._eyes in Solidity.
     const eyeRung = earned ? rungOf(irisRun) : rung;
     const base = inks(marks, eyeRung).heartInk;
     const ink = hasMark(marks, TINT) ? (tintVariant === 1 ? TINT_GOLD : TINT_VIOLET) : base;
