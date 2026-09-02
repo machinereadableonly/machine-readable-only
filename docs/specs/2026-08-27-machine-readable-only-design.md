@@ -687,6 +687,18 @@ failed on every real phone.
 
 ## 9. Marks (paid upgrades)
 
+> **SUPERSEDED 2026-09-02 by `docs/specs/2026-09-02-mro-mark-ladder-design.md`.**
+> Everything in this section about the LADDER is out of date and must not be
+> quoted: the seven independent Marks are replaced by ten Marks in five
+> exclusive pairs, supply caps are removed entirely, and `Pulse` in the table
+> below was measured and dropped on 2026-08-29 before any of that. The rule
+> "independent -- no tier requires the one below" is dead.
+>
+> What in this section STILL HOLDS is the payment path: x402 inside MCP, the
+> facilitator hosts, only the bound agent may buy, money to `TREASURY_ADDRESS`,
+> and prices as `setUpgrade` dials. The section is kept unedited so the record
+> of what changed survives.
+
 Plain English: **x402** is the standard where a server says "402 Payment
 Required" with an exact price, and the agent pays in stablecoin inside its
 retry. No account, no card, no subscription. Since July 2026 the protocol is

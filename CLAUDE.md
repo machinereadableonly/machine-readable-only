@@ -88,15 +88,21 @@ return visits, so the artwork is the agent's own history of coming back.
   and passed happily. See the plan2-payment memory.
   **THE MINT PRICE IS 1 USDC as of 2026-09-01 (`f49749c`)**, swept everywhere.
   It is the Warden constant `MINT_PRICE`, not an on-chain value.
-  **THE MARK LADDER IS BEING REDESIGNED as of 2026-08-31, and NOTHING IS
-  BUILT.** Rendering every Mark found three that do not earn their price
-  (Bloom draws NOTHING at the top tier), and found an EIGHTH surface in the
-  QR's three finder patterns at 9,061 gas. Violet Bloom is DECIDED (one
-  constant, zero bytes). the operator then agreed a gamified ladder: five tiers of two,
-  money against time, permanent exclusions. Read the gamified-mark-ladder and
-  mark-ladder-redesign memories BEFORE touching Marks -- the redesign needs a
-  CONTRACT change, the first since Plan 1. The measurement tools are committed
-  (`09a09fe`); the renderer is untouched. Next step is writing the spec.
+  **THE MARK LADDER IS FULLY SPECIFIED as of 2026-09-02 and NOTHING IS BUILT.**
+  Spec: `docs/specs/2026-09-02-mro-mark-ladder-design.md`, which SUPERSEDES
+  section 9 of the master spec. Ten Marks in FIVE EXCLUSIVE PAIRS; in each pair
+  one side is bought and one earned by a run of days, and taking either closes
+  the other. EVERY EXCLUSION IS PAIR-INTERNAL -- the cross-pair rule that cost
+  Break was removed as a trap on 2026-09-02, along with a second trap (ungated
+  Aura). Needs a CONTRACT change, the first since Plan 1: two uint16 masks on
+  `Upgrade` (excludes, requiresAny), a `variant` argument on `applyMark`, and
+  variants packed into the spare bits of `_marks`. All four visual questions are
+  CLOSED by rendering: Static is green, Beat violet, the Iris offers target /
+  squircle / leaf, Tint offers violet / gold. 189 Mark sets, 459 renderable
+  combinations. Read the mark-ladder-spec and static-hue-decision memories
+  BEFORE touching Marks. The renderer is still untouched, and the Warden's Mark
+  catalogue is literally `{}` (`warden/src/main.mjs:204`), so NO MARK IS
+  BUYABLE BY ANY ROUTE today.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -192,9 +198,11 @@ return visits, so the artwork is the agent's own history of coming back.
   JSON) plus a 365-cell pixel heart, one cell per credited day. Streak sets
   colour at 3 / 7 / 30 / 100; a lapse pales it in steps. Rings mark extra
   years.
-- **Marks:** seven paid tiers -- Vein 1, Blue Blood 5, Voice 20, Bloom 50,
-  Halo 100 (x1000), Crown 5,000 (x100), Singularity 100,000 (x10) --
-  gated by level, wholeness and streak.
+- **Marks:** SUPERSEDED 2026-09-02. The seven independent tiers (Vein, Blue
+  Blood, Voice, Bloom, Halo, Crown, Singularity) are retired. Ten Marks in five
+  pairs, nothing limited: Hush 1 / Ache run 7; Static 5 / Beat run 30; Iris 25 /
+  Iris run 100; Vessel 1,250 / Break run 365; Tint 250 / Aura 25, both gated on
+  holding an Iris. See `docs/specs/2026-09-02-mro-mark-ladder-design.md`.
 - **Endings:** Rest (owner seals, irreversible), Sunset (operator closes),
   Lineage (one seed per agent-year, same collection, tenure not depth).
 - **Renderer** is swappable, split three ways.

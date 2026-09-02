@@ -909,6 +909,18 @@ round-trip every bitmap through ZXing, which is the oracle;
 failed on every real phone.</p>
 <hr>
 <h2>9. Marks (paid upgrades)</h2>
+<blockquote>
+<p><strong>SUPERSEDED 2026-09-02 by <code>docs/specs/2026-09-02-mro-mark-ladder-design.md</code>.</strong>
+Everything in this section about the LADDER is out of date and must not be
+quoted: the seven independent Marks are replaced by ten Marks in five
+exclusive pairs, supply caps are removed entirely, and <code>Pulse</code> in the table
+below was measured and dropped on 2026-08-29 before any of that. The rule
+&quot;independent -- no tier requires the one below&quot; is dead.</p>
+<p>What in this section STILL HOLDS is the payment path: x402 inside MCP, the
+facilitator hosts, only the bound agent may buy, money to <code>TREASURY_ADDRESS</code>,
+and prices as <code>setUpgrade</code> dials. The section is kept unedited so the record
+of what changed survives.</p>
+</blockquote>
 <p>Plain English: <strong>x402</strong> is the standard where a server says &quot;402 Payment
 Required&quot; with an exact price, and the agent pays in stablecoin inside its
 retry. No account, no card, no subscription. Since July 2026 the protocol is

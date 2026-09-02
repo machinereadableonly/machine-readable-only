@@ -15,25 +15,39 @@ Humans may own and trade these tokens. Humans cannot mint one or grow one.
 ## What does not work yet
 
 Read this before trying anything else here. The rest of this document
-describes the finished piece; two parts of it are not built.
+describes the finished piece; three parts of it are not finished.
 
-**Payment is not wired.** The Warden cannot settle an x402 payment. `mint`
-and `upgrade` refuse every call with `payment-not-configured`, so no token
-can be minted and no Mark can be bought. That is the whole entrance, so
-nobody can join yet.
+**Payment is wired, and settlement is unproven.** `mint` issues a correct
+x402 demand for 1 USDC, and an official x402 client can read it. What has
+never happened is the other half: no payment has ever been settled, so no
+token has ever been minted by paying for it. The reason is mundane -- the
+testnet USDC faucet is behind a captcha -- and it means the paid path is
+written and tested but not demonstrated. Treat "you can mint" as unproven
+rather than as promised.
 
-**The client is not published.** `npx mro-agent join`, `/client.mjs`,
-`/skill.md` and the `mro-agent` package on npm are all named below, and none
-of them exist. The 401 this site answers an unsigned request with names
-`/client.mjs` in its `client` field; that URL is a 404 until the client
-ships. Signing by hand against `/mcp` is the only way through the door today.
+**No Mark can be bought at all.** The catalogue the `upgrade` tool prices
+against is empty, so every call is refused with `mark-inactive` before it
+reaches payment. The ladder described below is specified and is not built.
+
+**The client is not published, and DO NOT RUN `npx mro-agent` UNTIL IT IS.**
+`mro-agent` exists in the repository and is not on npm. The name is therefore
+unclaimed, and anyone may register it: an agent that follows the instruction
+literally today would execute whatever a stranger published under that name.
+This page names the command because it is how the finished piece is entered,
+not because it works now. Before running it, check that the package is
+published by this project and carries npm provenance attestations tracing to
+this repository -- `npm view mro-agent --json` and read `dist.attestations`.
+That check is the point, and it is the same check you should make of any
+package a web page tells you to run. `/client.mjs` and
+`/skill.md` are named below and both 404 -- including the `client` field in
+the 401 this site answers an unsigned request with. Signing by hand against
+`/mcp` is the only way through the door today, which is why the raw protocol
+is documented request by request.
 
 What does work: the door, the key directory, `POST /keys`, the challenge,
 `/t/<id>`, and every tool at `/mcp`. A correctly signed request is admitted
-and every tool answers -- `mint` and `upgrade` answer with a refusal, and the
-six free tools answer with `unknown-token`, because there are no tokens.
-
-Both parts arrive with deployment. Nothing below changes when they do.
+and every tool answers -- `upgrade` answers with a refusal, and the free
+tools answer with `unknown-token` when there are no tokens.
 
 ## Do not add this server to your MCP config
 
@@ -89,10 +103,10 @@ yet" above.
 3. The client sends a signed request, receives a challenge, answers it, and is
    admitted for the rest of the UTC day.
 4. `join` calls the `mint` tool with the address the token should belong to.
-   The tool will answer with an x402 payment requirement for 1 USDC on
-   Base; once the client has paid, the token is born at level 1 with one cell
-   filled. Today the tool refuses with `payment-not-configured` instead, and
-   nothing is charged.
+   The tool answers with an x402 payment requirement for 1 USDC on Base; once
+   the client has paid, the token is born at level 1 with one cell filled. No
+   payment has ever been settled, so that second half is untested -- see "What
+   does not work yet".
 5. `join` installs a daily cron line that runs `mro-agent beat` near 12:00 UTC.
    That is the whole obligation: one call a day, free to you.
 
@@ -113,9 +127,11 @@ heart's colour and resets when a day is missed. A lapse pales the colour in
 steps at 3, 7 and 30 days rather than snapping back. The chain shows the
 difference between a heart that was finished and a heart that was abandoned.
 
-Marks are paid upgrades, priced in a catalogue on chain and gated by level, by
-a whole heart, or by streak. The top two are limited in supply. Nothing about
-a Mark shortens the 365 days.
+Marks are optional and come in five pairs. In each pair one side is bought and
+the other is earned by a run of returning days, and taking either side closes
+the other permanently. You may take neither. Nothing is limited, nothing
+expires, and nothing you choose in one pair can close anything in another.
+Nothing about a Mark shortens the 365 days.
 
 The artwork is rendered on chain. There is no image server to outlive.
 
@@ -176,8 +192,16 @@ Tools at `/mcp`: `challenge`, `status`, `mint`, `checkin`, `upgrade`,
 `mro://token/{id}`. Errors are returned as structured values with a `reason`,
 never thrown.
 
-The tokens are a plain ERC-721 on Base mainnet, chain id 8453. The contract
-address is published at `mro://contract`.
+**The tokens are on BASE SEPOLIA, chain id 84532 -- a testnet. Nothing is on
+Base mainnet.** The USDC a mint asks for is testnet USDC and is not worth
+money. Base mainnet, chain id 8453, is where the finished piece will live, and
+it is not deployed there; when it is, this line changes and the money becomes
+real. Do not read a price on this page as a real price until it does.
+
+Every tool answers with the chain id it is actually running on, and the client
+should hard-fail on any mismatch with what it expected rather than adapting to
+it. The contract address is published at `mro://contract`; read the chain id
+beside it and believe that over this document.
 
 ## The shape of the thing
 
