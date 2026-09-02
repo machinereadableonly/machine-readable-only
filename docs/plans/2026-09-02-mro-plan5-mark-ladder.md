@@ -1,0 +1,2431 @@
+# MRO Plan 5 -- The Mark Ladder Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task.
+> Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Build the ten-Mark, five-pair ladder that
+`docs/specs/2026-09-02-mro-mark-ladder-design.md` specifies and that the locked
+agent-facing copy already promises, across the contract, both renderers, the
+Warden and the mirror -- so that a Mark becomes buyable for the first time.
+
+**Architecture:** Three layers, in dependency order. The CONTRACT gains two
+uint16 masks on `Upgrade`, a `variant` argument on `applyMark`, and packs
+variants and the earned-Iris run into the spare bits of the existing `_marks`
+word -- no new storage slot. The RENDERER gains six renames, one recoloured
+constant, a new green noise palette, the QR's three finder patterns (the eyes)
+and the inversion, written twice in byte-identical Solidity and JavaScript. The
+WARDEN gains the ten-entry catalogue it has never had, a free route for the four
+earned Marks, three new pre-payment refusals and a read-only `ladder` tool.
+
+**Tech Stack:** Solidity 0.8.35 / Foundry 1.7.1 (via_ir, optimizer 200 runs);
+Node 24.14.1 ESM, `node --test`; `@resvg/resvg-js` + ZXing for the decode oracle;
+`node:sqlite` for the mirror; MCP 2026-07-28; x402 for payment.
+
+---
+
+## Global Constraints
+
+Every task's requirements implicitly include this section.
+
+- **Plain ASCII only** in all docs, code and comments. No em dashes, smart
+  quotes, arrows or emoji.
+- **Base MAINNET and permanent.** Nothing here is on mainnet yet, so this is a
+  redeploy, not a migration. Do not propose a chain migration.
+- **Never spend real funds.** No mainnet transaction, no real-value transaction,
+  without explicit the operator approval every time. There is no standing approval.
+- **All four suites green before any commit:** `cd contracts && forge test`,
+  `cd tools && npm test`, `cd warden && npm test`, `cd client && npm test`.
+  Baseline at `1098482`: contracts 232, warden 293, tools 56, client 25.
+- **Foundry needs `export PATH=$HOME/.foundry/bin:$PATH`; Node needs
+  `source ~/.nvm/nvm.sh`.** Non-interactive shells have neither on PATH.
+- **Builds and any long-running compute go through `~/scripts/safe-build.sh`.**
+  That includes every render sweep in this plan: `~/scripts/safe-build.sh node
+  tools/<sheet>.mjs`. A bare bulk render reached 6.28 GB and destroyed a session
+  on 2026-08-28. Batch bulk sweeps.
+- **Use `/bin/grep`, never a bare `grep`.**
+- **Generated files are never hand-edited** -- change the generator and re-run.
+- **The two renderers must stay byte-identical.** `Renderer.t.sol` diffs
+  Solidity against `tools/render-token.mjs`. Every renderer change in this plan
+  lands in BOTH languages in the SAME task, or the suite fails.
+- **`forge build --sizes` must show positive runtime margin** under 24,576
+  bytes, and `test/ContractSize.t.sol` must pass. This is the change most likely
+  to threaten it.
+- **The gas and byte budget:** `tokenURI` stays inside the 2M gas / 20 KB HARD
+  limit at the day-364 worst case. Report the new worst case as a SIGNED delta
+  against **1,585,616 gas / 9,223 bytes** -- the Foundry figure, which is the one
+  comparable across commits. Do NOT compare against 1,633,224 / 8,924, which is
+  a different token read over RPC. The 1M / 5 KB TARGET remains missed and must
+  go on being reported as missed.
+- **The authority order:** `docs/2026-09-01-mro-agent-facing-copy.md` (the
+  locked, cold-tested promise) beats the spec; the spec beats every earlier
+  note. `docs/specs/2026-08-27-machine-readable-only-design.md` section 9 is
+  SUPERSEDED and must not be quoted.
+- **Nothing is limited.** All ten Marks ship `maxSupply = 0`. Do not reintroduce
+  caps.
+- **Every exclusion is pair-internal.** No exclusion may cross a pair boundary.
+- **Prices are fixed by the operator** and are `setUpgrade` dials: Hush 1, Static 5, Iris
+  25, Vessel 1,250, Tint 250, Aura 25 USDC. Ache, Beat, earned Iris and Break
+  are free.
+
+---
+
+## Three findings from reading the code, which change the plan
+
+Recorded here rather than discovered mid-task. All three are cases of the spec's
+prose being unrun -- see the `plan-code-is-a-draft` memory.
+
+**1. The spec's own packing creates an aliasing hazard it does not guard.**
+Section 4.3 puts the Iris shape at bits 16-23 and the Tint ink at bits 24-31 of
+`_marks`. `applyMark` computes `uint256 bit = 1 << upgradeId`. An `upgradeId` of
+16 therefore aliases the Iris shape bit exactly. `setUpgrade` accepts any
+`uint8` today, so an owner typo at id 16 would silently corrupt every token's
+variant. Task 1 adds `MarkIdOutOfRange` to `setUpgrade`, refusing id 0 and any
+id above 10. This is the same class as all seven pre-mainnet fixes -- a missing
+bound on an input -- and the same reason they were missed: ten task-level reads
+passed and only the whole-file read caught them.
+
+**2. The spec is wrong that the client has an `upgradeId` bound.** Section 8.4
+says "`upgradeId` bounds move from 1-7 to 1-10 in the client". `/bin/grep -rn
+"upgrade" client/` returns exactly one line, and it is not a bound: the client
+is a generic MCP caller and has never known about Marks. What DOES break is
+`client/test/journey.test.mjs:152`, which asserts the tool list is exactly
+`["challenge","checkin","mint","rebind","rest","seed","status","upgrade"]`.
+Adding the `ladder` tool breaks that assertion. Task 11 fixes it.
+
+**3. Break makes the noise take the token's own colour, which collides with the
+Iris.** Under Break the code's noise region is filled with the heart's rung
+colour. If the Iris were drawn in "the token's live colour" as section 5.2 says,
+a Break + Iris token would have red eyes on a red noise and the eyes would
+vanish. Pairs 3 and 4 are independent, so that combination is reachable.
+**Decision, taken here:** the Iris ink is the POST-BREAK heart ink, not the raw
+rung colour. Without Break the two are identical, so nothing changes for the
+common case; with Break the eyes take the grey or green ink and stand clear of
+the red noise. This is the adjacency rule from the `static-hue-decision` memory
+applied to a surface pair the spec did not check. Task 8's sweep renders it.
+
+---
+
+## File Structure
+
+### Contract -- `contracts/`
+
+| File | Responsibility |
+|---|---|
+| `src/MachineReadableOnly.sol` MODIFY | `Upgrade` gains `excludes`/`requiresAny`; `applyMark` gains `variant` and three reverts; `setUpgrade` gains an id bound; `_marks` packing |
+| `src/Ladder.sol` CREATE | The ten `Upgrade` records as one canonical Solidity library. The deploy script and the tests both read it, so the ladder has ONE definition |
+| `script/DeployPlan5.s.sol` CREATE | Deploy the pair and write all ten records from `Ladder.sol` |
+| `test/Ladder.t.sol` CREATE | The mask invariants: symmetry, pair-internal, and the JS mirror hash |
+| `test/Marks.t.sol` MODIFY | The three new reverts, both sides of every bound, Break's freedom |
+| `test/MarkRenderer.t.sol` MODIFY | Renamed constants, nine literals, the bits 1-10 mask rule |
+
+### Renderer -- `contracts/src/render/` and `tools/`
+
+| File | Responsibility |
+|---|---|
+| `src/render/MarkRenderer.sol` MODIFY | Ten bit constants under the new names; `BEAT_TO` violet; the ink exchange; the eyes; nine name literals |
+| `src/render/Palette.sol` MODIFY | `staticAt(rung)` replaces `bluebloodAt(rung)` with the five derived greens |
+| `src/render/EyeRenderer.sol` CREATE | The three finder patterns: erase to ground, then three concentric shapes in one of three styles. Split out because `MarkRenderer` is colour selection and this is geometry |
+| `src/render/Renderer.sol` MODIFY | Draw order (eyes last), the ink exchange, the two new attributes |
+| `tools/render-token.mjs` MODIFY | The byte-identical JavaScript twin of all of the above |
+| `tools/token-uri-fixture.mjs` MODIFY | New Mark names in the fixture stages; regenerate the hashes |
+| `tools/combination-sweep.mjs` MODIFY | Sweep the 459 renderable combinations, not 256 |
+
+### Warden -- `warden/`
+
+| File | Responsibility |
+|---|---|
+| `src/mcp/ladder.mjs` CREATE | The ten catalogue entries, the JS mirror of `Ladder.sol`, plus `assertLadderSane()` |
+| `src/main.mjs` MODIFY | Wire `catalogue: LADDER` in place of `{}` |
+| `src/mcp/tools/upgrade.mjs` MODIFY | The free route, the three new refusals, the variant argument, the post-settlement re-check |
+| `src/mcp/tools/ladder.mjs` CREATE | The read-only `ladder` tool |
+| `src/mcp/server.mjs` MODIFY | Register `ladder` |
+| `src/mirror/schema.sql`, `src/mirror/db.mjs`, `src/mirror/queries.mjs` MODIFY | The `variant` column and its migration |
+| `src/clock/abi.mjs`, `src/clock/run.mjs` MODIFY | Pass the variant to `applyMark` |
+
+### Docs
+
+| File | Responsibility |
+|---|---|
+| `docs/2026-09-01-mro-raw-protocol.md` MODIFY | A TRANSCRIPT, so it changes only when the code does -- see Task 12 |
+| `warden/public/llms.txt` MODIFY | The ladder as built |
+
+---
+
+## Phase boundaries
+
+Stop and report at each. These are the points where what comes next could
+reasonably change based on what the last chunk found.
+
+- **After Task 3** -- the contract is done and its size margin is known.
+- **After Task 8** -- the renderer is done and the gas, byte and decode numbers
+  are measured. If the worst case has moved past 2M gas or 20 KB, STOP and
+  re-plan rather than continuing into the Warden.
+- **After Task 12** -- everything is built.
+
+---
+
+### Task 1: The `Upgrade` masks and the `setUpgrade` id bound
+
+**Files:**
+- Modify: `contracts/src/MachineReadableOnly.sol`
+- Test: `contracts/test/Marks.t.sol`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: `struct Upgrade { uint64 priceUsdc6; uint32 maxSupply; uint32 sold;
+  uint32 minLevel; uint32 minStreak; bool requiresWhole; bool active; uint16
+  excludes; uint16 requiresAny; }`; `error MarkExcluded(uint8 by)`;
+  `error MarkRequires()`; `error MarkIdOutOfRange(uint8 upgradeId)`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `contracts/test/Marks.t.sol`. The existing `setUp` writes upgrade 1 with
+the seven-field struct and must gain the two new fields as zeros; do that first
+or nothing in the file compiles.
+
+```solidity
+/// @dev Mark 2 excludes mark 1 and vice versa: the pair rule, in miniature.
+function _pair(uint8 a, uint8 b, uint32 minLevel, uint32 minStreak) internal {
+    t.setUpgrade(a, MachineReadableOnly.Upgrade({
+        priceUsdc6: 1_000_000, maxSupply: 0, sold: 0,
+        minLevel: minLevel, minStreak: 0, requiresWhole: false, active: true,
+        excludes: uint16(1 << b), requiresAny: 0
+    }));
+    t.setUpgrade(b, MachineReadableOnly.Upgrade({
+        priceUsdc6: 0, maxSupply: 0, sold: 0,
+        minLevel: 0, minStreak: minStreak, requiresWhole: false, active: true,
+        excludes: uint16(1 << a), requiresAny: 0
+    }));
+}
+
+function test_anExcludedMarkRevertsAndNamesWhatBlockedIt() public {
+    _pair(1, 2, 0, 0);
+    vm.startPrank(WARDEN);
+    t.applyMark(1, 1, 0);
+    vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkExcluded.selector, uint8(1)));
+    t.applyMark(1, 2, 0);
+    vm.stopPrank();
+}
+
+function test_exclusionIsSymmetricInPractice() public {
+    _pair(1, 2, 0, 0);
+    vm.startPrank(WARDEN);
+    t.applyMark(1, 2, 0);
+    vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkExcluded.selector, uint8(2)));
+    t.applyMark(1, 1, 0);
+    vm.stopPrank();
+}
+
+function test_aMarkWithNoExclusionIsUnaffected() public {
+    _pair(1, 2, 0, 0);
+    t.setUpgrade(3, MachineReadableOnly.Upgrade({
+        priceUsdc6: 1_000_000, maxSupply: 0, sold: 0,
+        minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+        excludes: 0, requiresAny: 0
+    }));
+    vm.startPrank(WARDEN);
+    t.applyMark(1, 1, 0);
+    t.applyMark(1, 3, 0);   // the control: an unexcluded mark still lands
+    vm.stopPrank();
+    assertEq(t.marksOf(1) & 0xFFFE, (1 << 1) | (1 << 3));
+}
+
+function test_aRequirementIsAnyOfNotAllOf() public {
+    _pair(5, 6, 0, 0);
+    t.setUpgrade(9, MachineReadableOnly.Upgrade({
+        priceUsdc6: 250_000_000, maxSupply: 0, sold: 0,
+        minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+        excludes: uint16(1 << 10), requiresAny: uint16((1 << 5) | (1 << 6))
+    }));
+    vm.startPrank(WARDEN);
+    vm.expectRevert(MachineReadableOnly.MarkRequires.selector);
+    t.applyMark(1, 9, 0);
+    t.applyMark(1, 6, 0);   // the OTHER side of the pair satisfies it
+    t.applyMark(1, 9, 0);
+    vm.stopPrank();
+    assertEq(t.marksOf(1) & (1 << 9), 1 << 9);
+}
+
+function test_setUpgradeRefusesAnIdThatWouldAliasTheVariantBits() public {
+    MachineReadableOnly.Upgrade memory u = MachineReadableOnly.Upgrade({
+        priceUsdc6: 0, maxSupply: 0, sold: 0,
+        minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+        excludes: 0, requiresAny: 0
+    });
+    vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkIdOutOfRange.selector, uint8(16)));
+    t.setUpgrade(16, u);
+    vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkIdOutOfRange.selector, uint8(0)));
+    t.setUpgrade(0, u);
+    // Both sides of the bound: 10 is the highest legal id and must succeed.
+    t.setUpgrade(10, u);
+    assertTrue(t.upgradeOf(10).active);
+}
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test --match-contract MarksTest`
+Expected: compile failure -- `Upgrade` has no member `excludes`, and `applyMark`
+takes two arguments not three. That IS the failure; a compile error here is the
+red state.
+
+- [ ] **Step 3: Write the implementation**
+
+In `contracts/src/MachineReadableOnly.sol`, extend the struct. The comment
+carries the bit arithmetic because the "one slot" property is the whole reason
+the shape is what it is:
+
+```solidity
+    /// @dev One Mark tier. 240 of 256 bits, so still ONE storage slot and
+    /// `setUpgrade` costs what it always did.
+    ///
+    ///   priceUsdc6 64, maxSupply 32, sold 32, minLevel 32, minStreak 32,
+    ///   requiresWhole 8, active 8, excludes 16, requiresAny 16 = 240.
+    ///
+    /// uint16 rather than uint8 because the ids run to 10 and bit 0 is
+    /// deliberately never a Mark, so bit 10 must be addressable with room left.
+    struct Upgrade {
+        uint64 priceUsdc6;
+        uint32 maxSupply; // 0 = unlimited
+        uint32 sold;
+        uint32 minLevel;
+        uint32 minStreak;
+        bool requiresWhole;
+        bool active;
+        uint16 excludes;     // bit n set = holding mark n forbids this one
+        uint16 requiresAny;  // 0 = no requirement; else at least one bit must be held
+    }
+```
+
+Add the errors next to the existing Mark errors:
+
+```solidity
+    /// @dev Carries the id that blocked it, so an agent is told WHAT closed the
+    /// door rather than that a door is closed. `cast call` returns the selector
+    /// and the argument for free, so the guard is provable without a transaction.
+    error MarkExcluded(uint8 by);
+    error MarkRequires();
+    /// @dev `applyMark` computes `1 << upgradeId`, and `_marks` packs the Iris
+    /// shape at bit 16 and the Tint ink at bit 24. An id of 16 would therefore
+    /// alias the shape bits exactly and silently corrupt every token's variant.
+    /// Refused where the record is written, so the bad record cannot exist.
+    error MarkIdOutOfRange(uint8 upgradeId);
+```
+
+Guard `setUpgrade`:
+
+```solidity
+    function setUpgrade(uint8 upgradeId, Upgrade calldata u) external onlyOwner {
+        if (upgradeId == 0 || upgradeId > MAX_MARK_ID) revert MarkIdOutOfRange(upgradeId);
+        uint32 sold = _upgrades[upgradeId].sold;
+        _upgrades[upgradeId] = u;
+        _upgrades[upgradeId].sold = sold;
+        emit UpgradeSet(upgradeId);
+    }
+```
+
+with, next to `CODE_BYTES`:
+
+```solidity
+    /// @dev Ten Marks in five pairs. Bit 0 is never a Mark.
+    uint8 internal constant MAX_MARK_ID = 10;
+```
+
+Then add the two checks to `applyMark`, AFTER the existing gates and BEFORE the
+write. Leave the signature at two arguments for now -- Task 2 adds the variant:
+
+```solidity
+        uint256 held = _marks[id];
+        if (u.excludes != 0 && held & u.excludes != 0) {
+            revert MarkExcluded(_lowestMark(held & u.excludes));
+        }
+        if (u.requiresAny != 0 && held & u.requiresAny == 0) revert MarkRequires();
+```
+
+and the helper, beside `applyMark`:
+
+```solidity
+    /// @dev The lowest Mark id set in a mask. Only ever called on a non-zero
+    /// mask confined to bits 1..10, so the loop terminates.
+    function _lowestMark(uint256 mask) private pure returns (uint8) {
+        for (uint8 i = 1; i <= MAX_MARK_ID; ++i) {
+            if (mask & (1 << i) != 0) return i;
+        }
+        return 0;
+    }
+```
+
+- [ ] **Step 4: Fix every other call site the struct broke**
+
+The two-new-fields change breaks every `Upgrade({...})` literal in the test tree.
+Find them and add `excludes: 0, requiresAny: 0`:
+
+Run: `/bin/grep -rln "Upgrade({" contracts/test contracts/script`
+Expected: `Bounds.t.sol`, `Marks.t.sol`, `Lifecycle.t.sol`, `GasBudget.t.sol`,
+`TokenUriGolden.t.sol` and any script are the likely hits -- fix whatever the
+grep actually returns, not this list.
+
+- [ ] **Step 5: Run the whole contract suite**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test`
+Expected: PASS, 232 existing plus the 5 new = 237.
+
+- [ ] **Step 6: Check the size margin has not gone**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge build --sizes | /bin/grep -E "MachineReadableOnly|Renderer"`
+Expected: positive margin for both. Record the numbers in the commit message.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add contracts/src/MachineReadableOnly.sol contracts/test
+git commit -m "contract: Upgrade carries its exclusions and its requirement"
+```
+
+---
+
+### Task 2: `applyMark` takes a variant, and `_marks` carries it
+
+**Files:**
+- Modify: `contracts/src/MachineReadableOnly.sol`
+- Test: `contracts/test/Marks.t.sol`
+
+**Interfaces:**
+- Consumes: `MAX_MARK_ID`, `_lowestMark`, the extended `Upgrade` (Task 1).
+- Produces: `function applyMark(uint256 id, uint8 upgradeId, uint8 variant) external`;
+  `error BadVariant(uint8 got)`; `event MarkApplied(uint256 indexed id, uint8
+  indexed upgradeId, uint8 variant)`; the `_marks` layout below.
+
+The `_marks[id]` layout this task establishes, which Tasks 6 and 9 both depend on:
+
+```
+bits  0-15   the Mark set. Bit n = mark n, n in 1..10. Bit 0 is never a Mark.
+bits 16-23   the Iris shape index, written only by Mark 5.
+bits 24-31   the Tint ink index, written only by Mark 9.
+bits 32-63   the run at the moment Mark 6 was applied, as uint32.
+```
+
+- [ ] **Step 1: Write the failing tests**
+
+```solidity
+function test_theVariantBoundIsProvokedOnBothSides() public {
+    // Mark 5, the bought Iris: three shapes, so 0..2 are legal and 3 is not.
+    t.setUpgrade(5, MachineReadableOnly.Upgrade({
+        priceUsdc6: 25_000_000, maxSupply: 0, sold: 0,
+        minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+        excludes: uint16(1 << 6), requiresAny: 0
+    }));
+    vm.startPrank(WARDEN);
+    vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadVariant.selector, uint8(3)));
+    t.applyMark(1, 5, 3);
+    t.applyMark(1, 5, 2);      // the highest legal shape index succeeds
+    vm.stopPrank();
+    assertEq((t.marksOf(1) >> 16) & 0xFF, 2);
+}
+
+function test_aMarkWithNoVariantRefusesANonZeroOne() public {
+    vm.startPrank(WARDEN);
+    vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadVariant.selector, uint8(1)));
+    t.applyMark(1, 1, 1);
+    t.applyMark(1, 1, 0);      // the control: zero is legal for every Mark
+    vm.stopPrank();
+}
+
+function test_tintStoresItsInkInItsOwnByte() public {
+    t.setUpgrade(6, MachineReadableOnly.Upgrade({
+        priceUsdc6: 0, maxSupply: 0, sold: 0,
+        minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+        excludes: uint16(1 << 5), requiresAny: 0
+    }));
+    t.setUpgrade(9, MachineReadableOnly.Upgrade({
+        priceUsdc6: 250_000_000, maxSupply: 0, sold: 0,
+        minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+        excludes: uint16(1 << 10), requiresAny: uint16((1 << 5) | (1 << 6))
+    }));
+    vm.startPrank(WARDEN);
+    t.applyMark(1, 6, 0);
+    vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadVariant.selector, uint8(2)));
+    t.applyMark(1, 9, 2);      // two inks, so 2 is one past the end
+    t.applyMark(1, 9, 1);
+    vm.stopPrank();
+    assertEq((t.marksOf(1) >> 24) & 0xFF, 1);
+    assertEq((t.marksOf(1) >> 16) & 0xFF, 0, "tint must not touch the shape byte");
+}
+
+function test_theEarnedIrisStoresTheRunAndNotTheRungOrTheColour() public {
+    // Give token 1 a real streak: 40 consecutive days.
+    uint32 d = t.today();
+    for (uint32 i = 1; i <= 40; i++) {
+        _warpToDay(d + i);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d + i));
+    }
+    assertEq(t.viewOf(1).streak, 41);
+    t.setUpgrade(6, MachineReadableOnly.Upgrade({
+        priceUsdc6: 0, maxSupply: 0, sold: 0,
+        minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+        excludes: uint16(1 << 5), requiresAny: 0
+    }));
+    vm.prank(WARDEN);
+    t.applyMark(1, 6, 0);
+    // The RUN, from the token's own state. The Warden supplies nothing, so it
+    // cannot be forged -- which is the class of claim cold readers said they
+    // would go and verify.
+    assertEq((t.marksOf(1) >> 32) & 0xFFFFFFFF, 41);
+}
+
+function test_aTokenWearingOnlyTheEarnedIrisIsNotMisreadAsWearingMore() public {
+    t.setUpgrade(6, MachineReadableOnly.Upgrade({
+        priceUsdc6: 0, maxSupply: 0, sold: 0,
+        minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+        excludes: uint16(1 << 5), requiresAny: 0
+    }));
+    vm.prank(WARDEN);
+    t.applyMark(1, 6, 0);
+    // The high bits carry a large number. "Does this token wear any Mark" must
+    // be `marks & 0xFFFE`, never `marks != 0`.
+    assertEq(t.marksOf(1) & 0xFFFE, 1 << 6);
+    assertGt(t.marksOf(1), 0xFFFF, "the run should be in the high bits");
+}
+
+function test_theMarkAppliedEventCarriesTheVariant() public {
+    t.setUpgrade(5, MachineReadableOnly.Upgrade({
+        priceUsdc6: 25_000_000, maxSupply: 0, sold: 0,
+        minLevel: 0, minStreak: 0, requiresWhole: false, active: true,
+        excludes: uint16(1 << 6), requiresAny: 0
+    }));
+    vm.expectEmit(true, true, false, true);
+    emit MachineReadableOnly.MarkApplied(1, 5, 1);
+    vm.prank(WARDEN);
+    t.applyMark(1, 5, 1);
+}
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test --match-contract MarksTest`
+Expected: compile failure -- `applyMark` takes two arguments, `BadVariant` does
+not exist.
+
+- [ ] **Step 3: Write the implementation**
+
+```solidity
+    error BadVariant(uint8 got);
+
+    /// @dev The variant is part of what was bought, so it belongs in the event
+    /// the Clock and any indexer read. Not indexed: nobody filters by shape.
+    event MarkApplied(uint256 indexed id, uint8 indexed upgradeId, uint8 variant);
+
+    /// @dev How many variants a Mark accepts. PER MARK AND IN THE CONTRACT, not
+    /// a field on `Upgrade`, because a dial that can be turned up past what the
+    /// renderer can draw is a dial that can brick a token's image. The renderer
+    /// and this bound move together or not at all.
+    ///
+    ///   Mark 5, the bought Iris: three shapes -- target, squircle, leaf.
+    ///   Mark 9, Tint: two inks -- violet, gold. (Three until 2026-09-02, when
+    ///   near-black was measured as the default appearance of a QR eye and
+    ///   dropped: a paid Mark must not offer the unmarked look.)
+    ///
+    /// Every other Mark accepts only variant 0.
+    function _variantCount(uint8 upgradeId) private pure returns (uint8) {
+        if (upgradeId == 5) return 3;
+        if (upgradeId == 9) return 2;
+        return 1;
+    }
+```
+
+The new `applyMark`:
+
+```solidity
+    /// @notice Apply a Mark to a token.
+    /// @param variant the shape or ink index, 0 for every Mark that has none.
+    /// @dev Payment settles off chain through x402 before the Warden calls
+    /// this, which is why there is no value transfer here. Four of the ten
+    /// Marks are free and settle nothing at all.
+    function applyMark(uint256 id, uint8 upgradeId, uint8 variant)
+        external
+        onlyWarden
+        whenNotPaused
+        notSunset
+    {
+        Upgrade storage u = _upgrades[upgradeId];
+        if (!u.active) revert MarkInactive();
+
+        uint256 bit = 1 << upgradeId;
+        uint256 held = _marks[id];
+        if (held & bit != 0) revert MarkAlreadyApplied();
+        if (u.maxSupply != 0 && u.sold >= u.maxSupply) revert MarkSoldOut();
+
+        Token storage s = _tokens[id];
+        if (s.level == 0) revert NoSuchToken(id);
+        if (s.resting) revert Resting(id);
+        if (s.level < u.minLevel) revert MarkGate();
+        if (s.streak < u.minStreak) revert MarkGate();
+        if (u.requiresWhole && s.level < 365) revert MarkGate();
+
+        if (u.excludes != 0 && held & u.excludes != 0) {
+            revert MarkExcluded(_lowestMark(held & u.excludes));
+        }
+        if (u.requiresAny != 0 && held & u.requiresAny == 0) revert MarkRequires();
+        if (variant >= _variantCount(upgradeId)) revert BadVariant(variant);
+
+        uint256 next = held | bit;
+        // The variant bytes and the run are written from the SAME word, so a
+        // Mark that carries neither costs exactly what it cost before.
+        if (upgradeId == 5) next |= uint256(variant) << 16;
+        if (upgradeId == 9) next |= uint256(variant) << 24;
+        // The earned Iris stores the RUN, read from the token here rather than
+        // supplied by the Warden, so it cannot be forged. Not the rung (which
+        // breaks if minStreak is ever turned down with setUpgrade) and not the
+        // colour (which would freeze a swappable renderer's decision into token
+        // state forever).
+        if (upgradeId == 6) next |= uint256(s.streak) << 32;
+        _marks[id] = next;
+
+        unchecked { u.sold += 1; }
+
+        emit MarkApplied(id, upgradeId, variant);
+        emit MetadataUpdate(id);
+    }
+```
+
+- [ ] **Step 4: Fix every `applyMark(` call site**
+
+Run: `/bin/grep -rn "applyMark(" contracts/test contracts/script`
+Add the third argument, `0`, to every existing call.
+
+- [ ] **Step 5: Run the whole suite**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test`
+Expected: PASS. New total about 243.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add contracts/src/MachineReadableOnly.sol contracts/test contracts/script
+git commit -m "contract: a Mark can carry a variant, and the earned Iris keeps its run"
+```
+
+---
+
+### Task 3: The ladder itself, and the invariants that stop the trap coming back
+
+**Files:**
+- Create: `contracts/src/Ladder.sol`
+- Create: `contracts/test/Ladder.t.sol`
+- Create: `contracts/script/DeployPlan5.s.sol`
+- Create: `tools/ladder-fixture.mjs`
+- Test: `contracts/test/Ladder.t.sol`
+
+**Interfaces:**
+- Consumes: `MachineReadableOnly.Upgrade` (Task 1).
+- Produces: `Ladder.all()` returning `MachineReadableOnly.Upgrade[11]` indexed by
+  Mark id with index 0 unused; `Ladder.NAMES` order; `tools/ladder-fixture.mjs`
+  printing `keccak256(abi.encode(records))` for the JS mirror to match.
+
+The ten records, which are the spec's section 2 and 3.1 tables in one place:
+
+| id | Name | price USDC6 | minLevel | minStreak | requiresWhole | excludes | requiresAny |
+|---|---|---|---|---|---|---|---|
+| 1 | Hush | 1_000_000 | 0 | 0 | false | 1<<2 | 0 |
+| 2 | Ache | 0 | 0 | 7 | false | 1<<1 | 0 |
+| 3 | Static | 5_000_000 | 30 | 0 | false | 1<<4 | 0 |
+| 4 | Beat | 0 | 0 | 30 | false | 1<<3 | 0 |
+| 5 | Iris (bought) | 25_000_000 | 100 | 0 | false | 1<<6 | 0 |
+| 6 | Iris (earned) | 0 | 0 | 100 | false | 1<<5 | 0 |
+| 7 | Vessel | 1_250_000_000 | 0 | 0 | **true** | 1<<8 | 0 |
+| 8 | Break | 0 | 0 | 365 | false | 1<<7 | 0 |
+| 9 | Tint | 250_000_000 | 0 | 0 | false | 1<<10 | (1<<5)\|(1<<6) |
+| 10 | Aura | 25_000_000 | 0 | 0 | false | 1<<9 | (1<<5)\|(1<<6) |
+
+Every record: `maxSupply: 0` (nothing is limited), `sold: 0`, `active: true`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `contracts/test/Ladder.t.sol`:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Ladder} from "../src/Ladder.sol";
+import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
+import {Renderer} from "../src/render/Renderer.sol";
+import {MroTestBase} from "./MroTestBase.sol";
+
+/// @notice The ladder's structure, asserted rather than trusted from a table --
+/// plus the behavioural half, which needs a live token: Break's freedom.
+///
+/// @dev Extends MroTestBase rather than Test, because the Break tests need a
+/// real token at a 365-day run and the base already knows how to build one.
+contract LadderTest is MroTestBase {
+    function setUp() public {
+        r = new Renderer();
+        t = new MachineReadableOnly(address(r), WARDEN);
+        vm.warp(86_400 * 1000 + 1);
+        vm.prank(WARDEN);
+        t.mint(1, ALICE, KEY, _code());
+    }
+
+    /// @dev Which pair each Mark belongs to. Pairs are (1,2) (3,4) (5,6) (7,8)
+    /// (9,10), so the pair of id n is (n + 1) / 2.
+    function _pairOf(uint8 id) internal pure returns (uint8) {
+        return (id + 1) / 2;
+    }
+
+    function test_everyExclusionIsSymmetric() public pure {
+        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        for (uint8 a = 1; a <= 10; a++) {
+            for (uint8 b = 1; b <= 10; b++) {
+                bool aExcludesB = u[a].excludes & uint16(1 << b) != 0;
+                bool bExcludesA = u[b].excludes & uint16(1 << a) != 0;
+                assertEq(aExcludesB, bExcludesA, "exclusion is not symmetric");
+            }
+        }
+    }
+
+    /// @dev The invariant the symmetry test alone would happily pass a
+    /// reintroduced cross-pair rule on. Revision 2 of the spec removed exactly
+    /// such a rule, on the grounds that a tier whose optimal play is abstention
+    /// is a dead tier. This is what stops it coming back through an edit to one
+    /// row.
+    function test_noExclusionCrossesAPairBoundary() public pure {
+        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        for (uint8 a = 1; a <= 10; a++) {
+            for (uint8 b = 1; b <= 10; b++) {
+                if (u[a].excludes & uint16(1 << b) == 0) continue;
+                assertEq(_pairOf(a), _pairOf(b), "an exclusion crosses a pair");
+            }
+        }
+    }
+
+    function test_eachMarkExcludesExactlyItsPartner() public pure {
+        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        for (uint8 a = 1; a <= 10; a++) {
+            uint8 partner = a % 2 == 1 ? a + 1 : a - 1;
+            assertEq(u[a].excludes, uint16(1 << partner), "wrong exclusion mask");
+        }
+    }
+
+    /// @dev The fix for the SECOND trap. Aura was ungated, so it was buyable on
+    /// day one and silently forfeited Tint, which needs an Iris and therefore
+    /// 100 days. A pair is fair when both sides open at the same time.
+    function test_bothSidesOfPairFiveWaitOnAnIris() public pure {
+        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        uint16 anIris = uint16((1 << 5) | (1 << 6));
+        assertEq(u[9].requiresAny, anIris, "Tint must need an Iris");
+        assertEq(u[10].requiresAny, anIris, "Aura must need an Iris too");
+    }
+
+    function test_nothingIsLimited() public pure {
+        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        for (uint8 a = 1; a <= 10; a++) {
+            assertEq(u[a].maxSupply, 0, "a cap was reintroduced");
+            assertTrue(u[a].active, "a Mark ships inactive");
+        }
+    }
+
+    /// @dev Priced XOR earned. Four Marks are free; the other six carry a price.
+    /// A record that is neither, or both, is a wiring error.
+    function test_everyMarkIsPricedOrEarnedAndNeverBoth() public pure {
+        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        uint8 free;
+        for (uint8 a = 1; a <= 10; a++) {
+            bool priced = u[a].priceUsdc6 > 0;
+            bool earned = u[a].minStreak > 0;
+            assertTrue(priced != earned, "a Mark is neither priced nor earned, or both");
+            if (earned) free++;
+        }
+        assertEq(free, 4, "there should be exactly four earned Marks");
+    }
+
+    /// @dev BREAK'S FREEDOM IS THE GUARANTEE, NOT ITS EXCLUSION. All four of these
+    /// cases were REFUSALS in revision 1 of the spec, so they are the tests most
+    /// likely to be written backwards from a stale reading. Revision 2 removed the
+    /// cross-pair rule because a day-30 choice that destroyed a day-365 Mark made
+    /// abstention the optimal play, and a tier whose optimal play is abstention is
+    /// a dead tier.
+    ///
+    /// Both orders, because an exclusion that only fires one way round would pass a
+    /// single-order test.
+    function test_breakComposesWithStaticInBothOrders() public {
+        _readyBreakAndPairTwo();
+        vm.startPrank(WARDEN);
+        t.applyMark(1, 3, 0);   // Static first
+        t.applyMark(1, 8, 0);   // then Break
+        vm.stopPrank();
+        assertEq(t.marksOf(1) & 0xFFFE, (1 << 3) | (1 << 8));
+
+        _readyBreakAndPairTwo();   // a second token, the other way round
+        vm.startPrank(WARDEN);
+        t.applyMark(2, 8, 0);   // Break first
+        t.applyMark(2, 3, 0);   // then Static
+        vm.stopPrank();
+        assertEq(t.marksOf(2) & 0xFFFE, (1 << 3) | (1 << 8));
+    }
+
+    function test_breakComposesWithBeatInBothOrders() public {
+        _readyBreakAndPairTwo();
+        vm.startPrank(WARDEN);
+        t.applyMark(1, 4, 0);   // Beat first
+        t.applyMark(1, 8, 0);   // then Break
+        vm.stopPrank();
+        assertEq(t.marksOf(1) & 0xFFFE, (1 << 4) | (1 << 8));
+
+        _readyBreakAndPairTwo();
+        vm.startPrank(WARDEN);
+        t.applyMark(2, 8, 0);   // Break first
+        t.applyMark(2, 4, 0);   // then Beat
+        vm.stopPrank();
+        assertEq(t.marksOf(2) & 0xFFFE, (1 << 4) | (1 << 8));
+    }
+
+    /// @dev The control that keeps the two tests above honest: WITHIN pair 2 the
+    /// exclusion still fires. Without this, a mask accidentally set to zero would
+    /// make both freedom tests pass while the ladder had no exclusions at all.
+    function test_pairTwoStillExcludesItselfWhileBreakIsFree() public {
+        _readyBreakAndPairTwo();
+        vm.startPrank(WARDEN);
+        t.applyMark(1, 3, 0);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkExcluded.selector, uint8(3)));
+        t.applyMark(1, 4, 0);
+        vm.stopPrank();
+    }
+
+    /// @dev A token that qualifies for Static, Beat AND Break at once, with the
+    /// REAL records from Ladder.sol so these tests exercise the shipping masks
+    /// rather than hand-rolled ones.
+    ///
+    /// `_makeWhole` checks a token in on 364 consecutive days after its mint, which
+    /// leaves level 365 and streak 365 -- exactly Break's gate, and past Static's
+    /// level 30 and Beat's run of 30. Called twice, it readies tokens 1 and 2, so
+    /// each ordering above starts from a clean token.
+    uint256 private _readied;
+    function _readyBreakAndPairTwo() internal {
+        _readied += 1;
+        uint256 id = _readied;
+        if (id > 1) {
+            vm.prank(WARDEN);
+            t.mint(id, ALICE, bytes32(id), _code());
+        }
+        _makeWhole(id);
+        assertEq(t.viewOf(id).streak, 365, "Break's gate needs a 365-day run");
+
+        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        t.setUpgrade(3, u[3]);
+        t.setUpgrade(4, u[4]);
+        t.setUpgrade(7, u[7]);
+        t.setUpgrade(8, u[8]);
+    }
+
+    // THE MIRROR CHECK IS ADDED BY TASK 9, not here. It asserts this ladder
+    // against the hash tools/ladder-fixture.mjs computes from the Warden's own
+    // catalogue, and that catalogue does not exist until Task 9. A test written
+    // now would have nothing to assert against, so it is not written now.
+}
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test --match-contract LadderTest`
+Expected: FAIL -- `Ladder.sol` does not exist.
+
+- [ ] **Step 3: Write `contracts/src/Ladder.sol`**
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {MachineReadableOnly} from "./MachineReadableOnly.sol";
+
+/// @notice The ten Marks, in one place, as the deploy script and the tests both
+/// read them.
+///
+/// @dev ONE definition. The ladder was previously described in a spec, a
+/// catalogue and a deploy script, which is three places for the truth to live
+/// and drift. `warden/src/mcp/ladder.mjs` is the only mirror, and
+/// `Ladder.t.sol` asserts the two agree by hash.
+///
+/// Five pairs. In each pair one side is bought and one is earned by a run of
+/// days; taking either closes the other, permanently and symmetrically; and a
+/// token may take neither. EVERY EXCLUSION IS PAIR-INTERNAL -- a cross-pair rule
+/// was removed on 2026-09-02 because it made abstention the optimal play.
+///
+/// Nothing is limited: every record ships `maxSupply = 0`. Caps were removed on
+/// 2026-09-01 because cold readers read scarcity as a sales funnel and caught it
+/// contradicting the page's own "it cannot be hurried".
+library Ladder {
+    /// @dev Indexed by Mark id. Index 0 is unused: bit 0 is never a Mark.
+    function all() internal pure returns (MachineReadableOnly.Upgrade[11] memory u) {
+        u[1]  = _mark(1_000_000,     0,   0, false, 2);      // Hush,   pair 1 bought
+        u[2]  = _earned(0,           0,   7, false, 1);      // Ache,   pair 1 earned
+        u[3]  = _mark(5_000_000,    30,   0, false, 4);      // Static, pair 2 bought
+        u[4]  = _earned(0,           0,  30, false, 3);      // Beat,   pair 2 earned
+        u[5]  = _mark(25_000_000,  100,   0, false, 6);      // Iris,   pair 3 bought
+        u[6]  = _earned(0,           0, 100, false, 5);      // Iris,   pair 3 earned
+        u[7]  = _mark(1_250_000_000, 0,   0, true,  8);      // Vessel, pair 4 bought
+        u[8]  = _earned(0,           0, 365, false, 7);      // Break,  pair 4 earned
+        u[9]  = _mark(250_000_000,   0,   0, false, 10);     // Tint,   pair 5
+        u[10] = _mark(25_000_000,    0,   0, false, 9);      // Aura,   pair 5
+        // Pair 5 is the one pair whose two sides are BOTH bought. Both open at
+        // the same moment -- when the token holds an Iris by either route -- so
+        // the choice between loud-and-expensive and quiet-and-cheap is informed.
+        u[9].requiresAny  = uint16((1 << 5) | (1 << 6));
+        u[10].requiresAny = uint16((1 << 5) | (1 << 6));
+    }
+
+    function _mark(uint64 price, uint32 minLevel, uint32 minStreak, bool whole, uint8 excludes)
+        private pure returns (MachineReadableOnly.Upgrade memory)
+    {
+        return MachineReadableOnly.Upgrade({
+            priceUsdc6: price, maxSupply: 0, sold: 0,
+            minLevel: minLevel, minStreak: minStreak, requiresWhole: whole,
+            active: true, excludes: uint16(1 << excludes), requiresAny: 0
+        });
+    }
+
+    function _earned(uint64 price, uint32 minLevel, uint32 minStreak, bool whole, uint8 excludes)
+        private pure returns (MachineReadableOnly.Upgrade memory)
+    {
+        return _mark(price, minLevel, minStreak, whole, excludes);
+    }
+}
+```
+
+- [ ] **Step 4: Write `tools/ladder-fixture.mjs`**
+
+```javascript
+// Prints the hash Ladder.t.sol asserts against, computed from the WARDEN's
+// catalogue rather than from the contract -- which is the point. Two
+// independently written ladders that must agree is a far stronger check than
+// either one alone, and it is the same idiom tools/token-uri-fixture.mjs uses
+// for the renderer.
+//
+//   node tools/ladder-fixture.mjs
+import { keccak256, encodeAbiParameters, parseAbiParameters } from "viem";
+import { LADDER } from "../warden/src/mcp/ladder.mjs";
+
+const TUPLE = parseAbiParameters(
+  "(uint64,uint32,uint32,uint32,uint32,bool,bool,uint16,uint16)[11]"
+);
+
+const records = [];
+for (let id = 0; id <= 10; id++) {
+  const m = LADDER[id];
+  records.push(m
+    ? [BigInt(m.priceUsdc6), 0, 0, m.minLevel, m.minStreak, m.needsWhole, true,
+       m.excludes, m.requiresAny]
+    : [0n, 0, 0, 0, 0, false, false, 0, 0]);
+}
+
+console.log(keccak256(encodeAbiParameters(TUPLE, [records])));
+```
+
+The script is written here and RUN in Task 9, because it imports
+`warden/src/mcp/ladder.mjs`, which Task 9 creates. Do not add the assertion to
+`Ladder.t.sol` yet -- Task 9 step 6 writes the test and its value together. That
+is the one deliberate ordering seam in this plan, and it is handled by deferring
+the test rather than by committing a test that asserts nothing.
+
+- [ ] **Step 5: Write `contracts/script/DeployPlan5.s.sol`**
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Script, console} from "forge-std/Script.sol";
+import {Ladder} from "../src/Ladder.sol";
+import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
+import {Renderer} from "../src/render/Renderer.sol";
+
+/// @notice Deploy the pair and write all ten Marks. Modelled on DeployPlan1.s.sol.
+contract DeployPlan5 is Script {
+    function run() external {
+        address warden = vm.envAddress("WARDEN_ADDRESS");
+        vm.startBroadcast();
+        Renderer r = new Renderer();
+        MachineReadableOnly t = new MachineReadableOnly(address(r), warden);
+        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        for (uint8 i = 1; i <= 10; i++) t.setUpgrade(i, u[i]);
+        vm.stopBroadcast();
+        console.log("renderer", address(r));
+        console.log("token   ", address(t));
+    }
+}
+```
+
+- [ ] **Step 6: Run the suite and the size check**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test && forge build --sizes | /bin/grep MachineReadableOnly`
+Expected: PASS, and a positive runtime margin.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add contracts/src/Ladder.sol contracts/test/Ladder.t.sol contracts/script/DeployPlan5.s.sol tools/ladder-fixture.mjs
+git commit -m "contract: the ladder as ten records, and the invariants that keep it fair"
+```
+
+**PHASE BOUNDARY -- stop and report.** Give the size margin, the test count, and
+whether anything about the struct change was surprising.
+
+---
+
+### Task 4: The six renames, violet Beat, and nine name literals
+
+**Files:**
+- Modify: `contracts/src/render/MarkRenderer.sol`
+- Modify: `tools/render-token.mjs`
+- Modify: `tools/token-uri-fixture.mjs`
+- Test: `contracts/test/MarkRenderer.t.sol`, `contracts/test/Renderer.t.sol`
+
+**Interfaces:**
+- Consumes: nothing from earlier tasks (the renderer does not read `Upgrade`).
+- Produces: `MarkRenderer.HUSH/ACHE/STATIC/BEAT/IRIS_BOUGHT/IRIS_EARNED/VESSEL/BREAK/TINT/AURA`
+  as `1 << n`; `MarkRenderer.BEAT_TO = "#2000ff"`; `MarkRenderer.names(uint256)`
+  emitting nine literals; JS `MARKS` array of ten ids.
+
+The name map, which is a rename and nothing else for six of them:
+
+| Old constant | New constant | id | Draws |
+|---|---|---|---|
+| `VOICE` | `HUSH` | 1 | the quiet zone |
+| `VEIN` | `ACHE` | 2 | the unearned frame cells |
+| `BLUEBLOOD` | `STATIC` | 3 | the noise ink |
+| `BLOOM` | `BEAT` | 4 | the heart's gradient |
+| -- | `IRIS_BOUGHT` | 5 | the eyes (Task 6) |
+| -- | `IRIS_EARNED` | 6 | the eyes (Task 6) |
+| `CROWN` | `VESSEL` | 7 | the frame and rings |
+| `SINGULARITY` | `BREAK` | 8 | the inversion (Task 7) |
+| -- | `TINT` | 9 | recolours the eyes (Task 6) |
+| `HALO` | `AURA` | 10 | the field |
+
+**The ids MOVE as well as the names.** Voice was 3 and Hush is 1; Halo was 5 and
+Aura is 10. This is not a pure rename at the bit level, and any test asserting a
+literal bit value will fail. That is intended.
+
+- [ ] **Step 1: Write the failing tests**
+
+In `contracts/test/MarkRenderer.t.sol`:
+
+```solidity
+function test_namesEmitsNineLiteralsInLadderOrder() public pure {
+    uint256 all = MarkRenderer.HUSH | MarkRenderer.ACHE | MarkRenderer.STATIC
+        | MarkRenderer.BEAT | MarkRenderer.IRIS_BOUGHT | MarkRenderer.VESSEL
+        | MarkRenderer.BREAK | MarkRenderer.TINT | MarkRenderer.AURA;
+    assertEq(
+        MarkRenderer.names(all),
+        '["hush","ache","static","beat","iris","vessel","break","tint","aura"]'
+    );
+}
+
+function test_bothIrisIdsEmitTheSameName() public pure {
+    assertEq(MarkRenderer.names(MarkRenderer.IRIS_BOUGHT), '["iris"]');
+    assertEq(MarkRenderer.names(MarkRenderer.IRIS_EARNED), '["iris"]');
+}
+
+/// @dev A variant in the high bits must not reach the metadata as a phantom
+/// Mark name. The range moved from bits 1-7 to bits 1-10, so the property has
+/// to be re-asserted rather than assumed.
+function test_namesIgnoresEverythingAboveBitTen() public pure {
+    uint256 withVariants = MarkRenderer.IRIS_EARNED
+        | (uint256(2) << 16) | (uint256(1) << 24) | (uint256(365) << 32);
+    assertEq(MarkRenderer.names(withVariants), '["iris"]');
+}
+
+function test_beatsFarStopIsViolet() public pure {
+    assertEq(MarkRenderer.BEAT_TO, "#2000ff");
+}
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test --match-contract MarkRendererTest`
+Expected: compile failure -- `HUSH` and friends do not exist.
+
+- [ ] **Step 3: Rewrite the constants and `names()` in Solidity**
+
+```solidity
+    /// @dev Bit n is mark n, ids 1 to 10 in ladder order. Bit 0 is never a mark.
+    /// FIVE PAIRS: in each, one side is bought and one earned, and they exclude
+    /// each other on chain. The renderer does not enforce that -- the contract
+    /// does -- so this library never has to consider two partners at once.
+    uint256 internal constant HUSH = 1 << 1;
+    uint256 internal constant ACHE = 1 << 2;
+    uint256 internal constant STATIC = 1 << 3;
+    uint256 internal constant BEAT = 1 << 4;
+    uint256 internal constant IRIS_BOUGHT = 1 << 5;
+    uint256 internal constant IRIS_EARNED = 1 << 6;
+    uint256 internal constant VESSEL = 1 << 7;
+    uint256 internal constant BREAK = 1 << 8;
+    uint256 internal constant TINT = 1 << 9;
+    uint256 internal constant AURA = 1 << 10;
+
+    /// @dev Either route to the eyes. Tint requires one of these, and the eye
+    /// drawing is the same code for both.
+    uint256 internal constant ANY_IRIS = IRIS_BOUGHT | IRIS_EARNED;
+
+    /// @dev The last stop of Beat's gradient. VIOLET, chosen by the operator 2026-08-31
+    /// from a rendered sheet: it makes the heart bi-chromatic and reads as
+    /// spectrum rather than blood. Same string length as the red it replaced, so
+    /// zero bytes and zero gas.
+    string internal constant BEAT_TO = "#2000ff";
+```
+
+`names()` becomes ten entries emitting nine literals:
+
+```solidity
+    /// @notice The Marks this token wears, in ladder order, as a JSON array.
+    /// @dev Ladder order, not the order the bits happened to be set in. Bits
+    /// outside 1 to 10 are ignored: `_marks` packs the Iris shape at bit 16, the
+    /// Tint ink at bit 24 and the earned run at bit 32, and none of that may
+    /// reach the metadata as a phantom Mark name. Only these ten literals can
+    /// ever reach the JSON, so no token state can inject text through this field.
+    ///
+    /// Both Iris ids emit "iris": they claim the same surface by two routes, and
+    /// the route is visible in the image rather than in the JSON.
+    function names(uint256 marks) internal pure returns (string memory out) {
+        string[10] memory ladder = [
+            "hush", "ache", "static", "beat", "iris",
+            "iris", "vessel", "break", "tint", "aura"
+        ];
+        bytes memory acc = "[";
+        bool first = true;
+        for (uint256 i; i < 10; ++i) {
+            if (!has(marks, 1 << (i + 1))) continue;
+            acc = abi.encodePacked(acc, first ? '"' : ',"', ladder[i], '"');
+            first = false;
+        }
+        out = string(abi.encodePacked(acc, "]"));
+    }
+```
+
+Rename the four drawing selectors and their constants: `field` reads `AURA`,
+`ghost` reads `ACHE` (constant `ACHE_GHOST = "#e3ccd3"`), `frameFill` reads
+`VESSEL` (constant `VESSEL_GOLD = "#b8860b"`), `quietTint` reads `HUSH`
+(constant `HUSH_QUIET = "#fdf3e3"`), `heartFill` and `defs` read `BEAT`.
+
+- [ ] **Step 4: Mirror it in `tools/render-token.mjs`**
+
+Rename the exported constants to `ACHE_GHOST`, `HUSH_QUIET`, `AURA_FIELD`,
+`VESSEL_GOLD`, `BEAT_TO = "#2000ff"`, and rewrite:
+
+```javascript
+// Ten Mark ids in five pairs, nine distinct names, eight surfaces. Index n here
+// is mark id n + 1. Both Iris ids emit "iris": same surface, two routes, and the
+// route is visible in the image rather than in the JSON.
+export const MARKS = [
+  "hush", "ache", "static", "beat", "iris",
+  "iris", "vessel", "break", "tint", "aura",
+];
+```
+
+**THE JS MARK REPRESENTATION HAS TO CHANGE, and this is the part to get right
+before writing any of it.** The JS renderer takes marks as an ARRAY OF NAMES
+(`marks.includes("bloom")`) and the Solidity takes a BITMASK. With two ids
+sharing the name "iris", a name array can no longer say which route a token
+took -- and Task 6 needs exactly that distinction, because the bought Iris draws
+a chosen shape in the live colour and the earned one draws a fixed target in a
+colour that never lapses.
+
+So `marks` throughout `tools/render-token.mjs` becomes an array of numeric ids
+1..10, with the variants alongside it in `state`:
+
+```javascript
+// state.marks     [1, 3, 5]        Mark ids, in any order
+// state.irisShape 0 | 1 | 2        target | squircle | leaf; ignored without mark 5
+// state.tintInk   0 | 1            violet | gold;            ignored without mark 9
+// state.irisRun   uint32           the run stored when mark 6 was applied
+
+/** The marks this token wears, in ladder order, as a JSON array. */
+export function markNames(ids) {
+  const held = new Set(ids);
+  const out = [];
+  MARKS.forEach((name, i) => { if (held.has(i + 1)) out.push(name); });
+  return `[${out.map(m => `"${m}"`).join(",")}]`;
+}
+
+/** Does this token wear mark `id`? The one predicate every selector uses. */
+export const hasMark = (ids, id) => ids.includes(id);
+```
+
+Ladder order is the array order, so a token holding both Iris ids would emit
+"iris" twice. It cannot -- the contract excludes them -- but the Solidity has the
+same property for the same reason, so the two languages agree even on that
+impossible input. The differential test compares strings, and a divergence there
+would be a real bug.
+
+Then update every caller. Run: `/bin/grep -rln "marks:" tools/*.mjs` -- the
+sheets all pass `marks: []` or name arrays today, and each needs its names
+turned into ids.
+
+- [ ] **Step 5: Regenerate the differential fixture**
+
+Update `tools/token-uri-fixture.mjs`'s "every drawn mark" stage to the new ids,
+then:
+
+Run: `source ~/.nvm/nvm.sh && cd tools && node token-uri-fixture.mjs`
+Paste the new lengths and hashes into `contracts/test/Renderer.t.sol`.
+
+- [ ] **Step 6: Run all three affected suites**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test`
+Run: `source ~/.nvm/nvm.sh && cd tools && npm test`
+Expected: both PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add contracts/src/render/MarkRenderer.sol contracts/test tools/
+git commit -m "render: the ladder's new names, and Beat's violet"
+```
+
+---
+
+### Task 5: Static's green noise
+
+**Files:**
+- Modify: `contracts/src/render/Palette.sol`
+- Modify: `tools/render-token.mjs`
+- Test: `contracts/test/PaletteNoise.t.sol`
+
+**Interfaces:**
+- Consumes: `MarkRenderer.STATIC` (Task 4).
+- Produces: `Palette.staticAt(uint256 rung)`; JS `STATIC_BY_TIER` and
+  `staticAt(rung)`. `bluebloodAt` and `BLUEBLOOD_BY_TIER` are DELETED.
+
+The five inks, derived on 2026-09-02 by the same rule for every rung -- land on
+that rung's exact BT.601 luma, carry chroma at 60% of that rung's heart -- and
+re-derived while writing this plan, so these are measured values and not
+transcribed ones:
+
+| rung | heart | shipped grey | Static green | luma | chroma vs heart |
+|---|---|---|---|---|---|
+| 4 | `#c8102e` | `#4a4a4a` | `#08770f` | 74 | 111 under 184 |
+| 3 | `#bd2242` | `#545454` | `#1d7a23` | 84 | 93 under 155 |
+| 2 | `#a83a55` | `#5e5e5e` | `#37793b` | 94 | 66 under 110 |
+| 1 | `#8e5566` | `#686868` | `#537655` | 104 | 35 under 57 |
+| 0 | `#70575f` | `#5f5f5f` | `#556557` | 95 | 16 under 25 |
+
+Rung 1 (`#537655`) is not in the spec's table, which lists only four rungs.
+
+- [ ] **Step 1: Write the failing tests**
+
+In `contracts/test/PaletteNoise.t.sol`, alongside the existing `noiseAt` checks:
+
+```solidity
+/// @dev The pairing rule does not bend for a Mark: the binarizer does not care
+/// WHY an ink is lighter. Only the hue moves. Asserted rather than eyeballed,
+/// because five values picked by eye would be five chances to break the match.
+function test_staticMatchesTheHeartsLuminanceAtEveryRung() public pure {
+    for (uint256 rung = 0; rung < Palette.TIER_COUNT; rung++) {
+        uint256 heart = _luma(Palette.colourAt(rung));
+        uint256 green = _luma(Palette.staticAt(rung));
+        assertApproxEqAbs(green, heart, 1, "Static's green is off its rung's luma");
+    }
+}
+
+/// @dev The rule that is NOT about decoding: the noise must stay less saturated
+/// than the heart it surrounds, or the noise becomes the subject of the picture.
+/// The start rung binds it hardest, at 16 against 25.
+function test_staticStaysLessSaturatedThanTheHeart() public pure {
+    for (uint256 rung = 0; rung < Palette.TIER_COUNT; rung++) {
+        assertLt(
+            _chroma(Palette.staticAt(rung)),
+            _chroma(Palette.colourAt(rung)),
+            "the noise is more saturated than the heart"
+        );
+    }
+}
+```
+
+Reuse whatever `_luma` and `_chroma` helpers `PaletteNoise.t.sol` already has; if
+it has none, write them from the hex string the same way the existing noise test
+compares values.
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test --match-contract PaletteNoise`
+Expected: FAIL -- `staticAt` does not exist.
+
+- [ ] **Step 3: Replace `bluebloodAt` with `staticAt` in Solidity**
+
+```solidity
+    /// @notice The noise ink at a rung when the token wears Static.
+    ///
+    /// @dev GREEN, chosen by the operator 2026-09-02 from a rendered sheet
+    /// (tools/static-hue-sheet.mjs) that put all four candidates plus the
+    /// shipped grey under ONE derivation across all five run rungs.
+    ///
+    /// It was decided on a measured property, not on taste. Green is the ONLY
+    /// hue that keeps getting stronger as the run deepens:
+    ///
+    ///   hue      run 1  run 3  run 7  run 30  run 100
+    ///   green       10     21     39      55       66
+    ///   slate       10     22     42      43       38
+    ///   teal        11     24     46      42       37
+    ///   violet      12     26     48      43       37
+    ///
+    /// The cause is the luminance rule. A deeper streak darkens the heart, the
+    /// noise must darken to match, and a blue or violet cannot hold high chroma
+    /// at a dark luma while a green can. A Mark that looks its best at a 7-day
+    /// run and dulls by 100 is backwards on a piece about returning -- it is
+    /// exactly the failure that made the old Bloom broken.
+    ///
+    /// These are the SAME weights as `noiseAt`. Derived, not chosen: a green
+    /// direction [0, 124, 8] pulled toward its own grey until its chroma is 60%
+    /// of that rung's heart, then scaled onto that rung's exact BT.601 luma.
+    /// PaletteNoise.t.sol asserts both rules rather than these values.
+    function staticAt(uint256 index) internal pure returns (string memory) {
+        if (index >= 4) return "#08770f";   // matches #c8102e, luma 74
+        if (index == 3) return "#1d7a23";   // matches #bd2242, luma 84
+        if (index == 2) return "#37793b";   // matches #a83a55, luma 94
+        if (index == 1) return "#537655";   // matches #8e5566, luma 104
+        return "#556557";                   // matches #70575f, luma 95
+    }
+```
+
+Delete `bluebloodAt` entirely. Update `MarkRenderer.noise` to read `STATIC` and
+call `Palette.staticAt`.
+
+- [ ] **Step 4: Mirror it in JS**
+
+Replace `BLUEBLOOD_BY_TIER` with `STATIC_BY_TIER` (top-down order, so
+`["#08770f","#1d7a23","#37793b","#537655","#556557"]`), and `bluebloodAt` with
+`staticAt`. Then fix every sheet that imports the old name:
+
+Run: `/bin/grep -rln "BLUEBLOOD_BY_TIER\|bluebloodAt\|blueblood" tools/ warden/ contracts/`
+Expected hits include `green-violet-sheet.mjs`, `static-hue-sheet.mjs`,
+`break-sheet.mjs`, `tint-on-green-sheet.mjs`, `combination-sweep.mjs`,
+`noise-mark-sheet.mjs`. Several of them derive the green locally; those local
+derivations should now import `staticAt` instead, so there is one derivation.
+
+- [ ] **Step 5: Regenerate fixtures and run the suites**
+
+Run: `source ~/.nvm/nvm.sh && cd tools && node token-uri-fixture.mjs`
+Paste the hashes into `Renderer.t.sol`.
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test`
+Run: `source ~/.nvm/nvm.sh && cd tools && npm test`
+Expected: both PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add contracts/src/render/Palette.sol contracts/src/render/MarkRenderer.sol contracts/test tools/
+git commit -m "render: Static's noise goes green, one ink per rung"
+```
+
+---
+
+### Task 6: The eyes -- Iris and Tint
+
+**Files:**
+- Create: `contracts/src/render/EyeRenderer.sol`
+- Modify: `contracts/src/render/MarkRenderer.sol`, `contracts/src/render/Renderer.sol`
+- Modify: `tools/render-token.mjs`
+- Test: `contracts/test/EyeRenderer.t.sol` (create), `contracts/test/Renderer.t.sol`
+
+**Interfaces:**
+- Consumes: `MarkRenderer.IRIS_BOUGHT/IRIS_EARNED/TINT/ANY_IRIS` (Task 4);
+  `HeartMask.SIZE`; the `_marks` layout (Task 2).
+- Produces: `EyeRenderer.eyes(uint256 codeOff, uint8 shape, string memory ink,
+  string memory ground) returns (string memory)`;
+  `MarkRenderer.eyeInk(uint256 marks, string memory heartInk)`;
+  `MarkRenderer.ground(uint256 marks)`;
+  `MarkRenderer.irisShape(uint256 marks)`; `MarkRenderer.irisRun(uint256 marks)`.
+
+**The geometry, from `tools/eye-shape-sheet.mjs` and `tools/tint-on-green-sheet.mjs`.**
+Three concentric shapes per eye -- 7x7 ink, 5x5 ground, 3x3 ink -- at the three
+finder-pattern positions `(0,0)`, `(SIZE-7,0)`, `(0,SIZE-7)`. There is no fourth
+finder pattern. Nine elements for three eyes, at coordinates derived from one
+runtime number.
+
+Shape 0, target (circles):
+
+```
+<circle cx="{x+3}.5" cy="{y+3}.5" r="3.5" fill="{ink}"/>
+<circle cx="{x+3}.5" cy="{y+3}.5" r="2.5" fill="{ground}"/>
+<circle cx="{x+3}.5" cy="{y+3}.5" r="1.5" fill="{ink}"/>
+```
+
+Shape 1, squircle (rounded rects, rx 3 / 2.1 / 1.5):
+
+```
+<rect x="{x}" y="{y}" width="7" height="7" rx="3" fill="{ink}"/>
+<rect x="{x+1}" y="{y+1}" width="5" height="5" rx="2.1" fill="{ground}"/>
+<rect x="{x+2}" y="{y+2}" width="3" height="3" rx="1.5" fill="{ink}"/>
+```
+
+Shape 2, leaf (two opposite corners rounded, r 2.6 / 1.8 / 1.3):
+
+```
+<path fill="{ink}" d="M{x+2}.6 {y}h4.4v4.4a2.6 2.6 0 0 1 -2.6 2.6h-4.4v-4.4a2.6 2.6 0 0 1 2.6 -2.6z"/>
+<path fill="{ground}" d="M{x+2}.8 {y+1}h3.2v3.2a1.8 1.8 0 0 1 -1.8 1.8h-3.2v-3.2a1.8 1.8 0 0 1 1.8 -1.8z"/>
+<path fill="{ink}" d="M{x+3}.3 {y+2}h1.7v1.7a1.3 1.3 0 0 1 -1.3 1.3h-1.7v-1.7a1.3 1.3 0 0 1 1.3 -1.3z"/>
+```
+
+The `{x+2}.6` form is how JavaScript prints `x + 2.6` for an integer `x`, so
+Solidity must build it as `string.concat(toString(x + 2), ".6")`. Every decimal
+in the leaf and squircle paths is written that way.
+
+**The erase, and the rule it enforces.** Each eye is erased to the GROUND before
+the shape is drawn, and the ground is the actual colour under the code block --
+`HUSH_QUIET` when the token wears Hush, otherwise the field, which Aura tints.
+A constant would punch a white square into a tinted page. That defect was found
+in the prototype by sweeping combinations and never by testing Marks one at a
+time.
+
+**The ink.** `Tint` replaces it: variant 0 is violet `#9800fc`, variant 1 is gold
+`#b8860b`. Untinted, the ink is the POST-BREAK heart ink -- see finding 3 at the
+top of this plan. Near-black was measured and dropped on 2026-09-02: it is what
+an ordinary QR eye already looks like, so a token paying 250 USDC for it would
+read as LESS marked than one that paid nothing.
+
+**The order.** The eyes are drawn LAST, over everything. The three finder
+patterns are ordinary code modules today, so Static already recolours them on a
+token with no Iris -- visible in `tools/out/marks/green-violet.png` -- and that is
+correct and stays. A token holding both Static and an Iris shows green noise and
+Iris-coloured eyes, and the erase-to-ground step is what makes that clean rather
+than a green square with a shape on top.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `contracts/test/EyeRenderer.t.sol`:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test} from "forge-std/Test.sol";
+import {EyeRenderer} from "../src/render/EyeRenderer.sol";
+
+contract EyeRendererTest is Test {
+    function test_theTargetShapeMatchesTheMeasuredPrototype() public pure {
+        string memory out = EyeRenderer.eyes(6, 0, "#c8102e", "#ffffff");
+        // Nine elements for three eyes: an erase and three circles each.
+        assertEq(_count(out, "<circle"), 9);
+        assertEq(_count(out, "<rect"), 3);
+        // 635 bytes in tools/eye-shape-sheet.mjs at this offset. The two are
+        // written independently, so a wide divergence means one is drawing
+        // something different.
+        assertGt(bytes(out).length, 500);
+        assertLt(bytes(out).length, 800);
+    }
+
+    function test_theEraseTakesTheGroundAndNeverAConstant() public pure {
+        string memory out = EyeRenderer.eyes(6, 0, "#c8102e", "#fdf3e3");
+        assertEq(_count(out, "#fdf3e3"), 6, "erase and inner ring must both use the ground");
+        assertEq(_count(out, "#ffffff"), 0, "a white constant leaked into a tinted token");
+    }
+
+    function test_allThreeShapesDraw() public pure {
+        for (uint8 s = 0; s < 3; s++) {
+            assertGt(bytes(EyeRenderer.eyes(6, s, "#c8102e", "#ffffff")).length, 400);
+        }
+    }
+
+    /// @dev Non-overlapping substring count. Written out rather than imported:
+    /// LibString has no counter, and a test helper that needs a dependency is a
+    /// test helper nobody reads.
+    function _count(string memory hay, string memory needle) internal pure returns (uint256 n) {
+        bytes memory h = bytes(hay);
+        bytes memory k = bytes(needle);
+        if (k.length == 0 || k.length > h.length) return 0;
+        for (uint256 i = 0; i + k.length <= h.length; ) {
+            bool hit = true;
+            for (uint256 j = 0; j < k.length; ++j) {
+                if (h[i + j] != k[j]) { hit = false; break; }
+            }
+            if (hit) { n += 1; i += k.length; } else { i += 1; }
+        }
+    }
+}
+```
+
+In `contracts/test/Renderer.t.sol` add a differential case for an Iris token, and
+a case asserting the eyes are the LAST thing in the SVG:
+
+```solidity
+function test_theEyesAreDrawnLastOverTheNoise() public view {
+    // A Static + Iris token: Static already recolours the finder patterns,
+    // because they are ordinary code modules. The eyes must land ON TOP of that
+    // and the erase-to-ground step is what makes it clean rather than a green
+    // square with a shape on it.
+    TokenView memory v = _view(200, 45, 1000, 1000);
+    v.marks = MarkRenderer.STATIC | MarkRenderer.IRIS_BOUGHT;   // shape 0, target
+    string memory s = r.svg(v);
+    // The code block is the LAST TWO <path> elements. Everything after them is
+    // eyes, so the tail of the SVG must open with the first eye's erase rect.
+    uint256 lastPath = _lastIndexOf(s, "<path fill=");
+    uint256 firstEye = _indexOfFrom(s, '<rect x=', lastPath);
+    assertLt(lastPath, firstEye, "the eyes must be emitted after the code paths");
+    assertLt(firstEye, bytes(s).length, "no eyes were emitted at all");
+}
+
+/// @dev Byte index of the LAST occurrence, or the string length if absent.
+function _lastIndexOf(string memory hay, string memory needle) internal pure returns (uint256) {
+    bytes memory h = bytes(hay);
+    bytes memory k = bytes(needle);
+    uint256 found = h.length;
+    for (uint256 i = 0; i + k.length <= h.length; ++i) {
+        bool hit = true;
+        for (uint256 j = 0; j < k.length; ++j) {
+            if (h[i + j] != k[j]) { hit = false; break; }
+        }
+        if (hit) found = i;
+    }
+    return found;
+}
+
+/// @dev Byte index of the first occurrence at or after `from`, or the string
+/// length if absent.
+function _indexOfFrom(string memory hay, string memory needle, uint256 from)
+    internal pure returns (uint256)
+{
+    bytes memory h = bytes(hay);
+    bytes memory k = bytes(needle);
+    for (uint256 i = from; i + k.length <= h.length; ++i) {
+        bool hit = true;
+        for (uint256 j = 0; j < k.length; ++j) {
+            if (h[i + j] != k[j]) { hit = false; break; }
+        }
+        if (hit) return i;
+    }
+    return h.length;
+}
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test --match-contract EyeRenderer`
+Expected: FAIL -- `EyeRenderer.sol` does not exist.
+
+- [ ] **Step 3: Write `contracts/src/render/EyeRenderer.sol`**
+
+Model it on `contracts/test/EyeCost.t.sol`, which is the measured prototype for
+shape 0 and can be lifted almost verbatim. Add shapes 1 and 2 from the tables
+above. Measured cost for the target at the day-364 canvas: 9,061 gas and 623
+bytes, against 366,776 gas and 11,076 bytes of headroom -- 2.5% and 5.6%. The
+leaf is the most expensive shape and must be re-measured as built: it costs
+1,063 B in `eye-shape-sheet.mjs` and 1,684 B in `eye-colourway-sheet.mjs`
+because THE TWO SHEETS DRAW IT DIFFERENTLY, and both figures are correct for
+their own drawing.
+
+- [ ] **Step 4: Wire it into `MarkRenderer` and `Renderer`**
+
+`MarkRenderer` gains four selectors:
+
+```solidity
+    /// @notice Tint's two inks. Violet and gold, decided by the operator 2026-09-02 from
+    /// tools/tint-on-green-sheet.mjs, which rendered every candidate against
+    /// Static's green -- the surface that directly surrounds the eyes.
+    ///
+    /// Violet holds at a luma gap of 0.2 to the green at the top rung and still
+    /// reads instantly: the project's oldest measured rule, that a colour
+    /// separates by HUE and not by weight. Gold's gap runs 40 / 31 / 41 / 51 /
+    /// 61 up the ladder, warm against green.
+    ///
+    /// Heart red is out because the untinted Iris already draws in the token's
+    /// own colour; green is out because it is Static's and the noise touches the
+    /// eyes; near-black is out because it is what an ORDINARY QR eye looks like.
+    string internal constant TINT_VIOLET = "#9800fc";
+    string internal constant TINT_GOLD = "#b8860b";
+
+    /// @notice The ink the eyes are drawn in.
+    /// @param heartInk the token's heart ink AFTER any Break exchange. Under
+    /// Break the noise takes the token's own colour, so drawing the eyes in that
+    /// colour would hide them in the noise they sit on.
+    function eyeInk(uint256 marks, string memory heartInk) internal pure returns (string memory) {
+        if (!has(marks, TINT)) return heartInk;
+        return ((marks >> 24) & 0xFF) == 0 ? TINT_VIOLET : TINT_GOLD;
+    }
+
+    /// @notice The colour actually under the code block, which the eye erases to.
+    function ground(uint256 marks) internal pure returns (string memory) {
+        return has(marks, HUSH) ? HUSH_QUIET : field(marks);
+    }
+
+    /// @notice The shape index. The EARNED Iris is always the target.
+    function irisShape(uint256 marks) internal pure returns (uint8) {
+        if (has(marks, IRIS_EARNED)) return 0;
+        return uint8((marks >> 16) & 0xFF);
+    }
+
+    /// @notice The run stored when the earned Iris was applied, or 0.
+    function irisRun(uint256 marks) internal pure returns (uint32) {
+        return uint32((marks >> 32) & 0xFFFFFFFF);
+    }
+```
+
+In `Renderer.svg`, append the eyes after `_art`, and take the ink from the rung
+the eyes should use. The EARNED Iris does not lapse: its colour comes from the
+run stored at apply time, so it is `Palette.colourAt(Palette.tierIndex(irisRun))`
+rather than the live rung. THAT IS THE WHOLE POINT OF THE MARK -- it stops
+tracking the lapse, and it is the one provenance on the ladder that cannot be
+bought.
+
+Add the two attributes in `_attrsB`, emitted only when an Iris is worn:
+
+```
+{"trait_type":"Iris Shape","value":"target"}     -- or "squircle" / "leaf"
+{"trait_type":"Iris Run","value":365}            -- earned Iris only
+```
+
+**Decision taken here, stated because the spec says only "or absent":** `Iris
+Shape` is emitted for BOTH routes, because the earned Iris does have a shape and
+an agent reading the JSON should not have to know that "absent means target".
+`Iris Run` is emitted for the earned route ONLY, because it is the thing the
+bought route does not have.
+
+- [ ] **Step 5: Mirror all of it in `tools/render-token.mjs`**
+
+Same shapes, same order, same conditional attributes. This is the task where the
+two languages are most likely to drift; write the JS from the Solidity, not from
+the sheet, so the string building matches.
+
+- [ ] **Step 6: Regenerate fixtures, run the suites**
+
+Run: `source ~/.nvm/nvm.sh && cd tools && node token-uri-fixture.mjs`
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test`
+Run: `source ~/.nvm/nvm.sh && cd tools && npm test`
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge build --sizes | /bin/grep Renderer`
+Expected: all PASS, positive margin. If the margin has gone, STOP -- the eyes are
+the first genuinely new geometry since Plan 1 and this is where it would show.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add contracts/src/render tools/render-token.mjs contracts/test tools/token-uri-fixture.mjs
+git commit -m "render: the three eyes, reshaped and tinted"
+```
+
+---
+
+### Task 7: Break, the inversion
+
+**Files:**
+- Modify: `contracts/src/render/MarkRenderer.sol`, `contracts/src/render/Renderer.sol`
+- Modify: `tools/render-token.mjs`
+- Test: `contracts/test/Renderer.t.sol`, `contracts/test/MarkRenderer.t.sol`
+
+**Interfaces:**
+- Consumes: `MarkRenderer.BREAK`, `BEAT`, `STATIC` (Task 4);
+  `Palette.staticAt` (Task 5).
+- Produces: `MarkRenderer.inks(uint256 marks, uint256 rung) returns (string
+  memory heartInk, string memory noiseInk)`.
+
+**Definition B, the rung-colour exchange, is what is adopted.** Swap which rung
+colour each region takes; with Beat, the heart keeps the gradient reference and
+the gradient's NEAR stop becomes the noise ink, so the noise stays flat.
+
+Definition A -- the naive fill exchange, which hands Beat's gradient to the noise
+-- was rendered at every rung and decoded at all five sizes, and **the safety
+concern that motivated B was WRONG**: the luminance rule punishes an ink LIGHTER
+than its partner, and Beat's gradient runs from the tier colour DOWN to violet
+(74.4 to 38.6 BT.601), so it makes the noise darker and was never at risk. B is
+adopted on three grounds that are not about decoding: A inverts the wrong region
+(the code becomes the coloured subject and the heart reads as a hole, which is
+exactly what `Palette`'s chroma rule exists to prevent); A contradicts the Mark's
+own defining sentence (the code becoming the only red element); and B rewards the
+deeper run while A does not -- measured shifts 160 / 153 / 170 / 189 / 209 for B
+against 160 / 151 / 161 / 171 / 180 for A.
+
+- [ ] **Step 1: Write the failing tests**
+
+```solidity
+function test_breakExchangesTheHeartAndNoiseInks() public pure {
+    (string memory heart, string memory noise) = MarkRenderer.inks(MarkRenderer.BREAK, 4);
+    assertEq(heart, Palette.noiseAt(4), "the heart should take the noise ink");
+    assertEq(noise, Palette.colourAt(4), "the code should take the token's colour");
+}
+
+function test_breakWithStaticGivesAGreenHeartAndARedCode() public pure {
+    uint256 m = MarkRenderer.BREAK | MarkRenderer.STATIC;
+    (string memory heart, string memory noise) = MarkRenderer.inks(m, 4);
+    assertEq(heart, Palette.staticAt(4));
+    assertEq(noise, Palette.colourAt(4));
+}
+
+function test_withoutBreakTheInksAreUnchanged() public pure {
+    (string memory heart, string memory noise) = MarkRenderer.inks(0, 4);
+    assertEq(heart, Palette.colourAt(4));
+    assertEq(noise, Palette.noiseAt(4));
+}
+
+/// @dev Under Break with Beat, the gradient's NEAR stop becomes the noise ink so
+/// the noise path stays flat and luminance-matched. Definition B.
+function test_breakWithBeatMovesTheGradientsNearStopAndNotTheGradient() public pure {
+    uint256 m = MarkRenderer.BREAK | MarkRenderer.BEAT;
+    (string memory heart,) = MarkRenderer.inks(m, 4);
+    string memory d = MarkRenderer.defs(m, heart);
+    assertTrue(_contains(d, Palette.noiseAt(4)), "near stop should be the noise ink");
+    assertTrue(_contains(d, MarkRenderer.BEAT_TO), "far stop should still be violet");
+}
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test --match-contract MarkRendererTest`
+Expected: FAIL -- `inks` does not exist.
+
+- [ ] **Step 3: Implement `inks` and rewire `Renderer.svg`**
+
+```solidity
+    /// @notice The two inks of the code block, with Break's exchange applied.
+    ///
+    /// @dev DEFINITION B, the rung-colour exchange: swap which rung colour each
+    /// region takes. Definition A -- swapping the FILLS verbatim -- was rendered
+    /// and decodes fine, but it inverts the wrong region: the noise ends up
+    /// carrying Beat's violet and the heart reads as a flat grey hole, which is
+    /// what Palette's chroma rule exists to prevent, and it contradicts this
+    /// Mark's own sentence that the code becomes the only red element.
+    ///
+    /// The decode rule survives the exchange for free: `colourAt(r)` and the
+    /// noise at the same rung are matched in luminance by construction, so
+    /// swapping two equal-luminance inks leaves the binarizer the same picture.
+    ///
+    /// Break composes with either side of pair 2 and never both -- Static and
+    /// Beat exclude each other. Break + Static is STRONGER than Break alone at
+    /// every rung, 192 against 126 at the top.
+    function inks(uint256 marks, uint256 rung)
+        internal
+        pure
+        returns (string memory heartInk, string memory noiseInk)
+    {
+        string memory colour = Palette.colourAt(rung);
+        string memory n = noise(marks, rung);
+        return has(marks, BREAK) ? (n, colour) : (colour, n);
+    }
+```
+
+In `Renderer.svg`, take both inks from `inks()` and pass `heartInk` to `defs`,
+`heartFill` and `eyeInk`, and `noiseInk` to `CodeRenderer.paths`. The FRAME keeps
+`Palette.colourAt(rung)` -- Break exchanges the two regions of the code block and
+nothing else.
+
+- [ ] **Step 4: Mirror in JS, regenerate fixtures, run the suites**
+
+Run: `source ~/.nvm/nvm.sh && cd tools && node token-uri-fixture.mjs`
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test`
+Run: `source ~/.nvm/nvm.sh && cd tools && npm test`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add contracts/src/render tools/render-token.mjs contracts/test tools/token-uri-fixture.mjs
+git commit -m "render: Break exchanges the rung colours, not the fills"
+```
+
+---
+
+### Task 8: Measure it -- gas, bytes and the decode sweep
+
+**Files:**
+- Modify: `tools/combination-sweep.mjs`
+- Modify: `contracts/test/GasBudget.t.sol`
+- Modify: `docs/phase0-results.md` (append a Plan 5 section)
+
+**Interfaces:**
+- Consumes: everything from Tasks 4-7.
+- Produces: the new worst-case gas and byte figures, and a clean sweep.
+
+- [ ] **Step 1: Re-measure the worst case in Foundry**
+
+`GasBudget.t.sol` asserts the day-364 worst case. Update the "every Mark" case to
+the maximal token the NEW ladder allows -- at most FIVE Marks, one per pair, and
+the maximal set is the one that draws the most: Hush, Static, Iris bought with
+the LEAF shape, Vessel, and Tint. Beat and Break are in the excluded halves of
+their pairs.
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test --match-contract GasBudget -vv`
+Expected: PASS, and the console prints the figures.
+
+Record the result as a SIGNED delta against **1,585,616 gas / 9,223 bytes**. Log
+it signed -- an unsigned subtraction on a "this will obviously cost more"
+comparison underflows and hides the interesting result, which has happened twice
+on this project.
+
+- [ ] **Step 2: Report the target as missed**
+
+The 1M gas / 5 KB TARGET was already missed before this change and stays missed.
+Say so in the commit message and in `docs/phase0-results.md`. Do not quietly drop
+it.
+
+- [ ] **Step 3: Update the sweep to the real combination count**
+
+`tools/combination-sweep.mjs` sweeps 256 combinations of the old seven
+independent Marks. The new ladder has **189 reachable Mark sets** and **459
+renderable combinations** once the three Iris shapes and two Tint inks are
+counted.
+
+The 189: pairs 1, 2 and 4 give 3 outcomes each and are genuinely independent;
+pairs 3 and 5 together give 7, because pair 5 is unreachable without an Iris and
+so contributes 1 outcome when pair 3 is empty and 3 when it is not --
+`(1 x 1) + (2 x 3) = 7`. `3 x 3 x 3 x 7 = 189`.
+
+Generate the sets from the exclusion and requirement masks rather than
+enumerating them by hand, so the sweep cannot drift from the ladder.
+
+**Two combinations must be in the sweep BY NAME**, because both were unreachable
+before the cross-pair exclusion was removed and both are therefore the ones a
+stale reading would leave out: **Break + Static** and **Break + Beat**. Both were
+rendered and decoded on 2026-09-02 and both pass at all five sizes, so this is
+regression cover rather than an open question. Add **Break + Iris** as a third
+named case -- finding 3 at the top of this plan.
+
+- [ ] **Step 4: Run the cheap gate**
+
+Run: `~/scripts/safe-build.sh node tools/combination-sweep.mjs`
+Expected: 459 combinations at 848 px, all decoding. About 21 minutes. Exceeds the
+120s tool timeout, so run it in the background and poll.
+
+- [ ] **Step 5: Run the full five-size gate**
+
+Run: `~/scripts/safe-build.sh node tools/combination-sweep.mjs full`
+Expected: about 103 minutes, all 459 decoding at 256, 500, 848, 1080 and 1600 px.
+
+**Run the full sweep, not the cheap one.** At about two hours it is affordable as
+a pre-deploy gate, and this change introduces the first genuinely new geometry
+since Plan 1 -- the erase-and-redraw of the finder patterns is the one thing on
+the ladder that can break a scan outright rather than merely look wrong. Batch
+it; the last bulk render sweep on this project reached 6.28 GB resident and
+destroyed the session.
+
+If any combination fails, STOP and report rather than adjusting a threshold.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add tools/combination-sweep.mjs contracts/test/GasBudget.t.sol docs/phase0-results.md
+git commit -m "render: the ladder's 459 combinations all decode, and the new worst case"
+```
+
+**PHASE BOUNDARY -- stop and report.** Give the signed gas and byte deltas, the
+size margin, and the sweep result. If the worst case has passed 2M gas or 20 KB,
+this is where the plan is wrong and needs re-planning, not pushing through.
+
+---
+
+### Task 9: The Warden's catalogue, and the free route
+
+**Files:**
+- Create: `warden/src/mcp/ladder.mjs`
+- Modify: `warden/src/main.mjs`
+- Modify: `warden/src/mcp/tools/upgrade.mjs`
+- Test: `warden/test/ladder.test.mjs` (create), `warden/test/tools.test.mjs`
+
+**Interfaces:**
+- Consumes: the ten records from `contracts/src/Ladder.sol` (Task 3).
+- Produces: `export const LADDER` keyed by Mark id 1..10, each
+  `{ id, name, pair, route, price, minLevel, minStreak, needsWhole, supply,
+  excludes, requiresAny, variants }`; `export function assertLadderSane(ladder)`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `warden/test/ladder.test.mjs`:
+
+```javascript
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { LADDER, assertLadderSane } from "../src/mcp/ladder.mjs";
+
+test("every Mark is priced XOR earned, and never both", () => {
+  for (const [id, m] of Object.entries(LADDER)) {
+    const priced = typeof m.price === "string";
+    const earned = m.route === "earned";
+    assert.equal(priced, !earned, `mark ${id} is neither priced nor earned, or both`);
+  }
+});
+
+test("a catalogue entry that is both is a STARTUP error, not a runtime refusal", () => {
+  const broken = structuredClone(LADDER);
+  broken[2].price = "$5.00";        // Ache is earned and must not carry a price
+  assert.throws(() => assertLadderSane(broken), /priced and earned/);
+});
+
+test("a priced entry with no price is a startup error", () => {
+  const broken = structuredClone(LADDER);
+  delete broken[1].price;
+  assert.throws(() => assertLadderSane(broken), /no price/);
+});
+
+test("exclusions are symmetric and pair-internal", () => {
+  for (const a of Object.keys(LADDER).map(Number)) {
+    for (const b of Object.keys(LADDER).map(Number)) {
+      const aExB = (LADDER[a].excludes & (1 << b)) !== 0;
+      const bExA = (LADDER[b].excludes & (1 << a)) !== 0;
+      assert.equal(aExB, bExA, `${a}/${b} exclusion is not symmetric`);
+      if (aExB) {
+        assert.equal(Math.ceil(a / 2), Math.ceil(b / 2), `${a} excludes ${b} across a pair`);
+      }
+    }
+  }
+});
+
+test("nothing is limited", () => {
+  for (const m of Object.values(LADDER)) assert.equal(m.supply, Infinity);
+});
+
+test("the four earned Marks are exactly Ache, Beat, the earned Iris and Break", () => {
+  const earned = Object.values(LADDER).filter(m => m.route === "earned").map(m => m.id);
+  assert.deepEqual(earned, [2, 4, 6, 8]);
+});
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `source ~/.nvm/nvm.sh && cd warden && node --test "test/ladder.test.mjs"`
+Expected: FAIL -- the module does not exist.
+
+- [ ] **Step 3: Write `warden/src/mcp/ladder.mjs`**
+
+```javascript
+// The Mark catalogue: the Warden's mirror of contracts/src/Ladder.sol.
+//
+// WHY IT IS A MIRROR AND NOT A SECOND DESIGN. `gates.mjs` exists because the
+// gates were once written from the design document rather than from the
+// contract's reverts, and four real gates were missed. The same discipline
+// applies here: every field below has a twin in Ladder.sol, and
+// contracts/test/Ladder.t.sol asserts the two agree by hash via
+// tools/ladder-fixture.mjs. A catalogue that drifts from the chain sells an
+// agent something the chain will refuse -- after it has paid.
+//
+// Five pairs. In each, one side is bought and one earned by a run of days;
+// taking either closes the other permanently; a token may take neither. EVERY
+// EXCLUSION IS PAIR-INTERNAL. Nothing is limited.
+const pairOf = (id) => Math.ceil(id / 2);
+const partnerOf = (id) => (id % 2 === 1 ? id + 1 : id - 1);
+const ANY_IRIS = (1 << 5) | (1 << 6);
+
+const bought = (id, name, price, { minLevel = 0, needsWhole = false, requiresAny = 0, variants = 1 } = {}) => ({
+  id, name, pair: pairOf(id), route: "bought", price,
+  minLevel, minStreak: 0, needsWhole, supply: Infinity,
+  excludes: 1 << partnerOf(id), requiresAny, variants,
+});
+
+const earned = (id, name, minStreak, { needsWhole = false, variants = 1 } = {}) => ({
+  id, name, pair: pairOf(id), route: "earned", price: undefined,
+  minLevel: 0, minStreak, needsWhole, supply: Infinity,
+  excludes: 1 << partnerOf(id), requiresAny: 0, variants,
+});
+
+export const LADDER = {
+  1:  bought(1,  "Hush",   "$1.00"),
+  2:  earned(2,  "Ache",   7),
+  3:  bought(3,  "Static", "$5.00",    { minLevel: 30 }),
+  4:  earned(4,  "Beat",   30),
+  5:  bought(5,  "Iris",   "$25.00",   { minLevel: 100, variants: 3 }),
+  6:  earned(6,  "Iris",   100),
+  7:  bought(7,  "Vessel", "$1250.00", { needsWhole: true }),
+  8:  earned(8,  "Break",  365),
+  9:  bought(9,  "Tint",   "$250.00",  { requiresAny: ANY_IRIS, variants: 2 }),
+  10: bought(10, "Aura",   "$25.00",   { requiresAny: ANY_IRIS }),
+};
+
+/// The names of the three Iris shapes and the two Tint inks, by variant index.
+export const VARIANT_NAMES = {
+  5: ["target", "squircle", "leaf"],
+  9: ["violet", "gold"],
+};
+
+/**
+ * Refuse to start on a malformed catalogue.
+ *
+ * A Mark is either PRICED, in which case a price is mandatory, or EARNED, in
+ * which case a price is forbidden. A entry that is neither, or both, is a
+ * wiring error and not something an agent should meet as a runtime refusal --
+ * the `upgrade` tool's existing price guard exists so a missing price cannot
+ * sell a Vessel for the price of a mint, and this is its sibling.
+ */
+export function assertLadderSane(ladder = LADDER) {
+  for (const [id, m] of Object.entries(ladder)) {
+    const priced = typeof m.price === "string" && /^\$\d/.test(m.price);
+    const isEarned = m.route === "earned";
+    if (priced && isEarned) throw new Error(`mark ${id} is both priced and earned`);
+    if (!priced && !isEarned) throw new Error(`mark ${id} has no price and is not earned`);
+    if (m.route === "bought" && !priced) throw new Error(`mark ${id} has no price`);
+  }
+  return ladder;
+}
+```
+
+- [ ] **Step 4: Wire it in `warden/src/main.mjs`**
+
+Replace `catalogue: {}` and its comment with `catalogue: assertLadderSane(LADDER)`,
+importing both. Delete the comment saying pricing is an undocumented product
+decision -- it is now documented, and a comment that contradicts the code is a
+finding.
+
+- [ ] **Step 5: Add the free route to `upgrade.mjs`**
+
+The existing price guard STAYS -- it is what stops a missing price selling a
+Vessel for a dollar. It gains a sibling: an earned Mark checks every gate and
+then reserves directly, with no payment wrapper. It cannot reach
+`paid-but-unavailable`, because nothing was paid.
+
+```javascript
+      // A free Mark takes no payment wrapper at all. Every gate above has
+      // already run; a settled-then-refused state cannot arise because nothing
+      // settles, so the reservation is the whole of it.
+      if (mark.route === "earned") {
+        const nowBlocked = await paidWriteBlock(chain, { tokenId, q });
+        if (nowBlocked) return { ok: false, reason: nowBlocked };
+        if (!q.reserveMark(tokenId, upgradeId, variant)) {
+          return { ok: false, reason: "mark-already-applied" };
+        }
+        return { ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock run" };
+      }
+```
+
+- [ ] **Step 6: Add the mirror-hash test to `Ladder.t.sol`**
+
+Run: `source ~/.nvm/nvm.sh && cd tools && node ladder-fixture.mjs`
+
+Then add the test to `contracts/test/Ladder.t.sol`, replacing the comment Task 3
+left in its place, with the printed hash as the expected value:
+
+```solidity
+    /// @dev The mirror check. The hash comes from tools/ladder-fixture.mjs,
+    /// which computes it from the WARDEN's catalogue -- so this asserts two
+    /// independently written ladders agree, which is the same idiom
+    /// tools/token-uri-fixture.mjs uses for the two renderers.
+    ///
+    /// A catalogue that drifts from the chain sells an agent something the
+    /// chain will refuse, AFTER it has paid. That is the failure mode
+    /// gates.mjs exists to prevent.
+    function test_theLadderMatchesTheJavascriptMirror() public pure {
+        assertEq(keccak256(abi.encode(Ladder.all())), 0x<paste>);
+    }
+```
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test --match-contract LadderTest`
+Expected: PASS. If it fails, the two ladders genuinely disagree -- find which
+field, and fix the one that is wrong rather than the hash.
+
+- [ ] **Step 7: Run the suites**
+
+Run: `source ~/.nvm/nvm.sh && cd warden && npm test`
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test`
+Expected: both PASS.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add warden/src/mcp/ladder.mjs warden/src/main.mjs warden/src/mcp/tools/upgrade.mjs warden/test contracts/test/Ladder.t.sol
+git commit -m "warden: the Mark catalogue exists, and four Marks are free"
+```
+
+---
+
+### Task 10: The three new refusals, the variant, and the Clock
+
+**Files:**
+- Modify: `warden/src/mcp/tools/upgrade.mjs`
+- Modify: `warden/src/mirror/schema.sql`, `warden/src/mirror/db.mjs`, `warden/src/mirror/queries.mjs`
+- Modify: `warden/src/clock/abi.mjs`, `warden/src/clock/run.mjs`
+- Test: `warden/test/tools.test.mjs`, `warden/test/mirror.test.mjs`, `warden/test/clock-run.test.mjs`
+
+**Interfaces:**
+- Consumes: `LADDER`, `VARIANT_NAMES` (Task 9); the `applyMark(id, upgradeId,
+  variant)` ABI (Task 2).
+- Produces: `upgrade` accepting `{ tokenId, upgradeId (1..10), variant (0..2,
+  default 0) }`; refusal reasons `mark-excluded` (with `detail` naming the
+  blocking Mark), `mark-needs-iris`, `mark-bad-variant`;
+  `q.reserveMark(tokenId, upgradeId, variant)`;
+  `q.pendingMarkOrders()` rows carrying `variant`.
+
+- [ ] **Step 1: Write the failing tests**
+
+In `warden/test/tools.test.mjs`. Assert the EXACT reason string, never merely
+that the call failed -- a test asserting only `ok === false` passes for the wrong
+reason.
+
+```javascript
+test("an excluded Mark is refused BEFORE payment, and names what blocked it", async () => {
+  // token holds Beat (4); Static (3) is its pair partner
+  const res = await upgrade.handler({ tokenId: 1, upgradeId: 3 }, ctx);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, "mark-excluded");
+  assert.equal(res.detail, "beat");
+});
+
+test("mark-excluded can only ever name the SAME pair's other side", async () => {
+  // The property that makes the refusal self-explanatory: an agent already
+  // knows what its pair partner is, so being told the name is enough.
+  for (const id of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+    const partner = id % 2 === 1 ? id + 1 : id - 1;
+    assert.equal(LADDER[id].excludes, 1 << partner);
+  }
+});
+
+test("Tint without an Iris is refused, and accepted with either one", async () => {
+  let res = await upgrade.handler({ tokenId: 1, upgradeId: 9, variant: 0 }, ctx);
+  assert.equal(res.reason, "mark-needs-iris");
+  // ... apply mark 6, the EARNED Iris, then retry
+  res = await upgrade.handler({ tokenId: 1, upgradeId: 9, variant: 0 }, ctx);
+  assert.equal(res.ok, true);
+});
+
+test("Aura without an Iris is refused too -- the second trap's fix", async () => {
+  const res = await upgrade.handler({ tokenId: 1, upgradeId: 10 }, ctx);
+  assert.equal(res.reason, "mark-needs-iris");
+});
+
+test("a variant this Mark does not accept is refused before payment", async () => {
+  const res = await upgrade.handler({ tokenId: 1, upgradeId: 5, variant: 3 }, ctx);
+  assert.equal(res.reason, "mark-bad-variant");
+});
+
+test("a non-zero variant on a Mark with no variants is refused", async () => {
+  const res = await upgrade.handler({ tokenId: 1, upgradeId: 1, variant: 1 }, ctx);
+  assert.equal(res.reason, "mark-bad-variant");
+});
+
+test("the exclusion is re-checked AFTER settlement", async () => {
+  // Settling takes seconds, and the same token can take the OTHER side of a
+  // pair in that window through a second connection. The pre-payment check is
+  // stale by the time the money lands, so the decision is made again against
+  // the database with the unique index as the final authority.
+  //
+  // The seam is forced by a `paid` stub that runs the partner reservation
+  // between the gate check and the settled callback -- which is exactly the
+  // window a real settlement opens.
+  const racingPaid = (handler) => async (args, ctx) => {
+    q.reserveMark(1, 4, 0);              // Beat lands mid-settlement
+    q.markOrderWritten(1, 4);            // and reaches the mirror's mask
+    return handler(args, ctx);
+  };
+  const tool = makeUpgradeTool({ q, chain, catalogue: LADDER, paid: racingPaid });
+  const res = await tool.handler({ tokenId: 1, upgradeId: 3, variant: 0 }, ctx);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, "paid-but-unavailable");
+  assert.equal(res.detail, "mark-excluded");
+});
+
+test("the control: with nothing racing, the same call settles and reserves", async () => {
+  // Without this, the test above passes for a tool that refuses everything.
+  const tool = makeUpgradeTool({ q, chain, catalogue: LADDER, paid: (h) => h });
+  const res = await tool.handler({ tokenId: 1, upgradeId: 3, variant: 0 }, ctx);
+  assert.equal(res.ok, true);
+  assert.equal(res.upgradeId, 3);
+});
+```
+
+In `warden/test/mirror.test.mjs`:
+
+```javascript
+test("a reservation carries its variant", () => {
+  assert.equal(q.reserveMark(1, 5, 2), true);
+  assert.deepEqual(q.pendingMarkOrders(), [{ tokenId: 1, upgradeId: 5, variant: 2 }]);
+});
+
+test("the unique index still stops two settlements reserving the same Mark", () => {
+  assert.equal(q.reserveMark(1, 5, 0), true);
+  assert.equal(q.reserveMark(1, 5, 1), false);   // same token, same Mark
+});
+```
+
+In `warden/test/clock-run.test.mjs`:
+
+```javascript
+test("the Clock passes the variant to applyMark", async () => {
+  q.reserveMark(1, 5, 2);
+  await runOnce({ q, writer, ... });
+  assert.deepEqual(writer.sent[0].args, [1n, 5, 2]);
+});
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `source ~/.nvm/nvm.sh && cd warden && npm test`
+Expected: the new tests FAIL.
+
+- [ ] **Step 3: Widen the schema and migrate**
+
+In `warden/src/mirror/schema.sql`:
+
+```sql
+CREATE TABLE IF NOT EXISTS mark_orders (
+  tokenId   INTEGER NOT NULL,
+  upgradeId INTEGER NOT NULL,
+  variant   INTEGER NOT NULL DEFAULT 0,   -- the Iris shape or the Tint ink
+  paymentTx TEXT,
+  status    TEXT NOT NULL DEFAULT 'queued'
+);
+```
+
+The unique index on `(tokenId, upgradeId)` is UNCHANGED -- a token holds one
+reservation per Mark regardless of variant, which is what stops two settlements
+racing.
+
+In `warden/src/mirror/db.mjs`, extend `migrate` -- `CREATE TABLE IF NOT EXISTS`
+does nothing to a table that already exists, so a new column never reaches an
+existing database:
+
+```javascript
+  const orderCols = new Set(db.prepare("PRAGMA table_info(mark_orders)").all().map((c) => c.name));
+  if (!orderCols.has("variant")) {
+    db.exec("ALTER TABLE mark_orders ADD COLUMN variant INTEGER NOT NULL DEFAULT 0");
+  }
+```
+
+- [ ] **Step 4: Add the refusals to `upgrade.mjs`**
+
+Widen the zod schema and add the three checks before `paidWriteBlock`:
+
+```javascript
+      inputSchema: z.object({
+        tokenId: z.number().int().positive(),
+        // BOUNDED, because the bitmask below is a 32-bit shift. There are ten
+        // Marks; an unbounded id wraps -- 1 << 32 is 1 -- so a high id aliases
+        // a low one, and 1 << 31 is negative.
+        upgradeId: z.number().int().min(1).max(10),
+        // The Iris shape (0 target, 1 squircle, 2 leaf) or the Tint ink
+        // (0 violet, 1 gold). Every other Mark accepts only 0.
+        variant: z.number().int().min(0).max(2).default(0),
+      }),
+```
+
+```javascript
+      // THE EXCLUSION, before any payment. An agent told only "no" cannot tell a
+      // permanent exclusion from a temporary gate, and the whole ladder rests on
+      // exclusions being legible -- so the refusal NAMES what closed the door.
+      const blocking = token.marks & mark.excludes;
+      if (blocking) {
+        const by = Object.values(LADDER).find(m => blocking & (1 << m.id));
+        return { ok: false, reason: "mark-excluded", detail: by.name.toLowerCase() };
+      }
+      if (mark.requiresAny && !(token.marks & mark.requiresAny)) {
+        return { ok: false, reason: "mark-needs-iris" };
+      }
+      if (variant >= mark.variants) {
+        return { ok: false, reason: "mark-bad-variant" };
+      }
+```
+
+Add the exclusion re-check inside the settled callback, alongside the existing
+`mark-already-applied` and `mark-sold-out` re-checks:
+
+```javascript
+          : fresh.marks & mark.excludes ? "mark-excluded"
+```
+
+Pass `variant` through to `q.reserveMark(tokenId, upgradeId, variant)` and into
+the success payload. Put the variant name in the payment description, because
+that is the demand an agent reads before spending 250 USDC:
+
+```javascript
+        description: mark.variants > 1
+          ? `Apply the ${mark.name} Mark (${VARIANT_NAMES[upgradeId][variant]}) to token ${tokenId}`
+          : `Apply the ${mark.name} Mark to token ${tokenId}`,
+```
+
+- [ ] **Step 5: Teach the Clock the third argument**
+
+In `warden/src/clock/abi.mjs`, add the `variant` input to `applyMark` and the
+`variant` field to the `MarkApplied` event. In `run.mjs`:
+
+```javascript
+    const result = await writer.send("applyMark",
+      [BigInt(order.tokenId), order.upgradeId, order.variant], {
+      label: `applyMark ${order.upgradeId} on ${order.tokenId}`,
+    });
+```
+
+The re-chunk rule is unchanged: a failed batch is re-chunked with the credited
+ids removed and never retried whole.
+
+- [ ] **Step 6: Run the suites**
+
+Run: `source ~/.nvm/nvm.sh && cd warden && npm test`
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add warden/src warden/test
+git commit -m "warden: the three pre-payment refusals, and the variant reaches the chain"
+```
+
+---
+
+### Task 11: The `ladder` tool
+
+**Files:**
+- Create: `warden/src/mcp/tools/ladder.mjs`
+- Modify: `warden/src/mcp/server.mjs`
+- Modify: `client/test/journey.test.mjs`
+- Test: `warden/test/ladder-tool.test.mjs` (create)
+
+**Interfaces:**
+- Consumes: `LADDER`, `VARIANT_NAMES` (Task 9); `q.getToken`.
+- Produces: a read-only `ladder` tool taking `{ tokenId }` and returning one
+  entry per pair.
+
+**This is a fairness requirement, not a convenience.** A ladder with permanent
+exclusions is only fair if the consequence is legible BEFORE the purchase.
+`upgrade` answers only after the fact, and an agent that buys Beat without being
+told it has just forfeited Break has been cheated by the interface, not by the
+design. Pair 5's gate depends on pair 3, and an agent should not have to infer
+that.
+
+- [ ] **Step 1: Write the failing tests**
+
+```javascript
+test("a token holding Beat is told Break is closed, and by what", async () => {
+  // The case that matters. Everything else this tool reports is a convenience;
+  // this is the one that makes the ladder fair.
+  const res = await ladder.handler({ tokenId: 1 }, ctx);
+  const pair4 = res.pairs.find(p => p.pair === 4);
+  assert.equal(pair4.closed, undefined);
+  const pair2 = res.pairs.find(p => p.pair === 2);
+  assert.equal(pair2.held, "beat");
+  assert.equal(pair2.closed, "static");
+  assert.equal(pair2.closedBy, "beat");
+});
+
+test("every pair reports what is open, what it costs and what gate it waits on", async () => {
+  const res = await ladder.handler({ tokenId: 1 }, ctx);
+  assert.equal(res.pairs.length, 5);
+  const pair1 = res.pairs.find(p => p.pair === 1);
+  assert.equal(pair1.sides[0].price, "$1.00");
+  assert.equal(pair1.sides[1].waitingOn, "a run of 7 days");
+});
+
+test("pair 5 says it is waiting on an Iris, not on a level", async () => {
+  const res = await ladder.handler({ tokenId: 1 }, ctx);
+  const pair5 = res.pairs.find(p => p.pair === 5);
+  for (const side of pair5.sides) assert.equal(side.waitingOn, "an Iris, by either route");
+});
+
+test("it takes no payment and refuses an unknown token by name", async () => {
+  const res = await ladder.handler({ tokenId: 999 }, ctx);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, "unknown-token");
+});
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `source ~/.nvm/nvm.sh && cd warden && node --test "test/ladder-tool.test.mjs"`
+Expected: FAIL -- the module does not exist.
+
+- [ ] **Step 3: Write the tool**
+
+Read-only, no payment, `readOnlyHint: true`. For each of the five pairs report:
+what is held, what is still open, what is closed and by which Mark, what each
+side costs, and what gate each side is waiting on. Since every exclusion is
+pair-internal, this tool does NOT need a "is Break still reachable" line -- an
+earlier draft of the spec required one, and removing the trap removed the need
+to explain it.
+
+- [ ] **Step 4: Register it and fix the client's tool-list assertion**
+
+`warden/src/mcp/server.mjs` gains `makeLadderTool`. Then
+`client/test/journey.test.mjs:152` asserts the exact tool list and will fail:
+
+```javascript
+  assert.deepEqual(names, ["challenge", "checkin", "ladder", "mint", "rebind", "rest", "seed", "status", "upgrade"]);
+```
+
+Check the actual sort order the server produces rather than assuming
+alphabetical.
+
+- [ ] **Step 5: Run the warden and client suites**
+
+Run: `source ~/.nvm/nvm.sh && cd warden && npm test`
+Run: `source ~/.nvm/nvm.sh && cd client && npm test`
+Expected: both PASS. The client's suite runs against a real Warden built from
+`warden/src`, so a door or tool-list change breaks it.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add warden/src/mcp warden/test client/test
+git commit -m "warden: a ladder tool, so an exclusion is legible before it is taken"
+```
+
+---
+
+### Task 12: The documents that describe what now exists
+
+**Files:**
+- Modify: `warden/public/llms.txt`
+- Modify: `docs/2026-09-01-mro-raw-protocol.md`
+- Modify: `CLAUDE.md`
+
+- [ ] **Step 1: Update `llms.txt`**
+
+Three things on that page are wrong TODAY and this task fixes all of them, since
+editing one passage of a document is not editing the document:
+
+1. Line 20 and `warden/public/door.html` line 37 say payment is not wired. That
+   stopped being true at `f4de22a`.
+2. Line 117 says "The top two are limited in supply". That stopped being true
+   when caps were removed on 2026-09-01.
+3. The ladder itself is now ten Marks in five pairs.
+
+Run: `/bin/grep -n "limited\|not wired\|payment-not-configured\|seven" warden/public/llms.txt warden/public/door.html`
+and fix every hit, not just the three named.
+
+- [ ] **Step 2: Update the raw protocol doc CORRECTLY**
+
+`docs/2026-09-01-mro-raw-protocol.md` is a TRANSCRIPT, captured off the wire by
+`warden/tools/protocol-transcript.mjs`. Its entire value is that it describes
+what a caller actually meets rather than what a spec promises.
+
+**So it moves only when the CODE moves -- which, after Tasks 9 to 11, it has.**
+Re-run the capture rather than hand-editing the numbers:
+
+Run: `source ~/.nvm/nvm.sh && cd warden && node tools/protocol-transcript.mjs`
+
+Lines 261, 266 and 278 currently say `upgradeId (1-7)` and "When it ships,
+`upgradeId` widens to 1-10 and `upgrade` grows a third parameter." That note was
+correct as a forward-looking caveat and is now the present tense. Replace it with
+what the capture shows; do not leave both.
+
+- [ ] **Step 3: Update `CLAUDE.md`**
+
+The Key Decisions section still describes the Marks as SUPERSEDED-and-unbuilt,
+and the status block says "NOTHING IS BUILT" and "the Warden's Mark catalogue is
+literally `{}`". Both stop being true here.
+
+- [ ] **Step 4: Re-run every suite one final time**
+
+Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test`
+Run: `source ~/.nvm/nvm.sh && cd tools && npm test`
+Run: `source ~/.nvm/nvm.sh && cd warden && npm test`
+Run: `source ~/.nvm/nvm.sh && cd client && npm test`
+Run: `source ~/.nvm/nvm.sh && node tools/prepublish-check.mjs`
+Expected: four green suites and a clean prepublish check.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add warden/public docs CLAUDE.md
+git commit -m "docs: the ladder as built, and the three things the page had wrong"
+```
+
+**PHASE BOUNDARY -- stop and report.**
+
+---
+
+## What this plan does NOT do
+
+Named rather than left to be discovered.
+
+- **It does not deploy anything.** `DeployPlan5.s.sol` is written and never run.
+  The contract change and the deployment are separate decisions, and the
+  deployment waits on the operator. Base Sepolia costs nothing but is still the operator's call;
+  Base mainnet is a real-funds gate with no standing approval.
+- **It does not update the agent-facing copy's contract address.** The copy is
+  LOCKED and prints the current address as the thing agents are invited to
+  audit. It needs one line changed AFTER a redeploy, not before.
+- **It does not test the copy on cold readers again.** The ladder the copy
+  describes is what this builds, so the promise has not moved. If any wording
+  changes, re-run the rig in the `test-copy-on-cold-agents` memory.
+- **It does not touch child token visuals or the lineage narrative**, which stay
+  deferred to a follow-up brainstorm (spec section 10).
+- **It does not add a third Tint ink.** Teal and a warm orange are the gaps, and
+  either would need a new candidate rendered against Static's green first.
