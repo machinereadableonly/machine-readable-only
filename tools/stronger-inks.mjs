@@ -19,6 +19,7 @@ import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
   renderSvg, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt, canvasFor,
+  STATIC, BEAT,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -117,7 +118,7 @@ for (const [fam, { rgb, chroma }] of [...strongest].sort((a, b) => b[1].chroma -
     const k = luma(rgbOf(noiseAt(r))) / luma(rgb);
     BLUEBLOOD_BY_TIER[i] = hex(rgb.map(v => v * k));
   }
-  const svg = draw(STREAK, ["blueblood"]);
+  const svg = draw(STREAK, [STATIC]);
   const ok = decodes(svg);
   const s = shift(basePx, pixels(svg, 560));
   const heartChroma = chromaOf(rgbOf(heart));
@@ -149,7 +150,7 @@ const farEnds = [
       .map(([f, { rgb }]) => [`half-luma ${f}`, hex(rgb)]),
 ];
 for (const [label, far] of farEnds) {
-  const svg = draw(STREAK, ["bloom"]).replace(
+  const svg = draw(STREAK, [BEAT]).replace(
     /(<stop offset="1" stop-color=")#c8102e(")/, `$1${far}$2`);
   const ok = decodes(svg);
   const s = shift(basePx, pixels(svg, 560));

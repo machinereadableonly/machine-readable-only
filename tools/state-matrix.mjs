@@ -5,8 +5,20 @@
 // lifecycle is roughly 800,000 states. Testing it is neither possible nor
 // useful. What follows covers every axis independently at its boundaries, plus
 // the handful of places where two axes actually interact.
-import { MAX_RINGS, MARKS } from "./render-token.mjs";
+import {
+  MAX_RINGS, MARKS, HUSH, ACHE, STATIC, BEAT, VESSEL, BREAK, AURA,
+} from "./render-token.mjs";
 import { DAY_CELLS } from "./frame-geometry.mjs";
+
+/// A Mark id's ladder name, for labels only -- never fed back into `marks`.
+const nameOf = id => MARKS[id - 1];
+
+// Old ladder name -> new Mark id, same surface. Kept only so the historical
+// sweeps below keep rendering exactly the picture they always rendered; see
+// tools/state-matrix.mjs's callers and the Task 4 brief's name map.
+//   vein -> ache, blueblood -> static, voice -> hush, bloom -> beat,
+//   halo -> aura, crown -> vessel, singularity -> break.
+const OLD_SEVEN = [HUSH, ACHE, STATIC, BEAT, VESSEL, BREAK, AURA];
 
 /// Streak values one step either side of every tier threshold (3, 7, 30, 100).
 export const STREAKS = [0, 1, 2, 3, 6, 7, 29, 30, 99, 100, 400];
@@ -22,8 +34,11 @@ export const RING_YEARS = [0, 1, 2, 5, 9, 10, 11];
 /// 364 is the measured gas worst case; 365 seals the frame.
 export const FILLS = [1, 12, 200, 364, 365];
 
-/// The five Marks that draw, each alone, then none and all.
-export const DRAWING_MARKS = ["vein", "voice", "bloom", "halo", "crown"];
+/// The five Marks that draw, each alone, then none and all. Preserved from the
+/// old ladder by the same-surface map above: vein -> ache, voice -> hush,
+/// bloom -> beat, halo -> aura, crown -> vessel. (Static also draws -- the
+/// noise ink -- but was never in this list before the rename either.)
+export const DRAWING_MARKS = [ACHE, HUSH, BEAT, AURA, VESSEL];
 
 /// Every colour boundary against every lapse boundary. 88 pairs.
 export function colourCases() {
@@ -57,13 +72,14 @@ export function renderCases() {
     out.push({ label: `fill ${level}`, ...base, level });
   }
 
-  // Marks: none, each drawing one alone, all five, all seven.
+  // Marks: none, each drawing one alone, all five, all seven (the old ladder,
+  // renamed and repositioned -- see OLD_SEVEN above).
   out.push({ label: "no marks", ...base, marks: [] });
   for (const m of DRAWING_MARKS) {
-    out.push({ label: `mark ${m}`, ...base, marks: [m] });
+    out.push({ label: `mark ${nameOf(m)}`, ...base, marks: [m] });
   }
   out.push({ label: "all drawing marks", ...base, marks: DRAWING_MARKS });
-  out.push({ label: "all seven marks", ...base, marks: MARKS });
+  out.push({ label: "all seven marks", ...base, marks: OLD_SEVEN });
 
   // Frozen lifecycles. Both must hold their colour against a far-future clock.
   out.push({ label: "resting", ...base, today: 9999, resting: true });
@@ -138,7 +154,7 @@ export function crossStates() {
   const base = { lastDay: 1000, today: 1000 };
   return [
     { label: "day one",        ...base, level: 1,    streak: 0,   marks: [] },
-    { label: "mid, marked",    ...base, level: 200,  streak: 45,  marks: ["vein", "bloom"] },
+    { label: "mid, marked",    ...base, level: 200,  streak: 45,  marks: [ACHE, BEAT] },
     { label: "day 364 worst",  ...base, level: 364,  streak: 100, marks: DRAWING_MARKS },
     { label: "whole, 1 year",  ...base, level: 365,  streak: 400, marks: [] },
     { label: "whole, 10 years",...base, level: 3650, streak: 30,  marks: DRAWING_MARKS },

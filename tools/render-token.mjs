@@ -64,11 +64,15 @@ export const FIELD = "#ffffff";
 // render-token.test.mjs -- contrast arithmetic alone is not sufficient, as the
 // noise ink sits at 4.54 against white and so is already at the floor before
 // any tint is applied.
-export const VEIN_GHOST = "#e3ccd3";  // Vein: the year ahead, visible from day one
-export const VOICE_QUIET = "#fdf3e3"; // Voice: the quiet zone hugging the code
-export const HALO_FIELD = "#fbeff2";  // Halo: the whole field
-export const CROWN_GOLD = "#b8860b";  // Crown: frame and year rings
-export const BLOOM_TO = "#c8102e";    // Bloom: the far end of the heart gradient
+export const ACHE_GHOST = "#e3ccd3";  // Ache: the year ahead, visible from day one
+export const HUSH_QUIET = "#fdf3e3";  // Hush: the quiet zone hugging the code
+export const AURA_FIELD = "#fbeff2";  // Aura: the whole field
+export const VESSEL_GOLD = "#b8860b"; // Vessel: frame and year rings
+// Beat: the far end of the heart gradient. VIOLET, chosen by the operator 2026-08-31 from
+// a rendered sheet: it makes the heart bi-chromatic and reads as spectrum
+// rather than blood. Same string length as the red it replaced (#c8102e), so
+// zero bytes and zero gas.
+export const BEAT_TO = "#2000ff";
 
 // Re-measured 2026-08-29, correcting an earlier note in this file that claimed
 // #f9eaef was the deepest tint that still decodes. It is not: #f9eaef fails at
@@ -76,10 +80,17 @@ export const BLOOM_TO = "#c8102e";    // Bloom: the far end of the heart gradien
 // all four sizes, asserted in render-token.test.mjs so the margin cannot be
 // tightened without the suite noticing.
 //
-// It is also a different hue from Halo's rose, so Voice reads as amber rather
+// It is also a different hue from Aura's rose, so Hush reads as amber rather
 // than as a slightly deeper pink that would vanish when both Marks are worn at
 // once.
-export const MARKS = ["vein", "blueblood", "voice", "bloom", "halo", "crown", "singularity"];
+
+// Ten Mark ids in five pairs, nine distinct names, eight surfaces. Index n here
+// is mark id n + 1. Both Iris ids emit "iris": same surface, two routes, and the
+// route is visible in the image rather than in the JSON.
+export const MARKS = [
+  "hush", "ache", "static", "beat", "iris",
+  "iris", "vessel", "break", "tint", "aura",
+];
 
 // TIERS is written top-down (100+ first) while Solidity indexes the ladder
 // bottom-up (0 = the start of a life). Everything below works in RUNGS -- the
@@ -201,6 +212,10 @@ export function ringBars(rings, canvas) {
  * @param modules  the code's module bits, row major, size*size
  * @param want     the heart target bits, same shape, used to split heart from noise
  * @param state    { level, streak, years, marks, lastDay, today, resting, sunset }
+ *
+ * state.marks is an array of Mark ids (1..10), not names -- see MARKS above
+ * and hasMark below. Ids 5 and 6 both draw "iris", and Task 6 needs to tell
+ * them apart, which a name array could not do.
  */
 export function renderSvg(modules, want, size, state) {
   const {
@@ -226,15 +241,15 @@ export function renderSvg(modules, want, size, state) {
   const frozen = resting || sunset;
   const rung = frozen ? rungOf(streak) : lapsedRung(streak, lastDay, today);
   const colour = colourAt(rung);
-  // Blue Blood claims the noise ink -- the one surface no other Mark touches.
+  // Static claims the noise ink -- the one surface no other Mark touches.
   // Selected by RUNG, not by colour, so the heart and the noise can never be
   // taken from different tiers. Mirrors MarkRenderer.noise in Solidity.
-  const noise = marks.includes("blueblood") ? bluebloodAt(rung) : noiseAt(rung);
-  const gold = marks.includes("crown") ? CROWN_GOLD : null;
-  const ghost = marks.includes("vein") ? VEIN_GHOST : GHOST;
-  const field = marks.includes("halo") ? HALO_FIELD : FIELD;
-  const voice = marks.includes("voice");
-  const bloom = marks.includes("bloom");
+  const noise = hasMark(marks, STATIC) ? bluebloodAt(rung) : noiseAt(rung);
+  const gold = hasMark(marks, VESSEL) ? VESSEL_GOLD : null;
+  const ghost = hasMark(marks, ACHE) ? ACHE_GHOST : GHOST;
+  const field = hasMark(marks, AURA) ? AURA_FIELD : FIELD;
+  const hush = hasMark(marks, HUSH);
+  const beat = hasMark(marks, BEAT);
 
   const lit = new Set(), dim = new Set(), noiseCells = new Set();
 
@@ -271,15 +286,15 @@ export function renderSvg(modules, want, size, state) {
   if (noiseCells.size) groups.push([noise, noiseCells]);
   if (heart.size) groups.push([colour, heart]);
 
-  // Bloom replaces the heart's flat fill with a gradient running from the
-  // token's own streak colour into the deepest red. Both ends are colours the
-  // ladder already proves scannable, so no stop between them can be paler than
-  // the palest tier.
-  const heartFill = bloom ? "url(#b)" : colour;
-  const defs = bloom
+  // Beat replaces the heart's flat fill with a gradient running from the
+  // token's own streak colour into violet. Both ends are colours the ladder
+  // already proves scannable, so no stop between them can be paler than the
+  // palest tier.
+  const heartFill = beat ? "url(#b)" : colour;
+  const defs = beat
     ? `<defs><linearGradient id="b" x1="0" y1="0" x2="0" y2="1">`
       + `<stop offset="0" stop-color="${colour}"/>`
-      + `<stop offset="1" stop-color="${BLOOM_TO}"/></linearGradient></defs>`
+      + `<stop offset="1" stop-color="${BEAT_TO}"/></linearGradient></defs>`
     : "";
 
   const body = groups.map(([c, s]) => {
@@ -289,11 +304,11 @@ export function renderSvg(modules, want, size, state) {
     return `<path fill="${fill}" d="${d}"/>`;
   }).join("");
 
-  // Voice tints the whole 45-cell block behind the code, which is one rect
+  // Hush tints the whole 45-cell block behind the code, which is one rect
   // rather than a path over the 656 quiet-zone cells. The modules are drawn on
   // top, so tinting the full square costs 46 bytes instead of about 1,140.
-  const quiet = voice
-    ? `<rect x="${blockOff}" y="${blockOff}" width="${BLOCK}" height="${BLOCK}" fill="${VOICE_QUIET}"/>`
+  const quiet = hush
+    ? `<rect x="${blockOff}" y="${blockOff}" width="${BLOCK}" height="${BLOCK}" fill="${HUSH_QUIET}"/>`
     : "";
 
   // ` width="848" height="848"` when a size is declared, empty otherwise -- so
@@ -321,7 +336,7 @@ export function renderSvg(modules, want, size, state) {
 // The hash character cannot appear raw anywhere in the URI. The whole tokenURI
 // is itself a URI, so a raw "#" starts the fragment and truncates the JSON --
 // measured: JSON.parse fails with "Unterminated string at position 31". Base64
-// hides every "#" in the SVG (the colours, and Bloom's url(#b) reference); the
+// hides every "#" in the SVG (the colours, and Beat's url(#b) reference); the
 // only one left is in the name, written as %23.
 export const TOKEN_NAME = "Machine Readable Only";
 export const DESCRIPTION =
@@ -331,10 +346,29 @@ const attr = (k, v) => `{"trait_type":"${k}","value":${v}}`;
 const num = (k, v) => attr(k, `${v}`);
 const str = (k, v) => attr(k, `"${v}"`);
 
+// Mark ids, ladder order 1 to 10. Mirrors MarkRenderer.sol's bit constants
+// exactly -- id n is bit n there and index n-1 into MARKS here.
+export const HUSH = 1;
+export const ACHE = 2;
+export const STATIC = 3;
+export const BEAT = 4;
+export const IRIS_BOUGHT = 5;
+export const IRIS_EARNED = 6;
+export const VESSEL = 7;
+export const BREAK = 8;
+export const TINT = 9;
+export const AURA = 10;
+
 /** The marks this token wears, in ladder order, as a JSON array. */
-export function markNames(marks) {
-  return `[${MARKS.filter(m => marks.includes(m)).map(m => `"${m}"`).join(",")}]`;
+export function markNames(ids) {
+  const held = new Set(ids);
+  const out = [];
+  MARKS.forEach((name, i) => { if (held.has(i + 1)) out.push(name); });
+  return `[${out.map(m => `"${m}"`).join(",")}]`;
 }
+
+/** Does this token wear mark `id`? The one predicate every selector uses. */
+export const hasMark = (ids, id) => ids.includes(id);
 
 /**
  * @param state { tokenId, level, streak, lastDay, mintDay, today, generation,

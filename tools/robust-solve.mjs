@@ -22,7 +22,7 @@
 // That asymmetry is why the gate is deliberately stricter than it needs to be.
 import { allMaskSolves, payloadFor, unpackModules } from "./qart.mjs";
 import { heartMaskBytes } from "./heart-mask.mjs";
-import { renderSvg, canvasFor } from "./render-token.mjs";
+import { renderSvg, canvasFor, ACHE, HUSH, BEAT, AURA, VESSEL } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
 /// The raster sizes a candidate must clear. The four a third party picks
@@ -41,10 +41,12 @@ export const GATE_SIZES = [256, 350, 500, 700, 1000, 1080, 1150, 1300, 1550];
 /// against, so a code is only as good as the images it actually appears in.
 export function gateStates() {
   const base = { lastDay: 1000, today: 1000 };
-  const marks = ["vein", "voice", "bloom", "halo", "crown"];
+  // Same five drawing Marks as before the rename: vein -> ache, voice -> hush,
+  // bloom -> beat, halo -> aura, crown -> vessel.
+  const marks = [ACHE, HUSH, BEAT, AURA, VESSEL];
   return [
     { label: "day one",         ...base, level: 1,    streak: 0,   marks: [] },
-    { label: "mid, marked",     ...base, level: 200,  streak: 45,  marks: ["vein", "bloom"] },
+    { label: "mid, marked",     ...base, level: 200,  streak: 45,  marks: [ACHE, BEAT] },
     { label: "day 364 worst",   ...base, level: 364,  streak: 100, marks },
     { label: "whole, 1 year",   ...base, level: 365,  streak: 400, marks: [] },
     { label: "whole, 10 years", ...base, level: 3650, streak: 30,  marks },

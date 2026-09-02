@@ -16,7 +16,7 @@ import { keccak256, toBytes } from "viem";
 import { tokenBitmap, SIZE } from "./token-bitmap.mjs";
 import { heartMaskBytes } from "./heart-mask.mjs";
 import { unpackModules } from "./qart.mjs";
-import { tokenUri } from "./render-token.mjs";
+import { tokenUri, HUSH, BEAT, IRIS_BOUGHT, VESSEL, AURA } from "./render-token.mjs";
 
 /// The six life stages the differential test covers, plus the Marks case.
 export const STAGES = [
@@ -27,8 +27,14 @@ export const STAGES = [
                          generation: 1, parent: 7, seedsGiven: 2 }],
   ["whole and lapsed", { level: 365,      streak: 140, lastDay: 1000, today: 1040 }],
   ["ten years, capped",{ level: 365 * 10, streak: 400, lastDay: 1000, today: 1000 }],
+  // One Mark per pair -- the legal maximum a real token can hold, since
+  // MachineReadableOnly.applyMark excludes pair partners. Hush over Ache and
+  // Beat over Static draw the larger amount of image (Hush adds a rect, Beat
+  // adds a gradient defs block), which makes this also the byte-worst-case
+  // fixture. Iris Bought is included even though it draws nothing yet, so the
+  // fixture reflects a token that took every pair rather than four of five.
   ["every drawn mark", { level: 365 * 10, streak: 400, lastDay: 1000, today: 1000,
-                         marks: ["vein", "blueblood", "voice", "bloom", "halo", "crown", "singularity"] }],
+                         marks: [HUSH, BEAT, IRIS_BOUGHT, VESSEL, AURA] }],
   ["sealed at rest",   { level: 365 * 3,  streak: 200, lastDay: 1000, today: 9999, resting: true }],
 ];
 

@@ -9,7 +9,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { solve, payloadFor, unpackModules } from "../qart.mjs";
 import { heartMaskBytes } from "../heart-mask.mjs";
-import { renderSvg } from "../render-token.mjs";
+import { renderSvg, ACHE, HUSH, BEAT, AURA, VESSEL } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 import { tokenBitmap, SIZE } from "../token-bitmap.mjs";
 import { gateSolve, GATE_SIZES, gateStates } from "../robust-solve.mjs";
@@ -23,7 +23,7 @@ const KNOWN_FRAGILE = [
   { id: 55, badMask: 4, state: { level: 365,  streak: 400, marks: [] },
     sizes: [350, 500, 1000, 1150, 1300, 1550], label: "whole, 1 year" },
   { id: 12, badMask: 4, state: { level: 3650, streak: 30,
-      marks: ["vein", "voice", "bloom", "halo", "crown"] },
+      marks: [ACHE, HUSH, BEAT, AURA, VESSEL] },
     sizes: [700], label: "whole, 10 years" },
 ];
 

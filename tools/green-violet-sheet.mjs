@@ -22,6 +22,7 @@ import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
   renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
+  STATIC, BEAT,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -98,7 +99,7 @@ for (const s of STREAKS) {
   const rung = rungOf(s);
   const ink = inks[TIERS.length - 1 - rung];
   const heart = colourAt(rung);
-  const svg = draw(s, ["blueblood"]);
+  const svg = draw(s, [STATIC]);
   const ok = decodesAt(svg);
   const d = shift(pixels(draw(s, []), 560), pixels(svg, 560));
   const hc = chromaOf(rgbOf(heart)), nc = chromaOf(rgbOf(ink));
@@ -114,7 +115,7 @@ console.log("streak  heart    far      shift    decodes");
 for (const s of STREAKS) {
   const heart = colourAt(rungOf(s));
   const far = hex(atLuma(VIOLET, luma(rgbOf(heart)) * 0.5));
-  const svg = draw(s, ["bloom"]).replace(
+  const svg = draw(s, [BEAT]).replace(
     /(<stop offset="1" stop-color=")#c8102e(")/, `$1${far}$2`);
   const ok = decodesAt(svg);
   const d = shift(pixels(draw(s, []), 560), pixels(svg, 560));

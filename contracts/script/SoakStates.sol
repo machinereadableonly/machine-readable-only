@@ -44,8 +44,8 @@ library SoakStates {
         s[20] = State(364, 400, 0, 0, false, "fill 364");
         s[21] = State(365, 400, 0, 0, false, "fill 365");
         s[22] = State(365, 400, 0, 0, false, "no marks");
-        s[23] = State(365, 400, 0, 122, false, "all drawing marks");
-        s[24] = State(365, 400, 0, 254, false, "all seven marks");
+        s[23] = State(365, 400, 0, 1174, false, "all drawing marks");
+        s[24] = State(365, 400, 0, 1438, false, "all seven marks");
         s[25] = State(365, 400, 8999, 0, true, "resting");
     }
 }

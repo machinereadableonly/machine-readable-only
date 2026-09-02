@@ -30,7 +30,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
-  renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
+  renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt, STATIC,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -136,7 +136,7 @@ for (const h of HUES) {
     const rung = rungOf(r.streak);
     const ink = inks[TIERS.length - 1 - rung];
     const heart = colourAt(rung);
-    const svg = draw(r.streak, ["blueblood"]);
+    const svg = draw(r.streak, [STATIC]);
     const ok = decodesAt(svg);
     const d = shift(bare[ri], pixels(svg, 560));
     const hc = chromaOf(rgbOf(heart));

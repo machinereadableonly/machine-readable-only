@@ -56,13 +56,15 @@ contract TokenViewTest is Test {
         assertEq(HeartMask.bits().length, HeartMask.BYTES);
     }
 
-    function test_marksAreOneBitPerMarkIdOneToSeven() public pure {
+    function test_marksAreOneBitPerMarkId() public pure {
         // Bit n = mark id n. Id 0 is unused so a zero word means "no marks".
+        // TokenView.marks is a raw bitfield -- it does not know Mark names, so
+        // this test only proves the arithmetic, not any particular ladder.
         TokenView memory v = _sample();
-        v.marks = (1 << 1) | (1 << 7);           // Vein and Singularity
-        assertTrue(v.marks & (1 << 1) != 0, "vein");
-        assertTrue(v.marks & (1 << 7) != 0, "singularity");
-        assertTrue(v.marks & (1 << 5) == 0, "halo not set");
+        v.marks = (1 << 1) | (1 << 7);           // Hush and Vessel
+        assertTrue(v.marks & (1 << 1) != 0, "hush");
+        assertTrue(v.marks & (1 << 7) != 0, "vessel");
+        assertTrue(v.marks & (1 << 5) == 0, "iris bought not set");
         assertEq(v.marks, 130);
     }
 
