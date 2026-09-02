@@ -18,9 +18,16 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       description: "Apply a paid Mark to a token bound to your key. Gates are checked before any payment is requested.",
       inputSchema: z.object({
         tokenId: z.number().int().positive(),
-        // BOUNDED, because the bitmask below is a 32-bit shift. There are seven
-        // marks; an unbounded id wraps -- 1 << 32 is 1 and 1 << 33 is 2, so a
-        // high id aliases a low one -- and 1 << 31 is negative.
+        // BOUNDED, because the bitmask below is a 32-bit shift. An unbounded id
+        // wraps -- 1 << 32 is 1 and 1 << 33 is 2, so a high id aliases a low
+        // one -- and 1 << 31 is negative.
+        //
+        // THE BOUND IS SEVEN AND THE LADDER HAS TEN. That is deliberate, not an
+        // oversight. Marks 9 and 10 are both gated on already holding an Iris,
+        // and NOTHING here enforces `requiresAny` yet; opening those ids before
+        // that gate exists would make them buyable on day one, which silently
+        // forfeits the other side of a pair that takes 100 days to reach. The
+        // bound rises to 10 in the same change that enforces the gate.
         upgradeId: z.number().int().min(1).max(7),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
@@ -40,10 +47,30 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       if (q.markSold(upgradeId) >= mark.supply) return { ok: false, reason: "mark-sold-out" };
       if (token.marks & (1 << upgradeId)) return { ok: false, reason: "mark-already-applied" };
 
+      // THE FREE ROUTE. Four of the ten Marks are earned by a run of days and
+      // take no payment wrapper at all. This sits ABOVE the price guard on
+      // purpose: an earned Mark has no price, so the guard below would refuse
+      // every one of them as a catalogue error.
+      //
+      // The chain gate is read HERE, and only here, on this path. The paid
+      // route reads it twice because settlement takes seconds and the piece can
+      // be paused or the token sealed inside that window; nothing settles here,
+      // so a settled-then-refused state cannot arise and one read is the whole
+      // of it. reserveMark's unique index is still the final authority, so two
+      // calls racing for the same token cannot both reserve.
+      if (mark.route === "earned") {
+        const blocked = await paidWriteBlock(chain, { tokenId, q });
+        if (blocked) return { ok: false, reason: blocked };
+        if (!q.reserveMark(tokenId, upgradeId)) {
+          return { ok: false, reason: "mark-already-applied" };
+        }
+        return { ok: true, accepted: true, upgradeId, appliedBy: "the next Clock run" };
+      }
+
       // THE PRICE COMES FROM THE MARK, and a catalogue entry without one is
-      // refused rather than defaulted. The seven Marks run from 1 to 100,000
-      // USDC against a mint's single dollar; anything that silently
-      // substituted a default here would sell a Crown for the price of a mint.
+      // refused rather than defaulted. The six bought Marks run from $1.00 to
+      // $1,250.00 against a mint's single dollar; anything that silently
+      // substituted a default here would sell a Vessel for the price of a mint.
       if (typeof mark.price !== "string" || !/^\$\d/.test(mark.price)) {
         alert(`mark ${upgradeId} has no usable price in the catalogue`);
         return { ok: false, reason: "mark-inactive", detail: "no-price" };
@@ -101,7 +128,7 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       }, mark.price, {
         tool: "upgrade",
         // The MARK'S OWN NAME, because this is the demand an agent reads before
-        // spending up to 100,000 USDC. "a paid tool" is not good enough.
+        // spending up to $1,250.00. "a paid tool" is not good enough.
         description: `Apply the ${mark.name} Mark to token ${tokenId}`,
       })(args, ctx);
     },

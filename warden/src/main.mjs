@@ -21,6 +21,7 @@ import { createServer } from "./server.mjs";
 import { makeAllowRegistration, makeSpawnSolve } from "./bootstrap.mjs";
 import { makePaymentGateway, warmUp } from "./pay/x402.mjs";
 import { makeMcpHandler } from "./mcp/server.mjs";
+import { LADDER, assertLadderSane } from "./mcp/ladder.mjs";
 import { tokenView } from "./mcp/tokenView.mjs";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
@@ -196,12 +197,12 @@ async function main() {
     domain,
     llmsTxt,
     paid,
-    // No Mark catalogue is wired yet. Every `upgrade` call is refused at its
-    // own gate ("mark-inactive") before it would ever reach payment. Pricing
-    // and per-Mark gates (minLevel, needsWhole, minStreak, supply) are
-    // undocumented product decisions belonging to whoever builds that
-    // catalogue for real -- not something to invent here.
-    catalogue: {},
+    // The ten Marks, mirroring contracts/src/Ladder.sol. assertLadderSane
+    // throws HERE, at boot, rather than letting a malformed entry reach an
+    // agent as a runtime refusal -- a Mark that is priced and earned, or
+    // priced differently from the chain, is a wiring error and not something
+    // to discover after money has moved.
+    catalogue: assertLadderSane(LADDER),
     // Mirrors the contract's default supplyCap (MachineReadableOnly.sol:
     // `supplyCap = 10_000`). This is only a soft pre-payment check -- the
     // contract enforces the real cap on chain regardless -- and it does not

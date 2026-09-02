@@ -5,7 +5,8 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeUpgradeTool } from "../src/mcp/tools/upgrade.mjs";
 import { makeMintTool } from "../src/mcp/tools/mint.mjs";
-import { openChain } from "./chain-stub.mjs";
+import { openChain, restingChain } from "./chain-stub.mjs";
+import { LADDER, assertLadderSane } from "../src/mcp/ladder.mjs";
 
 // A `paid` stub for the success path. It settles synchronously (no gap
 // between the pre-check and the write), which is fine for a single call.
@@ -631,4 +632,105 @@ test("the warm-up builds the same cache entry the mint tool will use", async () 
   // One wrapper, not two: warming up under a different name would leave the
   // first paying agent waiting on a second round trip anyway.
   assert.equal(wrapped.length, 1);
+});
+
+// --- the free route: four of the ten Marks are earned, not bought -----------
+
+// A free Mark must never reach the payment wrapper at all. `paid` throws if it
+// is touched, which is the same idiom the pre-payment gate tests above use.
+const paidMustNotBeCalled = () => { throw new Error("payment must not be requested"); };
+
+/// A token bound to k1 at a given level and run of days.
+function tokenAt({ level, streak }) {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 100, level, streak);
+  return q;
+}
+
+test("an earned Mark is applied with no payment wrapper at all", async () => {
+  const q = tokenAt({ level: 10, streak: 7 });         // Ache's gate is a run of 7
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER), paid: paidMustNotBeCalled,
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: "k1" });
+  assert.equal(r.ok, true);
+  assert.equal(r.upgradeId, 2);
+  assert.equal(r.appliedBy, "the next Clock run");
+  assert.equal(q.markSold(2), 1, "the reservation reached the mirror");
+});
+
+test("an earned Mark whose run is short is refused, and still costs nothing", async () => {
+  const q = tokenAt({ level: 10, streak: 6 });         // one day short of Ache
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER), paid: paidMustNotBeCalled,
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "mark-needs-streak");
+  assert.equal(q.markSold(2), 0);
+});
+
+// THE REGRESSION THIS PINS. The free route must sit BEFORE the price guard.
+// Placed after it, every earned Mark is refused mark-inactive / no-price,
+// because an earned Mark has no price by definition. The alert assertion is
+// what tells the two apart: the guard alerts, the free route does not.
+test("an earned Mark is not mistaken for a catalogue entry with a missing price", async () => {
+  const q = tokenAt({ level: 40, streak: 30 });        // Beat's gate
+  const alerts = [];
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER),
+    paid: paidMustNotBeCalled, alert: (m) => alerts.push(m),
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 4 }, { keyId: "k1" });
+  assert.equal(r.ok, true);
+  assert.deepEqual(alerts, [], "a free Mark must not alert about a missing price");
+});
+
+test("taking the same free Mark twice is refused by the mirror, not by money", async () => {
+  const q = tokenAt({ level: 10, streak: 7 });
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER), paid: paidMustNotBeCalled,
+  });
+
+  assert.equal((await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: "k1" })).ok, true);
+  const again = await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: "k1" });
+  assert.equal(again.ok, false);
+  assert.equal(again.reason, "mark-already-applied");
+  assert.equal(q.markSold(2), 1, "the second call reserved nothing");
+});
+
+// The free route still reads the chain once. applyMark carries whenNotPaused
+// and notSunset and reverts Resting(id), and `resting` is set by the token
+// OWNER calling rest() directly, so this mirror can never learn it without
+// asking -- free or not.
+test("a free Mark is still refused when the chain refuses the write", async () => {
+  const q = tokenAt({ level: 10, streak: 7 });
+  const tool = makeUpgradeTool({
+    q, chain: restingChain(), catalogue: assertLadderSane(LADDER), paid: paidMustNotBeCalled,
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "resting");
+  assert.equal(q.markSold(2), 0, "nothing was reserved");
+});
+
+// THE CONTROL. Without it, every test above passes for a tool that has
+// accidentally made ALL Marks free -- including the $1,250.00 one.
+test("a bought Mark still goes through the payment wrapper, at its own price", async () => {
+  const q = tokenAt({ level: 40, streak: 40 });
+  let charged = null;
+  const paid = (fn, price, meta) => { charged = { price, meta }; return fn; };
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER), paid,
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 3 }, { keyId: "k1" });   // Static
+  assert.equal(r.ok, true);
+  assert.equal(charged.price, "$5.00");
+  assert.equal(charged.meta.description, "Apply the Static Mark to token 1");
 });

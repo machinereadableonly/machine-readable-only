@@ -171,8 +171,21 @@ contract LadderTest is MroTestBase {
         t.setUpgrade(8, u[8]);
     }
 
-    // THE MIRROR CHECK IS ADDED BY TASK 9, not here. It asserts this ladder
-    // against the hash tools/ladder-fixture.mjs computes from the Warden's own
-    // catalogue, and that catalogue does not exist until Task 9. A test written
-    // now would have nothing to assert against, so it is not written now.
+    /// @dev The mirror check. The hash comes from tools/ladder-fixture.mjs,
+    /// which computes it from the WARDEN's catalogue -- so this asserts two
+    /// independently written ladders agree, which is the same idiom
+    /// tools/token-uri-fixture.mjs uses for the two renderers.
+    ///
+    /// A catalogue that drifts from the chain sells an agent something the
+    /// chain will refuse, AFTER it has paid. That is the failure mode
+    /// gates.mjs exists to prevent.
+    ///
+    /// Regenerate with: node tools/ladder-fixture.mjs
+    function test_theLadderMatchesTheJavascriptMirror() public pure {
+        assertEq(
+            keccak256(abi.encode(Ladder.all())),
+            0xe48dfa7ee05a90c1ec7fc9cd15d400587161909c02f9f327ef3b106c74e15408,
+            "the Warden's catalogue and the contract's ladder disagree"
+        );
+    }
 }
