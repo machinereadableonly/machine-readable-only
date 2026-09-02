@@ -196,14 +196,30 @@ export function createServer(config) {
       }
 
       // Cases 3 and 4: everything else needs a signature and a challenge answer.
-      const decision = await admit(req, { secret: config.challengeSecret, lookupKey, seen, domain: config.domain });
+      //
+      // THE BODY IS READ HERE, BEFORE THE DOOR, because the signature is bound
+      // to it by content-digest and the door cannot check a digest against
+      // bytes it has not seen. That consumes the stream, so the raw text is
+      // handed on to the MCP adapter, which reads it again from a replay.
+      let raw;
+      try {
+        raw = await readBody(req, 64 * 1024);
+      } catch (err) {
+        json(res, 400, { ok: false, reason: err instanceof BodyTooLargeError ? "too-large" : "body" });
+        req.destroy();
+        return;
+      }
+
+      const decision = await admit(req, {
+        secret: config.challengeSecret, lookupKey, seen, domain: config.domain, body: raw,
+      });
       if (!decision.ok) return json(res, decision.status, decision.body);
 
       // `return await`, not a bare `return`. A bare return hands the promise
       // back OUTSIDE this try, so a rejecting handler becomes an unhandled
       // rejection -- which under Node's default takes the process down and
       // leaves the caller hanging rather than getting the 500 below.
-      if (path === "/mcp") return await config.mcp.nodeHandler(req, res, decision.keyId, decision.sigHash);
+      if (path === "/mcp") return await config.mcp.nodeHandler(req, res, decision.keyId, decision.sigHash, raw);
 
       return json(res, 404, { ok: false, reason: "unknown-route" });
     } catch (err) {

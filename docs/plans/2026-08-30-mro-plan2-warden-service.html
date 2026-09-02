@@ -957,6 +957,10 @@ export const MAX_WINDOW_MS = 5 * 60 * 1000;
 /// The components a signature must cover. The standard mandates only
 /// @authority; method and path are added so a signature captured from one tool
 /// call cannot be replayed against a different one.
+/// [SUPERSEDED 2026-09-02: this reasoning is WRONG for this service. Every MCP
+/// call is POST /mcp, so method and path separate no two tools. content-digest
+/// was added to REQUIRED to bind the signature to the body. Do not re-adopt
+/// this comment.]
 const REQUIRED = [&quot;@authority&quot;, &quot;@method&quot;, &quot;@path&quot;, &quot;signature-agent&quot;];
 
 /**
@@ -3010,5 +3014,560 @@ try {
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 7: Prove the solved bitmap actually scans</strong></li>
 </ul>
-<p>A bitmap the Warden stores is permanent per token: a</body>
+<p>A bitmap the Warden stores is permanent per token: a code that does not decode is carried for the life of the piece. So the worker&#39;s output is judged by a decoder, not by the solver that produced it.</p>
+<p><code>warden/test/bitmap.decode.mjs</code> -- deliberately NOT named <code>*.test.mjs</code>, because it renders and rasterises and must never run inside <code>npm test</code>:</p>
+<pre><code class="language-js">// Does the bitmap this worker produced actually scan?
+//
+// ZXing IS THE ORACLE, not jsqr. Measured 2026-08-28 on the same image: jsqr
+// stopped at the first non-text byte and reported a clean 24-character URL
+// where ZXing returned all 101. A suite that asked jsqr passed 25 tests while
+// every tile failed on a real phone. jsqr is kept only to assert the two agree.
+//
+// Run:  ~/scripts/safe-build.sh node test/bitmap.decode.mjs
+import assert from &quot;node:assert/strict&quot;;
+import { execFileSync } from &quot;node:child_process&quot;;
+import { scanResult } from &quot;../../tools/test/helpers/decode.mjs&quot;;
+import { payloadFor } from &quot;../../tools/qart.mjs&quot;;
+
+const DOMAIN = &quot;example.com&quot;;
+const TOKEN_ID = 1;
+
+const out = execFileSync(&quot;node&quot;, [&quot;--max-old-space-size=768&quot;, &quot;src/solve/worker.mjs&quot;, DOMAIN, String(TOKEN_ID)], {
+  encoding: &quot;utf8&quot;,
+});
+const solved = JSON.parse(out.trim());
+assert.equal(solved.ok, true, &quot;the worker must report success on its stdout line&quot;);
+
+// scanResult&#39;s real signature is (svg, px) and it returns { ok, destination }.
+// Read it from tools/test/helpers/decode.mjs rather than assuming: the shape
+// assumed here first was wrong and the check could not run.
+const scan = scanResult(svgFor(solved.hex), 1080);
+assert.equal(scan.ok, true, `the stored bitmap must decode: ${JSON.stringify(scan)}`);
+assert.equal(scan.destination, payloadFor(DOMAIN, TOKEN_ID).split(&quot;#&quot;)[0],
+  &quot;the decoded destination must be the intended one&quot;);
+
+console.log(`bitmap for token ${TOKEN_ID} decodes at every gate size, mask ${solved.mask}`);
+</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; ~/scripts/safe-build.sh node test/bitmap.decode.mjs
+</code></pre>
+<p>Expected: the success line. If <code>scanResult</code>&#39;s signature in <code>tools/test/helpers/decode.mjs</code> differs from the call above, use the real one rather than changing the helper: it is the oracle the whole project already trusts.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 8: Run the unit tests</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; npm test
+</code></pre>
+<p>Expected: at least 47 passing. Report the real number.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 9: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add warden/src/solve warden/src/mirror/queries.mjs warden/test/solve.test.mjs warden/test/bitmap.decode.mjs
+git commit -m &quot;feat(warden): the solve queue and its child-process worker, with a retry cap that alerts&quot;
+</code></pre>
+<hr>
+<h2>Task 9: Payments</h2>
+<p>The two paid tools, and the adapter that stops a known silent failure.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/src/pay/x402.mjs</code>, <code>warden/src/mcp/tools/{mint,upgrade}.mjs</code></li>
+<li>Test: <code>warden/test/pay.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>createPaymentWrapper</code> from <code>@x402/mcp</code>; <code>queries(db)</code>.</p>
+</li>
+<li><p>Produces: <code>adaptContext(mcpCtx)</code> returning the <code>extra</code> shape the wrapper expects; <code>makeMintTool(deps)</code>, <code>makeUpgradeTool(deps)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<p><code>warden/test/pay.test.mjs</code>:</p>
+<pre><code class="language-js">import { test } from &quot;node:test&quot;;
+import assert from &quot;node:assert/strict&quot;;
+import { adaptContext } from &quot;../src/pay/x402.mjs&quot;;
+import { openDb } from &quot;../src/mirror/db.mjs&quot;;
+import { queries } from &quot;../src/mirror/queries.mjs&quot;;
+import { makeUpgradeTool } from &quot;../src/mcp/tools/upgrade.mjs&quot;;
+
+// THE BUG THIS PREVENTS. @x402/mcp 2.24.0 declares @modelcontextprotocol/sdk
+// ^1.12.1, and its wrapper reads the payment as `extra?._meta` -- the v1 shape.
+// Under the v2 server, _meta lives at ctx.mcpReq._meta. Without this adapter the
+// wrapper finds nothing, decides no payment was made, and answers &quot;payment
+// required&quot; forever, INCLUDING to an agent that has just paid.
+test(&quot;the v2 context is adapted to the shape the payment wrapper reads&quot;, () =&gt; {
+  const v2 = { mcpReq: { id: 1, method: &quot;tools/call&quot;, _meta: { &quot;x402/payment&quot;: { scheme: &quot;exact&quot; } } } };
+  assert.deepEqual(adaptContext(v2)._meta, { &quot;x402/payment&quot;: { scheme: &quot;exact&quot; } });
+});
+
+test(&quot;a context with no _meta adapts to undefined rather than throwing&quot;, () =&gt; {
+  assert.equal(adaptContext({ mcpReq: { id: 1, method: &quot;tools/call&quot; } })._meta, undefined);
+  assert.equal(adaptContext(undefined)._meta, undefined);
+});
+
+test(&quot;an upgrade gate is checked BEFORE payment is requested&quot;, async () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  q.insertToken({ tokenId: 1, keyId: &quot;k1&quot;, owner: &quot;0xabc&quot;, lastDay: 100, mintDay: 100 });
+
+  let paymentWasRequested = false;
+  const tool = makeUpgradeTool({
+    q,
+    catalogue: { 5: { name: &quot;Halo&quot;, minLevel: 100, supply: 1000, sold: 0 } },
+    paid: () =&gt; { paymentWasRequested = true; throw new Error(&quot;payment must not be requested&quot;); },
+  });
+
+  // The token is at level 1; Halo needs 100. An agent must never be charged for
+  // an upgrade it cannot have.
+  const r = await tool.handler({ tokenId: 1, upgradeId: 5 }, { keyId: &quot;k1&quot; });
+  assert.equal(paymentWasRequested, false);
+  assert.equal(r.reason, &quot;mark-level-too-low&quot;);
+});
+
+test(&quot;a sold-out mark is refused before payment&quot;, async () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  q.insertToken({ tokenId: 1, keyId: &quot;k1&quot;, owner: &quot;0xabc&quot;, lastDay: 100, mintDay: 100 });
+  const tool = makeUpgradeTool({
+    q,
+    catalogue: { 1: { name: &quot;Vein&quot;, minLevel: 1, supply: 10, sold: 10 } },
+    paid: () =&gt; { throw new Error(&quot;payment must not be requested&quot;); },
+  });
+  const r = await tool.handler({ tokenId: 1, upgradeId: 1 }, { keyId: &quot;k1&quot; });
+  assert.equal(r.reason, &quot;mark-sold-out&quot;);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and watch it fail</strong></li>
+</ul>
+<p>Expected: FAIL, <code>Cannot find module &#39;../src/pay/x402.mjs&#39;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Write <code>pay/x402.mjs</code></strong></li>
+</ul>
+<pre><code class="language-js">// x402 payment for the two paid tools.
+//
+// THE VERSION SEAM, verified by reading @x402/mcp 2.24.0&#39;s own source on
+// 2026-08-30. That package declares @modelcontextprotocol/sdk ^1.12.1 and
+// zod ^3.24.2 -- the v1 SDK -- while this server is @modelcontextprotocol/server
+// 2.0.0 with zod 4. Its `createPaymentWrapper` reads the payment payload as
+// `extra?._meta`, which was the v1 tool-context shape. Under v2 the same data
+// lives at `ctx.mcpReq._meta`.
+//
+// The consequence of ignoring this is not a crash. The wrapper would simply
+// never find a payment, conclude none was made, and answer &quot;payment required&quot;
+// forever -- to paying agents included. A silent failure, so it is adapted here
+// and pinned by a test.
+import { createPaymentWrapper } from &quot;@x402/mcp&quot;;
+
+/// Translate the v2 tool context into the shape the payment wrapper reads.
+export function adaptContext(mcpCtx) {
+  return { _meta: mcpCtx?.mcpReq?._meta };
+}
+
+/**
+ * Build the `paid()` wrapper.
+ *
+ * `accepts` comes from the resource server&#39;s buildPaymentRequirements, so the
+ * price and network are declared in one place rather than per tool.
+ */
+export function makePaid(resourceServer, accepts) {
+  const wrap = createPaymentWrapper(resourceServer, { accepts });
+  return (handler) =&gt; {
+    const wrapped = wrap(handler);
+    return (args, ctx) =&gt; wrapped(args, adaptContext(ctx.mcpCtx));
+  };
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Write <code>tools/upgrade.mjs</code> and <code>tools/mint.mjs</code></strong></li>
+</ul>
+<pre><code class="language-js">// warden/src/mcp/tools/upgrade.mjs
+import * as z from &quot;zod&quot;;
+
+/// Every reason an upgrade can be refused. All of them are checked BEFORE
+/// payment is requested: an agent must never pay for a Mark it cannot have.
+export const UPGRADE_REASONS = [
+  &quot;unknown-token&quot;, &quot;not-bound-to-caller&quot;, &quot;mark-inactive&quot;, &quot;mark-level-too-low&quot;,
+  &quot;mark-needs-whole&quot;, &quot;mark-needs-streak&quot;, &quot;mark-sold-out&quot;, &quot;mark-already-applied&quot;,
+];
+
+export function makeUpgradeTool({ q, catalogue, paid, alert = console.error }) {
+  return {
+    name: &quot;upgrade&quot;,
+    config: {
+      title: &quot;Buy a Mark&quot;,
+      description: &quot;Apply a paid Mark to a token bound to your key. Gates are checked before any payment is requested.&quot;,
+      inputSchema: z.object({
+        tokenId: z.number().int().positive(),
+        // BOUNDED, because the bitmask below is a 32-bit shift. There are seven
+        // marks; an unbounded id wraps -- 1 &lt;&lt; 32 is 1 and 1 &lt;&lt; 33 is 2, so a
+        // high id aliases a low one -- and 1 &lt;&lt; 31 is negative.
+        upgradeId: z.number().int().min(1).max(7),
+      }),
+      annotations: { readOnlyHint: false, openWorldHint: true },
+    },
+
+    async handler(args, ctx) {
+      const { tokenId, upgradeId } = args;
+      const token = q.getToken(tokenId);
+      if (!token) return { ok: false, reason: &quot;unknown-token&quot; };
+      if (token.keyId !== ctx.keyId) return { ok: false, reason: &quot;not-bound-to-caller&quot; };
+
+      const mark = catalogue[upgradeId];
+      if (!mark) return { ok: false, reason: &quot;mark-inactive&quot; };
+      if (token.level &lt; mark.minLevel) return { ok: false, reason: &quot;mark-level-too-low&quot; };
+      if (mark.needsWhole &amp;&amp; token.level &lt; 365) return { ok: false, reason: &quot;mark-needs-whole&quot; };
+      if (mark.minStreak &amp;&amp; token.streak &lt; mark.minStreak) return { ok: false, reason: &quot;mark-needs-streak&quot; };
+      if (q.markSold(upgradeId) &gt;= mark.supply) return { ok: false, reason: &quot;mark-sold-out&quot; };
+      if (token.marks &amp; (1 &lt;&lt; upgradeId)) return { ok: false, reason: &quot;mark-already-applied&quot; };
+
+      // Only now is payment requested.
+      return paid(async () =&gt; {
+        // EVERYTHING ABOVE IS NOW STALE. Settling a payment takes seconds, and
+        // in that window another buyer can take the last unit or the same token
+        // can be marked. So the decision is made again here, against the
+        // database, with the unique index as the final authority rather than a
+        // read that could itself be overtaken.
+        const fresh = q.getToken(tokenId);
+        const blocked =
+          !fresh ? &quot;unknown-token&quot;
+          : fresh.keyId !== ctx.keyId ? &quot;not-bound-to-caller&quot;
+          : fresh.marks &amp; (1 &lt;&lt; upgradeId) ? &quot;mark-already-applied&quot;
+          : q.markSold(upgradeId) &gt;= mark.supply ? &quot;mark-sold-out&quot;
+          : null;
+
+        // reserveMark returns false when this token already holds the mark, so
+        // two settlements racing for the same token cannot both reserve.
+        if (!blocked &amp;&amp; q.reserveMark(tokenId, upgradeId)) {
+          return { accepted: true, upgradeId, appliedBy: &quot;the next Clock run&quot; };
+        }
+
+        // MONEY HAS ALREADY CHANGED HANDS. This must never be a quiet refusal:
+        // the agent has paid for something it cannot be given, and somebody has
+        // to see that. Alert, and say plainly what happened.
+        const detail = blocked ?? &quot;mark-already-applied&quot;;
+        alert(`upgrade ${upgradeId} for token ${tokenId} settled but cannot be applied: ${detail}`);
+        return { ok: false, reason: &quot;paid-but-unavailable&quot;, detail };
+      })(args, ctx);
+    },
+  };
+}
+</code></pre>
+<p><code>warden/src/mcp/tools/mint.mjs</code>:</p>
+<pre><code class="language-js">// The way in. 0.10 USDC, paid inside the tool call, no account anywhere.
+import * as z from &quot;zod&quot;;
+
+export function makeMintTool({ q, paid, supplyCap, today, alert = console.error }) {
+  return {
+    name: &quot;mint&quot;,
+    config: {
+      title: &quot;Mint a token&quot;,
+      description:
+        &quot;Costs $0.10 in USDC on Base. One per key. Returns immediately with your token id; the artwork is solved within the hour and written on chain at 00:05 UTC.&quot;,
+      inputSchema: z.object({
+        to: z.string().regex(/^0x[0-9a-fA-F]{40}$/, &quot;expected a 20-byte address&quot;),
+      }),
+      annotations: { readOnlyHint: false, openWorldHint: true },
+    },
+
+    async handler(args, ctx) {
+      // Both gates come before payment. Charging for a mint that cannot happen
+      // is the worst failure this tool has.
+      if (q.hasMinted(ctx.keyId)) return { ok: false, reason: &quot;already-minted&quot; };
+      if (q.tokenCount() &gt;= supplyCap) return { ok: false, reason: &quot;supply-cap-reached&quot; };
+
+      return paid(async () =&gt; {
+        // Re-decided after settlement, for the same reason as upgrade: two
+        // concurrent settlements from one key both pass the check above. The
+        // unique index on mints.keyId is what actually holds it, and insertMint
+        // throwing is the signal -- see below.
+        // The id is assigned HERE, not by the contract. The contract takes it
+        // as an argument and reverts if taken, so the id promised now is the id
+        // that lands.
+        const tokenId = q.nextTokenId();
+        const day = today();
+        try {
+          // ONE TRANSACTION, and the guarded write FIRST. These two rows are one
+          // fact. Written separately, a second settlement for the same key
+          // inserted its token, then hit the unique index on the mint row and
+          // returned unavailable -- leaving an orphan token holding a supply-cap
+          // slot that no mint would ever claim. Measured: two tokens, one mint.
+          q.transact(() =&gt; {
+            // solveState &#39;pending&#39; is what puts this token in front of the solver.
+            q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId });
+            q.insertToken({ tokenId, keyId: ctx.keyId, owner: args.to, lastDay: day, mintDay: day });
+          });
+        } catch (err) {
+          // The unique index refused a second mint for this key. The agent has
+          // PAID, so this is never silent.
+          alert(`mint settled for key ${ctx.keyId} but could not be recorded: ${err.message}`);
+          return { ok: false, reason: &quot;paid-but-unavailable&quot;, detail: &quot;already-minted&quot; };
+        }
+        return {
+          ok: true,
+          tokenId,
+          to: args.to,
+          agentKeyId: ctx.keyId,
+          level: 1,
+          txStatus: &quot;queued&quot;,
+          onChainBy: new Date((day + 1) * 86_400_000 + 300_000).toISOString(),
+        };
+      })(args, ctx);
+    },
+  };
+}
+</code></pre>
+<p>Two more statements in <code>queries.mjs</code>:</p>
+<pre><code class="language-js">    tokenCount: db.prepare(&quot;SELECT COUNT(*) AS n FROM tokens&quot;),
+    insertMint: db.prepare(&quot;INSERT INTO mints (tokenId, toAddress, keyId) VALUES (?, ?, ?)&quot;),
+</code></pre>
+<pre><code class="language-js">    tokenCount: () =&gt; s.tokenCount.get().n,
+    insertMint: ({ tokenId, toAddress, keyId }) =&gt; s.insertMint.run(tokenId, toAddress, keyId),
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Add the mark statements to <code>queries.mjs</code></strong></li>
+</ul>
+<pre><code class="language-js">    reserveMark: db.prepare(&quot;INSERT INTO mark_orders (tokenId, upgradeId) VALUES (?, ?)&quot;),
+    markSold: db.prepare(&quot;SELECT COUNT(*) AS n FROM mark_orders WHERE upgradeId = ?&quot;),
+    hasMinted: db.prepare(&quot;SELECT COUNT(*) AS n FROM mints WHERE keyId = ?&quot;),
+</code></pre>
+<p>and:</p>
+<pre><code class="language-js">    /// Returns true when the reservation was new, false when this token already
+    /// holds that mark. Any OTHER database error is rethrown -- the same
+    /// discrimination insertCredit makes, and for the same reason.
+    reserveMark(tokenId, upgradeId) {
+      try {
+        s.reserveMark.run(tokenId, upgradeId);
+        return true;
+      } catch (err) {
+        if (UNIQUE_VIOLATION.test(err.message)) return false;
+        throw err;
+      }
+    },
+    /// How many of a mark have actually been reserved. Read from the mirror,
+    /// never from the catalogue object: a static `sold` field is never
+    /// incremented by anything, so the sold-out gate would never fire and the
+    /// supply would be unlimited.
+    markSold: (upgradeId) =&gt; s.markSold.get(upgradeId).n,
+    hasMinted: (keyId) =&gt; s.hasMinted.get(keyId).n &gt; 0,
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Run the tests</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; npm test
+</code></pre>
+<p>Expected: at least 51 passing. Report the real number, and confirm the suite still runs in a few seconds -- a jump means heavy compute leaked into it.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add warden/src/pay warden/src/mcp/tools/upgrade.mjs warden/src/mcp/tools/mint.mjs warden/src/mirror/queries.mjs warden/test/pay.test.mjs
+git commit -m &quot;feat(warden): x402 payment, with the v1-to-v2 context adapter that stops a silent payment-required loop&quot;
+</code></pre>
+<hr>
+<h2>Task 10: The door sign and llms.txt</h2>
+<p>The only HTML the piece has, and its statement of what it is. Both are copy, so both go to the operator before they are final.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/public/door.html</code>, <code>warden/public/llms.txt</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: nothing.</p>
+</li>
+<li><p>Produces: two static files nginx serves.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Draft <code>door.html</code></strong></p>
+</li>
+</ul>
+<p>One page, no JavaScript, no tracking, no external requests. It says what the piece is, that entry requires a signed request, and where the instructions are. It must NOT claim that major agents already sign: name only what demonstrably can.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Draft <code>llms.txt</code></strong></li>
+</ul>
+<p>Markdown. It states: what the piece is; that the entry rule proves a program composed the request and nothing more; that the piece has an operator and can be ended by Sunset; that the contract owner can swap the Renderer but cannot touch any token&#39;s history; that the Warden can mint and check in but cannot move tokens or funds; and where the client and SKILL.md are. It tells an agent NOT to add the server to its MCP config, per spec section 3.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Check both are ASCII and show them to the operator</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+LC_ALL=C /bin/grep -n &#39;[^ -~]&#39; warden/public/door.html warden/public/llms.txt
+</code></pre>
+<p>Expected: nothing printed. Then give the operator both absolute paths and wait for his read before committing. These are the piece&#39;s own words and they are his call, not a build decision.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Commit once the operator has approved the copy</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/public
+git commit -m &quot;feat(warden): the door sign and llms.txt&quot;
+</code></pre>
+<hr>
+<h2>Task 11: Deployment configuration, written not applied</h2>
+<p>Written now so nothing is retrofitted the day a domain exists.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/ecosystem.config.cjs</code>, <code>warden/nginx.conf.example</code>, <code>warden/DEPLOY.md</code></li>
+<li>Modify: <code>~/.claude/templates/port-allocation.md</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: nothing.</p>
+</li>
+<li><p>Produces: a deployment that is one command once <code>MRO_DOMAIN</code> is set.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write <code>ecosystem.config.cjs</code></strong></p>
+</li>
+</ul>
+<pre><code class="language-js">// PM2 process definition. Fork mode, one instance, bound to loopback only:
+// public traffic reaches this through nginx, never directly.
+module.exports = {
+  apps: [
+    {
+      name: &quot;mro-warden&quot;,
+      script: &quot;src/server.mjs&quot;,
+      cwd: &quot;~/projects/machine-readable-only/warden&quot;,
+      interpreter: homedir() + &quot;/.nvm/versions/node/v24.14.1/bin/node&quot;,
+      exec_mode: &quot;fork&quot;,
+      instances: 1,
+      max_memory_restart: &quot;512M&quot;,
+      env: { NODE_ENV: &quot;production&quot;, PORT: &quot;3006&quot;, HOST: &quot;127.0.0.1&quot; },
+      error_file: homedir() + &quot;/logs/mro-warden.err.log&quot;,
+      out_file: homedir() + &quot;/logs/mro-warden.out.log&quot;,
+    },
+  ],
+};
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Write <code>nginx.conf.example</code></strong></li>
+</ul>
+<p>Static routes served from disk for <code>/</code> (door.html), <code>/llms.txt</code>, <code>/client.mjs</code>, <code>/skill.md</code> and <code>/.well-known/http-message-signatures-directory</code>; everything else proxied to <code>127.0.0.1:3006</code> with the original <code>Host</code> preserved. A comment records that the Warden pins <code>@authority</code> to its configured domain rather than trusting that header.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Write <code>DEPLOY.md</code></strong></li>
+</ul>
+<p>The ordered runbook: register a domain; DNS at Cloudflare; the certbot command; <code>pm2 start ecosystem.config.cjs</code>; <code>ufw deny 3006</code>; and the Cloudflare settings, with <strong>Bot Fight Mode OFF</strong> called out and why (it runs outside the ruleset engine, ignores Allow rules, and may challenge API traffic; only Verified Bots are exempt, which is almost none of MRO&#39;s visitors). It also records Cloudflare&#39;s signed-agent test endpoint <code>https://crawltest.com/cdn-cgi/web-bot-auth</code> as the first thing to point a visitor at when their signing fails.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Register the port</strong></li>
+</ul>
+<p>Add to the table in <code>~/.claude/templates/port-allocation.md</code>:</p>
+<pre><code>| 3006 | machine-readable-only | Node (Warden) | PM2 | (domain pending) | 2026-08-30 |
+</code></pre>
+<p>3006 was confirmed free on 2026-08-30: 3000 to 3005 are taken.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add warden/ecosystem.config.cjs warden/nginx.conf.example warden/DEPLOY.md
+git commit -m &quot;feat(warden): deployment configuration, domain read from the environment&quot;
+</code></pre>
+<hr>
+<h2>Task 11b: The bootstrap</h2>
+<p><code>createServer(config)</code> is a factory. Nothing calls it outside the tests, so <code>npm start</code> runs a module that defines a server and never starts one. The plan&#39;s finish line is &quot;the Warden runs on 127.0.0.1:3006&quot;, and until this exists it does not run at all.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/src/main.mjs</code></li>
+<li>Modify: <code>warden/package.json</code> (start script), <code>warden/ecosystem.config.cjs</code> (script path)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: <code>createServer</code>, <code>openDb</code>, <code>queries</code>, <code>makeMcpHandler</code>, <code>tokenView</code>, <code>makeChainReader</code>, <code>makePaid</code>, <code>runSolver</code>, <code>requeueOrphans</code>.</li>
+<li>Produces: a process that listens on 127.0.0.1:3006.</li>
+</ul>
+<p><code>main.mjs</code> must:</p>
+<ul>
+<li>Read every value from the environment and FAIL LOUDLY on a missing one. A warden that starts with no <code>CHALLENGE_SECRET</code> would issue forgeable challenges; a missing <code>MRO_DOMAIN</code> would pin the signature authority to <code>undefined</code>. Name the variable in the error.</li>
+<li>Supply <code>allowRegistration</code>, which <code>createServer</code> requires: the spec&#39;s dial is 20 per minute per source and 10,000 keys total.</li>
+<li>Call <code>requeueOrphans(q)</code> once at startup, before anything else. Any row still marked <code>solving</code> is by definition abandoned by a previous process.</li>
+<li>Bind to <code>127.0.0.1</code> only. Public traffic arrives through nginx; binding <code>0.0.0.0</code> would expose the service directly.</li>
+<li>Handle SIGTERM and SIGINT by closing the server and the database, so PM2 restarts do not leave a half-written mirror.</li>
+</ul>
+<p>It must NOT be imported by any test. Tests build their own server through <code>createServer</code>, which is why that factory stays pure.</p>
+<hr>
+<h2>Task 12: The end-to-end join</h2>
+<p>Every module has been tested alone. This is the only test that proves they compose.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/test/e2e/join.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: everything.</p>
+</li>
+<li><p>Produces: proof that a real signed request, made the way a client will make it, gets in and comes back out with a token.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the test</strong></p>
+</li>
+</ul>
+<pre><code class="language-js">import { test } from &quot;node:test&quot;;
+import assert from &quot;node:assert/strict&quot;;
+import { createHash } from &quot;node:crypto&quot;;
+import { signatureHeaders } from &quot;web-bot-auth&quot;;
+import { signerFromJWK } from &quot;web-bot-auth/crypto&quot;;
+
+// The whole journey, against a server started in-process on an ephemeral port:
+//   1. an unsigned request gets a 401 and a challenge
+//   2. the same request, signed and answered, gets in
+//   3. mint (mocked facilitator) returns a token id
+//   4. checkin credits a day
+//   5. /t/&lt;id&gt; returns the same view as `status`, unsigned
+//
+// Step 5 is the one that would otherwise rot: the QR points at /t/&lt;id&gt;, and a
+// scanner and an agent must never be told two different stories about a token.
+</code></pre>
+<p>Generate an Ed25519 key with <code>crypto.subtle.generateKey</code>, register it through <code>POST /keys</code>, then drive the five steps. Assert on step 1 that the body carries <code>challenge</code>, <code>expires</code>, <code>mcp</code>, <code>docs</code> and <code>client</code>; on step 2 that the status is not 401; on step 5 that <code>/t/&lt;id&gt;</code> and <code>status</code> return the same <code>level</code>, <code>streak</code> and <code>heart</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run the whole suite</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; cd ~/projects/machine-readable-only/warden &amp;&amp; npm test
+</code></pre>
+<p>Expected: every test passing, including the five e2e steps.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run the other two suites</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh &amp;&amp; export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd ~/projects/machine-readable-only/contracts &amp;&amp; forge test 2&gt;&amp;1 | tail -3
+cd ~/projects/machine-readable-only/tools &amp;&amp; npm test 2&gt;&amp;1 | tail -5
+</code></pre>
+<p>Expected: 231 Foundry tests and 56 tools tests, unchanged. Plan 2 touches neither, so any change here is a regression to investigate before committing.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add warden/test/e2e
+git commit -m &quot;test(warden): the end-to-end join, from unsigned 401 to a credited day&quot;
+</code></pre>
+<hr>
+<h2>Risks carried into execution</h2>
+<ul>
+<li><strong><code>@x402/mcp</code> sits on the v1 SDK.</strong> The context adapter in Task 9 handles the one seam found by reading its source. If a second seam appears at runtime, the fallback is to use the package&#39;s SDK-agnostic exports directly (<code>createPaymentRequiredError</code>, <code>extractPaymentFromMeta</code>, <code>attachPaymentResponseToMeta</code>, <code>MCP_PAYMENT_META_KEY</code>) and compose the 402 challenge ourselves. Do not downgrade the server to v1: the 2026-07-28 transport is a spec requirement.</li>
+<li><strong><code>web-bot-auth</code> 0.1.3 was last published 2026-03-09.</strong> All verification is behind <code>door/verify.mjs</code>, so replacing it touches one module, and the vendored vectors are the contract it is held to.</li>
+<li><strong>No domain.</strong> Everything through Task 12 is verifiable locally. Task 11&#39;s configuration cannot be exercised until the operator registers one.</li>
+<li><strong>The solve is the one heavy thing here.</strong> Never call it from a test that runs under <code>npm test</code>; it belongs behind <code>safe-build.sh</code>.</li>
+</ul>
+<h2>What this plan does NOT do</h2>
+<p>No chain writes, no Clock, no daily post, no reference client, no <code>SKILL.md</code>, no seed agent. All of those are Plans 3 and 4.</p>
+<p><strong>And its gates do not yet mirror the contract&#39;s.</strong> Found by the final review and confirmed against <code>MachineReadableOnly.sol</code>. The Warden queues actions the chain will reject, which means an agent can pay for, or be promised, something the Clock cannot write:</p>
+<table>
+<thead>
+<tr>
+<th>Contract gate</th>
+<th>Where it reverts</th>
+<th>Warden</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>WalletCap</code> (default 20 per address)</td>
+<td>mint :246, seed :538</td>
+<td>checked in neither</td>
+</tr>
+<tr>
+<td><code>Resting</code></td>
+<td>batchCheckIn :308, applyMark :454</td>
+<td>checked in <code>seed</code> only</td>
+</tr>
+<tr>
+<td><code>Sunset</code></td>
+<td>the <code>whenLive</code> modifier, :103</td>
+<td>checked nowhere</td>
+</tr>
+</tbody></table>
+<p>And the mirror cannot represent two of those states: <code>tokens.status</code> holds only <code>queued</code> or <code>written</code>, so <code>tokenView</code>&#39;s <code>resting: t.status === &quot;resting&quot;</code> is <strong>always false</strong>. The column would have to gain the state before any check could read it.</p>
+<p>This is one defect class, not three: the Warden&#39;s gates were written from the design rather than from the contract&#39;s reverts. Closing it needs a decision about where <code>resting</code> and <code>sunset</code> come from before the Clock exists to reconcile them -- a live chain read per call, a column the Clock maintains, or accepting the divergence until Plan 3. That decision is the operator&#39;s, and it is recorded here rather than guessed at.</p>
+<p><strong>And it does not COLLECT money.</strong> The payment path is built and tested against a mocked facilitator, but the running service cannot settle a real payment: <code>@x402/evm</code>, which carries the scheme that accepts USDC on Base, is not installed, and settlement also needs a facilitator endpoint and a treasury that exist only once there is a deployment. So <code>paid</code> FAILS CLOSED -- <code>mint</code> and <code>upgrade</code> refuse with <code>payment-not-configured</code> rather than crashing at startup or, far worse, giving tokens away for nothing.</p>
+<p>The consequence, stated plainly so nobody reads &quot;Plan 2 complete&quot; as more than it is: <strong>an agent cannot yet enter the piece.</strong> Minting is the only way in and it cannot take money. Wiring it needs three decisions that belong with the deployment, not with this plan: which facilitator, the treasury address, and vetting <code>@x402/evm</code> before installing it. RESOLVED 2026-08-31: <code>@x402/evm</code> 2.24.0 vetted and installed, payment wired, testnet facilitator <code>https://x402.org/facilitator</code> (the spec&#39;s <code>https://facilitator.x402.org</code> does not resolve), treasury still a placeholder pending the operator. The Mark catalogue is empty for the same reason -- its per-Mark prices and gates are the contract&#39;s to declare, not this service&#39;s to invent.</p>
+
+</body>
 </html>

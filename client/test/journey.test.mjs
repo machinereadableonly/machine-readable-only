@@ -275,3 +275,20 @@ test("a double-wrapped refusal is not mistaken for a demand", () => {
   };
   assert.equal(readDemand(doubleWrapped), null);
 });
+
+// -- the two digest implementations must agree ------------------------------
+
+test("the client's content-digest is byte-identical to the door's", async () => {
+  // The client and the Warden each compute this independently, and if they
+  // ever diverge EVERY request is refused with reason "digest" -- a total
+  // outage from a one-character difference. The journey tests above would
+  // catch it, but only by failing everything at once; this says which side.
+  const { contentDigest: clientDigest } = await import("../src/signing.mjs");
+  const { contentDigest: doorDigest } = await import("../../warden/src/door/verify.mjs");
+
+  for (const body of ["", "{}", JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }), "\u00e9\u00e8"]) {
+    assert.equal(clientDigest(body), doorDigest(body), `disagreed on ${JSON.stringify(body)}`);
+  }
+  // And the shape is RFC 9530's, not something of our own invention.
+  assert.match(clientDigest("x"), /^sha-256=:[A-Za-z0-9+/]+=*:$/);
+});

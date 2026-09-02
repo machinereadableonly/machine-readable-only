@@ -26,6 +26,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
+import { contentDigest } from "../../src/door/verify.mjs";
 import { createServer } from "../../src/server.mjs";
 import { makeMcpHandler } from "../../src/mcp/server.mjs";
 import { tokenView } from "../../src/mcp/tokenView.mjs";
@@ -40,7 +41,7 @@ const TO = "0x00000000000000000000000000000000000000a1";
 
 // What a real client signs. The door checks exactly these four components, so
 // signing fewer would be refused and signing more would not be read.
-const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent"];
+const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
 
 /**
  * Bring up the whole service the way a deployment does.
@@ -149,12 +150,16 @@ async function registerKey(base) {
 /// The signature headers a client mints for one request. The URL signed is the
 /// CONFIGURED domain, not the loopback address the socket goes to: the door
 /// pins @authority to its own domain, which is what a client behind nginx sees.
-async function signHeaders(privateJwk, path) {
+async function signHeaders(privateJwk, path, body = "") {
   const signer = await signerFromJWK(privateJwk);
   const message = {
     method: "POST",
     url: `https://${DOMAIN}${path}`,
-    headers: { "signature-agent": `"https://${DOMAIN}"`, host: DOMAIN },
+    headers: {
+      "signature-agent": `"https://${DOMAIN}"`,
+      host: DOMAIN,
+      "content-digest": contentDigest(body),
+    },
   };
   const created = new Date();
   const headers = await signatureHeaders(message, signer, {
@@ -174,7 +179,10 @@ async function callMcp(base, privateJwk, payload) {
   assert.equal(challengeRes.status, 401);
   const { challenge } = await challengeRes.json();
 
-  const { headers, keyId } = await signHeaders(privateJwk, "/mcp");
+  // Serialised once: the bytes that are signed must be the bytes that are
+  // sent, or the door's digest check refuses them.
+  const raw = JSON.stringify({ jsonrpc: "2.0", id: 1, ...payload });
+  const { headers, keyId } = await signHeaders(privateJwk, "/mcp", raw);
   const res = await fetch(`${base}/mcp`, {
     method: "POST",
     headers: {
@@ -184,7 +192,7 @@ async function callMcp(base, privateJwk, payload) {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
     },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...payload }),
+    body: raw,
   });
   const text = await res.text();
   // `sent` carries the exact headers this call signed with, so a test can

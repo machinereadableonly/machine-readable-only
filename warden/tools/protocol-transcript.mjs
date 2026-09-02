@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
+import { contentDigest } from "../src/door/verify.mjs";
 import { createServer } from "../src/server.mjs";
 import { makeMcpHandler } from "../src/mcp/server.mjs";
 import { tokenView } from "../src/mcp/tokenView.mjs";
@@ -33,7 +34,7 @@ const NETWORK = `eip155:${CHAIN_ID}`;
 const TREASURY = "0x000000000000000000000000000000000000dEaD";
 const CONTRACT = "0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D";
 const RPC = process.env.BASE_RPC_URL ?? "https://sepolia.base.org";
-const COMPONENTS = ["@authority", "@method", "@path", "signature-agent"];
+const COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
 
 const dir = mkdtempSync(join(tmpdir(), "mro-transcript-"));
 const db = openDb(join(dir, "mirror.db"));
@@ -80,8 +81,10 @@ show("4. GET /.well-known/http-message-signatures-directory -> " + dirRes.status
 // --- 4. a signed, challenge-answering request ------------------------------
 const { challenge } = await (await fetch(`${base}/mcp`, { method: "POST" })).json();
 const signer = await signerFromJWK(privateKey.export({ format: "jwk" }));
-const message = { method: "POST", url: `https://${DOMAIN}/mcp`,
-  headers: { "signature-agent": `"https://${DOMAIN}"`, host: DOMAIN } };
+const messageFor = (body) => ({ method: "POST", url: `https://${DOMAIN}/mcp`,
+  headers: { "signature-agent": `"https://${DOMAIN}"`, host: DOMAIN,
+    "content-digest": contentDigest(body) } });
+const message = messageFor("");
 const created = new Date();
 const signed = await signatureHeaders(message, signer, {
   created, expires: new Date(created.getTime() + 60_000), components: COMPONENTS });
@@ -93,13 +96,17 @@ console.log("\n(key id / RFC 7638 thumbprint: " + signer.keyid + ")");
 async function call(payload) {
   const { challenge: c } = await (await fetch(`${base}/mcp`, { method: "POST" })).json();
   const cr = new Date();
-  const s = await signatureHeaders(message, signer, {
+  // Serialised ONCE. The bytes signed must be the bytes sent, or the door
+  // refuses with reason "digest".
+  const raw = JSON.stringify({ jsonrpc: "2.0", id: 1, ...payload });
+  const msg = messageFor(raw);
+  const s = await signatureHeaders(msg, signer, {
     created: cr, expires: new Date(cr.getTime() + 60_000), components: COMPONENTS });
   const res = await fetch(`${base}/mcp`, { method: "POST",
-    headers: { ...message.headers, ...s, challenge: c,
+    headers: { ...msg.headers, ...s, challenge: c,
       "challenge-response": createHash("sha256").update(c + signer.keyid).digest("hex"),
       "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...payload }) });
+    body: raw });
   const text = await res.text();
   const line = text.split("\n").find((l) => l.startsWith("data:"));
   return { status: res.status, body: JSON.parse((line ?? text).replace(/^data:\s*/, "")) };

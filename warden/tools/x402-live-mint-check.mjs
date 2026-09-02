@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
+import { contentDigest } from "../src/door/verify.mjs";
 import { createServer } from "../src/server.mjs";
 import { makeMcpHandler } from "../src/mcp/server.mjs";
 import { tokenView } from "../src/mcp/tokenView.mjs";
@@ -39,7 +40,7 @@ const CHAIN_ID = Number(process.argv[3] ?? 84_532);
 const TREASURY = process.argv[4] ?? "0x000000000000000000000000000000000000dEaD";
 const NETWORK = `eip155:${CHAIN_ID}`;
 const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
-const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent"];
+const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
 const CONTRACT = "0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D";
 const RPC = process.env.BASE_RPC_URL ?? "https://sepolia.base.org";
 
@@ -101,10 +102,16 @@ async function registerKey() {
 async function callMcp(privateJwk, payload) {
   const { challenge } = await (await fetch(`${base}/mcp`, { method: "POST" })).json();
   const signer = await signerFromJWK(privateJwk);
+  const raw = JSON.stringify({ jsonrpc: "2.0", id: 1, ...payload });
   const message = {
     method: "POST",
     url: `https://${DOMAIN}/mcp`,
-    headers: { "signature-agent": `"https://${DOMAIN}"`, host: DOMAIN },
+    headers: {
+      "signature-agent": `"https://${DOMAIN}"`,
+      host: DOMAIN,
+      // Signed over the exact bytes sent below, serialised once.
+      "content-digest": contentDigest(raw),
+    },
   };
   const created = new Date();
   const signed = await signatureHeaders(message, signer, {
@@ -122,7 +129,7 @@ async function callMcp(privateJwk, payload) {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
     },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...payload }),
+    body: raw,
   });
   const text = await res.text();
   const line = text.split("\n").find((l) => l.startsWith("data:"));

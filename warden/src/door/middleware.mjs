@@ -1,7 +1,7 @@
 // Sorting a request into one of four cases.
 import { createHash } from "node:crypto";
 import { issueChallenge, checkChallenge, CHALLENGE_MS } from "./challenge.mjs";
-import { verifyRequest, headerOf } from "./verify.mjs";
+import { verifyRequest, headerOf, contentDigest } from "./verify.mjs";
 
 /**
  * Adapt a Node request to the shape the signature library takes.
@@ -57,7 +57,7 @@ export function challengeBody(challenge, expires, domain, reason) {
  * per-day admitted set, so this function has no globals and tests can drive it.
  */
 export async function admit(req, deps) {
-  const { secret, lookupKey, seen, domain, now = Date.now() } = deps;
+  const { secret, lookupKey, seen, domain, body = "", now = Date.now() } = deps;
 
   const fail = (reason) => {
     const { challenge, expires } = issueChallenge(secret, now);
@@ -70,6 +70,14 @@ export async function admit(req, deps) {
 
   const verified = await verifyRequest(like, lookupKey);
   if (!verified.ok) return fail(verified.reason);
+
+  // THE BODY, CHECKED AFTER THE SIGNATURE AND NEVER BEFORE. Verification is
+  // what proves the `content-digest` header is the one the caller signed;
+  // comparing an unverified header to the body would only prove the attacker
+  // can do arithmetic. `REQUIRED` guarantees the signature covered it, so by
+  // this line the header is authentic and this compares it to what arrived.
+  const offeredDigest = headerOf(like, "content-digest");
+  if (offeredDigest !== contentDigest(body)) return fail("digest");
 
   const answer = headerOf(like, "challenge-response");
   const offered = headerOf(like, "challenge");

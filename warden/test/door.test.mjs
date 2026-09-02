@@ -6,6 +6,7 @@ import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { toRequestLike, pinnedUrl, challengeBody, admit, sweepSeen } from "../src/door/middleware.mjs";
+import { contentDigest } from "../src/door/verify.mjs";
 import { issueChallenge, CHALLENGE_MS } from "../src/door/challenge.mjs";
 import { createServer } from "../src/server.mjs";
 
@@ -13,7 +14,7 @@ const VECTORS = JSON.parse(
   readFileSync(new URL("./vectors/web_bot_auth_architecture_v1.json", import.meta.url), "utf8")
 );
 const ED = VECTORS.find((v) => v.key.kty === "OKP");
-const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent"];
+const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
 
 // -- toRequestLike ----------------------------------------------------------
 
@@ -82,18 +83,23 @@ const lookupED = async () => ED.key;
 /// headers a real client would also carry. `req.url` is a PATH, matching what
 /// Node's IncomingMessage actually gives admit() -- the whole point of
 /// toRequestLike is turning that back into what the signature covers.
-async function signedRequest({ extraHeaders = {}, windowMs = 60_000 } = {}) {
+async function signedRequest({ extraHeaders = {}, windowMs = 60_000, body = "", components = CLIENT_COMPONENTS } = {}) {
   const signer = await signerFromJWK(ED.key);
   const message = {
     method: "POST",
     url: `https://${DOMAIN}/mcp`,
-    headers: { "signature-agent": `"https://${DOMAIN}"`, host: DOMAIN, ...extraHeaders },
+    headers: {
+      "signature-agent": `"https://${DOMAIN}"`,
+      host: DOMAIN,
+      "content-digest": contentDigest(body),
+      ...extraHeaders,
+    },
   };
   const created = new Date();
   const headers = await signatureHeaders(message, signer, {
     created,
     expires: new Date(created.getTime() + windowMs),
-    components: CLIENT_COMPONENTS,
+    components,
   });
   return {
     method: "POST",
@@ -159,6 +165,101 @@ test("an unknown key is refused before any challenge is checked", async () => {
   const decision = await admit(req, { secret: SECRET, lookupKey: async () => null, seen, domain: DOMAIN });
   assert.equal(decision.ok, false);
   assert.equal(decision.body.reason, "unknown-key");
+});
+
+// -- the signature must be bound to the BODY --------------------------------
+//
+// Found 2026-09-02 by a fresh reader of the protocol doc, reasoning from the
+// document's own statements. Every MCP call is POST /mcp, so @method and @path
+// are identical across all eight tools and separate none of them. Without
+// content-digest the body is unsigned, and a captured Signature pair
+// authenticates ANY tool call until it expires -- up to five minutes.
+//
+// The challenge is not a second factor here: key ids are public, challenges are
+// free and unauthenticated, and the answer is a pure function of the two. So
+// these tests answer the challenge HONESTLY, exactly as an attacker holding a
+// captured signature could.
+
+const BODY_A = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "status" } });
+const BODY_B = JSON.stringify({
+  jsonrpc: "2.0", id: 1, method: "tools/call",
+  params: { name: "mint", arguments: { to: "0x000000000000000000000000000000000000dEaD" } },
+});
+
+test("a signature bought for one body does not admit a different one", async () => {
+  // THE ATTACK. One key may mint once, ever, so replaying a captured signature
+  // against `mint` consumes the victim's only mint to an address of the
+  // attacker's choosing. This is the test the whole fix exists for.
+  const seen = new Set();
+  const signer = await signerFromJWK(ED.key);
+  const { challenge } = issueChallenge(SECRET);
+  const req = await signedRequest({
+    body: BODY_A,
+    extraHeaders: { challenge, "challenge-response": answerFor(challenge, signer.keyid) },
+  });
+
+  const decision = await admit(req, {
+    secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN, body: BODY_B,
+  });
+
+  assert.equal(decision.ok, false, "a swapped body must not be admitted");
+  assert.equal(decision.body.reason, "digest");
+});
+
+test("a signature over the body it was made for is admitted", async () => {
+  // The control. Without this the test above passes for a token that refuses
+  // everything, which would prove nothing.
+  const seen = new Set();
+  const signer = await signerFromJWK(ED.key);
+  const { challenge } = issueChallenge(SECRET);
+  const req = await signedRequest({
+    body: BODY_A,
+    extraHeaders: { challenge, "challenge-response": answerFor(challenge, signer.keyid) },
+  });
+
+  const decision = await admit(req, {
+    secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN, body: BODY_A,
+  });
+
+  assert.equal(decision.ok, true, `expected admission, got ${JSON.stringify(decision)}`);
+  assert.equal(decision.keyId, signer.keyid);
+});
+
+test("a signature that does not cover content-digest is refused", async () => {
+  // Covering the header is not enough; the signature must include it in the
+  // components, or an attacker simply rewrites the header alongside the body.
+  const seen = new Set();
+  const signer = await signerFromJWK(ED.key);
+  const { challenge } = issueChallenge(SECRET);
+  const req = await signedRequest({
+    body: BODY_A,
+    components: ["@authority", "@method", "@path", "signature-agent"],
+    extraHeaders: { challenge, "challenge-response": answerFor(challenge, signer.keyid) },
+  });
+
+  const decision = await admit(req, {
+    secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN, body: BODY_A,
+  });
+
+  assert.equal(decision.ok, false);
+  assert.equal(decision.body.reason, "components");
+});
+
+test("a request carrying no content-digest at all is refused", async () => {
+  const seen = new Set();
+  const signer = await signerFromJWK(ED.key);
+  const { challenge } = issueChallenge(SECRET);
+  const req = await signedRequest({
+    body: BODY_A,
+    extraHeaders: { challenge, "challenge-response": answerFor(challenge, signer.keyid) },
+  });
+  delete req.headers["content-digest"];
+
+  const decision = await admit(req, {
+    secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN, body: BODY_A,
+  });
+
+  assert.equal(decision.ok, false);
 });
 
 // -- sweepSeen ------------------------------------------------------------
@@ -232,13 +333,17 @@ async function registerFreshKey(base) {
 
 /// Sign a message the way a real client would, for an arbitrary target URL
 /// (which may name a different authority than this server).
-async function signFor(privateJwk, targetUrl) {
+async function signFor(privateJwk, targetUrl, body = "") {
   const target = new URL(targetUrl);
   const signer = await signerFromJWK(privateJwk);
   const message = {
     method: "POST",
     url: target.toString(),
-    headers: { "signature-agent": `"https://${DOMAIN}"`, host: target.host },
+    headers: {
+      "signature-agent": `"https://${DOMAIN}"`,
+      host: target.host,
+      "content-digest": contentDigest(body),
+    },
   };
   const created = new Date();
   const headers = await signatureHeaders(message, signer, {
@@ -319,7 +424,13 @@ test("a signed and answered request to an unmatched path gets 404", async () => 
     const message = {
       method: "POST",
       url: `https://${DOMAIN}/nowhere`,
-      headers: { "signature-agent": `"https://${DOMAIN}"`, host: DOMAIN },
+      headers: {
+        "signature-agent": `"https://${DOMAIN}"`,
+        host: DOMAIN,
+        // No body is sent, so the digest is of the empty string -- which is
+        // exactly what the door will compute from the request it receives.
+        "content-digest": contentDigest(""),
+      },
     };
     const signer = await signerFromJWK(privateJwk);
     const created = new Date();
@@ -400,7 +511,13 @@ test("a fully signed and answered POST /mcp reaches the mcp handler", async () =
     const message = {
       method: "POST",
       url: `https://${DOMAIN}/mcp`,
-      headers: { "signature-agent": `"https://${DOMAIN}"`, host: DOMAIN },
+      headers: {
+        "signature-agent": `"https://${DOMAIN}"`,
+        host: DOMAIN,
+        // No body is sent, so the digest is of the empty string -- which is
+        // exactly what the door will compute from the request it receives.
+        "content-digest": contentDigest(""),
+      },
     };
     const signer = await signerFromJWK(privateJwk);
     const created = new Date();
