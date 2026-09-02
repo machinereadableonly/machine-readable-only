@@ -81,6 +81,16 @@ export const VESSEL_GOLD = "#b8860b"; // Vessel: frame and year rings
 // zero bytes and zero gas.
 export const BEAT_TO = "#2000ff";
 
+// Tint's two inks -- the eyes only, and only when an Iris is worn. Violet and
+// gold, chosen by the operator 2026-09-02 from tools/tint-on-green-sheet.mjs, which
+// rendered every candidate against Static's green, the surface that directly
+// surrounds the eyes. Heart red is out because the untinted Iris already
+// draws in the token's own colour; green is out because it is Static's;
+// near-black is out because it is what an ORDINARY QR eye already looks like.
+// Must match MarkRenderer.TINT_VIOLET / TINT_GOLD in Solidity.
+export const TINT_VIOLET = "#9800fc";
+export const TINT_GOLD = "#b8860b";
+
 // Re-measured 2026-08-29, correcting an earlier note in this file that claimed
 // #f9eaef was the deepest tint that still decodes. It is not: #f9eaef fails at
 // 900 px, and #f7e3e8 fails at 900, 700 and 500. The shipped #fdf3e3 decodes at
@@ -215,14 +225,72 @@ export function ringBars(rings, canvas) {
   return d;
 }
 
+// The QR's three reshaped finder patterns ("eyes"). Mirrors
+// contracts/src/render/EyeRenderer.sol exactly -- written FROM the Solidity,
+// not from the sheet, so the string building matches. Shape 0 target
+// (concentric circles), 1 squircle (rounded rects), 2 leaf (two opposite
+// corners rounded). See EyeRenderer.sol for the geometry notes and the decode
+// testing that picked these three.
+export const IRIS_SHAPE_NAMES = ["target", "squircle", "leaf"];
+
+const eyeErase = (x, y, ground) => `<rect x="${x}" y="${y}" width="7" height="7" fill="${ground}"/>`;
+
+const eyeTarget = (x, y, ink, ground) => {
+  const cx = `${x + 3}.5`, cy = `${y + 3}.5`;
+  return `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${ink}"/>`
+    + `<circle cx="${cx}" cy="${cy}" r="2.5" fill="${ground}"/>`
+    + `<circle cx="${cx}" cy="${cy}" r="1.5" fill="${ink}"/>`;
+};
+
+const eyeSquircle = (x, y, ink, ground) =>
+  `<rect x="${x}" y="${y}" width="7" height="7" rx="3" fill="${ink}"/>`
+  + `<rect x="${x + 1}" y="${y + 1}" width="5" height="5" rx="2.1" fill="${ground}"/>`
+  + `<rect x="${x + 2}" y="${y + 2}" width="3" height="3" rx="1.5" fill="${ink}"/>`;
+
+// Two opposite corners rounded, r 2.6 / 1.8 / 1.3. `x + 2.6` etc. print with a
+// single decimal digit for an integer x, which is why Solidity has to build
+// these as string.concat(toString(x + 2), ".6") -- verified to match before
+// EyeRenderer.sol was written.
+const eyeLeaf = (x, y, ink, ground) =>
+  `<path fill="${ink}" d="M${x + 2}.6 ${y}h4.4v4.4a2.6 2.6 0 0 1 -2.6 2.6h-4.4v-4.4a2.6 2.6 0 0 1 2.6 -2.6z"/>`
+  + `<path fill="${ground}" d="M${x + 2}.8 ${y + 1}h3.2v3.2a1.8 1.8 0 0 1 -1.8 1.8h-3.2v-3.2a1.8 1.8 0 0 1 1.8 -1.8z"/>`
+  + `<path fill="${ink}" d="M${x + 3}.3 ${y + 2}h1.7v1.7a1.3 1.3 0 0 1 -1.3 1.3h-1.7v-1.7a1.3 1.3 0 0 1 1.3 -1.3z"/>`;
+
+const EYE_SHAPES = [eyeTarget, eyeSquircle, eyeLeaf];
+
+/**
+ * The three eyes, reshaped, at the three fixed finder-pattern positions
+ * relative to `codeOff`. Erased to `ground` before `ink` is drawn on top --
+ * NEVER a constant, because the ground is the actual colour under the code
+ * block (HUSH_QUIET when Hush is worn, otherwise the field, which Aura
+ * tints). Mirrors EyeRenderer.eyes in Solidity.
+ */
+export function eyeOverlay(codeOff, shape, ink, ground, size) {
+  const draw = EYE_SHAPES[shape] ?? eyeTarget;
+  const positions = [[0, 0], [size - 7, 0], [0, size - 7]];
+  let out = "";
+  for (const [ex, ey] of positions) {
+    const x = codeOff + ex, y = codeOff + ey;
+    out += eyeErase(x, y, ground) + draw(x, y, ink, ground);
+  }
+  return out;
+}
+
 /**
  * @param modules  the code's module bits, row major, size*size
  * @param want     the heart target bits, same shape, used to split heart from noise
- * @param state    { level, streak, years, marks, lastDay, today, resting, sunset }
+ * @param state    { level, streak, years, marks, lastDay, today, resting,
+ *                   sunset, irisVariant, tintVariant, irisRun }
  *
  * state.marks is an array of Mark ids (1..10), not names -- see MARKS above
  * and hasMark below. Ids 5 and 6 both draw "iris", and Task 6 needs to tell
  * them apart, which a name array could not do.
+ *
+ * irisVariant is the shape index (0/1/2) written when the BOUGHT Iris is
+ * applied; tintVariant is the ink index (0/1) written when Tint is applied;
+ * irisRun is the streak stored when the EARNED Iris is applied. All three
+ * default to 0, mirroring the bits `_marks` packs on chain when a Mark has
+ * never been applied.
  */
 export function renderSvg(modules, want, size, state) {
   const {
@@ -234,6 +302,9 @@ export function renderSvg(modules, want, size, state) {
     // carry the same number or the differential test is measuring nothing.
     // Pass 0 for the RendererUnsized control.
     pxPerCell = 16,
+    // The bits _marks packs on chain for the eyes: the BOUGHT Iris's shape,
+    // Tint's ink, and the streak the EARNED Iris stored when it was applied.
+    irisVariant = 0, tintVariant = 0, irisRun = 0,
   } = state;
   const years = ringsFor(rawYears);
   const canvas = canvasFor(years);
@@ -324,7 +395,26 @@ export function renderSvg(modules, want, size, state) {
   const px = pxPerCell ? canvas * pxPerCell : 0;
   const intrinsic = px ? ` width="${px}" height="${px}"` : "";
 
-  return `<svg xmlns="http://www.w3.org/2000/svg"${intrinsic} viewBox="0 0 ${canvas} ${canvas}" shape-rendering="crispEdges">${defs}<rect width="${canvas}" height="${canvas}" fill="${field}"/>${quiet}${body}</svg>`;
+  // The reshaped eyes, drawn LAST -- over the noise, the frame and the heart --
+  // so the erase-to-ground step lands cleanly even on a token wearing Static,
+  // whose green already recolours these same modules as ordinary code. Empty
+  // when no Iris is worn, so the finder patterns stay ordinary code modules
+  // exactly as they are today. Mirrors Renderer._eyes in Solidity.
+  const anyIris = hasMark(marks, IRIS_BOUGHT) || hasMark(marks, IRIS_EARNED);
+  let eyes = "";
+  if (anyIris) {
+    const earned = hasMark(marks, IRIS_EARNED);
+    // The EARNED Iris does not lapse: its colour comes from the run stored at
+    // apply time, not the live rung, which is the whole point of the Mark --
+    // it stops tracking the lapse.
+    const base = earned ? colourAt(rungOf(irisRun)) : colour;
+    const ink = hasMark(marks, TINT) ? (tintVariant === 1 ? TINT_GOLD : TINT_VIOLET) : base;
+    const ground = hush ? HUSH_QUIET : field;
+    const eyeShape = earned ? 0 : irisVariant;
+    eyes = eyeOverlay(codeOff, eyeShape, ink, ground, size);
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg"${intrinsic} viewBox="0 0 ${canvas} ${canvas}" shape-rendering="crispEdges">${defs}<rect width="${canvas}" height="${canvas}" fill="${field}"/>${quiet}${body}${eyes}</svg>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -379,7 +469,8 @@ export const hasMark = (ids, id) => ids.includes(id);
 
 /**
  * @param state { tokenId, level, streak, lastDay, mintDay, today, generation,
- *                seedsGiven, parent, agentKeyId, resting, sunset, marks }
+ *                seedsGiven, parent, agentKeyId, resting, sunset, marks,
+ *                irisVariant, tintVariant, irisRun }
  */
 // The attribute list is the spec's, in the spec's order. `Sunset` is the one
 // entry the spec does not list; it is real piece-wide state a reader can act
@@ -390,6 +481,7 @@ export function tokenUri(modules, want, size, state) {
     tokenId = 0, level = 0, streak = 0, lastDay = 0, mintDay = 0, today = 0,
     generation = 0, seedsGiven = 0, parent = 0, agentKeyId = 0,
     resting = false, sunset = false, marks = [],
+    irisVariant = 0, tintVariant = 0, irisRun = 0,
   } = state;
 
   const years = Math.floor(level / DAY_CELLS);
@@ -400,8 +492,22 @@ export function tokenUri(modules, want, size, state) {
   // BigInt so a plain number and a 0x..n literal both render the same 66 chars.
   const keyHex = `0x${BigInt(agentKeyId).toString(16).padStart(64, "0")}`;
   const svg = renderSvg(modules, want, size,
-    { level, streak, years, marks, lastDay, today, resting, sunset });
+    { level, streak, years, marks, lastDay, today, resting, sunset, irisVariant, tintVariant, irisRun });
   const image = Buffer.from(svg, "utf8").toString("base64");
+
+  // "Iris Shape" is emitted for BOTH routes -- the earned Iris does have a
+  // shape (always "target") and an agent reading the JSON should not have to
+  // know that "absent means target". "Iris Run" is emitted for the EARNED
+  // route only, because it is the thing the bought route does not have.
+  // Mirrors Renderer._irisAttrs in Solidity.
+  const earnedIris = hasMark(marks, IRIS_EARNED);
+  const anyIris = hasMark(marks, IRIS_BOUGHT) || earnedIris;
+  const irisAttrs = anyIris
+    ? [
+        str("Iris Shape", IRIS_SHAPE_NAMES[earnedIris ? 0 : irisVariant]),
+        ...(earnedIris ? [num("Iris Run", irisRun)] : []),
+      ]
+    : [];
 
   const json = "{"
     + `"name":"${TOKEN_NAME} %23${tokenId}${suffix}",`
@@ -422,6 +528,7 @@ export function tokenUri(modules, want, size, state) {
         num("Children", seedsGiven),
         str("Resting", resting ? "yes" : "no"),
         str("Sunset", sunset ? "yes" : "no"),
+        ...irisAttrs,
         attr("Marks", markNames(marks)),
       ].join(",")
     + "]}";
