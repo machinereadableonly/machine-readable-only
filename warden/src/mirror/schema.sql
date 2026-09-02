@@ -44,6 +44,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS credits_token_day ON credits (tokenId, day);
 CREATE TABLE IF NOT EXISTS mark_orders (
   tokenId   INTEGER NOT NULL,
   upgradeId INTEGER NOT NULL,
+  variant   INTEGER NOT NULL DEFAULT 0,   -- the Iris shape or the Tint ink; 0 for every other Mark
   paymentTx TEXT,
   status    TEXT NOT NULL DEFAULT 'queued'
 );
@@ -52,6 +53,10 @@ CREATE TABLE IF NOT EXISTS mark_orders (
 -- against two settlements racing to apply the same mark to the same token --
 -- a read-then-write check alone can be overtaken between the read and the
 -- write.
+--
+-- The variant is deliberately NOT part of this index. A token holds one
+-- reservation per Mark whatever shape it chose; including the variant would let
+-- the same Mark be bought twice by asking for a different shape the second time.
 CREATE UNIQUE INDEX IF NOT EXISTS mark_orders_token_upgrade ON mark_orders (tokenId, upgradeId);
 
 CREATE TABLE IF NOT EXISTS mints (

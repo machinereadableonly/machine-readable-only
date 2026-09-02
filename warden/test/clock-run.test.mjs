@@ -209,6 +209,38 @@ test("a Mark that lands is written and its bit is set", async () => {
   assert.equal(q.getToken(1).marks, 1 << 2);
 });
 
+// THE VARIANT HAS TO REACH THE CHAIN. applyMark takes three arguments, and the
+// shape or ink an agent paid for lives only in this third one -- a Clock that
+// drops it writes a target Iris to somebody who bought a leaf, permanently.
+//
+// The stub writer records arguments instead of encoding them, which is exactly
+// why src/clock/abi.mjs went stale unnoticed. test/abi.test.mjs covers the
+// encoding side; this covers the value being passed at all.
+test("the Clock passes the variant to applyMark", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  q.reserveMark(1, 5, 2);                       // the bought Iris, leaf
+  const writer = okWriter();
+  await runClock({ ...baseArgs(q), writer });
+
+  const call = writer.sent.find((c) => c.functionName === "applyMark");
+  assert.deepEqual(call.args, [1n, 5, 2]);
+});
+
+test("a Mark with no variant still sends an explicit zero, never undefined", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  q.reserveMark(1, 1);
+  const writer = okWriter();
+  await runClock({ ...baseArgs(q), writer });
+
+  const call = writer.sent.find((c) => c.functionName === "applyMark");
+  assert.deepEqual(call.args, [1n, 1, 0]);
+  assert.equal(typeof call.args[2], "number", "undefined encoded as a uint8 is a throw");
+});
+
 // A crash mid-run must not double-write. Nothing is chosen from a counter;
 // everything is chosen by reading rows the last run left queued.
 test("running twice writes each row exactly once", async () => {

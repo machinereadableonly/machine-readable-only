@@ -131,9 +131,13 @@ export async function runClock({
 
   // 5. MARKS.
   for (const order of q.pendingMarkOrders()) {
-    const result = await writer.send("applyMark", [BigInt(order.tokenId), order.upgradeId], {
-      label: `applyMark ${order.upgradeId} on ${order.tokenId}`,
-    });
+    // THREE arguments. The variant is the shape or ink the agent chose and paid
+    // for, and it exists nowhere else -- the contract writes it into the token's
+    // own word, permanently. Dropping it would silently hand out the default.
+    const result = await writer.send("applyMark",
+      [BigInt(order.tokenId), order.upgradeId, order.variant], {
+        label: `applyMark ${order.upgradeId} on ${order.tokenId}`,
+      });
     if (result.ok) {
       q.markOrderWritten(order.tokenId, order.upgradeId);
       summary.marks.push(order);

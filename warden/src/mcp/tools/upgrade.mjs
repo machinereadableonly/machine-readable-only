@@ -1,6 +1,7 @@
 // warden/src/mcp/tools/upgrade.mjs
 import * as z from "zod";
 import { paidWriteBlock, requireChain } from "../gates.mjs";
+import { VARIANT_NAMES } from "../ladder.mjs";
 
 // There was an exported UPGRADE_REASONS array here, listing the eight
 // pre-payment refusals. Nothing imported it, nothing validated against it, and
@@ -22,19 +23,22 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         // wraps -- 1 << 32 is 1 and 1 << 33 is 2, so a high id aliases a low
         // one -- and 1 << 31 is negative.
         //
-        // THE BOUND IS SEVEN AND THE LADDER HAS TEN. That is deliberate, not an
-        // oversight. Marks 9 and 10 are both gated on already holding an Iris,
-        // and NOTHING here enforces `requiresAny` yet; opening those ids before
-        // that gate exists would make them buyable on day one, which silently
-        // forfeits the other side of a pair that takes 100 days to reach. The
-        // bound rises to 10 in the same change that enforces the gate.
-        upgradeId: z.number().int().min(1).max(7),
+        // Ten, raised from seven in the SAME change that enforces requiresAny.
+        // Opening 9 and 10 before that gate existed would have made Tint and
+        // Aura buyable on day one, silently forfeiting the other side of a pair
+        // that takes 100 days to reach.
+        upgradeId: z.number().int().min(1).max(10),
+        // The Iris shape (0 target, 1 squircle, 2 leaf) or the Tint ink
+        // (0 violet, 1 gold). Every other Mark accepts only 0, which the
+        // per-Mark check below enforces -- this bound is only the widest any
+        // Mark accepts. The default is what lets an agent omit it entirely.
+        variant: z.number().int().min(0).max(2).default(0),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
 
     async handler(args, ctx) {
-      const { tokenId, upgradeId } = args;
+      const { tokenId, upgradeId, variant = 0 } = args;
       const token = q.getToken(tokenId);
       if (!token) return { ok: false, reason: "unknown-token" };
       if (token.keyId !== ctx.keyId) return { ok: false, reason: "not-bound-to-caller" };
@@ -46,6 +50,29 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       if (mark.minStreak && token.streak < mark.minStreak) return { ok: false, reason: "mark-needs-streak" };
       if (q.markSold(upgradeId) >= mark.supply) return { ok: false, reason: "mark-sold-out" };
       if (token.marks & (1 << upgradeId)) return { ok: false, reason: "mark-already-applied" };
+
+      // THE EXCLUSION, before any payment. An agent told only "no" cannot tell a
+      // permanent exclusion from a temporary gate, and the whole ladder rests on
+      // exclusions being legible -- so the refusal NAMES what closed the door.
+      // It can only ever name the same pair's other side, which is why a name is
+      // enough: every exclusion is pair-internal.
+      const blocking = token.marks & mark.excludes;
+      if (blocking) {
+        const by = Object.values(catalogue).find((m) => blocking & (1 << m.id));
+        return { ok: false, reason: "mark-excluded", detail: by?.name.toLowerCase() };
+      }
+
+      // Both sides of pair five wait on an Iris, by either route. Aura was
+      // ungated once, and being buyable on day one silently forfeited Tint --
+      // which needs an Iris, and therefore 100 days.
+      if (mark.requiresAny && !(token.marks & mark.requiresAny)) {
+        return { ok: false, reason: "mark-needs-iris" };
+      }
+
+      // The variant bound is per Mark and the CONTRACT is its authority
+      // (applyMark reverts BadVariant). Refusing here means an agent is never
+      // charged for a shape the chain will not write.
+      if (variant >= mark.variants) return { ok: false, reason: "mark-bad-variant" };
 
       // THE FREE ROUTE. Four of the ten Marks are earned by a run of days and
       // take no payment wrapper at all. This sits ABOVE the price guard on
@@ -61,10 +88,10 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       if (mark.route === "earned") {
         const blocked = await paidWriteBlock(chain, { tokenId, q });
         if (blocked) return { ok: false, reason: blocked };
-        if (!q.reserveMark(tokenId, upgradeId)) {
+        if (!q.reserveMark(tokenId, upgradeId, variant)) {
           return { ok: false, reason: "mark-already-applied" };
         }
-        return { ok: true, accepted: true, upgradeId, appliedBy: "the next Clock run" };
+        return { ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock run" };
       }
 
       // THE PRICE COMES FROM THE MARK, and a catalogue entry without one is
@@ -104,19 +131,20 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
           !fresh ? "unknown-token"
           : fresh.keyId !== ctx.keyId ? "not-bound-to-caller"
           : fresh.marks & (1 << upgradeId) ? "mark-already-applied"
+          : fresh.marks & mark.excludes ? "mark-excluded"
           : q.markSold(upgradeId) >= mark.supply ? "mark-sold-out"
           : null;
 
         // reserveMark returns false when this token already holds the mark, so
         // two settlements racing for the same token cannot both reserve.
-        if (!blocked && q.reserveMark(tokenId, upgradeId)) {
+        if (!blocked && q.reserveMark(tokenId, upgradeId, variant)) {
           // `ok: true` because every refusal from this tool carries
           // `ok: false`, and a client that branches on `result.ok` -- the one
           // field every other tool here answers with -- read a PAID success as
           // a failure. `accepted` stays alongside it: it is what the design
           // names this state, and dropping it would break anything already
           // reading it.
-          return { ok: true, accepted: true, upgradeId, appliedBy: "the next Clock run" };
+          return { ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock run" };
         }
 
         // MONEY HAS ALREADY CHANGED HANDS. This must never be a quiet refusal:
@@ -128,8 +156,12 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       }, mark.price, {
         tool: "upgrade",
         // The MARK'S OWN NAME, because this is the demand an agent reads before
-        // spending up to $1,250.00. "a paid tool" is not good enough.
-        description: `Apply the ${mark.name} Mark to token ${tokenId}`,
+        // spending up to $1,250.00. "a paid tool" is not good enough -- and for
+        // the two Marks with a choice, neither is the name alone: Tint costs
+        // $250.00 and the ink is the whole of what is bought.
+        description: mark.variants > 1
+          ? `Apply the ${mark.name} Mark (${VARIANT_NAMES[upgradeId][variant]}) to token ${tokenId}`
+          : `Apply the ${mark.name} Mark to token ${tokenId}`,
       })(args, ctx);
     },
   };
