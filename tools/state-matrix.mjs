@@ -7,6 +7,7 @@
 // the handful of places where two axes actually interact.
 import {
   MAX_RINGS, MARKS, HUSH, ACHE, STATIC, BEAT, VESSEL, BREAK, AURA,
+  IRIS_BOUGHT, IRIS_EARNED, TINT,
 } from "./render-token.mjs";
 import { DAY_CELLS } from "./frame-geometry.mjs";
 
@@ -80,6 +81,37 @@ export function renderCases() {
   }
   out.push({ label: "all drawing marks", ...base, marks: DRAWING_MARKS });
   out.push({ label: "all seven marks", ...base, marks: OLD_SEVEN });
+
+  // The eyes (Task 6). Added in Fix Round 1: neither DRAWING_MARKS nor
+  // OLD_SEVEN was ever extended to wear an Iris, so both fixtures this
+  // function feeds -- the cross-language byte diff and the on-chain soak --
+  // were blind to the newest and riskiest drawing surface. DRAWING_MARKS and
+  // OLD_SEVEN are left untouched on purpose: they are historical-continuity
+  // sets whose tracked numbers are only comparable across commits because
+  // they have not moved. These are new cases instead, each a LEGAL Mark set
+  // (at most one per pair -- (1,2) (3,4) (5,6) (7,8) (9,10) -- and Tint/Aura
+  // additionally require holding an Iris, per Ladder.sol's requiresAny).
+  out.push({ label: "iris squircle", ...base, marks: [IRIS_BOUGHT], irisVariant: 1 });
+  out.push({ label: "iris leaf", ...base, marks: [IRIS_BOUGHT], irisVariant: 2 });
+  out.push({ label: "tint violet", ...base, marks: [IRIS_BOUGHT, TINT], tintVariant: 0 });
+  out.push({ label: "tint gold", ...base, marks: [IRIS_BOUGHT, TINT], tintVariant: 1 });
+  // The earned Iris does not lapse: it keeps the colour of the run it was
+  // applied at. Thirty days lapsed here so the live rung (start tier) and the
+  // stored run (top tier) visibly disagree -- this is the case that actually
+  // exercises "does not lapse" rather than merely asserting it never moved.
+  out.push({
+    label: "earned iris, lapsed to the start tier",
+    ...base, streak: 100, today: 1030, marks: [IRIS_EARNED], irisRun: 100,
+  });
+  // The specific defect this task exists to prevent: an Iris erased onto the
+  // AURA field with no Hush worn. A constant erase colour (rather than the
+  // actual ground) would punch a white square into this token's tinted page.
+  out.push({ label: "iris on aura, no hush", ...base, marks: [IRIS_BOUGHT, AURA] });
+  // Tint is legal on the earned route too, and untested until now.
+  out.push({
+    label: "tint on earned iris",
+    ...base, streak: 100, marks: [IRIS_EARNED, TINT], tintVariant: 1, irisRun: 100,
+  });
 
   // Frozen lifecycles. Both must hold their colour against a far-future clock.
   out.push({ label: "resting", ...base, today: 9999, resting: true });

@@ -20,7 +20,7 @@ library RenderFixture {
         string label;
     }
 
-    uint256 internal constant COUNT = 32;
+    uint256 internal constant COUNT = 39;
 
     function cases() internal pure returns (Case[] memory c) {
         c = new Case[](COUNT);
@@ -55,6 +55,13 @@ library RenderFixture {
         c[i++] = Case(365, 400, 1000, 1000, 128, false, false, 8889, 0xc82ff6d44bb03a0d81e6bf3fa0a7399a547ed9c1ff3909f69ab7ac914df82e6a, "mark vessel");
         c[i++] = Case(365, 400, 1000, 1000, 1174, false, false, 9205, 0x280d49892598197b41bf4b901cb99118b80bb26aba1e7aae5e6c69278b68150f, "all drawing marks");
         c[i++] = Case(365, 400, 1000, 1000, 1438, false, false, 9222, 0x88c7aef48f5ade6a5a338803679a670fda030ca0eac01e318007fb53731441bf, "all seven marks");
+        c[i++] = Case(365, 400, 1000, 1000, 65568, false, false, 9930, 0x4095aba54239b3a11aea40203672fe118cc2c7e506223ee567680d41ff8bddd4, "iris squircle");
+        c[i++] = Case(365, 400, 1000, 1000, 131104, false, false, 10350, 0xcb56ffa79ac7e6a2969b46f1a933c86a5c23df2b98d217d72fef3d795e78662f, "iris leaf");
+        c[i++] = Case(365, 400, 1000, 1000, 544, false, false, 9787, 0xadbea7f98ff529e1e77b720420e67e177adb5c9ac08208c4dc8368e95e9ec636, "tint violet");
+        c[i++] = Case(365, 400, 1000, 1000, 16777760, false, false, 9787, 0xa8d87e21a913435789dd5be0a7f923966b0cf1b22a8232752a227ca58d15e792, "tint gold");
+        c[i++] = Case(365, 100, 1000, 1030, 429496729664, false, false, 9818, 0x53b9578049037ea2b77f53d7c466c88d606b93c0eb5112c4351e1772e908fd8c, "earned iris, lapsed to the start tier");
+        c[i++] = Case(365, 400, 1000, 1000, 1056, false, false, 9787, 0x4d5dc3c1c73bd261594e8416f54d925b7453dc34511a3d87be6ff4a05c5a50ec, "iris on aura, no hush");
+        c[i++] = Case(365, 100, 1000, 1000, 429513507392, false, false, 9825, 0x95ac054ef773c7634d0c7c932f2c12e2113b774688bfc5bad3516603aaf48624, "tint on earned iris");
         c[i++] = Case(365, 400, 1000, 9999, 0, true, false, 8884, 0x67490dca20f51b027abb39ef572373d371bbb20c208963433dc20e5a6ee5130b, "resting");
         c[i++] = Case(365, 400, 1000, 9999, 0, false, true, 8882, 0xed352579f1540d780ed5095728f8f4123e785baa9d18f79db90ba351ea25acb5, "sunset");
     }

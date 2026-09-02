@@ -23,6 +23,24 @@ import { renderCases, soakCases } from "./state-matrix.mjs";
 export const marksToBits = ids =>
   (ids ?? []).reduce((acc, id) => acc | (1n << BigInt(id)), 0n);
 
+/// The full `_marks` word a case renders with: the Mark bits, plus whichever
+/// of the Task 6 variant/run bits the case set. MUST mirror the bit layout
+/// `applyMark` writes on chain (bits 16-23 Iris shape, 24-31 Tint ink, 32-63
+/// the earned run) -- `render-token.mjs`'s `renderSvg`/`tokenUri` read
+/// `irisVariant`/`tintVariant`/`irisRun` as SEPARATE state fields when the JS
+/// side renders a case, so if this function does not fold them back into the
+/// same word RenderMatrixTest.sol reconstructs `TokenView.marks` from, the
+/// Solidity side would render shape/ink 0 while the JS reference rendered
+/// whatever the case actually asked for -- a silent mismatch the differential
+/// test would then (correctly) fail on.
+export const packMarks = c => {
+  let bits = marksToBits(c.marks);
+  if (c.irisVariant) bits |= BigInt(c.irisVariant) << 16n;
+  if (c.tintVariant) bits |= BigInt(c.tintVariant) << 24n;
+  if (c.irisRun) bits |= BigInt(c.irisRun) << 32n;
+  return bits;
+};
+
 export function fixtures(domain, tokenId) {
   const bitmap = tokenBitmap(domain, tokenId);
   const modules = unpackModules(Buffer.from(bitmap.hex, "hex"), SIZE);
@@ -32,7 +50,7 @@ export function fixtures(domain, tokenId) {
     const uri = tokenUri(modules, want, SIZE, { tokenId, mintDay: 900, ...c });
     return {
       ...c,
-      marksBits: marksToBits(c.marks),
+      marksBits: packMarks(c),
       bytes: uri.length,
       hash: keccak256(toBytes(uri)),
     };
@@ -89,7 +107,7 @@ export function renderSoakStates() {
   const cases = soakCases().filter(c => !c.sunset);
   const lines = cases.map((c, i) =>
     `        s[${i}] = State(${c.level}, ${c.streak}, ${(c.today ?? 0) - (c.lastDay ?? 0)}, `
-    + `${marksToBits(c.marks)}, ${!!c.resting}, "${c.label}");`
+    + `${packMarks(c)}, ${!!c.resting}, "${c.label}");`
   ).join("\n");
 
   return `// SPDX-License-Identifier: MIT

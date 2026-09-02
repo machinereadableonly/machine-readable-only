@@ -17,7 +17,7 @@ library SoakStates {
         string label;
     }
 
-    uint256 internal constant COUNT = 26;
+    uint256 internal constant COUNT = 33;
 
     function all() internal pure returns (State[] memory s) {
         s = new State[](COUNT);
@@ -46,6 +46,13 @@ library SoakStates {
         s[22] = State(365, 400, 0, 0, false, "no marks");
         s[23] = State(365, 400, 0, 1174, false, "all drawing marks");
         s[24] = State(365, 400, 0, 1438, false, "all seven marks");
-        s[25] = State(365, 400, 8999, 0, true, "resting");
+        s[25] = State(365, 400, 0, 65568, false, "iris squircle");
+        s[26] = State(365, 400, 0, 131104, false, "iris leaf");
+        s[27] = State(365, 400, 0, 544, false, "tint violet");
+        s[28] = State(365, 400, 0, 16777760, false, "tint gold");
+        s[29] = State(365, 100, 30, 429496729664, false, "earned iris, lapsed to the start tier");
+        s[30] = State(365, 400, 0, 1056, false, "iris on aura, no hush");
+        s[31] = State(365, 100, 0, 429513507392, false, "tint on earned iris");
+        s[32] = State(365, 400, 8999, 0, true, "resting");
     }
 }
