@@ -621,8 +621,12 @@ git commit -m "contract: a Mark can carry a variant, and the earned Iris keeps i
 **Interfaces:**
 - Consumes: `MachineReadableOnly.Upgrade` (Task 1).
 - Produces: `Ladder.all()` returning `MachineReadableOnly.Upgrade[11]` indexed by
-  Mark id with index 0 unused; `Ladder.NAMES` order; `tools/ladder-fixture.mjs`
-  printing `keccak256(abi.encode(records))` for the JS mirror to match.
+  Mark id with index 0 unused; `tools/ladder-fixture.mjs` printing
+  `keccak256(abi.encode(records))` for the JS mirror to match.
+  NOT a name list: the Mark names live in `MarkRenderer.names()` (Task 4) for
+  the metadata and in the Warden catalogue (Task 9) for the agent-facing copy.
+  `Ladder.sol` is the GATES, and duplicating the names here would be a third
+  place for them to drift.
 
 The ten records, which are the spec's section 2 and 3.1 tables in one place:
 
