@@ -477,7 +477,7 @@ the argument for free, which is how the guard gets proven on chain without a
 transaction.</p>
 <p><strong>Variant bounds are per Mark and live in the contract, not the Warden.</strong> Two
 Marks accept a non-zero variant -- Mark 5 (the Iris shape, three of them) and
-Mark 9 (the Tint ink, three of them). Every other Mark requires <code>variant == 0</code>.
+Mark 9 (the Tint ink, two of them). Every other Mark requires <code>variant == 0</code>.
 A Mark whose variant is unbounded would let the Warden write an index the
 renderer cannot draw, and the renderer has no way to refuse at read time.</p>
 <p>The bound is a per-Mark constant in the contract rather than a field on
@@ -552,11 +552,11 @@ combinations and never by testing Marks one at a time.</p>
 squircle or leaf -- in the token&#39;s live colour, which lapses with the heart.</li>
 <li><strong>Iris earned (6)</strong> draws the <strong>target</strong>, fixed, in the colour derived from the
 run stored at apply time, which never lapses.</li>
-<li><strong>Tint (9)</strong> replaces the ink both of those use with one of <strong>three</strong> chosen
-colours -- violet, ink or gold. It draws nothing itself; it is a colour
-substitution on a surface another Mark drew, which is why it requires one.</li>
+<li><strong>Tint (9)</strong> replaces the ink both of those use with one of <strong>two</strong> chosen
+colours -- violet or gold. It draws nothing itself; it is a colour substitution
+on a surface another Mark drew, which is why it requires one.</li>
 </ul>
-<p>The variant bound is therefore <strong>3</strong> for Mark 5 and <strong>3</strong> for Mark 9. Every other
+<p>The variant bound is therefore <strong>3</strong> for Mark 5 and <strong>2</strong> for Mark 9. Every other
 Mark requires <code>variant == 0</code>.</p>
 <p>Reshaping measures 239/255, against 126 for recolouring, because erasing a
 square and drawing a new form moves far more pixels than swapping an ink. It is
@@ -790,7 +790,7 @@ three strengths and are near-identical at thumbnail size, so offering more than
 one of them would be a fake choice. Square is not offered at all: it is the
 shipped look, and at 126/255 it is the only candidate that does not read as a
 deliberate change.</p>
-<p><strong>THE INKS: violet, ink, gold.</strong></p>
+<p><strong>THE INKS: violet and gold.</strong></p>
 <p>The rule, which the sheet makes obvious and the decode test cannot see: <strong>a Tint
 ink must not be a colour another Mark already puts on the same token.</strong> Applied
 to the five measured inks:</p>
@@ -819,12 +819,13 @@ to the five measured inks:</p>
 </tr>
 <tr>
 <td>ink</td>
-<td>IN. Nothing else on the ladder uses it.</td>
+<td>OUT, decided 2026-09-02 from the green-noise render. It decodes perfectly and is the weakest thing on the sheet: near-black eyes are what an ORDINARY QR eye looks like, so Tint-ink leaves a token looking less marked than one that paid nothing. See 7.4.</td>
 </tr>
 </tbody></table>
-<p>Green came off this list only after Static took it in 7.2, and that is the order
-this document has to be read in: <strong>the hue decision changed the ink list, and a
-palette chosen before it would have shipped the collision.</strong></p>
+<p>Green came off this list only after Static took it in 7.2, and ink came off only
+after being rendered against that green in 7.4. That is the order this document
+has to be read in: <strong>each decision changed the ink list, and a palette fixed
+before either would have shipped both a collision and a dud.</strong></p>
 <p>One figure to keep straight, because it looks like a contradiction and is not:
 the leaf costs <strong>1,063 B</strong> in <code>eye-shape-sheet.mjs</code> and <strong>1,684 B</strong> in
 <code>eye-colourway-sheet.mjs</code>. The two sheets draw the leaf differently -- concentric
@@ -855,12 +856,12 @@ it the one colour a paid Mark must not offer.</p>
 <p>That is the same failure as the old Bloom and the old Blue Blood: a Mark that
 draws something, decodes fine, and is not worth its price. It is only ever caught
 by rendering it.</p>
-<p><strong>Recommended palette: violet and gold, and the variant bound drops from 3 to 2.</strong>
-Two inks that both work beats three with a dud, and every measured alternative is
-already excluded for a stated reason -- heart red is the untinted default, green
-is Static&#39;s, crown gold is kept because Vessel&#39;s frame never touches the code
-block. A third ink would need a new candidate rendered against the green before
-it could be offered.</p>
+<p><strong>DECIDED (the operator, 2026-09-02): violet and gold. The variant bound for Mark 9 drops
+from 3 to 2.</strong> Two inks that both work beats three with a dud, and every measured
+alternative is already excluded for a stated reason -- heart red is the untinted
+default, green is Static&#39;s, crown gold is kept because Vessel&#39;s frame never
+touches the code block. A third ink would need a new candidate rendered against
+the green before it could be offered; teal and a warm orange are the gaps.</p>
 <p>Sheets: <code>tools/tint-on-green-sheet.mjs</code> (this measurement),
 <code>tools/eye-shape-sheet.mjs</code>, <code>tools/eye-colourway-sheet.mjs</code>.</p>
 <hr>
@@ -904,13 +905,13 @@ the Foundry figure that is comparable across commits -- not against the 1,633,22
 <h3>8.3 The decode sweep, and its real cost</h3>
 <p>This is the one place the acceptance criteria need a decision rather than a rule,
 so it is stated honestly instead of buried.</p>
-<p><strong>189 Mark sets</strong> are reachable. Counting variants -- three Iris shapes and three
+<p><strong>189 Mark sets</strong> are reachable. Counting variants -- three Iris shapes and two
 Tint inks, each drawing a different picture -- the number of distinct
-<strong>renderable combinations is 567</strong>. Earlier notes assumed 28 and a sweep of
+<strong>renderable combinations is 459</strong>. Earlier notes assumed 28 and a sweep of
 minutes; that predates the pair structure and no longer holds.</p>
 <p>At the measured 13.4 seconds per combination across five sizes:</p>
-<pre><code>all 567, five sizes    about 127 minutes
-all 567, 848 px only   about 25 minutes
+<pre><code>all 459, five sizes    about 103 minutes
+all 459, 848 px only   about 21 minutes
 </code></pre>
 <p><strong>Run the full five-size sweep.</strong> At about two hours it is affordable as a
 pre-deploy gate, and this change introduces the first genuinely new geometry
@@ -940,10 +941,10 @@ schema, <code>docs/2026-09-01-mro-raw-protocol.md</code> and <code>warden/public
 <h2>9. What this spec does not settle</h2>
 <p>Named rather than left to be discovered.</p>
 <ul>
-<li><strong>Whether Tint offers two inks or three.</strong> The green-noise render (7.4) ruled
-ink out on visual grounds, leaving violet and gold. Offering a third would need
-a new candidate rendered against the green first. Every other visual question
-is now closed.</li>
+<li>Nothing visual. Every rendered question the ladder raised is closed: the hue
+(7.2), the shapes and inks (7.3, 7.4), and Break&#39;s two new combinations (5.3).
+A third Tint ink could be added later, but it would need a new candidate
+rendered against the green first.</li>
 <li><strong>Whether the agent-facing copy needs any change.</strong> It should not: the copy
 describes five pairs, exclusions and free earned sides, and this spec is
 written to it. The one line that will need editing afterwards is the contract
