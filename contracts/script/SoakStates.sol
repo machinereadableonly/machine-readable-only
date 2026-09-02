@@ -17,7 +17,7 @@ library SoakStates {
         string label;
     }
 
-    uint256 internal constant COUNT = 33;
+    uint256 internal constant COUNT = 37;
 
     function all() internal pure returns (State[] memory s) {
         s = new State[](COUNT);
@@ -53,6 +53,10 @@ library SoakStates {
         s[29] = State(365, 100, 30, 429496729664, false, "earned iris, lapsed to the start tier");
         s[30] = State(365, 400, 0, 1056, false, "iris on aura, no hush");
         s[31] = State(365, 100, 0, 429513507392, false, "tint on earned iris");
-        s[32] = State(365, 400, 8999, 0, true, "resting");
+        s[32] = State(365, 400, 0, 256, false, "break alone");
+        s[33] = State(365, 400, 0, 264, false, "break with static");
+        s[34] = State(365, 400, 0, 272, false, "break with beat");
+        s[35] = State(365, 100, 30, 429496729920, false, "break on earned iris, lapsed to the start tier");
+        s[36] = State(365, 400, 8999, 0, true, "resting");
     }
 }

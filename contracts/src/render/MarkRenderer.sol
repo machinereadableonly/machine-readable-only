@@ -11,12 +11,11 @@ import {Palette} from "./Palette.sol";
 /// a pair, and this library still has to behave, which it does because no two
 /// Marks in different pairs ever write the same surface.
 ///
-/// Nine of the ten draw at this point. Hush, Ache, Static, Beat, Vessel and Aura
-/// each claim one surface below. Iris Bought, Iris Earned and Tint claim the
-/// eyes -- drawn by `EyeRenderer`, which `Renderer.svg` calls with the ink and
-/// ground this library selects. Break draws nothing yet -- the inversion lands
-/// in a later task -- so its constant exists for `names()` and for the bit
-/// layout, and nothing in this file branches on it.
+/// All ten draw at this point. Hush, Ache, Static, Beat, Vessel and Aura each
+/// claim one surface below. Iris Bought, Iris Earned and Tint claim the eyes --
+/// drawn by `EyeRenderer`, which `Renderer.svg` calls with the ink and ground
+/// this library selects. Break claims no surface of its own -- it exchanges
+/// which rung colour the heart and the noise take, in `inks()` below.
 ///
 /// This library is almost entirely colour selection, which is why it is cheap:
 /// `FrameRenderer` and `CodeRenderer` already take their fills as parameters, so
@@ -104,6 +103,32 @@ library MarkRenderer {
     /// `Palette.lapsedIndex` exists to prevent.
     function noise(uint256 marks, uint256 rung) internal pure returns (string memory) {
         return has(marks, STATIC) ? Palette.staticAt(rung) : Palette.noiseAt(rung);
+    }
+
+    /// @notice The two inks of the code block, with Break's exchange applied.
+    ///
+    /// @dev DEFINITION B, the rung-colour exchange: swap which rung colour each
+    /// region takes. Definition A -- swapping the FILLS verbatim -- was rendered
+    /// and decodes fine, but it inverts the wrong region: the noise ends up
+    /// carrying Beat's violet and the heart reads as a flat grey hole, which is
+    /// what Palette's chroma rule exists to prevent, and it contradicts this
+    /// Mark's own sentence that the code becomes the only red element.
+    ///
+    /// The decode rule survives the exchange for free: `colourAt(r)` and the
+    /// noise at the same rung are matched in luminance by construction, so
+    /// swapping two equal-luminance inks leaves the binarizer the same picture.
+    ///
+    /// Break composes with either side of pair 2 and never both -- Static and
+    /// Beat exclude each other. Break + Static is STRONGER than Break alone at
+    /// every rung, 192 against 126 at the top.
+    function inks(uint256 marks, uint256 rung)
+        internal
+        pure
+        returns (string memory heartInk, string memory noiseInk)
+    {
+        string memory colour = Palette.colourAt(rung);
+        string memory n = noise(marks, rung);
+        return has(marks, BREAK) ? (n, colour) : (colour, n);
     }
 
     /// @notice The heart modules. Beat swaps the flat fill for a gradient

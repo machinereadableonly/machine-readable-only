@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
-         rungOf, colourAt, noiseAt, staticAt, MAX_RINGS, ringsFor, ringSpan,
+         rungOf, colourAt, noiseAt, staticAt, inks, BEAT_TO, MAX_RINGS, ringsFor, ringSpan,
          HUSH_QUIET, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
        } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
@@ -215,10 +215,12 @@ test("streak tiers map to the right colours", () => {
   assert.equal(tierColour(9999), "#c8102e");
 });
 
-// The six Marks that touch the image (Task 4 rename: vein -> ache, blueblood
-// -> static, voice -> hush, bloom -> beat, halo -> aura, crown -> vessel).
-// Iris Bought, Iris Earned, Break and Tint draw nothing yet -- the eyes and
-// the inversion land in later tasks.
+// The six Marks that claim a surface of their own (Task 4 rename: vein ->
+// ache, blueblood -> static, voice -> hush, bloom -> beat, halo -> aura,
+// crown -> vessel). Iris Bought and Iris Earned claim the eyes, tested
+// separately. Break and Tint are not here: Break claims no surface of its
+// own -- it exchanges which rung colour two EXISTING surfaces take, tested
+// below -- and Tint requires an Iris.
 const DRAWN_MARKS = [ACHE, STATIC, HUSH, BEAT, AURA, VESSEL];
 
 test("every drawn mark changes the image without breaking the scan", () => {
@@ -232,14 +234,38 @@ test("every drawn mark changes the image without breaking the scan", () => {
   }
 });
 
-test("a mark that does not draw yet leaves the image alone", () => {
-  // Break is the inversion (Task 7) and is not built yet, so it may not
-  // change the image. Iris Bought used to be in this test too -- it drew
-  // nothing before Task 6 built the eyes -- and was removed when that
-  // stopped being true, rather than left here asserting something false.
+// Break, the inversion (Task 7). DEFINITION B, the rung-colour exchange: swap
+// which rung colour the heart and the noise take, rather than swapping the
+// fills verbatim. See inks() in render-token.mjs for the full reasoning.
+test("Break exchanges the heart and noise inks", () => {
+  const rung = 4;
+  assert.deepEqual(inks([], rung), { heartInk: colourAt(rung), noiseInk: noiseAt(rung) },
+    "without Break the inks are unchanged");
+  assert.deepEqual(inks([BREAK], rung), { heartInk: noiseAt(rung), noiseInk: colourAt(rung) },
+    "Break swaps which rung colour each region takes");
+});
+
+test("Break with Static gives a green heart and a red code", () => {
+  const rung = 4;
+  assert.deepEqual(inks([BREAK, STATIC], rung), { heartInk: staticAt(rung), noiseInk: colourAt(rung) });
+});
+
+test("Break with Beat moves the gradient's near stop, not the gradient itself", () => {
+  const rung = rungOf(45);
+  const svg = render({ level: 200, streak: 45, years: 0, marks: [BREAK, BEAT] });
+  assert.ok(svg.includes(`stop-color="${noiseAt(rung)}"`), "near stop should be the noise ink");
+  assert.ok(svg.includes(`stop-color="${BEAT_TO}"`), "far stop should still be violet");
+});
+
+test("Break changes the image and still scans, alone, with Static and with Beat", () => {
   const base = render({ level: 200, streak: 45, years: 0 });
-  assert.equal(render({ level: 200, streak: 45, years: 0, marks: [BREAK] }), base,
-    "break should not touch the image yet");
+  for (const marks of [[BREAK], [BREAK, STATIC], [BREAK, BEAT]]) {
+    const svg = render({ level: 200, streak: 45, years: 0, marks });
+    assert.notEqual(svg, base, `marks ${marks} changed nothing`);
+    const got = scanResult(svg);
+    assert.ok(got.ok, `marks ${marks} broke the scan: ${got.why}`);
+    assert.equal(got.destination, DESTINATION, `marks ${marks} changed the destination`);
+  }
 });
 
 test("Static tints the noise and nothing else", () => {
