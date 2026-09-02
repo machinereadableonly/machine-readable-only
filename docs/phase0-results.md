@@ -1637,9 +1637,22 @@ The old ladder let a token wear all seven Marks at once. The new one does not:
 Marks come in five exclusive pairs -- (1,2) (3,4) (5,6) (7,8) (9,10) -- and a
 token can hold at most one side of each, so the ceiling is five Marks, not ten.
 The maximal LEGAL token is the pair-by-pair choice that draws the most: Hush,
-Static, the BOUGHT Iris in its costliest shape (leaf), Vessel, and Tint. Beat
+BEAT, the BOUGHT Iris in its costliest shape (leaf), Vessel, and Tint. Vessel
 and Break sit in the excluded halves of their pairs and are never worn
 alongside this set.
+
+**FIX ROUND 1 correction.** The first pass through this task assumed Static was
+the pricier side of pair 2 and measured that variant. It is not -- Static is a
+same-length ink SWAP (`Palette.staticAt` in place of `Palette.noiseAt`, zero
+extra bytes), while Beat replaces the heart's flat fill with a gradient
+reference and adds an entire `<defs><linearGradient>...</linearGradient></defs>`
+block. The sweep below already showed this (its largest SVG among all 459 is a
+Beat combination, not a Static one) and went unreconciled against the assumed
+worst case in the first pass. THE RULE THIS ESTABLISHES: the sweep measured
+every combination and the worst-case selection by hand is a guess -- when they
+disagree, the sweep is right. `tools/combination-sweep.mjs` now asserts this
+directly (`crossCheckAgainstMaxLegal`): the maximal legal token's own byte
+count must equal the sweep's own computed largest, or the sweep throws.
 
 Measured `contracts/test/GasBudget.t.sol`, day 364 (the worst-case day -- see
 the entry above on why level 364 costs more than level 365), through the real
@@ -1647,25 +1660,25 @@ token contract with cold storage:
 
 | | Gas | Bytes |
 |---|---|---|
-| **New worst case (day 364, max marks)** | **1,737,744** | **10,441** |
+| **New worst case (day 364, max marks, Beat)** | **1,749,915** | **10,651** |
 | Pre-Plan-5 shipped baseline | 1,585,616 | 9,223 |
 | Post-rename baseline (this phase, before the drawing work) | 1,586,533 | 9,213 |
-| **Signed delta vs. pre-Plan-5** | **+152,128** | **+1,218** |
-| **Signed delta vs. post-rename** | **+151,211** | **+1,228** |
+| **Signed delta vs. pre-Plan-5** | **+164,299** | **+1,428** |
+| **Signed delta vs. post-rename** | **+163,382** | **+1,438** |
 
 The post-rename baseline isolates the Mark-name rename alone (+917 gas / -10
 bytes, purely from Mark names changing length in the metadata). Comparing the
 new worst case against IT rather than the pre-Plan-5 figure is what shows the
-cost of the new drawing work on its own: about +151,211 gas and +1,228 bytes
-for five new Marks (Static's noise recolour, the bought Iris's reshaped eyes in
-its leaf variant, and Tint's eye ink), on top of the Hush/Vessel pair that was
+cost of the new drawing work on its own: about +163,382 gas and +1,438 bytes
+for five new Marks (Beat's gradient, the bought Iris's reshaped eyes in its
+leaf variant, and Tint's eye ink), on top of the Hush/Vessel pair that was
 already in the pre-Plan-5 figure.
 
 Both numbers stay inside the 2,000,000 gas / 20,000 byte HARD limit, with
-262,256 gas (13.1%) and 9,559 bytes (47.8%) of margin still unused.
+250,085 gas (12.5%) and 9,349 bytes (46.7%) of margin still unused.
 
 **The 1,000,000 gas / 5,000 byte TARGET was already missed before this change
-and is still missed.** The worst case exceeds it by 737,744 gas and 5,441
+and is still missed.** The worst case exceeds it by 749,915 gas and 5,651
 bytes. This is reported, not quietly dropped -- see the Phase 0 section above,
 where the same target was already missed pre-Plan-5.
 
@@ -1704,13 +1717,38 @@ the case quietly vanishing.
   in its leaf shape)
 - Named cases: Break + Static PASS, Break + Beat PASS, Break + Iris PASS, all
   decoded at 848
+- **MAX_LEGAL cross-check: confirmed.** `contracts/test/GasBudget.t.sol`'s
+  maximal legal token (Hush + Beat + Iris-leaf + Vessel + Tint, 7,243 bytes)
+  ties the sweep's own largest byte count exactly. Vessel and Tint are
+  same-length hex substitutions (zero extra bytes), so several Mark sets
+  legitimately tie for "largest" -- the sweep's `reduce` happens to report the
+  3-Mark subset first, but the two figures now assert equal rather than being
+  eyeballed as "close enough".
 
-The full five-size gate (`node tools/combination-sweep.mjs full`, 256/500/848/
-1080/1600 px, about 103 minutes) is wired and correct but was deliberately
-left to run separately as a pre-deploy gate, per the Task 8 brief -- the
-erase-and-redraw of the finder patterns for the Iris eyes is the one thing on
-this ladder that can break a scan outright rather than merely look wrong, so
-it earns the full sweep rather than the cheap one alone.
+**Fix Round 1, the memory fix for the full five-size gate.** The full gate
+(`node tools/combination-sweep.mjs full`, 256/500/848/1080/1600 px, about 103
+minutes) was reported as "wired and correct" in the first pass on the strength
+of its argv wiring alone -- it had not actually been run to completion, and
+when the controller ran it, it was SIGKILLed by `safe-build.sh`'s 3G MemoryMax
+after about 150 of 459 combinations (exit 137). Instrumented rather than
+patched over: `@resvg/resvg-js` 2.6.2 (the installed version) does not call
+napi-rs's `adjust_external_memory()`, so V8 never sees the native memory a
+render allocates and never collects it under pressure -- measured, RSS climbed
+from 117 MB to 4.2 GB over 200 renders at 1600px in a tight loop, reading
+`.pixels` exactly once per render each time (the known resvg-js leak shape on
+this project), and explicit `global.gc()` every 10 iterations made no
+measurable difference. The fix landed upstream in 2.7.0-alpha.0 (2026-01-22)
+but only as an alpha; no stable release carries it, so upgrading was not an
+option. The full gate now batches: the orchestrator spawns this same file as a
+child process per 30-combination batch (measured ~38 MB RSS growth per
+combination across the real 5-size mix; a batch peaks around 1.3 GB), and the
+OS reclaims everything when a batch's process exits before the next one
+starts. Confirmed live (a bounded smoke test, stopped deliberately rather than
+run to completion, per the controller's instruction): a worker's RSS climbed
+to ~1.2 GB across one 30-combination batch, then the next batch's worker
+started fresh at ~71 MB. 330 of 459 combinations (11 batches) decoded cleanly,
+0 failures, before the smoke test was stopped. The controller runs the full
+459 to completion separately.
 
 ### A comment correction
 

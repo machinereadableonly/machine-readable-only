@@ -30,13 +30,28 @@ contract GasBudgetTest is Test {
     /// @dev The maximal LEGAL token under the ten-Mark ladder: at most one Mark
     /// per pair -- (1,2) (3,4) (5,6) (7,8) (9,10) -- so "every Mark" is no
     /// longer a state any token can reach. This is the pair-by-pair selection
-    /// that draws the most: Hush, Static, the BOUGHT Iris in its costliest
-    /// shape (leaf), Vessel, and Tint. Beat and Break sit in the excluded
-    /// halves of their pairs and are never worn alongside this set. The Iris
-    /// shape is packed at bits 16-23 of the same word applyMark writes it to
-    /// (MachineReadableOnly.applyMark, upgradeId == 5); 2 is leaf, per
+    /// that draws the most: Hush, BEAT, the BOUGHT Iris in its costliest
+    /// shape (leaf), Vessel, and Tint. Vessel and Break sit in the excluded
+    /// halves of their pairs and are never worn alongside this set.
+    ///
+    /// FIX ROUND 1: this used to say Static, not Beat. That was wrong, and the
+    /// evidence was already in hand: Static is a same-length ink SWAP (zero
+    /// extra bytes), while Beat replaces the heart's flat fill with a gradient
+    /// reference and adds an entire `<defs><linearGradient>...</linearGradient>
+    /// </defs>` block. Measured, same day-364 state:
+    ///   Hush + Static + Iris(leaf) + Vessel + Tint   1,728,964 gas / 10,441 B
+    ///   Hush + Beat   + Iris(leaf) + Vessel + Tint   1,738,180 gas / 10,651 B
+    /// Beat costs 9,216 more gas and 210 more bytes. `combination-sweep.mjs`'s
+    /// own sweep already showed this -- its largest SVG among all 459 is a Beat
+    /// combination, not a Static one -- and that sweep is the more trustworthy
+    /// source: it measured every combination rather than assuming which pair
+    /// side costs more. See that file's MAX_LEGAL for the cross-check that now
+    /// ties the two together.
+    ///
+    /// The Iris shape is packed at bits 16-23 of the same word applyMark writes
+    /// it to (MachineReadableOnly.applyMark, upgradeId == 5); 2 is leaf, per
     /// render-token.mjs's IRIS_SHAPE_NAMES order (target, squircle, leaf).
-    uint256 constant MAX_MARKS = MarkRenderer.HUSH | MarkRenderer.STATIC | MarkRenderer.IRIS_BOUGHT
+    uint256 constant MAX_MARKS = MarkRenderer.HUSH | MarkRenderer.BEAT | MarkRenderer.IRIS_BOUGHT
         | MarkRenderer.VESSEL | MarkRenderer.TINT | (uint256(2) << 16);
 
     /// @dev Token 1 on example.com, from tools/token-bitmap.mjs.
@@ -213,11 +228,20 @@ contract GasBudgetTest is Test {
     /// noise ink, which `CodeRenderer.paths` already takes as a parameter, so it
     /// substitutes one seven-character colour for another. The image bytes must
     /// therefore be IDENTICAL, and only the branch costs gas.
+    /// @dev FIX ROUND 1: this used to XOR MarkRenderer.STATIC onto MAX_MARKS to
+    /// get "everything except Static". That broke the moment MAX_MARKS itself
+    /// stopped containing Static (it wears Beat instead -- see MAX_MARKS's own
+    /// doc comment): the XOR then ADDED Static on top of Beat rather than
+    /// removing it, comparing two illegal, mislabelled states that both carried
+    /// Beat, one of them also carrying Static. Isolating what Static costs needs
+    /// a base that carries NEITHER pair-2 Mark, so the only difference between
+    /// the two measured tokens is Static itself.
     function test_whatStaticCosts() public {
-        uint256 without = MAX_MARKS ^ MarkRenderer.STATIC;
+        uint256 withoutPairTwo = MarkRenderer.HUSH | MarkRenderer.IRIS_BOUGHT
+            | MarkRenderer.VESSEL | MarkRenderer.TINT | (uint256(2) << 16);
 
-        _place(40, 364, 100, 1000, false, without);
-        _place(41, 364, 100, 1000, false, MAX_MARKS);
+        _place(40, 364, 100, 1000, false, withoutPairTwo);
+        _place(41, 364, 100, 1000, false, withoutPairTwo | MarkRenderer.STATIC);
 
         (uint256 gasOff, uint256 lenOff) = _measure("day 364, without Static", 40);
         (uint256 gasOn, uint256 lenOn) = _measure("day 364, with Static", 41);
