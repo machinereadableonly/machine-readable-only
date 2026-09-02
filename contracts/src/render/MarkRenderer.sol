@@ -79,7 +79,7 @@ library MarkRenderer {
     }
 
     /// @notice The noise modules -- every lit module that is not the heart.
-    /// Static tints them slate.
+    /// Static tints them green.
     ///
     /// @dev Takes the RUNG rather than a colour, because both palettes are
     /// indexed by it and the two inks of a code block must come from the same
@@ -87,7 +87,7 @@ library MarkRenderer {
     /// with a start-tier noise, which is exactly the wiring mistake
     /// `Palette.lapsedIndex` exists to prevent.
     function noise(uint256 marks, uint256 rung) internal pure returns (string memory) {
-        return has(marks, STATIC) ? Palette.bluebloodAt(rung) : Palette.noiseAt(rung);
+        return has(marks, STATIC) ? Palette.staticAt(rung) : Palette.noiseAt(rung);
     }
 
     /// @notice The heart modules. Beat swaps the flat fill for a gradient

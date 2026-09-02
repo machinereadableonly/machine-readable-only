@@ -38,21 +38,28 @@ export const NOISE_BY_TIER = [
   "#686868",   // matches #8e5566, luma 104
   "#5f5f5f",   // matches #70575f, luma 95
 ];
-// Blue Blood, the rung-2 Mark: the noise takes a slate tint. Same weights as
-// NOISE_BY_TIER above -- the luminance pairing does not bend for a Mark, because
-// the binarizer does not care why an ink is lighter. Only the hue moves.
+// Static, the rung-1 Mark (Task 4 rename from Blue Blood): the noise takes a
+// green tint. Same weights as NOISE_BY_TIER above -- the luminance pairing does
+// not bend for a Mark, because the binarizer does not care why an ink is
+// lighter. Only the hue moves.
 //
-// Derived, not chosen: a slate direction [60, 90, 130] pulled 70% toward its own
-// grey, then scaled so each tier lands on its exact BT.601 luma. The intensity
-// is set by the rule that the noise must stay less saturated than the heart it
-// surrounds, or the noise becomes the subject; the start tier binds it at chroma
-// 22 against the heart's 25. Must match Palette.bluebloodAt in Solidity.
-export const BLUEBLOOD_BY_TIER = [
-  "#444b55",   // matches #c8102e, luma 74
-  "#4d5560",   // matches #bd2242, luma 84
-  "#565f6c",   // matches #a83a55, luma 94
-  "#5f6a77",   // matches #8e5566, luma 104
-  "#57606d",   // matches #70575f, luma 95
+// GREEN, chosen by the operator 2026-09-02 from a rendered sheet (static-hue-sheet.mjs)
+// that put all four candidates plus the shipped grey under ONE derivation
+// across all five run rungs. It is the only hue that keeps getting STRONGER as
+// the run deepens (10/21/39/55/66 across the rungs, where slate, teal and
+// violet all peak at run 7 and fall back): a deeper streak darkens the heart,
+// the noise must darken to match, and a blue or violet cannot hold high chroma
+// at a dark luma while a green can.
+//
+// Derived, not chosen: a green direction [0, 124, 8] pulled toward its own
+// grey until its chroma is 60% of that rung's heart, then scaled onto that
+// rung's exact BT.601 luma. Must match Palette.staticAt in Solidity.
+export const STATIC_BY_TIER = [
+  "#08770f",   // matches #c8102e, luma 74
+  "#1d7a23",   // matches #bd2242, luma 84
+  "#37793b",   // matches #a83a55, luma 94
+  "#537655",   // matches #8e5566, luma 104
+  "#556557",   // matches #70575f, luma 95
 ];
 
 export const GHOST = "#f4eef0";   // frame cells not yet earned
@@ -99,7 +106,7 @@ const TOP = TIERS.length - 1;
 export const rungOf = streak => TOP - TIERS.findIndex(t => streak >= t.min);
 export const colourAt = rung => TIERS[TOP - rung].colour;
 export const noiseAt = rung => NOISE_BY_TIER[TOP - rung];
-export const bluebloodAt = rung => BLUEBLOOD_BY_TIER[TOP - rung];
+export const staticAt = rung => STATIC_BY_TIER[TOP - rung];
 export const tierColour = streak => colourAt(rungOf(streak));
 
 // A lapse walks BACK DOWN the same ladder rather than introducing paler tones.
@@ -244,7 +251,7 @@ export function renderSvg(modules, want, size, state) {
   // Static claims the noise ink -- the one surface no other Mark touches.
   // Selected by RUNG, not by colour, so the heart and the noise can never be
   // taken from different tiers. Mirrors MarkRenderer.noise in Solidity.
-  const noise = hasMark(marks, STATIC) ? bluebloodAt(rung) : noiseAt(rung);
+  const noise = hasMark(marks, STATIC) ? staticAt(rung) : noiseAt(rung);
   const gold = hasMark(marks, VESSEL) ? VESSEL_GOLD : null;
   const ghost = hasMark(marks, ACHE) ? ACHE_GHOST : GHOST;
   const field = hasMark(marks, AURA) ? AURA_FIELD : FIELD;

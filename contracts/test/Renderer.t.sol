@@ -270,8 +270,8 @@ contract RendererTest is Test {
             "a colour swap cannot change the image length"
         );
         assertTrue(
-            vm.contains(marked, Palette.bluebloodAt(Palette.tierIndex(45))),
-            "the slate ink is missing from a Static token"
+            vm.contains(marked, Palette.staticAt(Palette.tierIndex(45))),
+            "the green ink is missing from a Static token"
         );
         assertFalse(
             vm.contains(marked, Palette.noiseAt(Palette.tierIndex(45))),

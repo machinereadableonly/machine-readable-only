@@ -30,7 +30,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
-  renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt, STATIC,
+  renderSvg, canvasFor, STATIC_BY_TIER, TIERS, colourAt, rungOf, noiseAt, STATIC,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -119,7 +119,7 @@ const decodesAt = svg => SIZES.filter(px => {
 // The bare token at each rung, rendered once and reused as the shift baseline.
 const bare = RUNGS.map(r => pixels(draw(r.streak, []), 560));
 
-const keep = [...BLUEBLOOD_BY_TIER];
+const keep = [...STATIC_BY_TIER];
 const tiles = [];
 
 console.log("STATIC HUE COMPARISON -- one rule for every hue");
@@ -130,7 +130,7 @@ for (const h of HUES) {
   const inks = inksFor(h.rgb);
   // The palette is a module-level array, so a candidate is written in and put
   // back immediately after. Nothing here is meant to ship.
-  for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = inks[i];
+  for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = inks[i];
 
   RUNGS.forEach((r, ri) => {
     const rung = rungOf(r.streak);
@@ -153,7 +153,7 @@ for (const h of HUES) {
     });
   });
 }
-for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = keep[i];
+for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = keep[i];
 
 // One row per hue, one column per rung, weakest run on the left.
 const TILE = 230, LBL = 40, PAD = 24, HEAD = 74, ROWLBL = 26;

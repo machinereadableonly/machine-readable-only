@@ -29,7 +29,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
-  renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
+  renderSvg, canvasFor, STATIC_BY_TIER, TIERS, colourAt, rungOf, staticAt,
   QUIET, FIELD, STATIC,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
@@ -48,32 +48,11 @@ const THICK = (canvas - 45) / 2 - RING - GAP;
 const codeOff = RING + GAP + THICK + QUIET;
 const EYES = [[0, 0], [S - 7, 0], [0, S - 7]];
 
-const GREEN = [0, 124, 8];
 const luma = ([r, g, b]) => 0.299 * r + 0.587 * g + 0.114 * b;
-const chromaOf = ([r, g, b]) => Math.max(r, g, b) - Math.min(r, g, b);
-const hex = ([r, g, b]) => "#" + [r, g, b].map(v =>
-  Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
 const rgbOf = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-const atLuma = ([r, g, b], t) => {
-  const k = t / (0.299 * r + 0.587 * g + 0.114 * b);
-  return [r * k, g * k, b * k];
-};
-const toward = ([r, g, b], t) => {
-  const m = 0.299 * r + 0.587 * g + 0.114 * b;
-  return [r + (m - r) * t, g + (m - g) * t, b + (m - b) * t];
-};
-/// Static's green per rung, same derivation as static-hue-sheet.mjs.
-const greenInks = () => TIERS.map((_, i) => {
-  const rung = TIERS.length - 1 - i;
-  const wanted = chromaOf(rgbOf(colourAt(rung))) * 0.60;
-  const target = luma(rgbOf(noiseAt(rung)));
-  let ink = atLuma(toward(GREEN, 0.95), target);
-  for (let m = 0.95; m >= 0; m -= 0.01) {
-    ink = atLuma(toward(GREEN, m), target);
-    if (chromaOf(ink) >= wanted) break;
-  }
-  return hex(ink);
-});
+/// Static's green per rung, read from the shipped derivation rather than
+/// recomputed here -- one derivation, in render-token.mjs.
+const greenInks = () => TIERS.map((_, i) => staticAt(TIERS.length - 1 - i));
 
 /// The three shapes adopted for the bought Iris, with the measured geometry.
 const SHAPES = {
@@ -128,14 +107,14 @@ const INKS = [
 ];
 
 const inks = greenInks();
-const keep = [...BLUEBLOOD_BY_TIER];
+const keep = [...STATIC_BY_TIER];
 
 /// A token wearing Static, at one rung, with an Iris in the given shape/ink.
 function tile(streak, rung, style, tintHex) {
-  for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = inks[i];
+  for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = inks[i];
   const base = renderSvg(CODE.modules, TARGET.want, CODE.size,
     { level: 200, streak, years: 1, marks: [STATIC], lastDay: 20700, today: 20700 });
-  for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = keep[i];
+  for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = keep[i];
   return withEyes(base, style, tintHex ?? colourAt(rung));
 }
 

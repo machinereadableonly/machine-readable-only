@@ -19,7 +19,7 @@ import { PNG } from "pngjs";
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
-  renderSvg, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt, STATIC, BEAT,
+  renderSvg, STATIC_BY_TIER, TIERS, colourAt, rungOf, noiseAt, STATIC, BEAT,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -97,11 +97,11 @@ function bluebloodInks() {
   });
 }
 function bluebloodProposed(streak) {
-  const keep = [...BLUEBLOOD_BY_TIER];
+  const keep = [...STATIC_BY_TIER];
   const inks = bluebloodInks();
-  for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = inks[i];
+  for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = inks[i];
   const svg = draw(streak, [STATIC]);
-  for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = keep[i];
+  for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = keep[i];
   return svg;
 }
 

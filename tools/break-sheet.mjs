@@ -40,7 +40,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
-  renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
+  renderSvg, canvasFor, STATIC_BY_TIER, TIERS, colourAt, rungOf, noiseAt, staticAt,
   STATIC, BEAT,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
@@ -53,35 +53,10 @@ const SIZES = [256, 500, 848, 1080, 1600];
 const OUT = new URL("./out/marks", import.meta.url).pathname;
 
 const VIOLET = "#2000ff";   // Beat's far stop, decided 2026-08-31
-const GREEN = [0, 124, 8];  // Static's hue, decided 2026-09-02
 
-const luma = ([r, g, b]) => 0.299 * r + 0.587 * g + 0.114 * b;
-const chromaOf = ([r, g, b]) => Math.max(r, g, b) - Math.min(r, g, b);
-const hex = ([r, g, b]) => "#" + [r, g, b].map(v =>
-  Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
-const rgbOf = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-const atLuma = ([r, g, b], t) => {
-  const k = t / (0.299 * r + 0.587 * g + 0.114 * b);
-  return [r * k, g * k, b * k];
-};
-const toward = ([r, g, b], t) => {
-  const m = 0.299 * r + 0.587 * g + 0.114 * b;
-  return [r + (m - r) * t, g + (m - g) * t, b + (m - b) * t];
-};
-
-/// Static's green, one ink per rung: chroma 60% of that rung's heart, landed on
-/// that rung's exact luma. Same derivation as static-hue-sheet.mjs.
-const greenInks = () => TIERS.map((_, i) => {
-  const rung = TIERS.length - 1 - i;
-  const wanted = chromaOf(rgbOf(colourAt(rung))) * 0.60;
-  const target = luma(rgbOf(noiseAt(rung)));
-  let ink = atLuma(toward(GREEN, 0.95), target);
-  for (let m = 0.95; m >= 0; m -= 0.01) {
-    ink = atLuma(toward(GREEN, m), target);
-    if (chromaOf(ink) >= wanted) break;
-  }
-  return hex(ink);
-});
+/// Static's green, one ink per rung: read from the shipped derivation rather
+/// than recomputed here -- one derivation, in render-token.mjs.
+const greenInks = () => TIERS.map((_, i) => staticAt(TIERS.length - 1 - i));
 
 // ---------------------------------------------------------------------------
 // The Break transform.
@@ -155,7 +130,7 @@ const decodesAt = svg => SIZES.filter(px => {
 });
 
 const inks = greenInks();
-const keep = [...BLUEBLOOD_BY_TIER];
+const keep = [...STATIC_BY_TIER];
 
 /// Each variant returns the finished SVG for one rung.
 const VARIANTS = [
@@ -172,9 +147,9 @@ const VARIANTS = [
   {
     name: "Break + Static",
     make: (s, rung) => {
-      for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = inks[i];
+      for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = inks[i];
       const svg = raw(s, [STATIC]);
-      for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = keep[i];
+      for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = keep[i];
       return invert(svg, {
         mode: "B", heartInk: colourAt(rung),
         noiseInk: inks[TIERS.length - 1 - rung], beat: false,

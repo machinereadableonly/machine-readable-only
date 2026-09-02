@@ -18,7 +18,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
-  renderSvg, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt, canvasFor,
+  renderSvg, STATIC_BY_TIER, TIERS, colourAt, rungOf, noiseAt, canvasFor,
   STATIC, BEAT,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
@@ -107,16 +107,16 @@ console.log(`top rung: heart ${heart} (chroma ${chromaOf(rgbOf(heart))}), `
 console.log("BLUE BLOOD -- strongest ink per hue family at the noise's exact luma");
 console.log("family    ink       chroma  vs heart  shift    decodes");
 const strongest = strongestAt(luma(rgbOf(neutral)));
-const keep = [...BLUEBLOOD_BY_TIER];
+const keep = [...STATIC_BY_TIER];
 for (const [fam, { rgb, chroma }] of [...strongest].sort((a, b) => b[1].chroma - a[1].chroma)) {
   if (fam === "grey") continue;
   const ink = hex(rgb);
   // Every rung gets the same hue, each scaled to its own luma, so the ladder
   // stays coherent rather than only the tier being previewed.
-  for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) {
-    const r = BLUEBLOOD_BY_TIER.length - 1 - i;
+  for (let i = 0; i < STATIC_BY_TIER.length; i++) {
+    const r = STATIC_BY_TIER.length - 1 - i;
     const k = luma(rgbOf(noiseAt(r))) / luma(rgb);
-    BLUEBLOOD_BY_TIER[i] = hex(rgb.map(v => v * k));
+    STATIC_BY_TIER[i] = hex(rgb.map(v => v * k));
   }
   const svg = draw(STREAK, [STATIC]);
   const ok = decodes(svg);
@@ -127,7 +127,7 @@ for (const [fam, { rgb, chroma }] of [...strongest].sort((a, b) => b[1].chroma -
     + `${ok === SIZES.length ? "ALL" : "FAILS " + (SIZES.length - ok)}`);
   tiles.push({ group: "blueblood", label: `${fam} ${ink}`, svg, shift: s, ok, all: ok === SIZES.length });
 }
-for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = keep[i];
+for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = keep[i];
 
 // ---------------------------------------------------------------------------
 // BLOOM. The far end of the gradient has more freedom than the flat noise ink,

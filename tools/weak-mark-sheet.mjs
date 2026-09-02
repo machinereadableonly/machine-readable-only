@@ -24,7 +24,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
-  renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
+  renderSvg, canvasFor, STATIC_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
   STATIC, BEAT,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
@@ -154,7 +154,7 @@ function bluebloodInks(fraction, floor = 0) {
 }
 
 function bluebloodCandidates(streak) {
-  const SHIPPED = [...BLUEBLOOD_BY_TIER];
+  const SHIPPED = [...STATIC_BY_TIER];
   const rung = rungOf(streak);
   const out = [];
   for (const c of [
@@ -163,7 +163,7 @@ function bluebloodCandidates(streak) {
     { name: "0.40 x heart", inks: bluebloodInks(0.40) },
     { name: "0.40 + floor", inks: bluebloodInks(0.40, 22) },
   ]) {
-    for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = c.inks[i];
+    for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = c.inks[i];
     const base = renderSvg(CODE.modules, TARGET.want, CODE.size, stateFor(streak, []));
     const svg = renderSvg(CODE.modules, TARGET.want, CODE.size, stateFor(streak, [STATIC]));
     const ink = c.inks[TIERS.length - 1 - rung];
@@ -176,7 +176,7 @@ function bluebloodCandidates(streak) {
       ok: decodes(svg),
     });
   }
-  for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = SHIPPED[i];
+  for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = SHIPPED[i];
   return out;
 }
 
