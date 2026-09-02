@@ -182,14 +182,18 @@ test("two mints from the same key: exactly one succeeds, the second is paid-but-
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM tokens").get().n, 1);
 });
 
-test("upgradeId 8, 0, 32 and 33 are rejected by the schema", () => {
+// The bound moved from 7 to 10 when the ladder's last three Marks became
+// reachable. The out-of-range cases that matter are unchanged in KIND: zero,
+// and the shift-wrapping values -- 1 << 32 is 1 and 1 << 33 is 2, so a high id
+// would alias a low one, and 1 << 31 is negative.
+test("upgradeId 11, 0, 32 and 33 are rejected by the schema", () => {
   const tool = makeUpgradeTool({
     q: {},
     chain: openChain(),
     catalogue: {},
     paid: () => { throw new Error("payment must not be requested"); },
   });
-  for (const upgradeId of [8, 0, 32, 33]) {
+  for (const upgradeId of [11, 0, 32, 33]) {
     const result = tool.config.inputSchema.safeParse({ tokenId: 1, upgradeId });
     assert.equal(result.success, false, `upgradeId ${upgradeId} should be rejected`);
   }
@@ -733,4 +737,149 @@ test("a bought Mark still goes through the payment wrapper, at its own price", a
   assert.equal(r.ok, true);
   assert.equal(charged.price, "$5.00");
   assert.equal(charged.meta.description, "Apply the Static Mark to token 1");
+});
+
+// --- the three pre-payment refusals, and the variant -------------------------
+
+/// A token that already wears a Mark. markOrderWritten is what sets the mirror's
+/// bitmask, so a reservation alone is not yet a held Mark -- which is exactly
+/// the state the post-settlement re-check exists for.
+function tokenWearing({ level, streak, marks = [] }) {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 100, level, streak);
+  for (const id of marks) {
+    q.reserveMark(1, id, 0);
+    q.markOrderWritten(1, id);
+  }
+  return q;
+}
+
+const ladderTool = (q, over = {}) => makeUpgradeTool({
+  q, chain: openChain(), catalogue: assertLadderSane(LADDER),
+  paid: () => { throw new Error("payment must not be requested"); },
+  ...over,
+});
+
+test("an excluded Mark is refused BEFORE payment, and names what blocked it", async () => {
+  const q = tokenWearing({ level: 40, streak: 40, marks: [4] });   // wears Beat
+  const r = await ladderTool(q).handler({ tokenId: 1, upgradeId: 3 }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "mark-excluded");
+  assert.equal(r.detail, "beat");
+});
+
+// The property that makes the refusal self-explanatory: an agent already knows
+// what its pair partner is, so naming it is enough. If an exclusion could ever
+// name a Mark from another pair, the detail would be a puzzle instead.
+test("mark-excluded can only ever name the SAME pair's other side", () => {
+  for (const id of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+    const partner = id % 2 === 1 ? id + 1 : id - 1;
+    assert.equal(LADDER[id].excludes, 1 << partner);
+  }
+});
+
+test("Tint without an Iris is refused, and accepted once one is held", async () => {
+  const bare = tokenWearing({ level: 200, streak: 200 });
+  const no = await ladderTool(bare).handler({ tokenId: 1, upgradeId: 9, variant: 0 }, { keyId: "k1" });
+  assert.equal(no.reason, "mark-needs-iris");
+
+  // Mark 6 is the EARNED Iris. Either side of pair three opens Tint, and using
+  // the earned one proves the requirement is a mask and not a check for the
+  // bought Mark alone.
+  const withIris = tokenWearing({ level: 200, streak: 200, marks: [6] });
+  let charged = null;
+  const yes = await ladderTool(withIris, { paid: (fn, price) => { charged = price; return fn; } })
+    .handler({ tokenId: 1, upgradeId: 9, variant: 1 }, { keyId: "k1" });
+  assert.equal(yes.ok, true);
+  assert.equal(yes.variant, 1);
+  assert.equal(charged, "$250.00");
+});
+
+test("Aura without an Iris is refused too -- the second trap's fix", async () => {
+  const q = tokenWearing({ level: 200, streak: 200 });
+  const r = await ladderTool(q).handler({ tokenId: 1, upgradeId: 10 }, { keyId: "k1" });
+  assert.equal(r.reason, "mark-needs-iris");
+});
+
+test("a variant this Mark does not accept is refused before payment", async () => {
+  const q = tokenWearing({ level: 200, streak: 200 });
+  const r = await ladderTool(q).handler({ tokenId: 1, upgradeId: 5, variant: 3 }, { keyId: "k1" });
+  assert.equal(r.reason, "mark-bad-variant");
+});
+
+// The boundary, both sides. The highest legal shape is accepted and the next one
+// is not -- a bound tested from one side only passes for an off-by-one.
+test("the highest legal variant is accepted and the next is not", async () => {
+  const q = tokenWearing({ level: 200, streak: 200 });
+  const ok = await ladderTool(q, { paid: (fn) => fn })
+    .handler({ tokenId: 1, upgradeId: 5, variant: 2 }, { keyId: "k1" });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.variant, 2);
+
+  const over = tokenWearing({ level: 200, streak: 200 });
+  const no = await ladderTool(over).handler({ tokenId: 1, upgradeId: 5, variant: 3 }, { keyId: "k1" });
+  assert.equal(no.reason, "mark-bad-variant");
+});
+
+test("a non-zero variant on a Mark with no variants is refused", async () => {
+  const q = tokenWearing({ level: 10, streak: 10 });
+  const r = await ladderTool(q).handler({ tokenId: 1, upgradeId: 1, variant: 1 }, { keyId: "k1" });
+  assert.equal(r.reason, "mark-bad-variant");
+});
+
+test("the variant is named in the payment demand an agent reads", async () => {
+  const q = tokenWearing({ level: 200, streak: 200 });
+  let meta = null;
+  await ladderTool(q, { paid: (fn, price, m) => { meta = m; return fn; } })
+    .handler({ tokenId: 1, upgradeId: 5, variant: 2 }, { keyId: "k1" });
+  assert.equal(meta.description, "Apply the Iris Mark (leaf) to token 1");
+});
+
+// Settling takes seconds, and the same token can take the OTHER side of a pair
+// in that window through a second connection. The pre-payment check is stale by
+// the time the money lands, so the decision is made again against the database.
+test("the exclusion is re-checked AFTER settlement", async () => {
+  const q = tokenWearing({ level: 40, streak: 40 });
+  const alerts = [];
+  const racing = (fn) => async (args, ctx) => {
+    q.reserveMark(1, 4, 0);        // Beat lands mid-settlement
+    q.markOrderWritten(1, 4);      // and reaches the mirror's mask
+    return fn(args, ctx);
+  };
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER),
+    paid: racing, alert: (m) => alerts.push(m),
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 3, variant: 0 }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "paid-but-unavailable");
+  assert.equal(r.detail, "mark-excluded");
+  assert.equal(alerts.length, 1, "money moved and nobody was told");
+});
+
+// THE CONTROL for the test above: with nothing racing, the identical call
+// settles and reserves. Without it, that test passes for a tool that refuses
+// everything.
+test("with nothing racing, the same call settles and reserves", async () => {
+  const q = tokenWearing({ level: 40, streak: 40 });
+  const r = await ladderTool(q, { paid: (fn) => fn })
+    .handler({ tokenId: 1, upgradeId: 3, variant: 0 }, { keyId: "k1" });
+  assert.equal(r.ok, true);
+  assert.equal(r.upgradeId, 3);
+  assert.deepEqual(q.pendingMarkOrders().map((o) => ({ ...o })),
+    [{ tokenId: 1, upgradeId: 3, variant: 0 }]);
+});
+
+test("the schema now accepts the whole ladder, ids 8 to 10 included", () => {
+  const q = tokenWearing({ level: 1, streak: 1 });
+  const schema = ladderTool(q).config.inputSchema;
+  for (const upgradeId of [1, 8, 9, 10]) {
+    assert.equal(schema.safeParse({ tokenId: 1, upgradeId }).success, true, `id ${upgradeId} rejected`);
+  }
+  assert.equal(schema.safeParse({ tokenId: 1, upgradeId: 11 }).success, false);
+  assert.equal(schema.safeParse({ tokenId: 1, upgradeId: 1, variant: 3 }).success, false);
+  // The default is what lets an agent omit it entirely.
+  assert.equal(schema.parse({ tokenId: 1, upgradeId: 1 }).variant, 0);
 });

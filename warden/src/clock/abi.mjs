@@ -42,6 +42,11 @@ export const MRO_ABI = [
         "name": "upgradeId",
         "type": "uint8",
         "internalType": "uint8"
+      },
+      {
+        "name": "variant",
+        "type": "uint8",
+        "internalType": "uint8"
       }
     ],
     "outputs": [],
@@ -609,6 +614,16 @@ export const MRO_ABI = [
             "name": "active",
             "type": "bool",
             "internalType": "bool"
+          },
+          {
+            "name": "excludes",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "requiresAny",
+            "type": "uint16",
+            "internalType": "uint16"
           }
         ]
       }
@@ -858,6 +873,16 @@ export const MRO_ABI = [
             "name": "active",
             "type": "bool",
             "internalType": "bool"
+          },
+          {
+            "name": "excludes",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "requiresAny",
+            "type": "uint16",
+            "internalType": "uint16"
           }
         ]
       }
@@ -1132,6 +1157,12 @@ export const MRO_ABI = [
         "name": "upgradeId",
         "type": "uint8",
         "indexed": true,
+        "internalType": "uint8"
+      },
+      {
+        "name": "variant",
+        "type": "uint8",
+        "indexed": false,
         "internalType": "uint8"
       }
     ],
@@ -1447,6 +1478,17 @@ export const MRO_ABI = [
   },
   {
     "type": "error",
+    "name": "BadVariant",
+    "inputs": [
+      {
+        "name": "got",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "BadVoucher",
     "inputs": []
   },
@@ -1645,12 +1687,39 @@ export const MRO_ABI = [
   },
   {
     "type": "error",
+    "name": "MarkExcluded",
+    "inputs": [
+      {
+        "name": "by",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "MarkGate",
     "inputs": []
   },
   {
     "type": "error",
+    "name": "MarkIdOutOfRange",
+    "inputs": [
+      {
+        "name": "upgradeId",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "MarkInactive",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "MarkRequires",
     "inputs": []
   },
   {

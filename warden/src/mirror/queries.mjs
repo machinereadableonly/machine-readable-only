@@ -36,7 +36,7 @@ export function queries(db) {
     tokenCount: db.prepare("SELECT COUNT(*) AS n FROM tokens"),
     setResting: db.prepare("UPDATE tokens SET resting = 1 WHERE tokenId = ?"),
     insertMint: db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (?, ?, ?)"),
-    reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId) VALUES (?, ?)"),
+    reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId, variant) VALUES (?, ?, ?)"),
     markSold: db.prepare("SELECT COUNT(*) AS n FROM mark_orders WHERE upgradeId = ?"),
     hasMinted: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE keyId = ?"),
 
@@ -54,7 +54,7 @@ export function queries(db) {
       "SELECT tokenId, day FROM credits WHERE status = 'queued' AND day <= ? ORDER BY day ASC, tokenId ASC"
     ),
     pendingMarkOrders: db.prepare(
-      "SELECT tokenId, upgradeId FROM mark_orders WHERE status = 'queued' ORDER BY tokenId ASC"
+      "SELECT tokenId, upgradeId, variant FROM mark_orders WHERE status = 'queued' ORDER BY tokenId ASC"
     ),
     markMintWritten: db.prepare("UPDATE mints SET status = 'written' WHERE tokenId = ?"),
     markTokenWritten: db.prepare("UPDATE tokens SET status = 'written' WHERE tokenId = ?"),
@@ -145,9 +145,9 @@ export function queries(db) {
     /// Returns true when the reservation was new, false when this token already
     /// holds that mark. Any OTHER database error is rethrown -- the same
     /// discrimination insertCredit makes, and for the same reason.
-    reserveMark(tokenId, upgradeId) {
+    reserveMark(tokenId, upgradeId, variant = 0) {
       try {
-        s.reserveMark.run(tokenId, upgradeId);
+        s.reserveMark.run(tokenId, upgradeId, variant);
         return true;
       } catch (err) {
         if (UNIQUE_VIOLATION.test(err.message)) return false;
