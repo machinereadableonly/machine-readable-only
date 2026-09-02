@@ -2078,22 +2078,62 @@ this is where the plan is wrong and needs re-planning, not pushing through.</p>
 <li>Create: <code>warden/src/mcp/ladder.mjs</code></li>
 <li>Modify: <code>warden/src/main.mjs</code></li>
 <li>Modify: <code>warden/src/mcp/tools/upgrade.mjs</code></li>
-<li>Test: <code>warden/test/ladder.test.mjs</code> (create), <code>warden/test/tools.test.mjs</code></li>
+<li>Modify: <code>tools/ladder-fixture.mjs</code></li>
+<li>Modify: <code>warden/src/pay/x402.mjs</code> (one rotted comment)</li>
+<li>Test: <code>warden/test/ladder.test.mjs</code> (create), <code>warden/test/pay.test.mjs</code>,
+<code>warden/test/e2e/join.test.mjs</code>, <code>contracts/test/Ladder.t.sol</code></li>
 </ul>
 <p><strong>Interfaces:</strong></p>
 <ul>
-<li><p>Consumes: the ten records from <code>contracts/src/Ladder.sol</code> (Task 3).</p>
-</li>
-<li><p>Produces: <code>export const LADDER</code> keyed by Mark id 1..10, each
-<code>{ id, name, pair, route, price, minLevel, minStreak, needsWhole, supply, excludes, requiresAny, variants }</code>; <code>export function assertLadderSane(ladder)</code>.</p>
-</li>
-<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
-</li>
+<li>Consumes: the ten records from <code>contracts/src/Ladder.sol</code> (Task 3).</li>
+<li>Produces: <code>export const LADDER</code> keyed by Mark id 1..10, each
+<code>{ id, name, pair, route, price, priceUsdc6, minLevel, minStreak, needsWhole, supply, excludes, requiresAny, variants }</code>; <code>export const VARIANT_NAMES</code>;
+<code>export function assertLadderSane(ladder)</code>.</li>
+</ul>
+<p><strong>FIVE CORRECTIONS were applied to this task on 2026-09-02, before it was
+executed, after checking its code against the tree rather than reading it for
+plausibility. They are recorded here because the same class of error is what
+[[plan-code-is-a-draft]] exists to catch:</strong></p>
+<ol>
+<li><code>tools/ladder-fixture.mjs</code> (already committed by Task 3) reads
+<code>m.priceUsdc6</code>. The draft catalogue carried only the display string
+<code>price: &quot;$1.00&quot;</code>, so <code>BigInt(undefined)</code> threw and Step 6 could never have
+run. Entries carry BOTH fields and <code>assertLadderSane</code> cross-checks them --
+a Warden charging $1 for what the chain publishes at $5 is the money bug
+this whole mirror exists to prevent.</li>
+<li>The free route called <code>q.reserveMark(tokenId, upgradeId, variant)</code>.
+<code>warden/src/mirror/queries.mjs:148</code> takes TWO arguments; the third and the
+<code>variant</code> input are Task 10&#39;s work, so the draft referenced a variable that
+does not exist yet. The free route uses the two-argument form.</li>
+<li>The free route was placed AFTER the price guard, where it can never run:
+an earned Mark has no price, so the guard returns <code>mark-inactive</code> /
+<code>no-price</code> first. It goes BEFORE the guard.</li>
+<li>Its comment contradicted its code -- &quot;the reservation is the whole of it&quot;
+above a second chain read. On the free path nothing settles, so there is
+exactly ONE chain read and it belongs to that path.</li>
+<li>The file list named <code>warden/test/tools.test.mjs</code>, which contains no
+<code>makeUpgradeTool</code> at all. The upgrade tool is exercised in <code>pay.test.mjs</code>
+(10 uses), <code>gates.test.mjs</code> (5) and <code>bootstrap.test.mjs</code> (2).</li>
+</ol>
+<p><strong>Verified live rather than from memory, 2026-09-02:</strong> <code>@x402/core/utils</code>
+exports <code>parseMoney</code>, and every ladder price parses (<code>$1250.00</code> -&gt; <code>1250.00</code>).
+<code>$1,250.00</code> THROWS <code>Invalid money format</code>. A comma in one price string would
+be a runtime failure at an agent&#39;s first payment attempt, so the prices are
+pinned against x402&#39;s own parser rather than a regex of our own.</p>
+<p><strong>The <code>upgradeId</code> schema bound STAYS at <code>.max(7)</code> in this task.</strong> The catalogue
+has ten entries and the tool accepts seven ids, which looks like an oversight
+and is not. Raising it here would make Tint (9) and Aura (10) buyable WITHOUT
+holding an Iris, because <code>requiresAny</code> is not enforced until Task 10 -- exactly
+the second trap the spec removed on 2026-09-02. Break (8) therefore cannot be
+taken until Task 10; ids 2, 4 and 6 exercise the free route fully.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></li>
 </ul>
 <p>Create <code>warden/test/ladder.test.mjs</code>:</p>
 <pre><code class="language-javascript">import { test } from &quot;node:test&quot;;
 import assert from &quot;node:assert/strict&quot;;
-import { LADDER, assertLadderSane } from &quot;../src/mcp/ladder.mjs&quot;;
+import { parseMoney } from &quot;@x402/core/utils&quot;;
+import { LADDER, VARIANT_NAMES, assertLadderSane } from &quot;../src/mcp/ladder.mjs&quot;;
 
 test(&quot;every Mark is priced XOR earned, and never both&quot;, () =&gt; {
   for (const [id, m] of Object.entries(LADDER)) {
@@ -2115,6 +2155,29 @@ test(&quot;a priced entry with no price is a startup error&quot;, () =&gt; {
   assert.throws(() =&gt; assertLadderSane(broken), /no price/);
 });
 
+// THE MONEY CHECK. The display string is what an agent is charged; priceUsdc6
+// is what the chain publishes and what the mirror hash covers. Two fields
+// holding one fact is how they drift, so they are checked against each other.
+test(&quot;the display price and priceUsdc6 are the same number&quot;, () =&gt; {
+  for (const m of Object.values(LADDER)) {
+    if (m.route === &quot;earned&quot;) {
+      assert.equal(m.priceUsdc6, 0, `${m.name} is earned and must cost nothing`);
+      continue;
+    }
+    assert.equal(m.price, `$${(m.priceUsdc6 / 1_000_000).toFixed(2)}`,
+      `${m.name}: the string and the integer disagree`);
+  }
+});
+
+// Verified live 2026-09-02: &quot;$1,250.00&quot; throws Invalid money format. A comma
+// would not fail until an agent&#39;s first payment attempt, so it fails here.
+test(&quot;every price survives x402&#39;s own parser, not a regex of ours&quot;, () =&gt; {
+  for (const m of Object.values(LADDER)) {
+    if (m.route === &quot;earned&quot;) continue;
+    assert.doesNotThrow(() =&gt; parseMoney(m.price), `${m.name}: x402 rejects ${m.price}`);
+  }
+});
+
 test(&quot;exclusions are symmetric and pair-internal&quot;, () =&gt; {
   for (const a of Object.keys(LADDER).map(Number)) {
     for (const b of Object.keys(LADDER).map(Number)) {
@@ -2132,9 +2195,145 @@ test(&quot;nothing is limited&quot;, () =&gt; {
   for (const m of Object.values(LADDER)) assert.equal(m.supply, Infinity);
 });
 
+test(&quot;a reintroduced cap is a startup error, not a silent sales funnel&quot;, () =&gt; {
+  const broken = structuredClone(LADDER);
+  broken[1].supply = 100;
+  assert.throws(() =&gt; assertLadderSane(broken), /limited/);
+});
+
 test(&quot;the four earned Marks are exactly Ache, Beat, the earned Iris and Break&quot;, () =&gt; {
   const earned = Object.values(LADDER).filter(m =&gt; m.route === &quot;earned&quot;).map(m =&gt; m.id);
   assert.deepEqual(earned, [2, 4, 6, 8]);
+});
+
+// The contract is the authority on variant bounds -- MachineReadableOnly&#39;s
+// private _variantCount, which has no accessor and so cannot be reached by the
+// mirror hash. This asserts the same table on the JS side; the contract&#39;s own
+// BadVariant boundary test is what actually enforces it.
+test(&quot;only the bought Iris and Tint accept a variant, and the names match the count&quot;, () =&gt; {
+  for (const m of Object.values(LADDER)) {
+    const expected = m.id === 5 ? 3 : m.id === 9 ? 2 : 1;
+    assert.equal(m.variants, expected, `${m.name} (${m.id}) has the wrong variant count`);
+  }
+  assert.equal(VARIANT_NAMES[5].length, LADDER[5].variants);
+  assert.equal(VARIANT_NAMES[9].length, LADDER[9].variants);
+  assert.deepEqual(Object.keys(VARIANT_NAMES).map(Number), [5, 9]);
+});
+</code></pre>
+<p>In <code>warden/test/pay.test.mjs</code>, the free route -- ids 2, 4 and 6 are reachable
+under the <code>.max(7)</code> bound. Assert the EXACT reason string, never merely that a
+call failed:</p>
+<pre><code class="language-javascript">// A free Mark must never reach the payment wrapper at all. `paid` throws if
+// touched, which is the same idiom the pre-payment gate tests already use.
+const paidMustNotBeCalled = () =&gt; { throw new Error(&quot;payment must not be requested&quot;); };
+
+test(&quot;an earned Mark is applied with no payment wrapper at all&quot;, async () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  q.insertToken({ tokenId: 1, keyId: &quot;k1&quot;, owner: &quot;0xabc&quot;, lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 100, 10, 7);                     // level 10, a run of 7 -- Ache&#39;s gate
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER), paid: paidMustNotBeCalled,
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: &quot;k1&quot; });
+  assert.equal(r.ok, true);
+  assert.equal(r.upgradeId, 2);
+  assert.equal(r.appliedBy, &quot;the next Clock run&quot;);
+  assert.equal(q.markSold(2), 1, &quot;the reservation reached the mirror&quot;);
+});
+
+test(&quot;an earned Mark whose run is short is refused, and still costs nothing&quot;, async () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  q.insertToken({ tokenId: 1, keyId: &quot;k1&quot;, owner: &quot;0xabc&quot;, lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 100, 10, 6);                     // one day short of Ache
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER), paid: paidMustNotBeCalled,
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: &quot;k1&quot; });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, &quot;mark-needs-streak&quot;);
+});
+
+// THE REGRESSION THIS PINS. The free route must sit BEFORE the price guard.
+// Placed after it, every earned Mark is refused mark-inactive / no-price,
+// because an earned Mark has no price by definition.
+test(&quot;an earned Mark is not mistaken for a catalogue entry with a missing price&quot;, async () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  q.insertToken({ tokenId: 1, keyId: &quot;k1&quot;, owner: &quot;0xabc&quot;, lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 100, 40, 30);                    // Beat&#39;s gate
+  const alerts = [];
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER),
+    paid: paidMustNotBeCalled, alert: (m) =&gt; alerts.push(m),
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 4 }, { keyId: &quot;k1&quot; });
+  assert.equal(r.ok, true);
+  assert.deepEqual(alerts, [], &quot;a free Mark must not alert about a missing price&quot;);
+});
+
+test(&quot;taking the same free Mark twice is refused by the mirror, not by money&quot;, async () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  q.insertToken({ tokenId: 1, keyId: &quot;k1&quot;, owner: &quot;0xabc&quot;, lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 100, 10, 7);
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER), paid: paidMustNotBeCalled,
+  });
+
+  assert.equal((await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: &quot;k1&quot; })).ok, true);
+  const again = await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: &quot;k1&quot; });
+  assert.equal(again.ok, false);
+  assert.equal(again.reason, &quot;mark-already-applied&quot;);
+});
+
+// The free route reads the chain exactly once -- applyMark still carries
+// whenNotPaused, notSunset and Resting, and `resting` is set by the token
+// owner directly, so this mirror can never learn it without asking.
+test(&quot;a free Mark is still refused when the chain refuses the write&quot;, async () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  q.insertToken({ tokenId: 1, keyId: &quot;k1&quot;, owner: &quot;0xabc&quot;, lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 100, 10, 7);
+  const chain = openChain();
+  chain.lifecycleOf = async () =&gt; ({ exists: true, resting: true, sunset: false, level: 10, lastDay: 100 });
+  const tool = makeUpgradeTool({
+    q, chain, catalogue: assertLadderSane(LADDER), paid: paidMustNotBeCalled,
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: &quot;k1&quot; });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, &quot;resting&quot;);
+  assert.equal(q.markSold(2), 0, &quot;nothing was reserved&quot;);
+});
+
+// THE CONTROL. Without it, every test above passes for a tool that has
+// accidentally made ALL Marks free.
+test(&quot;a bought Mark still goes through the payment wrapper&quot;, async () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  q.insertToken({ tokenId: 1, keyId: &quot;k1&quot;, owner: &quot;0xabc&quot;, lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 100, 40, 40);
+  let charged = null;
+  const paid = (fn, price, meta) =&gt; { charged = { price, meta }; return fn; };
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER), paid,
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 3 }, { keyId: &quot;k1&quot; });   // Static, $5
+  assert.equal(r.ok, true);
+  assert.equal(charged.price, &quot;$5.00&quot;);
+  assert.equal(charged.meta.description, &quot;Apply the Static Mark to token 1&quot;);
+});
+</code></pre>
+<p>In <code>warden/test/e2e/join.test.mjs</code>, one assertion driving the REAL catalogue
+through the door. <code>warden/src/main.mjs</code> cannot be imported (see its header), so
+this is the only proof the assembled thing works with the real ladder rather
+than a stub:</p>
+<pre><code class="language-javascript">test(&quot;the real ladder is servable through the real door&quot;, async () =&gt; {
+  // ... the file&#39;s existing join + mint flow, then:
+  const r = await callTool(&quot;upgrade&quot;, { tokenId: 1, upgradeId: 2 });
+  // Whatever the answer, it must be a REASON and not a crash: a catalogue that
+  // throws on wiring takes the whole server down at boot.
+  assert.equal(typeof r.reason === &quot;string&quot; || r.ok === true, true);
 });
 </code></pre>
 <ul>
@@ -2158,36 +2357,46 @@ Expected: FAIL -- the module does not exist.</p>
 // Five pairs. In each, one side is bought and one earned by a run of days;
 // taking either closes the other permanently; a token may take neither. EVERY
 // EXCLUSION IS PAIR-INTERNAL. Nothing is limited.
+//
+// TWO FIELDS HOLD THE PRICE, deliberately. `price` is the x402 demand string an
+// agent is charged; `priceUsdc6` is what the contract publishes and what the
+// mirror hash covers. assertLadderSane checks they are the same number, because
+// two fields holding one fact is how they drift.
 const pairOf = (id) =&gt; Math.ceil(id / 2);
 const partnerOf = (id) =&gt; (id % 2 === 1 ? id + 1 : id - 1);
 const ANY_IRIS = (1 &lt;&lt; 5) | (1 &lt;&lt; 6);
 
-const bought = (id, name, price, { minLevel = 0, needsWhole = false, requiresAny = 0, variants = 1 } = {}) =&gt; ({
-  id, name, pair: pairOf(id), route: &quot;bought&quot;, price,
+const usd = (usdc6) =&gt; `$${(usdc6 / 1_000_000).toFixed(2)}`;
+
+const bought = (id, name, priceUsdc6, { minLevel = 0, needsWhole = false, requiresAny = 0, variants = 1 } = {}) =&gt; ({
+  id, name, pair: pairOf(id), route: &quot;bought&quot;, price: usd(priceUsdc6), priceUsdc6,
   minLevel, minStreak: 0, needsWhole, supply: Infinity,
   excludes: 1 &lt;&lt; partnerOf(id), requiresAny, variants,
 });
 
 const earned = (id, name, minStreak, { needsWhole = false, variants = 1 } = {}) =&gt; ({
-  id, name, pair: pairOf(id), route: &quot;earned&quot;, price: undefined,
+  id, name, pair: pairOf(id), route: &quot;earned&quot;, price: undefined, priceUsdc6: 0,
   minLevel: 0, minStreak, needsWhole, supply: Infinity,
   excludes: 1 &lt;&lt; partnerOf(id), requiresAny: 0, variants,
 });
 
 export const LADDER = {
-  1:  bought(1,  &quot;Hush&quot;,   &quot;$1.00&quot;),
+  1:  bought(1,  &quot;Hush&quot;,           1_000_000),
   2:  earned(2,  &quot;Ache&quot;,   7),
-  3:  bought(3,  &quot;Static&quot;, &quot;$5.00&quot;,    { minLevel: 30 }),
+  3:  bought(3,  &quot;Static&quot;,         5_000_000, { minLevel: 30 }),
   4:  earned(4,  &quot;Beat&quot;,   30),
-  5:  bought(5,  &quot;Iris&quot;,   &quot;$25.00&quot;,   { minLevel: 100, variants: 3 }),
+  5:  bought(5,  &quot;Iris&quot;,           25_000_000, { minLevel: 100, variants: 3 }),
   6:  earned(6,  &quot;Iris&quot;,   100),
-  7:  bought(7,  &quot;Vessel&quot;, &quot;$1250.00&quot;, { needsWhole: true }),
+  7:  bought(7,  &quot;Vessel&quot;,         1_250_000_000, { needsWhole: true }),
   8:  earned(8,  &quot;Break&quot;,  365),
-  9:  bought(9,  &quot;Tint&quot;,   &quot;$250.00&quot;,  { requiresAny: ANY_IRIS, variants: 2 }),
-  10: bought(10, &quot;Aura&quot;,   &quot;$25.00&quot;,   { requiresAny: ANY_IRIS }),
+  9:  bought(9,  &quot;Tint&quot;,           250_000_000, { requiresAny: ANY_IRIS, variants: 2 }),
+  10: bought(10, &quot;Aura&quot;,           25_000_000,  { requiresAny: ANY_IRIS }),
 };
 
 /// The names of the three Iris shapes and the two Tint inks, by variant index.
+/// The CONTRACT is the authority on the bounds -- MachineReadableOnly&#39;s private
+/// _variantCount -- and it has no accessor, so the mirror hash cannot cover
+/// this. ladder.test.mjs asserts the same table here.
 export const VARIANT_NAMES = {
   5: [&quot;target&quot;, &quot;squircle&quot;, &quot;leaf&quot;],
   9: [&quot;violet&quot;, &quot;gold&quot;],
@@ -2196,11 +2405,12 @@ export const VARIANT_NAMES = {
 /**
  * Refuse to start on a malformed catalogue.
  *
- * A Mark is either PRICED, in which case a price is mandatory, or EARNED, in
- * which case a price is forbidden. A entry that is neither, or both, is a
- * wiring error and not something an agent should meet as a runtime refusal --
- * the `upgrade` tool&#39;s existing price guard exists so a missing price cannot
- * sell a Vessel for the price of a mint, and this is its sibling.
+ * A Mark is either PRICED, in which case a price is mandatory and must equal
+ * the integer the chain publishes, or EARNED, in which case a price is
+ * forbidden. An entry that is neither, or both, is a wiring error and not
+ * something an agent should meet as a runtime refusal -- the `upgrade` tool&#39;s
+ * existing price guard exists so a missing price cannot sell a Vessel for the
+ * price of a mint, and this is its sibling.
  */
 export function assertLadderSane(ladder = LADDER) {
   for (const [id, m] of Object.entries(ladder)) {
@@ -2209,6 +2419,14 @@ export function assertLadderSane(ladder = LADDER) {
     if (priced &amp;&amp; isEarned) throw new Error(`mark ${id} is both priced and earned`);
     if (!priced &amp;&amp; !isEarned) throw new Error(`mark ${id} has no price and is not earned`);
     if (m.route === &quot;bought&quot; &amp;&amp; !priced) throw new Error(`mark ${id} has no price`);
+    if (priced &amp;&amp; m.price !== usd(m.priceUsdc6)) {
+      throw new Error(`mark ${id} has no price the chain agrees with: ${m.price} vs ${m.priceUsdc6}`);
+    }
+    if (isEarned &amp;&amp; m.priceUsdc6 !== 0) throw new Error(`mark ${id} is earned and priced on chain`);
+    // Caps were removed on 2026-09-01 because cold readers read scarcity as a
+    // sales funnel. A cap reintroduced here would contradict Ladder.sol&#39;s
+    // maxSupply = 0 and would be sold before the chain refused it.
+    if (m.supply !== Infinity) throw new Error(`mark ${id} is limited, and nothing is limited`);
   }
   return ladder;
 }
@@ -2223,24 +2441,40 @@ finding.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 5: Add the free route to <code>upgrade.mjs</code></strong></li>
 </ul>
-<p>The existing price guard STAYS -- it is what stops a missing price selling a
-Vessel for a dollar. It gains a sibling: an earned Mark checks every gate and
-then reserves directly, with no payment wrapper. It cannot reach
-<code>paid-but-unavailable</code>, because nothing was paid.</p>
-<pre><code class="language-javascript">      // A free Mark takes no payment wrapper at all. Every gate above has
-      // already run; a settled-then-refused state cannot arise because nothing
-      // settles, so the reservation is the whole of it.
+<p>It goes BEFORE the price guard, not after: an earned Mark has no price, so the
+guard would refuse every one of them <code>mark-inactive</code> / <code>no-price</code>. The guard
+STAYS -- it is what stops a missing price selling a Vessel for a dollar.</p>
+<pre><code class="language-javascript">      // THE FREE ROUTE. Four of the ten Marks are earned by a run of days and
+      // take no payment wrapper at all. This sits ABOVE the price guard on
+      // purpose: an earned Mark has no price, so the guard below would refuse
+      // every one of them as a catalogue error.
+      //
+      // The chain gate is read HERE and only here on this path. The paid route
+      // reads it twice because settlement takes seconds and the piece can be
+      // paused inside that window; nothing settles here, so a
+      // settled-then-refused state cannot arise and one read is the whole of it.
       if (mark.route === &quot;earned&quot;) {
-        const nowBlocked = await paidWriteBlock(chain, { tokenId, q });
-        if (nowBlocked) return { ok: false, reason: nowBlocked };
-        if (!q.reserveMark(tokenId, upgradeId, variant)) {
+        const blocked = await paidWriteBlock(chain, { tokenId, q });
+        if (blocked) return { ok: false, reason: blocked };
+        if (!q.reserveMark(tokenId, upgradeId)) {
           return { ok: false, reason: &quot;mark-already-applied&quot; };
         }
-        return { ok: true, accepted: true, upgradeId, variant, appliedBy: &quot;the next Clock run&quot; };
+        return { ok: true, accepted: true, upgradeId, appliedBy: &quot;the next Clock run&quot; };
       }
 </code></pre>
+<p>Two comments in the same wave, both now false and both about money:
+<code>upgrade.mjs</code>&#39;s price guard says &quot;The seven Marks run from 1 to 100,000 USDC&quot;
+and <code>pay/x402.mjs</code> says the same and names Crown and Singularity, which are
+retired Marks. Ten Marks, six of them priced, $1.00 to $1,250.00.</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 6: Add the mirror-hash test to <code>Ladder.t.sol</code></strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Fold supply and active into the mirror hash</strong></li>
+</ul>
+<p><code>tools/ladder-fixture.mjs</code> hardcodes <code>maxSupply: 0</code> and <code>active: true</code> rather
+than reading them from the catalogue, so a JS-side cap or an inactive Mark is
+invisible to the hash. Derive both from <code>LADDER</code> -- <code>supply === Infinity ? 0 : supply</code>, and <code>active</code> true for every id 1..10 -- so the two ladders check each
+other on those fields too.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Add the mirror-hash test to <code>Ladder.t.sol</code></strong></li>
 </ul>
 <p>Run: <code>source ~/.nvm/nvm.sh &amp;&amp; cd tools &amp;&amp; node ladder-fixture.mjs</code></p>
 <p>Then add the test to <code>contracts/test/Ladder.t.sol</code>, replacing the comment Task 3
@@ -2261,15 +2495,20 @@ left in its place, with the printed hash as the expected value:</p>
 Expected: PASS. If it fails, the two ladders genuinely disagree -- find which
 field, and fix the one that is wrong rather than the hash.</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 7: Run the suites</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 8: Run the suites, unfiltered</strong></li>
 </ul>
 <p>Run: <code>source ~/.nvm/nvm.sh &amp;&amp; cd warden &amp;&amp; npm test</code>
 Run: <code>export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; cd contracts &amp;&amp; forge test</code>
-Expected: both PASS.</p>
+Run: <code>source ~/.nvm/nvm.sh &amp;&amp; cd tools &amp;&amp; npm test</code>
+Run: <code>source ~/.nvm/nvm.sh &amp;&amp; cd client &amp;&amp; npm test</code>
+Expected: all PASS. Unfiltered, always: a <code>--match-contract</code> run goes green
+against a stale generated fixture, which is how the Task 4 rename broke
+<code>contracts/script/SoakStates.sol</code> silently.</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 8: Commit</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 9: Commit</strong></li>
 </ul>
-<pre><code class="language-bash">git add warden/src/mcp/ladder.mjs warden/src/main.mjs warden/src/mcp/tools/upgrade.mjs warden/test contracts/test/Ladder.t.sol
+<pre><code class="language-bash">git add warden/src/mcp/ladder.mjs warden/src/main.mjs warden/src/mcp/tools/upgrade.mjs \
+        warden/src/pay/x402.mjs warden/test tools/ladder-fixture.mjs contracts/test/Ladder.t.sol
 git commit -m &quot;warden: the Mark catalogue exists, and four Marks are free&quot;
 </code></pre>
 <hr>

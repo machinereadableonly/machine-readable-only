@@ -34,6 +34,7 @@ import { openDb } from "../../src/mirror/db.mjs";
 import { queries } from "../../src/mirror/queries.mjs";
 import { utcDay } from "../../src/mcp/tools/checkin.mjs";
 import { openChain } from "../chain-stub.mjs";
+import { LADDER, assertLadderSane } from "../../src/mcp/ladder.mjs";
 
 const DOMAIN = "example.com";
 const SECRET = "e2e-secret";
@@ -52,7 +53,13 @@ const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", 
  * databases, and a mint made through a tool would be invisible to /t/<id>.
  * A file is also what production has.
  */
-function startJourney() {
+/// The journey's own catalogue. Deliberately NOT the real ladder: this stub
+/// keeps the main journey's assertions about one cheap Mark independent of
+/// what the ladder happens to price today. The real ladder gets its own test
+/// at the bottom of this file.
+const STUB_CATALOGUE = { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } };
+
+function startJourney({ catalogue = STUB_CATALOGUE } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "mro-e2e-"));
   const stateDbPath = join(dir, "mirror.db");
 
@@ -79,7 +86,7 @@ function startJourney() {
     },
     supplyCap: 5555,
     today: () => utcDay() + clock.offset,
-    catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
+    catalogue,
     // A null from the chain means "could not be reached", which checkin treats
     // as a refusal. Our caller is the bound key, so this is never consulted.
     chain: openChain(),
@@ -414,4 +421,51 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
 
   // The listener is gone, not merely asked to go.
   assert.equal(journey.server.listening, false);
+});
+
+// THE ONLY PLACE THE REAL CATALOGUE IS ASSEMBLED AND SERVED. warden/src/main.mjs
+// cannot be imported (see its header), so the line that wires
+// `catalogue: assertLadderSane(LADDER)` into the running server is by
+// construction untested. This drives the same object through the same door.
+//
+// It is worth its own test because "the catalogue is malformed" is a BOOT
+// failure by design -- assertLadderSane throws rather than refusing at runtime
+// -- and a throw at boot takes the whole piece down, not one tool.
+test("the real ladder is servable through the real door", async (t) => {
+  const journey = await startJourney({ catalogue: assertLadderSane(LADDER) });
+  const { base } = journey;
+
+  try {
+    const { privateJwk } = await registerKey(base);
+
+    // A Mark on a token that does not exist. The point is not the refusal --
+    // it is that a real catalogue entry was looked up, gated and answered
+    // rather than crashing the handler.
+    const refused = await callMcp(base, privateJwk, {
+      id: 1, method: "tools/call",
+      params: { name: "upgrade", arguments: { tokenId: 1, upgradeId: 2 } },
+    });
+    const result = toolResult(refused.body);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "unknown-token");
+
+    // AND the free route is genuinely reachable through the door, not only in
+    // a unit test that constructs the tool by hand. Mint, then take Ache with
+    // a run long enough to have earned it.
+    const minted = toolResult((await callMcp(base, privateJwk, {
+      id: 2, method: "tools/call",
+      params: { name: "mint", arguments: { to: "0x" + "7".repeat(40) } },
+    })).body);
+    journey.q.creditDay(minted.tokenId, 100, 10, 7);
+
+    const ache = toolResult((await callMcp(base, privateJwk, {
+      id: 3, method: "tools/call",
+      params: { name: "upgrade", arguments: { tokenId: minted.tokenId, upgradeId: 2 } },
+    })).body);
+    assert.equal(ache.ok, true, `Ache should be free: ${JSON.stringify(ache)}`);
+    assert.equal(ache.upgradeId, 2);
+    assert.equal(journey.q.markSold(2), 1);
+  } finally {
+    await journey.stop();
+  }
 });

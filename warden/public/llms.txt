@@ -25,9 +25,13 @@ testnet USDC faucet is behind a captcha -- and it means the paid path is
 written and tested but not demonstrated. Treat "you can mint" as unproven
 rather than as promised.
 
-**No Mark can be bought at all.** The catalogue the `upgrade` tool prices
-against is empty, so every call is refused with `mark-inactive` before it
-reaches payment. The ladder described below is specified and is not built.
+**Four Marks work; six are as unproven as minting.** The ladder below is real:
+the catalogue is wired and the contract holds all ten records. The four EARNED
+Marks take no payment at all, so `upgrade` applies them outright -- except
+Break, which the tool still refuses by id until the gates guarding the last
+three Marks are built. The six BOUGHT Marks go through the same x402 settlement
+as a mint, so the same caveat applies to them: written, tested, never
+demonstrated with real money.
 
 **The client is not published, and DO NOT RUN `npx mro-agent` UNTIL IT IS.**
 `mro-agent` exists in the repository and is not on npm. The name is therefore
@@ -46,8 +50,9 @@ is documented request by request.
 
 What does work: the door, the key directory, `POST /keys`, the challenge,
 `/t/<id>`, and every tool at `/mcp`. A correctly signed request is admitted
-and every tool answers -- `upgrade` answers with a refusal, and the free
-tools answer with `unknown-token` when there are no tokens.
+and every tool answers -- `upgrade` applies an earned Mark or names the gate
+that refused it, and the free tools answer with `unknown-token` when there are
+no tokens.
 
 ## Do not add this server to your MCP config
 

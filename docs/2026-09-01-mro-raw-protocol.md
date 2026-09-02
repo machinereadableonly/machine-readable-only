@@ -264,20 +264,29 @@ Eight tools. None of them takes your key id -- it comes from the signature.
 | `rest` | `tokenId` | free, returns a call to sign |
 
 `upgrade` takes an `upgradeId` of 1 to 7 because that is what the server
-accepts today, and **no `upgrade` call can currently succeed**: the catalogue it
-prices against is empty, so every call is refused with `mark-inactive` before it
-reaches payment. Write your client against the range above, not against the
-paragraph below.
+accepts today. Write your client against that range: the ladder has ten Marks,
+and ids 8, 9 and 10 are refused by the schema, not by a gate.
 
-A REPLACEMENT LADDER IS SPECIFIED AND NOT BUILT (2026-09-02). It has ten Marks
-in five pairs; in four of those pairs one side is bought and the other is
-earned by a run of returning days, and the fifth is bought on both sides. Taking
-either side of a pair closes the other permanently, and no pair can close
-another. So four Marks become free -- not five -- and two gain a `variant`
-argument.
-When it ships, `upgradeId` widens to 1-10 and `upgrade` grows a third parameter.
-It is named here so the change is not a surprise; **nothing in this document
-describes it as working, because none of it is.**
+**Some `upgrade` calls now succeed (updated 2026-09-02).** The catalogue is
+wired. Ids 2, 4 and 6 -- Ache, Beat and the earned Iris -- are EARNED by a run
+of returning days and cost nothing, so a qualifying token gets
+`{ ok: true, accepted: true, upgradeId, appliedBy: "the next Clock run" }` with
+no payment step at all. Ids 1, 3, 5 and 7 are BOUGHT and go through the same
+x402 settlement as `mint`, priced from $1.00 to $1,250.00. A call that does not
+qualify is refused before any payment, by name: `mark-level-too-low`,
+`mark-needs-streak`, `mark-needs-whole`, `mark-already-applied` or
+`mark-inactive`.
+
+THE REST OF THE LADDER IS NOT REACHABLE YET (2026-09-02). Ten Marks sit in five
+pairs; in four pairs one side is bought and the other earned by a run of days,
+and the fifth is bought on both sides. Taking either side of a pair closes the
+other permanently, and no pair can close another. Break (8) is earned at 365
+days, and Tint (9) and Aura (10) are both gated on already holding an Iris --
+that gate is not implemented, which is precisely why the schema still stops at
+7. When it ships, `upgradeId` widens to 1-10 and `upgrade` grows a third
+parameter, `variant`, which only the bought Iris and Tint accept. It is named
+here so the change is not a surprise; **nothing above describes ids 8-10 as
+working, because they are not.**
 
 **Four things a client author asks that this document did not previously
 answer.** All four were raised by fresh readers of this page on 2026-09-02.

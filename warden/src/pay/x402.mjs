@@ -83,18 +83,18 @@ async function initResourceServer(facilitatorUrl, network) {
  * minting until someone restarts the process.
  *
  * WHY THE PRICE IS PER CALL, not baked into one wrapper. `mint` costs $1.00 and
- * the seven Marks cost from 1 to 100,000 USDC. A single fixed-price wrapper
- * shared by both tools would silently charge $1.00 for a Crown the day the Mark
- * catalogue is wired -- a money bug sitting in the seam between two correct
- * tasks, which is exactly where this project has found its worst defects.
+ * the six bought Marks cost from $1.00 to $1,250.00. A single fixed-price
+ * wrapper shared by both tools would silently charge $1.00 for a Vessel -- a
+ * money bug sitting in the seam between two correct tasks, which is exactly
+ * where this project has found its worst defects.
  * Requirements are built and cached per (tool, price, description).
  *
  * WHY THE TOOL NAMES ITSELF. Left alone, @x402/mcp derives the resource from
  * `config.resource.url` and falls back to the literal string "paid_tool"
  * (paymentWrapper.ts). Both paid tools then demand payment for
- * `mcp://tool/paid_tool`, so an agent about to spend 100,000 USDC on a
- * Singularity is told only that it is paying "a paid tool" -- and every x402
- * receipt and discovery listing says the same. Observed in the live journey
+ * `mcp://tool/paid_tool`, so an agent about to spend $1,250.00 on a Vessel is
+ * told only that it is paying "a paid tool" -- and every x402 receipt and
+ * discovery listing says the same. Observed in the live journey
  * check on 2026-08-31, not guessed.
  *
  * `build` and `wrapFactory` are injectable so tests can drive every branch --
