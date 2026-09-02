@@ -25,6 +25,7 @@ import { queries } from "../src/mirror/queries.mjs";
 import { utcDay } from "../src/mcp/tools/checkin.mjs";
 import { makePaymentGateway } from "../src/pay/x402.mjs";
 import { makeChainReader } from "../src/chain/read.mjs";
+import { LADDER, assertLadderSane } from "../src/mcp/ladder.mjs";
 
 const DOMAIN = "example.com";
 const SECRET = "transcript-secret";
@@ -44,7 +45,15 @@ const chain = makeChainReader({ rpcUrl: RPC, contract: CONTRACT });
 const mcp = makeMcpHandler({
   q, chain, today: utcDay, contract: CONTRACT, chainId: CHAIN_ID,
   challengeSecret: SECRET, domain: DOMAIN, llmsTxt: "", paid,
-  catalogue: {}, supplyCap: 10_000,
+  // THE REAL CATALOGUE, exactly as main.mjs boots it. This read `{}` until
+  // 2026-09-02, which predated the catalogue being wired at all -- and an empty
+  // catalogue does not make the capture silent, it makes it LIE: every `upgrade`
+  // call refuses `mark-inactive` and `ladder` reports a piece with no Marks in
+  // it. The whole worth of this script is that the document it feeds describes
+  // what a caller actually meets, so a stub here is worse than no capture.
+  // assertLadderSane throws at boot rather than letting a malformed entry be
+  // transcribed as though an agent would meet it.
+  catalogue: assertLadderSane(LADDER), supplyCap: 10_000,
 });
 const server = createServer({
   stateDbPath: join(dir, "mirror.db"), domain: DOMAIN, challengeSecret: SECRET,
