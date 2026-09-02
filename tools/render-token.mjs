@@ -119,6 +119,21 @@ export const noiseAt = rung => NOISE_BY_TIER[TOP - rung];
 export const staticAt = rung => STATIC_BY_TIER[TOP - rung];
 export const tierColour = streak => colourAt(rungOf(streak));
 
+// Break's exchange, DEFINITION B: swap which rung colour the heart and the
+// noise take, rather than swapping the fills verbatim (Definition A, which
+// hands Beat's gradient to the noise and was rejected -- see MarkRenderer.inks
+// in Solidity for the full reasoning). The decode rule survives the exchange
+// for free: colourAt(r) and the noise at the same rung are matched in
+// luminance by construction, so swapping two equal-luminance inks leaves the
+// binarizer the same picture. Mirrors MarkRenderer.inks exactly.
+export function inks(marks, rung) {
+  const colour = colourAt(rung);
+  const n = hasMark(marks, STATIC) ? staticAt(rung) : noiseAt(rung);
+  return hasMark(marks, BREAK)
+    ? { heartInk: n, noiseInk: colour }
+    : { heartInk: colour, noiseInk: n };
+}
+
 // A lapse walks BACK DOWN the same ladder rather than introducing paler tones.
 // Paler is not available: #767676 is the lightest ink that still decodes, so a
 // genuinely paler heart would stop scanning. Reusing the ladder means every
@@ -321,8 +336,10 @@ export function renderSvg(modules, want, size, state) {
   const colour = colourAt(rung);
   // Static claims the noise ink -- the one surface no other Mark touches.
   // Selected by RUNG, not by colour, so the heart and the noise can never be
-  // taken from different tiers. Mirrors MarkRenderer.noise in Solidity.
-  const noise = hasMark(marks, STATIC) ? staticAt(rung) : noiseAt(rung);
+  // taken from different tiers. Break then exchanges which rung colour the
+  // heart and the noise take (Definition B) -- see inks() above. The FRAME
+  // keeps `colour` unaffected; only the code block's two regions exchange.
+  const { heartInk, noiseInk: noise } = inks(marks, rung);
   const gold = hasMark(marks, VESSEL) ? VESSEL_GOLD : null;
   const ghost = hasMark(marks, ACHE) ? ACHE_GHOST : GHOST;
   const field = hasMark(marks, AURA) ? AURA_FIELD : FIELD;
@@ -362,16 +379,17 @@ export function renderSvg(modules, want, size, state) {
   const framePath = pathFor(lit, canvas) + ringBars(years, canvas);
   if (framePath) groups.push([frameColour, framePath]);
   if (noiseCells.size) groups.push([noise, noiseCells]);
-  if (heart.size) groups.push([colour, heart]);
+  if (heart.size) groups.push([heartInk, heart]);
 
   // Beat replaces the heart's flat fill with a gradient running from the
   // token's own streak colour into violet. Both ends are colours the ladder
   // already proves scannable, so no stop between them can be paler than the
-  // palest tier.
-  const heartFill = beat ? "url(#b)" : colour;
+  // palest tier. The near stop is heartInk rather than colour, so Break +
+  // Beat moves it to the noise ink and leaves the far stop, BEAT_TO, alone.
+  const heartFill = beat ? "url(#b)" : heartInk;
   const defs = beat
     ? `<defs><linearGradient id="b" x1="0" y1="0" x2="0" y2="1">`
-      + `<stop offset="0" stop-color="${colour}"/>`
+      + `<stop offset="0" stop-color="${heartInk}"/>`
       + `<stop offset="1" stop-color="${BEAT_TO}"/></linearGradient></defs>`
     : "";
 
@@ -404,10 +422,15 @@ export function renderSvg(modules, want, size, state) {
   let eyes = "";
   if (anyIris) {
     const earned = hasMark(marks, IRIS_EARNED);
-    // The EARNED Iris does not lapse: its colour comes from the run stored at
+    // The EARNED Iris does not lapse: its rung comes from the run stored at
     // apply time, not the live rung, which is the whole point of the Mark --
-    // it stops tracking the lapse.
-    const base = earned ? colourAt(rungOf(irisRun)) : colour;
+    // it stops tracking the lapse. Break's exchange is then applied at THAT
+    // rung through inks(), not the token's live rung: the earned Iris is
+    // frozen at a top-tier run, and under Break the live noise is also
+    // top-tier red, so computing the eye's ink at the live rung would collide
+    // the eye into the noise it sits on. Mirrors Renderer._eyes in Solidity.
+    const eyeRung = earned ? rungOf(irisRun) : rung;
+    const base = inks(marks, eyeRung).heartInk;
     const ink = hasMark(marks, TINT) ? (tintVariant === 1 ? TINT_GOLD : TINT_VIOLET) : base;
     const ground = hush ? HUSH_QUIET : field;
     const eyeShape = earned ? 0 : irisVariant;

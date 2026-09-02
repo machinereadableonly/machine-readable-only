@@ -113,6 +113,26 @@ export function renderCases() {
     ...base, streak: 100, marks: [IRIS_EARNED, TINT], tintVariant: 1, irisRun: 100,
   });
 
+  // Break (Task 7): the rung-colour exchange. Added in the same task as the
+  // renderer change, since nothing else here covers it -- DRAWING_MARKS and
+  // OLD_SEVEN are historical-continuity sets and stay untouched on purpose.
+  // Break composes with either side of pair 2 (Static XOR Beat, never both)
+  // and either route of pair 3 (an Iris), so those are the interactions worth
+  // a case each rather than Break alone.
+  out.push({ label: "break alone", ...base, marks: [BREAK] });
+  out.push({ label: "break with static", ...base, marks: [BREAK, STATIC] });
+  out.push({ label: "break with beat", ...base, marks: [BREAK, BEAT] });
+  // The earned Iris frozen at the top tier while the live rung has lapsed to
+  // the start tier -- reusing the same mismatch as "earned iris, lapsed to
+  // the start tier" above, but with Break worn too, so this actually
+  // exercises computing the eye's ink at ITS OWN rung (the frozen one) rather
+  // than the token's live rung, which is where the two languages could most
+  // easily disagree.
+  out.push({
+    label: "break on earned iris, lapsed to the start tier",
+    ...base, streak: 100, today: 1030, marks: [BREAK, IRIS_EARNED], irisRun: 100,
+  });
+
   // Frozen lifecycles. Both must hold their colour against a far-future clock.
   out.push({ label: "resting", ...base, today: 9999, resting: true });
   out.push({ label: "sunset", ...base, today: 9999, sunset: true });

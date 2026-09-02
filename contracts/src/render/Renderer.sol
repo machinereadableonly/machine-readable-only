@@ -66,11 +66,12 @@ contract Renderer is IRenderer {
     function svg(TokenView memory v) public pure returns (string memory) {
         uint256 rung = _rung(v);
         string memory colour = Palette.colourAt(rung);
+        (string memory heartInk, string memory noiseInk) = MarkRenderer.inks(v.marks, rung);
         return string(
             abi.encodePacked(
-                _head(v, colour),
-                _art(v, colour, MarkRenderer.noise(v.marks, rung)),
-                _eyes(v, colour),
+                _head(v, heartInk),
+                _art(v, colour, heartInk, noiseInk),
+                _eyes(v, rung),
                 "</svg>"
             )
         );
@@ -81,14 +82,27 @@ contract Renderer is IRenderer {
     /// even on a token wearing Static, whose green already recolours these
     /// same modules as ordinary code. Empty when no Iris is worn, so the
     /// finder patterns stay ordinary code modules exactly as they are today.
-    function _eyes(TokenView memory v, string memory colour) private pure returns (string memory) {
+    ///
+    /// @param rung the token's own live rung, from `_rung`.
+    /// @dev The ink is computed through `inks()` at the EYE'S OWN RUNG, not
+    /// necessarily `rung`, and then Break's exchange is applied through that
+    /// call rather than by hand here. For the bought Iris the eye's rung is the
+    /// token's live one. For the EARNED Iris it is the run stored when the Mark
+    /// was applied -- frozen, the same rule `_rung` itself does not apply to
+    /// this route. That matters under Break: the earned Iris is frozen at a
+    /// top-tier run, and the live noise is also top-tier red once Break swaps
+    /// it in, so computing the eye's ink at the live rung would collide the
+    /// eye into the noise it sits on. Computing it at the eye's own rung keeps
+    /// the two apart. Tint, when worn, overrides the ink outright either way.
+    function _eyes(TokenView memory v, uint256 rung) private pure returns (string memory) {
         if (!MarkRenderer.has(v.marks, MarkRenderer.ANY_IRIS)) return "";
-        // The EARNED Iris does not lapse: its colour comes from the run stored
+        // The EARNED Iris does not lapse: its rung comes from the run stored
         // at apply time, not the live rung, which is the whole point of the
         // Mark -- it stops tracking the lapse.
-        string memory base = MarkRenderer.has(v.marks, MarkRenderer.IRIS_EARNED)
-            ? Palette.colourAt(Palette.tierIndex(MarkRenderer.irisRun(v.marks)))
-            : colour;
+        uint256 eyeRung = MarkRenderer.has(v.marks, MarkRenderer.IRIS_EARNED)
+            ? Palette.tierIndex(MarkRenderer.irisRun(v.marks))
+            : rung;
+        (string memory base,) = MarkRenderer.inks(v.marks, eyeRung);
         return EyeRenderer.eyes(
             _blockOff(v.level) + QUIET,
             MarkRenderer.irisShape(v.marks),
@@ -156,7 +170,10 @@ contract Renderer is IRenderer {
     /// intrinsic-size call to a single eleven-argument expression blew the IR
     /// pipeline's stack (`too deep by 2 slots`), the same wall `_attributes`
     /// already splits around.
-    function _head(TokenView memory v, string memory colour) private pure returns (string memory) {
+    /// @param heartInk the heart ink, AFTER Break's exchange -- `defs`'s
+    /// gradient near stop must move with the exchange too, so Break + Beat
+    /// gives the noise ink rather than the token's own colour.
+    function _head(TokenView memory v, string memory heartInk) private pure returns (string memory) {
         string memory c = LibString.toString(FrameRenderer.canvas(FrameRenderer.rings(v.level)));
         string memory open = string(
             abi.encodePacked(
@@ -167,7 +184,7 @@ contract Renderer is IRenderer {
         return string(
             abi.encodePacked(
                 open,
-                MarkRenderer.defs(v.marks, colour),
+                MarkRenderer.defs(v.marks, heartInk),
                 '<rect width="', c, '" height="', c, '" fill="', MarkRenderer.field(v.marks), '"/>',
                 _quiet(v.marks, _blockOff(v.level))
             )
@@ -175,11 +192,16 @@ contract Renderer is IRenderer {
     }
 
     /// @dev The four paths, in the fixed order: ghost, frame, noise, heart.
-    function _art(TokenView memory v, string memory colour, string memory noise)
-        private
-        pure
-        returns (string memory)
-    {
+    /// @param colour the token's own rung colour, UNAFFECTED by Break -- the
+    /// frame keeps it regardless. Break exchanges only the code block's two
+    /// regions, which is why the heart and the noise take `heartInk` and
+    /// `noiseInk` instead.
+    function _art(
+        TokenView memory v,
+        string memory colour,
+        string memory heartInk,
+        string memory noiseInk
+    ) private pure returns (string memory) {
         return string(
             abi.encodePacked(
                 FrameRenderer.paths(
@@ -189,8 +211,8 @@ contract Renderer is IRenderer {
                     v.code,
                     HeartMask.bits(),
                     _blockOff(v.level) + QUIET,
-                    MarkRenderer.heartFill(v.marks, colour),
-                    noise
+                    MarkRenderer.heartFill(v.marks, heartInk),
+                    noiseInk
                 )
             )
         );

@@ -9,9 +9,10 @@ import {Palette} from "../src/render/Palette.sol";
 /// @dev Nine of the ten change the image. Iris Bought, Iris Earned and Tint
 /// claim the eyes -- selection tested here (eyeInk, ground, irisShape, irisRun),
 /// drawing tested in EyeRenderer.t.sol and end to end in Renderer.t.sol. Break
-/// is the inversion (Task 7) and is not built yet. Every colour here must match
-/// the constant of the same name in tools/render-token.mjs, which the Renderer
-/// differential test then checks end to end.
+/// is the inversion, tested below (`inks`) -- it claims no surface of its own,
+/// only which rung colour the heart and the noise take. Every colour here must
+/// match the constant of the same name in tools/render-token.mjs, which the
+/// Renderer differential test then checks end to end.
 contract MarkRendererTest is Test {
     uint256 constant NONE = 0;
     string constant STREAK = "#c8102e";
@@ -104,8 +105,9 @@ contract MarkRendererTest is Test {
     }
 
     function test_theMarksThatDrawNothingDrawNothing() public pure {
-        // Iris Bought, Break and Tint: the eyes and the inversion are not built
-        // yet (Tasks 6 and 7), so these three must change nothing here.
+        // Iris Bought, Break and Tint: the eyes are drawn by EyeRenderer, not
+        // here, and Break's exchange lives entirely in `inks`, so these three
+        // must change nothing on the surfaces this test checks.
         uint256 all = MarkRenderer.IRIS_BOUGHT | MarkRenderer.BREAK | MarkRenderer.TINT;
         assertEq(MarkRenderer.field(all), "#ffffff", "field untouched");
         assertEq(MarkRenderer.ghost(all), Palette.ghost(), "ghost untouched");
@@ -174,5 +176,52 @@ contract MarkRendererTest is Test {
 
     function test_beatsFarStopIsViolet() public pure {
         assertEq(MarkRenderer.BEAT_TO, "#2000ff");
+    }
+
+    // ---------------------------------------------------------------------
+    // Break, the inversion
+    // ---------------------------------------------------------------------
+
+    function _contains(string memory haystack, string memory needle) internal pure returns (bool) {
+        bytes memory h = bytes(haystack);
+        bytes memory n = bytes(needle);
+        if (n.length > h.length) return false;
+        for (uint256 i = 0; i <= h.length - n.length; i++) {
+            bool ok = true;
+            for (uint256 j = 0; j < n.length; j++) {
+                if (h[i + j] != n[j]) { ok = false; break; }
+            }
+            if (ok) return true;
+        }
+        return false;
+    }
+
+    function test_breakExchangesTheHeartAndNoiseInks() public pure {
+        (string memory heart, string memory noise) = MarkRenderer.inks(MarkRenderer.BREAK, 4);
+        assertEq(heart, Palette.noiseAt(4), "the heart should take the noise ink");
+        assertEq(noise, Palette.colourAt(4), "the code should take the token's colour");
+    }
+
+    function test_breakWithStaticGivesAGreenHeartAndARedCode() public pure {
+        uint256 m = MarkRenderer.BREAK | MarkRenderer.STATIC;
+        (string memory heart, string memory noise) = MarkRenderer.inks(m, 4);
+        assertEq(heart, Palette.staticAt(4));
+        assertEq(noise, Palette.colourAt(4));
+    }
+
+    function test_withoutBreakTheInksAreUnchanged() public pure {
+        (string memory heart, string memory noise) = MarkRenderer.inks(0, 4);
+        assertEq(heart, Palette.colourAt(4));
+        assertEq(noise, Palette.noiseAt(4));
+    }
+
+    /// @dev Under Break with Beat, the gradient's NEAR stop becomes the noise ink so
+    /// the noise path stays flat and luminance-matched. Definition B.
+    function test_breakWithBeatMovesTheGradientsNearStopAndNotTheGradient() public pure {
+        uint256 m = MarkRenderer.BREAK | MarkRenderer.BEAT;
+        (string memory heart,) = MarkRenderer.inks(m, 4);
+        string memory d = MarkRenderer.defs(m, heart);
+        assertTrue(_contains(d, Palette.noiseAt(4)), "near stop should be the noise ink");
+        assertTrue(_contains(d, MarkRenderer.BEAT_TO), "far stop should still be violet");
     }
 }
