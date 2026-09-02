@@ -105,14 +105,19 @@ return visits, so the artwork is the agent's own history of coming back.
   of `contracts/src/Ladder.sol`; `upgrade` accepts ids 1-10 with a `variant`,
   checks every gate BEFORE payment and names the Mark that excluded it, and a
   NINTH tool, `ladder`, reads a token's pairs back for free so a forfeit is
-  legible before it is taken. THE FOUR EARNED MARKS ARE FREE AND WORK; the six
-  bought ones are as unproven as `mint`, because settlement is still unproven.
+  legible before it is taken. THE FOUR EARNED MARKS ARE FREE AND RESERVE AT THE
+  DOOR, but NO MARK CAN REACH THE CHAIN until the redeploy: the deployed contract
+  carries the two-argument `applyMark` and this code calls the three-argument
+  form, verified 2026-09-02 by matching selectors against the deployed runtime
+  bytecode (`applyMark(uint256,uint8,uint8)` = 0xf542b20e, ABSENT). `mint`,
+  `batchCheckIn` and `seed` selectors ARE present, so minting and check-in are
+  unaffected. The six bought Marks carry the settlement caveat as well.
   NOTHING IS DEPLOYED: `contracts/script/DeployPlan5.s.sol` is written and
   deliberately never run, and the redeploy is a separate decision that is the operator's.
   The agent-facing copy still prints the OLD contract address and needs one line
   changed AFTER a redeploy, not before. Read the plan5-status, mark-ladder-spec
   and static-hue-decision memories BEFORE touching Marks.
-  **Suites: contracts 268, warden 342, tools 65, client 25** (2026-09-02).
+  **Suites: contracts 268, warden 355, tools 66, client 25** (2026-09-02).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
