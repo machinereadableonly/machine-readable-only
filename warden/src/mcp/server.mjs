@@ -9,6 +9,7 @@
 // resources/subscribe. All are deprecated or removed in this revision and new
 // implementations are told not to adopt them.
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
+import { Readable } from "node:stream";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { makeCheckinTool } from "./tools/checkin.mjs";
 import { makeStatusTool } from "./tools/status.mjs";
@@ -117,9 +118,23 @@ export function makeMcpHandler(deps) {
     /// The door has already verified the caller, so the key id AND the hash of
     /// the signature that proved it are attached to the Node request as
     /// `auth`, which is the channel toNodeHandler forwards.
-    nodeHandler(req, res, keyId, sigHash = null) {
-      req.auth = { token: "web-bot-auth", clientId: keyId, scopes: [], extra: { keyId, sigHash } };
-      return node(req, res);
+    /// `raw` is the body the door already consumed to check content-digest.
+    /// The adapter reads the request as a stream, so it is replayed here rather
+    /// than re-read -- the stream is at its end by the time this is called.
+    nodeHandler(req, res, keyId, sigHash = null, raw = null) {
+      const auth = { token: "web-bot-auth", clientId: keyId, scopes: [], extra: { keyId, sigHash } };
+      if (raw === null) {
+        req.auth = auth;
+        return node(req, res);
+      }
+      const replay = Readable.from([Buffer.from(raw, "utf8")]);
+      // The IncomingMessage surface the adapter reads, and nothing more.
+      Object.assign(replay, {
+        headers: req.headers, rawHeaders: req.rawHeaders, method: req.method,
+        url: req.url, httpVersion: req.httpVersion, httpVersionMajor: req.httpVersionMajor,
+        httpVersionMinor: req.httpVersionMinor, socket: req.socket, complete: true, auth,
+      });
+      return node(replay, res);
     },
   };
 }

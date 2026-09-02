@@ -85,7 +85,11 @@ export async function knock({ origin, path = "/mcp", fetchImpl = fetch }) {
  */
 export async function admittedFetch({ origin, site = origin, privateJwk, signatureAgent = site, path = "/mcp", body, fetchImpl = fetch }) {
   const { challenge } = await knock({ origin, path, fetchImpl });
-  const { headers, keyId } = await signRequest({ privateJwk, origin: site, signatureAgent, path });
+  // The body is signed, not just sent: the door binds the signature to it with
+  // content-digest. `body` is passed through to fetch UNCHANGED below, so what
+  // is hashed is exactly what goes on the wire -- re-serialising it here would
+  // produce a digest for bytes nobody sends.
+  const { headers, keyId } = await signRequest({ privateJwk, origin: site, signatureAgent, path, body });
 
   return fetchImpl(new URL(path, origin), {
     method: "POST",

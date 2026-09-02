@@ -10,15 +10,39 @@
 import { verify } from "web-bot-auth";
 import { verifierFromJWK } from "web-bot-auth/crypto";
 import { parseDictionary } from "structured-headers";
+import { createHash } from "node:crypto";
+
+/**
+ * The RFC 9530 `Content-Digest` header value for a body.
+ *
+ * `sha-256=:<base64>:` -- a structured-field dictionary whose value is a byte
+ * sequence, which is what the colons are. Exported because the door and the
+ * reference client must produce byte-identical values, and because a test that
+ * built its own would be testing its own arithmetic.
+ */
+export function contentDigest(body) {
+  const bytes = Buffer.isBuffer(body) ? body : Buffer.from(body ?? "", "utf8");
+  return `sha-256=:${createHash("sha256").update(bytes).digest("base64")}:`;
+}
 
 /// The spec's window bound. The standard sets no maximum, so a signature could
 /// otherwise be minted valid for a year and replayed for a year.
 export const MAX_WINDOW_MS = 5 * 60 * 1000;
 
 /// The components a signature must cover. The standard mandates only
-/// @authority; method and path are added so a signature captured from one tool
-/// call cannot be replayed against a different one.
-const REQUIRED = ["@authority", "@method", "@path", "signature-agent"];
+/// @authority.
+///
+/// `content-digest` is what binds a signature to a BODY, and it is the whole
+/// reason the other three are not enough here. Every MCP call is POST /mcp, so
+/// @method and @path are identical across all eight tools and separate none of
+/// them. Without the digest, a captured Signature pair authenticates ANY tool
+/// call until it expires -- and the challenge is no second factor, because key
+/// ids are public, challenges are free and unauthenticated, and the answer is a
+/// pure function of the two. One key may mint once ever, so the worst case was
+/// an attacker spending a victim's only mint. Found 2026-09-02 by a fresh
+/// reader of the protocol doc; the comment here previously claimed method and
+/// path prevented exactly this.
+const REQUIRED = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
 
 /**
  * The component list a signature ACTUALLY covered.

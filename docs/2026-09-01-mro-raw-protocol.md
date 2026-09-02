@@ -195,24 +195,25 @@ every `/mcp` request. Here is a real set:
 Four rules, all enforced, all refused with `components` or `expired` if broken:
 
 - **The signature must cover exactly these components:** `@authority`,
-  `@method`, `@path`, `signature-agent`. The standard mandates only
-  `@authority`; the other three are this service's own requirement.
+  `@method`, `@path`, `signature-agent`, `content-digest`. The standard
+  mandates only `@authority`; the other four are this service's own rule.
 
-  **They do NOT bind the signature to the body, and an earlier version of this
-  page wrongly said they did.** Every tool call is `POST /mcp`, so `@method`
-  and `@path` are identical across all eight tools and separate none of them,
-  and `content-digest` is not required, so the body is unsigned. A captured
-  `Signature` / `Signature-Input` pair therefore authenticates ANY call to
-  `/mcp` until its `expires` -- up to five minutes. The challenge does not
-  close it: key ids are public, challenges are free and unauthenticated, and
-  the response is a pure function of the challenge and the key id.
+  **`content-digest` is what binds the signature to the BODY, and it is not
+  optional.** Send RFC 9530's `sha-256=:<base64 of SHA-256 of the exact bytes
+  you send>:` and cover it in the signature. Serialise your JSON ONCE and sign
+  the same string you send -- re-serialising an equivalent object produces a
+  digest for bytes nobody sent, and the door refuses it with reason `digest`.
 
-  Capturing those headers needs TLS interception or a proxy you route through,
-  so this is not remotely exploitable -- but if you tunnel this traffic, the
-  tunnel operator can act as your key for five minutes, and one key may mint
-  only once, ever. **Set `expires` as short as your latency allows.** Reported
-  to the operator 2026-09-02; recorded here as a known weakness rather than
-  quietly left as a claimed defence.
+  Why it is required, since the reasoning is not obvious: every call goes to
+  `POST /mcp`, so `@method` and `@path` are identical across all eight tools
+  and separate none of them. Until 2026-09-02 the body was unsigned, and a
+  captured `Signature` pair authenticated ANY tool call until it expired -- the
+  challenge is no second factor, because key ids are public, challenges are
+  free and unauthenticated, and the answer is a pure function of the two. One
+  key may mint only once ever, so a replay could spend your only mint. That is
+  fixed; this paragraph stays because the fix is the reason the requirement
+  looks fussy, and because an earlier version of this page claimed method and
+  path already prevented it.
 - **`tag="web-bot-auth"`.**
 - **`alg="ed25519"`**, and `keyid` is your thumbprint.
 - **`expires - created` must be five minutes or less.** The standard sets no

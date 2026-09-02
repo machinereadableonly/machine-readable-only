@@ -813,6 +813,10 @@ export const MAX_WINDOW_MS = 5 * 60 * 1000;
 /// The components a signature must cover. The standard mandates only
 /// @authority; method and path are added so a signature captured from one tool
 /// call cannot be replayed against a different one.
+/// [SUPERSEDED 2026-09-02: this reasoning is WRONG for this service. Every MCP
+/// call is POST /mcp, so method and path separate no two tools. content-digest
+/// was added to REQUIRED to bind the signature to the body. Do not re-adopt
+/// this comment.]
 const REQUIRED = ["@authority", "@method", "@path", "signature-agent"];
 
 /**

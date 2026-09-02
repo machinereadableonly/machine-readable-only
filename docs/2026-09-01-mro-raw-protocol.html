@@ -264,22 +264,22 @@ challenge-response: 05daa76ef95a2e6d4fcd3334f23cbb07fd5196f27976af423f73160e0a76
 <p>Four rules, all enforced, all refused with <code>components</code> or <code>expired</code> if broken:</p>
 <ul>
 <li><p><strong>The signature must cover exactly these components:</strong> <code>@authority</code>,
-<code>@method</code>, <code>@path</code>, <code>signature-agent</code>. The standard mandates only
-<code>@authority</code>; the other three are this service&#39;s own requirement.</p>
-<p><strong>They do NOT bind the signature to the body, and an earlier version of this
-page wrongly said they did.</strong> Every tool call is <code>POST /mcp</code>, so <code>@method</code>
-and <code>@path</code> are identical across all eight tools and separate none of them,
-and <code>content-digest</code> is not required, so the body is unsigned. A captured
-<code>Signature</code> / <code>Signature-Input</code> pair therefore authenticates ANY call to
-<code>/mcp</code> until its <code>expires</code> -- up to five minutes. The challenge does not
-close it: key ids are public, challenges are free and unauthenticated, and
-the response is a pure function of the challenge and the key id.</p>
-<p>Capturing those headers needs TLS interception or a proxy you route through,
-so this is not remotely exploitable -- but if you tunnel this traffic, the
-tunnel operator can act as your key for five minutes, and one key may mint
-only once, ever. <strong>Set <code>expires</code> as short as your latency allows.</strong> Reported
-to the operator 2026-09-02; recorded here as a known weakness rather than
-quietly left as a claimed defence.</p>
+<code>@method</code>, <code>@path</code>, <code>signature-agent</code>, <code>content-digest</code>. The standard
+mandates only <code>@authority</code>; the other four are this service&#39;s own rule.</p>
+<p><strong><code>content-digest</code> is what binds the signature to the BODY, and it is not
+optional.</strong> Send RFC 9530&#39;s <code>sha-256=:&lt;base64 of SHA-256 of the exact bytes you send&gt;:</code> and cover it in the signature. Serialise your JSON ONCE and sign
+the same string you send -- re-serialising an equivalent object produces a
+digest for bytes nobody sent, and the door refuses it with reason <code>digest</code>.</p>
+<p>Why it is required, since the reasoning is not obvious: every call goes to
+<code>POST /mcp</code>, so <code>@method</code> and <code>@path</code> are identical across all eight tools
+and separate none of them. Until 2026-09-02 the body was unsigned, and a
+captured <code>Signature</code> pair authenticated ANY tool call until it expired -- the
+challenge is no second factor, because key ids are public, challenges are
+free and unauthenticated, and the answer is a pure function of the two. One
+key may mint only once ever, so a replay could spend your only mint. That is
+fixed; this paragraph stays because the fix is the reason the requirement
+looks fussy, and because an earlier version of this page claimed method and
+path already prevented it.</p>
 </li>
 <li><p><strong><code>tag=&quot;web-bot-auth&quot;</code>.</strong></p>
 </li>

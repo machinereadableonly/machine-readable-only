@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { parseDictionary } from "structured-headers";
-import { verifyRequest, MAX_WINDOW_MS, coveredComponents } from "../src/door/verify.mjs";
+import { verifyRequest, MAX_WINDOW_MS, coveredComponents, contentDigest } from "../src/door/verify.mjs";
 
 const VECTORS = JSON.parse(
   readFileSync(new URL("./vectors/web_bot_auth_architecture_v1.json", import.meta.url), "utf8")
@@ -19,7 +19,14 @@ const ED = VECTORS.find((v) => v.key.kty === "OKP");
 /// capturing a Signature-Input header on 2026-08-30 -- and this project requires
 /// @method and @path on top of that, so a helper that omitted the list would
 /// sign too little and every happy-path test would be refused for "components".
-const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent"];
+/// content-digest joined the list on 2026-09-02: it is what binds a signature to
+/// a body, and without it a captured signature authenticates any tool call.
+const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
+
+/// The digest of an EMPTY body, which is what these unit tests sign over.
+/// verifyRequest never sees a body -- `admit` compares the digest to what
+/// arrived -- so the value only has to exist and be covered.
+const EMPTY_DIGEST = contentDigest("");
 
 /// Build a signed request the way a real client will, so the test exercises the
 /// same code path an agent hits rather than a hand-rolled header.
@@ -28,7 +35,11 @@ async function signedRequest({ windowMs = 60_000, components = CLIENT_COMPONENTS
   const message = {
     method: "POST",
     url: "https://example.com/mcp",
-    headers: { "signature-agent": '"https://example.com"', host: "example.com" },
+    headers: {
+      "signature-agent": '"https://example.com"',
+      host: "example.com",
+      "content-digest": EMPTY_DIGEST,
+    },
   };
   const created = new Date();
   const headers = await signatureHeaders(message, signer, {
@@ -124,11 +135,15 @@ async function impostorKeyIdRequest() {
   const message = {
     method: "POST",
     url: "https://example.com/mcp",
-    headers: { "signature-agent": '"https://example.com"', host: "example.com" },
+    headers: {
+      "signature-agent": '"https://example.com"',
+      host: "example.com",
+      "content-digest": EMPTY_DIGEST,
+    },
   };
   const createdSec = Math.floor(Date.now() / 1000);
   const expiresSec = createdSec + 60;
-  const componentList = '("@authority" "@method" "@path" "signature-agent")';
+  const componentList = '("@authority" "@method" "@path" "signature-agent" "content-digest")';
   const signatureInputString =
     `${componentList};created=${createdSec};expires=${expiresSec}` +
     `;mykeyid="impostor-key-id";keyid="${signer.keyid}";alg="ed25519"` +
@@ -138,6 +153,7 @@ async function impostorKeyIdRequest() {
     `"@method": POST\n` +
     `"@path": /mcp\n` +
     `"signature-agent": "https://example.com"\n` +
+    `"content-digest": ${EMPTY_DIGEST}\n` +
     `"@signature-params": ${signatureInputString}`;
   const signature = await signer.sign(base);
   const sigB64 = Buffer.from(signature).toString("base64");
