@@ -16,12 +16,12 @@ import { keccak256, toBytes } from "viem";
 import { tokenBitmap, SIZE } from "./token-bitmap.mjs";
 import { heartMaskBytes } from "./heart-mask.mjs";
 import { unpackModules } from "./qart.mjs";
-import { tokenUri, MARKS } from "./render-token.mjs";
+import { tokenUri } from "./render-token.mjs";
 import { renderCases, soakCases } from "./state-matrix.mjs";
 
-/// Mark id n is bit n, and MARKS is in ladder order, so index i is bit i+1.
-export const marksToBits = names =>
-  (names ?? []).reduce((acc, n) => acc | (1n << BigInt(MARKS.indexOf(n) + 1)), 0n);
+/// `marks` is already an array of Mark ids (1..10) -- id n is bit n.
+export const marksToBits = ids =>
+  (ids ?? []).reduce((acc, id) => acc | (1n << BigInt(id)), 0n);
 
 export function fixtures(domain, tokenId) {
   const bitmap = tokenBitmap(domain, tokenId);

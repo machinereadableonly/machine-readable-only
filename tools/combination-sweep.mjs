@@ -4,13 +4,17 @@
 // token that buys several. Most pairs are safe by construction because they
 // write disjoint surfaces, but four pairs genuinely collide:
 //
-//   Bloom + Singularity    -- both write the HEART's fill
-//   Blue Blood + Singularity -- both write the NOISE's ink
-//   Eyes + Halo            -- the eye erases to the field, and Halo moves it
-//   Eyes + Voice           -- same, for the quiet-zone tint
+//   Beat + Break     -- both write the HEART's fill
+//   Static + Break   -- both write the NOISE's ink
+//   Eyes + Aura      -- the eye erases to the field, and Aura moves it
+//   Eyes + Hush      -- same, for the quiet-zone tint
+//
+// (Named for the ladder as it stood when this sweep was written: Bloom,
+// Singularity, Blue Blood, Halo and Voice are now Beat, Break, Static, Aura
+// and Hush -- see the Task 4 rename.)
 //
 // The last two are a defect this sweep was written to catch: the first eye
-// prototype erased its 7x7 to the FIELD constant, so on a Halo or Voice token
+// prototype erased its 7x7 to the FIELD constant, so on an Aura or Hush token
 // it would have punched a white square into a tinted ground.
 //
 // Decoded at one size for the sweep (848, the exact 53 x 16 multiple), then any
@@ -26,7 +30,8 @@ import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
   renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
-  QUIET, FIELD, HALO_FIELD, VOICE_QUIET,
+  QUIET, FIELD, AURA_FIELD, HUSH_QUIET,
+  ACHE, STATIC, HUSH, BEAT, AURA, VESSEL, BREAK,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -40,16 +45,16 @@ const FULL = process.argv[2] === "full";
 const SIZES = FULL ? [256, 500, 848, 1080, 1600] : [848];
 
 // The state every Mark can coexist in: a whole heart at a 365-day streak, which
-// is the only state Crown and Singularity are even purchasable in. Note Vein
-// draws NOTHING here -- a whole heart has no unearned cells left -- which is a
+// is the only state Vessel and Break are even purchasable in. Note Ache draws
+// NOTHING here -- a whole heart has no unearned cells left -- which is a
 // property of the ladder, not a fault in the sweep.
 const STATE = { level: 365, streak: 400, years: 1, lastDay: 20700, today: 20700 };
 const rung = rungOf(STATE.streak);
 const HEART = colourAt(rung);
 const NEUTRAL = noiseAt(rung);
 
-const VIOLET = "#2000ff";   // DECIDED: Bloom's far end
-const GREEN_MIX = 0.60;     // proposed: Blue Blood's chroma, as a share of the heart's
+const VIOLET = "#2000ff";   // DECIDED: Beat's far end
+const GREEN_MIX = 0.60;     // proposed: Static's chroma, as a share of the heart's
 
 const luma = ([r, g, b]) => 0.299 * r + 0.587 * g + 0.114 * b;
 const chromaOf = ([r, g, b]) => Math.max(r, g, b) - Math.min(r, g, b);
@@ -81,15 +86,19 @@ const THICK = (canvas - 45) / 2 - 2;
 const codeOff = 2 + THICK + QUIET;
 const EYES = [[0, 0], [S - 7, 0], [0, S - 7]];
 
-const MARKS = ["vein", "blueblood", "voice", "bloom", "halo", "crown", "singularity", "eyes"];
+// Old ladder name -> new Mark id, same surface: vein -> ache, blueblood ->
+// static, voice -> hush, bloom -> beat, halo -> aura, crown -> vessel,
+// singularity -> break. "eyes" is not a Mark the reference renderer knows --
+// it is this sweep's own prototype, stripped before the call and drawn after.
+const MARKS = [ACHE, STATIC, HUSH, BEAT, AURA, VESSEL, BREAK, "eyes"];
 
 /// Build one token with an arbitrary set of Marks, applying the proposals.
 function build(set) {
   const has = m => set.includes(m);
 
-  // Green noise, if Blue Blood is on. Written into the palette and restored.
+  // Green noise, if Static is on. Written into the palette and restored.
   const keep = [...BLUEBLOOD_BY_TIER];
-  if (has("blueblood")) {
+  if (has(STATIC)) {
     const inks = greenInks();
     for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = inks[i];
   }
@@ -99,17 +108,17 @@ function build(set) {
     { ...STATE, marks: set.filter(m => m !== "eyes") });
   for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = keep[i];
 
-  // Violet Bloom: one constant, same length as the one it replaces.
-  if (has("bloom")) svg = svg.replace(
+  // Violet Beat: one constant, same length as the one it replaces.
+  if (has(BEAT)) svg = svg.replace(
     /(<stop offset="1" stop-color=")#c8102e(")/, `$1${VIOLET}$2`);
 
-  const noiseInk = has("blueblood") ? greenInks()[TIERS.length - 1 - rung] : NEUTRAL;
+  const noiseInk = has(STATIC) ? greenInks()[TIERS.length - 1 - rung] : NEUTRAL;
 
-  // Singularity: exchange the heart and noise fills. When Bloom is also on, the
+  // Break: exchange the heart and noise fills. When Beat is also on, the
   // heart's fill is the gradient reference, so the exchange carries the
-  // GRADIENT across to the noise -- Bloom decorates whatever wears the heart's
+  // GRADIENT across to the noise -- Beat decorates whatever wears the heart's
   // ink. That is a DESIGN CHOICE and is flagged in the report, not settled here.
-  if (has("singularity")) {
+  if (has(BREAK)) {
     const fills = [...svg.matchAll(/<path fill="(url\(#b\)|#[0-9a-f]{6})"/g)];
     const n = fills[fills.length - 2], h = fills[fills.length - 1];
     const nf = n[1], hf = h[1];
@@ -117,12 +126,12 @@ function build(set) {
     svg = svg.slice(0, n.index) + n[0].replace(nf, hf) + svg.slice(n.index + n[0].length);
   }
 
-  // The eyes. THE GROUND UNDER THEM IS NOT ALWAYS WHITE: Voice tints the block
-  // the code sits in, and Halo tints the whole field. Erasing to a constant
+  // The eyes. THE GROUND UNDER THEM IS NOT ALWAYS WHITE: Hush tints the block
+  // the code sits in, and Aura tints the whole field. Erasing to a constant
   // would punch a white square into either one.
   if (has("eyes")) {
-    const ground = has("voice") ? VOICE_QUIET : (has("halo") ? HALO_FIELD : FIELD);
-    const ink = has("crown") ? "#b8860b" : HEART;
+    const ground = has(HUSH) ? HUSH_QUIET : (has(AURA) ? AURA_FIELD : FIELD);
+    const ink = has(VESSEL) ? "#b8860b" : HEART;
     let add = "";
     for (const [ex, ey] of EYES) {
       const x = codeOff + ex, y = codeOff + ey, c = x + 3.5, cy = y + 3.5;

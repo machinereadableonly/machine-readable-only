@@ -4,7 +4,8 @@ import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
          rungOf, colourAt, noiseAt, bluebloodAt, MAX_RINGS, ringsFor, ringSpan,
-         VOICE_QUIET } from "../render-token.mjs";
+         HUSH_QUIET, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
+       } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
 const PAYLOAD = payloadFor("example.com", 1);
@@ -39,20 +40,20 @@ const luma601 = h => {
   return 0.299 * r + 0.587 * g + 0.114 * b;
 };
 
-test("every Blue Blood ink matches its tier in luminance", () => {
+test("every Static ink matches its tier in luminance", () => {
   // The Mark may move the noise in HUE; it may not move it in WEIGHT. The
   // binarizer resolves on weight and does not care why an ink is lighter, so
-  // Blue Blood clears exactly the bar the neutral palette clears. Mirrors
+  // Static clears exactly the bar the neutral palette clears. Mirrors
   // PaletteNoise.t.sol.
   for (let rung = 0; rung < TIERS.length; rung++) {
     const gap = Math.abs(luma601(colourAt(rung)) - luma601(bluebloodAt(rung)));
     assert.ok(gap <= 1,
-      `rung ${rung}: heart ${colourAt(rung)} and Blue Blood ${bluebloodAt(rung)} `
+      `rung ${rung}: heart ${colourAt(rung)} and Static ${bluebloodAt(rung)} `
       + `are ${gap.toFixed(1)} apart in luminance -- they must match`);
   }
 });
 
-test("Blue Blood never out-chromas the heart it surrounds", () => {
+test("Static never out-chromas the heart it surrounds", () => {
   // Not a decode rule -- every intensity measured decodes. It is about which
   // element is the subject: the start-tier heart carries the least chroma on
   // the ladder, so a vivid noise takes the picture over. Day one binds it.
@@ -63,7 +64,7 @@ test("Blue Blood never out-chromas the heart it surrounds", () => {
   for (let rung = 0; rung < TIERS.length; rung++) {
     const heart = chroma(colourAt(rung)), noise = chroma(bluebloodAt(rung));
     assert.ok(noise < heart,
-      `rung ${rung}: Blue Blood ${bluebloodAt(rung)} has chroma ${noise} against `
+      `rung ${rung}: Static ${bluebloodAt(rung)} has chroma ${noise} against `
       + `a heart ${colourAt(rung)} at ${heart} -- the noise must stay quieter`);
   }
 });
@@ -108,9 +109,9 @@ test("the code is always dark ink on a light field, never inverted", () => {
     { level: 0, streak: 0, years: 0 },
     { level: 200, streak: 45, years: 0 },
     { level: 365, streak: 140, years: 1 },
-    { level: 365, streak: 140, years: 1, marks: ["vein"] },
-    { level: 365, streak: 140, years: 1, marks: ["halo"] },
-    { level: 365, streak: 140, years: 1, marks: ["crown"] },
+    { level: 365, streak: 140, years: 1, marks: [ACHE] },
+    { level: 365, streak: 140, years: 1, marks: [AURA] },
+    { level: 365, streak: 140, years: 1, marks: [VESSEL] },
   ]) {
     const svg = render(state);
     // The field is the first rect: the ground everything else is painted on.
@@ -214,11 +215,11 @@ test("streak tiers map to the right colours", () => {
   assert.equal(tierColour(9999), "#c8102e");
 });
 
-// The five Marks that touch the image. Pulse is an animation_url and
-// Singularity picks the QArt target at mint, so neither changes what is drawn.
-// Blue Blood joined this list on 2026-08-29, taking the rung Pulse vacated.
-// Pulse was never here: it was an animation_url and drew nothing.
-const DRAWN_MARKS = ["vein", "blueblood", "voice", "bloom", "halo", "crown"];
+// The six Marks that touch the image (Task 4 rename: vein -> ache, blueblood
+// -> static, voice -> hush, bloom -> beat, halo -> aura, crown -> vessel).
+// Iris Bought, Iris Earned, Break and Tint draw nothing yet -- the eyes and
+// the inversion land in later tasks.
+const DRAWN_MARKS = [ACHE, STATIC, HUSH, BEAT, AURA, VESSEL];
 
 test("every drawn mark changes the image without breaking the scan", () => {
   const base = render({ level: 200, streak: 45, years: 0 });
@@ -231,30 +232,28 @@ test("every drawn mark changes the image without breaking the scan", () => {
   }
 });
 
-test("the mark that does not draw leaves the image alone", () => {
-  // Singularity is the only one left: it chooses the QArt target picture at
-  // mint rather than painting a surface. Blue Blood used to sit here beside it
-  // as Pulse, which was an animation_url; Pulse was dropped on 2026-08-29
-  // because it cost 469,027 gas, and its rung now tints the noise instead.
+test("a mark that does not draw yet leaves the image alone", () => {
+  // Break is the inversion (Task 7) and Iris Bought is the eyes (Task 6) --
+  // neither is built, so neither may change the image today.
   const base = render({ level: 200, streak: 45, years: 0 });
-  assert.equal(render({ level: 200, streak: 45, years: 0, marks: ["singularity"] }), base,
-    "singularity should not touch the image");
+  assert.equal(render({ level: 200, streak: 45, years: 0, marks: [BREAK] }), base,
+    "break should not touch the image yet");
 });
 
-test("Blue Blood tints the noise and nothing else", () => {
+test("Static tints the noise and nothing else", () => {
   const base = render({ level: 200, streak: 45, years: 0 });
-  const marked = render({ level: 200, streak: 45, years: 0, marks: ["blueblood"] });
-  assert.notEqual(marked, base, "Blue Blood must actually change the image");
+  const marked = render({ level: 200, streak: 45, years: 0, marks: [STATIC] });
+  assert.notEqual(marked, base, "Static must actually change the image");
 
   // The ONLY difference may be the noise ink. Swapping the tinted ink back for
   // the neutral one has to reproduce the unmarked image byte for byte -- if it
   // does not, the Mark has reached a surface that belongs to another Mark.
   const rung = rungOf(45);
   const restored = marked.split(bluebloodAt(rung)).join(noiseAt(rung));
-  assert.equal(restored, base, "Blue Blood touched something other than the noise");
+  assert.equal(restored, base, "Static touched something other than the noise");
 });
 
-test("Blue Blood scans at every rung and every size", () => {
+test("Static scans at every rung and every size", () => {
   // The Mark tints half the lit modules in the code block, so it has to clear
   // the decode bar at every tier rather than at the one that happened to be
   // rendered during design. 848 is the exact multiple (53 cells x 16); the rest
@@ -264,14 +263,14 @@ test("Blue Blood scans at every rung and every size", () => {
   const STREAKS = [0, 3, 7, 30, 100];   // one per rung, lowest first
 
   for (const streak of STREAKS) {
-    const svg = render({ level: 200, streak, years: 0, marks: ["blueblood"],
+    const svg = render({ level: 200, streak, years: 0, marks: [STATIC],
                          lastDay: 1000, today: 1000 });
     for (const px of SIZES) {
       const got = scanResult(svg, px);
       assert.ok(got.ok,
-        `Blue Blood at streak ${streak} failed to decode at ${px}px: ${got.why}`);
+        `Static at streak ${streak} failed to decode at ${px}px: ${got.why}`);
       assert.equal(got.destination, DESTINATION,
-        `Blue Blood at streak ${streak} decoded to the wrong url at ${px}px`);
+        `Static at streak ${streak} decoded to the wrong url at ${px}px`);
     }
   }
 });
@@ -303,11 +302,11 @@ test("the shipped quiet-zone tint keeps its decode margin", () => {
   // The lesson is kept rather than the number: a tint has to be MEASURED, and
   // the floor moves when anything else in the block changes.
   const at = tint => {
-    const svg = render({ level: 200, streak: 45, years: 0, marks: ["voice"] })
-      .replace(new RegExp(VOICE_QUIET, "g"), tint);
+    const svg = render({ level: 200, streak: 45, years: 0, marks: [HUSH] })
+      .replace(new RegExp(HUSH_QUIET, "g"), tint);
     return [900, 700, 500, 350].filter(px => !scanResult(svg, px).ok);
   };
-  assert.deepEqual(at(VOICE_QUIET), [], "the shipped tint must decode at every size");
+  assert.deepEqual(at(HUSH_QUIET), [], "the shipped tint must decode at every size");
   assert.ok(at("#c294a8").length > 0, "#c294a8 must remain too deep to adopt");
 });
 
@@ -328,17 +327,17 @@ test("a lapse pales the image, and a sealed token never pales", () => {
 });
 
 test("the duotone survives every mark", () => {
-  // The heart and the uncontrolled noise must stay two separate fills. Bloom
+  // The heart and the uncontrolled noise must stay two separate fills. Beat
   // swaps the heart's flat colour for a gradient reference and must not merge
-  // the two groups. Blue Blood is the ONLY Mark permitted to change the noise
+  // the two groups. Static is the ONLY Mark permitted to change the noise
   // ink, so the expected noise is chosen by the mark set rather than fixed --
   // if any other Mark ever tints it, this fails, which is the point.
-  for (const marks of [[], ["bloom"], ["blueblood"], DRAWN_MARKS]) {
+  for (const marks of [[], [BEAT], [STATIC], DRAWN_MARKS]) {
     const svg = render({ level: 200, streak: 45, years: 0, marks });
     const rung = rungOf(45);
-    const noise = marks.includes("blueblood") ? bluebloodAt(rung) : noiseAt(rung);
+    const noise = hasMark(marks, STATIC) ? bluebloodAt(rung) : noiseAt(rung);
     assert.ok(svg.includes(`fill="${noise}"`), `noise fill lost with ${marks}`);
-    const heart = marks.includes("bloom") ? 'fill="url(#b)"' : `fill="${tierColour(45)}"`;
+    const heart = hasMark(marks, BEAT) ? 'fill="url(#b)"' : `fill="${tierColour(45)}"`;
     assert.ok(svg.includes(heart), `heart fill lost with ${marks}`);
   }
 });

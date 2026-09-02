@@ -25,6 +25,7 @@ import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
   renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
+  STATIC, BEAT,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -104,7 +105,7 @@ function bloomCandidates(streak) {
     { name: "tier x0.75", to: atLuma(rgbOf(tier), luma(tier) * 0.75) },
   ].map(c => {
     const base = renderSvg(CODE.modules, TARGET.want, CODE.size, stateFor(streak, []));
-    const shipped = renderSvg(CODE.modules, TARGET.want, CODE.size, stateFor(streak, ["bloom"]));
+    const shipped = renderSvg(CODE.modules, TARGET.want, CODE.size, stateFor(streak, [BEAT]));
     // Prototype by substituting the gradient's far stop. Nothing here ships,
     // and doing it this way keeps the reference renderer untouched.
     const svg = shipped.replace(
@@ -164,7 +165,7 @@ function bluebloodCandidates(streak) {
   ]) {
     for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = c.inks[i];
     const base = renderSvg(CODE.modules, TARGET.want, CODE.size, stateFor(streak, []));
-    const svg = renderSvg(CODE.modules, TARGET.want, CODE.size, stateFor(streak, ["blueblood"]));
+    const svg = renderSvg(CODE.modules, TARGET.want, CODE.size, stateFor(streak, [STATIC]));
     const ink = c.inks[TIERS.length - 1 - rung];
     const heart = colourAt(rung);
     out.push({

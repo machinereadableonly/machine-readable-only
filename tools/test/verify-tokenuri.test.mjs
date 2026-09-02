@@ -12,7 +12,7 @@ import { decodeTokenUri, attributesOf } from "../verify-tokenuri.mjs";
 import { tokenBitmap, SIZE } from "../token-bitmap.mjs";
 import { heartMaskBytes } from "../heart-mask.mjs";
 import { unpackModules } from "../qart.mjs";
-import { tokenUri } from "../render-token.mjs";
+import { tokenUri, ACHE, STATIC, HUSH, BEAT, AURA, VESSEL } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
 const DOMAIN = "example.com";
@@ -26,7 +26,7 @@ function uriFor(state) {
 }
 
 const WORST = { level: 364, streak: 400, lastDay: 1000, today: 1000,
-                marks: ["vein", "blueblood", "voice", "bloom", "halo", "crown"] };
+                marks: [ACHE, STATIC, HUSH, BEAT, AURA, VESSEL] };
 
 test("a tokenURI splits into parseable JSON and a decodable SVG", () => {
   const { json, svg } = decodeTokenUri(uriFor(WORST));

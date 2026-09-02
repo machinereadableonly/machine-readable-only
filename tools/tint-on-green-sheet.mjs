@@ -30,7 +30,7 @@ import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
   renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
-  QUIET, FIELD,
+  QUIET, FIELD, STATIC,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -134,7 +134,7 @@ const keep = [...BLUEBLOOD_BY_TIER];
 function tile(streak, rung, style, tintHex) {
   for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = inks[i];
   const base = renderSvg(CODE.modules, TARGET.want, CODE.size,
-    { level: 200, streak, years: 1, marks: ["blueblood"], lastDay: 20700, today: 20700 });
+    { level: 200, streak, years: 1, marks: [STATIC], lastDay: 20700, today: 20700 });
   for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = keep[i];
   return withEyes(base, style, tintHex ?? colourAt(rung));
 }

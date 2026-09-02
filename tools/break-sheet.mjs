@@ -41,6 +41,7 @@ import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
   renderSvg, canvasFor, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
+  STATIC, BEAT,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -172,7 +173,7 @@ const VARIANTS = [
     name: "Break + Static",
     make: (s, rung) => {
       for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = inks[i];
-      const svg = raw(s, ["blueblood"]);
+      const svg = raw(s, [STATIC]);
       for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = keep[i];
       return invert(svg, {
         mode: "B", heartInk: colourAt(rung),
@@ -182,13 +183,13 @@ const VARIANTS = [
   },
   {
     name: "Break + Beat, def A (fill swap)",
-    make: (s, rung) => invert(violet(raw(s, ["bloom"])), {
+    make: (s, rung) => invert(violet(raw(s, [BEAT])), {
       mode: "A", heartInk: colourAt(rung), noiseInk: noiseAt(rung), beat: true,
     }),
   },
   {
     name: "Break + Beat, def B (rung swap)",
-    make: (s, rung) => invert(violet(raw(s, ["bloom"])), {
+    make: (s, rung) => invert(violet(raw(s, [BEAT])), {
       mode: "B", heartInk: colourAt(rung), noiseInk: noiseAt(rung), beat: true,
     }),
   },

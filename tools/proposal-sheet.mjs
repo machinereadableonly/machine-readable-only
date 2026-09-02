@@ -19,7 +19,7 @@ import { PNG } from "pngjs";
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
-  renderSvg, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt,
+  renderSvg, BLUEBLOOD_BY_TIER, TIERS, colourAt, rungOf, noiseAt, STATIC, BEAT,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -71,7 +71,7 @@ const draw = (streak, marks) => renderSvg(CODE.modules, TARGET.want, CODE.size, 
 function bloomProposed(streak) {
   const tier = colourAt(rungOf(streak));
   const far = atLuma(rgbOf(tier), luma(tier) * 0.6);
-  const svg = draw(streak, ["bloom"]).replace(
+  const svg = draw(streak, [BEAT]).replace(
     /(<stop offset="1" stop-color=")#c8102e(")/, `$1${far}$2`);
   if (svg.includes('stop-color="#c8102e"/></linearGradient>') && far !== "#c8102e") {
     throw new Error("bloom far stop was not substituted");
@@ -100,7 +100,7 @@ function bluebloodProposed(streak) {
   const keep = [...BLUEBLOOD_BY_TIER];
   const inks = bluebloodInks();
   for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = inks[i];
-  const svg = draw(streak, ["blueblood"]);
+  const svg = draw(streak, [STATIC]);
   for (let i = 0; i < BLUEBLOOD_BY_TIER.length; i++) BLUEBLOOD_BY_TIER[i] = keep[i];
   return svg;
 }
@@ -213,12 +213,12 @@ const MARKS = [
   {
     tag: "bloom", name: "Bloom", streak: 150, rungNote: "streak 150, the tier where Bloom currently does nothing at all",
     proposal: "gradient far end = tier ink at 60% luminance",
-    proposed: bloomProposed, shipped: s => draw(s, ["bloom"]),
+    proposed: bloomProposed, shipped: s => draw(s, [BEAT]),
   },
   {
     tag: "blueblood", name: "Blue Blood", streak: 150, rungNote: "streak 150, the top tier",
     proposal: "noise chroma = 40% of the heart's, floor 22",
-    proposed: bluebloodProposed, shipped: s => draw(s, ["blueblood"]),
+    proposed: bluebloodProposed, shipped: s => draw(s, [STATIC]),
   },
   {
     tag: "singularity", name: "Singularity", streak: 150, rungNote: "streak 150; the Mark can only ever be bought at this tier",

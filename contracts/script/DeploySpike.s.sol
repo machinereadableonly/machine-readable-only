@@ -25,13 +25,13 @@ import {SpikeBitmaps} from "./SpikeBitmaps.sol";
 ///   forge script script/DeploySpike.s.sol:DeploySpike \
 ///     --rpc-url local --private-key $KEY --broadcast
 contract DeploySpike is Script {
-    /// @dev Singularity is left off token 3 on purpose: it selects the QArt
-    /// target picture at mint and has no render effect, so wearing it here
-    /// would change nothing while implying it did.
-    uint256 constant MARKS_NO_SINGULARITY = MarkRenderer.VEIN | MarkRenderer.BLUEBLOOD
-        | MarkRenderer.VOICE | MarkRenderer.BLOOM | MarkRenderer.HALO | MarkRenderer.CROWN;
+    /// @dev Break is left off token 3 on purpose: it draws nothing yet (the
+    /// inversion lands in a later task), so wearing it here would change
+    /// nothing while implying it did.
+    uint256 constant MARKS_NO_BREAK = MarkRenderer.HUSH | MarkRenderer.ACHE
+        | MarkRenderer.STATIC | MarkRenderer.BEAT | MarkRenderer.AURA | MarkRenderer.VESSEL;
 
-    uint256 constant VEIN_AND_BLOOM = MarkRenderer.VEIN | MarkRenderer.BLOOM;
+    uint256 constant ACHE_AND_BEAT = MarkRenderer.ACHE | MarkRenderer.BEAT;
 
     function run() external returns (address renderer, address token) {
         // The key is read here rather than passed as --private-key so it never
@@ -49,18 +49,18 @@ contract DeploySpike is Script {
         // A part-filled frame, which is where the frame paths start fragmenting.
         t.mint(2, to, bytes32(uint256(0xa9e2)), SpikeBitmaps.code(2));
         _place(t, 2, 200, 45);
-        t.setMarks(2, VEIN_AND_BLOOM);
+        t.setMarks(2, ACHE_AND_BEAT);
 
         // Whole, one completed year, every Mark that draws.
         t.mint(3, to, bytes32(uint256(0xa9e3)), SpikeBitmaps.code(3));
         _place(t, 3, 365, 400);
-        t.setMarks(3, MARKS_NO_SINGULARITY);
+        t.setMarks(3, MARKS_NO_BREAK);
         t.setParent(3, 1);
 
         // The worst case: one day short of whole, wearing everything.
         t.mint(4, to, bytes32(uint256(0xa9e4)), SpikeBitmaps.code(4));
         _place(t, 4, 364, 400);
-        t.setMarks(4, MARKS_NO_SINGULARITY);
+        t.setMarks(4, MARKS_NO_BREAK);
 
         vm.stopBroadcast();
 

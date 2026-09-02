@@ -24,8 +24,15 @@ contract RendererTest is Test {
         hex"ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80";
     }
 
-    uint256 constant ALL_MARKS = MarkRenderer.VEIN | MarkRenderer.BLUEBLOOD | MarkRenderer.VOICE
-        | MarkRenderer.BLOOM | MarkRenderer.HALO | MarkRenderer.CROWN | MarkRenderer.SINGULARITY;
+    /// @dev One Mark per pair -- the legal maximum a real token can hold, since
+    /// `MachineReadableOnly.applyMark` excludes pair partners. Hush over Ache
+    /// and Beat over Static were picked because they draw the larger amount of
+    /// image (Hush adds a rect, Beat adds a gradient defs block), which makes
+    /// this also the byte-worst-case fixture. Iris Bought is included even
+    /// though it draws nothing yet, so the fixture reflects a token that took
+    /// every pair rather than four of five.
+    uint256 constant ALL_MARKS = MarkRenderer.HUSH | MarkRenderer.BEAT
+        | MarkRenderer.IRIS_BOUGHT | MarkRenderer.VESSEL | MarkRenderer.AURA;
 
     function setUp() public {
         r = new Renderer();
@@ -98,8 +105,8 @@ contract RendererTest is Test {
     function test_everyMarkAtOnceMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(365 * 10, 400, 1000, 1000);
         v.marks = ALL_MARKS;
-        _diff("every drawn mark", v, 10106,
-            0x56950279ce158df5fd7f0ddb8c9cde42fc1c6d5d35400aa171fab2ee60e31b57);
+        _diff("every drawn mark", v, 10079,
+            0x728f2d92a9c037981e61f977003e6906d1ccaf8db0d680516987084cade02c99);
     }
 
     function test_aSealedTokenMatchesTheJavascriptReference() public view {
@@ -116,10 +123,10 @@ contract RendererTest is Test {
     function test_noRawHashSurvivesIntoTheUri() public view {
         // The whole tokenURI is itself a URI, so one raw "#" opens a fragment
         // and truncates the JSON. Base64 hides every hash inside the SVG; the
-        // one in the name is written %23. Bloom is worn here because its
+        // one in the name is written %23. Beat is worn here because its
         // url(#b) reference is the easiest one to leak.
         TokenView memory v = _view(365, 140, 1000, 1000);
-        v.marks = MarkRenderer.BLOOM;
+        v.marks = MarkRenderer.BEAT;
         bytes memory uri = bytes(r.tokenURI(v));
         for (uint256 i; i < uri.length; ++i) {
             assertTrue(uri[i] != "#", "a raw hash reached the tokenURI");
@@ -139,11 +146,11 @@ contract RendererTest is Test {
         // Ghost, frame, noise, heart. Fixed so each library emits one adjacent
         // pair of paths and the assembler can simply concatenate them.
         //
-        // Crown is worn so the frame is gold and the four fills are four
+        // Vessel is worn so the frame is gold and the four fills are four
         // distinct strings. On a bare token the frame and the heart share the
         // streak colour, and searching for it would find the frame every time.
         TokenView memory v = _view(200, 45, 1000, 1000);
-        v.marks = MarkRenderer.CROWN;
+        v.marks = MarkRenderer.VESSEL;
         string memory out = r.svg(v);
 
         // Both inks are read off the palette rather than pasted in. They are a
@@ -239,24 +246,24 @@ contract RendererTest is Test {
         revert("not found");
     }
 
-    /// @notice Blue Blood may change the ink and nothing else.
+    /// @notice Static may change the ink and nothing else.
     ///
     /// @dev The Mark claims the noise, which is the one surface no other Mark
     /// touches. `CodeRenderer.paths` already takes that ink as a parameter, so
     /// wearing the Mark swaps one seven-character hex colour for another and the
     /// image cannot change length. If it ever does, the Mark has reached a
     /// surface that belongs to somebody else -- which is the rule that keeps a
-    /// token wearing all seven legible.
-    function test_blueBloodChangesTheInkAndNothingElse() public view {
+    /// token wearing every drawing Mark legible.
+    function test_staticChangesTheInkAndNothingElse() public view {
         TokenView memory v = _view(200, 45, 1000, 1000);
         string memory bare = r.svg(v);
 
-        v.marks = MarkRenderer.BLUEBLOOD;
+        v.marks = MarkRenderer.STATIC;
         string memory marked = r.svg(v);
 
         assertTrue(
             keccak256(bytes(bare)) != keccak256(bytes(marked)),
-            "Blue Blood must actually change the image"
+            "Static must actually change the image"
         );
         assertEq(
             bytes(marked).length, bytes(bare).length,
@@ -264,11 +271,11 @@ contract RendererTest is Test {
         );
         assertTrue(
             vm.contains(marked, Palette.bluebloodAt(Palette.tierIndex(45))),
-            "the slate ink is missing from a Blue Blood token"
+            "the slate ink is missing from a Static token"
         );
         assertFalse(
             vm.contains(marked, Palette.noiseAt(Palette.tierIndex(45))),
-            "the neutral noise ink survived into a Blue Blood token"
+            "the neutral noise ink survived into a Static token"
         );
     }
 }

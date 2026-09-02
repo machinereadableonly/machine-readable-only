@@ -48,13 +48,13 @@ library RenderFixture {
         c[i++] = Case(364, 400, 1000, 1000, 0, false, false, 8872, 0x4aa2aa3188727be683344ea3773902fa65bb2ac0ce15b47101a1f384587b2e5d, "fill 364");
         c[i++] = Case(365, 400, 1000, 1000, 0, false, false, 8881, 0xbf7ce02662a6d2f8484cc11afcf1833fb09451d5d2450aea41d8d4dad4a80728, "fill 365");
         c[i++] = Case(365, 400, 1000, 1000, 0, false, false, 8881, 0xbf7ce02662a6d2f8484cc11afcf1833fb09451d5d2450aea41d8d4dad4a80728, "no marks");
-        c[i++] = Case(365, 400, 1000, 1000, 2, false, false, 8887, 0x3e79fba692859380c3aa4572019d36342de5a2e13530cea2c8a0961d96f3ba2b, "mark vein");
-        c[i++] = Case(365, 400, 1000, 1000, 8, false, false, 8964, 0x87f646ae5122d934d1c3d29997d91a990cb7f84c7be01c86a6c22f62cda886a5, "mark voice");
-        c[i++] = Case(365, 400, 1000, 1000, 16, false, false, 9100, 0xdfeba0249c5e26ef6abbf267c2e29086e0232ab3273fb6670a297d536fe080ca, "mark bloom");
-        c[i++] = Case(365, 400, 1000, 1000, 32, false, false, 8887, 0x9af36e2f13b1468c120dfed4d7a07175c9b52939a074f689f66f1683c3b2cb8a, "mark halo");
-        c[i++] = Case(365, 400, 1000, 1000, 64, false, false, 8888, 0x21f6643be9df517763b1af70ee3b47be22a6184c9c68247e060d42d4cbadbc69, "mark crown");
-        c[i++] = Case(365, 400, 1000, 1000, 122, false, false, 9206, 0x9a25d3683a6eb593839cca09452f178fd39cf10c7a4a541a8cd367d2471fcab8, "all drawing marks");
-        c[i++] = Case(365, 400, 1000, 1000, 254, false, false, 9232, 0xd3ec0bdf9393e31e05bb67f545904b2d3e18cc00ec732b14082b456d889c146a, "all seven marks");
+        c[i++] = Case(365, 400, 1000, 1000, 4, false, false, 8887, 0x48394d6b2ecf9f77de94bf54be396e378e332f8eb2b0464aba6a967b9ee54756, "mark ache");
+        c[i++] = Case(365, 400, 1000, 1000, 2, false, false, 8963, 0x4988f8f8c4bf782424d6bd19098d991a07c3f36125285e92baa8011c51581818, "mark hush");
+        c[i++] = Case(365, 400, 1000, 1000, 16, false, false, 9099, 0xb1493b5209927563d7f3dad70bad52ce0dc9e815a96103ff7cc14ab41ee3a1fa, "mark beat");
+        c[i++] = Case(365, 400, 1000, 1000, 1024, false, false, 8887, 0x81b83ca9bb444794a1d75fbd471b215e63231d541a0b651dea76afd1ea3bca93, "mark aura");
+        c[i++] = Case(365, 400, 1000, 1000, 128, false, false, 8889, 0xc82ff6d44bb03a0d81e6bf3fa0a7399a547ed9c1ff3909f69ab7ac914df82e6a, "mark vessel");
+        c[i++] = Case(365, 400, 1000, 1000, 1174, false, false, 9205, 0x280d49892598197b41bf4b901cb99118b80bb26aba1e7aae5e6c69278b68150f, "all drawing marks");
+        c[i++] = Case(365, 400, 1000, 1000, 1438, false, false, 9222, 0x0a934ec10de47fdff812b9570be64cfdead58122f18803632c461bea47a0b6b3, "all seven marks");
         c[i++] = Case(365, 400, 1000, 9999, 0, true, false, 8884, 0x67490dca20f51b027abb39ef572373d371bbb20c208963433dc20e5a6ee5130b, "resting");
         c[i++] = Case(365, 400, 1000, 9999, 0, false, true, 8882, 0xed352579f1540d780ed5095728f8f4123e785baa9d18f79db90ba351ea25acb5, "sunset");
     }
