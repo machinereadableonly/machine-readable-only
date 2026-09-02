@@ -50,9 +50,11 @@ mainnet, so it is a redeploy and not a migration.
 
 The seven old Marks (Vein, Blue Blood, Voice, Bloom, Halo, Crown, Singularity)
 are retired as a ladder. Their surfaces and their measured drawing code are
-reused under new names. Ten Marks replace them, arranged as five pairs. In each
-pair one side is bought and the other is earned by a run of days, taking either
-side closes the other permanently, and a token may take neither. Two new
+reused under new names. Ten Marks replace them, arranged as five pairs. In four
+of the pairs one side is bought and the other is earned by a run of days; pair
+five is bought on BOTH sides and both sides are gated on holding an Iris (see
+3.1.2). Taking either side of a pair closes the other permanently, and a token
+may take neither. Two new
 surfaces are drawn for the first time: the QR's three finder patterns (the
 eyes), and the inversion, which the old Singularity declared and never drew.
 
