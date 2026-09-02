@@ -1,0 +1,26 @@
+{
+  "name": "mro-agent",
+  "version": "0.1.0",
+  "description": "The reference client for Machine Readable Only. Proves a program composed the request, mints one token, and comes back daily.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "mro-agent": "./src/cli.mjs" },
+  "exports": {
+    ".": "./src/index.mjs",
+    "./keys": "./src/keys.mjs",
+    "./signing": "./src/signing.mjs",
+    "./challenge": "./src/challenge.mjs",
+    "./door": "./src/door.mjs",
+    "./pay": "./src/pay.mjs"
+  },
+  "files": ["src", "README.md"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "@x402/evm": "2.24.0",
+    "viem": "^2.56.0",
+    "web-bot-auth": "0.1.3"
+  }
+}
