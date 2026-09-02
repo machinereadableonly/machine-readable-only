@@ -37,6 +37,7 @@ export function queries(db) {
     setResting: db.prepare("UPDATE tokens SET resting = 1 WHERE tokenId = ?"),
     insertMint: db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (?, ?, ?)"),
     reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId, variant) VALUES (?, ?, ?)"),
+    reservedMarks: db.prepare("SELECT upgradeId FROM mark_orders WHERE tokenId = ?"),
     markSold: db.prepare("SELECT COUNT(*) AS n FROM mark_orders WHERE upgradeId = ?"),
     hasMinted: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE keyId = ?"),
 
@@ -55,6 +56,12 @@ export function queries(db) {
     ),
     pendingMarkOrders: db.prepare(
       "SELECT tokenId, upgradeId, variant FROM mark_orders WHERE status = 'queued' ORDER BY tokenId ASC"
+    ),
+    stuckMarkOrders: db.prepare(
+      "SELECT tokenId, upgradeId, variant FROM mark_orders WHERE status = 'failed' ORDER BY tokenId ASC, upgradeId ASC"
+    ),
+    failMarkOrder: db.prepare(
+      "UPDATE mark_orders SET status = 'failed' WHERE tokenId = ? AND upgradeId = ?"
     ),
     markMintWritten: db.prepare("UPDATE mints SET status = 'written' WHERE tokenId = ?"),
     markTokenWritten: db.prepare("UPDATE tokens SET status = 'written' WHERE tokenId = ?"),
@@ -154,6 +161,29 @@ export function queries(db) {
         throw err;
       }
     },
+    /**
+     * Every Mark this token has RESERVED, in the same bitmask shape
+     * `tokens.marks` uses.
+     *
+     * WHY IT IS NEEDED. `tokens.marks` is written by markOrderWritten alone,
+     * and only the Clock calls that, after a successful on-chain applyMark. So
+     * from a purchase until the next 00:05 UTC run -- up to 24 hours -- the
+     * mirror's mask does not include what the token has already bought. Every
+     * decision made from `tokens.marks` alone is blind for that window, which
+     * is how both sides of one exclusive pair were sold to one token.
+     *
+     * EVERY ROW COUNTS, whatever its status, and this deliberately does not
+     * filter. A 'written' row is already in `tokens.marks` so it adds nothing.
+     * A 'queued' row is the whole point. A 'failed' row -- the terminal state
+     * for an order the chain will never accept -- stays counted because money
+     * moved and the row is waiting for a human: freeing the partner would sell
+     * the other side of a pair whose first side may yet be resolved in the
+     * agent's favour. A refusal can be undone by a human; a second sale cannot.
+     * It is also what the unique index does, which holds no status either.
+     */
+    reservedMask: (tokenId) =>
+      s.reservedMarks.all(tokenId).reduce((mask, r) => mask | (1 << r.upgradeId), 0),
+
     /// How many of a mark have actually been reserved. Read from the mirror,
     /// never from the catalogue object: a static `sold` field is never
     /// incremented by anything, so the sold-out gate would never fire and the
@@ -178,6 +208,24 @@ export function queries(db) {
     pendingCredits: (throughDay) => s.pendingCredits.all(throughDay),
 
     pendingMarkOrders: () => s.pendingMarkOrders.all(),
+
+    /**
+     * Mark orders the chain refused outright. The `mints` pattern, applied to
+     * the one queue that lacked it.
+     *
+     * A row whose applyMark reverted on SIMULATION will revert again tomorrow
+     * for the same reason -- an exclusion is permanent, `rest` is irreversible,
+     * and a Mark the ladder no longer gates the way the chain does is a wiring
+     * error, not a delay. Without a terminal state the Clock re-sent that call
+     * every night and alerted every night, which is how a real problem becomes
+     * something a human learns to scroll past.
+     */
+    stuckMarkOrders: () => s.stuckMarkOrders.all(),
+
+    /// Move one order to its terminal state. There is deliberately no way back:
+    /// requeueing a Mark the chain refused is a decision for a human who has
+    /// read the alert, not something the Clock should do to itself.
+    failMarkOrder: (tokenId, upgradeId) => s.failMarkOrder.run(tokenId, upgradeId),
 
     /// A mint landed: both rows move together, because a written token with a
     /// queued mint (or the reverse) is a state nothing else in this service

@@ -76,6 +76,19 @@
 <body>
 <h1>MRO Plan 5 -- The Mark Ladder Implementation Plan</h1>
 <blockquote>
+<p><strong>Do not re-render this document with <code>~/scripts/render-md-to-html.js</code>
+without checking the tail (2026-09-02).</strong> That script pipes the markdown into
+<code>marked</code> through <code>execSync(..., { input: md })</code>, and on this document the
+captured output is cut mid-word at 148,952 bytes -- the last three bullets of
+the final section vanish, leaving an unclosed <code>&lt;li&gt;</code> and no <code>&lt;/ul&gt;</code>. It is
+reproducible, and it is NOT a size limit: the 182,577-byte plan 2 HTML renders
+complete through the same script, while <code>npx marked &lt; this.md</code> writes all
+146,605 bytes of body correctly. The committed
+<code>2026-09-02-mro-plan5-mark-ladder.html</code> was assembled from that shell render
+plus the script&#39;s own header, so it is complete; running the script over this
+file again would truncate it back. The markdown is the authority either way.</p>
+</blockquote>
+<blockquote>
 <p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
@@ -2921,5 +2934,13 @@ Base mainnet is a real-funds gate with no standing approval.</li>
 LOCKED and prints the current address as the thing agents are invited to
 audit. It needs one line changed AFTER a redeploy, not before.</li>
 <li><strong>It does not test the copy on cold readers again.</strong> The ladder the copy
-describes is what this builds, so the promise has not moved. If any w</body>
+describes is what this builds, so the promise has not moved. If any wording
+changes, re-run the rig in the <code>test-copy-on-cold-agents</code> memory.</li>
+<li><strong>It does not touch child token visuals or the lineage narrative</strong>, which stay
+deferred to a follow-up brainstorm (spec section 10).</li>
+<li><strong>It does not add a third Tint ink.</strong> Teal and a warm orange are the gaps, and
+either would need a new candidate rendered against Static&#39;s green first.</li>
+</ul>
+
+</body>
 </html>

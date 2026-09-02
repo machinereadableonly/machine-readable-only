@@ -333,7 +333,7 @@ already wears Ache:
       "params": { "name": "ladder", "arguments": { "tokenId": 1 } } }
 
     {
-      "ok": true, "tokenId": 1, "level": 120, "streak": 120,
+      "ok": true, "tokenId": 1, "level": 120, "streak": 120, "resting": false,
       "pairs": [
         { "pair": 1,
           "sides": [
@@ -364,6 +364,18 @@ already wears Ache:
 a side can still be taken. `waitingOn` appears only on an open side that is
 gated, so its absence means the gate is met. A decided pair also carries
 `held`, `closed` and `closedBy` at the top level.
+
+**A Mark you have bought counts from the moment you buy it**, not from the
+moment it reaches the chain. A purchase is reserved at this door and written on
+chain by the next Clock run, so `state` reads `held` for a Mark that is still
+queued and its partner reads `closed` -- and `upgrade` refuses that partner with
+`mark-excluded` for the same reason. The one place this does not apply is pair
+five's Iris requirement: an Iris that is not yet on chain does not satisfy the
+contract either, so both sides still report `waitingOn` an Iris until it lands.
+
+**`resting` is true when the token has been sealed by its owner.** `rest` is
+irreversible and the contract refuses every Mark on a sealed token, so when it
+is true every side reads `closed` and no price on the page can be paid.
 
 **Every gate is checked before any payment is requested**, and the refusal says
 which one. The two worth showing, both captured from the token above:

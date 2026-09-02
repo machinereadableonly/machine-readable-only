@@ -20,6 +20,12 @@ import { VARIANT_NAMES } from "../ladder.mjs";
  * made an ungated Aura a trap. A side whose gates the token already meets says
  * nothing, because "waiting on a run of 7 days" told to a token with a run of
  * 400 reads as a refusal the agent cannot act on.
+ *
+ * The Iris requirement is measured against `token.marks` and NOT the union with
+ * reservations, because `upgrade` gates it that way too: an Iris that has not
+ * reached the chain does not satisfy the contract either, and applyMark would
+ * revert MarkGate. So a token that bought an Iris this morning is told pair five
+ * still waits on one, which is what it will actually be refused with.
  */
 function waitingOn(mark, token, catalogue) {
   if (mark.requiresAny && !(token.marks & mark.requiresAny)) {
@@ -43,9 +49,21 @@ function waitingOn(mark, token, catalogue) {
 
 /// One side of one pair. `state` is the single field that says whether it can
 /// still be taken: two booleans for one fact is how they drift apart.
-function sideOf(mark, token, catalogue) {
-  const held = Boolean(token.marks & (1 << mark.id));
-  const state = held ? "held" : token.marks & mark.excludes ? "closed" : "open";
+///
+/// `mask` is what the token has TAKEN -- its on-chain Marks unioned with what it
+/// has bought and not yet had written -- rather than `token.marks`, which lags a
+/// purchase by up to a day. `upgrade` refuses on that same union, and this tool
+/// exists so the refusal is legible in advance: reporting as open a side that
+/// `upgrade` will refuse is exactly the misreading it was built to prevent.
+function sideOf(mark, token, catalogue, mask) {
+  const held = Boolean(mask & (1 << mark.id));
+  // A SEALED TOKEN CAN TAKE NOTHING. rest() is irreversible and applyMark
+  // reverts Resting(id), so `upgrade` refuses all ten -- and five open pairs
+  // with prices beside them would be quoting a price for something that cannot
+  // be bought at any price. `resting` is learned lazily and can be false when
+  // the chain says otherwise, so this only ever closes a door: a token this
+  // mirror knows is sealed is sealed.
+  const state = held ? "held" : (mask & mark.excludes) || token.resting ? "closed" : "open";
   const side = {
     id: mark.id,
     // Lower case, because this is the same token `upgrade`'s `mark-excluded`
@@ -84,9 +102,12 @@ export function makeLadderTool({ q, catalogue }) {
       const token = q.getToken(tokenId);
       if (!token) return { ok: false, reason: "unknown-token" };
 
+      // What the token has taken, on chain or at the door. See sideOf.
+      const mask = token.marks | q.reservedMask(tokenId);
+
       const pairs = [];
       for (const mark of Object.values(catalogue).sort((a, b) => a.id - b.id)) {
-        const side = sideOf(mark, token, catalogue);
+        const side = sideOf(mark, token, catalogue, mask);
         let entry = pairs.find((p) => p.pair === mark.pair);
         if (!entry) pairs.push((entry = { pair: mark.pair, sides: [] }));
         entry.sides.push(side);
@@ -99,14 +120,30 @@ export function makeLadderTool({ q, catalogue }) {
         const held = entry.sides.find((s) => s.state === "held");
         if (!held) continue;
         entry.held = held.name;
-        entry.closed = entry.sides.find((s) => s !== held).name;
+        // A PAIR WITH ONE SIDE closes nothing, and saying so is better than
+        // throwing. Every pair in the shipped ladder has two sides and
+        // assertLadderSane does not check that it does, so a catalogue with an
+        // odd Mark in it -- or a stub catalogue in a test -- used to take this
+        // free, read-only tool down with a TypeError.
+        const other = entry.sides.find((s) => s !== held);
+        if (!other) continue;
+        entry.closed = other.name;
         entry.closedBy = held.name;
       }
 
       // The two numbers every gate above is measured against, so an agent told
-      // it is short of a run of 30 can see how short. The rest of the token's
+      // it is short of a run of 30 can see how short. `resting` is here because
+      // it is the one state that closes every pair at once, and a page of
+      // closed sides with no reason given is a puzzle. The rest of the token's
       // state is `status`'s job and is not repeated here.
-      return { ok: true, tokenId: token.tokenId, level: token.level, streak: token.streak, pairs };
+      return {
+        ok: true,
+        tokenId: token.tokenId,
+        level: token.level,
+        streak: token.streak,
+        resting: Boolean(token.resting),
+        pairs,
+      };
     },
   };
 }

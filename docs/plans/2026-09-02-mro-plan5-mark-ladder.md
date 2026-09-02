@@ -1,5 +1,17 @@
 # MRO Plan 5 -- The Mark Ladder Implementation Plan
 
+> **Do not re-render this document with `~/scripts/render-md-to-html.js`
+> without checking the tail (2026-09-02).** That script pipes the markdown into
+> `marked` through `execSync(..., { input: md })`, and on this document the
+> captured output is cut mid-word at 148,952 bytes -- the last three bullets of
+> the final section vanish, leaving an unclosed `<li>` and no `</ul>`. It is
+> reproducible, and it is NOT a size limit: the 182,577-byte plan 2 HTML renders
+> complete through the same script, while `npx marked < this.md` writes all
+> 146,605 bytes of body correctly. The committed
+> `2026-09-02-mro-plan5-mark-ladder.html` was assembled from that shell render
+> plus the script's own header, so it is complete; running the script over this
+> file again would truncate it back. The markdown is the authority either way.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 > Steps use checkbox (`- [ ]`) syntax for tracking.

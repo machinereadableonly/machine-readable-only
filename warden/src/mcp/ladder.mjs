@@ -86,6 +86,16 @@ export function assertLadderSane(ladder = LADDER) {
     // sales funnel. A cap reintroduced here would contradict Ladder.sol's
     // maxSupply = 0, and would be sold before the chain refused it.
     if (m.supply !== Infinity) throw new Error(`mark ${id} is limited, and nothing is limited`);
+    // A MARK WITH A CHOICE MUST HAVE THE NAMES FOR IT. `upgrade` writes the
+    // chosen shape or ink into the payment demand an agent reads before
+    // spending up to $250.00, and it indexes this table to do it -- so a Mark
+    // offering variants with no name table threw a TypeError out of a PAID tool
+    // at the last possible moment. A missing name table is a wiring error like
+    // a missing price, and a wiring error belongs at boot, where it stops the
+    // service rather than one agent's purchase.
+    if (m.variants > 1 && VARIANT_NAMES[m.id]?.length !== m.variants) {
+      throw new Error(`mark ${id} offers ${m.variants} variants and VARIANT_NAMES does not name that many`);
+    }
   }
   return ladder;
 }
