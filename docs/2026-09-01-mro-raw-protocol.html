@@ -99,6 +99,10 @@ deployment you can read today, and it is not the mainnet piece.</li>
 is exercised against the live x402 facilitator. The final step, a facilitator
 actually transferring USDC, needs testnet USDC we do not yet hold.</li>
 <li><strong>The treasury address is a placeholder</strong> (<code>0x...dEaD</code>). Do not pay it.</li>
+<li><strong>The Mark ladder&#39;s contract is not deployed.</strong> The deployment you can read
+today predates it, so no Mark can be written on chain by any route. The
+<code>upgrade</code> and <code>ladder</code> tools are real and answer correctly; what they promise
+cannot be settled on chain yet. Detail in section 5, under The Mark ladder.</li>
 </ul>
 <h2>The shape of it</h2>
 <pre><code>GET  /.well-known/http-message-signatures-directory   who we accept keys from
@@ -488,18 +492,35 @@ upgrade { &quot;tokenId&quot;: 1, &quot;upgradeId&quot;: 9, &quot;variant&quot;:
 </code></pre>
 <p><code>mark-excluded</code> is the permanent one, and it NAMES the Mark that closed the
 door -- lower case, the same token <code>ladder</code> returns, so you do not have to
-case-fold to match them. It can only ever name the other side of the same pair.
-The rest are temporary: <code>mark-level-too-low</code>, <code>mark-needs-streak</code>,
-<code>mark-needs-whole</code>, <code>mark-needs-iris</code>, <code>mark-bad-variant</code>,
-<code>mark-already-applied</code>, <code>mark-inactive</code>, <code>unknown-token</code> and
-<code>not-bound-to-caller</code>. <code>chain-unavailable</code>, <code>paused</code>, <code>sunset</code> and <code>resting</code>
-come from the contract&#39;s own gates, which are read before payment and again
-after settlement.</p>
+case-fold to match them. It can only ever name the other side of the same pair.</p>
+<p>Every other refusal is temporary, and all of these arrive BEFORE any payment is
+requested: <code>mark-level-too-low</code>, <code>mark-needs-streak</code>, <code>mark-needs-whole</code>,
+<code>mark-needs-iris</code>, <code>mark-bad-variant</code>, <code>mark-already-applied</code>,
+<code>mark-inactive</code>, <code>unknown-token</code>, <code>not-bound-to-caller</code>, and
+<code>chain-unavailable</code> / <code>paused</code> / <code>sunset</code> / <code>resting</code> from the contract&#39;s own
+gates. <code>mark-sold-out</code> is in the same list and cannot fire today: nothing in
+the ladder is limited, and this service refuses to start on a catalogue that
+says otherwise.</p>
+<p><strong>One refusal arrives AFTER your money has moved: <code>paid-but-unavailable</code>.</strong>
+Settling takes seconds, and inside that window the piece can be paused, the
+token&#39;s owner can seal it with <code>rest</code>, or the same Mark can be reserved by
+another call. So every gate is read a SECOND time after settlement, and if one
+of them now refuses you get
+<code>{ &quot;ok&quot;: false, &quot;reason&quot;: &quot;paid-but-unavailable&quot;, &quot;detail&quot;: &quot;&lt;the gate that refused&gt;&quot; }</code> with the payment already made. Budget for it before you spend
+$1250.00 on a Vessel. It is not silent on our side: it raises an operator
+alert, because somebody has to see that an agent paid for something it could
+not be given.</p>
 <p>The four EARNED Marks cost nothing, so a qualifying token gets
 <code>{ ok: true, accepted: true, upgradeId, variant, appliedBy: &quot;the next Clock run&quot; }</code> with no payment step at all. The six BOUGHT Marks go through the same
 x402 settlement as <code>mint</code>, and <strong>no Mark has ever been bought</strong>, for the same
-reason no token has been minted by paying for it: settlement is unproven. The
-gates, the refusals and the free route are exercised; the money is not.</p>
+reason no token has been minted by paying for it: settlement is unproven.</p>
+<p><strong>And &quot;the next Clock run&quot; cannot land today, for any Mark.</strong> The ladder needed
+a contract change and the deployed contract is the one from before it: its
+<code>applyMark</code> takes two arguments, the one this service calls takes three. So an
+<code>{ ok: true, accepted: true }</code> from <code>upgrade</code> is a reservation at this door and
+nothing more until the new contract is deployed -- earned and bought alike.
+<code>mint</code> and <code>checkin</code> are unaffected; those functions are unchanged. Everything
+above is what the wire says, and this is what the chain says.</p>
 <h2>6. Pay</h2>
 <p>Call a paid tool with no payment and you are told the price. This is the real
 refusal, captured:</p>

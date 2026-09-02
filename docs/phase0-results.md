@@ -1654,9 +1654,10 @@ disagree, the sweep is right. `tools/combination-sweep.mjs` now asserts this
 directly (`crossCheckAgainstMaxLegal`): the maximal legal token's own byte
 count must equal the sweep's own computed largest, or the sweep throws.
 
-Measured `contracts/test/GasBudget.t.sol`, day 364 (the worst-case day -- see
-the entry above on why level 364 costs more than level 365), through the real
-token contract with cold storage:
+Measured `contracts/test/GasBudget.t.sol`, day 364 (the worst-case day FOR GAS
+-- see the entry above on why level 364 costs more than level 365), through the
+real token contract with cold storage. The worst case for BYTES is a different
+token, measured in the same run and recorded below the table:
 
 | | Gas | Bytes |
 |---|---|---|
@@ -1674,13 +1675,27 @@ for five new Marks (Beat's gradient, the bought Iris's reshaped eyes in its
 leaf variant, and Tint's eye ink), on top of the Hush/Vessel pair that was
 already in the pre-Plan-5 figure.
 
-Both numbers stay inside the 2,000,000 gas / 20,000 byte HARD limit, with
-250,085 gas (12.5%) and 9,349 bytes (46.7%) of margin still unused.
+**THE DEAREST TOKEN AND THE LARGEST TOKEN ARE NOT THE SAME TOKEN, and each
+limit is measured against its own worst case.** `GasBudget.t.sol:119-120` says
+so in the code and prints two separate headroom lines; an earlier version of
+this paragraph took the byte margin off the GAS worst case and understated the
+bytes by 899. Both figures below are real, both come from the same run of the
+same test, and neither supersedes the other:
+
+| worst case for | token | state | Gas | Bytes | margin |
+|---|---|---|---|---|---|
+| **gas** | 9 | level 364, run 400, max marks | **1,749,915** | 10,651 | 250,085 gas (12.5%) |
+| **bytes** | 7 | level 3,650 (the ring cap), run 400, max marks | 1,679,943 | **11,550** | 8,450 bytes (42.3%) |
+
+Token 9 is the figure the suite tracks across commits (`worstGas`, and the one
+the assertions compare); token 7 is what `maxBytes` collects, and 20,000 -
+11,550 = 8,450 is the byte headroom the test itself prints. Both stay inside
+the 2,000,000 gas / 20,000 byte HARD limit.
 
 **The 1,000,000 gas / 5,000 byte TARGET was already missed before this change
-and is still missed.** The worst case exceeds it by 749,915 gas and 5,651
-bytes. This is reported, not quietly dropped -- see the Phase 0 section above,
-where the same target was already missed pre-Plan-5.
+and is still missed.** Gas exceeds it by 749,915 on token 9, and bytes by 6,550
+on token 7. This is reported, not quietly dropped -- see the Phase 0 section
+above, where the same target was already missed pre-Plan-5.
 
 ### The decode sweep: 459 renderable combinations
 

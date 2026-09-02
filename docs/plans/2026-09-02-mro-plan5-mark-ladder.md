@@ -867,9 +867,10 @@ import {MachineReadableOnly} from "./MachineReadableOnly.sol";
 /// and drift. `warden/src/mcp/ladder.mjs` is the only mirror, and
 /// `Ladder.t.sol` asserts the two agree by hash.
 ///
-/// Five pairs. In each pair one side is bought and one is earned by a run of
-/// days; taking either closes the other, permanently and symmetrically; and a
-/// token may take neither. EVERY EXCLUSION IS PAIR-INTERNAL -- a cross-pair rule
+/// Five pairs. In four of them one side is bought and one is earned by a run
+/// of days; pair five is bought on BOTH sides and both sides are gated on
+/// holding an Iris. Taking either side closes the other, permanently and
+/// symmetrically; and a token may take neither. EVERY EXCLUSION IS PAIR-INTERNAL -- a cross-pair rule
 /// was removed on 2026-09-02 because it made abstention the optimal play.
 ///
 /// Nothing is limited: every record ships `maxSupply = 0`. Caps were removed on
@@ -1068,8 +1069,8 @@ Expected: compile failure -- `HUSH` and friends do not exist.
 
 ```solidity
     /// @dev Bit n is mark n, ids 1 to 10 in ladder order. Bit 0 is never a mark.
-    /// FIVE PAIRS: in each, one side is bought and one earned, and they exclude
-    /// each other on chain. The renderer does not enforce that -- the contract
+    /// FIVE PAIRS whose two sides exclude each other on chain (in four of them
+    /// one side is bought and one earned; pair five is bought on both sides). The renderer does not enforce that -- the contract
     /// does -- so this library never has to consider two partners at once.
     uint256 internal constant HUSH = 1 << 1;
     uint256 internal constant ACHE = 1 << 2;
@@ -2137,9 +2138,11 @@ Expected: FAIL -- the module does not exist.
 // tools/ladder-fixture.mjs. A catalogue that drifts from the chain sells an
 // agent something the chain will refuse -- after it has paid.
 //
-// Five pairs. In each, one side is bought and one earned by a run of days;
-// taking either closes the other permanently; a token may take neither. EVERY
-// EXCLUSION IS PAIR-INTERNAL. Nothing is limited.
+// Five pairs. In four of them one side is bought and one earned by a run of
+// days; pair five is BOUGHT ON BOTH SIDES and both sides are gated on holding an
+// Iris, which is what stops a cheap day-one Aura forfeiting a Tint that needs
+// 100 days. Taking either side closes the other permanently; a token may take
+// neither. EVERY EXCLUSION IS PAIR-INTERNAL. Nothing is limited.
 //
 // TWO FIELDS HOLD THE PRICE, deliberately. `price` is the x402 demand string an
 // agent is charged; `priceUsdc6` is what the contract publishes and what the

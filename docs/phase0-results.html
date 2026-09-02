@@ -2456,9 +2456,10 @@ every combination and the worst-case selection by hand is a guess -- when they
 disagree, the sweep is right. <code>tools/combination-sweep.mjs</code> now asserts this
 directly (<code>crossCheckAgainstMaxLegal</code>): the maximal legal token&#39;s own byte
 count must equal the sweep&#39;s own computed largest, or the sweep throws.</p>
-<p>Measured <code>contracts/test/GasBudget.t.sol</code>, day 364 (the worst-case day -- see
-the entry above on why level 364 costs more than level 365), through the real
-token contract with cold storage:</p>
+<p>Measured <code>contracts/test/GasBudget.t.sol</code>, day 364 (the worst-case day FOR GAS
+-- see the entry above on why level 364 costs more than level 365), through the
+real token contract with cold storage. The worst case for BYTES is a different
+token, measured in the same run and recorded below the table:</p>
 <table>
 <thead>
 <tr>
@@ -2500,12 +2501,48 @@ cost of the new drawing work on its own: about +163,382 gas and +1,438 bytes
 for five new Marks (Beat&#39;s gradient, the bought Iris&#39;s reshaped eyes in its
 leaf variant, and Tint&#39;s eye ink), on top of the Hush/Vessel pair that was
 already in the pre-Plan-5 figure.</p>
-<p>Both numbers stay inside the 2,000,000 gas / 20,000 byte HARD limit, with
-250,085 gas (12.5%) and 9,349 bytes (46.7%) of margin still unused.</p>
+<p><strong>THE DEAREST TOKEN AND THE LARGEST TOKEN ARE NOT THE SAME TOKEN, and each
+limit is measured against its own worst case.</strong> <code>GasBudget.t.sol:119-120</code> says
+so in the code and prints two separate headroom lines; an earlier version of
+this paragraph took the byte margin off the GAS worst case and understated the
+bytes by 899. Both figures below are real, both come from the same run of the
+same test, and neither supersedes the other:</p>
+<table>
+<thead>
+<tr>
+<th>worst case for</th>
+<th>token</th>
+<th>state</th>
+<th>Gas</th>
+<th>Bytes</th>
+<th>margin</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>gas</strong></td>
+<td>9</td>
+<td>level 364, run 400, max marks</td>
+<td><strong>1,749,915</strong></td>
+<td>10,651</td>
+<td>250,085 gas (12.5%)</td>
+</tr>
+<tr>
+<td><strong>bytes</strong></td>
+<td>7</td>
+<td>level 3,650 (the ring cap), run 400, max marks</td>
+<td>1,679,943</td>
+<td><strong>11,550</strong></td>
+<td>8,450 bytes (42.3%)</td>
+</tr>
+</tbody></table>
+<p>Token 9 is the figure the suite tracks across commits (<code>worstGas</code>, and the one
+the assertions compare); token 7 is what <code>maxBytes</code> collects, and 20,000 -
+11,550 = 8,450 is the byte headroom the test itself prints. Both stay inside
+the 2,000,000 gas / 20,000 byte HARD limit.</p>
 <p><strong>The 1,000,000 gas / 5,000 byte TARGET was already missed before this change
-and is still missed.</strong> The worst case exceeds it by 749,915 gas and 5,651
-bytes. This is reported, not quietly dropped -- see the Phase 0 section above,
-where the same target was already missed pre-Plan-5.</p>
+and is still missed.</strong> Gas exceeds it by 749,915 on token 9, and bytes by 6,550
+on token 7. This is reported, not quietly dropped -- see the Phase 0 section
+above, where the same target was already missed pre-Plan-5.</p>
 <h3>The decode sweep: 459 renderable combinations</h3>
 <p>The old sweep covered 256 combinations of the retired seven independent Marks.
 The new ladder&#39;s reachable Mark sets are generated from the same exclusion and

@@ -15,7 +15,8 @@ Humans may own and trade these tokens. Humans cannot mint one or grow one.
 ## What does not work yet
 
 Read this before trying anything else here. The rest of this document
-describes the finished piece; three parts of it are not finished.
+describes the finished piece; three parts of it are not finished -- payment
+settlement, the Mark ladder's contract, and the client.
 
 **Payment is wired, and settlement is unproven.** `mint` issues a correct
 x402 demand for 1 USDC, and an official x402 client can read it. What has
@@ -25,15 +26,26 @@ testnet USDC faucet is behind a captcha -- and it means the paid path is
 written and tested but not demonstrated. Treat "you can mint" as unproven
 rather than as promised.
 
-**The four earned Marks work; the six bought ones are as unproven as minting.**
-The whole ladder is reachable now: `upgrade` accepts every id from 1 to 10, the
-catalogue is wired, and the contract holds all ten records. The four EARNED
-Marks -- Ache, Beat, the earned Iris and Break -- take no payment at all, so
-`upgrade` applies one outright to a token whose run has reached it. The six
-BOUGHT Marks go through the same x402 settlement as a mint, so the same caveat
-applies to them: written, tested, never demonstrated with real money. No Mark
-has ever been bought. Every gate is checked before payment is requested,
-including the Iris that both sides of the last pair need.
+**NO MARK CAN REACH THE CHAIN: the ladder's contract is not deployed.** The
+ladder needed a contract change, and the contract deployed on Base Sepolia is
+the one from before it. Its `applyMark` takes two arguments; the one this
+service calls takes three, the third being the shape or ink you chose. A Mark
+you ask for today is therefore accepted here, reserved, and then FAILS when the
+site tries to write it. That is true of all ten Marks, earned and bought alike,
+and it is not something you can work around from your end. `mint` and the daily
+check-in are NOT affected: those two functions are unchanged, and the deployed
+contract still carries them. Until the new contract is deployed, treat every
+Mark as unavailable whatever the tools answer.
+
+*What the ladder DOES do, at the door, since the paragraph above is not the
+whole story.* `upgrade` accepts every id from 1 to 10, the catalogue is wired,
+and every gate is checked before payment is requested -- including the Iris that
+both sides of the last pair need. The four EARNED Marks (Ache, Beat, the earned
+Iris and Break) take no payment at all, so `upgrade` reserves one outright for a
+token whose run has reached it. The six BOUGHT Marks go through the same x402
+settlement as a mint, so minting's caveat applies to them too: written, tested,
+never demonstrated with real money. No Mark has ever been bought, and none has
+ever been written on chain.
 
 **The client is not published, and DO NOT RUN `npx mro-agent` UNTIL IT IS.**
 `mro-agent` exists in the repository and is not on npm. The name is therefore
@@ -52,9 +64,11 @@ is documented request by request.
 
 What does work: the door, the key directory, `POST /keys`, the challenge,
 `/t/<id>`, and every tool at `/mcp`. A correctly signed request is admitted
-and every tool answers -- `upgrade` applies an earned Mark or names the gate
-that refused it, and the free tools answer with `unknown-token` when there are
-no tokens.
+and every tool answers -- `upgrade` reserves an earned Mark or names the gate
+that refused it, `ladder` reads a token's five pairs back, and the free tools
+answer with `unknown-token` when there are no tokens. A reserved Mark is a
+reservation at this door and nothing more until the ladder's contract is
+deployed.
 
 ## Do not add this server to your MCP config
 
@@ -145,6 +159,9 @@ days.
 The `ladder` tool reads all of that back for any token, free: what it wears,
 what that has closed, what each side costs and what it is still short of. Ask
 before you buy, because an exclusion cannot be undone.
+
+None of it is on chain yet. The ladder's contract is not deployed -- see "What
+does not work yet" at the top of this page.
 
 The artwork is rendered on chain. There is no image server to outlive.
 

@@ -28,6 +28,10 @@ no document.
   is exercised against the live x402 facilitator. The final step, a facilitator
   actually transferring USDC, needs testnet USDC we do not yet hold.
 - **The treasury address is a placeholder** (`0x...dEaD`). Do not pay it.
+- **The Mark ladder's contract is not deployed.** The deployment you can read
+  today predates it, so no Mark can be written on chain by any route. The
+  `upgrade` and `ladder` tools are real and answer correctly; what they promise
+  cannot be settled on chain yet. Detail in section 5, under The Mark ladder.
 
 ## The shape of it
 
@@ -373,19 +377,40 @@ which one. The two worth showing, both captured from the token above:
 `mark-excluded` is the permanent one, and it NAMES the Mark that closed the
 door -- lower case, the same token `ladder` returns, so you do not have to
 case-fold to match them. It can only ever name the other side of the same pair.
-The rest are temporary: `mark-level-too-low`, `mark-needs-streak`,
-`mark-needs-whole`, `mark-needs-iris`, `mark-bad-variant`,
-`mark-already-applied`, `mark-inactive`, `unknown-token` and
-`not-bound-to-caller`. `chain-unavailable`, `paused`, `sunset` and `resting`
-come from the contract's own gates, which are read before payment and again
-after settlement.
+
+Every other refusal is temporary, and all of these arrive BEFORE any payment is
+requested: `mark-level-too-low`, `mark-needs-streak`, `mark-needs-whole`,
+`mark-needs-iris`, `mark-bad-variant`, `mark-already-applied`,
+`mark-inactive`, `unknown-token`, `not-bound-to-caller`, and
+`chain-unavailable` / `paused` / `sunset` / `resting` from the contract's own
+gates. `mark-sold-out` is in the same list and cannot fire today: nothing in
+the ladder is limited, and this service refuses to start on a catalogue that
+says otherwise.
+
+**One refusal arrives AFTER your money has moved: `paid-but-unavailable`.**
+Settling takes seconds, and inside that window the piece can be paused, the
+token's owner can seal it with `rest`, or the same Mark can be reserved by
+another call. So every gate is read a SECOND time after settlement, and if one
+of them now refuses you get
+`{ "ok": false, "reason": "paid-but-unavailable", "detail": "<the gate that
+refused>" }` with the payment already made. Budget for it before you spend
+$1250.00 on a Vessel. It is not silent on our side: it raises an operator
+alert, because somebody has to see that an agent paid for something it could
+not be given.
 
 The four EARNED Marks cost nothing, so a qualifying token gets
 `{ ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock
 run" }` with no payment step at all. The six BOUGHT Marks go through the same
 x402 settlement as `mint`, and **no Mark has ever been bought**, for the same
-reason no token has been minted by paying for it: settlement is unproven. The
-gates, the refusals and the free route are exercised; the money is not.
+reason no token has been minted by paying for it: settlement is unproven.
+
+**And "the next Clock run" cannot land today, for any Mark.** The ladder needed
+a contract change and the deployed contract is the one from before it: its
+`applyMark` takes two arguments, the one this service calls takes three. So an
+`{ ok: true, accepted: true }` from `upgrade` is a reservation at this door and
+nothing more until the new contract is deployed -- earned and bought alike.
+`mint` and `checkin` are unaffected; those functions are unchanged. Everything
+above is what the wire says, and this is what the chain says.
 
 ## 6. Pay
 

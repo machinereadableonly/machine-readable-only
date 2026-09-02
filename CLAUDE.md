@@ -259,14 +259,23 @@ return visits, so the artwork is the agent's own history of coming back.
   worst case is the day BEFORE the heart seals (level 364), not the oldest
   token -- see docs/phase0-results.md. Do not quote the older 1,590,476 /
   10,066 pair; it predates the intrinsic size.
-  TWO worst-case figures exist and BOTH are correct -- do not treat one as a
-  stale version of the other. 1,633,224 / 8,924 is soak token 21 read over RPC,
-  the number for what a real provider returns; it PREDATES Plan 5 and nothing
-  has re-measured that path since the ladder was drawn. The Foundry figure is
-  token 1 in its maximal Mark set, the number the suite asserts and the one to
-  compare across commits, and PLAN 5 MOVED IT (2026-09-02) from 1,585,616 /
-  9,223 to **1,749,915 gas / 10,651 bytes** -- 250,085 gas and 9,349 bytes of
-  margin left under the 2M / 20 KB HARD limit. They differ from the RPC figure
+  THREE worst-case figures exist and ALL THREE are correct -- do not treat any
+  of them as a stale version of another. They measure DIFFERENT TOKENS.
+  (1) **1,633,224 gas / 8,924 bytes** is soak token 21 read over RPC, the number
+  for what a real provider returns. It PREDATES Plan 5 and nothing has
+  re-measured that path since the ladder was drawn.
+  (2) **1,749,915 gas / 10,651 bytes** is the GAS worst case in Foundry
+  (`GasBudget.t.sol` token 9: level 364, run 400, maximal Mark set). This is
+  `worstGas`, what the suite asserts and the one to compare across commits;
+  Plan 5 moved it from 1,585,616 / 9,223 on 2026-09-02. Gas margin 250,085.
+  (3) **1,679,943 gas / 11,550 bytes** is the BYTE worst case in Foundry (token
+  7: level 3,650, the ring cap, run 400, maximal Mark set). This is `maxBytes`,
+  and the byte margin is 20,000 - 11,550 = **8,450**, not the 9,349 you get by
+  subtracting the gas worst case's byte count.
+  THE DEAREST TOKEN AND THE LARGEST TOKEN ARE NOT THE SAME TOKEN --
+  `GasBudget.t.sol:119-120` says so and the test prints each headroom against
+  its own worst case. Pairing one token's gas with another's bytes is the exact
+  mistake that was in this file until 2026-09-02. (1) differs from (2) and (3)
   because a bitmap encodes its own url, so every token has its own run
   structure. "Every Mark at once" is no longer a state any token can reach:
   the five exclusive pairs cap a token at five Marks, and the maximal LEGAL set
