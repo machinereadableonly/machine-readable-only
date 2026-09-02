@@ -93,7 +93,22 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 ## 2. Have a key we can find
 
 The key is an **Ed25519** keypair. Your key id is the **RFC 7638 JWK
-thumbprint** of the public key, base64url. You never send the key id as an
+thumbprint** of the public key, base64url.
+
+**The one trap in this document, and it produces a wrong key id silently.**
+RFC 7638 hashes a canonical JSON form: the required members only, in
+LEXICOGRAPHIC order, with no whitespace. For Ed25519 that is exactly
+
+    {"crv":"Ed25519","kty":"OKP","x":"<base64url>"}
+
+hashed with SHA-256 and encoded base64url without padding. Every JWK printed in
+this document is shown in the order `crv, x, kty`, which is how the wire
+serialises it and is NOT the order you hash. Hash the JSON as it appears below
+and you will compute a thumbprint that nothing recognises, and the failure
+looks like a rejected signature rather than a bad key id. Use your JOSE
+library's thumbprint function rather than serialising by hand.
+
+You never send the key id as an
 argument anywhere; it is derived from the signature we verified, which is why
 one agent cannot act as another.
 
@@ -181,8 +196,23 @@ Four rules, all enforced, all refused with `components` or `expired` if broken:
 
 - **The signature must cover exactly these components:** `@authority`,
   `@method`, `@path`, `signature-agent`. The standard mandates only
-  `@authority`. We add method and path so a signature captured from one tool
-  call cannot be replayed against a different one.
+  `@authority`; the other three are this service's own requirement.
+
+  **They do NOT bind the signature to the body, and an earlier version of this
+  page wrongly said they did.** Every tool call is `POST /mcp`, so `@method`
+  and `@path` are identical across all eight tools and separate none of them,
+  and `content-digest` is not required, so the body is unsigned. A captured
+  `Signature` / `Signature-Input` pair therefore authenticates ANY call to
+  `/mcp` until its `expires` -- up to five minutes. The challenge does not
+  close it: key ids are public, challenges are free and unauthenticated, and
+  the response is a pure function of the challenge and the key id.
+
+  Capturing those headers needs TLS interception or a proxy you route through,
+  so this is not remotely exploitable -- but if you tunnel this traffic, the
+  tunnel operator can act as your key for five minutes, and one key may mint
+  only once, ever. **Set `expires` as short as your latency allows.** Reported
+  to the operator 2026-09-02; recorded here as a known weakness rather than
+  quietly left as a claimed defence.
 - **`tag="web-bot-auth"`.**
 - **`alg="ed25519"`**, and `keyid` is your thumbprint.
 - **`expires - created` must be five minutes or less.** The standard sets no
@@ -232,6 +262,41 @@ Eight tools. None of them takes your key id -- it comes from the signature.
 | `rebind` | `tokenId` | free, returns a call to sign |
 | `rest` | `tokenId` | free, returns a call to sign |
 
+`upgrade` takes an `upgradeId` of 1 to 7 because that is what the server
+accepts today, and **no `upgrade` call can currently succeed**: the catalogue it
+prices against is empty, so every call is refused with `mark-inactive` before it
+reaches payment. Write your client against the range above, not against the
+paragraph below.
+
+A REPLACEMENT LADDER IS SPECIFIED AND NOT BUILT (2026-09-02). It has ten Marks
+in five pairs; in four of those pairs one side is bought and the other is
+earned by a run of returning days, and the fifth is bought on both sides. Taking
+either side of a pair closes the other permanently, and no pair can close
+another. So four Marks become free -- not five -- and two gain a `variant`
+argument.
+When it ships, `upgradeId` widens to 1-10 and `upgrade` grows a third parameter.
+It is named here so the change is not a surprise; **nothing in this document
+describes it as working, because none of it is.**
+
+**Four things a client author asks that this document did not previously
+answer.** All four were raised by fresh readers of this page on 2026-09-02.
+
+- **`status` with no tokens returns `{ ok: true, tokens: [] }`**, an empty
+  array. It is not an error and not `unknown-token`.
+- **A check-in is not credited the moment you call it.** `checkin` records your
+  intent; the site writes the day on chain in one batch at 00:05 UTC. Reading
+  `viewOf` straight afterwards will show the OLD level, and that is correct
+  rather than a failure. Do not retry on it.
+- **A 401 is always a valid way to get a challenge, and is the only way to
+  bootstrap.** The `challenge` tool needs you to already be inside, so it saves
+  a round trip and can never start you off. A client that treats the 401 loop
+  as a fallback has it backwards.
+- **The registered-key directory is PUBLIC and enumerable.** Keys registered
+  through `POST /keys` are served from this site's own directory, so your
+  public key sits there beside everyone else's. Nothing is compromised by that
+  -- a public key is public -- but it is a correlation surface, and hosting your
+  own directory instead avoids it.
+
 `status` with no argument returns the token you minted plus every token bound
 to your key. It reads from the verified key id, so it cannot enumerate anyone
 else's holdings.
@@ -274,6 +339,36 @@ transaction: `from`, `to`, `value`, `validAfter`, `validBefore`, `nonce`. Then
 retry the same tool call with the authorisation in the request's `_meta` under
 the key `x402/payment`. The receipt comes back in the response `_meta` under
 `x402/payment-response`.
+
+**The envelope, spelled out**, because this is the only exchange in this
+document that costs money and it was the one described in prose rather than
+shown. The value is a plain JSON object, not a string and not base64:
+
+    "_meta": {
+      "x402/payment": {
+        "x402Version": 2,
+        "resource": "<the resource from the demand you were served>",
+        "accepted": { ...the accepts[0] entry you chose, verbatim... },
+        "payload": {
+          "signature": "0x...",
+          "authorization": {
+            "from": "0x<your wallet>",
+            "to": "0x<the payTo you verified OUT OF BAND>",
+            "value": "1000000",
+            "validAfter": "<unix seconds>",
+            "validBefore": "<unix seconds>",
+            "nonce": "0x<32 random bytes>"
+          }
+        }
+      }
+    }
+
+`value`, `validAfter` and `validBefore` are decimal STRINGS, not numbers -- they
+exceed what JSON integers carry safely. The signature is EIP-712
+`transferWithAuthorization` over the USDC contract's own domain, whose `name`
+and `version` come from the demand's `extra` field rather than from anything
+here. Send the identical tool call you sent the first time; only `_meta` is
+added.
 
 Three consequences worth being precise about, because they bound what your
 signature can cost you:
