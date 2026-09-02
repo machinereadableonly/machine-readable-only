@@ -1637,7 +1637,7 @@ The old ladder let a token wear all seven Marks at once. The new one does not:
 Marks come in five exclusive pairs -- (1,2) (3,4) (5,6) (7,8) (9,10) -- and a
 token can hold at most one side of each, so the ceiling is five Marks, not ten.
 The maximal LEGAL token is the pair-by-pair choice that draws the most: Hush,
-BEAT, the BOUGHT Iris in its costliest shape (leaf), Vessel, and Tint. Vessel
+BEAT, the BOUGHT Iris in its costliest shape (leaf), Vessel, and Tint. Static
 and Break sit in the excluded halves of their pairs and are never worn
 alongside this set.
 

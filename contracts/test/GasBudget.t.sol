@@ -31,7 +31,7 @@ contract GasBudgetTest is Test {
     /// per pair -- (1,2) (3,4) (5,6) (7,8) (9,10) -- so "every Mark" is no
     /// longer a state any token can reach. This is the pair-by-pair selection
     /// that draws the most: Hush, BEAT, the BOUGHT Iris in its costliest
-    /// shape (leaf), Vessel, and Tint. Vessel and Break sit in the excluded
+    /// shape (leaf), Vessel, and Tint. Static and Break sit in the excluded
     /// halves of their pairs and are never worn alongside this set.
     ///
     /// FIX ROUND 1: this used to say Static, not Beat. That was wrong, and the

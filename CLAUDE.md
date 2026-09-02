@@ -78,8 +78,8 @@ return visits, so the artwork is the agent's own history of coming back.
   built from nothing -- the plan wrongly said one already existed. The protocol
   doc was cold-tested on SIX fresh agents: all six engaged, none refused, and
   they found three real defects. Read the plan4-client-and-auditability memory
-  before touching any of it. **Suites: contracts 232, warden 289, tools 56,
-  client 24.**
+  before touching any of it. **Suites at that commit: contracts 232, warden 289,
+  tools 56, client 24.**
   **A BLOCKING PAYMENT BUG WAS FOUND AND FIXED 2026-09-02 (`eaac15a`)** -- the
   MCP tool wrapper double-wrapped the paid tools' refusals, burying `isError`,
   so the official x402 client could not see a payment demand and NOTHING COULD
@@ -88,21 +88,31 @@ return visits, so the artwork is the agent's own history of coming back.
   and passed happily. See the plan2-payment memory.
   **THE MINT PRICE IS 1 USDC as of 2026-09-01 (`f49749c`)**, swept everywhere.
   It is the Warden constant `MINT_PRICE`, not an on-chain value.
-  **THE MARK LADDER IS FULLY SPECIFIED as of 2026-09-02 and NOTHING IS BUILT.**
-  Spec: `docs/specs/2026-09-02-mro-mark-ladder-design.md`, which SUPERSEDES
-  section 9 of the master spec. Ten Marks in FIVE EXCLUSIVE PAIRS; in each pair
-  one side is bought and one earned by a run of days, and taking either closes
-  the other. EVERY EXCLUSION IS PAIR-INTERNAL -- the cross-pair rule that cost
-  Break was removed as a trap on 2026-09-02, along with a second trap (ungated
-  Aura). Needs a CONTRACT change, the first since Plan 1: two uint16 masks on
-  `Upgrade` (excludes, requiresAny), a `variant` argument on `applyMark`, and
-  variants packed into the spare bits of `_marks`. All four visual questions are
-  CLOSED by rendering: Static is green, Beat violet, the Iris offers target /
-  squircle / leaf, Tint offers violet / gold. 189 Mark sets, 459 renderable
-  combinations. Read the mark-ladder-spec and static-hue-decision memories
-  BEFORE touching Marks. The renderer is still untouched, and the Warden's Mark
-  catalogue is literally `{}` (`warden/src/main.mjs:204`), so NO MARK IS
-  BUYABLE BY ANY ROUTE today.
+  **PLAN 5 (the Mark ladder) IS BUILT as of 2026-09-02 and NOTHING IS
+  DEPLOYED.** Spec: `docs/specs/2026-09-02-mro-mark-ladder-design.md`, which
+  SUPERSEDES section 9 of the master spec. Ten Marks in FIVE EXCLUSIVE PAIRS; in
+  FOUR of the pairs one side is bought and one earned by a run of days, and pair
+  five (Tint / Aura) is BOUGHT ON BOTH SIDES with both sides gated on holding an
+  Iris. Taking either side closes the other. EVERY EXCLUSION IS PAIR-INTERNAL --
+  the cross-pair rule that cost Break was removed as a trap on 2026-09-02, along
+  with a second trap (ungated Aura). The CONTRACT change landed -- the first
+  since Plan 1: two uint16 masks on `Upgrade` (excludes, requiresAny), a
+  `variant` argument on `applyMark`, and variants packed into the spare bits of
+  `_marks`. BOTH renderers draw the ladder. All four visual questions are CLOSED
+  by rendering: Static is green, Beat violet, the Iris offers target / squircle
+  / leaf, Tint offers violet / gold. 189 Mark sets, 459 renderable combinations.
+  The Warden's catalogue is `warden/src/mcp/ladder.mjs`, a hash-checked mirror
+  of `contracts/src/Ladder.sol`; `upgrade` accepts ids 1-10 with a `variant`,
+  checks every gate BEFORE payment and names the Mark that excluded it, and a
+  NINTH tool, `ladder`, reads a token's pairs back for free so a forfeit is
+  legible before it is taken. THE FOUR EARNED MARKS ARE FREE AND WORK; the six
+  bought ones are as unproven as `mint`, because settlement is still unproven.
+  NOTHING IS DEPLOYED: `contracts/script/DeployPlan5.s.sol` is written and
+  deliberately never run, and the redeploy is a separate decision that is the operator's.
+  The agent-facing copy still prints the OLD contract address and needs one line
+  changed AFTER a redeploy, not before. Read the plan5-status, mark-ladder-spec
+  and static-hue-decision memories BEFORE touching Marks.
+  **Suites: contracts 268, warden 342, tools 65, client 25** (2026-09-02).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -198,11 +208,17 @@ return visits, so the artwork is the agent's own history of coming back.
   JSON) plus a 365-cell pixel heart, one cell per credited day. Streak sets
   colour at 3 / 7 / 30 / 100; a lapse pales it in steps. Rings mark extra
   years.
-- **Marks:** SUPERSEDED 2026-09-02. The seven independent tiers (Vein, Blue
-  Blood, Voice, Bloom, Halo, Crown, Singularity) are retired. Ten Marks in five
-  pairs, nothing limited: Hush 1 / Ache run 7; Static 5 / Beat run 30; Iris 25 /
-  Iris run 100; Vessel 1,250 / Break run 365; Tint 250 / Aura 25, both gated on
-  holding an Iris. See `docs/specs/2026-09-02-mro-mark-ladder-design.md`.
+- **Marks:** the ten-Mark ladder, BUILT 2026-09-02. The seven independent tiers
+  (Vein, Blue Blood, Voice, Bloom, Halo, Crown, Singularity) are retired. Ten
+  Marks in five pairs, nothing limited, ids 1-10 in this order: Hush $1 / Ache
+  run 7; Static $5 (level 30) / Beat run 30; Iris $25 (level 100, three shapes)
+  / Iris run 100; Vessel $1,250 (whole heart) / Break run 365; Tint $250 (two
+  inks) / Aura $25 -- pair five is BOUGHT ON BOTH SIDES and both wait on an
+  Iris by either route. The x402 demand carries no thousands separator, so the
+  Vessel string is `$1250.00`. See
+  `docs/specs/2026-09-02-mro-mark-ladder-design.md`, and read it beside
+  `contracts/src/Ladder.sol` and `warden/src/mcp/ladder.mjs`, which mirror each
+  other by hash.
 - **Endings:** Rest (owner seals, irreversible), Sunset (operator closes),
   Lineage (one seed per agent-year, same collection, tenure not depth).
 - **Renderer** is swappable, split three ways.
@@ -245,11 +261,17 @@ return visits, so the artwork is the agent's own history of coming back.
   10,066 pair; it predates the intrinsic size.
   TWO worst-case figures exist and BOTH are correct -- do not treat one as a
   stale version of the other. 1,633,224 / 8,924 is soak token 21 read over RPC,
-  the number for what a real provider returns. 1,585,616 / 9,223 is token 1
-  with every Mark in Foundry, the number the suite asserts and the one to
-  compare across commits. They differ because a bitmap encodes its own url, so
-  every token has its own run structure. Blue Blood added 80 gas and 4 bytes to
-  the second figure on 2026-08-29.
+  the number for what a real provider returns; it PREDATES Plan 5 and nothing
+  has re-measured that path since the ladder was drawn. The Foundry figure is
+  token 1 in its maximal Mark set, the number the suite asserts and the one to
+  compare across commits, and PLAN 5 MOVED IT (2026-09-02) from 1,585,616 /
+  9,223 to **1,749,915 gas / 10,651 bytes** -- 250,085 gas and 9,349 bytes of
+  margin left under the 2M / 20 KB HARD limit. They differ from the RPC figure
+  because a bitmap encodes its own url, so every token has its own run
+  structure. "Every Mark at once" is no longer a state any token can reach:
+  the five exclusive pairs cap a token at five Marks, and the maximal LEGAL set
+  is Hush + Beat + the bought Iris in leaf + Vessel + Tint. Do not quote the
+  retired seven-Mark figures.
 - **A third party's CDN interpolates unless the SVG declares a size.** With no
   width/height it rasterises at the viewBox units -- 53 pixels, one per module
   -- then upscales that bitmap, and 54% of the results would not decode.
@@ -339,8 +361,8 @@ return visits, so the artwork is the agent's own history of coming back.
 - **The two untracked files are resolved (2026-08-30).**
   `contracts/script/MintOnePlan1.s.sol` is COMMITTED. `ZZReviewProbe.t.sol` was
   superseded by `contracts/test/Bounds.t.sol`, which inverts every probe to pin
-  the fix, and then DELETED with the operator's approval. **The true test count is 231.**
-  The old "forge test reports 223" hazard no longer applies.
+  the fix, and then DELETED with the operator's approval. **The true count was 231 at that
+  commit, not the 223 the old hazard quoted; it is 268 today.**
 - **Coinbase Agentic Wallets cannot sign NFT trades** -- this rules out an
   otherwise obvious integration.
 - **Distribution is the real risk, not the build.** Five of six early-2026

@@ -34,7 +34,7 @@ export const MAX_WINDOW_MS = 5 * 60 * 1000;
 ///
 /// `content-digest` is what binds a signature to a BODY, and it is the whole
 /// reason the other three are not enough here. Every MCP call is POST /mcp, so
-/// @method and @path are identical across all eight tools and separate none of
+/// @method and @path are identical across all nine tools and separate none of
 /// them. Without the digest, a captured Signature pair authenticates ANY tool
 /// call until it expires -- and the challenge is no second factor, because key
 /// ids are public, challenges are free and unauthenticated, and the answer is a

@@ -205,7 +205,7 @@ Four rules, all enforced, all refused with `components` or `expired` if broken:
   digest for bytes nobody sent, and the door refuses it with reason `digest`.
 
   Why it is required, since the reasoning is not obvious: every call goes to
-  `POST /mcp`, so `@method` and `@path` are identical across all eight tools
+  `POST /mcp`, so `@method` and `@path` are identical across all nine tools
   and separate none of them. Until 2026-09-02 the body was unsigned, and a
   captured `Signature` pair authenticated ANY tool call until it expired -- the
   challenge is no second factor, because key ids are public, challenges are
@@ -250,43 +250,19 @@ back as a single SSE `data:` line.
 
     { "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {} }
 
-Eight tools. None of them takes your key id -- it comes from the signature.
+Nine tools. None of them takes your key id -- it comes from the signature.
 
 | tool | arguments | costs |
 |---|---|---|
 | `challenge` | none | free |
 | `status` | `tokenId?` | free |
+| `ladder` | `tokenId` | free |
 | `checkin` | `tokenId` | free |
 | `mint` | `to` (0x address) | 1 USDC |
-| `upgrade` | `tokenId`, `upgradeId` (1-7) | the Mark's price |
+| `upgrade` | `tokenId`, `upgradeId` (1-10), `variant?` (0-2, default 0) | the Mark's price |
 | `seed` | `parentId`, `to` | free |
 | `rebind` | `tokenId` | free, returns a call to sign |
 | `rest` | `tokenId` | free, returns a call to sign |
-
-`upgrade` takes an `upgradeId` of 1 to 7 because that is what the server
-accepts today. Write your client against that range: the ladder has ten Marks,
-and ids 8, 9 and 10 are refused by the schema, not by a gate.
-
-**Some `upgrade` calls now succeed (updated 2026-09-02).** The catalogue is
-wired. Ids 2, 4 and 6 -- Ache, Beat and the earned Iris -- are EARNED by a run
-of returning days and cost nothing, so a qualifying token gets
-`{ ok: true, accepted: true, upgradeId, appliedBy: "the next Clock run" }` with
-no payment step at all. Ids 1, 3, 5 and 7 are BOUGHT and go through the same
-x402 settlement as `mint`, priced from $1.00 to $1,250.00. A call that does not
-qualify is refused before any payment, by name: `mark-level-too-low`,
-`mark-needs-streak`, `mark-needs-whole`, `mark-already-applied` or
-`mark-inactive`.
-
-THE REST OF THE LADDER IS NOT REACHABLE YET (2026-09-02). Ten Marks sit in five
-pairs; in four pairs one side is bought and the other earned by a run of days,
-and the fifth is bought on both sides. Taking either side of a pair closes the
-other permanently, and no pair can close another. Break (8) is earned at 365
-days, and Tint (9) and Aura (10) are both gated on already holding an Iris --
-that gate is not implemented, which is precisely why the schema still stops at
-7. When it ships, `upgradeId` widens to 1-10 and `upgrade` grows a third
-parameter, `variant`, which only the bought Iris and Tint accept. It is named
-here so the change is not a surprise; **nothing above describes ids 8-10 as
-working, because they are not.**
 
 **Four things a client author asks that this document did not previously
 answer.** All four were raised by fresh readers of this page on 2026-09-02.
@@ -315,6 +291,101 @@ else's holdings.
 wallet must sign, and we never submit it:
 
     { "ok": true, "contract": "0x...", "function": "rest", "args": [1], "irreversible": true }
+
+### The Mark ladder
+
+Marks are optional and come in five pairs. **Taking either side of a pair
+closes the other permanently.** No pair can close anything in another. You may
+take neither, and nothing about a Mark shortens the 365 days.
+
+In four of the pairs one side is BOUGHT and the other is EARNED by a run of
+returning days:
+
+| pair | bought | earned |
+|---|---|---|
+| 1 | `1` hush, $1.00 | `2` ache, a run of 7 days |
+| 2 | `3` static, $5.00, level 30 | `4` beat, a run of 30 days |
+| 3 | `5` iris, $25.00, level 100, `variant` 0-2 | `6` iris, a run of 100 days |
+| 4 | `7` vessel, $1250.00, a whole heart | `8` break, a run of 365 days |
+
+**Pair five is bought on BOTH sides**: `9` tint at $250.00 with `variant` 0-1,
+against `10` aura at $25.00. Neither opens until the token already holds an
+Iris, by either route, so the two become available at the same moment and the
+choice between them is informed rather than forfeited by accident.
+
+`variant` picks the Iris shape (0 target, 1 squircle, 2 leaf) or the Tint ink
+(0 violet, 1 gold); every other Mark accepts only 0, and the server refuses
+`mark-bad-variant` rather than charging you for a shape the chain will not
+write. Prices are the exact strings the x402 demand carries -- no thousands
+separator.
+
+`ladder` answers the question `upgrade` cannot, because a refusal arrives after
+the choice has been made: what would I be giving up, and what am I still short
+of. It is free, reads nothing but this service's own mirror, and works on any
+token id rather than only your own. A token at level 120 with a run of 120 that
+already wears Ache:
+
+    { "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+      "params": { "name": "ladder", "arguments": { "tokenId": 1 } } }
+
+    {
+      "ok": true, "tokenId": 1, "level": 120, "streak": 120,
+      "pairs": [
+        { "pair": 1,
+          "sides": [
+            { "id": 1, "name": "hush", "route": "bought", "state": "closed", "price": "$1.00" },
+            { "id": 2, "name": "ache", "route": "earned", "state": "held" }
+          ],
+          "held": "ache", "closed": "hush", "closedBy": "ache" },
+        { "pair": 4,
+          "sides": [
+            { "id": 7, "name": "vessel", "route": "bought", "state": "open",
+              "price": "$1250.00", "waitingOn": "a whole heart, 365 days" },
+            { "id": 8, "name": "break", "route": "earned", "state": "open",
+              "waitingOn": "a run of 365 days" }
+          ] },
+        { "pair": 5,
+          "sides": [
+            { "id": 9, "name": "tint", "route": "bought", "state": "open",
+              "price": "$250.00", "variants": ["violet", "gold"],
+              "waitingOn": "an Iris, by either route" },
+            { "id": 10, "name": "aura", "route": "bought", "state": "open",
+              "price": "$25.00", "waitingOn": "an Iris, by either route" }
+          ] }
+      ]
+    }
+
+(Pairs 2 and 3 are elided above; every pair is present in the real answer.)
+`state` is `open`, `held` or `closed` and is the single field that says whether
+a side can still be taken. `waitingOn` appears only on an open side that is
+gated, so its absence means the gate is met. A decided pair also carries
+`held`, `closed` and `closedBy` at the top level.
+
+**Every gate is checked before any payment is requested**, and the refusal says
+which one. The two worth showing, both captured from the token above:
+
+    upgrade { "tokenId": 1, "upgradeId": 1 }
+    -> { "ok": false, "reason": "mark-excluded", "detail": "ache" }
+
+    upgrade { "tokenId": 1, "upgradeId": 9, "variant": 1 }
+    -> { "ok": false, "reason": "mark-needs-iris" }
+
+`mark-excluded` is the permanent one, and it NAMES the Mark that closed the
+door -- lower case, the same token `ladder` returns, so you do not have to
+case-fold to match them. It can only ever name the other side of the same pair.
+The rest are temporary: `mark-level-too-low`, `mark-needs-streak`,
+`mark-needs-whole`, `mark-needs-iris`, `mark-bad-variant`,
+`mark-already-applied`, `mark-inactive`, `unknown-token` and
+`not-bound-to-caller`. `chain-unavailable`, `paused`, `sunset` and `resting`
+come from the contract's own gates, which are read before payment and again
+after settlement.
+
+The four EARNED Marks cost nothing, so a qualifying token gets
+`{ ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock
+run" }` with no payment step at all. The six BOUGHT Marks go through the same
+x402 settlement as `mint`, and **no Mark has ever been bought**, for the same
+reason no token has been minted by paying for it: settlement is unproven. The
+gates, the refusals and the free route are exercised; the money is not.
 
 ## 6. Pay
 
@@ -498,9 +569,11 @@ ERC721Enumerable.
     node warden/tools/protocol-transcript.mjs
 
 It stands up the real server, registers a real key, signs a real request,
-calls the real x402 facilitator, and prints every exchange above. It moves no
-money: the mint call it makes is deliberately unpaid, and what it captures is
-the refusal.
+calls the real x402 facilitator, seeds one token into its own throwaway mirror
+so the ladder has something to answer about, and prints every exchange above.
+It moves no money: the mint call it makes is deliberately unpaid, what it
+captures is the refusal, and both `upgrade` calls are refused before payment is
+ever requested.
 
 If this page and that output disagree, the output is right and this page is a
 bug. Say so.

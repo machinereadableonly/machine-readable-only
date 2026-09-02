@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>docs/phase0-results.html</title>
+  <title>Phase 0 rendering spike -- measured results</title>
   <style>
     :root {
       --bg: #fafaf7;
@@ -2430,6 +2430,162 @@ public Base Sepolia RPC, outside Foundry entirely:</p>
 </tbody></table>
 <p>Both figures sit well inside the 2,000,000 gas / 20,000 byte hard limit.
 Mint itself cost 352,642 gas.</p>
+<hr>
+<h2>Plan 5: the ten-Mark ladder measured</h2>
+<p>The measurement gate for Plan 5&#39;s mark ladder rewrite (Task 8 of
+<code>docs/plans/2026-09-02-mro-plan5-mark-ladder.md</code>). Two questions: does the
+worst-case <code>tokenURI</code> still fit the on-chain budget under the new ladder, and
+does every reachable combination still scan. Both answers are yes.</p>
+<h3>The worst case, re-measured</h3>
+<p>The old ladder let a token wear all seven Marks at once. The new one does not:
+Marks come in five exclusive pairs -- (1,2) (3,4) (5,6) (7,8) (9,10) -- and a
+token can hold at most one side of each, so the ceiling is five Marks, not ten.
+The maximal LEGAL token is the pair-by-pair choice that draws the most: Hush,
+BEAT, the BOUGHT Iris in its costliest shape (leaf), Vessel, and Tint. Static
+and Break sit in the excluded halves of their pairs and are never worn
+alongside this set.</p>
+<p><strong>FIX ROUND 1 correction.</strong> The first pass through this task assumed Static was
+the pricier side of pair 2 and measured that variant. It is not -- Static is a
+same-length ink SWAP (<code>Palette.staticAt</code> in place of <code>Palette.noiseAt</code>, zero
+extra bytes), while Beat replaces the heart&#39;s flat fill with a gradient
+reference and adds an entire <code>&lt;defs&gt;&lt;linearGradient&gt;...&lt;/linearGradient&gt;&lt;/defs&gt;</code>
+block. The sweep below already showed this (its largest SVG among all 459 is a
+Beat combination, not a Static one) and went unreconciled against the assumed
+worst case in the first pass. THE RULE THIS ESTABLISHES: the sweep measured
+every combination and the worst-case selection by hand is a guess -- when they
+disagree, the sweep is right. <code>tools/combination-sweep.mjs</code> now asserts this
+directly (<code>crossCheckAgainstMaxLegal</code>): the maximal legal token&#39;s own byte
+count must equal the sweep&#39;s own computed largest, or the sweep throws.</p>
+<p>Measured <code>contracts/test/GasBudget.t.sol</code>, day 364 (the worst-case day -- see
+the entry above on why level 364 costs more than level 365), through the real
+token contract with cold storage:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Gas</th>
+<th>Bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>New worst case (day 364, max marks, Beat)</strong></td>
+<td><strong>1,749,915</strong></td>
+<td><strong>10,651</strong></td>
+</tr>
+<tr>
+<td>Pre-Plan-5 shipped baseline</td>
+<td>1,585,616</td>
+<td>9,223</td>
+</tr>
+<tr>
+<td>Post-rename baseline (this phase, before the drawing work)</td>
+<td>1,586,533</td>
+<td>9,213</td>
+</tr>
+<tr>
+<td><strong>Signed delta vs. pre-Plan-5</strong></td>
+<td><strong>+164,299</strong></td>
+<td><strong>+1,428</strong></td>
+</tr>
+<tr>
+<td><strong>Signed delta vs. post-rename</strong></td>
+<td><strong>+163,382</strong></td>
+<td><strong>+1,438</strong></td>
+</tr>
+</tbody></table>
+<p>The post-rename baseline isolates the Mark-name rename alone (+917 gas / -10
+bytes, purely from Mark names changing length in the metadata). Comparing the
+new worst case against IT rather than the pre-Plan-5 figure is what shows the
+cost of the new drawing work on its own: about +163,382 gas and +1,438 bytes
+for five new Marks (Beat&#39;s gradient, the bought Iris&#39;s reshaped eyes in its
+leaf variant, and Tint&#39;s eye ink), on top of the Hush/Vessel pair that was
+already in the pre-Plan-5 figure.</p>
+<p>Both numbers stay inside the 2,000,000 gas / 20,000 byte HARD limit, with
+250,085 gas (12.5%) and 9,349 bytes (46.7%) of margin still unused.</p>
+<p><strong>The 1,000,000 gas / 5,000 byte TARGET was already missed before this change
+and is still missed.</strong> The worst case exceeds it by 749,915 gas and 5,651
+bytes. This is reported, not quietly dropped -- see the Phase 0 section above,
+where the same target was already missed pre-Plan-5.</p>
+<h3>The decode sweep: 459 renderable combinations</h3>
+<p>The old sweep covered 256 combinations of the retired seven independent Marks.
+The new ladder&#39;s reachable Mark sets are generated from the same exclusion and
+requirement masks <code>contracts/src/Ladder.sol</code> encodes (<code>Upgrade.excludes</code> /
+<code>Upgrade.requiresAny</code>), not listed by hand, in <code>tools/combination-sweep.mjs</code>:</p>
+<ul>
+<li><strong>189 reachable Mark sets.</strong> Pairs 1, 2 and 4 -- (Hush, Ache), (Static, Beat),
+(Vessel, Break) -- each contribute 3 independent outcomes (neither side, or
+either one). Pairs 3 and 5 -- Iris, and Tint/Aura, which requires holding an
+Iris -- together contribute 7: <code>(1 x 1) + (2 x 3)</code>, one outcome when pair 3 is
+empty (pair 5 must be empty too), three when pair 3 is not empty (pair 5 is
+free to be neither, Tint, or Aura). <code>3 x 3 x 3 x 7 = 189</code>.</li>
+<li><strong>459 renderable combinations</strong>, once the bought Iris&#39;s three eye shapes and
+Tint&#39;s two inks are expanded per Mark set. Generated the same way, not
+hand-counted, and both counts (189 and 459) are asserted at the top of the
+sweep -- a mismatch would throw rather than silently proceeding.</li>
+</ul>
+<p>Three combinations are named explicitly in the sweep, because a stale reading
+of an earlier ladder revision would have left them untested: <strong>Break +
+Static</strong> and <strong>Break + Beat</strong> were REFUSALS before the cross-pair exclusion was
+removed on 2026-09-02, and <strong>Break + Iris</strong> is the case where the eyes sit on
+a noise Break has recoloured to the token&#39;s own ink (finding 3 in the Plan 5
+plan doc). All three are asserted present in the generated set, so a future
+ladder edit that makes any of them unreachable again fails loudly rather than
+the case quietly vanishing.</p>
+<p><strong>Result, at 848 px (the cheap gate, <code>node tools/combination-sweep.mjs</code>):</strong></p>
+<ul>
+<li>459 combinations, 848 px each</li>
+<li><strong>0 decode failures</strong></li>
+<li>SVG bytes: min 5,970, max 7,243 (the largest: Hush + Beat + the bought Iris
+in its leaf shape)</li>
+<li>Named cases: Break + Static PASS, Break + Beat PASS, Break + Iris PASS, all
+decoded at 848</li>
+<li><strong>MAX_LEGAL cross-check: confirmed.</strong> <code>contracts/test/GasBudget.t.sol</code>&#39;s
+maximal legal token (Hush + Beat + Iris-leaf + Vessel + Tint, 7,243 bytes)
+ties the sweep&#39;s own largest byte count exactly. Vessel and Tint are
+same-length hex substitutions (zero extra bytes), so several Mark sets
+legitimately tie for &quot;largest&quot; -- the sweep&#39;s <code>reduce</code> happens to report the
+3-Mark subset first, but the two figures now assert equal rather than being
+eyeballed as &quot;close enough&quot;.</li>
+</ul>
+<p><strong>Fix Round 1, the memory fix for the full five-size gate.</strong> The full gate
+(<code>node tools/combination-sweep.mjs full</code>, 256/500/848/1080/1600 px, about 103
+minutes) was reported as &quot;wired and correct&quot; in the first pass on the strength
+of its argv wiring alone -- it had not actually been run to completion, and
+when the controller ran it, it was SIGKILLed by <code>safe-build.sh</code>&#39;s 3G MemoryMax
+after about 150 of 459 combinations (exit 137). Instrumented rather than
+patched over: <code>@resvg/resvg-js</code> 2.6.2 (the installed version) does not call
+napi-rs&#39;s <code>adjust_external_memory()</code>, so V8 never sees the native memory a
+render allocates and never collects it under pressure -- measured, RSS climbed
+from 117 MB to 4.2 GB over 200 renders at 1600px in a tight loop, reading
+<code>.pixels</code> exactly once per render each time (the known resvg-js leak shape on
+this project), and explicit <code>global.gc()</code> every 10 iterations made no
+measurable difference. The fix landed upstream in 2.7.0-alpha.0 (2026-01-22)
+but only as an alpha; no stable release carries it, so upgrading was not an
+option. The full gate now batches: the orchestrator spawns this same file as a
+child process per 30-combination batch (measured ~38 MB RSS growth per
+combination across the real 5-size mix; a batch peaks around 1.3 GB), and the
+OS reclaims everything when a batch&#39;s process exits before the next one
+starts. Confirmed live (a bounded smoke test, stopped deliberately rather than
+run to completion, per the controller&#39;s instruction): a worker&#39;s RSS climbed
+to ~1.2 GB across one 30-combination batch, then the next batch&#39;s worker
+started fresh at ~71 MB. 330 of 459 combinations (11 batches) decoded cleanly,
+0 failures, before the smoke test was stopped. The controller runs the full
+459 to completion separately.</p>
+<h3>A comment correction</h3>
+<p>Two doc comments (<code>contracts/src/render/Renderer.sol</code>&#39;s <code>_eyes</code>, and the
+matching block in <code>tools/render-token.mjs</code>) stated a false reason for
+computing the earned Iris&#39;s eye ink at its frozen stored rung instead of the
+token&#39;s live rung: that a live-rung lookup would &quot;collide the eye into the
+noise it sits on.&quot; Checked against the real palette, that is false -- at the
+live rung the eye would be <code>#5f5f5f</code> (luma 95.0) against a <code>#70575f</code> noise
+(luma 95.4), luminance-matched and separated by hue, which is this project&#39;s
+own decode rule; they would read fine together. The real reason: a live-rung
+lookup would let the earned Iris&#39;s ink walk back down the ladder as the
+token&#39;s streak fades, starting the one Mark that cannot be bought lapsing
+again -- exactly the property it exists to be free of. Both comments are
+corrected; no behaviour changed, confirmed by regenerating
+<code>contracts/test/RenderFixture.sol</code> and <code>contracts/test/ColourFixture.sol</code> and
+seeing an empty <code>git status</code>.</p>
 
 </body>
 </html>

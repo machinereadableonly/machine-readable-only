@@ -129,4 +129,46 @@ const minted = await call({ method: "tools/call",
   params: { name: "mint", arguments: { to: "0x" + "a1".repeat(20) } } });
 show("7. tools/call mint, unpaid -> " + minted.status, minted.body);
 
+// --- 5. the ladder, and the two refusals that are worth reading -------------
+//
+// WHY THIS SECTION EXISTS. Until 2026-09-02 the capture stopped at an unpaid
+// `mint`, so the document's whole upgrade section was hand-written prose no
+// capture backed -- which is exactly how it drifted to claiming `upgradeId
+// (1-7)` while the server had accepted 1-10 since Task 10. Marks are five
+// pairs where taking either side closes the other PERMANENTLY, so the two
+// things a client author has to be able to read are the ladder before a choice
+// and a refusal that NAMES what closed a door. Both are captured here.
+//
+// A token has to exist for either call to say anything, so one is seeded into
+// this run's throwaway mirror. `insertToken` is the only setter `queries.mjs`
+// has; level, streak and the mark bitmask are set by plain SQL because nothing
+// in the write path sets them directly -- the Clock does, from chain events.
+// Bit 2 of `marks` is Ache, the EARNED side of pair one, at a level and run
+// that clear most of the ladder's gates so the answers are about exclusions
+// rather than about a brand new token.
+const TOKEN = 1;
+const today = utcDay();
+q.insertToken({ tokenId: TOKEN, keyId: signer.keyid, owner: "0x" + "a1".repeat(20),
+  lastDay: today, mintDay: today });
+db.prepare("UPDATE tokens SET marks = ?, level = ?, streak = ? WHERE tokenId = ?")
+  .run(1 << 2, 120, 120, TOKEN);
+
+const ladder = await call({ method: "tools/call",
+  params: { name: "ladder", arguments: { tokenId: TOKEN } } });
+show("8. tools/call ladder, free -> " + ladder.status, ladder.body);
+
+// Hush is the BOUGHT side of the pair this token already wears the earned side
+// of. Refused before any payment is requested, and the refusal names the Mark
+// that closed it.
+const excluded = await call({ method: "tools/call",
+  params: { name: "upgrade", arguments: { tokenId: TOKEN, upgradeId: 1 } } });
+show("9. tools/call upgrade 1 (Hush), excluded -> " + excluded.status, excluded.body);
+
+// Tint is gated on already holding an Iris by either route. Also refused before
+// payment, and this one carries the `variant` argument that only the bought
+// Iris and Tint accept.
+const gated = await call({ method: "tools/call",
+  params: { name: "upgrade", arguments: { tokenId: TOKEN, upgradeId: 9, variant: 1 } } });
+show("10. tools/call upgrade 9 (Tint, gold), gated -> " + gated.status, gated.body);
+
 await new Promise((done) => server.close(done));
