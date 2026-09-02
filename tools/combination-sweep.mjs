@@ -1,37 +1,62 @@
-// Do the Marks work in COMBINATION? All 256 of them.
+// Do the Marks work in COMBINATION? All 459 renderable ones.
 //
-// Every Mark so far has been measured alone, which proves nothing about the
-// token that buys several. Most pairs are safe by construction because they
-// write disjoint surfaces, but four pairs genuinely collide:
+// The old sweep (before this rewrite) covered 256 combinations of the retired
+// seven-Mark ladder, and did most of the drawing itself: it mutated the
+// palette in place for Static, regex-swapped Beat's gradient stop, regex-swapped
+// Break's fills, and hand-drew the eyes as a prototype `"eyes"` pseudo-Mark. None
+// of that survives here. Tasks 4-7 taught `render-token.mjs`'s `renderSvg` every
+// one of those surfaces natively -- Static's green, Beat's violet, Break's
+// rung-colour exchange, and the three reshaped Iris eyes with Tint's ink -- so
+// this sweep now does nothing but call it and decode what comes back.
 //
-//   Beat + Break     -- both write the HEART's fill
-//   Static + Break   -- both write the NOISE's ink
-//   Eyes + Aura      -- the eye erases to the field, and Aura moves it
-//   Eyes + Hush      -- same, for the quiet-zone tint
+// THE COMBINATIONS THEMSELVES ARE GENERATED, not listed by hand, from the same
+// exclusion and requirement masks `contracts/src/Ladder.sol` encodes as
+// `Upgrade.excludes` / `Upgrade.requiresAny`. That is the whole point: a hand
+// list drifts the moment the ladder's pairing changes, silently leaving the
+// newest states untested. The mask table below is this file's own mirror of
+// Ladder.sol (there is no live JS import yet -- `warden/src/mcp/ladder.mjs`,
+// which `tools/ladder-fixture.mjs` already expects, is Task 9's, not built as
+// of this sweep) and MUST be kept in step with it by hand, the same way
+// `render-token.mjs`'s Mark colours are kept in step with `MarkRenderer.sol`.
 //
-// (Named for the ladder as it stood when this sweep was written: Bloom,
-// Singularity, Blue Blood, Halo and Voice are now Beat, Break, Static, Aura
-// and Hush -- see the Task 4 rename.)
+// Five pairs -- (1,2) (3,4) (5,6) (7,8) (9,10) -- one side bought, one earned,
+// taking either closes the other, and a token may take neither. Pair 5 (Tint,
+// Aura) additionally requires holding an Iris by either route (pair 3). That
+// yields 189 reachable Mark SETS: pairs 1, 2 and 4 contribute 3 independent
+// outcomes each, and pairs 3 and 5 together contribute 7 -- (1 x 1) + (2 x 3),
+// one outcome when pair 3 is empty and pair 5 must be too, three when pair 3 is
+// not empty and pair 5 is free to be anything -- so 3 x 3 x 3 x 7 = 189.
 //
-// The last two are a defect this sweep was written to catch: the first eye
-// prototype erased its 7x7 to the FIELD constant, so on an Aura or Hush token
-// it would have punched a white square into a tinted ground.
+// A Mark SET is not yet a renderable COMBINATION: the bought Iris carries one of
+// three shapes and Tint carries one of two inks, both real pixels this sweep has
+// to see. Expanding those variants brings 189 to 459 -- verified against the
+// derivation in the header of this file's own generateCombinations(), not
+// hand-counted.
 //
-// Decoded at one size for the sweep (848, the exact 53 x 16 multiple), then any
-// failure is re-run across the full ladder. Batched, because 256 renders is the
-// shape of job that has taken this box down before.
+// THREE COMBINATIONS ARE NAMED EXPLICITLY below, because a stale reading of an
+// earlier ladder revision would have left them untested: Break + Static and
+// Break + Beat were REFUSALS before the cross-pair exclusion was removed
+// (2026-09-02), and Break + Iris is the case where the eyes sit on a noise Break
+// has recoloured to the token's own ink (see finding 3,
+// docs/plans/2026-09-02-mro-plan5-mark-ladder.md). All three are asserted
+// present in the generated set below -- if a future ladder edit makes any of
+// them unreachable again, that assertion fails loudly rather than the case
+// quietly vanishing from the sweep.
 //
-//   node tools/combination-sweep.mjs           (through ~/scripts/safe-build.sh)
-//   node tools/combination-sweep.mjs full      (all 5 sizes -- slow)
+// Decoded at one size for the cheap gate (848, the exact 53 x 16 multiple), and
+// at all five real sizes for the full gate. Batched, because 459 renders is
+// exactly the shape of job that has taken this box down before.
+//
+//   node tools/combination-sweep.mjs           (848 px only, ~21 min, through ~/scripts/safe-build.sh)
+//   node tools/combination-sweep.mjs full      (5 sizes, ~103 min, through ~/scripts/safe-build.sh)
 import { writeFileSync } from "node:fs";
 import { Resvg } from "@resvg/resvg-js";
 
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import {
-  renderSvg, canvasFor, STATIC_BY_TIER, TIERS, colourAt, rungOf, noiseAt, staticAt,
-  QUIET, FIELD, AURA_FIELD, HUSH_QUIET,
-  ACHE, STATIC, HUSH, BEAT, AURA, VESSEL, BREAK,
+  renderSvg, MARKS, IRIS_SHAPE_NAMES,
+  HUSH, STATIC, BEAT, IRIS_BOUGHT, IRIS_EARNED, VESSEL, BREAK, TINT,
 } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -39,90 +64,126 @@ const PAYLOAD = payloadFor("example.com", 1);
 const DEST = PAYLOAD.slice(0, -1);
 const CODE = solve(PAYLOAD, 7);
 const TARGET = heartTarget(CODE.size);
-const S = CODE.size;
 const OUT = new URL("./out/marks", import.meta.url).pathname;
 const FULL = process.argv[2] === "full";
 const SIZES = FULL ? [256, 500, 848, 1080, 1600] : [848];
 
-// The state every Mark can coexist in: a whole heart at a 365-day streak, which
-// is the only state Vessel and Break are even purchasable in. Note Ache draws
-// NOTHING here -- a whole heart has no unearned cells left -- which is a
-// property of the ladder, not a fault in the sweep.
-const STATE = { level: 365, streak: 400, years: 1, lastDay: 20700, today: 20700 };
-const rung = rungOf(STATE.streak);
-const HEART = colourAt(rung);
-const NEUTRAL = noiseAt(rung);
+// The state every Mark set can coexist in: a whole heart at a 365-day streak --
+// the only state Vessel and Break are even purchasable in, and live rather than
+// resting or sunset so Break's rung-colour exchange has a rung to read. Note
+// Ache draws NOTHING here -- a whole heart has no unearned cells left -- which
+// is a property of the ladder, not a fault in the sweep.
+const STATE = { level: 365, streak: 400, lastDay: 20700, today: 20700 };
 
-const VIOLET = "#2000ff";   // DECIDED: Beat's far end
+// ---------------------------------------------------------------------------
+// Generate the reachable Mark sets from Ladder.sol's own exclusion and
+// requirement masks, rather than listing 189 sets by hand.
+// ---------------------------------------------------------------------------
 
-/// Static's green per rung, read from the shipped derivation rather than
-/// recomputed here -- one derivation, in render-token.mjs.
-function greenInks() {
-  return TIERS.map((_, i) => staticAt(TIERS.length - 1 - i));
+// Mirror of contracts/src/Ladder.sol: for each Mark id, the bit of its excluded
+// partner, and (pair 5 only) the bits of what it requires ANY of. Bit n here
+// means Mark id n, matching Ladder.sol's own `uint16(1 << id)` encoding.
+const EXCLUDES = {
+  1: 1 << 2, 2: 1 << 1,   // Hush / Ache
+  3: 1 << 4, 4: 1 << 3,   // Static / Beat
+  5: 1 << 6, 6: 1 << 5,   // Iris bought / Iris earned
+  7: 1 << 8, 8: 1 << 7,   // Vessel / Break
+  9: 1 << 10, 10: 1 << 9, // Tint / Aura
+};
+const AN_IRIS = (1 << 5) | (1 << 6);
+const REQUIRES_ANY = { 9: AN_IRIS, 10: AN_IRIS };
+
+/** Is this bitmask (bit n = Mark id n held) a set Ladder.sol's masks allow? */
+function isLegalSet(mask) {
+  for (let id = 1; id <= 10; id++) {
+    if (!(mask & (1 << id))) continue;
+    if (EXCLUDES[id] && (mask & EXCLUDES[id])) return false;
+    const req = REQUIRES_ANY[id] ?? 0;
+    if (req && !(mask & req)) return false;
+  }
+  return true;
 }
 
-const canvas = canvasFor(STATE.years);
-const THICK = (canvas - 45) / 2 - 2;
-const codeOff = 2 + THICK + QUIET;
-const EYES = [[0, 0], [S - 7, 0], [0, S - 7]];
+function idsOf(mask) {
+  const ids = [];
+  for (let id = 1; id <= 10; id++) if (mask & (1 << id)) ids.push(id);
+  return ids;
+}
 
-// Old ladder name -> new Mark id, same surface: vein -> ache, blueblood ->
-// static, voice -> hush, bloom -> beat, halo -> aura, crown -> vessel,
-// singularity -> break. "eyes" is not a Mark the reference renderer knows --
-// it is this sweep's own prototype, stripped before the call and drawn after.
-const MARKS = [ACHE, STATIC, HUSH, BEAT, AURA, VESSEL, BREAK, "eyes"];
+function labelFor(ids, irisVariant, tintVariant) {
+  if (!ids.length) return "none";
+  return ids.map(id => {
+    if (id === IRIS_BOUGHT) return `iris-bought(${IRIS_SHAPE_NAMES[irisVariant]})`;
+    if (id === IRIS_EARNED) return "iris-earned";
+    if (id === TINT) return `tint(${tintVariant === 1 ? "gold" : "violet"})`;
+    return MARKS[id - 1];
+  }).join("+");
+}
 
-/// Build one token with an arbitrary set of Marks, applying the proposals.
-function build(set) {
-  const has = m => set.includes(m);
-
-  // Green noise, if Static is on. Written into the palette and restored.
-  const keep = [...STATIC_BY_TIER];
-  if (has(STATIC)) {
-    const inks = greenInks();
-    for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = inks[i];
+/**
+ * Every reachable Mark set, expanded into every renderable variant: the three
+ * Iris shapes when the BOUGHT Iris is held (the earned route is always shape 0,
+ * "target" -- MarkRenderer.irisShape), and the two Tint inks when Tint is held.
+ */
+function generateCombinations() {
+  const legalSets = [];
+  for (let mask = 0; mask < (1 << 11); mask++) {
+    if (mask & 1) continue;          // bit 0 is never a Mark
+    if (isLegalSet(mask)) legalSets.push(mask);
   }
-  // `eyes` is not a Mark the reference renderer knows, so it is stripped before
-  // the call and drawn afterwards.
-  let svg = renderSvg(CODE.modules, TARGET.want, CODE.size,
-    { ...STATE, marks: set.filter(m => m !== "eyes") });
-  for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = keep[i];
-
-  // Violet Beat: one constant, same length as the one it replaces.
-  if (has(BEAT)) svg = svg.replace(
-    /(<stop offset="1" stop-color=")#c8102e(")/, `$1${VIOLET}$2`);
-
-  const noiseInk = has(STATIC) ? greenInks()[TIERS.length - 1 - rung] : NEUTRAL;
-
-  // Break: exchange the heart and noise fills. When Beat is also on, the
-  // heart's fill is the gradient reference, so the exchange carries the
-  // GRADIENT across to the noise -- Beat decorates whatever wears the heart's
-  // ink. That is a DESIGN CHOICE and is flagged in the report, not settled here.
-  if (has(BREAK)) {
-    const fills = [...svg.matchAll(/<path fill="(url\(#b\)|#[0-9a-f]{6})"/g)];
-    const n = fills[fills.length - 2], h = fills[fills.length - 1];
-    const nf = n[1], hf = h[1];
-    svg = svg.slice(0, h.index) + h[0].replace(hf, nf) + svg.slice(h.index + h[0].length);
-    svg = svg.slice(0, n.index) + n[0].replace(nf, hf) + svg.slice(n.index + n[0].length);
+  if (legalSets.length !== 189) {
+    throw new Error(
+      `generated ${legalSets.length} reachable Mark sets from the masks, expected `
+      + `189 -- the mask table above has drifted from contracts/src/Ladder.sol`
+    );
   }
 
-  // The eyes. THE GROUND UNDER THEM IS NOT ALWAYS WHITE: Hush tints the block
-  // the code sits in, and Aura tints the whole field. Erasing to a constant
-  // would punch a white square into either one.
-  if (has("eyes")) {
-    const ground = has(HUSH) ? HUSH_QUIET : (has(AURA) ? AURA_FIELD : FIELD);
-    const ink = has(VESSEL) ? "#b8860b" : HEART;
-    let add = "";
-    for (const [ex, ey] of EYES) {
-      const x = codeOff + ex, y = codeOff + ey, c = x + 3.5, cy = y + 3.5;
-      add += `<rect x="${x}" y="${y}" width="7" height="7" fill="${ground}"/>`
-        + `<circle cx="${c}" cy="${cy}" r="3.5" fill="${ink}"/>`
-        + `<circle cx="${c}" cy="${cy}" r="2.5" fill="${ground}"/>`
-        + `<circle cx="${c}" cy="${cy}" r="1.5" fill="${ink}"/>`;
+  const combos = [];
+  for (const mask of legalSets) {
+    const ids = idsOf(mask);
+    const irisVariants = ids.includes(IRIS_BOUGHT) ? [0, 1, 2] : [0];
+    const tintVariants = ids.includes(TINT) ? [0, 1] : [0];
+    for (const irisVariant of irisVariants) {
+      for (const tintVariant of tintVariants) {
+        combos.push({ ids, irisVariant, tintVariant, label: labelFor(ids, irisVariant, tintVariant) });
+      }
     }
-    svg = svg.replace(/<\/svg>$/, `${add}</svg>`);
   }
-  return svg;
+  if (combos.length !== 459) {
+    throw new Error(
+      `generated ${combos.length} renderable combinations, expected 459 -- `
+      + `the variant expansion above has drifted`
+    );
+  }
+  return { legalSets, combos };
+}
+
+const { legalSets, combos } = generateCombinations();
+console.log(`generated ${legalSets.length} reachable Mark sets, ${combos.length} renderable combinations`);
+
+// The three combinations a stale reading of an earlier ladder revision would
+// have left untested. Asserted present, not just hoped for -- see the header.
+const NAMED = [
+  { name: "Break + Static", test: c => c.ids.length === 2 && c.ids.includes(BREAK) && c.ids.includes(STATIC) },
+  { name: "Break + Beat", test: c => c.ids.length === 2 && c.ids.includes(BREAK) && c.ids.includes(BEAT) },
+  { name: "Break + Iris", test: c => c.ids.includes(BREAK) && (c.ids.includes(IRIS_BOUGHT) || c.ids.includes(IRIS_EARNED)) },
+];
+for (const n of NAMED) {
+  const found = combos.find(n.test);
+  if (!found) throw new Error(`named combination missing from the generated sweep: ${n.name}`);
+  n.combo = found;
+  console.log(`  named case present: ${n.name}  ->  [${found.label}]`);
+}
+
+/** Build one token's SVG for a generated combination -- render-token.mjs does
+ *  all the drawing now; this file only chooses what to ask it for. */
+function build({ ids, irisVariant, tintVariant }) {
+  return renderSvg(CODE.modules, TARGET.want, CODE.size, {
+    ...STATE, marks: ids, irisVariant, tintVariant,
+    // The run the EARNED Iris was applied at. STATE is live and never lapsed,
+    // so its own streak is a faithful "when this was applied" value.
+    irisRun: STATE.streak,
+  });
 }
 
 const decodesAt = svg => SIZES.filter(px => {
@@ -130,20 +191,22 @@ const decodesAt = svg => SIZES.filter(px => {
   return r.ok && r.destination === DEST;
 });
 
-// All 256 subsets, as bitmasks.
 const results = [];
 let failures = 0;
-for (let mask = 0; mask < (1 << MARKS.length); mask++) {
-  const set = MARKS.filter((_, i) => mask & (1 << i));
-  const svg = build(set);
+for (let i = 0; i < combos.length; i++) {
+  const combo = combos[i];
+  const svg = build(combo);
   const ok = decodesAt(svg);
   const all = ok.length === SIZES.length;
   if (!all) failures++;
-  results.push({ mask, set, all, ok, bytes: svg.length });
+  results.push({ ...combo, all, ok, bytes: svg.length });
+  const named = NAMED.find(n => n.combo === combo);
   if (!all) {
-    console.log(`FAIL  [${set.join(" ") || "none"}]  decoded at ${ok.join(",") || "no size"}`);
+    console.log(`FAIL  [${combo.label}]  decoded at ${ok.join(",") || "no size"}`);
+  } else if (named) {
+    console.log(`  [NAMED OK] ${named.name}  [${combo.label}]  decoded at ${ok.join(",")}`);
   }
-  if ((mask + 1) % 32 === 0) console.log(`  ...${mask + 1}/256 combinations`);
+  if ((i + 1) % 50 === 0) console.log(`  ...${i + 1}/${combos.length} combinations`);
 }
 
 const bytes = results.map(r => r.bytes);
@@ -151,10 +214,20 @@ console.log(`\n${results.length} combinations, ${SIZES.length} decode size(s) ea
 console.log(`decode failures: ${failures}`);
 console.log(`svg bytes: min ${Math.min(...bytes)}, max ${Math.max(...bytes)}`);
 const worst = results.reduce((a, b) => (b.bytes > a.bytes ? b : a));
-console.log(`largest: [${worst.set.join(" ")}] at ${worst.bytes} B`);
+console.log(`largest: [${worst.label}] at ${worst.bytes} B`);
+for (const n of NAMED) {
+  const r = results.find(x => x.ids === n.combo.ids && x.irisVariant === n.combo.irisVariant
+    && x.tintVariant === n.combo.tintVariant);
+  console.log(`named result -- ${n.name}: ${r.all ? "PASS" : "FAIL"} (decoded at ${r.ok.join(",") || "no size"})`);
+}
 
-// The full set, drawn once so it can be looked at rather than trusted.
-const everything = build(MARKS);
+// The maximal legal token (see contracts/test/GasBudget.t.sol's MAX_MARKS),
+// drawn once so it can be looked at rather than trusted: Hush, Static, the
+// bought Iris in its leaf shape, Vessel, Tint.
+const MAX_LEGAL = { ids: [HUSH, STATIC, IRIS_BOUGHT, VESSEL, TINT], irisVariant: 2, tintVariant: 0 };
+const maximal = build(MAX_LEGAL);
 writeFileSync(`${OUT}/all-marks.png`,
-  new Resvg(everything, { fitTo: { mode: "width", value: 700 } }).render().asPng());
-console.log(`\nwrote ${OUT}/all-marks.png`);
+  new Resvg(maximal, { fitTo: { mode: "width", value: 700 } }).render().asPng());
+console.log(`\nwrote ${OUT}/all-marks.png (the maximal legal set: ${labelFor(MAX_LEGAL.ids, 2, 0)})`);
+
+process.exitCode = failures ? 1 : 0;

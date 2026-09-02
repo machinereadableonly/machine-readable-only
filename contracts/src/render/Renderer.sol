@@ -89,11 +89,15 @@ contract Renderer is IRenderer {
     /// call rather than by hand here. For the bought Iris the eye's rung is the
     /// token's live one. For the EARNED Iris it is the run stored when the Mark
     /// was applied -- frozen, the same rule `_rung` itself does not apply to
-    /// this route. That matters under Break: the earned Iris is frozen at a
-    /// top-tier run, and the live noise is also top-tier red once Break swaps
-    /// it in, so computing the eye's ink at the live rung would collide the
-    /// eye into the noise it sits on. Computing it at the eye's own rung keeps
-    /// the two apart. Tint, when worn, overrides the ink outright either way.
+    /// this route. That is NOT for contrast against the noise: at the live
+    /// rung the eye ink would be luminance-matched to the noise and still read
+    /// fine, separated by hue the same way the heart and noise already are.
+    /// The real reason is that the EARNED Iris must not lapse: reading the
+    /// live rung would let its ink walk back down the ladder as the token's
+    /// streak fades, which starts the one Mark that cannot be bought lapsing
+    /// again -- exactly the property it exists to be free of. Computing it at
+    /// the eye's own frozen rung keeps it still. Tint, when worn, overrides the
+    /// ink outright either way.
     function _eyes(TokenView memory v, uint256 rung) private pure returns (string memory) {
         if (!MarkRenderer.has(v.marks, MarkRenderer.ANY_IRIS)) return "";
         // The EARNED Iris does not lapse: its rung comes from the run stored

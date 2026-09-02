@@ -27,8 +27,17 @@ contract GasBudgetTest is Test {
     uint256 constant GAS_TARGET = 1_000_000;
     uint256 constant BYTE_TARGET = 5_000;
 
-    uint256 constant ALL_MARKS = MarkRenderer.HUSH | MarkRenderer.ACHE | MarkRenderer.STATIC
-        | MarkRenderer.BEAT | MarkRenderer.AURA | MarkRenderer.VESSEL | MarkRenderer.BREAK;
+    /// @dev The maximal LEGAL token under the ten-Mark ladder: at most one Mark
+    /// per pair -- (1,2) (3,4) (5,6) (7,8) (9,10) -- so "every Mark" is no
+    /// longer a state any token can reach. This is the pair-by-pair selection
+    /// that draws the most: Hush, Static, the BOUGHT Iris in its costliest
+    /// shape (leaf), Vessel, and Tint. Beat and Break sit in the excluded
+    /// halves of their pairs and are never worn alongside this set. The Iris
+    /// shape is packed at bits 16-23 of the same word applyMark writes it to
+    /// (MachineReadableOnly.applyMark, upgradeId == 5); 2 is leaf, per
+    /// render-token.mjs's IRIS_SHAPE_NAMES order (target, squircle, leaf).
+    uint256 constant MAX_MARKS = MarkRenderer.HUSH | MarkRenderer.STATIC | MarkRenderer.IRIS_BOUGHT
+        | MarkRenderer.VESSEL | MarkRenderer.TINT | (uint256(2) << 16);
 
     /// @dev Token 1 on example.com, from tools/token-bitmap.mjs.
     function _code() internal pure returns (bytes memory) {
@@ -88,9 +97,9 @@ contract GasBudgetTest is Test {
         _place(4, 365, 140, 960, false, 0);              // forty days lapsed
         _place(5, 365 * 3, 200, 1000, false, 0);
         _place(6, 365 * 10, 400, 1000, false, 0);        // at the ring cap
-        _place(7, 365 * 10, 400, 1000, false, ALL_MARKS);
+        _place(7, 365 * 10, 400, 1000, false, MAX_MARKS);
         _place(8, 365 * 3, 200, 1000, true, 0);          // sealed
-        _place(9, 364, 400, 1000, false, ALL_MARKS);     // the day before whole
+        _place(9, 364, 400, 1000, false, MAX_MARKS);     // the day before whole
 
         // The dearest stage and the largest stage are NOT the same token, so
         // each limit is tracked against its own worst case.
@@ -103,14 +112,14 @@ contract GasBudgetTest is Test {
         (, b) = _measure("whole and lapsed", 4);            maxBytes = _max(maxBytes, b);
         (, b) = _measure("three years", 5);                 maxBytes = _max(maxBytes, b);
         (, b) = _measure("ten years, at the cap", 6);       maxBytes = _max(maxBytes, b);
-        (uint256 capAndMarks, uint256 capBytes) = _measure("cap and every mark", 7);
+        (uint256 capAndMarks, uint256 capBytes) = _measure("cap and max marks", 7);
         maxBytes = _max(maxBytes, capBytes);
         (uint256 sealedGas,) = _measure("sealed at rest", 8);
-        (uint256 worstGas, uint256 lastBytes) = _measure("day 364, every mark", 9);
+        (uint256 worstGas, uint256 lastBytes) = _measure("day 364, max marks", 9);
         maxBytes = _max(maxBytes, lastBytes);
 
         // A sealed token takes a branch, not extra work.
-        assertLt(sealedGas, capAndMarks, "sealing must not cost more than wearing every mark");
+        assertLt(sealedGas, capAndMarks, "sealing must not cost more than wearing the max marks");
 
         // The worst case is NOT the oldest token. See the test below.
         assertGt(worstGas, capAndMarks, "day 364 is the expensive case, not the ring cap");
@@ -127,9 +136,9 @@ contract GasBudgetTest is Test {
         // Guarded, not just skipped: on the coverage profile worstGas exceeds
         // the limit and this subtraction would underflow into a panic.
         if (_gasIsMeaningful()) {
-            console.log("  gas, from day 364 with every mark      ", GAS_LIMIT - worstGas);
+            console.log("  gas, from day 364 with max marks       ", GAS_LIMIT - worstGas);
         }
-        console.log("  bytes, from the ring cap with every mark", BYTE_LIMIT - maxBytes);
+        console.log("  bytes, from the ring cap with max marks", BYTE_LIMIT - maxBytes);
     }
 
     function _max(uint256 a, uint256 c) private pure returns (uint256) {
@@ -162,11 +171,11 @@ contract GasBudgetTest is Test {
     /// so a partial frame implies level < 365, which implies zero rings. The
     /// two expensive cases are mutually exclusive.
     function test_theWorstCaseIsTheDayBeforeTheHeartSeals() public {
-        _place(10, 364, 400, 1000, false, ALL_MARKS);
-        _place(11, 365, 400, 1000, false, ALL_MARKS);
+        _place(10, 364, 400, 1000, false, MAX_MARKS);
+        _place(11, 365, 400, 1000, false, MAX_MARKS);
 
-        (uint256 almost,) = _measure("level 364, every mark", 10);
-        (uint256 whole,) = _measure("level 365, every mark", 11);
+        (uint256 almost,) = _measure("level 364, max marks", 10);
+        (uint256 whole,) = _measure("level 365, max marks", 11);
 
         assertGt(almost, whole, "an unsealed frame must be the dearer of the two");
         console.log("the seal is worth", almost - whole);
@@ -179,7 +188,7 @@ contract GasBudgetTest is Test {
     /// measured alone at Task 7; the difference is the storage read, and it is
     /// the one quantity this whole task exists to find.
     function test_theTokenContractsOwnOverheadIsSmall() public {
-        _place(7, 365 * 10, 400, 1000, false, ALL_MARKS);
+        _place(7, 365 * 10, 400, 1000, false, MAX_MARKS);
 
         uint256 before = gasleft();
         t.tokenURI(7);
@@ -205,10 +214,10 @@ contract GasBudgetTest is Test {
     /// substitutes one seven-character colour for another. The image bytes must
     /// therefore be IDENTICAL, and only the branch costs gas.
     function test_whatStaticCosts() public {
-        uint256 without = ALL_MARKS ^ MarkRenderer.STATIC;
+        uint256 without = MAX_MARKS ^ MarkRenderer.STATIC;
 
         _place(40, 364, 100, 1000, false, without);
-        _place(41, 364, 100, 1000, false, ALL_MARKS);
+        _place(41, 364, 100, 1000, false, MAX_MARKS);
 
         (uint256 gasOff, uint256 lenOff) = _measure("day 364, without Static", 40);
         (uint256 gasOn, uint256 lenOn) = _measure("day 364, with Static", 41);

@@ -1621,3 +1621,110 @@ public Base Sepolia RPC, outside Foundry entirely:
 
 Both figures sit well inside the 2,000,000 gas / 20,000 byte hard limit.
 Mint itself cost 352,642 gas.
+
+---
+
+## Plan 5: the ten-Mark ladder measured
+
+The measurement gate for Plan 5's mark ladder rewrite (Task 8 of
+`docs/plans/2026-09-02-mro-plan5-mark-ladder.md`). Two questions: does the
+worst-case `tokenURI` still fit the on-chain budget under the new ladder, and
+does every reachable combination still scan. Both answers are yes.
+
+### The worst case, re-measured
+
+The old ladder let a token wear all seven Marks at once. The new one does not:
+Marks come in five exclusive pairs -- (1,2) (3,4) (5,6) (7,8) (9,10) -- and a
+token can hold at most one side of each, so the ceiling is five Marks, not ten.
+The maximal LEGAL token is the pair-by-pair choice that draws the most: Hush,
+Static, the BOUGHT Iris in its costliest shape (leaf), Vessel, and Tint. Beat
+and Break sit in the excluded halves of their pairs and are never worn
+alongside this set.
+
+Measured `contracts/test/GasBudget.t.sol`, day 364 (the worst-case day -- see
+the entry above on why level 364 costs more than level 365), through the real
+token contract with cold storage:
+
+| | Gas | Bytes |
+|---|---|---|
+| **New worst case (day 364, max marks)** | **1,737,744** | **10,441** |
+| Pre-Plan-5 shipped baseline | 1,585,616 | 9,223 |
+| Post-rename baseline (this phase, before the drawing work) | 1,586,533 | 9,213 |
+| **Signed delta vs. pre-Plan-5** | **+152,128** | **+1,218** |
+| **Signed delta vs. post-rename** | **+151,211** | **+1,228** |
+
+The post-rename baseline isolates the Mark-name rename alone (+917 gas / -10
+bytes, purely from Mark names changing length in the metadata). Comparing the
+new worst case against IT rather than the pre-Plan-5 figure is what shows the
+cost of the new drawing work on its own: about +151,211 gas and +1,228 bytes
+for five new Marks (Static's noise recolour, the bought Iris's reshaped eyes in
+its leaf variant, and Tint's eye ink), on top of the Hush/Vessel pair that was
+already in the pre-Plan-5 figure.
+
+Both numbers stay inside the 2,000,000 gas / 20,000 byte HARD limit, with
+262,256 gas (13.1%) and 9,559 bytes (47.8%) of margin still unused.
+
+**The 1,000,000 gas / 5,000 byte TARGET was already missed before this change
+and is still missed.** The worst case exceeds it by 737,744 gas and 5,441
+bytes. This is reported, not quietly dropped -- see the Phase 0 section above,
+where the same target was already missed pre-Plan-5.
+
+### The decode sweep: 459 renderable combinations
+
+The old sweep covered 256 combinations of the retired seven independent Marks.
+The new ladder's reachable Mark sets are generated from the same exclusion and
+requirement masks `contracts/src/Ladder.sol` encodes (`Upgrade.excludes` /
+`Upgrade.requiresAny`), not listed by hand, in `tools/combination-sweep.mjs`:
+
+- **189 reachable Mark sets.** Pairs 1, 2 and 4 -- (Hush, Ache), (Static, Beat),
+  (Vessel, Break) -- each contribute 3 independent outcomes (neither side, or
+  either one). Pairs 3 and 5 -- Iris, and Tint/Aura, which requires holding an
+  Iris -- together contribute 7: `(1 x 1) + (2 x 3)`, one outcome when pair 3 is
+  empty (pair 5 must be empty too), three when pair 3 is not empty (pair 5 is
+  free to be neither, Tint, or Aura). `3 x 3 x 3 x 7 = 189`.
+- **459 renderable combinations**, once the bought Iris's three eye shapes and
+  Tint's two inks are expanded per Mark set. Generated the same way, not
+  hand-counted, and both counts (189 and 459) are asserted at the top of the
+  sweep -- a mismatch would throw rather than silently proceeding.
+
+Three combinations are named explicitly in the sweep, because a stale reading
+of an earlier ladder revision would have left them untested: **Break +
+Static** and **Break + Beat** were REFUSALS before the cross-pair exclusion was
+removed on 2026-09-02, and **Break + Iris** is the case where the eyes sit on
+a noise Break has recoloured to the token's own ink (finding 3 in the Plan 5
+plan doc). All three are asserted present in the generated set, so a future
+ladder edit that makes any of them unreachable again fails loudly rather than
+the case quietly vanishing.
+
+**Result, at 848 px (the cheap gate, `node tools/combination-sweep.mjs`):**
+
+- 459 combinations, 848 px each
+- **0 decode failures**
+- SVG bytes: min 5,970, max 7,243 (the largest: Hush + Beat + the bought Iris
+  in its leaf shape)
+- Named cases: Break + Static PASS, Break + Beat PASS, Break + Iris PASS, all
+  decoded at 848
+
+The full five-size gate (`node tools/combination-sweep.mjs full`, 256/500/848/
+1080/1600 px, about 103 minutes) is wired and correct but was deliberately
+left to run separately as a pre-deploy gate, per the Task 8 brief -- the
+erase-and-redraw of the finder patterns for the Iris eyes is the one thing on
+this ladder that can break a scan outright rather than merely look wrong, so
+it earns the full sweep rather than the cheap one alone.
+
+### A comment correction
+
+Two doc comments (`contracts/src/render/Renderer.sol`'s `_eyes`, and the
+matching block in `tools/render-token.mjs`) stated a false reason for
+computing the earned Iris's eye ink at its frozen stored rung instead of the
+token's live rung: that a live-rung lookup would "collide the eye into the
+noise it sits on." Checked against the real palette, that is false -- at the
+live rung the eye would be `#5f5f5f` (luma 95.0) against a `#70575f` noise
+(luma 95.4), luminance-matched and separated by hue, which is this project's
+own decode rule; they would read fine together. The real reason: a live-rung
+lookup would let the earned Iris's ink walk back down the ladder as the
+token's streak fades, starting the one Mark that cannot be bought lapsing
+again -- exactly the property it exists to be free of. Both comments are
+corrected; no behaviour changed, confirmed by regenerating
+`contracts/test/RenderFixture.sol` and `contracts/test/ColourFixture.sol` and
+seeing an empty `git status`.
