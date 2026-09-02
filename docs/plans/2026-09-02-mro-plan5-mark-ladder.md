@@ -1753,10 +1753,20 @@ git commit -m "render: Break exchanges the rung colours, not the fills"
 - [ ] **Step 1: Re-measure the worst case in Foundry**
 
 `GasBudget.t.sol` asserts the day-364 worst case. Update the "every Mark" case to
-the maximal token the NEW ladder allows -- at most FIVE Marks, one per pair, and
-the maximal set is the one that draws the most: Hush, Static, Iris bought with
-the LEAF shape, Vessel, and Tint. Beat and Break are in the excluded halves of
-their pairs.
+the maximal token the NEW ladder allows -- at most FIVE Marks, one per pair.
+
+**CORRECTED 2026-09-02, by measurement. An earlier revision of this plan named
+STATIC here and that was WRONG.** Static is a same-length ink swap and adds no
+bytes; BEAT adds a whole `<defs><linearGradient>...</linearGradient></defs>`
+block. Measured in the same harness at day 364: the Static set costs 1,728,964
+gas / 10,441 bytes, the Beat set 1,738,180 / 10,651 -- 9,216 gas and 210 bytes
+more. The maximal set is **Hush, Beat, Iris bought with the LEAF shape, Vessel,
+Tint**. Static and Break are in the excluded halves of their pairs.
+
+The sweep says so independently: it prints the largest SVG across all 459
+combinations and names a BEAT-bearing one. If the worst-case selection and that
+`largest:` line ever disagree, THE SWEEP IS RIGHT -- it measured every
+combination, the selection is a guess.
 
 Run: `export PATH=$HOME/.foundry/bin:$PATH && cd contracts && forge test --match-contract GasBudget -vv`
 Expected: PASS, and the console prints the figures.
@@ -1804,6 +1814,14 @@ Expected: 459 combinations at 848 px, all decoding. About 21 minutes. Exceeds th
 
 Run: `~/scripts/safe-build.sh node tools/combination-sweep.mjs full`
 Expected: about 103 minutes, all 459 decoding at 256, 500, 848, 1080 and 1600 px.
+
+**THE FULL SWEEP MUST SURVIVE ITS OWN MEMORY CAP, and as first written it did
+not.** Measured 2026-09-02: an unbatched full run was SIGKILLed by
+`safe-build.sh` at the 3G ceiling after about 150 of 459 combinations. The
+848-only run completes because it rasterises ONE size; the full run holds five,
+and the 1600 px raster does the damage. Batch or slice it, and INSTRUMENT IT
+BEFORE RAISING THE CAP -- on this project a bulk render that looked too big has
+twice turned out to be a copying getter read in a loop.
 
 **Run the full sweep, not the cheap one.** At about two hours it is affordable as
 a pre-deploy gate, and this change introduces the first genuinely new geometry
