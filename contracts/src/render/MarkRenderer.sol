@@ -11,11 +11,12 @@ import {Palette} from "./Palette.sol";
 /// a pair, and this library still has to behave, which it does because no two
 /// Marks in different pairs ever write the same surface.
 ///
-/// Six of the ten draw at this point. Hush, Ache, Static, Beat, Vessel and Aura
-/// each claim one surface below. Iris Bought, Iris Earned, Tint and Break draw
-/// nothing yet -- the eyes and the inversion land in later tasks -- so their
-/// constants exist for `names()` and for the bit layout, and nothing in this
-/// file branches on them.
+/// Nine of the ten draw at this point. Hush, Ache, Static, Beat, Vessel and Aura
+/// each claim one surface below. Iris Bought, Iris Earned and Tint claim the
+/// eyes -- drawn by `EyeRenderer`, which `Renderer.svg` calls with the ink and
+/// ground this library selects. Break draws nothing yet -- the inversion lands
+/// in a later task -- so its constant exists for `names()` and for the bit
+/// layout, and nothing in this file branches on it.
 ///
 /// This library is almost entirely colour selection, which is why it is cheap:
 /// `FrameRenderer` and `CodeRenderer` already take their fills as parameters, so
@@ -53,6 +54,21 @@ library MarkRenderer {
     string internal constant ACHE_GHOST = "#e3ccd3";
     string internal constant VESSEL_GOLD = "#b8860b";
     string internal constant HUSH_QUIET = "#fdf3e3";
+
+    /// @notice Tint's two inks. Violet and gold, decided by the operator 2026-09-02 from
+    /// tools/tint-on-green-sheet.mjs, which rendered every candidate against
+    /// Static's green -- the surface that directly surrounds the eyes.
+    ///
+    /// Violet holds at a luma gap of 0.2 to the green at the top rung and still
+    /// reads instantly: the project's oldest measured rule, that a colour
+    /// separates by HUE and not by weight. Gold's gap runs 40 / 31 / 41 / 51 /
+    /// 61 up the ladder, warm against green.
+    ///
+    /// Heart red is out because the untinted Iris already draws in the token's
+    /// own colour; green is out because it is Static's and the noise touches the
+    /// eyes; near-black is out because it is what an ORDINARY QR eye looks like.
+    string internal constant TINT_VIOLET = "#9800fc";
+    string internal constant TINT_GOLD = "#b8860b";
 
     function has(uint256 marks, uint256 bit) internal pure returns (bool) {
         return marks & bit != 0;
@@ -110,6 +126,31 @@ library MarkRenderer {
     /// four sizes, so there is little room below this and none should be taken.
     function quietTint(uint256 marks) internal pure returns (string memory) {
         return has(marks, HUSH) ? HUSH_QUIET : "";
+    }
+
+    /// @notice The ink the eyes are drawn in.
+    /// @param heartInk the token's heart ink AFTER any Break exchange. Under
+    /// Break the noise takes the token's own colour, so drawing the eyes in that
+    /// colour would hide them in the noise they sit on.
+    function eyeInk(uint256 marks, string memory heartInk) internal pure returns (string memory) {
+        if (!has(marks, TINT)) return heartInk;
+        return ((marks >> 24) & 0xFF) == 0 ? TINT_VIOLET : TINT_GOLD;
+    }
+
+    /// @notice The colour actually under the code block, which the eye erases to.
+    function ground(uint256 marks) internal pure returns (string memory) {
+        return has(marks, HUSH) ? HUSH_QUIET : field(marks);
+    }
+
+    /// @notice The shape index. The EARNED Iris is always the target.
+    function irisShape(uint256 marks) internal pure returns (uint8) {
+        if (has(marks, IRIS_EARNED)) return 0;
+        return uint8((marks >> 16) & 0xFF);
+    }
+
+    /// @notice The run stored when the earned Iris was applied, or 0.
+    function irisRun(uint256 marks) internal pure returns (uint32) {
+        return uint32((marks >> 32) & 0xFFFFFFFF);
     }
 
     /// @notice Beat's gradient definition, or nothing.

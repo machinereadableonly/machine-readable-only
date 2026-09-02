@@ -6,11 +6,12 @@ import {MarkRenderer} from "../src/render/MarkRenderer.sol";
 import {Palette} from "../src/render/Palette.sol";
 
 /// @notice The ten Marks, and which surface each one claims.
-/// @dev Only six of the ten change the image. Iris Bought, Iris Earned and Tint
-/// draw the eyes (Task 6) and Break is the inversion (Task 7); none of those are
-/// built yet. Every colour here must match the constant of the same name in
-/// tools/render-token.mjs, which the Renderer differential test then checks end
-/// to end.
+/// @dev Nine of the ten change the image. Iris Bought, Iris Earned and Tint
+/// claim the eyes -- selection tested here (eyeInk, ground, irisShape, irisRun),
+/// drawing tested in EyeRenderer.t.sol and end to end in Renderer.t.sol. Break
+/// is the inversion (Task 7) and is not built yet. Every colour here must match
+/// the constant of the same name in tools/render-token.mjs, which the Renderer
+/// differential test then checks end to end.
 contract MarkRendererTest is Test {
     uint256 constant NONE = 0;
     string constant STREAK = "#c8102e";

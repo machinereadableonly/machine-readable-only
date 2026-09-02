@@ -105,8 +105,8 @@ contract RendererTest is Test {
     function test_everyMarkAtOnceMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(365 * 10, 400, 1000, 1000);
         v.marks = ALL_MARKS;
-        _diff("every drawn mark", v, 10079,
-            0x728f2d92a9c037981e61f977003e6906d1ccaf8db0d680516987084cade02c99);
+        _diff("every drawn mark", v, 10976,
+            0x9926de14952c582758e63867875c31734df52fb322a88fc796993e13b04840c1);
     }
 
     function test_aSealedTokenMatchesTheJavascriptReference() public view {
@@ -114,6 +114,89 @@ contract RendererTest is Test {
         v.resting = true;
         _diff("sealed at rest", v, 9117,
             0x3d365a93f4dc7bb11a537cfa45146857fe16807f7872184787c2cf149262be88);
+    }
+
+    function test_theEyesAreDrawnLastOverTheNoise() public view {
+        // A Static + Iris token: Static already recolours the finder patterns,
+        // because they are ordinary code modules. The eyes must land ON TOP of that
+        // and the erase-to-ground step is what makes it clean rather than a green
+        // square with a shape on it.
+        TokenView memory v = _view(200, 45, 1000, 1000);
+        v.marks = MarkRenderer.STATIC | MarkRenderer.IRIS_BOUGHT;   // shape 0, target
+        string memory s = r.svg(v);
+        // The code block is the LAST TWO <path> elements. Everything after them is
+        // eyes, so the tail of the SVG must open with the first eye's erase rect.
+        uint256 lastPath = _lastIndexOf(s, "<path fill=");
+        uint256 firstEye = _indexOfFrom(s, '<rect x=', lastPath);
+        assertLt(lastPath, firstEye, "the eyes must be emitted after the code paths");
+        assertLt(firstEye, bytes(s).length, "no eyes were emitted at all");
+    }
+
+    function test_tintOverridesTheUntintedEyeInk() public view {
+        // Untinted, the bought Iris draws in the token's own heart colour.
+        // Tint replaces it -- variant 0 violet, variant 1 gold -- regardless
+        // of what the live rung would otherwise put there.
+        TokenView memory v = _view(200, 45, 1000, 1000);
+        uint256 base = MarkRenderer.IRIS_BOUGHT | MarkRenderer.TINT;
+
+        v.marks = base;   // variant 0 -> violet
+        string memory violet = r.svg(v);
+        assertTrue(vm.contains(violet, "#9800fc"), "Tint variant 0 must draw violet eyes");
+
+        v.marks = base | (uint256(1) << 24);   // variant 1 -> gold
+        string memory gold = r.svg(v);
+        assertTrue(vm.contains(gold, "#b8860b"), "Tint variant 1 must draw gold eyes");
+
+        assertTrue(
+            keccak256(bytes(violet)) != keccak256(bytes(gold)),
+            "the two Tint variants must produce different images"
+        );
+    }
+
+    function test_theEarnedIrisEyeKeepsItsStoredRunColourAndNeverLapses() public view {
+        // The earned Iris was applied at a 100-day run -- the top tier -- and
+        // must keep drawing that colour even once the token has since lapsed
+        // all the way back down to the start tier. That is the whole point of
+        // the Mark: it stops tracking the lapse.
+        TokenView memory v = _view(200, 100, 1000, 1030);   // 30 days lapsed
+        v.marks = MarkRenderer.IRIS_EARNED | (uint256(100) << 32);
+        string memory out = r.svg(v);
+
+        string memory storedColour = Palette.colourAt(Palette.tierIndex(100));
+        string memory liveColour = Palette.colourAt(Palette.lapsedIndex(100, 1000, 1030));
+        assertTrue(
+            keccak256(bytes(storedColour)) != keccak256(bytes(liveColour)),
+            "sanity: the live rung must actually differ from the stored run"
+        );
+        assertTrue(vm.contains(out, storedColour), "the earned Iris must draw in the run it was applied at");
+    }
+
+    function test_theIrisAttributesAppearOnlyWhenAnIrisIsWorn() public view {
+        TokenView memory bare = _view(200, 45, 1000, 1000);
+        string memory bareUri = r.tokenURI(bare);
+        assertFalse(vm.contains(bareUri, "Iris Shape"), "no Iris Shape attribute without an Iris");
+        assertFalse(vm.contains(bareUri, "Iris Run"), "no Iris Run attribute without an Iris");
+
+        TokenView memory bought = _view(200, 45, 1000, 1000);
+        bought.marks = MarkRenderer.IRIS_BOUGHT | (uint256(2) << 16);   // shape 2, leaf
+        string memory boughtUri = r.tokenURI(bought);
+        assertTrue(
+            vm.contains(boughtUri, '{"trait_type":"Iris Shape","value":"leaf"}'),
+            "the bought route must name its shape"
+        );
+        assertFalse(vm.contains(boughtUri, "Iris Run"), "the bought route has no run to report");
+
+        TokenView memory earned = _view(200, 45, 1000, 1000);
+        earned.marks = MarkRenderer.IRIS_EARNED | (uint256(365) << 32);
+        string memory earnedUri = r.tokenURI(earned);
+        assertTrue(
+            vm.contains(earnedUri, '{"trait_type":"Iris Shape","value":"target"}'),
+            "the earned route is always target"
+        );
+        assertTrue(
+            vm.contains(earnedUri, '{"trait_type":"Iris Run","value":365}'),
+            "the earned route must report its stored run"
+        );
     }
 
     // ---------------------------------------------------------------------
@@ -244,6 +327,38 @@ contract RendererTest is Test {
             if (hit) return i;
         }
         revert("not found");
+    }
+
+    /// @dev Byte index of the LAST occurrence, or the string length if absent.
+    function _lastIndexOf(string memory hay, string memory needle) internal pure returns (uint256) {
+        bytes memory h = bytes(hay);
+        bytes memory k = bytes(needle);
+        uint256 found = h.length;
+        for (uint256 i = 0; i + k.length <= h.length; ++i) {
+            bool hit = true;
+            for (uint256 j = 0; j < k.length; ++j) {
+                if (h[i + j] != k[j]) { hit = false; break; }
+            }
+            if (hit) found = i;
+        }
+        return found;
+    }
+
+    /// @dev Byte index of the first occurrence at or after `from`, or the string
+    /// length if absent.
+    function _indexOfFrom(string memory hay, string memory needle, uint256 from)
+        internal pure returns (uint256)
+    {
+        bytes memory h = bytes(hay);
+        bytes memory k = bytes(needle);
+        for (uint256 i = from; i + k.length <= h.length; ++i) {
+            bool hit = true;
+            for (uint256 j = 0; j < k.length; ++j) {
+                if (h[i + j] != k[j]) { hit = false; break; }
+            }
+            if (hit) return i;
+        }
+        return h.length;
     }
 
     /// @notice Static may change the ink and nothing else.

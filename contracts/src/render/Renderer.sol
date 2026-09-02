@@ -5,6 +5,7 @@ import {Base64} from "solady/src/utils/Base64.sol";
 import {LibString} from "solady/src/utils/LibString.sol";
 
 import {CodeRenderer} from "./CodeRenderer.sol";
+import {EyeRenderer} from "./EyeRenderer.sol";
 import {FrameGeometry} from "./FrameGeometry.sol";
 import {FrameRenderer} from "./FrameRenderer.sol";
 import {HeartMask} from "./HeartMask.sol";
@@ -66,7 +67,33 @@ contract Renderer is IRenderer {
         uint256 rung = _rung(v);
         string memory colour = Palette.colourAt(rung);
         return string(
-            abi.encodePacked(_head(v, colour), _art(v, colour, MarkRenderer.noise(v.marks, rung)), "</svg>")
+            abi.encodePacked(
+                _head(v, colour),
+                _art(v, colour, MarkRenderer.noise(v.marks, rung)),
+                _eyes(v, colour),
+                "</svg>"
+            )
+        );
+    }
+
+    /// @dev The three reshaped finder patterns, drawn LAST -- over the noise,
+    /// the frame and the heart -- so the erase-to-ground step lands cleanly
+    /// even on a token wearing Static, whose green already recolours these
+    /// same modules as ordinary code. Empty when no Iris is worn, so the
+    /// finder patterns stay ordinary code modules exactly as they are today.
+    function _eyes(TokenView memory v, string memory colour) private pure returns (string memory) {
+        if (!MarkRenderer.has(v.marks, MarkRenderer.ANY_IRIS)) return "";
+        // The EARNED Iris does not lapse: its colour comes from the run stored
+        // at apply time, not the live rung, which is the whole point of the
+        // Mark -- it stops tracking the lapse.
+        string memory base = MarkRenderer.has(v.marks, MarkRenderer.IRIS_EARNED)
+            ? Palette.colourAt(Palette.tierIndex(MarkRenderer.irisRun(v.marks)))
+            : colour;
+        return EyeRenderer.eyes(
+            _blockOff(v.level) + QUIET,
+            MarkRenderer.irisShape(v.marks),
+            MarkRenderer.eyeInk(v.marks, base),
+            MarkRenderer.ground(v.marks)
         );
     }
 
@@ -237,9 +264,32 @@ contract Renderer is IRenderer {
                 _num("Children", v.seedsGiven),
                 _str("Resting", v.resting ? "yes" : "no"),
                 _str("Sunset", v.sunset ? "yes" : "no"),
+                _irisAttrs(v.marks),
                 '{"trait_type":"Marks","value":', MarkRenderer.names(v.marks), "}"
             )
         );
+    }
+
+    /// @dev "Iris Shape" and "Iris Run", emitted only when an Iris is worn.
+    ///
+    /// "Iris Shape" is emitted for BOTH routes -- the earned Iris does have a
+    /// shape (always "target") and an agent reading the JSON should not have
+    /// to know that "absent means target". "Iris Run" is emitted for the
+    /// EARNED route only, because it is the thing the bought route does not
+    /// have.
+    function _irisAttrs(uint256 marks) private pure returns (string memory) {
+        if (!MarkRenderer.has(marks, MarkRenderer.ANY_IRIS)) return "";
+        string memory shapeAttr = _str("Iris Shape", _irisShapeName(MarkRenderer.irisShape(marks)));
+        if (!MarkRenderer.has(marks, MarkRenderer.IRIS_EARNED)) return shapeAttr;
+        return string(
+            abi.encodePacked(shapeAttr, _num("Iris Run", MarkRenderer.irisRun(marks)))
+        );
+    }
+
+    function _irisShapeName(uint8 shape) private pure returns (string memory) {
+        if (shape == 1) return "squircle";
+        if (shape == 2) return "leaf";
+        return "target";
     }
 
     /// @dev "212/365". Cells shown is capped at 365 even though level is not.
