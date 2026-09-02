@@ -233,8 +233,10 @@ test("every drawn mark changes the image without breaking the scan", () => {
 });
 
 test("a mark that does not draw yet leaves the image alone", () => {
-  // Break is the inversion (Task 7) and Iris Bought is the eyes (Task 6) --
-  // neither is built, so neither may change the image today.
+  // Break is the inversion (Task 7) and is not built yet, so it may not
+  // change the image. Iris Bought used to be in this test too -- it drew
+  // nothing before Task 6 built the eyes -- and was removed when that
+  // stopped being true, rather than left here asserting something false.
   const base = render({ level: 200, streak: 45, years: 0 });
   assert.equal(render({ level: 200, streak: 45, years: 0, marks: [BREAK] }), base,
     "break should not touch the image yet");
