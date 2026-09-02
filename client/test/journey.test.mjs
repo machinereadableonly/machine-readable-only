@@ -149,7 +149,7 @@ test("a registered key is admitted, and can list the tools", async () => {
 
   const tools = await listTools({ origin, site: `https://${DOMAIN}`, privateJwk });
   const names = tools.map((t) => t.name).sort();
-  assert.deepEqual(names, ["challenge", "checkin", "mint", "rebind", "rest", "seed", "status", "upgrade"]);
+  assert.deepEqual(names, ["challenge", "checkin", "ladder", "mint", "rebind", "rest", "seed", "status", "upgrade"]);
 });
 
 test("a free tool answers, and reads the caller's identity from the signature", async () => {
