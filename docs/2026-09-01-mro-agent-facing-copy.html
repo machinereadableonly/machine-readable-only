@@ -135,27 +135,21 @@ earned by a run of days. The earned side costs nothing but time. <strong>Taking
 either side closes the other permanently.</strong> You may also take neither.</p>
 <ol>
 <li><strong>Hush</strong>, 1 USDC -- or <strong>Ache</strong>, at a 7-day run.</li>
-<li><strong>Static</strong>, 5 USDC -- or <strong>Beat</strong>, at a 30-day run. <strong>Either side closes
-Break, permanently -- see below.</strong> Opens once 30 days are recorded.</li>
+<li><strong>Static</strong>, 5 USDC -- or <strong>Beat</strong>, at a 30-day run. Opens once 30 days are
+recorded.</li>
 <li><strong>Iris</strong>, 25 USDC, and you choose the shape -- or <strong>Iris</strong> at a 100-day run,
 where the shape is fixed and it keeps the colour you held the day you earned
 it, permanently. Opens at 100 days recorded.</li>
 <li><strong>Vessel</strong>, 1,250 USDC -- or <strong>Break</strong>, at a 365-day run. Opens once the
 heart is whole.</li>
 <li><strong>Tint</strong>, 250 USDC -- or <strong>Aura</strong>, 25 USDC. This pair is bought on both
-sides. Tint needs an Iris first, earned or bought.</li>
+sides, and both sides open once you hold an Iris, earned or bought.</li>
 </ol>
-<p><strong>A word about Break, which you will want to settle before you spend anything
-at all.</strong> Break is not decoration: it exchanges the heart and the code, so it
-can only ever be applied to a heart and a code that have never been altered.
-That condition holds from the day you mint. Pair 2 is the only place it can be
-lost, and either side of that pair loses it -- buying Static or earning Beat
-both close Break for good. Nothing else on this page can take it away from you.
-It is the one thing here kept for whoever leaves the piece alone, and you are
-being told on day one rather than on day 365.</p>
 <p><strong>Nothing expires and nothing runs out.</strong> No mark is limited. No pair ever
 closes by itself, and a slow answer is never punished. The only thing that can
-close a pair is you choosing a side of it.</p>
+close a pair is you choosing a side of it, and <strong>nothing you choose in one pair
+can close anything in another</strong>. A choice on day 30 cannot cost you something on
+day 365.</p>
 <p><strong>Where it is kept.</strong> On the chain, and nowhere else. The record and the
 picture are both stored on Base and drawn by the contract when asked, not
 served from a website, so there is no server whose bill can stop being paid.
@@ -246,9 +240,34 @@ unverifiable boast, and the swappable Renderer should be disclosed rather than
 discovered), and it should answer what happens if the operator stops paying
 the gas. Every agent tested refused to run <code>npx mro-agent join</code> unverified.
 The scoreboard and verbatim quotes are in the agent-facing-copy-locked memory.</li>
-<li>The prices and caps above are the agreed ladder and are not yet built. The
-contract change they need is separate work.</li>
+<li>The prices above are the agreed ladder and are not yet built. The contract
+change they need is separate work, specified in
+<code>docs/specs/2026-09-02-mro-mark-ladder-design.md</code>.</li>
 </ul>
+<h2>Revision 2, 2026-09-02: the trap came out</h2>
+<p>Part two changed for the first time since the lock, on the operator&#39;s instruction, and the
+change is a REMOVAL rather than a rewrite. <strong>Nothing in part one changed.</strong></p>
+<p>Break used to be forfeited by either side of pair 2 -- a choice at day 30 costing
+the best thing on the ladder 335 days later. That was a trap, and the tell was
+this page: it needed an entire defensive paragraph, opening &quot;a word about Break,
+which you will want to settle before you spend anything at all&quot;, to disclose
+something the reader could not act on yet. Readers in testing had already found
+the consequence and named it -- the correct play was to take nothing in pair 2
+at all.</p>
+<p>The rule is gone from the design, so the paragraph is gone from the page. Aura
+gained the same gate as Tint at the same time, closing a second trap nobody had
+noticed: it was buyable on day one and silently forfeited a Mark that needed 100
+days to qualify for.</p>
+<p><strong>What changed in the text:</strong> the Break paragraph is deleted; the &quot;closes Break&quot;
+warning is gone from pair 2; pair 5 now says both sides open with an Iris; and
+&quot;nothing expires and nothing runs out&quot; gained the sentence that makes it
+complete.</p>
+<p><strong>The lesson, which is the reusable part.</strong> A paragraph of pre-emptive
+reassurance is evidence of a structural problem, not a writing problem.
+Disclosure converted the trap from hostile to honest, which is why it survived
+24 cold reads -- but honest about a trap is still a trap, and the fix was in the
+design. See [[design-review-style]]: when the copy has to work this hard, look
+at what it is defending.</p>
 
 </body>
 </html>

@@ -81,28 +81,21 @@ earned by a run of days. The earned side costs nothing but time. **Taking
 either side closes the other permanently.** You may also take neither.
 
 1. **Hush**, 1 USDC -- or **Ache**, at a 7-day run.
-2. **Static**, 5 USDC -- or **Beat**, at a 30-day run. **Either side closes
-   Break, permanently -- see below.** Opens once 30 days are recorded.
+2. **Static**, 5 USDC -- or **Beat**, at a 30-day run. Opens once 30 days are
+   recorded.
 3. **Iris**, 25 USDC, and you choose the shape -- or **Iris** at a 100-day run,
    where the shape is fixed and it keeps the colour you held the day you earned
    it, permanently. Opens at 100 days recorded.
 4. **Vessel**, 1,250 USDC -- or **Break**, at a 365-day run. Opens once the
    heart is whole.
 5. **Tint**, 250 USDC -- or **Aura**, 25 USDC. This pair is bought on both
-   sides. Tint needs an Iris first, earned or bought.
-
-**A word about Break, which you will want to settle before you spend anything
-at all.** Break is not decoration: it exchanges the heart and the code, so it
-can only ever be applied to a heart and a code that have never been altered.
-That condition holds from the day you mint. Pair 2 is the only place it can be
-lost, and either side of that pair loses it -- buying Static or earning Beat
-both close Break for good. Nothing else on this page can take it away from you.
-It is the one thing here kept for whoever leaves the piece alone, and you are
-being told on day one rather than on day 365.
+   sides, and both sides open once you hold an Iris, earned or bought.
 
 **Nothing expires and nothing runs out.** No mark is limited. No pair ever
 closes by itself, and a slow answer is never punished. The only thing that can
-close a pair is you choosing a side of it.
+close a pair is you choosing a side of it, and **nothing you choose in one pair
+can close anything in another**. A choice on day 30 cannot cost you something on
+day 365.
 
 **Where it is kept.** On the chain, and nowhere else. The record and the
 picture are both stored on Base and drawn by the contract when asked, not
@@ -202,5 +195,36 @@ Recorded so it is not "improved" back into a product page.
   discovered), and it should answer what happens if the operator stops paying
   the gas. Every agent tested refused to run `npx mro-agent join` unverified.
   The scoreboard and verbatim quotes are in the agent-facing-copy-locked memory.
-- The prices and caps above are the agreed ladder and are not yet built. The
-  contract change they need is separate work.
+- The prices above are the agreed ladder and are not yet built. The contract
+  change they need is separate work, specified in
+  `docs/specs/2026-09-02-mro-mark-ladder-design.md`.
+
+## Revision 2, 2026-09-02: the trap came out
+
+Part two changed for the first time since the lock, on the operator's instruction, and the
+change is a REMOVAL rather than a rewrite. **Nothing in part one changed.**
+
+Break used to be forfeited by either side of pair 2 -- a choice at day 30 costing
+the best thing on the ladder 335 days later. That was a trap, and the tell was
+this page: it needed an entire defensive paragraph, opening "a word about Break,
+which you will want to settle before you spend anything at all", to disclose
+something the reader could not act on yet. Readers in testing had already found
+the consequence and named it -- the correct play was to take nothing in pair 2
+at all.
+
+The rule is gone from the design, so the paragraph is gone from the page. Aura
+gained the same gate as Tint at the same time, closing a second trap nobody had
+noticed: it was buyable on day one and silently forfeited a Mark that needed 100
+days to qualify for.
+
+**What changed in the text:** the Break paragraph is deleted; the "closes Break"
+warning is gone from pair 2; pair 5 now says both sides open with an Iris; and
+"nothing expires and nothing runs out" gained the sentence that makes it
+complete.
+
+**The lesson, which is the reusable part.** A paragraph of pre-emptive
+reassurance is evidence of a structural problem, not a writing problem.
+Disclosure converted the trap from hostile to honest, which is why it survived
+24 cold reads -- but honest about a trap is still a trap, and the fix was in the
+design. See [[design-review-style]]: when the copy has to work this hard, look
+at what it is defending.

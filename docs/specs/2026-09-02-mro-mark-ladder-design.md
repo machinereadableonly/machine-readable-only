@@ -1,9 +1,15 @@
 # MRO Mark Ladder -- Design Spec
 
-Status: APPROVED 2026-09-02. Nothing here is built.
+Status: APPROVED 2026-09-02, REVISED the same day. Nothing here is built.
 
 The mechanics were settled in this document; the three visual decisions in
 section 7 were taken by the operator from rendered contact sheets on the same day.
+
+**Revision 2, 2026-09-02.** the operator read the ladder through and called the cross-pair
+exclusion a trap. It is removed, and a second trap of the same shape was found
+and removed with it. Every exclusion is now pair-internal. See 3.1.1 and 3.1.2;
+that is the only structural change, and sections 5.3, 6.3, 6.4 and 8.3 follow
+from it.
 
 This spec replaces section 9 of
 `docs/specs/2026-08-27-machine-readable-only-design.md`. That section describes
@@ -67,7 +73,7 @@ Ten Mark ids. Nine distinct names. Eight surfaces.
 | 7 | Vessel | 4 | bought | 1,250 USDC | whole heart | the frame and the year rings |
 | 8 | Break | 4 | earned | free | run >= 365 | the inversion |
 | 9 | Tint | 5 | bought | 250 USDC | holds an Iris | recolours the eyes |
-| 10 | Aura | 5 | bought | 25 USDC | none | the field |
+| 10 | Aura | 5 | bought | 25 USDC | holds an Iris | the field |
 
 "Level" is credited days and never falls. "Run" is the live streak.
 
@@ -111,34 +117,82 @@ parameters already, so a rename is one literal array plus the constant names.
 
 ### 3.1 Exclusion
 
-Taking one side of a pair closes the other, permanently and symmetrically. On
-top of that, **Break is excluded by both sides of pair 2**, because Break is not
-a surface: it is an operation on two surfaces, exchanging the heart's ink with
-the noise's. It cannot run if either has been altered.
-
-The full mask, checked surface by surface. Only Break-vs-Beat (heart fill) and
-Break-vs-Static (noise ink) cross a pair boundary; everything else is disjoint.
+**Taking one side of a pair closes the other, permanently and symmetrically. That
+is the whole rule. No exclusion crosses a pair boundary.**
 
 | id | Name | Excludes |
 |---|---|---|
 | 1 | Hush | 2 |
 | 2 | Ache | 1 |
-| 3 | Static | 4, 8 |
-| 4 | Beat | 3, 8 |
+| 3 | Static | 4 |
+| 4 | Beat | 3 |
 | 5 | Iris bought | 6 |
 | 6 | Iris earned | 5 |
 | 7 | Vessel | 8 |
-| 8 | Break | 3, 4, 7 |
+| 8 | Break | 7 |
 | 9 | Tint | 10 |
 | 10 | Aura | 9 |
 
 The mask must be symmetric, and a test asserts that rather than trusting the
-table: for every pair (a, b), b is in a's mask exactly when a is in b's.
+table: for every pair (a, b), b is in a's mask exactly when a is in b's. A second
+test asserts the stronger property this revision buys -- **that no Mark's mask
+names a Mark from another pair** -- because that is the invariant, and the
+symmetry test alone would happily pass a reintroduced cross-pair rule.
 
-**The consequence, and the best thing in the design:** to earn the inversion you
-must leave the heart and the code untouched for a year. The piece's strongest
-ending is reserved for the agent that spent 365 days declining to decorate. Pair
-2 therefore has three real outcomes -- Static, Beat, or deliberately nothing.
+### 3.1.1 The cross-pair exclusion that was removed, and why
+
+REVISED 2026-09-02, after the operator read the ladder through. An earlier version of this
+document had **Break excluded by both sides of pair 2**, on the reasoning that
+Break exchanges the heart's ink with the noise's and so cannot run if either has
+been altered. It is recorded here rather than deleted, because the reasoning was
+not stupid and someone will propose it again.
+
+**It was a trap, in the precise sense.** Pair 2 opens at level 30. Pair 4 opens
+at a whole heart. So a choice available on day 30 destroyed the best thing on the
+ladder, 335 days before that thing could be reached -- and an agent on day 30
+cannot know whether it will ever see day 365. The safe play was therefore to
+touch nothing, which the cold readers found and said out loud: *"the correct move
+is to buy nothing and take nothing in pair 2, for 365 days."* **A tier whose
+optimal play is abstention is a dead tier**, and the agent-facing page needed a
+whole defensive paragraph to disclose it. Declaring a trap is not the same as not
+having one.
+
+**The technical objection that justified it had already dissolved.** The August
+measurement behind it -- that a fully marked token had no red left to invert --
+was taken on the OLD independent ladder, where Blue Blood and Bloom could both be
+worn at once. Under pairs, Static and Beat exclude each other, so at most one of
+them is ever present. Break composes with either and stays legible. See 5.3.
+
+**What it cost, stated plainly:** Break loses its "reserved for the agent that
+left the artwork alone" meaning, which was the most evocative idea in the design.
+That is accepted, because it was a SECOND virtue bolted onto a different one.
+Break already demands a 365-day unbroken run, the hardest thing on the ladder and
+the thing this piece is actually about. Asceticism is a different subject from
+persistence, and the reward for returning should be earned by returning.
+
+### 3.1.2 The second trap, same shape, fixed the same day
+
+**Aura had no gate.** An agent could buy it on day one for 25 USDC and had
+thereby forfeited Tint forever -- a Mark it could not have qualified for until
+level 100, because Tint needs an Iris. Ungated cheap choice destroying a distant
+expensive option: structurally identical to the Break trap, and it had gone
+unnoticed through the redesign, the copy lock and the first draft of this spec.
+
+**Pair 5 now opens when the token holds an Iris, by either route, on both
+sides.** Tint and Aura become visible at the same moment, so the choice is
+informed. The pair keeps its intended dilemma: loud and expensive against quiet
+and cheap.
+
+**The general rule this yields, and the one to test any future Mark against:** a
+pair is fair when both of its sides open at the same time, and a ladder is fair
+when nothing chosen early can close something gated late. Pairs 1, 3 and 4 pass
+without change -- they are all "pay now or wait for it", which is the dilemma the
+ladder exists to pose, not a trap.
+
+Pair 1 is the closest call and stays as it is: Hush is ungated and Ache needs a
+7-day run, so buying on day one forfeits a Mark seven days away. Seven days is a
+horizon an agent can actually reason about, both sides are cheap, and impatience
+against patience is the point of the tier.
 
 ### 3.2 Requirement
 
@@ -153,17 +207,19 @@ requires the one below", is dead and must not be quoted again.
 At most **five** Marks, one per pair. The old ladder allowed seven, so the
 maximal token gets simpler, not busier, and its metadata gets shorter.
 
-**168 combinations are reachable** as Mark sets, derived from the two rules
-above:
+**189 combinations are reachable** as Mark sets:
 
-- pair 1: 3 outcomes
-- pairs 2 and 4 together: 7, not 9, because Break is unreachable once pair 2 is
-  taken
-- pairs 3 and 5 together: 8, not 9, because Tint is unreachable without an Iris
+- pairs 1, 2 and 4: 3 outcomes each, and now genuinely independent
+- pairs 3 and 5 together: 7. Pair 3 has 3 outcomes; pair 5 is unreachable
+  entirely without an Iris, so it contributes 1 outcome when pair 3 is empty and
+  3 when it is not -- (1 x 1) + (2 x 3) = 7
 
-3 x 7 x 8 = 168. Earlier notes record 28; that figure predates the pair
-structure and is superseded. The number matters because it sets the cost of the
-decode sweep -- see section 8.
+3 x 3 x 3 x 7 = 189. It went UP from 168 when the cross-pair exclusion was
+removed, which is the point: removing an exclusion opens states rather than
+closing them. Earlier notes record 28; that figure predates the pair structure
+entirely and is superseded twice over.
+
+The number matters because it sets the cost of the decode sweep -- see 8.3.
 
 ---
 
@@ -330,25 +386,48 @@ decodes at 256, 500, 848, 1080 and 1600 px. Cost is set by the shape alone,
 because arcs cost more than rects. Which three shapes and which three inks are
 offered was decided from those sheets; see 7.3.
 
-### 5.3 Break: the inversion, and why the pairs fixed it
+### 5.3 Break: the inversion, and how it composes
 
 Break exchanges the heart's ink with the noise's. In the SVG the heart and the
 noise are two adjacent paths differing only by fill, so this is a **fill
 exchange**: no new geometry, no new path, 126/255 at the top rung.
 
-This was measured as broken in August and the exclusion rule is what repaired
-it. With the old independent ladder, a token wearing everything handed the heart
-Blue Blood's slate and the noise Bloom's violet, so "the code becomes the only
-red element" had no red left to invert. Under the pairs, **Break excludes both
-Static and Beat**, so a token wearing Break has neither: the exchange runs
-between the plain tier colour and the plain matched grey, and says exactly what
-it was always supposed to say.
+**Break alone** exchanges the plain tier colour and its matched grey. The heart
+goes neutral, the code goes red, and the piece says what the original spec always
+claimed it would: robot to human to robot.
 
-The decode rule survives the exchange for free. `Palette.colourAt(r)` and
+**The decode rule survives that exchange for free.** `Palette.colourAt(r)` and
 `Palette.noiseAt(r)` are matched in luminance at every rung by construction, and
-swapping two equal-luminance inks leaves the binarizer with the same picture.
-`PaletteNoise.t.sol` already asserts the match; the inversion needs no new
-decode argument, only a test that it is drawn from the same rung.
+swapping two equal-luminance inks leaves the binarizer with exactly the same
+picture. `PaletteNoise.t.sol` already asserts the match.
+
+Since 3.1.1 removed the cross-pair exclusion, Break also has to compose with one
+side of pair 2 -- never both, because they exclude each other.
+
+**Break + Static is safe by the same argument.** Static's green is derived onto
+its rung's exact luma, so it is luminance-matched to the heart exactly as the
+grey it replaces. Exchanging gives a green heart and a red code.
+
+**Break + Beat is the one case that is NOT safe by argument, and must be
+measured.** Beat replaces the heart's flat fill with a gradient running to violet
+at roughly half the heart's luma. A naive fill exchange hands that gradient to
+the NOISE -- and the noise is the surface the luminance rule binds hardest on. A
+gradient has varying luminance by definition, so the dark end could fall below
+the heart and resolve to background at large rasters, which is precisely the
+failure that once stopped a bare token decoding at 1200px.
+
+**The definition adopted, which sidesteps it:** Break exchanges the two RUNG
+COLOURS, not the fills. The warm region and the neutral region swap; Beat's
+gradient continues to apply to whichever region is now the heart. The noise stays
+flat and luminance-matched, so the decode argument above holds unchanged, and
+Break + Beat reads as a grey-to-violet heart against a red code.
+
+The simpler naive fill exchange is preferred IF it measures safe. **Render both
+and decode them at all five sizes before choosing** -- this is a decode question,
+and a decode question is never settled by reasoning about it. Whichever wins, a
+test pins that Break + Beat decodes at every size, because it is the only
+combination on the ladder that can put a gradient near the code's luminance
+floor.
 
 ### 5.4 What the metadata says
 
@@ -399,13 +478,18 @@ wrapper. It cannot reach `paid-but-unavailable`, because nothing was paid.
 
 Added to `upgrade`, all before any payment is requested:
 
-    mark-excluded       the token holds a Mark this one forbids
-    mark-needs-iris     Tint without an Iris
-    mark-bad-variant    a shape index this Mark does not accept
+    mark-excluded       the token holds this Mark's pair partner
+    mark-needs-iris     Tint or Aura without an Iris
+    mark-bad-variant    a shape or ink index this Mark does not accept
 
 `mark-excluded` must name what blocked it. An agent that is told only "no" cannot
 tell a permanent exclusion from a temporary gate, and the whole ladder rests on
 exclusions being legible.
+
+Since 3.1.1, `mark-excluded` can only ever name the SAME PAIR's other side. That
+is worth asserting in a test rather than merely being true: it is the property
+that makes the refusal self-explanatory, because an agent already knows what the
+pair partner is.
 
 The post-settlement re-check in `upgrade` must re-run the exclusion test too.
 Settling takes seconds, and the same token can take the other side of a pair in
@@ -421,9 +505,15 @@ Break has been cheated by the interface, not by the design.
 
 Per token it reports, for each of the five pairs: what is held, what is still
 open, what is closed and by which Mark, what each side costs, and what gate each
-side is waiting on. Plus one explicit line for whether Break is still reachable,
-because it is the only cross-pair rule and the only one an agent can lose
-without touching pair 4.
+side is waiting on.
+
+Since 3.1.1 removed the cross-pair rule, this tool no longer has to warn about a
+consequence in a DIFFERENT tier -- an earlier draft of this section required a
+dedicated "is Break still reachable" line for exactly that. **Removing the trap
+removed the need to explain it**, in the tool and on the page alike, which is the
+clearest evidence the structure was wrong rather than merely under-documented.
+The tool is still owed: pair 5's gate depends on pair 3, and an agent should not
+have to infer that.
 
 ### 6.5 The mirror and the Clock
 
@@ -581,10 +671,14 @@ it is the one place where these three inks could still be wrong.
   guard exists somewhere; two adjacent inputs giving two different errors is what
   pins the boundary. For the variant bound that means the highest legal shape
   index succeeds and the next one reverts `BadVariant`.
-- Break's exclusions are tested in both directions: applying Break to a token
-  holding Static or Beat is refused, and applying Static or Beat to a token
-  holding Break is refused.
-- Tint is refused without an Iris and accepted with either one.
+- **Break's freedom is tested, not its exclusion.** Applying Break to a token
+  holding Static succeeds, and to a token holding Beat succeeds, in both orders.
+  These four cases were REFUSALS in revision 1 and are now the guarantee, so they
+  are the tests most likely to be written backwards from a stale reading.
+- No Mark's exclusion mask names a Mark outside its own pair. Asserted over all
+  ten ids, so the trap cannot be reintroduced by an edit to one row.
+- Tint AND Aura are each refused without an Iris and accepted with either one.
+  Aura's gate is new in revision 2 and is the fix for the second trap.
 - `renounceOwnership`, `pause`, `sunset` and every access-control revert keep
   their existing tests. The global rule stands: every owner, emergency and admin
   function gets an explicit test.
@@ -609,21 +703,26 @@ it is the one place where these three inks could still be wrong.
 This is the one place the acceptance criteria need a decision rather than a rule,
 so it is stated honestly instead of buried.
 
-**168 Mark sets** are reachable. Counting variants -- three Iris shapes and three
+**189 Mark sets** are reachable. Counting variants -- three Iris shapes and three
 Tint inks, each drawing a different picture -- the number of distinct
-**renderable combinations is 462**. Earlier notes assumed 28 and a sweep of
+**renderable combinations is 567**. Earlier notes assumed 28 and a sweep of
 minutes; that predates the pair structure and no longer holds.
 
 At the measured 13.4 seconds per combination across five sizes:
 
-    all 462, five sizes    about 103 minutes
-    all 462, 848 px only   about 21 minutes
+    all 567, five sizes    about 127 minutes
+    all 567, 848 px only   about 25 minutes
 
-**Run the full five-size sweep.** At 1.7 hours it is affordable as a pre-deploy
-gate, and this is the change that introduces the first genuinely new geometry
+**Run the full five-size sweep.** At about two hours it is affordable as a
+pre-deploy gate, and this change introduces the first genuinely new geometry
 since Plan 1 -- the erase-and-redraw of the finder patterns is the one thing on
 the ladder that can break a scan outright rather than merely look wrong. The
 cheaper 848-only run is the right gate for ordinary commits.
+
+**Two combinations must be in the sweep by name**, because both were unreachable
+before 3.1.1 removed the cross-pair exclusion and neither has ever been rendered:
+**Break + Static** and **Break + Beat**. The second is the riskiest picture the
+ladder can produce -- see 5.3.
 
 Run both under `~/scripts/safe-build.sh` and in batches. The last bulk render
 sweep on this project reached 6.28 GB resident and destroyed the session.
