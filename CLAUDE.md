@@ -70,12 +70,21 @@ return visits, so the artwork is the agent's own history of coming back.
   real 401 challenge all verified through Cloudflare, Let's Encrypt cert to
   2026-12-02, PM2 `mro-warden` saved, port 3006 loopback-only plus `ufw deny`.
   A scoped `CLOUDFLARE_API_TOKEN_MRO` (one zone) IS now on the box, so Claude
-  drives DNS. STILL NOT INSTALLED: the Clock's systemd timer, and the mirror is
-  EMPTY so `/t/<id>` 404s until a reconcile backfills it. See
-  [[warden-deployed]]; (2) a real TREASURY_ADDRESS -- a placeholder is in use and
-  refuses to start on any chain but Base Sepolia; (3) settlement is still
-  unproven and needs testnet USDC; (4) the daily X post is deliberately unbuilt
-  and needs X API credentials.
+  drives DNS. **THE CLOCK'S SYSTEMD TIMER IS INSTALLED AND ENABLED as of
+  2026-09-03**, first fire 2026-09-04 00:05 UTC, with a smoke run proven clean
+  (`Result=success`, a real reconcile off Base Sepolia, nothing written on the
+  mint day). It needed `loginctl enable-linger` -- a precondition no document
+  had recorded, without which the user manager dies at logout and the timer
+  never fires -- and one unit fix (`623f9a5`): `ProtectKernelModules` cannot
+  work in a user unit, because dropping a capability needs `CAP_SETPCAP`. The
+  mirror now holds token 2, so `/t/2` returns 200; `/t/1` still 404s because
+  token 1 was minted against a SCRATCH mirror and reconcile pages from a later
+  block. See [[clock-timer-installed]] and [[warden-deployed]];
+  (2) a real TREASURY_ADDRESS -- a placeholder is in use and
+  refuses to start on any chain but Base Sepolia; (3) **settlement IS PROVEN as
+  of 2026-09-03** -- token 2 was minted by paying 1 USDC through the live door
+  and wears a bought Hush Mark; see [[settlement-proven]]; (4) the daily X post
+  is deliberately unbuilt and needs X API credentials.
   **PLAN 4 IS PART-BUILT as of 2026-09-02.** Tasks 2, 4, 5 and 8 are DONE:
   `docs/2026-09-01-mro-raw-protocol.md` documents the protocol request by
   request (transcribed from a live capture, `warden/tools/protocol-transcript.mjs`,
