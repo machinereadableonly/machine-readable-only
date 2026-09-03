@@ -6,8 +6,17 @@ tools/out/
 *.png
 
 # Real secret files, at any depth. The .example schema file stays tracked.
+#
+# `.env` alone matches ONLY a file named exactly that. On 2026-09-03 a backup
+# named `.env.bak.<timestamp>` slipped past it and was committed by a
+# `git add -A`, secret and all -- caught by tools/prepublish-check.mjs before
+# it was ever pushed. The patterns below close that: anything that starts with
+# `.env.` is a real configuration file unless it is a schema.
 .env
+.env.*
+*.env.bak*
 !*.env.example
+!*.env.template
 
 # SDD scratch workspace (ledgers, briefs, review packages) -- not part of the piece
 .superpowers/
