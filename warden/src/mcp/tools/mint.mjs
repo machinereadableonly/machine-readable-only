@@ -60,10 +60,17 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
           return { ok: false, reason: "paid-but-unavailable", detail: stillBlocked };
         }
 
-        // The id is assigned HERE, not by the contract. The contract takes it
-        // as an argument and reverts if taken, so the id promised now is the id
-        // that lands.
-        const tokenId = q.nextTokenId();
+        // The id is assigned HERE, not by the contract, so it has to be an id
+        // THE CHAIN will accept. The mirror's own max id is not that: an empty
+        // mirror beside a contract that already holds tokens proposes an id
+        // mint() reverts on, and the agent has already paid by this line.
+        // Same rule as every other gate above -- read the chain, never assume
+        // this database is the world.
+        const tokenId = await chain.freeIdFrom(q.nextTokenId());
+        if (tokenId === null) {
+          alert(`mint settled for key ${ctx.keyId} but no free token id could be established on chain`);
+          return { ok: false, reason: "paid-but-unavailable", detail: "chain-unavailable" };
+        }
         const day = today();
         try {
           // The two rows are ONE FACT: a token with no mint record holds a

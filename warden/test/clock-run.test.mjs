@@ -1,6 +1,9 @@
 // One Clock run, end to end, against stubs. No network, no key, no chain.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { encodeFunctionData } from "viem";
+import { MRO_ABI } from "../src/clock/abi.mjs";
+import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
 import { runClock, CHECKIN_CHUNK } from "../src/clock/run.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
@@ -21,6 +24,20 @@ function queueMint(q, db, tokenId, { solveState = "done" } = {}) {
 }
 
 /// A writer that says yes to everything and records what it was asked to send.
+///
+/// IT ALSO ENCODES. Recording arguments proves nothing about whether the
+/// contract would accept them: on 2026-09-03 the Clock passed a base64url key
+/// id to a bytes32 parameter and every test still passed, because no test
+/// double had ever tried to encode a call. encodeFunctionData against the real
+/// ABI turns a wrong type into a failure here rather than on the chain.
+function assertEncodable(functionName, args) {
+  try {
+    encodeFunctionData({ abi: MRO_ABI, functionName, args });
+  } catch (e) {
+    assert.fail(`${functionName} args are not ABI-encodable: ${e.shortMessage ?? e.message}`);
+  }
+}
+
 function okWriter(overrides = {}) {
   const sent = [];
   return {
@@ -29,6 +46,7 @@ function okWriter(overrides = {}) {
     async gasOk() { return { ok: true, gasPrice: 6_000_000n, capWei: 50_000_000n }; },
     async startRun() { return 0; },
     async send(functionName, args, opts) {
+      assertEncodable(functionName, args);
       sent.push({ functionName, args, label: opts?.label });
       return { ok: true, hash: `0x${sent.length}` };
     },
@@ -40,6 +58,19 @@ const noChain = {
   async getBlockNumber() { return 46_163_891n; },
   async getLogs() { return []; },
 };
+
+/// A chain that holds token `tokenId` for a given owner and agent key, so the
+/// Clock can tell ITS OWN mint apart from somebody else's token at the same id.
+const chainHolding = ({ owner, agentKeyId }) => ({
+  ...noChain,
+  async readContract({ functionName }) {
+    if (functionName === "ownerOf") return owner;
+    if (functionName === "viewOf") return { agentKeyId };
+    throw new Error(`unexpected read: ${functionName}`);
+  },
+});
+
+const MINE = { owner: "0x" + "11".repeat(20), agentKeyId: keyIdToBytes32("k1") };
 
 const baseArgs = (q) => ({
   q,
@@ -174,21 +205,66 @@ for (const errorName of ["NotWarden", "Sunset", "EnforcedPause"]) {
   });
 }
 
-// The mirror was behind, not wrong. Retrying this every night forever is noise.
-test("a mint the chain already has is marked written rather than retried nightly", async () => {
+/// TokenExists, every time, so the two tests below differ only in WHOSE token
+/// the chain already holds at that id.
+const tokenExistsWriter = () => okWriter({
+  async send(fn, args, opts) {
+    assertEncodable(fn, args);
+    this.sent.push({ functionName: fn, args, label: opts?.label });
+    return { ok: false, reason: "reverted-on-simulate", errorName: "TokenExists", errorArgs: ["1"] };
+  },
+});
+
+// Cause one: a previous run landed this very mint. The mirror was behind, not
+// wrong, and retrying it every night forever is noise.
+test("a mint the chain already has AS THIS MINT is marked written", async () => {
   const { db, q } = mirror();
   queueMint(q, db, 1);
   const alerts = [];
-  const writer = okWriter({
-    async send(fn, args, opts) {
-      this.sent.push({ functionName: fn, args, label: opts?.label });
-      return { ok: false, reason: "reverted-on-simulate", errorName: "TokenExists", errorArgs: ["1"] };
-    },
+  const summary = await runClock({
+    ...baseArgs(q), publicClient: chainHolding(MINE),
+    writer: tokenExistsWriter(), alert: (m) => alerts.push(m),
   });
-  const summary = await runClock({ ...baseArgs(q), writer, alert: (m) => alerts.push(m) });
   assert.deepEqual(summary.minted, []);
   assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "written");
-  assert.ok(alerts.some((a) => /already existed on chain/.test(a)));
+  assert.ok(alerts.some((a) => /already on chain as this mint/.test(a)));
+});
+
+// Cause two, and the one that cost a real paid mint on 2026-09-03. A DIFFERENT
+// token holds that id, so this mint never happened. Closing the row here would
+// report success for a token that does not exist, to an agent that has paid.
+test("a mint blocked by SOMEBODY ELSE'S token is left queued, not closed", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const alerts = [];
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainHolding({ owner: "0x" + "99".repeat(20), agentKeyId: "someone-else" }),
+    writer: tokenExistsWriter(), alert: (m) => alerts.push(m),
+  });
+  assert.deepEqual(summary.minted, []);
+  assert.equal(
+    db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued",
+    "a PAID mint that did not happen must not be marked written"
+  );
+  assert.deepEqual(summary.stuckMints, [1]);
+  assert.ok(alerts.some((a) => /DIFFERENT token/.test(a) && /needs a human/.test(a)));
+});
+
+// An unreadable chain is neither cause. Guessing either way is what the fix is
+// for, so the row stays queued and a human is told.
+test("a mint whose id cannot be identified on chain is left queued", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const alerts = [];
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: { ...noChain, async readContract() { throw new Error("rpc down"); } },
+    writer: tokenExistsWriter(), alert: (m) => alerts.push(m),
+  });
+  assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued");
+  assert.deepEqual(summary.stuckMints, [1]);
+  assert.ok(alerts.some((a) => /could not be identified/.test(a)));
 });
 
 test("a Mark that lands is written and its bit is set", async () => {
