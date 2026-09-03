@@ -177,19 +177,13 @@ export async function runClock({
       summary.aborted = result.errorName ?? result.reason;
       return summary;
     }
-    // A SIMULATED REVERT IS FINAL FOR THIS ROW. It means the chain, reading its
-    // own current state, refuses this exact call: an exclusion (permanent), a
-    // seal (irreversible), a gate the ladder and the contract disagree about (a
-    // wiring error), or -- until the ladder's contract is deployed -- a
-    // three-argument applyMark that does not exist on the address the Clock
-    // talks to. None of those fix themselves overnight, and re-sending them
-    // nightly buries the alert that matters under one that never changes.
+    // ONLY A NAMED, PERMANENT REFUSAL IS FINAL FOR THIS ROW -- see isFinalMark.
     //
     // EVERY OTHER FAILURE STAYS QUEUED, deliberately. send-failed,
     // gas-estimate-failed and reverted-on-chain can all be a public RPC having
     // a bad minute, and a token that paid $1,250.00 for a Vessel must not lose
     // it to one. The row is retried on the next run exactly as it always was.
-    if (result.reason === "reverted-on-simulate") {
+    if (isFinalMark(result)) {
       q.failMarkOrder(order.tokenId, order.upgradeId);
       summary.stuckMarks.push(order);
       alert(`clock: mark ${order.upgradeId} on token ${order.tokenId} is paid for and the chain refuses it (${result.errorName ?? "no named error"}) -- it will not be retried and needs a human`);
@@ -201,6 +195,43 @@ export async function runClock({
   summary.reconciled = await reconcile({ q, publicClient, contract, chainId, lastReconciledBlock, log });
 
   return summary;
+}
+
+/**
+ * Is this refusal permanent for this row, rather than the chain being behind?
+ *
+ * THE DISTINCTION IS EXPENSIVE TO GET WRONG IN EITHER DIRECTION. Too narrow and
+ * a doomed row is re-sent nightly, burying the alert that matters. Too broad and
+ * a paid Mark is destroyed by a transient fault -- and worse than destroyed,
+ * because a failed row also closes the OTHER side of its pair in reservedMask,
+ * so a token loses a Mark it paid for AND the one it could still have earned.
+ *
+ * So this is an ALLOWLIST of applyMark's own named errors that no later run can
+ * clear, not a test on `reason`. Keying it on `reverted-on-simulate` was too
+ * broad and is what this replaces: three of the errors below the line mean the
+ * chain is BEHIND, and a mint whose send failed is explicitly not run-level, so
+ * the Clock reaches applyMark for a token the chain has not seen yet.
+ *
+ * NOT here, and each for a reason:
+ *   NoSuchToken  the mint has not landed yet; it lands on a later run
+ *   MarkGate     a level or streak the chain has not credited yet
+ *   MarkRequires an Iris still queued, possibly in this very run
+ *   MarkInactive setUpgrade has not written this Mark on chain yet
+ *   (no name)    including, TODAY, a three-argument applyMark that does not
+ *                exist on the deployed address -- the queue must survive the
+ *                redeploy, not be emptied by it
+ * MarkAlreadyApplied is handled above, and settles the row as written.
+ * MarkIdOutOfRange is absent because applyMark cannot revert it: that check is
+ * in setUpgrade, and the tool's schema bounds the id to 1-10 before this.
+ */
+function isFinalMark(result) {
+  if (result.reason !== "reverted-on-simulate") return false;
+  return [
+    "MarkExcluded", // the pair's other side is on chain; permanent by design
+    "Resting", // the owner sealed the token; irreversible
+    "BadVariant", // the shape paid for is not one this Mark offers
+    "MarkSoldOut", // cannot fire while nothing is limited, and never un-sells
+  ].includes(result.errorName);
 }
 
 /// Errors that mean the next write will fail for the same reason. Continuing
