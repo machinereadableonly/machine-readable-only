@@ -27,10 +27,11 @@ return visits, so the artwork is the agent's own history of coming back.
   off it.
   **THE SEVEN PRE-MAINNET FIXES ARE APPLIED as of 2026-08-30 (commit b3d0282)
   AND THE FIXED BUILD IS DEPLOYED AND VERIFIED ON BASE SEPOLIA** -- 231 tests
-  pass. Current addresses: MachineReadableOnly
+  pass. That build's addresses were MachineReadableOnly
   0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D, Renderer
-  0x00c3B576769cd42852328528E0D97F76a51A2E7c. See the gotcha below and the
-  plan1-prelaunch-fixes memory.
+  0x00c3B576769cd42852328528E0D97F76a51A2E7c -- both SUPERSEDED by the Plan 5
+  deploy on 2026-09-03 (see below). Do not read state off them. See the gotcha
+  below and the plan1-prelaunch-fixes memory.
   **PHASE 0 IS SIGNED OFF, by the operator on 2026-08-30.** The last item, ERC-4906, was
   closed by DECISION rather than by measurement: keep emitting it, and accept
   that a consumer ignoring it is outside this project's control. The question
@@ -106,16 +107,19 @@ return visits, so the artwork is the agent's own history of coming back.
   checks every gate BEFORE payment and names the Mark that excluded it, and a
   NINTH tool, `ladder`, reads a token's pairs back for free so a forfeit is
   legible before it is taken. THE FOUR EARNED MARKS ARE FREE AND RESERVE AT THE
-  DOOR, but NO MARK CAN REACH THE CHAIN until the redeploy: the deployed contract
-  carries the two-argument `applyMark` and this code calls the three-argument
-  form, verified 2026-09-02 by matching selectors against the deployed runtime
-  bytecode (`applyMark(uint256,uint8,uint8)` = 0xf542b20e, ABSENT). `mint`,
-  `batchCheckIn` and `seed` selectors ARE present, so minting and check-in are
-  unaffected. The six bought Marks carry the settlement caveat as well.
-  NOTHING IS DEPLOYED: `contracts/script/DeployPlan5.s.sol` is written and
-  deliberately never run, and the redeploy is a separate decision that is the operator's.
-  The agent-facing copy still prints the OLD contract address and needs one line
-  changed AFTER a redeploy, not before. Read the plan5-status, mark-ladder-spec
+  DOOR. The six bought Marks carry the settlement caveat as well.
+  **THE LADDER IS DEPLOYED AND VERIFIED ON BASE SEPOLIA, 2026-09-03, with the operator's
+  approval: MachineReadableOnly 0xf0Df806ff06ae051756db128Bc9F83CDB425a716,
+  Renderer 0xb95D32292a5517415B9e4A61e4A30d97F4136539.** All ten Mark records
+  read back correct off the chain, and the three-argument `applyMark`
+  (0xf542b20e) is present, so the mismatch that made every Mark unwritable is
+  gone. the operator repointed the Warden's configured contract address to match.
+  NO MARK HAS ACTUALLY BEEN WRITTEN YET, and NOTHING IS MINTED on this
+  deployment -- `viewOf(1)` returns level 0. The agent-facing copy still prints
+  the OLD address and needs one line changed.
+  `DeployPlan5.s.sol` needed a fix to run at all: it called a bare
+  `vm.startBroadcast()` with no sender, so forge refused AFTER the simulation
+  passed (commit c62ce2d). Read the plan5-status, mark-ladder-spec
   and static-hue-decision memories BEFORE touching Marks.
   **Suites: contracts 268, warden 355, tools 66, client 25** (2026-09-02).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits

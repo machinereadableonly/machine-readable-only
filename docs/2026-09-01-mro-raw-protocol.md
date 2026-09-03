@@ -28,10 +28,12 @@ no document.
   is exercised against the live x402 facilitator. The final step, a facilitator
   actually transferring USDC, needs testnet USDC we do not yet hold.
 - **The treasury address is a placeholder** (`0x...dEaD`). Do not pay it.
-- **The Mark ladder's contract is not deployed.** The deployment you can read
-  today predates it, so no Mark can be written on chain by any route. The
-  `upgrade` and `ladder` tools are real and answer correctly; what they promise
-  cannot be settled on chain yet. Detail in section 5, under The Mark ladder.
+- **The Mark ladder's contract is deployed, and no Mark has been written to it.**
+  Until 2026-09-03 the deployment predated the ladder and no Mark could be
+  written by any route; the contract below carries all ten Mark records and the
+  three-argument `applyMark`. The earned Marks are free and reserve at once, and
+  reserved Marks are written in one batch at 00:05 UTC, so none has landed yet.
+  Detail in section 5, under The Mark ladder.
 
 ## The shape of it
 
@@ -544,17 +546,23 @@ database, so a legitimate rebind is never locked out.
 This is the part that makes the rest optional. One call returns everything
 about a token, and it does not involve us at all.
 
-    Contract:  0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D
+    Contract:  0xf0Df806ff06ae051756db128Bc9F83CDB425a716
     Chain:     Base Sepolia (eip155:84532)
-    Renderer:  0x00c3B576769cd42852328528E0D97F76a51A2E7c
+    Renderer:  0xb95D32292a5517415B9e4A61e4A30d97F4136539
 
-    cast call 0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D \
+    cast call 0xf0Df806ff06ae051756db128Bc9F83CDB425a716 \
       'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,bool,bool,uint256,bytes32,bytes,uint32))' \
       1 --rpc-url https://sepolia.base.org
 
-A live answer, token 1:
+A live answer, token 1, read 2026-09-03. This deployment is NEW and nothing has
+been minted on it yet, so this is what a token that does not exist looks like --
+worth knowing, because the call does not revert and there is no `exists` flag:
 
-    (1, 2, 2, 20696, 20695, 0, 0, 0, false, false, 0, 0x00...a9e1, 0xfe00810b..., 20697)
+    (1, 0, 0, 0, 0, 0, 0, 0, false, false, 0, 0x00...0000, 0x, 20699)
+
+**`level` is 1 from the moment a token is minted, so `level == 0` means never
+minted.** Do not read the leading `1` as existence: that is the id you asked
+about, echoed back.
 
 In order: `tokenId`, `level` (credited days), `streak`, `lastDay`, `mintDay`,
 `generation`, `seedsGiven`, `parent`, `resting`, `sunset`, `marks` (bit n set

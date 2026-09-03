@@ -33,7 +33,11 @@ const FACILITATOR = "https://x402.org/facilitator";
 const CHAIN_ID = 84_532;
 const NETWORK = `eip155:${CHAIN_ID}`;
 const TREASURY = "0x000000000000000000000000000000000000dEaD";
-const CONTRACT = "0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D";
+// The Plan 5 deployment, 2026-09-03: the first contract to carry the ten
+// Mark records and the three-argument applyMark. Held as a constant rather
+// than read from the environment so the capture is reproducible from a
+// clean checkout, the same reason DOMAIN and SECRET are constants here.
+const CONTRACT = "0xf0Df806ff06ae051756db128Bc9F83CDB425a716";
 const RPC = process.env.BASE_RPC_URL ?? "https://sepolia.base.org";
 const COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
 

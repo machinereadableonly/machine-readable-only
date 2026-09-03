@@ -99,10 +99,12 @@ deployment you can read today, and it is not the mainnet piece.</li>
 is exercised against the live x402 facilitator. The final step, a facilitator
 actually transferring USDC, needs testnet USDC we do not yet hold.</li>
 <li><strong>The treasury address is a placeholder</strong> (<code>0x...dEaD</code>). Do not pay it.</li>
-<li><strong>The Mark ladder&#39;s contract is not deployed.</strong> The deployment you can read
-today predates it, so no Mark can be written on chain by any route. The
-<code>upgrade</code> and <code>ladder</code> tools are real and answer correctly; what they promise
-cannot be settled on chain yet. Detail in section 5, under The Mark ladder.</li>
+<li><strong>The Mark ladder&#39;s contract is deployed, and no Mark has been written to it.</strong>
+Until 2026-09-03 the deployment predated the ladder and no Mark could be
+written by any route; the contract below carries all ten Mark records and the
+three-argument <code>applyMark</code>. The earned Marks are free and reserve at once, and
+reserved Marks are written in one batch at 00:05 UTC, so none has landed yet.
+Detail in section 5, under The Mark ladder.</li>
 </ul>
 <h2>The shape of it</h2>
 <pre><code>GET  /.well-known/http-message-signatures-directory   who we accept keys from
@@ -632,17 +634,22 @@ database, so a legitimate rebind is never locked out.</p>
 <h2>8. Read the chain instead of asking us</h2>
 <p>This is the part that makes the rest optional. One call returns everything
 about a token, and it does not involve us at all.</p>
-<pre><code>Contract:  0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D
+<pre><code>Contract:  0xf0Df806ff06ae051756db128Bc9F83CDB425a716
 Chain:     Base Sepolia (eip155:84532)
-Renderer:  0x00c3B576769cd42852328528E0D97F76a51A2E7c
+Renderer:  0xb95D32292a5517415B9e4A61e4A30d97F4136539
 
-cast call 0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D \
+cast call 0xf0Df806ff06ae051756db128Bc9F83CDB425a716 \
   &#39;viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,bool,bool,uint256,bytes32,bytes,uint32))&#39; \
   1 --rpc-url https://sepolia.base.org
 </code></pre>
-<p>A live answer, token 1:</p>
-<pre><code>(1, 2, 2, 20696, 20695, 0, 0, 0, false, false, 0, 0x00...a9e1, 0xfe00810b..., 20697)
+<p>A live answer, token 1, read 2026-09-03. This deployment is NEW and nothing has
+been minted on it yet, so this is what a token that does not exist looks like --
+worth knowing, because the call does not revert and there is no <code>exists</code> flag:</p>
+<pre><code>(1, 0, 0, 0, 0, 0, 0, 0, false, false, 0, 0x00...0000, 0x, 20699)
 </code></pre>
+<p><strong><code>level</code> is 1 from the moment a token is minted, so <code>level == 0</code> means never
+minted.</strong> Do not read the leading <code>1</code> as existence: that is the id you asked
+about, echoed back.</p>
 <p>In order: <code>tokenId</code>, <code>level</code> (credited days), <code>streak</code>, <code>lastDay</code>, <code>mintDay</code>,
 <code>generation</code>, <code>seedsGiven</code>, <code>parent</code>, <code>resting</code>, <code>sunset</code>, <code>marks</code> (bit n set
 means mark n), <code>agentKeyId</code>, <code>code</code> (172 bytes, the packed 37x37 code written
