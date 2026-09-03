@@ -1,52 +1,93 @@
 # Warden deployment runbook
 
-This is written now so nothing is retrofitted the day a domain exists. It is
-NOT applied: there is no domain yet, so none of these steps have been run.
-Nothing in this file should be executed until the operator says the domain is real and
-he wants to go live.
-
 Steps marked **[the operator ONLY]** need a browser, a payment method, or a dashboard
 login Claude does not have. Steps with no mark can be run by Claude once
 approved for that specific run.
 
-## 1. Register a domain -- [the operator ONLY]
+**Claude cannot `sudo` on this box.** Permission rules deny it, including
+`sudo -n true`. The root work is therefore NOT a list of commands to copy --
+it is folded into one script, `deploy/install-warden-site.sh`, which the operator runs
+with a single command. Plan for that rather than discovering it mid-deploy.
 
-Buying a domain needs a registrar account and a payment method. Once bought,
-tell Claude the domain so `<domain>` placeholders in this repo's deployment
-files can be filled in and `MRO_DOMAIN` set correctly everywhere it is read.
+## 1. Register a domain -- [the operator ONLY] -- DONE 2026-09-03
 
-## 2. Point DNS at the VPS via Cloudflare -- [the operator ONLY]
+`machinereadableonly.com`, at Cloudflare Registrar. One year with auto-renew,
+expires 2027-09-03, registrar lock on. The reasoning, the names rejected and
+the measured cost to the artwork are in
+`docs/2026-09-03-mro-domain-decision.md`.
 
-Add the domain to Cloudflare (or, if it is already there, add the record):
+**Every QR bitmap must be re-solved against this domain before any mainnet
+mint** -- a bitmap encodes its own url, so nothing solved against the
+`example.com` placeholder carries over.
 
-- An `A` record for `<domain>` (and `www` if wanted) pointing at the VPS's
-  public IP.
-- Proxy status: **Proxied** (orange cloud on). See the Cloudflare settings
-  section below for why.
+## 2. Point DNS at the VPS via Cloudflare
 
-This step needs the Cloudflare dashboard, which needs the operator's login.
+An `A` record for `<domain>` pointing at the VPS's public IP.
 
-## 3. Issue a TLS certificate
+**Proxy status must be OFF (grey cloud) for this step, and only turned ON
+after the certificate is issued.** This is the opposite of what this file said
+before 2026-09-03, and the old instruction would have failed issuance:
+certbot answers an HTTP-01 challenge on port 80, and behind the orange cloud
+that challenge reaches Cloudflare rather than this origin. The correct order
+is the one the shared VPS runbook gives:
 
-Once DNS has propagated and the vhost skeleton from `nginx.conf.example` is
-copied into `/etc/nginx/sites-available/<domain>` with the real domain
-substituted for every `<domain>` placeholder:
+    proxy OFF -> certbot -> (optional origin lock) -> proxy ON
+
+Claude can do this step directly. A Cloudflare API token scoped to
+`Zone / DNS / Edit` and `Zone / Zone Settings / Edit` on this single zone
+lives in the infra secrets file as `CLOUDFLARE_API_TOKEN_MRO`; it cannot see
+or touch any other zone. Claude reads it from a script and never prints it.
+Without that token this step is [the operator ONLY] in the dashboard.
+
+## 3. Install the vhost and issue the certificate -- [the operator runs one command]
 
 ```
-sudo certbot --nginx -d <domain>
+sudo bash ~/projects/machine-readable-only/warden/deploy/install-warden-site.sh
 ```
 
-This is the standard certbot nginx-plugin flow: it obtains the certificate,
-writes the `ssl_certificate` / `ssl_certificate_key` paths, and can manage the
-port-80-to-443 redirect. Enable the site and reload nginx first if it is not
-already enabled:
+That script substitutes the domain into `nginx.conf.example`, installs and
+enables the site, tests and reloads nginx, runs `certbot --nginx --redirect`,
+applies `ufw deny 3006`, and re-tests. It is idempotent and it checks its own
+preconditions -- it refuses if the domain does not resolve, and warns if the
+name resolves somewhere that is not this host, which is what an orange cloud
+looks like from here.
 
-```
-sudo ln -s /etc/nginx/sites-available/<domain> /etc/nginx/sites-enabled/<domain>
-sudo nginx -t && sudo systemctl reload nginx
-```
+Expect a **502 from the site until step 5 starts the Warden**. nginx is then
+proxying to a port with nothing behind it. That is not a broken deploy.
+
+### What the vhost does, and what changed
+
+The vhost is a **pure proxy**: every route, including `/` and `/llms.txt`, is
+answered by the Warden on `127.0.0.1:3006`.
+
+It used to serve those two documents plus `/client.mjs`, `/skill.md` and the
+key directory from disk under `root /srv/mro/warden/public`. That could never
+have worked from a checkout -- nginx runs as `www-data` and the repository
+sits under a `0750` home directory it cannot traverse -- and the `/srv` path
+implied a copy that drifts from the repository. Both routes moved into the
+Warden on 2026-09-03; `warden/test/static.test.mjs` pins them.
+
+`/client.mjs` and `/skill.md` still 404, and llms.txt says so in plain words.
+That is disclosed behaviour, not an oversight. They become real when the
+client is published.
 
 ## 4. Create the configuration file -- [the operator ONLY]
+
+**The file already exists as of 2026-09-03.** What it needed after the domain
+was registered was one key changed, and there is a script for that which
+prints no secret:
+
+```
+bash ~/projects/machine-readable-only/warden/deploy/set-domain.sh
+```
+
+It sets `MRO_DOMAIN`, takes a timestamped backup first, restores mode 600, and
+then reports all eight required variables by NAME and presence only -- so a
+missing or empty one is caught here rather than at `pm2 start`. It echoes only
+the four values that are public anyway (domain, chain id, contract address,
+facilitator URL) so they can be eyeballed for typos.
+
+The rest of this section is the original reference for what each variable is.
 
 `src/main.mjs` requires EIGHT environment variables and refuses to start,
 naming the first one missing, if any is absent. They come from a
@@ -170,9 +211,28 @@ These all need the Cloudflare dashboard.
 - **SSL/TLS mode: Full (Strict).** Requires a valid certificate on the
   origin (which step 3 provides) and validates it, rather than accepting
   any certificate or terminating TLS in plaintext to the origin.
-- **Proxy status: Proxied** (orange cloud), set already in step 2 -- confirm
-  it is still on before going live, since a flat/DNS-only record would
-  bypass all of the above.
+- **Proxy status: Proxied** (orange cloud). Step 2 deliberately leaves it
+  OFF so certbot can answer its challenge; this is where it gets turned back
+  ON, AFTER the certificate exists. A record left grey bypasses everything
+  above and exposes the origin IP directly. Claude can flip this with the
+  scoped token; it is only a dashboard step if that token is absent.
+
+### Optional hardening, after the proxy is back ON
+
+The other sites on this box refuse connections that did not come through
+Cloudflare, using the global map in
+`/etc/nginx/conf.d/cloudflare-allowlist.conf`:
+
+```
+if ($cf_real_ip_ok = 0) { return 403; }
+```
+
+The line is present but commented out in `nginx.conf.example`. Enable it only
+once the proxy is ON. Enabling it while the proxy is off makes the origin
+return 403 to everything including your own checks, which looks exactly like a
+broken deploy -- `127.0.0.1` is allowlisted, so local curl keeps working and
+hides it. Deliberately NOT part of the first deploy: get the piece live and
+verified, then harden.
 
 ## 8. If a visitor's signing fails
 
