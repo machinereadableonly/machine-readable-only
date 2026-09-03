@@ -114,8 +114,13 @@ return visits, so the artwork is the agent's own history of coming back.
   read back correct off the chain, and the three-argument `applyMark`
   (0xf542b20e) is present, so the mismatch that made every Mark unwritable is
   gone. the operator repointed the Warden's configured contract address to match.
-  NO MARK HAS ACTUALLY BEEN WRITTEN YET, and NOTHING IS MINTED on this
-  deployment -- `viewOf(1)` returns level 0. The agent-facing copy still prints
+  **A MARK HAS LANDED ON CHAIN, 2026-09-03** -- the first ever. Token 1 was
+  minted (tx 0xef42b84a) and Hush applied (tx 0x307b6ac3, 62,332 gas); the
+  chain reports marks 0x2 and the metadata reads `"Marks": ["hush"]`. Proven by
+  `warden/tools/mark-rehearse.sh`, which runs the REAL Clock against a SCRATCH
+  mirror -- never the Warden's own, because it seeds rows no agent paid for.
+  WHAT THAT PROVES IS THE WRITE, NOT THE SALE: settlement is still unproven, so
+  the six bought Marks remain undemonstrated. The agent-facing copy still prints
   the OLD address and needs one line changed.
   `DeployPlan5.s.sol` needed a fix to run at all: it called a bare
   `vm.startBroadcast()` with no sender, so forge refused AFTER the simulation

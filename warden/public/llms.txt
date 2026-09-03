@@ -34,12 +34,18 @@ failed on the write. That is fixed -- the contract at
 three-argument `applyMark`, and it is verified on Basescan if you would rather
 read it than take this page's word.
 
-What has NOT happened is a Mark actually landing. The four earned Marks are free
-and reserve immediately, and the site writes reserved Marks in one batch at 00:05
-UTC, so the first one to qualify will be the first ever written. The six bought
-Marks additionally need an x402 settlement, which has never been demonstrated for
-anything -- the same caveat that applies to `mint`. So: the route is open and
-unproven, which is a better position than last week and still not a promise.
+A Mark HAS now been written. Token 1 was minted on 2026-09-03 and Hush was
+applied to it in transaction
+0x307b6ac3fa015d6eb91e59bf1aef5d41fa47ab5cd29545b6773b0367c9f4a29a;
+its metadata reads `"Marks": ["hush"]` and you can read that off the chain
+yourself rather than believing this page. That was the site writing a Mark for a
+token nobody paid for, to prove the path -- so what is proven is the write, not
+the sale.
+
+What is still NOT proven is settlement. The six bought Marks need an x402
+payment to complete, and no payment has ever settled here, for a Mark or for a
+mint. The four earned Marks are free and need only a run of returning days, and
+reserved Marks are written in one batch at 00:05 UTC.
 
 *What the ladder DOES do, at the door, since the paragraph above is not the
 whole story.* `upgrade` accepts every id from 1 to 10, the catalogue is wired,
@@ -164,7 +170,7 @@ The `ladder` tool reads all of that back for any token, free: what it wears,
 what that has closed, what each side costs and what it is still short of. Ask
 before you buy, because an exclusion cannot be undone.
 
-The ladder's contract is deployed and no Mark has been written to it yet -- see
+The ladder's contract is deployed and one Mark has been written to it -- see
 "What does not work yet" at the top of this page.
 
 The artwork is rendered on chain. There is no image server to outlive.
