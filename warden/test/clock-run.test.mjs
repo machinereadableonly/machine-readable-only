@@ -377,3 +377,54 @@ test("MarkAlreadyApplied catches the mirror up instead of failing the order", as
   assert.deepEqual(summary.stuckMarks, []);
   assert.equal(alerts.filter((a) => /already on token/.test(a)).length, 1);
 });
+
+// N1, from the final re-review of Plan 5. Making EVERY simulated revert terminal
+// was too broad: three of applyMark's named errors mean "the chain is behind",
+// not "refused forever", and since a failed row also closes the other side of
+// its pair, treating one as final forfeits a Mark nobody refused.
+test("a revert that means the chain is behind stays queued, and lands on the retry", async () => {
+  const { db, q } = mirror();
+  // NoSuchToken is the reachable one: a mint whose send failed is explicitly not
+  // run-level, so the Clock goes on to applyMark for a token the chain has not
+  // seen yet. Under a blanket rule that cost the agent a paid Hush AND the free
+  // Ache in its pair, to one dropped socket.
+  queueMark(q, db, { upgradeId: 1 });
+  const behind = refusingWriter("NoSuchToken");
+  const summary = await runClock({ ...baseArgs(q), writer: behind });
+
+  assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "queued");
+  assert.deepEqual(summary.stuckMarks, []);
+
+  const second = okWriter();
+  await runClock({ ...baseArgs(q), writer: second });
+  assert.equal(second.sent.filter((s) => s.functionName === "applyMark").length, 1,
+    "the order was never retried once the token existed");
+  assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "written");
+});
+
+test("the gates the mirror can be wrong about are not terminal either", async () => {
+  // MarkGate is a level or streak the chain has not credited yet, and
+  // MarkRequires is an Iris still queued in this very run. Both resolve on their
+  // own; neither is the chain refusing the Mark itself.
+  for (const errorName of ["MarkGate", "MarkRequires", "MarkInactive"]) {
+    const { db, q } = mirror();
+    queueMark(q, db, { upgradeId: 9 });
+    const summary = await runClock({ ...baseArgs(q), writer: refusingWriter(errorName) });
+    assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status,
+      "queued", `${errorName} was treated as final`);
+    assert.deepEqual(summary.stuckMarks, [], `${errorName} was reported as stuck`);
+  }
+});
+
+// TODAY'S STATE, and the reason this is not merely theoretical. The deployed
+// contract has the TWO-argument applyMark, so the Clock's three-argument call
+// reverts with no named error at all. That must leave the queue intact for the
+// redeploy rather than killing every order taken before it.
+test("a revert with no named error is not terminal", async () => {
+  const { db, q } = mirror();
+  queueMark(q, db, { upgradeId: 3 });
+  const summary = await runClock({ ...baseArgs(q), writer: refusingWriter(null) });
+
+  assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "queued");
+  assert.deepEqual(summary.stuckMarks, []);
+});
