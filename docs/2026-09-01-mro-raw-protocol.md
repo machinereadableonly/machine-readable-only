@@ -28,12 +28,14 @@ no document.
   is exercised against the live x402 facilitator. The final step, a facilitator
   actually transferring USDC, needs testnet USDC we do not yet hold.
 - **The treasury address is a placeholder** (`0x...dEaD`). Do not pay it.
-- **The Mark ladder's contract is deployed, and no Mark has been written to it.**
-  Until 2026-09-03 the deployment predated the ladder and no Mark could be
-  written by any route; the contract below carries all ten Mark records and the
-  three-argument `applyMark`. The earned Marks are free and reserve at once, and
-  reserved Marks are written in one batch at 00:05 UTC, so none has landed yet.
-  Detail in section 5, under The Mark ladder.
+- **The Mark ladder's contract is deployed and a Mark has landed on it.** Until
+  2026-09-03 the deployment predated the ladder and no Mark could be written by
+  any route. The contract below carries all ten Mark records and the
+  three-argument `applyMark`, and Hush was written to token 1 in
+  0x307b6ac3fa015d6eb91e59bf1aef5d41fa47ab5cd29545b6773b0367c9f4a29a.
+  That was the site proving the path, not an agent buying anything: SETTLEMENT
+  is still unproven, so the six bought Marks remain undemonstrated. Detail in
+  section 5, under The Mark ladder.
 
 ## The shape of it
 
@@ -554,15 +556,19 @@ about a token, and it does not involve us at all.
       'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,bool,bool,uint256,bytes32,bytes,uint32))' \
       1 --rpc-url https://sepolia.base.org
 
-A live answer, token 1, read 2026-09-03. This deployment is NEW and nothing has
-been minted on it yet, so this is what a token that does not exist looks like --
-worth knowing, because the call does not revert and there is no `exists` flag:
+A live answer, token 1, read 2026-09-03. It was minted that day and carries one
+Mark, Hush:
 
-    (1, 0, 0, 0, 0, 0, 0, 0, false, false, 0, 0x00...0000, 0x, 20699)
+    (1, 1, 1, 20699, 20699, 0, 0, 0, false, false, 2, 0x00...0001, 0xfe00810b..., 20699)
+
+`marks` is 2 there, which is bit 1 set, which is Hush. The Mark set lives in bits
+1 to 10; bits 16 and up carry the Iris shape, the Tint ink and the earned run, so
+test `marks & 0xFFFE` for "wears any Mark" and never `marks != 0`.
 
 **`level` is 1 from the moment a token is minted, so `level == 0` means never
 minted.** Do not read the leading `1` as existence: that is the id you asked
-about, echoed back.
+about, echoed back, and it comes back the same for a token that was never
+minted.
 
 In order: `tokenId`, `level` (credited days), `streak`, `lastDay`, `mintDay`,
 `generation`, `seedsGiven`, `parent`, `resting`, `sunset`, `marks` (bit n set
