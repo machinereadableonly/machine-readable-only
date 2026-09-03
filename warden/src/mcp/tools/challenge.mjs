@@ -14,7 +14,9 @@ export function makeChallengeTool({ challengeSecret, domain }) {
     },
     async handler() {
       const { challenge, expires } = issueChallenge(challengeSecret);
-      return { challenge, expires, mcp: `https://${domain}/mcp`, docs: `https://${domain}/llms.txt` };
+      // `ok` even here, where nothing can refuse: a client should not have to
+      // learn which tools answer with it and which do not.
+      return { ok: true, challenge, expires, mcp: `https://${domain}/mcp`, docs: `https://${domain}/llms.txt` };
     },
   };
 }
