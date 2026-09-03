@@ -1094,6 +1094,22 @@ its new numbers can be trusted.
 artwork at any plausible length, and the codes must be re-solved against the
 real domain before minting regardless, since a bitmap encodes its own url.
 
+**NOTE ADDED 2026-09-03: the real domain was chosen and measured, and the
+slope above under-predicts it by about half.** The domain is
+`machinereadableonly.com`, whose payload is 12 characters longer than
+`example.com` rather than the 9 measured here. The linear estimate predicts
+roughly 0.8 to 1.1 points; the measured cost is **2.13 points**, averaged over
+ids 1, 12 and 55 (64.9 / 63.9 / 63.3 falling to 61.9 / 62.2 / 61.6). So the
+slope is not linear out to twelve characters, and 0.065 points per character
+should not be quoted as a general figure. Three ids is a small sample and no
+better slope is claimed from it.
+
+The conclusion above still holds in both of its parts: 2.13 points did not
+change the decision, and robustness again did not degrade -- all three solves
+passed the decode gate on their first-choice mask with zero rejections, against
+two of five needing a fallback under `example.com`. Full record in
+`docs/2026-09-03-mro-domain-decision.md`.
+
 ### Pulse: measured at last, and it busts the gas ceiling on one day
 
 Tasks 7, 8 and 9 each recorded the same placeholder -- "`animation_url` is
