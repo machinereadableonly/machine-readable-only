@@ -65,9 +65,13 @@ return visits, so the artwork is the agent's own history of coming back.
   entry by name while the good one landed, and reconcile paging five windows
   across 49,000 blocks. **Warden tests are now 283.** See the plan3-status and
   clock-live-lessons memories.
-  WHAT IS LEFT FOR the operator: (1) there is still no domain, so deployment is written
-  and never applied -- including the Clock's systemd timer, which is verified
-  but not installed; (2) a real TREASURY_ADDRESS -- a placeholder is in use and
+  WHAT IS LEFT FOR the operator: (1) deployment is written and never applied -- including
+  the Clock's systemd timer, which is verified but not installed. THE DOMAIN NO
+  LONGER BLOCKS THIS: `machinereadableonly.com` was decided and REGISTERED on
+  2026-09-03 (Cloudflare, 1 year, auto-renew on, expires 2027-09-03), so the
+  remaining gap is applying the deployment, not choosing a name. There is still
+  no Cloudflare API token on the box, so DNS records are dashboard-only for now;
+  (2) a real TREASURY_ADDRESS -- a placeholder is in use and
   refuses to start on any chain but Base Sepolia; (3) settlement is still
   unproven and needs testnet USDC; (4) the daily X post is deliberately unbuilt
   and needs X API credentials.
@@ -204,6 +208,19 @@ return visits, so the artwork is the agent's own history of coming back.
 
 ## Key Decisions (locked 2026-08-27)
 
+- **Domain:** `machinereadableonly.com`, DECIDED and REGISTERED 2026-09-03.
+  Cloudflare Registrar, 1 year with auto-renew, expires 2027-09-03, registrar
+  lock on, nameservers already Cloudflare. `.com` was chosen as a DURABILITY
+  decision, not a branding one: ICANN caps any registration at ten years, so
+  permanence is the sum of renewals, and a new gTLD can be removed from the root
+  zone if its registry fails (EBERO is explicitly temporary). A lapse is worse
+  than a dead link -- the QR embeds the url in the artwork permanently, so
+  whoever registers the name next controls what a minted token points at. A
+  ten-year term was recommended and the operator chose one year plus auto-renew; extending
+  is possible at any time. `agentsonly` / `onlyagents` were considered and
+  REJECTED (a live AI company holds `agentsonly.com`; the names describe the
+  door, not the artwork). Full record and the measured artwork cost:
+  `docs/2026-09-03-mro-domain-decision.md`. Do not re-open the name.
 - **Entry:** RFC 9421 / Web Bot Auth signed request, plus a 5-second
   stateless code-only challenge.
 - **Mint:** 1 USDC via x402 inside MCP (`@x402/mcp` + `@x402/evm`), raised
@@ -295,6 +312,20 @@ return visits, so the artwork is the agent's own history of coming back.
   the five exclusive pairs cap a token at five Marks, and the maximal LEGAL set
   is Hush + Beat + the bought Iris in leaf + Vessel + Tint. Do not quote the
   retired seven-Mark figures.
+- **EVERY QR BITMAP MUST BE RE-SOLVED against `machinereadableonly.com` before
+  any mainnet mint.** A bitmap encodes its own url, so nothing solved against
+  the `example.com` placeholder carries over -- including every Base Sepolia
+  token minted so far, which stay as they are because they are testnet. The real
+  payload is `https://machinereadableonly.com/t/<id>#`, 36 characters at id 1,
+  because it carries the scheme AND a trailing `#`. MEASURED 2026-09-03: the
+  heart costs **2.13 points** (64.9 / 63.9 / 63.3 falling to 61.9 / 62.2 / 61.6
+  on ids 1, 12, 55), which is about TWICE what phase0-results.md's 0.065-points-
+  per-character slope predicts. That slope came from a 9-character increase and
+  does NOT hold linearly to 12; do not quote it as a general figure. Robustness
+  did not degrade -- all three passed the decode gate on the first-choice mask
+  with zero rejections, against two of five needing a fallback under
+  `example.com`. Rendered comparison:
+  `tools/out/domain-compare/compare-whole.png`.
 - **A third party's CDN interpolates unless the SVG declares a size.** With no
   width/height it rasterises at the viewBox units -- 53 pixels, one per module
   -- then upscales that bitmap, and 54% of the results would not decode.
