@@ -73,22 +73,43 @@ systemctl reload nginx
 echo "   reloaded"
 
 say "5. verify"
-# Through Cloudflare: must still work. Direct to the origin with a Host header:
-# must now be refused. The second is the whole point of the lock.
+# Both checks are ASSERTED, and both can roll back. An earlier version of this
+# script checked only the Cloudflare side and printed DONE regardless of the
+# direct result -- so on 2026-09-03 it reported the origin locked while the
+# direct check had plainly returned 200.
+#
+# It polls because `systemctl reload` returns before the new workers have taken
+# over, and the first probe raced that swap: it read 200 from a worker still
+# running the old config, which looks identical to a lock that does not work.
+probe_direct() {
+  curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
+    --resolve "${DOMAIN}:443:${MYIP}" "https://${DOMAIN}/" || true
+}
+
+DIRECT=""
+for attempt in 1 2 3 4 5 6; do
+  DIRECT="$(probe_direct)"
+  [ "$DIRECT" = "403" ] && break
+  echo "   direct probe $attempt: $DIRECT (waiting for the reload to take effect)"
+  sleep 2
+done
+
 VIA_CF="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://${DOMAIN}/" || true)"
 echo "   through Cloudflare      : $VIA_CF  (want 200)"
-DIRECT="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 15 \
-  --resolve "${DOMAIN}:443:${MYIP}" "https://${DOMAIN}/" || true)"
 echo "   direct to the origin IP : $DIRECT  (want 403)"
 
-if [ "$VIA_CF" != "200" ]; then
-  cp -p "$BACKUP" "$SITE"; nginx -t && systemctl reload nginx
-  die "the site stopped answering through Cloudflare -- rolled back"
-fi
+rollback() {
+  cp -p "$BACKUP" "$SITE"
+  nginx -t && systemctl reload nginx
+  die "$1 -- rolled back"
+}
+
+[ "$VIA_CF" = "200" ] || rollback "the site stopped answering through Cloudflare"
+[ "$DIRECT" = "403" ] || rollback "the origin still answers direct connections ($DIRECT), so the lock is NOT in force"
 
 cat <<EOF
 
-DONE. The origin now refuses connections that did not come through Cloudflare.
+DONE. Both checks passed: 200 through Cloudflare, 403 direct to the origin.
 
   backup: $BACKUP
 

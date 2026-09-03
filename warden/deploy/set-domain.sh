@@ -30,7 +30,13 @@ CONF="${DIR}/$(printf '.env')"
 # It was caught by tools/prepublish-check.mjs before any push, but the lesson
 # is that a secret must not be written inside a git working tree at all.
 # .gitignore is now a backstop for this; the fix is the location.
-BACKUP_DIR="${HOME}/.mro-env-backups"
+#
+# MRO_ENV_BACKUP_DIR exists ONLY so a test run can point this somewhere
+# disposable. Without it the scratch test backs its fake configuration up into
+# the real backup directory, leaving a file that looks like a genuine backup
+# and is not -- which is exactly the kind of ambiguity you do not want in a
+# folder you would reach for after a mistake.
+BACKUP_DIR="${MRO_ENV_BACKUP_DIR:-${HOME}/.mro-env-backups}"
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
 BACKUP="${BACKUP_DIR}/warden-env.$(date -u +%Y%m%dT%H%M%SZ)"
