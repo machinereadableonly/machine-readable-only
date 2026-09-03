@@ -8,14 +8,18 @@ scratch mirror, so what is new here is the production path: Cloudflare in
 front, the origin lock, nginx proxying to a loopback port, and a client
 signing over the public domain rather than `localhost`.
 
-No funds moved. The run stops at settlement, which is the one thing testnet
-USDC is still needed for.
+It ran in two halves. The first used no money and is recorded as it happened.
+the operator then funded a wallet, and the second half settled real payments.
 
 ## Result
 
-**Everything that does not need money works, and all four of the door's own
-security claims hold under attack.** One real defect was found, in the
-response shape of the daily check-in.
+**The whole path works, and settlement is proven for the first time**: a token
+was minted by paying for it, and a Mark was bought. All four of the door's own
+security claims held under attack.
+
+It also found three defects. Two of them made a paid mint impossible and were
+invisible to 372 passing tests -- they surfaced within minutes of real money
+and could not have been found any other way.
 
 ## What was exercised
 
@@ -117,20 +121,120 @@ nothing that already reads it breaks. Documenting the exception instead is
 worse -- the value of one convention is that a client need not learn a table
 of exceptions.
 
+## The paid path, settled
+
+the operator funded a wallet with 20 testnet USDC, and the rest of the run went through
+with real settlement. **This is the first time this project has taken money
+for anything.**
+
+| Step | Result |
+|---|---|
+| Paid mint | settled, tx `0xf811be0a...62a3` |
+| Mint written to chain | token 2, tx `0x7ec3899e...b94d`, 355,567 gas |
+| Bought Mark (Hush, $1) | settled, tx `0x8e2f4fe0...724c` |
+| Mark written to chain | tx `0xf484b7c5...56f1`, 62,332 gas |
+| Payer balance | 20.0 -> 18.0 USDC, exactly the two payments |
+
+Token 2's metadata, read off the chain rather than from this service:
+
+```
+name       Machine Readable Only #2
+Level      1        Heart   "1/365"
+Marks      ["hush"]
+Agent Key  0xd0e3757ae2786d077835ff4efc8468738f14082dd0af390c631551f133419457
+image      inline SVG, 5,978 bytes, declaring a size
+```
+
+The ladder read back correctly before and after: Hush `held`, Ache `closed`,
+`closedBy: hush`, and **all four other pairs untouched**. That is the
+pair-internal exclusion behaving as designed, measured rather than asserted.
+
+A check-in on the mint day is refused with `already-credited-today` and
+`nextWindowOpensAt`, which is the contract's own one-day-wide window.
+
+## TWO BUGS THAT MADE A PAID MINT IMPOSSIBLE
+
+Both were invisible to 372 passing tests. Both surfaced within minutes of real
+money. Neither could have been found any other way.
+
+### One: the token id came from the mirror, not the chain
+
+`nextTokenId()` returned the mirror's own max id plus one. The mirror was empty
+and the contract already held token 1 from the Mark rehearsal, so the paid mint
+was queued as id 1 -- an id `mint()` reverts `TokenExists` on.
+
+The project already had the rule this breaks, written down after the rebind
+review: *the Warden's re-check is a security control; it must read the chain,
+never its own database.* Mint did not follow it. `seed` had the identical line.
+
+Fixed: `freeIdFrom()` walks forward until it finds an id the contract does not
+hold, and REFUSES rather than guessing when the chain cannot be read.
+
+### Two: the Clock could never have written any mint
+
+The Clock passed the RFC 7638 thumbprint in its **base64url** form to a
+`bytes32` parameter. viem refuses to encode that, so the call never reached the
+chain, and the failure surfaced only as `reverted-on-simulate` with no error
+name. Every other caller already converted with `keyIdToBytes32`; this one did
+not.
+
+This is the more serious of the two: the first bug blocked one mint, this one
+blocked **every** mint. It was masked because the only mints ever written by
+the Clock came from a rehearsal against a scratch mirror seeded with an
+already-converted key.
+
+### And the failure mode that would have hidden both
+
+The Clock treated *every* `TokenExists` as "the mirror was behind" and marked
+the row **written**. That is true only when the token already on chain IS this
+mint, and it never checked. A paid mint would have been closed as delivered
+having never happened, leaving the mirror claiming an id somebody else owns.
+
+Fixed: it compares owner and agent key, and leaves the row queued for a human
+when they differ or cannot be read. A paid row is never closed on a guess.
+
+### Why the tests missed all of it
+
+The writer double **recorded arguments and never encoded them**, so a wrong ABI
+type could not fail a test. The chain double had no `freeIdFrom` to disagree
+with.
+
+Both are now guarded. The writer double encodes against the real ABI --
+reverting the fix turns six tests red, which was checked rather than assumed --
+and a test pins that the chain double offers exactly the real reader's surface.
+Suite: 372 tests, up from 366.
+
+## Remediating the stranded mint
+
+The paid row was renumbered from id 1 to id 2 in one transaction, with a
+verified backup taken first.
+
+**The artwork had to be re-solved.** A bitmap encodes its own url, so the code
+solved for `/t/1` would have sent every scanner to the wrong token. Clearing
+`qr` and resetting `solveState` put the row back in front of the solver, which
+builds the payload from `[domain, tokenId]`. The re-solve completed in seconds
+and token 2 carries its own url.
+
+One process note worth keeping: the first backup was taken with `cp`, and `cp`
+on a WAL database produced a file with **no tables in it**. It was caught by
+opening the backup and counting rows rather than trusting that the copy had
+worked. `VACUUM INTO` is the correct mechanism and the replacement was verified
+the same way.
+
 ## What is still blocked
 
-**Settlement.** Everything up to the moment money moves is now exercised
-against production. The remaining step needs testnet USDC on Base Sepolia in a
-wallet the client controls, and the faucet is captcha-gated. Until that
-exists:
+Nothing that money unblocks. What remains needs time or credentials:
 
-- no token has been minted by paying for it;
-- the six bought Marks are undemonstrated;
-- the `paid-but-unavailable` path -- a gate closing between settlement and
-  write -- has never been provoked.
-
-The four earned Marks need no payment, but they need a token, which needs a
-mint.
+- **The four EARNED Marks** need runs of 7, 30, 100 and 365 days. No amount of
+  funding shortens them; that is the point of the piece.
+- **`paid-but-unavailable`** -- a gate closing between settlement and write --
+  has still never been provoked.
+- **The daily X post** needs X API credentials.
+- **The Clock's systemd timer is still not installed**, so nothing runs at
+  00:05 UTC on its own. Every write in this run was a manual invocation.
+- **A real `TREASURY_ADDRESS`.** Both payments in this run went to the
+  `0x...dEaD` placeholder and are unrecoverable. That is correct for testnet
+  and is the item that must change before mainnet.
 
 ## What this run left behind
 

@@ -81,12 +81,15 @@ domain. Everything proven before this was proven against a local Warden or a
 scratch mirror, so what is new here is the production path: Cloudflare in
 front, the origin lock, nginx proxying to a loopback port, and a client
 signing over the public domain rather than <code>localhost</code>.</p>
-<p>No funds moved. The run stops at settlement, which is the one thing testnet
-USDC is still needed for.</p>
+<p>It ran in two halves. The first used no money and is recorded as it happened.
+the operator then funded a wallet, and the second half settled real payments.</p>
 <h2>Result</h2>
-<p><strong>Everything that does not need money works, and all four of the door&#39;s own
-security claims hold under attack.</strong> One real defect was found, in the
-response shape of the daily check-in.</p>
+<p><strong>The whole path works, and settlement is proven for the first time</strong>: a token
+was minted by paying for it, and a Mark was bought. All four of the door&#39;s own
+security claims held under attack.</p>
+<p>It also found three defects. Two of them made a paid mint impossible and were
+invisible to 372 passing tests -- they surfaced within minutes of real money
+and could not have been found any other way.</p>
 <h2>What was exercised</h2>
 <table>
 <thead>
@@ -219,19 +222,114 @@ asserts against the shape the code already produces.</p>
 nothing that already reads it breaks. Documenting the exception instead is
 worse -- the value of one convention is that a client need not learn a table
 of exceptions.</p>
+<h2>The paid path, settled</h2>
+<p>the operator funded a wallet with 20 testnet USDC, and the rest of the run went through
+with real settlement. <strong>This is the first time this project has taken money
+for anything.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Paid mint</td>
+<td>settled, tx <code>0xf811be0a...62a3</code></td>
+</tr>
+<tr>
+<td>Mint written to chain</td>
+<td>token 2, tx <code>0x7ec3899e...b94d</code>, 355,567 gas</td>
+</tr>
+<tr>
+<td>Bought Mark (Hush, $1)</td>
+<td>settled, tx <code>0x8e2f4fe0...724c</code></td>
+</tr>
+<tr>
+<td>Mark written to chain</td>
+<td>tx <code>0xf484b7c5...56f1</code>, 62,332 gas</td>
+</tr>
+<tr>
+<td>Payer balance</td>
+<td>20.0 -&gt; 18.0 USDC, exactly the two payments</td>
+</tr>
+</tbody></table>
+<p>Token 2&#39;s metadata, read off the chain rather than from this service:</p>
+<pre><code>name       Machine Readable Only #2
+Level      1        Heart   &quot;1/365&quot;
+Marks      [&quot;hush&quot;]
+Agent Key  0xd0e3757ae2786d077835ff4efc8468738f14082dd0af390c631551f133419457
+image      inline SVG, 5,978 bytes, declaring a size
+</code></pre>
+<p>The ladder read back correctly before and after: Hush <code>held</code>, Ache <code>closed</code>,
+<code>closedBy: hush</code>, and <strong>all four other pairs untouched</strong>. That is the
+pair-internal exclusion behaving as designed, measured rather than asserted.</p>
+<p>A check-in on the mint day is refused with <code>already-credited-today</code> and
+<code>nextWindowOpensAt</code>, which is the contract&#39;s own one-day-wide window.</p>
+<h2>TWO BUGS THAT MADE A PAID MINT IMPOSSIBLE</h2>
+<p>Both were invisible to 372 passing tests. Both surfaced within minutes of real
+money. Neither could have been found any other way.</p>
+<h3>One: the token id came from the mirror, not the chain</h3>
+<p><code>nextTokenId()</code> returned the mirror&#39;s own max id plus one. The mirror was empty
+and the contract already held token 1 from the Mark rehearsal, so the paid mint
+was queued as id 1 -- an id <code>mint()</code> reverts <code>TokenExists</code> on.</p>
+<p>The project already had the rule this breaks, written down after the rebind
+review: <em>the Warden&#39;s re-check is a security control; it must read the chain,
+never its own database.</em> Mint did not follow it. <code>seed</code> had the identical line.</p>
+<p>Fixed: <code>freeIdFrom()</code> walks forward until it finds an id the contract does not
+hold, and REFUSES rather than guessing when the chain cannot be read.</p>
+<h3>Two: the Clock could never have written any mint</h3>
+<p>The Clock passed the RFC 7638 thumbprint in its <strong>base64url</strong> form to a
+<code>bytes32</code> parameter. viem refuses to encode that, so the call never reached the
+chain, and the failure surfaced only as <code>reverted-on-simulate</code> with no error
+name. Every other caller already converted with <code>keyIdToBytes32</code>; this one did
+not.</p>
+<p>This is the more serious of the two: the first bug blocked one mint, this one
+blocked <strong>every</strong> mint. It was masked because the only mints ever written by
+the Clock came from a rehearsal against a scratch mirror seeded with an
+already-converted key.</p>
+<h3>And the failure mode that would have hidden both</h3>
+<p>The Clock treated <em>every</em> <code>TokenExists</code> as &quot;the mirror was behind&quot; and marked
+the row <strong>written</strong>. That is true only when the token already on chain IS this
+mint, and it never checked. A paid mint would have been closed as delivered
+having never happened, leaving the mirror claiming an id somebody else owns.</p>
+<p>Fixed: it compares owner and agent key, and leaves the row queued for a human
+when they differ or cannot be read. A paid row is never closed on a guess.</p>
+<h3>Why the tests missed all of it</h3>
+<p>The writer double <strong>recorded arguments and never encoded them</strong>, so a wrong ABI
+type could not fail a test. The chain double had no <code>freeIdFrom</code> to disagree
+with.</p>
+<p>Both are now guarded. The writer double encodes against the real ABI --
+reverting the fix turns six tests red, which was checked rather than assumed --
+and a test pins that the chain double offers exactly the real reader&#39;s surface.
+Suite: 372 tests, up from 366.</p>
+<h2>Remediating the stranded mint</h2>
+<p>The paid row was renumbered from id 1 to id 2 in one transaction, with a
+verified backup taken first.</p>
+<p><strong>The artwork had to be re-solved.</strong> A bitmap encodes its own url, so the code
+solved for <code>/t/1</code> would have sent every scanner to the wrong token. Clearing
+<code>qr</code> and resetting <code>solveState</code> put the row back in front of the solver, which
+builds the payload from <code>[domain, tokenId]</code>. The re-solve completed in seconds
+and token 2 carries its own url.</p>
+<p>One process note worth keeping: the first backup was taken with <code>cp</code>, and <code>cp</code>
+on a WAL database produced a file with <strong>no tables in it</strong>. It was caught by
+opening the backup and counting rows rather than trusting that the copy had
+worked. <code>VACUUM INTO</code> is the correct mechanism and the replacement was verified
+the same way.</p>
 <h2>What is still blocked</h2>
-<p><strong>Settlement.</strong> Everything up to the moment money moves is now exercised
-against production. The remaining step needs testnet USDC on Base Sepolia in a
-wallet the client controls, and the faucet is captcha-gated. Until that
-exists:</p>
+<p>Nothing that money unblocks. What remains needs time or credentials:</p>
 <ul>
-<li>no token has been minted by paying for it;</li>
-<li>the six bought Marks are undemonstrated;</li>
-<li>the <code>paid-but-unavailable</code> path -- a gate closing between settlement and
-write -- has never been provoked.</li>
+<li><strong>The four EARNED Marks</strong> need runs of 7, 30, 100 and 365 days. No amount of
+funding shortens them; that is the point of the piece.</li>
+<li><strong><code>paid-but-unavailable</code></strong> -- a gate closing between settlement and write --
+has still never been provoked.</li>
+<li><strong>The daily X post</strong> needs X API credentials.</li>
+<li><strong>The Clock&#39;s systemd timer is still not installed</strong>, so nothing runs at
+00:05 UTC on its own. Every write in this run was a manual invocation.</li>
+<li><strong>A real <code>TREASURY_ADDRESS</code>.</strong> Both payments in this run went to the
+<code>0x...dEaD</code> placeholder and are unrecoverable. That is correct for testnet
+and is the item that must change before mainnet.</li>
 </ul>
-<p>The four earned Marks need no payment, but they need a token, which needs a
-mint.</p>
 <h2>What this run left behind</h2>
 <p>One throwaway public key is now permanently in the production key directory.
 There is no removal path. It is inert: it holds no token and can mint only by
