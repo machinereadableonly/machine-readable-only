@@ -126,6 +126,38 @@ export function createServer(config) {
         return view ? json(res, 200, view) : json(res, 404, { ok: false, reason: "unknown-token" });
       }
 
+      // Case 1b: the two public documents -- the door page and the
+      // instructions. Served from this process rather than by nginx from
+      // disk, because nginx runs as www-data and the repository sits under a
+      // 0750 home directory it cannot traverse; the alternative was a copy
+      // under /srv that drifts from the repository. Public and unsigned for
+      // the same reason /t/ is: an agent that has not been admitted yet is
+      // exactly who needs to read them.
+      if (req.method === "GET" && (path === "/" || path === "/llms.txt")) {
+        const isDoor = path === "/";
+        const body = isDoor ? config.doorHtml : config.llmsTxt;
+        // A Warden wired without the documents 404s them rather than throwing
+        // on every request to "/", which would take the whole door down.
+        if (typeof body !== "string") return json(res, 404, { ok: false, reason: "not-found" });
+        res.writeHead(200, {
+          "content-type": isDoor ? "text/html; charset=utf-8" : "text/plain; charset=utf-8",
+          "content-length": Buffer.byteLength(body),
+        });
+        return res.end(body);
+      }
+
+      // Case 1c: the two documents llms.txt names and tells agents are not
+      // built yet. It says both "404", so they must actually 404 -- while
+      // nginx served the static routes with try_files that was true for free,
+      // and it stopped being true the moment this process took the routes
+      // over. 401 would also be the wrong answer on its own terms: it invites
+      // a caller to sign and retry, and no signature produces a file that does
+      // not exist. Only these two named paths are answered this way; anything
+      // else unknown stays gated, so the door is not a map of what exists.
+      if (req.method === "GET" && (path === "/client.mjs" || path === "/skill.md")) {
+        return json(res, 404, { ok: false, reason: "not-built-yet" });
+      }
+
       // The served key directory. Also public: a directory nobody can read is
       // not a directory.
       if (req.method === "GET" && path === "/.well-known/http-message-signatures-directory") {

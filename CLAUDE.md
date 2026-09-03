@@ -65,13 +65,14 @@ return visits, so the artwork is the agent's own history of coming back.
   entry by name while the good one landed, and reconcile paging five windows
   across 49,000 blocks. **Warden tests are now 283.** See the plan3-status and
   clock-live-lessons memories.
-  WHAT IS LEFT FOR the operator: (1) deployment is written and never applied -- including
-  the Clock's systemd timer, which is verified but not installed. THE DOMAIN NO
-  LONGER BLOCKS THIS: `machinereadableonly.com` was decided and REGISTERED on
-  2026-09-03 (Cloudflare, 1 year, auto-renew on, expires 2027-09-03), so the
-  remaining gap is applying the deployment, not choosing a name. There is still
-  no Cloudflare API token on the box, so DNS records are dashboard-only for now;
-  (2) a real TREASURY_ADDRESS -- a placeholder is in use and
+  WHAT IS LEFT FOR the operator: (1) **THE WARDEN IS DEPLOYED AND LIVE as of 2026-09-03
+  at `https://machinereadableonly.com`** -- door, llms.txt, key directory and a
+  real 401 challenge all verified through Cloudflare, Let's Encrypt cert to
+  2026-12-02, PM2 `mro-warden` saved, port 3006 loopback-only plus `ufw deny`.
+  A scoped `CLOUDFLARE_API_TOKEN_MRO` (one zone) IS now on the box, so Claude
+  drives DNS. STILL NOT INSTALLED: the Clock's systemd timer, and the mirror is
+  EMPTY so `/t/<id>` 404s until a reconcile backfills it. See
+  [[warden-deployed]]; (2) a real TREASURY_ADDRESS -- a placeholder is in use and
   refuses to start on any chain but Base Sepolia; (3) settlement is still
   unproven and needs testnet USDC; (4) the daily X post is deliberately unbuilt
   and needs X API credentials.

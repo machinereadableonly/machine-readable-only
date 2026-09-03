@@ -186,6 +186,7 @@ async function main() {
     new URL("../public/.well-known/http-message-signatures-directory", import.meta.url)
   );
   const llmsTxt = readFileSync(fileURLToPath(new URL("../public/llms.txt", import.meta.url)), "utf8");
+  const doorHtml = readFileSync(fileURLToPath(new URL("../public/door.html", import.meta.url)), "utf8");
 
   const mcp = makeMcpHandler({
     q,
@@ -218,6 +219,11 @@ async function main() {
     mcp,
     allowRegistration: makeAllowRegistration(q),
     directoryPath,
+    // The two public documents. Read once at startup, like llmsTxt above, so
+    // serving them costs no disk read per request. nginx proxies these
+    // through rather than serving them itself -- see the note in server.mjs.
+    doorHtml,
+    llmsTxt,
   });
 
   // Drain whatever is pending (including what requeueOrphans just restored)

@@ -1,77 +1,67 @@
-# Example nginx vhost for the Warden. NOT active configuration -- this is a
-# template to copy into /etc/nginx/sites-available/ once <domain> is real,
-# fill in the domain, get a certbot certificate, then enable the site. See
-# DEPLOY.md for the full ordered runbook.
+# Example nginx vhost for the Warden. NOT active configuration -- this is the
+# template `deploy/install-warden-site.sh` fills in and installs. See DEPLOY.md
+# for the full ordered runbook.
 #
-# Public traffic reaches the Warden ONLY through this proxy. The Warden
-# process itself binds 127.0.0.1:3006 (see ecosystem.config.cjs) and a UFW
-# rule denies external access to 3006 directly (see DEPLOY.md step "ufw deny
-# 3006").
+# This vhost is a PURE PROXY. Every route, including the door page and
+# llms.txt, is answered by the Warden process on 127.0.0.1:3006.
+#
+# It did not used to be. Until 2026-09-03 this template served `/`,
+# `/llms.txt`, `/client.mjs`, `/skill.md` and the key directory from disk with
+# `root /srv/mro/warden/public`. That could never have worked from a checkout:
+# nginx runs as www-data, the repository lives under /home/<user>/projects
+# which is mode 0750, and www-data cannot traverse it. The `/srv/mro` path in
+# the old template implied a COPY of public/, which drifts from the repository
+# the moment the copy is not refreshed -- and refreshing it needs sudo every
+# time a document changes. Serving from the process that already holds the
+# content removes the permission problem and the drift together.
+#
+# Two routes named in the old template do not exist and are EXPECTED to 404:
+# `/client.mjs` and `/skill.md`. llms.txt says so in plain words, so this is
+# disclosed behaviour rather than an oversight; do not "fix" it by inventing
+# files. They become real when the client is published.
 #
 # IMPORTANT -- do not "fix" this to trust the Host header. The Warden pins the
 # RFC 9421 signature's @authority component to its own CONFIGURED domain
 # (config.domain, read from MRO_DOMAIN), never to whatever Host arrives on
-# the request. That is deliberate: nginx forwards the original Host below
-# because upstream application logic (redirects, absolute URLs it renders)
-# may legitimately want it, but the signature check does not use it, so a
-# forged or mismatched Host header cannot move which authority a signature is
-# checked against. Proxying the real Host through is fine precisely because
-# the Warden does not trust it for anything security-relevant.
+# the request. nginx forwards the original Host below because upstream
+# application logic may legitimately want it, but the signature check does not
+# use it, so a forged or mismatched Host header cannot move which authority a
+# signature is checked against.
+#
+# HTTP only. certbot's --nginx plugin adds the TLS server block and the
+# port-80 redirect once the certificate exists -- this is the same shape the
+# other sites on this box use, and it is why the challenge can be answered
+# before any certificate is present.
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 80;
+    listen [::]:80;
     server_name <domain>;
 
-    ssl_certificate     /etc/letsencrypt/live/<domain>/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/<domain>/privkey.pem;
+    # Hardening follow-up, NOT enabled at first deploy: the Cloudflare origin
+    # lock used by the other sites on this box. The map lives in
+    # /etc/nginx/conf.d/cloudflare-allowlist.conf and is global.
+    #
+    # Enable it only AFTER certbot has issued and the Cloudflare proxy is back
+    # ON (orange cloud). Enabling it while the proxy is off makes the origin
+    # return 403 to everything, including your own checks, which looks exactly
+    # like a broken deploy. 127.0.0.1 is allowlisted, so local curl still works.
+    #
+    #   if ($cf_real_ip_ok = 0) { return 403; }
 
-    root /srv/mro/warden/public;
-
-    # Static routes served straight from disk -- no need to round-trip
-    # through the Warden process for content that never changes per request.
-    location = / {
-        try_files /door.html =404;
-    }
-
-    location = /llms.txt {
-        try_files /llms.txt =404;
-    }
-
-    location = /client.mjs {
-        try_files /client.mjs =404;
-    }
-
-    location = /skill.md {
-        try_files /skill.md =404;
-    }
-
-    location = /.well-known/http-message-signatures-directory {
-        try_files /.well-known/http-message-signatures-directory =404;
-    }
-
-    # Everything else (the door challenge, /keys, /keys/nonce, /mcp, /t/<id>)
-    # is proxied to the Warden. The original Host is preserved so the
-    # application layer sees the real hostname a visitor used -- this is
-    # NOT the same thing as trusting it for the signature check; see the
-    # comment at the top of this file.
+    # The whole piece is one upstream. /, /llms.txt, /t/<id>, /keys,
+    # /keys/nonce, /mcp and the key directory are all the Warden's.
     location / {
         proxy_pass http://127.0.0.1:3006;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
 
-server {
-    listen 80;
-    listen [::]:80;
-    server_name <domain>;
-    # certbot's --nginx plugin manages the redirect to 443 here once the
-    # certificate exists; before that this block only needs to exist so
-    # certbot's HTTP-01 challenge has somewhere to answer from.
-    location / {
-        return 301 https://$host$request_uri;
+        # MCP responses can stream. Buffering them would hold a reply until it
+        # completed, which turns an interactive tool call into a stall.
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_request_buffering off;
     }
 }
