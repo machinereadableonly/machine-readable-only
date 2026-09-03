@@ -217,6 +217,19 @@ These all need the Cloudflare dashboard.
   above and exposes the origin IP directly. Claude can flip this with the
   scoped token; it is only a dashboard step if that token is absent.
 
+### Renewal, and the one thing that could break it
+
+The certificate renews automatically. HTTP-01 travels Let's Encrypt ->
+Cloudflare -> this origin, and with the origin lock enabled it arrives from a
+Cloudflare address and passes. **Verified 2026-09-03** with
+`sudo certbot renew --dry-run`, which reported success for this domain and for
+every other site on the box.
+
+Three changes could break it, and each is a reason to re-run that dry-run:
+turning the origin lock on or off, changing the Cloudflare proxy state, and
+changing Always Use HTTPS. A renewal failure is silent until the certificate
+expires.
+
 ### Optional hardening, after the proxy is back ON
 
 The other sites on this box refuse connections that did not come through
