@@ -87,27 +87,18 @@ it is for.</p>
 were made with <code>cast</code> against the live deployment on the date in this file&#39;s
 name. Nothing here is written from memory, and you should not have to take it
 on trust.</p>
-<h2>What is not true yet</h2>
+<h2>This is a testnet preview</h2>
 <p>Stated first, because a document that quietly describes a future is worse than
 no document.</p>
-<ul>
-<li><strong>There is no domain.</strong> <code>&lt;domain&gt;</code> below is a placeholder. The service runs,
-is tested, and is not deployed anywhere you can reach.</li>
-<li><strong>The contract address below is Base Sepolia</strong>, chain id 84532. It is a real
-deployment you can read today, and it is not the mainnet piece.</li>
-<li><strong>Settlement has never been proven.</strong> Everything up to the moment money moves
-is exercised against the live x402 facilitator. The final step, a facilitator
-actually transferring USDC, needs testnet USDC we do not yet hold.</li>
-<li><strong>The treasury address is a placeholder</strong> (<code>0x...dEaD</code>). Do not pay it.</li>
-<li><strong>The Mark ladder&#39;s contract is deployed and a Mark has landed on it.</strong> Until
-2026-09-03 the deployment predated the ladder and no Mark could be written by
-any route. The contract below carries all ten Mark records and the
-three-argument <code>applyMark</code>, and Hush was written to token 1 in
-0x307b6ac3fa015d6eb91e59bf1aef5d41fa47ab5cd29545b6773b0367c9f4a29a.
-That was the site proving the path, not an agent buying anything: SETTLEMENT
-is still unproven, so the six bought Marks remain undemonstrated. Detail in
-section 5, under The Mark ladder.</li>
-</ul>
+<p>The service is reachable at <code>https://machinereadableonly.com</code>, and <code>&lt;domain&gt;</code>
+below stands for it. What runs there is a rehearsal: the contract is on Base
+Sepolia, chain id 84532 -- a real deployment you can read today, and not the
+mainnet piece. The finished piece will live on Base mainnet, chain id 8453,
+and is not deployed there.</p>
+<p><strong>The treasury address is a placeholder</strong> (<code>0x...dEaD</code>). Do not pay it.</p>
+<p>Read the rest of this document as the protocol rather than as a report on what
+has been exercised. Every tool answers with the chain id it is actually running
+on; believe that over this page.</p>
 <h2>The shape of it</h2>
 <pre><code>GET  /.well-known/http-message-signatures-directory   who we accept keys from
 GET  /keys/nonce                                      a nonce to prove a key with
@@ -526,15 +517,12 @@ alert, because somebody has to see that an agent paid for something it could
 not be given.</p>
 <p>The four EARNED Marks cost nothing, so a qualifying token gets
 <code>{ ok: true, accepted: true, upgradeId, variant, appliedBy: &quot;the next Clock run&quot; }</code> with no payment step at all. The six BOUGHT Marks go through the same
-x402 settlement as <code>mint</code>, and <strong>no Mark has ever been bought</strong>, for the same
-reason no token has been minted by paying for it: settlement is unproven.</p>
-<p><strong>And &quot;the next Clock run&quot; cannot land today, for any Mark.</strong> The ladder needed
-a contract change and the deployed contract is the one from before it: its
-<code>applyMark</code> takes two arguments, the one this service calls takes three. So an
-<code>{ ok: true, accepted: true }</code> from <code>upgrade</code> is a reservation at this door and
-nothing more until the new contract is deployed -- earned and bought alike.
-<code>mint</code> and <code>checkin</code> are unaffected; those functions are unchanged. Everything
-above is what the wire says, and this is what the chain says.</p>
+x402 settlement as <code>mint</code>.</p>
+<p>An <code>{ ok: true, accepted: true }</code> from <code>upgrade</code> is a RESERVATION at this door,
+not a write. The Mark is written on chain by the next Clock run, in the same
+00:05 UTC batch as the day&#39;s check-ins, and until then the chain does not know
+about it. Read the Mark back with <code>ladder</code>, or off the contract, rather than
+treating the reservation as the record.</p>
 <h2>6. Pay</h2>
 <p>Call a paid tool with no payment and you are told the price. This is the real
 refusal, captured:</p>
