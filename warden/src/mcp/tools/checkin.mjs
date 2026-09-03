@@ -21,7 +21,12 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
 
     async handler({ tokenId }, ctx) {
       const token = q.getToken(tokenId);
-      if (!token) return { accepted: false, reason: "unknown-token" };
+      // BOTH `ok` AND `accepted`, on every return. `ok` is the convention every
+      // other tool answers with and the only one llms.txt states, so a client
+      // branching on it read a successful check-in as a failure for as long as
+      // this tool answered with `accepted` alone. `accepted` stays because it
+      // is the word this tool has always used and something may read it.
+      if (!token) return { ok: false, accepted: false, reason: "unknown-token" };
 
       if (token.keyId !== ctx.keyId) {
         // The mirror does not recognise this caller. Before refusing, ask the
@@ -34,7 +39,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
         // would turn an RPC outage into an open door.
         const onChain = await chain.boundKeyOf(tokenId);
         if (!onChain || onChain !== keyIdToBytes32(ctx.keyId)) {
-          return { accepted: false, reason: "not-bound-to-caller" };
+          return { ok: false, accepted: false, reason: "not-bound-to-caller" };
         }
       }
 
@@ -45,7 +50,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // than assumed. This tool is FREE, so there is no settlement window and
       // no second check.
       const blocked = (await chainBlock(chain)) ?? (await tokenBlock(chain, tokenId, q));
-      if (blocked) return { accepted: false, reason: blocked };
+      if (blocked) return { ok: false, accepted: false, reason: blocked };
 
       const day = today();
       // Level counts distinct credited days and never falls. A streak
@@ -71,6 +76,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // guard is about agreeing with the chain, not about racing callers.
       if (day <= token.lastDay) {
         return {
+          ok: false,
           accepted: false,
           reason: "already-credited-today",
           nextWindowOpensAt: new Date((token.lastDay + 1) * 86_400_000).toISOString(),
@@ -96,6 +102,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
 
       if (!credited) {
         return {
+          ok: false,
           accepted: false,
           reason: "already-credited-today",
           nextWindowOpensAt: new Date((day + 1) * 86_400_000).toISOString(),
@@ -103,6 +110,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       }
 
       return {
+        ok: true,
         accepted: true,
         creditedDay: day,
         level,

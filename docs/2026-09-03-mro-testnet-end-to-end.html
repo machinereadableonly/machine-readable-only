@@ -87,7 +87,7 @@ the operator then funded a wallet, and the second half settled real payments.</p
 <p><strong>The whole path works, and settlement is proven for the first time</strong>: a token
 was minted by paying for it, and a Mark was bought. All four of the door&#39;s own
 security claims held under attack.</p>
-<p>It also found three defects. Two of them made a paid mint impossible and were
+<p>It also found three defects, all three now fixed. Two of them made a paid mint impossible and were
 invisible to 372 passing tests -- they surfaced within minutes of real money
 and could not have been found any other way.</p>
 <h2>What was exercised</h2>
@@ -218,10 +218,17 @@ is the one call every participant makes for 365 days.</p>
 <p>It is invisible from inside the project because the reference client prints
 whatever comes back rather than branching on it, and because the test suite
 asserts against the shape the code already produces.</p>
-<p>Recommended fix: add <code>ok</code> to every <code>checkin</code> return, keeping <code>accepted</code> so
-nothing that already reads it breaks. Documenting the exception instead is
-worse -- the value of one convention is that a client need not learn a table
-of exceptions.</p>
+<p><strong>FIXED, same day.</strong> <code>ok</code> was added to all six <code>checkin</code> returns, keeping
+<code>accepted</code> so anything already reading it still works. <code>challenge</code> gained
+<code>ok: true</code> as well: it can never refuse, but a convention with an exception is
+a table a client has to learn, and that was the whole argument for fixing this.</p>
+<p>Verified live after the change:</p>
+<pre><code>checkin (token 2)   {&quot;ok&quot;:false,&quot;accepted&quot;:false,&quot;reason&quot;:&quot;already-credited-today&quot;,
+                     &quot;nextWindowOpensAt&quot;:&quot;2026-09-04T00:00:00.000Z&quot;}
+</code></pre>
+<p><code>test/tool-convention.test.mjs</code> now pins it: every free tool must answer with a
+boolean <code>ok</code>, and a check-in must carry it on the refusal AND on the success.
+Reverting the fix turns both tests red, which was checked rather than assumed.</p>
 <h2>The paid path, settled</h2>
 <p>the operator funded a wallet with 20 testnet USDC, and the rest of the run went through
 with real settlement. <strong>This is the first time this project has taken money

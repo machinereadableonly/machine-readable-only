@@ -17,7 +17,7 @@ the operator then funded a wallet, and the second half settled real payments.
 was minted by paying for it, and a Mark was bought. All four of the door's own
 security claims held under attack.
 
-It also found three defects. Two of them made a paid mint impossible and were
+It also found three defects, all three now fixed. Two of them made a paid mint impossible and were
 invisible to 372 passing tests -- they surfaced within minutes of real money
 and could not have been found any other way.
 
@@ -116,10 +116,21 @@ It is invisible from inside the project because the reference client prints
 whatever comes back rather than branching on it, and because the test suite
 asserts against the shape the code already produces.
 
-Recommended fix: add `ok` to every `checkin` return, keeping `accepted` so
-nothing that already reads it breaks. Documenting the exception instead is
-worse -- the value of one convention is that a client need not learn a table
-of exceptions.
+**FIXED, same day.** `ok` was added to all six `checkin` returns, keeping
+`accepted` so anything already reading it still works. `challenge` gained
+`ok: true` as well: it can never refuse, but a convention with an exception is
+a table a client has to learn, and that was the whole argument for fixing this.
+
+Verified live after the change:
+
+```
+checkin (token 2)   {"ok":false,"accepted":false,"reason":"already-credited-today",
+                     "nextWindowOpensAt":"2026-09-04T00:00:00.000Z"}
+```
+
+`test/tool-convention.test.mjs` now pins it: every free tool must answer with a
+boolean `ok`, and a check-in must carry it on the refusal AND on the success.
+Reverting the fix turns both tests red, which was checked rather than assumed.
 
 ## The paid path, settled
 
