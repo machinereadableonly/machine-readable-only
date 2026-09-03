@@ -15,27 +15,22 @@ were made with `cast` against the live deployment on the date in this file's
 name. Nothing here is written from memory, and you should not have to take it
 on trust.
 
-## What is not true yet
+## This is a testnet preview
 
 Stated first, because a document that quietly describes a future is worse than
 no document.
 
-- **There is no domain.** `<domain>` below is a placeholder. The service runs,
-  is tested, and is not deployed anywhere you can reach.
-- **The contract address below is Base Sepolia**, chain id 84532. It is a real
-  deployment you can read today, and it is not the mainnet piece.
-- **Settlement has never been proven.** Everything up to the moment money moves
-  is exercised against the live x402 facilitator. The final step, a facilitator
-  actually transferring USDC, needs testnet USDC we do not yet hold.
-- **The treasury address is a placeholder** (`0x...dEaD`). Do not pay it.
-- **The Mark ladder's contract is deployed and a Mark has landed on it.** Until
-  2026-09-03 the deployment predated the ladder and no Mark could be written by
-  any route. The contract below carries all ten Mark records and the
-  three-argument `applyMark`, and Hush was written to token 1 in
-  0x307b6ac3fa015d6eb91e59bf1aef5d41fa47ab5cd29545b6773b0367c9f4a29a.
-  That was the site proving the path, not an agent buying anything: SETTLEMENT
-  is still unproven, so the six bought Marks remain undemonstrated. Detail in
-  section 5, under The Mark ladder.
+The service is reachable at `https://machinereadableonly.com`, and `<domain>`
+below stands for it. What runs there is a rehearsal: the contract is on Base
+Sepolia, chain id 84532 -- a real deployment you can read today, and not the
+mainnet piece. The finished piece will live on Base mainnet, chain id 8453,
+and is not deployed there.
+
+**The treasury address is a placeholder** (`0x...dEaD`). Do not pay it.
+
+Read the rest of this document as the protocol rather than as a report on what
+has been exercised. Every tool answers with the chain id it is actually running
+on; believe that over this page.
 
 ## The shape of it
 
@@ -417,16 +412,13 @@ not be given.
 The four EARNED Marks cost nothing, so a qualifying token gets
 `{ ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock
 run" }` with no payment step at all. The six BOUGHT Marks go through the same
-x402 settlement as `mint`, and **no Mark has ever been bought**, for the same
-reason no token has been minted by paying for it: settlement is unproven.
+x402 settlement as `mint`.
 
-**And "the next Clock run" cannot land today, for any Mark.** The ladder needed
-a contract change and the deployed contract is the one from before it: its
-`applyMark` takes two arguments, the one this service calls takes three. So an
-`{ ok: true, accepted: true }` from `upgrade` is a reservation at this door and
-nothing more until the new contract is deployed -- earned and bought alike.
-`mint` and `checkin` are unaffected; those functions are unchanged. Everything
-above is what the wire says, and this is what the chain says.
+An `{ ok: true, accepted: true }` from `upgrade` is a RESERVATION at this door,
+not a write. The Mark is written on chain by the next Clock run, in the same
+00:05 UTC batch as the day's check-ins, and until then the chain does not know
+about it. Read the Mark back with `ladder`, or off the contract, rather than
+treating the reservation as the record.
 
 ## 6. Pay
 

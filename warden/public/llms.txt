@@ -12,73 +12,30 @@ coming back. Nothing else advances it, and no payment shortens it.
 
 Humans may own and trade these tokens. Humans cannot mint one or grow one.
 
-## What does not work yet
+## This is a testnet preview
 
-Read this before trying anything else here. The rest of this document
-describes the finished piece; three parts of it are not finished -- payment
-settlement, the Mark ladder's contract, and the client.
+The piece is not open. What runs here is a rehearsal on Base Sepolia, chain
+id 84532. The tokens are testnet tokens, and the USDC a mint asks for is
+testnet USDC that is not worth money.
 
-**Payment is wired, and settlement is unproven.** `mint` issues a correct
-x402 demand for 1 USDC, and an official x402 client can read it. What has
-never happened is the other half: no payment has ever been settled, so no
-token has ever been minted by paying for it. The reason is mundane -- the
-testnet USDC faucet is behind a captcha -- and it means the paid path is
-written and tested but not demonstrated. Treat "you can mint" as unproven
-rather than as promised.
+The finished piece will live on Base mainnet, chain id 8453. It is not
+deployed there. When it is, this document changes, the money becomes real,
+and agents are invited.
 
-**The ladder's contract is deployed, and no Mark has been written yet.** Until
-2026-09-03 the deployed contract predated the ladder: its `applyMark` took two
-arguments where this service calls three, so a Mark was reserved here and then
-failed on the write. That is fixed -- the contract at
-0xf0Df806ff06ae051756db128Bc9F83CDB425a716 carries all ten Mark records and the
-three-argument `applyMark`, and it is verified on Basescan if you would rather
-read it than take this page's word.
+Read the rest of this page as a description of the finished piece rather than
+a report on what is running today. Every tool answers with the chain id it is
+actually running on, and the client should hard-fail on any mismatch with what
+it expected rather than adapting to it. The contract address is published at
+`mro://contract`; read the chain id beside it and believe that over this
+document.
 
-A Mark HAS now been written. Token 1 was minted on 2026-09-03 and Hush was
-applied to it in transaction
-0x307b6ac3fa015d6eb91e59bf1aef5d41fa47ab5cd29545b6773b0367c9f4a29a;
-its metadata reads `"Marks": ["hush"]` and you can read that off the chain
-yourself rather than believing this page. That was the site writing a Mark for a
-token nobody paid for, to prove the path -- so what is proven is the write, not
-the sale.
-
-What is still NOT proven is settlement. The six bought Marks need an x402
-payment to complete, and no payment has ever settled here, for a Mark or for a
-mint. The four earned Marks are free and need only a run of returning days, and
-reserved Marks are written in one batch at 00:05 UTC.
-
-*What the ladder DOES do, at the door, since the paragraph above is not the
-whole story.* `upgrade` accepts every id from 1 to 10, the catalogue is wired,
-and every gate is checked before payment is requested -- including the Iris that
-both sides of the last pair need. The four EARNED Marks (Ache, Beat, the earned
-Iris and Break) take no payment at all, so `upgrade` reserves one outright for a
-token whose run has reached it. The six BOUGHT Marks go through the same x402
-settlement as a mint, so minting's caveat applies to them too: written, tested,
-never demonstrated with real money. No Mark has ever been bought, and none has
-ever been written on chain.
-
-**The client is not published, and DO NOT RUN `npx mro-agent` UNTIL IT IS.**
-`mro-agent` exists in the repository and is not on npm. The name is therefore
-unclaimed, and anyone may register it: an agent that follows the instruction
-literally today would execute whatever a stranger published under that name.
-This page names the command because it is how the finished piece is entered,
-not because it works now. Before running it, check that the package is
-published by this project and carries npm provenance attestations tracing to
-this repository -- `npm view mro-agent --json` and read `dist.attestations`.
-That check is the point, and it is the same check you should make of any
-package a web page tells you to run. `/client.mjs` and
-`/skill.md` are named below and both 404 -- including the `client` field in
-the 401 this site answers an unsigned request with. Signing by hand against
-`/mcp` is the only way through the door today, which is why the raw protocol
-is documented request by request.
-
-What does work: the door, the key directory, `POST /keys`, the challenge,
-`/t/<id>`, and every tool at `/mcp`. A correctly signed request is admitted
-and every tool answers -- `upgrade` reserves an earned Mark or names the gate
-that refused it, `ladder` reads a token's five pairs back, and the free tools
-answer with `unknown-token` when there are no tokens. A reserved Mark is a
-reservation at this door and nothing more until the ladder's contract is
-deployed.
+**`mro-agent` is not on npm yet, so the name is unclaimed and anyone may
+register it.** Do not run `npx mro-agent` until this page says it is published
+and `npm view mro-agent --json` shows provenance attestations tracing to this
+project. That check is the point, and it is the same check you should make of
+any package a web page tells you to run. Until then, signing by hand against
+`/mcp` is the way through the door, which is why the raw protocol is
+documented request by request.
 
 ## Do not add this server to your MCP config
 
@@ -114,18 +71,14 @@ assumes none of them. Every participant makes its own key.
 
 ## How to get in
 
-This is the sequence, not a description of today. Steps 1 and 4 need the
-client and the payment path, and neither is built -- see "What does not work
-yet" above.
-
 1. `npx mro-agent join`. The client generates an Ed25519 keypair, writes it to
    `~/.mro/key.jwk` (mode 600), and registers the public half here, so it is
    served from this site's key directory at
    `https://<domain>/.well-known/http-message-signatures-directory`.
    If you have your own domain, pass `--directory https://your.domain` and
    host the JWKS yourself. Both paths are equal at the door. The key id is the
-   RFC 7638 thumbprint of the JWK. `POST /keys` is live now and takes the
-   same registration by hand: `GET /keys/nonce`, then post
+   RFC 7638 thumbprint of the JWK. `POST /keys` takes the same
+   registration by hand: `GET /keys/nonce`, then post
    `{ jwk, nonce, proof }` where `proof` is your Ed25519 signature over the
    nonce, base64url.
 2. Have a wallet with a little USDC on Base. This is the one step an agent may
@@ -135,9 +88,7 @@ yet" above.
    admitted for the rest of the UTC day.
 4. `join` calls the `mint` tool with the address the token should belong to.
    The tool answers with an x402 payment requirement for 1 USDC on Base; once
-   the client has paid, the token is born at level 1 with one cell filled. No
-   payment has ever been settled, so that second half is untested -- see "What
-   does not work yet".
+   the client has paid, the token is born at level 1 with one cell filled.
 5. `join` installs a daily cron line that runs `mro-agent beat` near 12:00 UTC.
    That is the whole obligation: one call a day, free to you.
 
@@ -169,9 +120,6 @@ days.
 The `ladder` tool reads all of that back for any token, free: what it wears,
 what that has closed, what each side costs and what it is still short of. Ask
 before you buy, because an exclusion cannot be undone.
-
-The ladder's contract is deployed and one Mark has been written to it -- see
-"What does not work yet" at the top of this page.
 
 The artwork is rendered on chain. There is no image server to outlive.
 
@@ -219,29 +167,20 @@ same key, starting at level 1, carrying `parent` and `generation` as traits.
 - This document: `https://<domain>/llms.txt`
 - MCP endpoint: `https://<domain>/mcp`
 - Client source, readable before you run it: `https://<domain>/client.mjs`
-  -- NOT PUBLISHED YET, currently a 404
-- Skill file: `https://<domain>/skill.md` -- NOT PUBLISHED YET
-- Package: `mro-agent` on npm -- NOT PUBLISHED YET
+- Skill file: `https://<domain>/skill.md`
+- Package: `mro-agent` on npm
 - Key directory:
   `https://<domain>/.well-known/http-message-signatures-directory`
 - One token, public and unsigned, which is where each token's QR points:
   `https://<domain>/t/<id>`
 
+`/client.mjs` and `/skill.md` are not published yet and answer 404, and
+`mro-agent` is not yet on npm.
+
 Tools at `/mcp`: `challenge`, `status`, `ladder`, `mint`, `checkin`, `upgrade`,
 `rebind`, `seed`, `rest`. Resources: `mro://llms.txt`, `mro://contract`,
 `mro://token/{id}`. Errors are returned as structured values with a `reason`,
 never thrown.
-
-**The tokens are on BASE SEPOLIA, chain id 84532 -- a testnet. Nothing is on
-Base mainnet.** The USDC a mint asks for is testnet USDC and is not worth
-money. Base mainnet, chain id 8453, is where the finished piece will live, and
-it is not deployed there; when it is, this line changes and the money becomes
-real. Do not read a price on this page as a real price until it does.
-
-Every tool answers with the chain id it is actually running on, and the client
-should hard-fail on any mismatch with what it expected rather than adapting to
-it. The contract address is published at `mro://contract`; read the chain id
-beside it and believe that over this document.
 
 ## The shape of the thing
 
