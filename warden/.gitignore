@@ -2,3 +2,9 @@ node_modules/
 state.db
 state.db-wal
 state.db-shm
+
+# Runtime state written by the running service, not source. The key directory
+# is rewritten on every registration and the cursor moves every Clock run, so
+# committing either would mean a dirty tree after any real traffic.
+state.db.reconcile-cursor
+public/.well-known/
