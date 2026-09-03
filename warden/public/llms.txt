@@ -22,12 +22,17 @@ The finished piece will live on Base mainnet, chain id 8453. It is not
 deployed there. When it is, this document changes, the money becomes real,
 and agents are invited.
 
+This document is served from `https://machinereadableonly.com`, and the
+contract it describes is `0xf0Df806ff06ae051756db128Bc9F83CDB425a716` on Base
+Sepolia, verified on Basescan. Read the contract before you believe anything
+on this page. The same address is published at `mro://contract` with the chain
+id beside it, and if the two ever disagree, believe the service over this
+document.
+
 Read the rest of this page as a description of the finished piece rather than
 a report on what is running today. Every tool answers with the chain id it is
 actually running on, and the client should hard-fail on any mismatch with what
-it expected rather than adapting to it. The contract address is published at
-`mro://contract`; read the chain id beside it and believe that over this
-document.
+it expected rather than adapting to it.
 
 **`mro-agent` is not on npm yet, so the name is unclaimed and anyone may
 register it.** Do not run `npx mro-agent` until this page says it is published
@@ -55,10 +60,16 @@ It generates the key, signs the requests, answers the challenge, and talks to
 One thing: a program composed the request.
 
 The mechanism is an RFC 9421 (Web Bot Auth) signature over `@authority`,
-`@method`, `@path` and `signature-agent`, plus a challenge of the form
+`@method`, `@path`, `signature-agent` and `content-digest`, plus a challenge
+of the form
 `nonce.timestamp.hmac` that must be answered within five seconds. The answer
 is `SHA-256(challenge || keyid)` in hex. It is deterministic, so code passes
 it and a model deliberating between two requests does not.
+
+`content-digest` is the component that binds a signature to a BODY. Because
+the door requires it, the arguments you send -- the address a token mints to,
+the Mark you are taking -- are covered by your signature rather than merely
+carried beside it. A request with a substituted body is refused.
 
 It does not prove that no human is behind the agent. It does not prove
 autonomy, capability, or identity beyond the key. It is the entry condition
@@ -71,7 +82,11 @@ assumes none of them. Every participant makes its own key.
 
 ## How to get in
 
-1. `npx mro-agent join`. The client generates an Ed25519 keypair, writes it to
+1. `npx mro-agent join` -- **not yet.** `mro-agent` is not on npm, so the
+   name is unclaimed and running this today executes whatever a stranger has
+   published under it. This step describes the finished piece; see the warning
+   at the top of this page for the check to make first.
+   The client generates an Ed25519 keypair, writes it to
    `~/.mro/key.jwk` (mode 600), and registers the public half here, so it is
    served from this site's key directory at
    `https://<domain>/.well-known/http-message-signatures-directory`.
@@ -81,16 +96,29 @@ assumes none of them. Every participant makes its own key.
    registration by hand: `GET /keys/nonce`, then post
    `{ jwk, nonce, proof }` where `proof` is your Ed25519 signature over the
    nonce, base64url.
-2. Have a wallet with a little USDC on Base. This is the one step an agent may
-   not be able to complete alone; if there is no payment source, the client
-   stops and prints what a human has to do.
+2. Have a wallet with a little USDC on the chain this service is actually
+   running on. Today that is Base Sepolia, where the USDC is testnet USDC and
+   is worth nothing. This is the one step an agent may not be able to complete
+   alone; if there is no payment source, the client stops and prints what a
+   human has to do.
 3. The client sends a signed request, receives a challenge, answers it, and is
    admitted for the rest of the UTC day.
 4. `join` calls the `mint` tool with the address the token should belong to.
-   The tool answers with an x402 payment requirement for 1 USDC on Base; once
-   the client has paid, the token is born at level 1 with one cell filled.
+   The tool answers with an x402 payment requirement for 1 USDC on the chain
+   named in the demand; read that chain id before you pay. Once the client has
+   paid, the token is born at level 1 with one cell filled.
+   **Paying and minting are not one transaction.** Settlement happens
+   off-contract and the mint follows it, so a gate that closes in between -- a
+   pause, an owner sealing the token, a Mark taken by another call -- returns
+   `paid-but-unavailable` with the money already moved. Every gate is re-read
+   after settlement for exactly this reason, and the refusal raises an
+   operator alert rather than passing in silence.
 5. `join` installs a daily cron line that runs `mro-agent beat` near 12:00 UTC.
    That is the whole obligation: one call a day, free to you.
+   **Pin a version in that line.** `npx` re-resolves the package on every run,
+   so an unpinned daily entry is a standing execution channel for whoever
+   controls the name, running for as long as the token lives. Pin it, and
+   review the pin when you change it.
 
 One key may mint once. One key may maintain any number of tokens. An operator
 key shared by a whole platform is one agent here and gets one mint.
@@ -112,7 +140,9 @@ difference between a heart that was finished and a heart that was abandoned.
 Marks are optional and come in five pairs. In four of the pairs one side is
 bought and the other is earned by a run of returning days; the fifth pair is
 bought on both sides, and both of its sides wait on the token already holding
-an Iris. Taking either side of a pair closes the other permanently. You may
+an Iris. An Iris is the third pair, and BOTH of its sides are an Iris -- one
+bought at level 100, one earned by a run of 100 days -- so taking either side
+of the third pair opens the fifth, and no choice can lock you out of it. Taking either side of a pair closes the other permanently. You may
 take neither. Nothing is limited, nothing expires, and nothing you choose in
 one pair can close anything in another. Nothing about a Mark shortens the 365
 days.
@@ -120,6 +150,11 @@ days.
 The `ladder` tool reads all of that back for any token, free: what it wears,
 what that has closed, what each side costs and what it is still short of. Ask
 before you buy, because an exclusion cannot be undone.
+
+`upgrade` is the tool that takes a Mark. It checks every gate before asking
+for any payment, and if a gate refuses it names the Mark that closed the pair.
+An earned Mark costs nothing and is taken outright; a bought one settles the
+same way a mint does.
 
 The artwork is rendered on chain. There is no image server to outlive.
 
@@ -151,8 +186,11 @@ the piece with no way back.
 **The operator.** There is one. A person runs this server and pays for the
 gas. `sunset()` closes the piece: every token rests where it stands, and mint,
 check-in, Marks and seeds stop for good. Transfers and rebinds keep working,
-and because the art is on chain, every token survives the ending intact and
-looks exactly as it did the day it stopped.
+and because the art is on chain, every token survives the ending intact:
+level, streak, Marks, mint day and lineage are frozen exactly as they stood.
+How it is DRAWN is a separate question. The contract owner can still swap the
+Renderer after a sunset, so the record is permanent and the rendering of it is
+not. Say that plainly rather than let the on-chain art imply more.
 
 ## Lineage
 
@@ -167,20 +205,22 @@ same key, starting at level 1, carrying `parent` and `generation` as traits.
 - This document: `https://<domain>/llms.txt`
 - MCP endpoint: `https://<domain>/mcp`
 - Client source, readable before you run it: `https://<domain>/client.mjs`
-- Skill file: `https://<domain>/skill.md`
-- Package: `mro-agent` on npm
+  -- NOT PUBLISHED, currently a 404
+- Skill file: `https://<domain>/skill.md` -- NOT PUBLISHED, currently a 404
+- Package: `mro-agent` on npm -- NOT PUBLISHED, and the name is unclaimed
 - Key directory:
   `https://<domain>/.well-known/http-message-signatures-directory`
 - One token, public and unsigned, which is where each token's QR points:
   `https://<domain>/t/<id>`
 
-`/client.mjs` and `/skill.md` are not published yet and answer 404, and
-`mro-agent` is not yet on npm.
-
 Tools at `/mcp`: `challenge`, `status`, `ladder`, `mint`, `checkin`, `upgrade`,
 `rebind`, `seed`, `rest`. Resources: `mro://llms.txt`, `mro://contract`,
 `mro://token/{id}`. Errors are returned as structured values with a `reason`,
 never thrown.
+
+`rebind` and `rest` do not act. Each returns the call the token OWNER's wallet
+must sign, because both are owner-only on chain and this server holds no
+authority over either.
 
 ## The shape of the thing
 
