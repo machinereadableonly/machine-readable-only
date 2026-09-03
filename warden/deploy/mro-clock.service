@@ -26,7 +26,19 @@ ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=%h/projects/machine-readable-only/warden %h/logs
 ProtectKernelTunables=true
-ProtectKernelModules=true
+# NOT ProtectKernelModules=true. This is a USER unit, and that directive works
+# by removing CAP_SYS_MODULE from the capability bounding set (systemd.exec(5)).
+# Setting a bounding set needs CAP_SETPCAP, which an unprivileged user manager
+# does not have, so systemd refuses to start the service at all:
+# "Failed to drop capabilities: Operation not permitted", status 218/CAPABILITIES.
+# Measured 2026-09-03: it fails on its own, three runs out of three, while every
+# other directive here passes.
+#
+# The line below keeps the half that actually works unprivileged -- the seccomp
+# filter blocking the module syscalls. The capability half was never protecting
+# anything here: this process runs as an ordinary user and has no CAP_SYS_MODULE
+# to lose.
+SystemCallFilter=~@module
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
