@@ -11,6 +11,8 @@
 // a crash re-reads the world rather than replaying a plan.
 import { chunk, writeCheckInChunk, packIds } from "./batch.mjs";
 import { readEvents, applyEvents, DEPLOY_BLOCK, MAX_LOG_SPAN } from "./reconcile.mjs";
+import { MRO_ABI } from "./abi.mjs";
+import { keyIdToBytes32 } from "../mcp/keyId.mjs";
 
 /// The spec's chunk size. UNVERIFIED against a real full chunk: it comes from
 /// arithmetic (about 7k gas per check-in against a 15M ceiling), and only one
@@ -29,6 +31,28 @@ export const STALE_AFTER_RUNS = 3;
  * `today` is the current UTC day index; only days STRICTLY BEFORE it are
  * written, because a check-in at 00:03 belongs to a day that has not closed.
  */
+/**
+ * Is the token already on chain the same mint as this queued row?
+ *
+ * true  - same owner AND same agent key: a previous run landed it.
+ * false - a different token holds that id.
+ * null  - the chain could not be read, which is NEITHER of the above and must
+ *         never be treated as either.
+ */
+export async function mintIsOnChain({ publicClient, contract, mint }) {
+  try {
+    const [owner, view] = await Promise.all([
+      publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "ownerOf", args: [BigInt(mint.tokenId)] }),
+      publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "viewOf", args: [BigInt(mint.tokenId)] }),
+    ]);
+    const sameOwner = String(owner).toLowerCase() === String(mint.toAddress).toLowerCase();
+    const sameKey = String(view.agentKeyId).toLowerCase() === keyIdToBytes32(mint.agentKeyId).toLowerCase();
+    return sameOwner && sameKey;
+  } catch {
+    return null;
+  }
+}
+
 export async function runClock({
   q,
   writer,
@@ -89,7 +113,13 @@ export async function runClock({
   for (const mint of q.pendingMints()) {
     const result = await writer.send(
       "mint",
-      [BigInt(mint.tokenId), mint.toAddress, mint.agentKeyId, `0x${mint.qr}`],
+      // The mirror stores the RFC 7638 thumbprint as base64url; the contract
+      // takes bytes32. Every other caller converts (checkin compares against
+      // keyIdToBytes32, rebind sends it), and this one did not -- so viem
+      // refused to encode the argument and NO mint could ever be written.
+      // The revert surfaced only as "reverted-on-simulate" with no error name,
+      // because it never reached the chain to produce one.
+      [BigInt(mint.tokenId), mint.toAddress, keyIdToBytes32(mint.agentKeyId), `0x${mint.qr}`],
       { label: `mint ${mint.tokenId}` }
     );
     if (result.ok) {
@@ -98,12 +128,31 @@ export async function runClock({
       summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
       continue;
     }
-    // TokenExists means somebody already minted this id -- the row is settled
-    // whatever this run thinks, and retrying it every night forever would be
-    // noise. Everything else stays queued for the next run.
+    // TokenExists has TWO causes and they need opposite handling.
+    //
+    // If the token on chain IS this mint -- same owner, same agent key -- then
+    // a previous run landed it and this mirror is simply behind. Marking it
+    // written is right, and retrying every night forever would be noise.
+    //
+    // If it is a DIFFERENT token, this mint has not happened and cannot happen
+    // under this id. The agent has PAID. Closing the row here would report
+    // success for a token that does not exist and leave the mirror claiming an
+    // id somebody else owns, so the row is left alone for a human. Assuming
+    // the benign cause is how a paid mint disappears silently.
     if (result.errorName === "TokenExists") {
-      q.markMintWritten(mint.tokenId);
-      alert(`clock: token ${mint.tokenId} already existed on chain; the mirror was behind and is now caught up`);
+      const mine = await mintIsOnChain({ publicClient, contract, mint });
+      if (mine === true) {
+        q.markMintWritten(mint.tokenId);
+        alert(`clock: token ${mint.tokenId} was already on chain as this mint; the mirror was behind and is now caught up`);
+        continue;
+      }
+      alert(
+        mine === false
+          ? `clock: token ${mint.tokenId} is held on chain by a DIFFERENT token, so this PAID mint cannot land under that id and needs a human`
+          : `clock: token ${mint.tokenId} exists on chain but could not be identified, so this PAID mint is left queued rather than closed on a guess`
+      );
+      summary.stuckMints = summary.stuckMints ?? [];
+      summary.stuckMints.push(mint.tokenId);
       continue;
     }
     alert(`clock: mint ${mint.tokenId} failed (${result.reason}${result.errorName ? ` ${result.errorName}` : ""})`);

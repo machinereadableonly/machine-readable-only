@@ -113,6 +113,24 @@ export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch, now = () 
   // reverts with AlreadySunset, so a piece that is closed can never reopen.
   let sunsetUntil = 0;
 
+  /**
+   * The lifecycle facts the Warden cannot know on its own, in ONE call.
+   *
+   * Returns `{ exists, resting, sunset, level, lastDay }`, or null when the
+   * chain could not be read. `exists` is level > 0, which is exactly how the
+   * contract itself decides NoSuchToken.
+   */
+  async function lifecycleOf(tokenId) {
+    const result = await viewOf(tokenId);
+    if (result === null) return null;
+    const level = asNumber(tupleField(result, FIELD.level));
+    const resting = asBool(tupleField(result, FIELD.resting));
+    const sunset = asBool(tupleField(result, FIELD.sunset));
+    const lastDay = asNumber(tupleField(result, FIELD.lastDay));
+    if (level === null || resting === null || sunset === null || lastDay === null) return null;
+    return { exists: level > 0, resting, sunset, level, lastDay };
+  }
+
   return {
     /**
      * The key id currently bound to a token, straight from the chain.
@@ -139,15 +157,29 @@ export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch, now = () 
      * gate compares against all come out of the same `viewOf`, so a tool that
      * needs any of them pays for one round trip, not several.
      */
-    async lifecycleOf(tokenId) {
-      const result = await viewOf(tokenId);
-      if (result === null) return null;
-      const level = asNumber(tupleField(result, FIELD.level));
-      const resting = asBool(tupleField(result, FIELD.resting));
-      const sunset = asBool(tupleField(result, FIELD.sunset));
-      const lastDay = asNumber(tupleField(result, FIELD.lastDay));
-      if (level === null || resting === null || sunset === null || lastDay === null) return null;
-      return { exists: level > 0, resting, sunset, level, lastDay };
+    lifecycleOf,
+
+    /**
+     * The first id at or after `from` that THE CHAIN does not already hold.
+     *
+     * Returns null when the chain could not be read, or when `maxProbes` ids
+     * in a row were all taken. Null is never "use `from` anyway": a caller
+     * that cannot establish a free id must refuse, because the contract
+     * reverts TokenExists and the agent has already paid by this point.
+     *
+     * WHY THIS EXISTS. The mirror's own max id is not a fact about the chain.
+     * An empty mirror beside a non-empty contract -- exactly what a fresh
+     * deployment has after any token is minted by another route -- proposes
+     * id 1 for a mint the contract will refuse. Measured on 2026-09-03 by the
+     * first paid mint this service ever took.
+     */
+    async freeIdFrom(from, maxProbes = 32) {
+      for (let id = from, probes = 0; probes < maxProbes; id += 1, probes += 1) {
+        const life = await lifecycleOf(id);
+        if (life === null) return null;
+        if (!life.exists) return id;
+      }
+      return null;
     },
 
     /**

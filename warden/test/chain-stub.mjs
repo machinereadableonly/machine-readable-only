@@ -16,6 +16,10 @@ export function openChain(overrides = {}) {
     boundKeyOf: async () => null,
     writesOpen: async () => null,
     lifecycleOf: async () => ({ exists: true, resting: false, sunset: false, level: 1, lastDay: 0 }),
+    // An open chain holds no token at the proposed id, so the id the mirror
+    // proposed is the id that lands. A stub returning something else here
+    // would silently renumber every token these suites assert on.
+    freeIdFrom: async (from) => from,
     walletRoomFor: async () => 20,
     ...overrides,
   };
@@ -27,6 +31,7 @@ export const unreadableChain = () =>
   openChain({
     writesOpen: async () => "unreadable",
     lifecycleOf: async () => null,
+    freeIdFrom: async () => null,
     walletRoomFor: async () => null,
   });
 export const restingChain = () =>
@@ -38,3 +43,7 @@ export const unknownTokenChain = () =>
     lifecycleOf: async () => ({ exists: false, resting: false, sunset: false, level: 0, lastDay: 0 }),
   });
 export const walletFullChain = () => openChain({ walletRoomFor: async () => 0 });
+
+/// A chain whose ids are already taken, so freeIdFrom must skip past them.
+export const takenIdsChain = (taken = [1]) =>
+  openChain({ freeIdFrom: async (from) => { let id = from; while (taken.includes(id)) id += 1; return id; } });

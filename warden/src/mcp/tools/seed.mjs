@@ -50,7 +50,11 @@ export function makeSeedTool({ q, chain, today, supplyCap }) {
       // lineage never landed is a token with no parent and generation 0 -- an
       // ordinary mint, indistinguishable from one, and it would still have
       // consumed the key's seed for the year.
-      const tokenId = q.nextTokenId();
+      // The chain decides which ids are free, not this mirror. See
+      // mint.mjs for why -- a seed writes a token the same way and would
+      // collide the same way.
+      const tokenId = await chain.freeIdFrom(q.nextTokenId());
+      if (tokenId === null) return { ok: false, reason: "chain-unavailable" };
       const generation = parent.generation + 1;
       q.transact(() => {
         q.insertToken({ tokenId, keyId: ctx.keyId, owner: to, lastDay: today(), mintDay: today() });
