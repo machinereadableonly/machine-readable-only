@@ -40,12 +40,12 @@ Report: docs/reviews/2026-09-04-mro-review-security.md
 
 | # | Step | Status |
 |---|---|---|
-| 12 | Contract funds and access control | PENDING |
-| 13 | Door authentication | PENDING |
-| 14 | Payment path | PENDING |
-| 15 | Clock key, secrets and mirror DB | PENDING |
-| 16 | Deploy and operational surface | PENDING |
-| 17 | Verifier over the security report | PENDING |
+| 12 | Contract funds and access control | DONE |
+| 13 | Door authentication | DONE |
+| 14 | Payment path | DONE |
+| 15 | Clock key, secrets and mirror DB | DONE |
+| 16 | Deploy and operational surface | DONE |
+| 17 | Verifier over the security report | DONE |
 
 ## Run log
 
@@ -69,3 +69,15 @@ Append one line per event: date, step, what happened. Keep it short.
 - 2026-09-04 10:00 UTC -- step 10 DONE: 8 BEFORE MAINNET, 4 ANYTIME, 1 observations.
 - 2026-09-04 10:00 UTC -- step 11 (synthesiser) dispatched.
 - 2026-09-04 10:08 UTC -- step 11 DONE: synthesis appended; totals 18 BEFORE MAINNET, 20 ANYTIME, 5 observations, 1 struck.
+- 2026-09-04 -- Review C: security report skeleton created at commit a98c08c; step 12 dispatched.
+- 2026-09-04 -- step 12 DONE: 0 Critical, 1 High, 2 Medium, 5 Low, 3 Info.
+- 2026-09-04 -- step 13 dispatched.
+- 2026-09-04 -- step 13 DONE: 0 Critical, 2 High, 3 Medium, 3 Low, 5 Info.
+- 2026-09-04 -- step 14 dispatched.
+- 2026-09-04 -- step 14 DONE: 1 Critical, 2 High, 3 Medium, 3 Low, 4 Info.
+- 2026-09-04 -- step 15 dispatched.
+- 2026-09-04 -- step 15 DONE: 0 Critical, 3 High, 4 Medium, 4 Low, 3 Info.
+- 2026-09-04 -- step 16 dispatched.
+- 2026-09-04 -- step 16 DONE: 0 Critical, 4 High, 4 Medium, 4 Low, 4 Info.
+- 2026-09-04 -- step 17 (verifier) dispatched.
+- 2026-09-04 -- step 17 DONE: 67 findings checked; 56 confirmed, 10 partly, 1 unverified, 6 severity changes.
