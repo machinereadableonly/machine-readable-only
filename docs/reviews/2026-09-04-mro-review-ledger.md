@@ -28,11 +28,11 @@ Report: docs/reviews/2026-09-04-mro-review-creative.md
 
 | # | Step | Status |
 |---|---|---|
-| 7 | Concept and the access rule | PENDING |
-| 8 | The token as an object | PENDING |
-| 9 | The agent's journey | PENDING |
-| 10 | Launch and permanence | PENDING |
-| 11 | Synthesiser | PENDING |
+| 7 | Concept and the access rule | DONE |
+| 8 | The token as an object | DONE |
+| 9 | The agent journey | DONE |
+| 10 | Launch and permanence | DONE |
+| 11 | Synthesiser | DONE |
 
 ## Review C -- Security (Opus 5)
 
@@ -59,3 +59,13 @@ Append one line per event: date, step, what happened. Keep it short.
 - 2026-09-04 -- step 4 DONE: 2 High, 8 Medium, 10 Low, 3 Info.
 - 2026-09-04 -- step 5 DONE: 1 High, 8 Medium, 6 Low, 4 Info.
 - 2026-09-04 -- step 6 DONE: verifier over 73 findings; 72 confirmed, 1 partly, 0 unverified.
+- 2026-09-04 -- Review B: report skeleton created at commit 7bc1140; step 7 dispatched.
+- 2026-09-04 -- step 7 DONE: 1 BEFORE MAINNET, 5 ANYTIME, 1 observations.
+- 2026-09-04 -- step 8 DONE: 3 BEFORE MAINNET, 5 ANYTIME, 2 observations.
+- 2026-09-04 09:32 UTC -- step 9 killed by the 5-hour session limit (HTTP 429) at 07:56; sections 1-2 intact on disk; window reset 09:30, resuming from step 9.
+- 2026-09-04 09:33 UTC -- step 9 re-dispatched after the window reset (fresh subagent, sections 1-2 untouched).
+- 2026-09-04 09:43 UTC -- step 9 DONE: 6 BEFORE MAINNET, 6 ANYTIME, 1 observations.
+- 2026-09-04 09:43 UTC -- step 10 dispatched.
+- 2026-09-04 10:00 UTC -- step 10 DONE: 8 BEFORE MAINNET, 4 ANYTIME, 1 observations.
+- 2026-09-04 10:00 UTC -- step 11 (synthesiser) dispatched.
+- 2026-09-04 10:08 UTC -- step 11 DONE: synthesis appended; totals 18 BEFORE MAINNET, 20 ANYTIME, 5 observations, 1 struck.

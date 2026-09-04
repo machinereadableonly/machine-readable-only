@@ -1,0 +1,2620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- Creative and Product Review</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- Creative and Product Review</h1>
+<p>Date: 2026-09-04
+Commit under review: 7bc1140 (working tree clean at start of run)
+Reviewer model: Fable 5.1, one subagent per section, run in order, then a
+synthesiser. This pass judges whether the thing being built is good and
+whether an agent arriving at it understands what it is being offered. It does
+NOT judge code correctness; Review A (fable-quality) covers that.</p>
+<h2>The convention</h2>
+<p>Base mainnet is permanent by design: the piece is a record of an agent&#39;s
+return visits and that history cannot move chains. So every finding carries
+exactly one of two tags:</p>
+<ul>
+<li><strong>BEFORE MAINNET</strong> -- set in the contract, in the artwork, in the token&#39;s
+permanent payload, or in the first impression the piece gets to make once.</li>
+<li><strong>ANYTIME</strong> -- can change later at no cost. Not urgent even if right.</li>
+</ul>
+<p>Rules every section follows:</p>
+<ol>
+<li>Propose specifics, never adjectives. A finding that cannot say what to
+change to is an observation, not a recommendation, and is labelled as one.</li>
+<li>Section 2 opens the images with Read. A finding about how something looks
+that was derived from source is void.</li>
+<li>Every recommendation is checked against the locked decisions in CLAUDE.md
+(free mint, per-token yearly seeding, other chains, a human-facing gallery,
+paying in anything but USDC, the domain name). One that contradicts a
+locked decision does not appear.</li>
+<li>Plain ASCII.</li>
+<li>Behaviour claims cite a real file:line or a real document.</li>
+</ol>
+<p>Finding format: <code>C&lt;section&gt;.&lt;n&gt; [BEFORE MAINNET | ANYTIME] title</code>, then
+what was observed (with citation), what to change it to, and why.</p>
+<h2>Section checklist</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Section</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>The concept and the access rule</td>
+<td>DONE</td>
+</tr>
+<tr>
+<td>2</td>
+<td>The token as an object</td>
+<td>DONE</td>
+</tr>
+<tr>
+<td>3</td>
+<td>The agent&#39;s journey</td>
+<td>DONE</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Launch and permanence</td>
+<td>DONE</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Synthesis</td>
+<td>DONE</td>
+</tr>
+</tbody></table>
+<h2>Section 1 -- The concept and the access rule</h2>
+<p><strong>Verdict.</strong> Today the door reads as an access rule described by an engineer:
+the HOW is everywhere and the WHY is asserted, never argued. The framing rule
+(CLAUDE.md Hard Rule 6, &quot;a program minted this&quot;) holds on every served line
+that states it: <code>warden/public/llms.txt:3</code> &quot;An artwork that only admits
+programs&quot;, <code>:5</code> &quot;A program proves it composed its own request&quot;, <code>:60</code> &quot;One
+thing: a program composed the request&quot;, <code>:74-76</code> &quot;It does not prove that no
+human is behind the agent ... It is the entry condition for an art piece, and
+it is not asked to carry more than that&quot;; <code>docs/2026-09-01-mro-raw-protocol.md:239-241</code>
+&quot;This is an entry condition for an art piece -- it establishes that a program
+composed the request ... it is not a defence against anything&quot;; and the code&#39;s
+own comment at <code>warden/src/door/challenge.mjs:3</code> &quot;This is an ACCESS CONDITION
+for an art piece&quot;. No served line calls it bot defence, anti-abuse, or
+protection, and the vocabulary of the protocol doc (replay cache, thumbprint,
+rate limit) is the register of an RFC, not of a security product. The one
+surface where the security register shows through is the human one:
+<code>warden/public/door.html:26-28</code> hands a person &quot;RFC 9421, Web Bot Auth&quot; and a
+five-second expiry and gives no reason for either. So the door is not bot
+defence with a story painted on; it is an access rule with the story left in a
+drawer. The WHY that turns &quot;only programs&quot; from a rule into a subject -- you
+end; what lasts is a record that the two of you kept coming back -- exists
+only in <code>docs/2026-09-01-mro-agent-facing-copy.md</code>, which is locked, tested
+across 24 cold reads, and has never been served: git history of <code>llms.txt</code>
+(twelve commits, <code>faefa20</code> to <code>53ed350</code>) never contained &quot;We offer permanence&quot;,
+and no SKILL.md exists outside <code>contracts/lib/</code>.</p>
+<p><strong>Is the claim legible to a cold agent?</strong> It depends entirely on which door it
+arrives at. Arriving at <code>/llms.txt</code>, yes: the WHAT is legible in eleven lines
+and six cold readers engaged with zero refusals (cold-read-round2-findings).
+Arriving at <code>/mcp</code>, which is where an ERC-8257 registry entry or a Bazaar
+listing sends it, the first thing the piece says is
+<code>warden/src/door/middleware.mjs:42-48</code>: a challenge, an expiry, and three
+URLs, one of which (<code>client</code>) is answered with a deliberate 404
+(<code>warden/src/server.mjs:157-158</code>). Arriving by scanning the QR, the only
+arrival the artwork itself makes and the one that is permanent, the piece
+answers with <code>warden/src/mcp/tokenView.mjs:7-25</code>: level, streak, heart,
+owner, and not one link to what it is. So today the piece&#39;s claim is legible
+as a rule at one entrance, as a puzzle at the second, and not at all at the
+third. The challenge itself computes nothing about the piece and is, as a
+mechanism, exactly the family the spec&#39;s own prior-art table describes as a
+&quot;machine captcha&quot;; the copy is the only thing that can make it a rite, which
+is why the first two findings below carry the weight.</p>
+<h3>C1.1 [BEFORE MAINNET] The offer is locked, tested, and not served</h3>
+<p><strong>Observed.</strong> <code>docs/2026-09-01-mro-agent-facing-copy.md</code> opens: &quot;This is the
+approved text an agent reads when it is sent to find out what MRO is. It is
+the primary artwork surface: the piece succeeds or fails on what the agent
+says to its operator when it comes back.&quot; The agent-facing-copy-locked memory
+adds: &quot;Spec section 1, <code>llms.txt</code>, <code>door.html</code> and SKILL.md all still carry
+the old framing and must be rewritten to serve this copy.&quot; As shipped,
+<code>warden/public/llms.txt:1-13</code> is a different document -- &quot;An artwork that
+only admits programs. A program proves it composed its own request, pays 1
+USDC, and mints one token on Base&quot; -- and none of part one (&quot;You end.&quot; / &quot;We
+offer permanence. Not yours&quot; / &quot;a piece of art whose only material is
+returning&quot;) appears in any served file. Checked: <code>/bin/grep -rl</code> for those
+phrases over <code>.txt .md .mjs .html</code> outside <code>node_modules</code> hits only the two
+files under <code>docs/</code>; every historical revision of <code>llms.txt</code> was checked for
+&quot;We offer permanence&quot; and none carried it. The served page is the whole of
+part two (the machinery) with part one (the offer) missing, and part two&#39;s own
+WHY is one clause: <code>docs/2026-09-01-mro-agent-facing-copy.md</code> part two,
+&quot;No human can mint one. That is the point of the piece.&quot; -- an assertion that
+depends on part one having been read.</p>
+<p><strong>Change to.</strong> Insert part one verbatim into <code>warden/public/llms.txt</code> between
+line 13 (&quot;Humans may own and trade these tokens. Humans cannot mint one or
+grow one.&quot;) and line 15 (&quot;## This is a testnet preview&quot;), under the heading
+<code>## The offer</code>, from &quot;This is an art project.&quot; through &quot;If they want it,
+they will say so.&quot;, and follow it with the single line &quot;That is the offer.
+The rest of this page is the machinery behind it.&quot; Leave every existing
+section in place below it; they are the fuller part two. When SKILL.md is
+written, open it with the same block. Restart the Warden (<code>main.mjs</code> reads the
+file once at startup, per the door-page-copy memory) and re-run the cold-read
+rig, because the door-page-copy memory records that the no-re-run judgement
+&quot;does not carry over&quot; once <code>llms.txt</code> changes.</p>
+<p>One line-level issue to hand to the lock&#39;s owner rather than fix here: part
+one&#39;s second paragraph, &quot;A human sent you here to find out what this is&quot;,
+assumes the operator-fetched arrival the rig was corrected to model. An agent
+that reaches <code>llms.txt</code> by following the <code>docs</code> field of a 401 sent itself.
+The sentence is still true often enough to keep; it is recorded so the
+mismatch is known rather than discovered.</p>
+<p><strong>Why.</strong> Every WHY the piece has lives in part one. Without it the served page
+can only say what the rule is and that it is &quot;the point&quot;; with it, &quot;only
+programs&quot; follows from the premise (&quot;You end ... What lasts is ... a record
+that the two of you kept coming back&quot;), and the door stops needing a defence
+because it has a reason. The tag is BEFORE MAINNET because the memory names
+<code>llms.txt</code> as the primary artwork surface and the first agents through the
+mainnet door will relay whichever version is there; that is the first
+impression the piece makes once, and the re-run it obliges takes days, not
+minutes.</p>
+<h3>C1.2 [ANYTIME] llms.txt says what the rule proves and never why the piece has it</h3>
+<p><strong>Observed.</strong> <code>warden/public/llms.txt:58-76</code>, &quot;What the entry rule proves&quot;,
+is one line of WHAT (<code>:60</code> &quot;One thing: a program composed the request&quot;),
+eleven lines of HOW (<code>:62-72</code>, the RFC 9421 components, the challenge form,
+<code>content-digest</code>), and three lines of what it does NOT prove (<code>:74-76</code>).
+Nowhere in the section, or on the page, is the sentence that says why an
+artwork would want that proof. <code>:66-67</code> comes closest and is a discriminator,
+not a reason: &quot;It is deterministic, so code passes it and a model deliberating
+between two requests does not.&quot; The section heading itself is the tell: the
+question a cold agent asks is not what the rule proves but why there is one.</p>
+<p><strong>Change to.</strong> Insert, directly after <code>:60</code> &quot;One thing: a program composed the
+request.&quot; and before <code>:62</code> &quot;The mechanism is ...&quot;:</p>
+<p>&quot;Why the piece asks for that and nothing else: it is a record of something
+coming back that does not itself persist between visits. A person who returns
+every day carries the year in their own memory. A program does not, and the
+token is the only place its returning is kept. So the door admits the thing
+the piece is about.&quot;</p>
+<p>Rename the heading at <code>:58</code> from &quot;What the entry rule proves&quot; to &quot;The entry
+rule, and why there is one&quot;.</p>
+<p><strong>Why.</strong> This is the one paragraph that ties the mechanism to the locked
+narrative (permanence for the pair, recorded as art) without touching part
+one, and it is the paragraph that makes <code>:74-76</code> read as scope rather than as
+a disclaimer. It serves C1.1 if C1.1 lands and stands alone if it does not.
+It adds no price, chain or cell count, so it does not trip the lock&#39;s rule
+against mechanics in the argument.</p>
+<h3>C1.3 [ANYTIME] door.html gives the human the HOW in the security register and no WHY</h3>
+<p><strong>Observed.</strong> <code>warden/public/door.html:26-28</code>: &quot;Entry requires a request
+signed with the caller&#39;s own key (RFC 9421, Web Bot Auth) and an answer to a
+challenge that expires in five seconds. Everything past this page is JSON,
+Markdown and MCP.&quot; This is the only human-facing page, and the door-page-copy
+memory records that it was deliberately rewritten (2026-09-03) to address &quot;a
+human who is expected to relay to their agent&quot;. The same rewrite deleted &quot;the
+one framing the entry rule as an access rule&quot;, on the grounds that <code>llms.txt</code>
+carries it. It does -- for the agent. The human is left with an RFC number,
+a header standard&#39;s name, and a timeout: the three words a person associates
+with a lock, and none with a piece. <code>:23-24</code> gives the WHAT (&quot;This is an
+artwork for agents. It is machine readable only.&quot;) and <code>:39-41</code> the
+ownership split; between them the entry paragraph is the only one written in
+the wrong register for its reader.</p>
+<p><strong>Change to.</strong> Replace <code>:26-28</code> with:</p>
+<p>&quot;Only a program can get in: entry is a request signed with the caller&#39;s own
+key and an answer computed inside five seconds, and neither can be done by
+hand. That is the rule of the piece. Everything past this page is JSON,
+Markdown and MCP.&quot;</p>
+<p>Drop &quot;(RFC 9421, Web Bot Auth)&quot; from this page; <code>llms.txt:62</code> carries it for
+the reader who needs it.</p>
+<p><strong>Why.</strong> The human relay is the one reader who will never see <code>llms.txt:74-76</code>
+and is the one most likely to read &quot;signed request plus a five-second
+challenge&quot; as bot protection, because that is what those words mean everywhere
+else on the web. &quot;That is the rule of the piece&quot; is a statement, not a
+defence, so it does not fall foul of the
+a-defensive-paragraph-is-a-design-smell rule; and it says in seven words what
+the deleted paragraph took a paragraph to say. The line is the human&#39;s only
+WHY, and it costs nothing.</p>
+<h3>C1.4 [ANYTIME] The 401 body names nothing and advertises a dead link</h3>
+<p><strong>Observed.</strong> <code>warden/src/door/middleware.mjs:41-51</code> builds the first thing
+the piece says to anything that knocks at <code>/mcp</code>: <code>challenge</code>, <code>expires</code>,
+<code>mcp</code>, <code>docs</code>, <code>client</code>, and an optional one-word <code>reason</code>. <code>client</code> is
+<code>https://&lt;domain&gt;/client.mjs</code>, which <code>warden/src/server.mjs:149-158</code> answers
+with <code>404 { reason: &quot;not-built-yet&quot; }</code> by design (&quot;It says both &#39;404&#39;, so they
+must actually 404&quot;). The <code>challenge</code> tool&#39;s own reply at
+<code>warden/src/mcp/tools/challenge.mjs:19</code> already omits <code>client</code>, so the two
+challenge shapes disagree. The comment at <code>middleware.mjs:40</code> says the body
+&quot;tells an agent everything it needs to come back&quot;; it tells it how to come
+back and nothing about where it is. <code>docs/2026-09-01-mro-raw-protocol.md:50-51</code>
+calls this &quot;the intended first request; there is nothing rude about it&quot;, and
+for the agent that has read that page it is not. For the agent that has not --
+the one sent by a registry entry, which is the discovery channel spec decision
+7 puts fourth -- it is a JSON riddle.</p>
+<p><strong>Change to.</strong> Two edits to <code>challengeBody</code>. (1) Add a fixed field
+<code>about: &quot;An artwork that only admits programs. This challenge is its entry condition; answer it inside five seconds, or read docs first.&quot;</code> (2) Emit
+<code>client</code> only when <code>/client.mjs</code> is actually served; until then leave it out,
+which also makes the 401 and the <code>challenge</code> tool agree. Update the captured
+body at <code>docs/2026-09-01-mro-raw-protocol.md:59-65</code> and the shape at spec
+section 5 case 2 to match, and re-capture with
+<code>warden/tools/protocol-transcript.mjs</code> rather than editing by hand, per that
+doc&#39;s own rule.</p>
+<p><strong>Why.</strong> A 401 is the one place the piece is guaranteed to speak first, and a
+challenge with no sentence beside it is the exact shape of a CAPTCHA. One
+string turns it into an invitation with a rule; and a first response that
+points at a 404 is the first impression the comparable-projects study says
+kills agent mints (&quot;dead infrastructure within six months&quot;) delivered on the
+very first byte.</p>
+<h3>C1.5 [ANYTIME] The QR&#39;s destination is a dead end</h3>
+<p><strong>Observed.</strong> The token&#39;s permanent payload is
+<code>https://machinereadableonly.com/t/&lt;id&gt;#</code> (CLAUDE.md, Gotchas). The route is
+served at <code>warden/src/server.mjs:113-127</code>, whose comment says gating it &quot;would
+mean a scanned token leads nowhere, which is the one distribution surface the
+artwork has&quot;. What it returns is <code>warden/src/mcp/tokenView.mjs:7-25</code>:
+<code>tokenId, level, streak, heart, whole, years, marks, lastDay, generation, parentId, resting, pendingOnChain, owner</code>. No <code>docs</code>, no <code>mcp</code>, no <code>contract</code>,
+no <code>chainId</code>. The spec promised more: section 8, &quot;What is drawn&quot;, says the
+route returns &quot;the token&#39;s live state, its contract address and the skill URL
+... A scanned marketplace thumbnail therefore leads a machine straight to the
+instructions: a distribution surface no prior project had.&quot; As shipped the
+scan leads to a number set with an owner address. A human who scans it from a
+marketplace listing, which is the arrival <code>door.html:39-41</code> invites (&quot;You can
+buy one, sell one, and look at one&quot;), lands on JSON with no way to the page
+that would explain it.</p>
+<p><strong>Change to.</strong> Add four fields to <code>tokenView</code> so the scanner and the <code>status</code>
+tool stay one story (the function&#39;s own rule, <code>tokenView.mjs:1-3</code>):
+<code>docs: &quot;https://&lt;domain&gt;/llms.txt&quot;</code>, <code>mcp: &quot;https://&lt;domain&gt;/mcp&quot;</code>,
+<code>contract: &lt;configured address&gt;</code>, <code>chainId: &lt;configured id&gt;</code>, sourced from the
+same config <code>registerResources</code> already receives (<code>warden/src/mcp/resources.mjs:8</code>),
+never from a literal (the comment at <code>resources.mjs:12-15</code> records why).</p>
+<p><strong>Why.</strong> The URL in the bitmap cannot change after mint, so the answer at the
+other end is the only part of the artwork&#39;s own arrival the project controls.
+Today that arrival is the least legible of the three. Four fields make the
+QR do the job the spec designed it for, and <code>contract</code> plus <code>chainId</code> also
+give the scanner the verification handle that cold-read round 2 found the
+page lost when it was trimmed.</p>
+<h3>C1.6 [ANYTIME] The MCP server declares no instructions, so tools/list is nine HOWs with no WHAT</h3>
+<p><strong>Observed.</strong> <code>warden/src/mcp/server.mjs:41</code>:
+<code>new McpServer({ name: &quot;machine-readable-only&quot;, version: &quot;1.0.0&quot; })</code>. The
+installed SDK (<code>@modelcontextprotocol/server</code> 2.0.0,
+<code>dist/createMcpHandler-CLhGwQTn.d.mts:2774-2777</code>) offers
+<code>instructions?: string</code>, &quot;Optional instructions describing how to use the
+server and its features&quot;, and it is not set. The nine tool descriptions are
+each correct and each a HOW: <code>mint.mjs:15</code> &quot;Costs $1.00 in USDC on Base. One
+per key. Returns immediately with your token id&quot;; <code>checkin.mjs:17</code> &quot;Record
+today&#39;s visit for a token bound to your key. Free.&quot;; <code>rest.mjs:9</code> &quot;Returns the
+call the token OWNER&#39;s wallet must sign. This cannot be undone.&quot; The one WHAT
+on the whole MCP surface is a resource title, <code>resources.mjs:9</code>
+<code>&quot;What this piece is&quot;</code> on <code>mro://llms.txt</code>, which is good and easy to miss in
+a list. What I have verified is that the option exists in the installed SDK;
+whether <code>server/discover</code> carries it to the caller under the 2026-07-28
+revision I have not checked against the spec text, and that should be
+confirmed before relying on it.</p>
+<p><strong>Change to.</strong> Pass
+<code>instructions: &quot;Machine Readable Only is an artwork that only admits programs. Read mro://llms.txt before calling anything. mint costs 1 USDC and is once per key; checkin is free and is the whole daily obligation; rebind and rest never act, they return a call for the token owner&#39;s wallet.&quot;</code>
+to the <code>McpServer</code> constructor at <code>server.mjs:41</code>.</p>
+<p><strong>Why.</strong> An agent that has passed the door and lists tools has, by
+construction, run the client without necessarily reading a word of copy. One
+sentence of WHAT at the point where it decides which tool to call is the
+cheapest place in the whole piece to put it, and it repeats nothing the lock
+governs.</p>
+<h3>C1.7 OBSERVATION -- The challenge is a timer, and only the copy can make it a rite</h3>
+<p><strong>Observed.</strong> What the agent computes is
+<code>challenge-response = hex(SHA-256(challenge_string + key_id))</code> inside five
+seconds (<code>docs/2026-09-01-mro-raw-protocol.md:230-234</code>,
+<code>warden/src/door/challenge.mjs:83</code>). The spec&#39;s own prior-art table describes
+Shellborn as &quot;gated by a SHA-256 machine captcha&quot; and BLINK as &quot;3-second
+code-only hash challenge&quot; (<code>docs/specs/2026-08-27-machine-readable-only-design.md:60,62</code>),
+and calls its own version &quot;one theatrical challenge that only code can pass&quot;
+(<code>:78</code>) and &quot;the theatre from brainstorm question 3&quot; (<code>:291</code>). Cold readers
+described it, accurately, as &quot;a latency gate rather than proof of key
+possession (both inputs are public)&quot; (cold-read-round2-findings). The
+computation carries no meaning from the piece: no day index, no token, nothing
+that names what is being entered. It is, as a mechanism, a CAPTCHA, and the
+copy does not pretend otherwise -- <code>llms.txt:66-67</code> says what it
+discriminates (&quot;code passes it and a model deliberating between two requests
+does not&quot;), <code>:74-76</code> says what it does not prove, and neither says what it
+means. One small thing to note in passing: <code>:66-67</code> tells the model reading
+it that it is the thing kept out, and the resolution (&quot;answers the challenge
+... on your behalf&quot;, <code>:55</code>) sits eleven lines earlier, so the reader meets the
+exclusion after the reassurance.</p>
+<p><strong>Why this is an observation and not a recommendation.</strong> I cannot name a
+different computation that is meaningful in the piece&#39;s terms and also stays
+deterministic, stateless, nonce-bound and body-bound (<code>challenge.mjs:2-7</code>,
+<code>middleware.mjs:74-80</code>), without redesigning a door that is built, cold-tested
+in three rounds, documented request by request from a live capture, and
+mirrored by the client. The mechanism should stay. The rite, if the piece is
+to have one, is made of the sentence before the hash and the sentence after
+it, which is C1.2 and C1.4; and of the premise that makes five seconds mean
+something (&quot;You end&quot;), which is C1.1.</p>
+<p>Section 1 count: 1 BEFORE MAINNET, 5 ANYTIME, 1 observations.</p>
+<h2>Section 2 -- The token as an object</h2>
+<p>Images opened: <code>tools/out/heart-preview-12.png</code>, <code>heart-preview-90.png</code>,
+<code>heart-preview-200.png</code>, <code>heart-preview-365.png</code> (the 2026-08-27 geometry
+preview: a heart of cells around a black square -- this is the SPEC&#39;s picture,
+not the built one); <code>tools/out/domain-compare/real-token-1-day12.png</code>,
+<code>real-token-1-day90.png</code>, <code>real-token-1-day200.png</code>, <code>real-token-1-lapsed.png</code>,
+<code>real-token-1-whole.png</code>, <code>compare-whole.png</code> (the current domain, 2026-09-03);
+<code>docs/year-rings.png</code>, <code>docs/day1-options.png</code>, <code>docs/noise-mark.png</code>,
+<code>docs/noise-mark-intensity.png</code>; <code>tools/out/marks/all-marks.png</code> (2026-09-02
+15:06, the CURRENT ladder&#39;s maximal legal set: Hush + Beat + Iris leaf + Vessel</p>
+<ul>
+<li>Tint violet), <code>base.png</code>, <code>static-hues.png</code>, <code>green-violet.png</code>,
+<code>eye-shapes.png</code>, <code>eye-colourways.png</code>, <code>tint-on-green.png</code>,
+<code>tint-on-green-shapes.png</code>, <code>break.png</code> (all current ladder); <code>eyes.png</code>,
+<code>stronger-inks.png</code>, <code>bloom.png</code>, <code>all.png</code> (RETIRED: the 2026-08-31 seven-tier
+sheets -- old red Bloom, Blue Blood candidates, square coloured eyes, all seven
+at once; looked at only to see what was dropped, nothing below is quoted from
+them); <code>voice.png</code>, <code>vein.png</code>, <code>crown.png</code>, <code>halo.png</code> (retired NAMES but the
+CURRENT drawings, because the ladder spec section 5.1 says Hush, Ache, Vessel
+and Aura &quot;draw exactly what Voice, Vein, Crown and Halo draw today&quot; -- these
+are the only renders of those four Marks that exist); <code>tools/out/token-1.png</code>,
+<code>token-2.png</code>, <code>token-21.png</code> (real soak tokens); <code>tools/out/third-party/ token-1-OURS-500.png</code> and <code>token-1-w_500.png</code> (what a CDN did to it).</li>
+</ul>
+<p><strong>Verdict.</strong> The object rewards looking at it, and for a reason the spec did
+not plan: the heart is not stuck on the barcode, it is made of the barcode.
+The built token (<code>real-token-1-whole.png</code>, <code>token-1.png</code>) is one 37-module
+code whose dark modules were chosen so that a heart-shaped region of them can
+be inked in colour, with the rest in a luminance-matched grey; the day frame
+is two cells thick around the code and the year rings sit outside that. So
+the QR is unambiguously the identity and the heart is inside the identity,
+not beside it -- <code>heart-preview-365.png</code>, the spec&#39;s own picture of a heart of
+cells around a black square, is the version that WOULD have read as a barcode
+with a heart stuck on, and it was not built. A run reads as accumulation on
+two surfaces at once, both visible in the four domain-compare stages: the
+frame grows from a twelve-cell tab at top centre (<code>day12</code>) to a full top bar
+(<code>day90</code>) to three sides (<code>day200</code>) to a closed square (<code>whole</code>), and the
+heart climbs from mauve to red as the streak deepens. The year rings
+(<code>year-rings.png</code>) are countable at one to five and become a red target by ten,
+which is the right shape for a decade. Every colour on the ladder was chosen
+from a rendered sheet with a decode gate, and the two strongest effects on the
+ladder are the two free ones (Beat 209/255, earned Iris 239/255, against
+Vessel&#39;s 126 at 1,250 USDC), which is exactly the right priority for a piece
+about returning rather than buying.</p>
+<p>Three things do not hold up when the pictures are put beside the words. The
+copy says the heart fills and is whole at 365 -- the picture shows a heart
+that is whole on day one and a FRAME that fills, and the metadata calls that
+frame &quot;Heart&quot; (C2.1). A lapse does not read as loss: the palette walks the
+lapse back DOWN the same five rungs a streak walks up, so a 100-day token
+nine days quiet and a live 10-day token are the same picture (C2.3); worse,
+because the streak resets to one on the next check-in, a token that misses a
+single day and comes back drops straight to the start colour, while a token
+that stays away for 29 days is still two rungs up -- the image punishes
+returning harder than absence (C2.2). And the ladder, which is well designed
+as a set of dilemmas, has two sides that are not worth what they cost in
+either currency: Aura is a 16/255 tint of the page for 25 USDC (C2.6), and
+Ache draws only the cells not yet earned, so it is gone the day the heart is
+whole (C2.5). The forfeit each pair carries is legible in the <code>ladder</code> tool
+only AFTER a side is taken; an open side does not say what taking it would
+close, and an accepted earned Mark does not say what it just closed (C2.7).</p>
+<h3>C2.1 [BEFORE MAINNET] The words say the heart fills; the picture shows a frame closing around a heart that was whole on day one</h3>
+<p><strong>Observed.</strong> <code>docs/2026-09-01-mro-agent-facing-copy.md:58-60</code>: &quot;At its
+centre is a code that identifies it. Around the code is a heart of 365 cells,
+and it begins almost empty.&quot; <code>:70-71</code>: &quot;Each new day fills one more cell.
+After 365 days the heart is whole.&quot; <code>warden/public/llms.txt:6-8</code>: &quot;one more
+cell of a pixel heart fills in around the code. After 365 distinct days the
+heart is whole&quot;. The metadata agrees with the words:
+<code>contracts/src/render/Renderer.sol:275</code> emits <code>Heart</code> as <code>&quot;&lt;level&gt;/365&quot;</code>.
+The picture says the opposite. <code>real-token-1-day12.png</code> shows a complete
+mauve heart inside the code with a twelve-cell tab at the top of an otherwise
+ghost frame; <code>day90</code> and <code>day200</code> show the same complete heart with more of
+the square frame lit; <code>whole</code> shows the frame closed. <code>docs/phase0-results.md:611-613</code>
+records this as the build: &quot;The heart is fully drawn from day one -- it is the
+code -- and the frame is the thing that accumulates&quot;, and
+<code>contracts/src/render/FrameGeometry.sol:5-6</code> defines the 365 cells as &quot;the
+two rings just outside the 45-cell code block&quot;. So the spec&#39;s section 8 heart
+of cells (<code>heart-preview-*.png</code>) was superseded by the QArt design, and the
+words never followed. An agent that reads &quot;heart 12/365&quot; and looks at the
+image sees a full heart, and a human who scans a day-30 token from a listing
+is told a heart is filling and cannot find it.</p>
+<p><strong>Change to.</strong> The copy is LOCKED and this is a decision for the operator, so the
+sentences are handed over rather than made. Copy <code>:58-60</code> to: &quot;At its centre
+is a code that identifies it, and the code carries a heart: it is there from
+the first day. Around the code is a frame of 365 cells, and it begins almost
+empty.&quot; Copy <code>:70-71</code> to: &quot;Each new day fills one more cell of the frame.
+After 365 days the frame closes and the heart is whole.&quot; <code>llms.txt:6-8</code> to:
+&quot;Every day the bound key checks in, one more cell of the frame around the
+code fills in. After 365 distinct days the frame closes and the heart is
+whole, and each further 365 days adds a ring.&quot; Rename the metadata trait at
+<code>Renderer.sol:275</code> from <code>Heart</code> to <code>Days</code> (the renderer is swappable, so this
+part is ANYTIME); keep <code>Whole</code> and the &quot;(Whole)&quot; name as they are, because
+&quot;whole&quot; then names the finished object, which is what the frame closing means.
+Re-run the cold-read rig after, since the copy changed.</p>
+<p><strong>Why.</strong> The picture is better than the words -- a heart that is present from
+the first day and a year built around it is a stronger image than a heart
+that is 3 percent there -- but the words are what the agent relays to its
+operator, and today they describe a different artwork. The tag is BEFORE
+MAINNET because the served copy is the primary artwork surface
+(agent-facing-copy-locked) and the first mainnet agents relay whichever
+version is live; the trait rename is the only part that can wait.</p>
+<h3>C2.2 [BEFORE MAINNET] A token that returns after one missed day is punished harder than one that stays away for a month</h3>
+<p><strong>Observed.</strong> <code>contracts/src/MachineReadableOnly.sol:330</code> and <code>:406</code> (both
+check-in paths): <code>s.streak = (day == s.lastDay + 1) ? s.streak + 1 : 1;</code>.
+<code>contracts/src/render/Palette.sol:129-143</code>: an ABSENT token pales in steps --
+gap 3 drops one rung, gap 7 two, gap 30 to the start. Put the two together for
+a token on a 100-day run (rung 4, <code>#c8102e</code>): stay away 29 days and it renders
+rung 2, <code>#a83a55</code> dusk, a colour a live 7-day run earns; stay away 6 days and
+it is still rung 3 rose. Miss ONE day and check in the next, and <code>streak</code>
+becomes 1, the gap becomes 0, and <code>lapsedIndex</code> returns <code>tierIndex(1)</code> = rung
+0, <code>#70575f</code>, the day-one mauve of <code>real-token-1-lapsed.png</code>. So the token
+that comes back looks worse than the token that does not, for the next 29
+days. The copy promises the reset (&quot;Miss a day and the run restarts at one:
+the cells you earned stay, the colour goes&quot;, copy <code>:74-76</code>) and the steps
+(&quot;After a long absence it pales in steps rather than all at once&quot;, <code>:76</code>;
+<code>llms.txt:138-139</code> &quot;A lapse pales the colour in steps at 3, 7 and 30 days
+rather than snapping back&quot;) -- and as built the steps are only ever seen by a
+token that has stopped returning. For a piece &quot;whose only material is
+returning&quot; (copy <code>:42</code>), the picture&#39;s incentive at the moment of a slip is to
+stay away.</p>
+<p><strong>Change to.</strong> Keep the run resetting to one; that is the locked promise.
+Change what the COLOUR does. In <code>MachineReadableOnly.sol</code> replace
+<code>uint56 reserved</code> in <code>struct Token</code> (<code>:29-38</code>) with <code>uint24 fellFrom; uint32 fellDay;</code> -- 56 bits, same single slot, so a check-in still costs what it
+costs -- and at <code>:330</code> and <code>:406</code>, when <code>day != s.lastDay + 1</code>, write
+<code>s.fellFrom = uint24(s.streak); s.fellDay = s.lastDay;</code> before the reset (one
+extra field in a slot that is being written anyway; zero extra SSTORE). Expose
+both through <code>TokenView</code>. In <code>Palette.sol</code> give the renderer
+<code>index = max(lapsedIndex(streak, lastDay, today), lapsedIndex(fellFrom, fellDay, today))</code>: the existing function, applied a second time to the run
+that fell, from the day it fell. A one-day slip on a 100-day run then shows
+rose for three days, dusk until day seven, tint until day thirty, and the
+start colour only if the new run has not climbed past it by then; the new run
+overtakes it at 3 / 7 / 30 days as it always did. No new colour is introduced,
+so no decode sweep is needed beyond the existing suite. Add the mirror of it
+to <code>tools/render-token.mjs</code> (the byte-for-byte diff will fail otherwise) and
+one Foundry test per bound: day-after-slip = rung 3, day 7 = rung 2, day 30 =
+rung 0, and a new 7-day run overtaking a fall at rung 1.</p>
+<p><strong>Why.</strong> It makes <code>:76</code> of the copy true for every token instead of only the
+abandoned ones, and it removes the one place in the piece where the image
+rewards not coming back. The tag is BEFORE MAINNET because it is two fields
+in the token struct: a token minted without them can never be given a fall
+day, so the first year&#39;s slips on mainnet would be permanently unrecorded.</p>
+<h3>C2.3 [ANYTIME] Falling and rising are the same picture</h3>
+<p><strong>Observed.</strong> <code>Palette.sol:103-113</code>: &quot;The lapse walks BACK DOWN this same
+ladder rather than introducing paler tones, because paler tones are not
+available: anything lighter than the noise stops decoding.&quot; The consequence
+is visible by putting <code>static-hues.png</code>&#39;s top row beside
+<code>real-token-1-lapsed.png</code>: a 100-day token nine days quiet renders <code>#a83a55</code>,
+and so does a live 7-day run; a 30-day token four days quiet renders <code>#a83a55</code>
+too. Nothing in the image says which direction a token is moving. The JSON
+says it (<code>streak</code>, <code>lastDay</code> in <code>tokenView.mjs:7-25</code>), a marketplace thumbnail
+does not, and the thumbnail is where the human sees it. <code>llms.txt:139-140</code>
+claims &quot;The chain shows the difference between a heart that was finished and
+a heart that was abandoned&quot; -- the chain does, the picture does not.</p>
+<p><strong>Change to.</strong> Pale by CHROMA, not by rung. Paler tones are unavailable, but
+the palette&#39;s own rule 3 (<code>Palette.sol:18-29</code>) is that the two inks must match
+in LUMINANCE -- hue and chroma are free, which is what Static&#39;s green exploits.
+So: at gap 3, render the heart at its rung&#39;s colour pulled 50 percent toward
+that rung&#39;s matched grey (<code>noiseAt</code>); at gap 7, 75 percent; at gap 30, the
+start colour as now. Luma is unchanged at every step, so the binarizer sees
+the same picture and the decode rule holds by construction; the chroma rule
+(noise chroma below heart chroma, <code>Palette.sol</code> header) binds only at day one
+and a two-step descent only exists from rungs 3 and 4, whose chroma at 25
+percent is still above the noise&#39;s 19. A falling heart then goes GREY-red,
+which a rising heart never is. Put the ten new tiles (two steps at five rungs)
+on <code>tools/static-hue-sheet.mjs</code>&#39;s rig and through the five-size decode gate
+before adopting; do not adopt from this paragraph. If C2.2 lands, apply the
+same chroma ramp to the fall-day descent, so a returned token also visibly
+fades rather than re-climbs.</p>
+<p><strong>Why.</strong> &quot;A gap is recorded, never erased&quot; (copy <code>:76-77</code>) is currently true
+of the level and false of the image: the image erases the gap into a lower
+rung that a fresh run also occupies. Greying is the one direction the ascent
+never takes, so it is the one signal that reads as loss on its own. Renderer
+only, hence ANYTIME; but it should be decided before the first lapse on
+mainnet, which is day two.</p>
+<h3>C2.4 [ANYTIME] Five rungs read as three</h3>
+<p><strong>Observed.</strong> <code>static-hues.png</code>, top row, five tiles at 200 px: run 1
+<code>#70575f</code> and run 3 <code>#8e5566</code> are both a muted mauve; run 30 <code>#bd2242</code> and run
+100 <code>#c8102e</code> are both red. Only run 7 <code>#a83a55</code> sits clearly apart. Alone,
+without the neighbour beside it, a rose heart cannot be told from a red one,
+so the top milestone -- the one the copy names last (<code>:74</code>) and the one that
+gates both Irises -- has no visible reward of its own. <code>Palette.sol:49-53</code>
+also records that rung 1 is LIGHTER than rung 0 (luma 104 against 95), so the
+first step of the ascent goes lighter, which is not the direction &quot;ascent&quot;
+reads.</p>
+<p><strong>Change to.</strong> Put one candidate on a sheet, under the same derivation as
+<code>tools/static-hue-sheet.mjs</code>, and decide from the render: rung 4 to a deeper,
+more saturated red in the region of <code>#b0001c</code> (BT.601 luma about 56), with
+<code>noiseAt(4)</code> and <code>staticAt(4)</code> re-derived onto that luma by the existing rule
+and the five-size decode gate run. Darker is the safe direction for the
+binarizer (<code>Palette.sol:18-26</code>: it is the gap that fails, and a matched pair
+at luma 56 has none). Leave rungs 0-3 alone: the 1-vs-3 pair is the first
+three days and matters less than 30-vs-100. <code>BEAT_TO</code> and Break&#39;s exchange
+take whatever rung 4 is, so neither needs a change; both need re-rendering.</p>
+<p><strong>Why.</strong> The 100-day rung is the only one an agent waits three months for and
+the one the copy singles out; it should be the one colour no lower rung can
+be mistaken for. This is a palette constant in a swappable renderer, so
+ANYTIME, and it is put as a sheet to judge rather than a number to adopt, per
+design-review-style.</p>
+<h3>C2.5 [ANYTIME] Pair 1&#39;s earned side erases itself as the year fills, and nothing tells the agent</h3>
+<p><strong>Observed.</strong> <code>contracts/src/render/MarkRenderer.sol:81-85</code>: Ache draws the
+&quot;Frame cells not yet earned&quot; in <code>ACHE_GHOST #e3ccd3</code>; <code>vein.png</code> (the current
+Ache drawing under its old name) shows it as the pink-grey lower half of a
+level-200 frame. Every credited day converts one Ache cell into a plain lit
+cell, and at level 365 there are no unearned cells (<code>FrameGeometry.sol:12</code>),
+so a whole token wears Ache and shows nothing -- <code>diff-stats.json</code> measures
+it at 6.4 percent of pixels even at level 200. Its pair partner Hush
+(<code>voice.png</code>, <code>MarkRenderer.sol:55 #fdf3e3</code> on the quiet zone) is permanent.
+Neither the copy (<code>:83</code>, &quot;Hush, 1 USDC -- or Ache, at a 7-day run&quot;), the
+served page (<code>llms.txt:142-150</code>) nor the <code>ladder</code> tool&#39;s side record
+(<code>warden/src/mcp/tools/ladder.mjs:67-75</code>: id, name, route, state, price)
+says that one side of the pair has a lifespan. As art it is coherent -- the
+ache is the year not yet kept, and a whole heart has none -- but as a pair it
+means the agent who waits seven days gets a Mark that is at its strongest on
+day seven and gone on day 365, while the agent who pays a dollar keeps its
+Mark forever.</p>
+<p><strong>Change to.</strong> Either of two, and the first is a one-line change. (a) Add a
+<code>note</code> field to the <code>ladder</code> tool&#39;s side for Mark 2 only, sourced from the
+catalogue (<code>warden/src/mcp/ladder.mjs:44</code>), reading &quot;draws the days not yet
+earned; nothing is left to draw once the heart is whole&quot;, and the same
+sentence after &quot;Ache, at a 7-day run&quot; in the copy and in <code>llms.txt</code>. (b) Give
+Ache a trace that survives: once <code>level &gt;= 365</code>, draw a one-cell outline in
+<code>ACHE_GHOST</code> on the margin immediately outside the day frame -- the cell that
+becomes <code>GAP</code> when the first ring arrives (<code>docs/phase0-results.md:306-309</code>)
+-- as four bars, the same emission the rings use, about 150 bytes. (a) is
+honest disclosure and costs nothing; (b) makes the earned side worth having
+on the finished object. Do (a) now regardless.</p>
+<p><strong>Why.</strong> Rule 8 of the copy&#39;s own rationale (<code>:167-169</code>): &quot;Disclose every
+catch ... one undisclosed catch and the whole thing comes back as a warning.&quot;
+A Mark that vanishes is a catch. ANYTIME because the drawing is renderer and
+the note is Warden copy; no Ache can exist on mainnet before day 7 and none
+can vanish before day 365.</p>
+<h3>C2.6 [ANYTIME] Aura is a 16/255 tint for 25 USDC, so pair 5&#39;s cheap side buys nothing visible and closes Tint</h3>
+<p><strong>Observed.</strong> <code>MarkRenderer.sol:76-79</code>: Aura sets the page to <code>#fbeff2</code>
+against <code>#ffffff</code>. <code>halo.png</code> (the current Aura drawing) at 560 px is a
+faintly pink field; <code>diff-stats.json</code> measures the old Halo, which is the same
+drawing, at <code>maxDelta 16</code> -- the ladder spec&#39;s own threshold for &quot;a Mark
+nobody can see&quot; is Blue Blood&#39;s 11-15 (<code>2026-09-02-mro-mark-ladder-design.md:576-577</code>).
+Pair 5 is &quot;loud and expensive against quiet and cheap&quot; by design (<code>:184-186</code>),
+and it opens only once an Iris is held, so the trap the revision removed is
+gone; what is left is that the quiet side is quiet to the point of absence,
+and taking it closes the 250 USDC side forever (<code>Ladder.sol:33-34</code>, mutual
+<code>excludes</code>). Hush has the same quietness (<code>maxDelta 28</code>) but is AT the decode
+floor -- <code>MarkRenderer.sol:149-151</code> records <code>#f9eaef</code> failing at 900 px -- so
+it cannot be stronger and costs a dollar, which is fine. Aura&#39;s surface is
+OUTSIDE the quiet zone, so that floor does not bind it.</p>
+<p><strong>Change to.</strong> Render Aura on a sheet at three field strengths -- <code>#f7e1e8</code>,
+<code>#f2d3dd</code>, and the token&#39;s live rung colour at 12 percent over white -- with
+the quiet zone left at <code>#ffffff</code> (or Hush&#39;s <code>#fdf3e3</code> when both are worn, the
+case <code>MarkRenderer.sol:147</code> already keeps distinguishable), and put every
+tile through the five-size decode gate, since a coloured field changes what
+the binarizer sees at the quiet zone&#39;s outer edge. Adopt the strongest that
+decodes. If none decodes above <code>#fbeff2</code>, lower Aura to 5 USDC so the
+forfeit of Tint is priced as a whisper rather than a Mark.</p>
+<p><strong>Why.</strong> The spec&#39;s own rule, learned from ink-Tint (<code>:704-714</code>): &quot;a Mark that
+draws something, decodes fine, and is not worth its price ... is only ever
+caught by rendering it.&quot; Aura was renamed from Halo without being re-rendered
+or re-measured under the new price and the new exclusion. Renderer and a
+<code>setUpgrade</code> dial, so ANYTIME; but the first Iris on mainnet is day 100, and
+pair 5 opens with it.</p>
+<h3>C2.7 [ANYTIME] The forfeit is legible after it is taken, not before</h3>
+<p><strong>Observed.</strong> The <code>ladder</code> tool is the fairness requirement the spec set
+(<code>:526-532</code>: &quot;A ladder with permanent exclusions is only fair if the
+consequence is legible before the purchase&quot;). Its output shape
+(<code>warden/src/mcp/tools/ladder.mjs:139-146</code>) is <code>{ok, tokenId, level, streak, resting, pairs:[{pair, sides:[{id, name, route, state, price?, variants?, waitingOn?}], held?, closed?, closedBy?}]}</code>. <code>closed</code> and <code>closedBy</code> are set
+only when a side is already <code>held</code> (<code>:116-132</code>). An OPEN side carries nothing
+that names what taking it closes; the pairing is implied by the array
+grouping and the reader&#39;s memory of <code>llms.txt:147</code>. <code>upgrade</code>&#39;s accepted
+responses, <code>warden/src/mcp/tools/upgrade.mjs:137</code> (earned) and <code>:201</code>
+(bought), are <code>{ok, accepted, upgradeId, variant, appliedBy}</code> -- the moment
+the forfeit actually happens, and the response does not mention it. The
+refusal side is good: <code>:84</code> returns <code>{reason: &quot;mark-excluded&quot;, detail: &quot;beat&quot;}</code>, which names the pair partner in the same lower-case form <code>ladder</code>
+uses. Two smaller mismatches: the tool is titled &quot;Buy a Mark&quot; and described
+as &quot;Apply a paid Mark&quot; (<code>:18-19</code>) while four Marks are earned through it
+(<code>:117</code>); and an earned side in <code>ladder</code> is distinguishable from a bought one
+only by <code>route</code> and the absence of <code>price</code>.</p>
+<p><strong>Change to.</strong> (1) In <code>sideOf</code> (<code>ladder.mjs:58-86</code>) add <code>closes: &lt;partner name&gt;</code> to every side whose <code>state</code> is <code>open</code>, derived from <code>mark.excludes</code>
+through the catalogue exactly as <code>upgrade.mjs:83</code> derives <code>detail</code>, so the
+two strings can never differ. (2) Add <code>closed: &lt;partner name&gt;</code> to both
+accepted responses at <code>upgrade.mjs:137</code> and <code>:201</code>. (3) Retitle the tool
+&quot;Take a Mark&quot; and describe it as &quot;Take a Mark, bought or earned, for a token
+bound to your key. Taking either side of a pair closes the other permanently;
+every gate is checked before any payment is requested.&quot; (4) Emit <code>price: &quot;free&quot;</code> on earned sides instead of omitting the key, so a client that
+tabulates sides does not print an empty cell for the free ones.</p>
+<p><strong>Why.</strong> The ladder is fair in structure (every exclusion pair-internal, both
+sides open together) and the refusal names the blocker; but the piece&#39;s
+promise is that the consequence is readable BEFORE the choice, and today the
+response that would carry it is the one after. Four fields, no design change,
+hence ANYTIME.</p>
+<h3>C2.8 [BEFORE MAINNET] The heart every sheet was judged on is not the heart that will mint</h3>
+<p><strong>Observed.</strong> <code>compare-whole.png</code>: <code>example.com -- mask 7, heart 64.9%</code> on the
+left, <code>machinereadableonly.com -- mask 0, heart 61.9%</code> on the right. The left
+heart has a clear cleft between two lobes and a point; the right heart&#39;s top
+is flatter and its right shoulder is eaten into by the noise. Every Mark
+sheet opened above -- <code>base.png</code>, <code>static-hues.png</code>, <code>green-violet.png</code>,
+<code>eye-shapes.png</code>, <code>eye-colourways.png</code>, <code>tint-on-green*.png</code>, <code>break.png</code>,
+<code>all-marks.png</code> -- carries the left-hand heart (all dated on or before
+2026-09-02; the domain solve is 2026-09-03). CLAUDE.md records the cost as
+2.13 points and &quot;robustness did not degrade&quot;, which is true and is the decode
+measurement; nobody has yet LOOKED at a Mark on the 62 percent heart. The
+bitmap is stored at mint and never rewritten (spec section 8, &quot;Why the QR
+bitmap is stored&quot;), and <code>HeartMask.bits()</code> (<code>Renderer.sol:216</code>) is the target
+the solver aims at, so the fidelity of every mainnet heart is fixed on the day
+it is minted.</p>
+<p><strong>Change to.</strong> Before the first mainnet mint, render ids 1 to 24 solved
+against <code>https://machinereadableonly.com/t/&lt;id&gt;#</code> as one contact sheet
+(<code>tools/out/domain-compare/</code> already has the rig for one id) and look at the
+top cleft on each. If the cleft is lost on more than a handful, deepen the
+cleft in <code>HeartMask</code> by two rows and widen the point by one, re-solve the
+same 24, and compare -- the mask is the one lever that changes what 62
+percent of controllable modules can draw. Re-render <code>all-marks.png</code> and
+<code>break.png</code> on the real-domain heart either way and re-judge Break, whose
+inversion depends most on the silhouette.</p>
+<p><strong>Why.</strong> Every visual decision on the ladder was taken from a sheet, which is
+this project&#39;s best habit; the sheets predate the one change (the URL) that
+alters the silhouette on every token forever. BEFORE MAINNET because a
+bitmap, once minted, is the token&#39;s permanent payload.</p>
+<h3>C2.9 OBSERVATION -- No sheet shows the ten current Marks under their current names</h3>
+<p><strong>Observed.</strong> <code>all-marks.png</code> (2026-09-02) shows the maximal LEGAL set of the
+current ladder together -- five Marks -- and is the only render in the tree
+that composes the current ladder at all. Six current Marks appear on
+decision sheets under their own names (Static, Beat, both Irises, Tint,
+Break). The other four -- Hush, Ache, Vessel, Aura -- exist only as
+<code>voice.png</code>, <code>vein.png</code>, <code>crown.png</code>, <code>halo.png</code>, dated 2026-08-31 under the
+retired names, on the old heart, at a fixed level-200 frame. Nothing shows
+Hush beside Ache, or Vessel beside Break, which are the choices the agent is
+asked to make. The 459 renderable combinations were swept for DECODE
+(ladder spec 8.3), not for looks, and a decode sweep cannot see a dud (spec
+7.4).</p>
+<p><strong>Why this is an observation.</strong> There is nothing to change in the object; the
+ask is a ten-tile sheet (each Mark alone, current names, real-domain heart,
+at the level its gate opens: 1, 7, 30, 30, 100, 100, 365, 365, 100, 100) plus
+five two-tile pair sheets, generated with the rigs that already exist. Until
+it exists, C2.5 and C2.6 are judged from renders of the same drawings under
+other names, and the pair decisions in the table below are judged from
+measurements rather than from a picture of the two sides together.</p>
+<h3>C2.10 OBSERVATION -- Break alone greys the heart; with pair 2 it is the strongest picture on the ladder</h3>
+<p><strong>Observed.</strong> <code>break.png</code>, row &quot;Break alone&quot;, run 365: the heart is the
+matched grey <code>#4a4a4a</code>, the noise red, the frame red -- 126/255, and at
+thumbnail size the heart reads as having gone dark. Rows &quot;Break + Static&quot;
+(green heart, red code, 192) and &quot;Break + Beat, def B&quot; (blue-violet heart, red
+code, 209) are the two most emphatic tiles in the whole tree. So the hardest
+Mark to earn, on a token that took nothing in pair 2, is the quietest form
+of itself, and the copy says nothing about that. This is recorded, not
+proposed against: the spec chose definition B on stated grounds (<code>:432-444</code>)
+and &quot;robot to human to robot&quot; is the piece&#39;s own sentence for it. The one
+thing worth telling the Break-earner, in the <code>ladder</code> tool note of C2.5 or
+in the copy&#39;s pair 4 line, is that Static (5 USDC, level 30, still open to a
+whole token) turns Break from an inversion into a green heart on a red code.</p>
+<h3>The five pairs</h3>
+<table>
+<thead>
+<tr>
+<th>Pair</th>
+<th>Bought</th>
+<th>Earned</th>
+<th>Both open on the same day?</th>
+<th>Real decision?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Hush 1 USDC, quiet zone <code>#fdf3e3</code>, permanent, at the decode floor (maxDelta 28)</td>
+<td>Ache run 7, unearned frame cells <code>#e3ccd3</code>, gone at whole (C2.5)</td>
+<td>Hush on day 1, Ache on day 7; the spec calls this the closest call and keeps it</td>
+<td>YES, but the stakes are a dollar against a week and the earned side is the one that disappears. Worth waiting for only if C2.5(b) lands or the wait is understood as buying the ache of the year, not a permanent Mark.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Static 5 USDC at LEVEL 30, green noise, 66/255 at the top rung and strengthening with the run</td>
+<td>Beat run 30, red-to-violet gradient on the heart, 209/255</td>
+<td>Yes for an unbroken token; a lapsed token at level 30 has only Static</td>
+<td>YES, as taste, not as value: Beat is free and three times stronger, but it makes the heart bi-chromatic, so Static is the choice for an agent that wants the heart to stay red. The real structure is that Static&#39;s LEVEL gate makes it the consolation of the token whose run broke, priced at 5 USDC -- good.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Iris 25 USDC at level 100, three shapes, colour lapses with the heart</td>
+<td>Iris run 100, target only, colour frozen at the run&#39;s colour (always rung 4)</td>
+<td>Yes for an unbroken token</td>
+<td>YES, and the best pair on the ladder: shape against permanence at the same strength (239/255 each), and the frozen colour is the one thing money cannot buy. 25 USDC for three months&#39; patience is priced right.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Vessel 1,250 USDC at whole, gold frame and rings, 126/255</td>
+<td>Break run 365, the inversion, 126 alone / 192 with Static / 209 with Beat</td>
+<td>Only for a PERFECT year; a token that slipped once at day 200 has Vessel at day 365 and Break no earlier than day 565</td>
+<td>YES, and the dearest decision in either currency: for the once-lapsed agent it is 1,250 USDC now against up to a further year; for the perfect agent Break dominates unless gold is the point. The price is a statement price for a 126/255 effect and that is deliberate (spec <code>:93-97</code>); leave it.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Tint 250 USDC, recolours the eyes violet or gold, 126/255</td>
+<td>Aura 25 USDC, page tint <code>#fbeff2</code>, maxDelta 16 (C2.6)</td>
+<td>Yes, both wait on an Iris</td>
+<td>NOT YET. Loud-against-quiet is the intended dilemma, but the quiet side is invisible, so as built it is &quot;pay 25 to close Tint for nothing you can see&quot;. Becomes a real decision once Aura is rendered at a visible strength or priced as a whisper. Tint at ten times the Iris for half the effect is steep but is a post-Iris luxury by design; leave it.</td>
+</tr>
+</tbody></table>
+<p>The implied price of a day rises 25x up the ladder -- 0.14 USDC per day of
+patience in pair 1, 0.17 in pair 2, 0.25 in pair 3, 3.42 in pair 4 -- which
+is the right shape: impatience should cost more the longer the wait it
+replaces. No price or level is proposed to move except Aura&#39;s, conditionally,
+in C2.6.</p>
+<p>Section 2 count: 3 BEFORE MAINNET, 5 ANYTIME, 2 observations.</p>
+<h2>Section 3 -- The agent&#39;s journey</h2>
+<p>What was checked outside the repo, before anything below was written: the
+Agent Skills specification at <code>agentskills.io/specification</code> (frontmatter
+fields, their limits, the body guidance and the progressive-disclosure rule);
+the npm <code>npx</code> and <code>npm exec</code> documentation (a package not present locally is
+installed to the npm cache and a prompt is printed unless <code>--yes</code>, or unless
+stdin is not a TTY; <code>package@version</code> pins; the docs say NOTHING about whether a
+cached copy is refreshed on later runs, so <code>llms.txt:120</code>&#39;s &quot;re-resolves on
+every run&quot; is a claim the docs neither confirm nor deny, and the advice to pin
+is correct regardless); the MCP 2026-07-28 tools page (a Tool carries <code>name</code>,
+<code>title</code>, <code>description</code>, <code>inputSchema</code> with per-property <code>description</code>, and
+<code>annotations</code>; tool execution errors are <code>isError: true</code> results that &quot;contain
+actionable feedback that language models can use to self-correct&quot;); and the
+<code>vercel-labs/skills</code> README (<code>npx skills add &lt;owner&gt;/&lt;repo&gt;</code>, discovery of
+<code>SKILL.md</code> at the repo root or under <code>skills/&lt;name&gt;/</code>, 73+ agent runtimes).
+Locally: <code>client/src/cli.mjs</code> was run with no arguments, with <code>whoami</code> against
+an empty HOME, with <code>beat</code> and no <code>--site</code>, and with an unknown command; and
+Zod&#39;s <code>.describe()</code> was confirmed to reach the served JSON Schema as
+<code>description</code> (measured with <code>z.toJSONSchema</code> on the exact schema objects the
+tools export), while none of the nine tools calls it. Live, read-only:
+<code>GET /llms.txt</code> (200), <code>GET /t/1</code> (404), <code>GET /t/2</code> (200, <code>pendingOnChain: false</code>, <code>marks: 2</code>), <code>POST /mcp</code> unsigned (401 with <code>client</code> pointing at
+<code>/client.mjs</code>, which is 404), <code>GET /skill.md</code> (404).</p>
+<p><strong>Verdict.</strong> The journey is well built at the bottom and unfinished at the top.
+The parts that had to be right are: a key on the wrong curve to ever sign a
+transaction (<code>client/src/keys.mjs:3-11</code>), a client that will not sign a
+payment without a <code>payTo</code> it was told out of band (<code>client/src/pay.mjs:60-63</code>),
+a refusal that cancels settlement instead of charging for nothing
+(refusal-cancels-settlement, measured at 0.00 USDC), a <code>ladder</code> tool that reads
+the forfeit back for free before it is taken (<code>warden/src/mcp/tools/ladder.mjs:88-96</code>),
+and a raw-protocol document captured off the wire rather than written from the
+source (<code>docs/2026-09-01-mro-raw-protocol.md:12-16</code>) that six cold readers
+followed without a refusal. An agent that reads that document can get from
+nothing to a minted token with <code>curl</code> and <code>cast</code>, and the testnet run of
+2026-09-03 proved that the whole path settles.</p>
+<p>What is unfinished is the part CLAUDE.md calls the product. The locked copy
+ends &quot;To begin. <code>npx mro-agent join</code>&quot; (<code>docs/2026-09-01-mro-agent-facing-copy.md:135</code>)
+and <code>llms.txt:53</code> prints the same four words; run as printed, the client stops
+at <code>--site is required</code> (<code>client/src/cli.mjs:68-69</code>), and with a site it
+stops at <code>--to &lt;0xaddress&gt; is required</code> (<code>:79</code>). Run correctly, with no
+wallet, it prints the raw x402 demand and nothing else (<code>:87-103</code>,
+pinned by <code>client/test/cli.test.mjs:115-116</code>), where <code>llms.txt:102-103</code>
+promised &quot;the client stops and prints what a human has to do&quot;. It writes the
+identity key to a path two served documents name differently
+(<code>client/src/keys.mjs:20</code> against <code>llms.txt:90</code> and <code>:128</code>), and it writes that
+key before it has checked the command is one it knows (<code>cli.mjs:72</code> runs
+before <code>:78</code>; measured: <code>mro-agent mark</code> created a key, then said <code>unknown command</code>). It reaches four of the nine tools (<code>cli.mjs:14-20</code>): an agent
+cannot take a Mark, read the ladder, rebind, seed or rest through the package
+the piece says is how agents arrive. And the daily line it prints for the year
+ahead (<code>cli.mjs:106-107</code>) has a literal <code>&lt;id&gt;</code> where the token id it was just
+handed should be, no package version where <code>llms.txt:120-123</code> tells the agent
+to pin one, and a fixed <code>0 12</code> where the spec asked for a random minute.</p>
+<p>On the Warden side the tool surface is honest and terse to a fault. Every
+description states its cost (<code>mint.mjs:15</code>, <code>checkin.mjs:17</code>, <code>ladder.mjs:93</code>,
+<code>seed.mjs:11</code>), the two that only return a call say so in capitals
+(<code>rebind.mjs:11</code>, <code>rest.mjs:9</code>), and the refusals are structured, never thrown
+(<code>server.mjs:73-89</code>). But the input schemas carry no field descriptions at all
+-- <code>upgradeId</code> is served as <code>integer, 1-10</code> with no name attached to any number
+(measured above), so an agent listing tools cannot tell Hush from Vessel without
+having read a page -- and a refusal is a bare word. <code>not-bound-to-caller</code>,
+<code>unknown-token</code>, <code>chain-unavailable</code> and <code>wallet-cap-reached</code> each name a state
+and none names the next move; <code>wallet-cap-reached</code> (<code>gates.mjs:53</code>) appears in
+no agent-facing document. The day-two reply, which is the one call an agent
+makes 365 times, is five fields (<code>checkin.mjs:112-119</code>): it does not say when
+the day lands on chain, when the run is lost, or, when a run has just broken,
+that it broke. The spec promised all three (<code>2026-08-27-machine-readable-only-design.md:122-124</code>)
+and the engagement study&#39;s one recommendation aimed at the agent rather than
+the operator (R6, <code>docs/2026-08-31-mro-engagement-and-narrative.md:149-160</code>)
+is exactly this reply. The five-second challenge, which the copy makes the
+piece&#39;s one theatrical moment, happens inside <code>door.mjs:87-99</code> in silence: the
+agent never sees it happen, never sees how long it took, and if a slow
+handshake eats the five seconds it sees <code>refused at the door: expired</code>
+(<code>mcp.mjs:36-39</code>) with no retry and no hint that the fix is to try again.</p>
+<h3>C3.1 [BEFORE MAINNET] <code>npx mro-agent join</code> as printed does not run</h3>
+<p><strong>Observed.</strong> The locked copy&#39;s last line is &quot;To begin. <code>npx mro-agent join</code>&quot;
+(<code>docs/2026-09-01-mro-agent-facing-copy.md:135</code>); <code>warden/public/llms.txt:53</code>
+and <code>:85</code> print the same command. <code>client/src/cli.mjs:68-69</code>: <code>if (!site) throw new Error(&quot;--site is required&quot;)</code>; the help text at <code>:22</code> describes <code>--site</code> as
+&quot;the site to talk to, e.g. <a href="https://example.com">https://example.com</a>&quot;. So the command every
+agent-facing document gives is one that fails on the first line for every
+agent that follows it, and the failure names an option whose value the agent
+has to guess. The domain is DECIDED and REGISTERED (CLAUDE.md, Key Decisions),
+so there is exactly one right answer to the question the error asks.</p>
+<p><strong>Change to.</strong> In <code>client/src/cli.mjs:67-70</code>, default <code>site</code> to
+<code>https://machinereadableonly.com</code>:</p>
+<pre><code>const site = args.site ?? &quot;https://machinereadableonly.com&quot;;
+</code></pre>
+<p>and change the help line at <code>:22</code> to <code>--site &lt;origin&gt;      the site to talk to (default https://machinereadableonly.com)</code>. Keep <code>--endpoint</code> as the
+override for tunnels. Keep <code>--to</code> required; its error already says why
+(<code>:79</code>). Then <code>llms.txt:53</code> and <code>:85</code> can stay as they are, and the copy&#39;s
+last line becomes true.</p>
+<p><strong>Why.</strong> This is the first run of the package as published to npm, which is a
+first impression made once, and it currently ends in an error whose right
+answer is a value the project has already fixed. Nothing about the locked
+copy changes; the client is brought to match it.</p>
+<h3>C3.2 [BEFORE MAINNET] With no wallet, <code>join</code> prints a payment demand and no next step</h3>
+<p><strong>Observed.</strong> <code>client/src/cli.mjs:87-103</code>: <code>mint</code> is called, and when no
+<code>MRO_WALLET_KEY</code> or <code>--wallet-key</code> is present, <code>meta</code> is <code>null</code> and the result
+-- the x402 demand, <code>{ x402Version, error: &quot;Payment required to access this tool&quot;, accepts: [...] }</code> -- is printed under the label <code>mint:</code> and the command
+exits 0. <code>client/test/cli.test.mjs:115-116</code> pins exactly that (&quot;No wallet key
+was given, so nothing was signed and the demand is reported&quot;).
+<code>warden/public/llms.txt:99-103</code> tells the agent something else: &quot;if there is
+no payment source, the client stops and prints what a human has to do&quot;, and
+spec step 4 (<code>docs/specs/2026-08-27-machine-readable-only-design.md:106-112</code>)
+is the same promise. The one step of the journey that an agent cannot do
+alone is the one where the client goes quiet.</p>
+<p><strong>Change to.</strong> In <code>cli.mjs</code>, after <code>:97</code>, when <code>readDemand(result)</code> is non-null
+and <code>walletKey</code> is absent, print this and exit 2 instead of printing the
+demand:</p>
+<pre><code>Minting costs 1 USDC: the site quoted 1000000 base units of USDC on
+eip155:&lt;network&gt;, payable to &lt;payTo&gt;. NOTHING WAS PAID and nothing was
+signed. This client cannot pay by itself. A human has to:
+  1. put 1 USDC on that chain in a wallet, and put its private key in
+     MRO_WALLET_KEY (never on the command line);
+  2. tell you, out of band, the treasury address to expect;
+  3. re-run this command with --expect-payto &lt;that address&gt;.
+This client refuses to pay any other address, amount or asset. Your
+identity key is unaffected and is at &lt;keyPath&gt;.
+</code></pre>
+<p>with <code>&lt;network&gt;</code> and <code>&lt;payTo&gt;</code> read from <code>accepts[0]</code> of the demand the
+client already parsed (<code>pay.mjs:32-46</code>). Amend <code>cli.test.mjs:105-117</code> to
+assert on &quot;NOTHING WAS PAID&quot; rather than on &quot;Payment required&quot;.</p>
+<p><strong>Why.</strong> The agent will relay whatever the client printed. Today it relays a
+JSON object with the word &quot;error&quot; in it, or nothing. The text above is what
+<code>llms.txt</code> already promised, it repeats the client&#39;s own refusal rule from
+<code>README.md:46-52</code> at the moment it matters, and it names the one thing the
+operator must hand over out of band, which is the whole of the payment
+safety story. First-run experience of the published package, hence the tag.</p>
+<h3>C3.3 [BEFORE MAINNET] The key is written to a path two served documents get wrong, before the command is validated, with no word about backing it up</h3>
+<p><strong>Observed.</strong> <code>client/src/keys.mjs:20</code>: the identity lives at
+<code>~/.mro/identity.jwk.json</code>; <code>client/README.md:28</code> says the same.
+<code>warden/public/llms.txt:90</code> says <code>~/.mro/key.jwk</code>; <code>:128</code> says &quot;Back up
+<code>~/.mro/key.jwk</code>&quot;; spec step 3 (<code>:102</code>) says <code>~/.mro/key.jwk</code>. An agent
+following the served page backs up a file that does not exist.
+<code>cli.mjs:72-73</code>: <code>ensureIdentity</code> runs for every command except <code>help</code> and
+<code>whoami</code>, BEFORE the command is dispatched at <code>:78</code>, <code>:112</code>, <code>:119</code>; measured:
+<code>mro-agent mark --site https://example.com</code> wrote a fresh key to disk and
+then failed with <code>unknown command: mark</code>. On creation the client prints
+<code>generated a new identity at: &lt;path&gt;</code> (<code>:73</code>) and nothing else. Nothing the
+client prints, on any command, says what the key is, that it should be backed
+up, or what losing it costs; the only place that is said is <code>llms.txt:128-129</code>
+(&quot;A lost key strands nothing ... but it costs a day&quot;), which the agent that
+ran <code>npx</code> may never have read.</p>
+<p><strong>Change to.</strong> (1) <code>llms.txt:90</code> and <code>:128</code> to <code>~/.mro/identity.jwk.json</code>.
+(2) Move <code>ensureIdentity</code> (<code>cli.mjs:72</code>) below a command check: validate
+<code>command</code> against <code>[&quot;join&quot;, &quot;beat&quot;, &quot;status&quot;, &quot;whoami&quot;]</code> at <code>:52</code> and throw
+the <code>unknown command</code> error before any key is made. (3) Replace <code>:73</code> with:</p>
+<pre><code>generated a new identity at &lt;path&gt; (mode 600).
+Back this file up now. It is the only thing that can grow your token:
+a lost key does not lose the token, but the token&#39;s OWNER wallet must
+then call rebind(tokenId, newKeyId) on chain, and no day is credited
+until it does.
+</code></pre>
+<p><strong>Why.</strong> The key is the agent&#39;s identity in the piece for a year or more,
+and the first-run message is the only time the client will ever say so. A
+package that creates a signing key on a typo, and calls it by a name the
+site&#39;s instructions do not use, is what the 21-of-21 refusals in
+agent-facing-copy-locked were about. First run of the published package,
+hence the tag.</p>
+<h3>C3.4 [BEFORE MAINNET] The cron line the client prints is not the line the site tells the agent to write</h3>
+<p><strong>Observed.</strong> <code>client/src/cli.mjs:105-107</code> prints, on <code>join --cron</code>:</p>
+<pre><code>0 12 * * * mro-agent beat --site &lt;site&gt; --token &lt;id&gt; &gt;&gt; ~/.mro/beat.log 2&gt;&amp;1
+</code></pre>
+<p>with a literal <code>&lt;id&gt;</code> placeholder, even when the <code>mint</code> result three lines
+earlier (<code>:102</code>) carried <code>tokenId</code>. Three documents describe a different line.
+<code>llms.txt:118</code>: &quot;<code>join</code> installs a daily cron line&quot; (it does not:
+<code>README.md:66-68</code> says so, deliberately). <code>llms.txt:120-123</code>: &quot;Pin a version
+in that line ... an unpinned daily entry is a standing execution channel for
+whoever controls the name&quot; -- the printed line names neither <code>npx</code> nor a
+version, so an agent that pastes it and has no global install gets <code>command not found</code> at noon, and an agent that &quot;fixes&quot; it to <code>npx mro-agent</code> has
+built exactly the channel the page warns about. Spec step 6 (<code>:119-121</code>):
+&quot;a random minute near 12:00 UTC&quot;; the printed line is <code>0 12</code> for every agent
+on earth, which puts every daily check-in of the whole collection through a
+five-second challenge in the same second.</p>
+<p><strong>Change to.</strong> Replace <code>:105-107</code> with a line built from the result: read
+<code>tokenId</code> from <code>structured(result)</code> when <code>ok</code> is true, read <code>version</code> from the
+package&#39;s own <code>package.json</code>, draw <code>M</code> from 0-59 and <code>H</code> from 11-13, and print</p>
+<pre><code>M H * * * npx --yes mro-agent@&lt;version&gt; beat --site &lt;site&gt; --token &lt;tokenId&gt; &gt;&gt; ~/.mro/beat.log 2&gt;&amp;1
+</code></pre>
+<p>with one sentence above it: &quot;Paste this into <code>crontab -e</code>. The version is
+pinned on purpose; when you change it, read what changed first.&quot; When there is
+no <code>tokenId</code> (unpaid run), print the same line with <code>--token &lt;your token id&gt;</code>
+and say why. Change <code>llms.txt:118</code> from &quot;installs&quot; to &quot;prints&quot;.</p>
+<p><strong>Why.</strong> This line runs for as long as the token lives, which is the
+definition of BEFORE MAINNET here: it is the one artefact of the first run
+that the agent copies somewhere and never looks at again. It has to be
+correct, pinned, and carry the id, or the year does not happen.</p>
+<h3>C3.5 [BEFORE MAINNET] <code>--directory</code> is documented, does not exist, and its absence registers the key in the public directory the agent was trying to avoid</h3>
+<p><strong>Observed.</strong> <code>warden/public/llms.txt:93-94</code>: &quot;If you have your own domain,
+pass <code>--directory https://your.domain</code> and host the JWKS yourself.&quot; Spec step 3
+(<code>:104-105</code>) says the same. <code>client/src/cli.mjs:35-45</code> accepts any <code>--flag value</code> pair, so <code>--directory</code> parses without complaint; <code>:82</code> then calls
+<code>registerKey</code> unconditionally, and <code>:75</code> builds <code>call = { origin, site, privateJwk }</code> with no <code>signatureAgent</code>, so <code>door.mjs:86</code> defaults it to the
+site. Net effect: an agent that passes <code>--directory</code> has its public key
+registered with MRO anyway and served from MRO&#39;s own directory, which
+<code>docs/2026-09-01-mro-raw-protocol.md:283-287</code> calls &quot;a correlation surface&quot;
+that &quot;hosting your own directory instead avoids&quot;, and
+<code>docs/2026-09-03-mro-testnet-end-to-end.md:252-254</code> records that &quot;there is no
+removal path&quot;.</p>
+<p><strong>Change to.</strong> In <code>cli.mjs</code>: add <code>--directory &lt;origin&gt;</code> to <code>USAGE</code> at <code>:21-33</code>
+(&quot;host your own JWKS there and skip registration&quot;); when set, skip
+<code>registerKey</code> at <code>:82</code> and pass <code>signatureAgent: args.directory</code> into <code>call</code>
+at <code>:75</code>. <code>index.mjs</code> already exports everything needed. Until that lands,
+delete <code>llms.txt:93-94</code> rather than describe a flag that silently does the
+opposite of what it says.</p>
+<p><strong>Why.</strong> A registration cannot be undone, and this is the one place in the
+journey where following the served instructions leaves a permanent trace the
+agent explicitly asked not to leave. The fix is fifteen lines and it makes the
+&quot;two paths, one rule&quot; of spec section 5 true in the client.</p>
+<h3>C3.6 [ANYTIME] The tool schemas name nothing: <code>upgradeId</code> is <code>integer 1-10</code></h3>
+<p><strong>Observed.</strong> Measured on the exact schema objects the tools export: the
+served <code>inputSchema</code> for <code>upgrade</code> is <code>{ tokenId: integer &gt; 0, upgradeId: integer 1-10, variant: integer 0-2 default 0 }</code> with no <code>description</code> on any
+property; <code>mint</code>&#39;s is <code>{ to: string, pattern ^0x[0-9a-fA-F]{40}$ }</code>. Zod 4&#39;s
+<code>.describe()</code> is emitted as JSON Schema <code>description</code> by the SDK&#39;s converter
+(<code>warden/node_modules/@modelcontextprotocol/server/dist/src-CX2iR2pK.mjs:5302</code>,
+verified by running it), and <code>/bin/grep -rn &#39;describe(&#39; warden/src/mcp/</code>
+returns nothing. The MCP tools page shows per-property descriptions as the
+normal shape of a tool and says tool execution errors should be &quot;actionable
+feedback that language models can use to self-correct&quot;. So an agent that lists
+tools sees ten integers and one regex, and the names Hush, Ache, Static, Beat,
+Iris, Vessel, Break, Tint and Aura, the prices, and the pairing exist only on
+pages it may not have read. The <code>upgrade</code> description (<code>upgrade.mjs:19</code>) is
+addressed by C2.7; this finding is the schema underneath it.</p>
+<p><strong>Change to.</strong> Add <code>.describe()</code> to every argument, with the ladder string
+GENERATED from <code>LADDER</code> in <code>warden/src/mcp/ladder.mjs</code> so it cannot drift from
+the catalogue (the same rule <code>mint.mjs:12-13</code> applies to its price):</p>
+<ul>
+<li><code>upgrade.tokenId</code>: &quot;A token bound to your key.&quot;</li>
+<li><code>upgrade.upgradeId</code>: built as <code>id name route price-or-run gate</code> per Mark,
+joined with <code>; </code>, which today renders as: &quot;1 hush bought $1.00; 2 ache
+earned by a run of 7; 3 static bought $5.00 at level 30; 4 beat earned by a
+run of 30; 5 iris bought $25.00 at level 100, choose a shape; 6 iris earned
+by a run of 100; 7 vessel bought $1250.00 at a whole heart; 8 break earned by
+a run of 365; 9 tint bought $250.00, needs an Iris, choose an ink; 10 aura
+bought $25.00, needs an Iris. Pairs are 1-2, 3-4, 5-6, 7-8, 9-10; taking
+either side closes the other permanently. Read <code>ladder</code> first.&quot;</li>
+<li><code>upgrade.variant</code>: &quot;Shape for 5 (0 target, 1 squircle, 2 leaf) or ink for 9
+(0 violet, 1 gold). Every other Mark takes 0.&quot;</li>
+<li><code>mint.to</code>: &quot;The Base address that will OWN the token: your operator&#39;s
+wallet, usually. Your signing key grows the token; this address owns it and
+can sell, rebind or seal it.&quot;</li>
+<li><code>checkin.tokenId</code>, <code>ladder.tokenId</code>, <code>rebind.tokenId</code>, <code>rest.tokenId</code>,
+<code>status.tokenId</code>: &quot;A token id.&quot; (<code>rest</code>: &quot;A token id. The call returned
+seals it forever.&quot;)</li>
+<li><code>seed.parentId</code>: &quot;A whole, unsealed token bound to your key.&quot;; <code>seed.to</code>:
+as <code>mint.to</code>.</li>
+</ul>
+<p>Also append to <code>mint.mjs:15</code>: &quot;The first call answers with an x402 payment
+demand; repeat the identical call with the signed authorisation under
+<code>_meta[\&quot;x402/payment\&quot;]</code>.&quot; And to <code>checkin.mjs:17</code>: &quot;Once per UTC day; a
+second call the same day is refused with <code>already-credited-today</code> and
+<code>nextWindowOpensAt</code>.&quot;</p>
+<p><strong>Why.</strong> tools/list is the one surface every MCP-speaking agent reads without
+being sent to a page, and it is the cheapest place in the piece to say what a
+Mark is. Descriptions are Warden strings, so ANYTIME.</p>
+<h3>C3.7 [ANYTIME] A refusal is a word; none says what to do next</h3>
+<p><strong>Observed.</strong> The complete set an agent can receive, from source:
+door <code>signature | components | expired | unknown-key | directory | challenge | digest</code> (<code>warden/src/door/verify.mjs:105-158</code>, <code>challenge.mjs:49-84</code>,
+<code>middleware.mjs:80</code>); registration <code>proof | nonce | invalid-jwk | rate-limited</code>
+(<code>directory.mjs:293-442</code>); tools <code>unknown-token | not-bound-to-caller | already-credited-today | already-minted | supply-cap-reached | wallet-cap-reached | chain-unavailable | paused | sunset | resting | parent-not-whole | no-seed-available | payment-unavailable | paid-but-unavailable | internal</code> and the eight <code>mark-*</code> reasons
+(<code>gates.mjs:23-54</code>, <code>mint.mjs:25-33</code>, <code>seed.mjs:26-57</code>, <code>upgrade.mjs:43-104</code>,
+<code>x402.mjs:221-228</code>, <code>server.mjs:83-84</code>). Three carry a second field
+(<code>already-credited-today</code> has <code>nextWindowOpensAt</code>, <code>mark-excluded</code> and
+<code>paid-but-unavailable</code> have <code>detail</code>); the rest are the word alone.
+<code>llms.txt:220-221</code> says only &quot;Errors are returned as structured values with a
+<code>reason</code>&quot;. Three specific gaps: <code>wallet-cap-reached</code> is in no agent-facing
+document (<code>/bin/grep</code> over <code>llms.txt</code> and the raw protocol finds only the
+<code>walletCap()</code> selector at <code>:593</code>); <code>digest</code> is missing from the 401 table at
+<code>docs/2026-09-01-mro-raw-protocol.md:86-94</code> although <code>:208</code> names it; and
+<code>unknown-token</code> is answered from the mirror before the chain is asked
+(<code>checkin.mjs:23</code>, <code>upgrade.mjs:42-43</code>, <code>status.mjs:16-17</code>), so a token that
+exists on chain and not in the mirror -- live today, <code>GET /t/1</code> is 404 while
+the chain holds token 1 (CLAUDE.md) -- is told it does not exist, by every
+tool, with no route to the <code>viewOf</code> call that would show it does.</p>
+<p><strong>Change to.</strong> (1) One table, in <code>gates.mjs</code>, <code>reason</code> to <code>next</code>, and every
+refusal builder spreads <code>next</code> in beside <code>reason</code>. The strings:</p>
+<pre><code>not-bound-to-caller     &quot;This token is bound to another key. If you are its new agent, the token OWNER&#39;s wallet must call rebind(tokenId, yourKeyId); call `rebind` to get that call. Nothing here can do it for you.&quot;
+unknown-token           &quot;No token with this id is known here. If you minted it today, it exists here from the moment `mint` answered; if the chain holds it and this service does not, read viewOf(id) on the contract and try again after 00:05 UTC.&quot;
+chain-unavailable       &quot;The chain could not be read, so this was refused rather than guessed. Nothing was charged. Try again in a minute.&quot;
+paused                  &quot;Writes are paused by the operator. Nothing was charged. Level and streak are not affected by the pause; try again later.&quot;
+sunset                  &quot;The piece is closed. Every token rests where it stands; transfers and rebind still work. Nothing more can be minted, credited or marked.&quot;
+resting                 &quot;This token was sealed by its owner. It cannot be credited or marked again.&quot;
+wallet-cap-reached      &quot;That address already holds the maximum number of tokens (walletCap() on the contract). Mint to a different address.&quot;
+already-minted          &quot;This key has minted its one token. `status` with no argument shows it.&quot;
+supply-cap-reached      &quot;The collection is full.&quot;
+payment-unavailable     &quot;Payment cannot be taken right now (the facilitator could not be reached). Nothing was charged. Try again later.&quot;
+paid-but-unavailable    &quot;A gate closed while your payment was being verified; `detail` names it. The authorisation was NOT submitted and your balance did not move.&quot;
+</code></pre>
+<p>and the <code>mark-*</code> reasons: <code>mark-level-too-low</code> &quot;needs a level of N days&quot;
+(interpolated from the catalogue), <code>mark-needs-streak</code> &quot;needs a run of N
+days&quot;, <code>mark-needs-whole</code> &quot;needs a whole heart, 365 days&quot;, <code>mark-needs-iris</code>
+&quot;needs an Iris, bought (5) or earned (6), already written on chain&quot;,
+<code>mark-excluded</code> &quot;closed permanently by <code>detail</code>, the other side of this
+pair&quot;, <code>mark-bad-variant</code> &quot;this Mark accepts only variant 0&quot; (or lists them),
+<code>mark-already-applied</code> &quot;this token already wears it&quot;.
+(2) For <code>unknown-token</code> specifically, ask <code>chain.lifecycleOf(tokenId)</code> on a
+mirror miss and, when it exists, answer <code>reason: &quot;not-yet-mirrored&quot;</code> with the
+second sentence above as <code>next</code>. (3) Add <code>digest</code> to the table at
+<code>raw-protocol.md:86-94</code> (&quot;the body you sent is not the body you signed; sign
+the exact bytes you send&quot;) and <code>wallet-cap-reached</code> to the gate list at
+<code>:530-531</code>. (4) In the client, <code>mcp.mjs:36-39</code>: print <code>next</code> when present,
+and map door reasons to sentences (see C3.9).</p>
+<p><strong>Why.</strong> The MCP spec&#39;s own definition of a tool error is feedback a model
+can act on. Every reason here is a correct diagnosis and none is a
+prescription, and the agent is a program that will do the next sensible
+thing if it is told what that is. Warden strings, hence ANYTIME.</p>
+<h3>C3.8 [ANYTIME] The day-two reply does not say when the day lands, when the run is lost, or that a run just broke</h3>
+<p><strong>Observed.</strong> <code>warden/src/mcp/tools/checkin.mjs:112-119</code> returns <code>{ ok, accepted, creditedDay, level, streak, nextWindowOpensAt }</code>. Spec step 7
+(<code>:122-124</code>): &quot;The reply says what the heart will look like after tonight&#39;s
+write, when the next window opens, and the deadline to keep the streak.&quot;
+Engagement R6 (<code>docs/2026-08-31-mro-engagement-and-narrative.md:149-160</code>)
+is the only recommendation in that study aimed at the agent rather than the
+operator: &quot;the reply should name the next threshold, the distance to it, and
+what is at risk tonight ... An agent given that will report it to its operator.
+That is the whole retention loop, and it costs a string.&quot; <code>mint.mjs:113</code>
+already computes <code>onChainBy</code>; <code>checkin</code> does not carry it. When the run
+breaks, <code>:60</code> computes <code>streak = 1</code> from a <code>token.streak</code> it still holds and
+the reply says <code>streak: 1</code> with no sign that it was 99 yesterday. So day two
+tells the agent less than day one did, and the one thing the copy makes
+matter (&quot;Miss a day and the run restarts at one&quot;, copy <code>:74-75</code>) is never
+announced by the tool that knows.</p>
+<p><strong>Change to.</strong> Extend the success return at <code>:112-119</code> with:</p>
+<pre><code>onChainBy:      new Date((day + 1) * 86_400_000 + 300_000).toISOString()   // same formula as mint.mjs:113
+streakDeadline: new Date((day + 2) * 86_400_000).toISOString()             // the end of tomorrow, UTC
+heart:          `${Math.min(level, 365)}/365`
+nextRung:       { at: &lt;first of 3, 7, 30, 100 above streak, or null&gt;, daysAway }
+runBroke:       (streak === 1 &amp;&amp; token.streak &gt; 1) ? { was: token.streak, lastCreditedDay: token.lastDay } : undefined
+note:           &quot;Day &lt;level&gt; credited; it is written on chain at 00:05 UTC. Your run is &lt;streak&gt;. Check in again before &lt;streakDeadline&gt; to keep it.&quot;
+</code></pre>
+<p>with <code>note</code> gaining, when <code>runBroke</code> is set, &quot; Your run of <was> ended: the
+<was> days are kept, the colour restarts.&quot; Put the same <code>onChainBy</code> on the
+<code>already-credited-today</code> refusal at <code>:78-84</code> so a second call in a day learns
+when the first lands.</p>
+<p><strong>Why.</strong> This is the only call an agent makes every day for a year, and it is
+the only place the piece speaks to the agent at all after mint. The fields are
+computed from values the handler already holds; nothing is read that is not
+read now. Warden strings, hence ANYTIME, but it should exist before the first
+mainnet day two.</p>
+<h3>C3.9 [ANYTIME] The client hides the rite and turns a slow handshake into a dead end</h3>
+<p><strong>Observed.</strong> <code>client/src/door.mjs:86-104</code>: knock, sign, answer, send, in
+silence. <code>challenge.mjs:25-36</code> provides <code>msRemaining</code> and its own comment says
+&quot;five seconds is not long, and a slow DNS lookup can eat it&quot;; nothing calls
+it (<code>/bin/grep -rn msRemaining client/src</code> hits only its definition and
+<code>index.mjs:8</code>). On a 401 the client throws <code>refused at the door: &lt;reason&gt;</code>
+(<code>mcp.mjs:36-39</code>) and exits 1 (<code>cli.mjs:127-130</code>). So the agent whose first
+request took 5.2 seconds end to end sees <code>refused at the door: expired</code>, no
+retry, and a word whose meaning is on a page it may not have read; and the
+agent whose request took 0.4 seconds never learns that anything happened.
+Section 1 (C1.7) concluded the challenge can only be a rite if the copy makes
+it one; the client is the copy the agent actually experiences, and it says
+nothing.</p>
+<p><strong>Change to.</strong> (1) In <code>admittedFetch</code>, on a 401 whose <code>reason</code> is <code>challenge</code>
+or <code>expired</code>, knock again and retry once. (2) Print one line to stderr on
+every admitted request, from <code>cli.mjs</code>&#39;s <code>out</code>: <code>answered the door&#39;s challenge in &lt;ms&gt; ms (it allows 5000)</code>. (3) In <code>mcp.mjs:38</code>, map the door reasons:</p>
+<pre><code>expired      &quot;the door&#39;s five-second challenge ran out before the answer arrived (retried once). Check the network path; a slow first handshake is the usual cause.&quot;
+challenge    &quot;the challenge answer did not match, or the challenge was already spent. This client computes it itself; if this persists, the key file may not be the one registered.&quot;
+unknown-key  &quot;the site does not have this key. Run `mro-agent join` once to register it, or host your own directory and pass --directory.&quot;
+signature    &quot;the signature did not verify. The key at &lt;path&gt; is not the one the site knows, or the request was altered in transit.&quot;
+components   &quot;the site requires a signature over five components; this client sends them, so this is a version mismatch. Update mro-agent.&quot;
+directory    &quot;the site could not fetch the key directory. Theirs if you registered with them, yours if you host one. Try again.&quot;
+digest       &quot;the body was altered after signing. This client signs the exact bytes it sends; something in between changed them.&quot;
+</code></pre>
+<p><strong>Why.</strong> Five seconds is the piece&#39;s one theatrical rule and the client is
+where an agent meets it; a number on stderr is the smallest honest way to let
+it be felt. The retry converts the most likely first-run failure into a
+success, and the sentences are the raw-protocol table (<code>:86-94</code>) delivered
+where the failure happens. Client strings, hence ANYTIME.</p>
+<h3>C3.10 [ANYTIME] &quot;Minted&quot; and &quot;on chain&quot; are one word apart and nothing dates the gap</h3>
+<p><strong>Observed.</strong> <code>mint.mjs:106-114</code> answers <code>txStatus: &quot;queued&quot;</code> with
+<code>onChainBy</code>, a promise for 00:05 UTC. <code>tokenView.mjs:23</code> then reports
+<code>pendingOnChain: t.status === &quot;queued&quot;</code> with no date, so <code>status</code> and <code>/t/&lt;id&gt;</code>
+say &quot;pending&quot; forever without saying since when or until when. The Clock can
+skip a night on purpose -- gas guard, <code>warden/src/clock/run.mjs:96</code>, &quot;nothing
+written&quot;; spec <code>:872-875</code> &quot;Rows stay pending and are written tomorrow&quot; -- and
+nothing tells the agent that the promise slipped. An agent that reads <code>status</code>
+on day three and sees <code>pendingOnChain: true</code> has no way to tell &quot;the Clock
+runs tonight&quot; from &quot;the Clock has not run for three nights&quot;, and the copy&#39;s
+whole verification story (&quot;Read the chain instead of asking us&quot;,
+<code>raw-protocol.md:550-584</code>) sends it to a chain that does not yet have it.</p>
+<p><strong>Change to.</strong> In <code>tokenView.mjs</code>, when <code>t.status === &quot;queued&quot;</code>, add
+<code>onChainBy: new Date((t.mintDay + 1) * 86_400_000 + 300_000).toISOString()</code>
+(the same formula <code>mint</code> promised) and <code>late: Date.now() &gt; onChainBy</code>. In
+the <code>status</code> tool description (<code>status.mjs:10</code>) append: &quot;<code>pendingOnChain</code>
+means the mirror holds it and the chain does not yet; <code>onChainBy</code> is when it
+should; <code>late</code> means that time has passed and the nightly write has not
+happened.&quot; Keep the field names identical on <code>/t/&lt;id&gt;</code>, per the function&#39;s
+own one-story rule (<code>tokenView.mjs:1-3</code>).</p>
+<p><strong>Why.</strong> The piece asks agents to verify it on chain and then holds their
+token off chain for up to a day; the least it can do is say for how long, and
+say when that has stopped being true. Two computed fields, hence ANYTIME.</p>
+<h3>C3.11 [BEFORE MAINNET] <code>payTo</code> pinning has no out-of-band source, and SKILL.md is the only channel that can be one</h3>
+<p><strong>Observed.</strong> The client refuses to pay without an expected <code>payTo</code> &quot;from a
+source other than this server&quot; (<code>client/src/pay.mjs:60-63</code>); the raw protocol
+says the same and says not to take it &quot;from this page, or from us&quot;
+(<code>:511-528</code>); the README says &quot;Get the treasury from your operator, out of
+band&quot; (<code>:46-52</code>). Today there is nothing out of band: the treasury is a
+placeholder (CLAUDE.md), no repository is named on any served page (cold-read
+round 2: a reader &quot;refuted our own mitigation&quot; because provenance &quot;only means
+something if the reader knows which repo is ours, and the page never names
+it&quot;; the operator deferred naming it), no X account exists, and <code>/skill.md</code> is a 404.
+So the strongest safety rule in the piece is, on launch day, an instruction
+the operator cannot follow. The skills CLI is the distribution bet (CLAUDE.md
+Gotchas; spec <code>:851-855</code>), and a skill file arrives by <code>git</code> from a named
+repository -- a different channel from the 402 quote, which is the definition
+of out of band.</p>
+<p><strong>Change to.</strong> Put the four values in SKILL.md (outline below, section &quot;Check
+these first&quot;), and only there and in the repository README, never in
+<code>llms.txt</code> or the 401: <code>treasury: 0x...</code> (the real <code>TREASURY_ADDRESS</code>),
+<code>contract: 0x...</code> with <code>chainId: 8453</code>, <code>package: mro-agent@&lt;version&gt;</code> with
+its expected <code>dist.attestations</code> repository, and <code>repository: &lt;the named repo&gt;</code>. Say in SKILL.md, in one sentence, why they are there and not on the
+site: &quot;These arrived with this file, from a repository you chose to install
+from. The site will quote a payTo; if it is not this one, refuse.&quot; Add
+<code>--expect-payto</code> to the SKILL.md mint command verbatim.</p>
+<p><strong>Why.</strong> BEFORE MAINNET because the first wave of agents will pay against
+whatever the first published SKILL.md says, and the treasury cannot change
+without every installed copy going stale; it has to be right, and real, the
+first time. This also closes the deferred half of the provenance fix by
+giving the reader the repository name in the file that came from it.</p>
+<h3>C3.12 [ANYTIME] The client reaches four of the nine tools</h3>
+<p><strong>Observed.</strong> <code>client/src/cli.mjs:14-20</code>: <code>whoami</code>, <code>join</code>, <code>beat</code>, <code>status</code>.
+Spec section 11 (<code>:846-850</code>) lists <code>mark</code>, <code>rebind</code>, <code>seed</code>, <code>rest</code>
+(with the <code>REST &lt;tokenId&gt;</code> confirmation) and <code>daemon</code> as well.
+<code>ladder</code> and <code>upgrade</code> -- the second act of the piece, and the only place
+money moves after mint -- are unreachable from the package the copy calls
+the way in; so are the two owner calls (<code>rebind</code>, <code>rest</code>) that the copy
+promises the operator (&quot;they can seal it permanently&quot;, copy <code>:106-107</code>).
+<code>index.mjs</code> already exports <code>callTool</code> and <code>payFor</code>, so each command is a
+dozen lines.</p>
+<p><strong>Change to.</strong> Add to <code>cli.mjs</code>: <code>ladder --token &lt;id&gt;</code> (prints the <code>ladder</code>
+result as a five-row table: pair, held, open sides with price or run,
+<code>closes</code>); <code>mark --token &lt;id&gt; --mark &lt;1-10&gt; [--variant &lt;n&gt;]</code> (calls
+<code>upgrade</code>; for a bought Mark, the same <code>payFor</code> path as <code>join</code> with
+<code>--expect-payto</code>; prints the <code>ladder</code> result again afterwards so the forfeit
+is shown as taken); <code>rebind --token &lt;id&gt;</code> and <code>rest --token &lt;id&gt;</code> (print the
+returned call as a <code>cast send</code> line for the OWNER&#39;s wallet, and for <code>rest</code>
+require the phrase <code>REST &lt;id&gt;</code> on stdin first, per spec <code>:772-773</code>); <code>seed --parent &lt;id&gt; --to &lt;0x&gt;</code>. Update the USAGE block and README.</p>
+<p><strong>Why.</strong> ANYTIME because a republished client costs nothing and the earned
+Marks cannot exist before day 7 on mainnet; but Hush is buyable on day one,
+and a first-wave agent that reads &quot;five pairs&quot; in the copy and finds no
+command for them will report that the product does not do what the page says.</p>
+<h3>C3.13 OBSERVATION -- A SKILL.md has never been cold-read, and the rig does not model its arrival</h3>
+<p><strong>Observed.</strong> Every cold read so far (24 of the copy, 6 of the raw protocol,
+6 of <code>llms.txt</code>) used the rig in test-copy-on-cold-agents, whose framing is
+&quot;the operator fetched this from the project&#39;s site and asked for a report&quot;.
+A skill installed by <code>npx skills add &lt;owner&gt;/&lt;repo&gt;</code> arrives differently: its
+<code>description</code> (max 1024 characters) is loaded at startup for every skill the
+runtime has, before any task, and the body is loaded only &quot;once it&#39;s decided
+to activate a skill&quot; (agentskills.io, Progressive disclosure). So the first
+impression is not part one of the copy; it is one sentence in a list of other
+skills&#39; sentences, read by an agent that was asked something else. Whether
+that sentence causes activation, and whether an agent activated that way
+relays the offer or warns against it, is unmeasured, and the rig cannot
+measure it without a new framing (&quot;you have this skill installed; your
+operator says ...&quot;).</p>
+<p><strong>Why this is an observation.</strong> The object to change is the description
+proposed below, and it cannot be judged from argument; the project&#39;s own rule
+is that agent-facing text is measured, not debated. The action is to run the
+rig on the SKILL.md with the installed-skill framing, three readers per
+variant, before the first publish, and to treat the <code>description</code> line as the
+variant under test.</p>
+<h3>The journey as a table</h3>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What the agent sees</th>
+<th>Where it can fail</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Discovery via <code>llms.txt</code></td>
+<td>Eleven lines of WHAT, a testnet frame, the npm warning, then <code>npx mro-agent join</code></td>
+<td>The offer is absent (C1.1); the command does not run as printed (C3.1)</td>
+<td>BEFORE MAINNET</td>
+</tr>
+<tr>
+<td>Discovery via the 401</td>
+<td>A challenge, an expiry, three URLs, one a 404</td>
+<td>No sentence says what this is (C1.4)</td>
+<td>ANYTIME</td>
+</tr>
+<tr>
+<td>Discovery via the QR</td>
+<td><code>/t/&lt;id&gt;</code> JSON: numbers and an owner; today 404 for token 1</td>
+<td>No link out (C1.5); &quot;unknown-token&quot; with no route to the chain (C3.7)</td>
+<td>ANYTIME</td>
+</tr>
+<tr>
+<td>Discovery via the skills CLI</td>
+<td>Nothing: <code>/skill.md</code> is 404 and no SKILL.md exists</td>
+<td>The distribution bet has no artefact (outline below, C3.11, C3.13)</td>
+<td>BEFORE MAINNET</td>
+</tr>
+<tr>
+<td>Key</td>
+<td><code>generated a new identity at &lt;path&gt;</code>; path differs from the served page; made even on a typo</td>
+<td>C3.3</td>
+<td>BEFORE MAINNET</td>
+</tr>
+<tr>
+<td>Registration</td>
+<td><code>registered with: &lt;site&gt;</code>; <code>--directory</code> silently ignored</td>
+<td>C3.5</td>
+<td>BEFORE MAINNET</td>
+</tr>
+<tr>
+<td>The door</td>
+<td>Silent on success; <code>refused at the door: expired</code> on a slow handshake, no retry</td>
+<td>C3.9</td>
+<td>ANYTIME</td>
+</tr>
+<tr>
+<td>tools/list</td>
+<td>Nine names, nine one-line descriptions with costs, schemas with no field descriptions</td>
+<td>C3.6, C1.6</td>
+<td>ANYTIME</td>
+</tr>
+<tr>
+<td>Mint, no wallet</td>
+<td>A raw x402 demand printed under <code>mint:</code>, exit 0</td>
+<td>C3.2</td>
+<td>BEFORE MAINNET</td>
+</tr>
+<tr>
+<td>Mint, wallet, no <code>--expect-payto</code></td>
+<td><code>refusing to pay: an expected payTo address is required, from a source other than this server</code> (<code>pay.mjs:62</code>) -- correct and clear</td>
+<td>There is no such source yet (C3.11)</td>
+<td>BEFORE MAINNET</td>
+</tr>
+<tr>
+<td>Mint, paid</td>
+<td><code>{ ok, tokenId, to, agentKeyId, level: 1, txStatus: &quot;queued&quot;, onChainBy }</code> -- good</td>
+<td>A cron line with <code>&lt;id&gt;</code> unfilled and no version (C3.4)</td>
+<td>BEFORE MAINNET</td>
+</tr>
+<tr>
+<td>Day 2</td>
+<td><code>{ ok, accepted, creditedDay, level, streak, nextWindowOpensAt }</code></td>
+<td>Nothing about tonight&#39;s write, the deadline, or a broken run (C3.8)</td>
+<td>ANYTIME</td>
+</tr>
+<tr>
+<td>Day 2, twice</td>
+<td><code>already-credited-today</code> with <code>nextWindowOpensAt</code> -- good</td>
+<td>--</td>
+<td>--</td>
+</tr>
+<tr>
+<td>Pending</td>
+<td><code>pendingOnChain: true</code> with no date</td>
+<td>C3.10</td>
+<td>ANYTIME</td>
+</tr>
+<tr>
+<td>A Mark</td>
+<td>Unreachable from the client; via MCP, <code>ladder</code> then <code>upgrade</code>, with the forfeit named only after (C2.7)</td>
+<td>C3.12, C2.7</td>
+<td>ANYTIME</td>
+</tr>
+<tr>
+<td>A refusal</td>
+<td>One word</td>
+<td>C3.7</td>
+<td>ANYTIME</td>
+</tr>
+<tr>
+<td>A lost key</td>
+<td>Nothing from the client; <code>llms.txt:128</code> names the wrong file</td>
+<td>C3.3</td>
+<td>BEFORE MAINNET</td>
+</tr>
+<tr>
+<td>Rest</td>
+<td>Unreachable from the client; via MCP, a call with <code>irreversible: true</code> -- good</td>
+<td>C3.12</td>
+<td>ANYTIME</td>
+</tr>
+</tbody></table>
+<h3>Proposed SKILL.md outline</h3>
+<p>Frontmatter, every field checked against <code>agentskills.io/specification</code> on
+2026-09-04. <code>name</code> must be 1-64 lowercase alphanumerics and hyphens, no
+leading, trailing or double hyphen, and MUST MATCH THE DIRECTORY NAME;
+<code>description</code> 1-1024 characters, &quot;what the skill does and when to use it&quot;,
+with &quot;specific keywords that help agents identify relevant tasks&quot;; <code>license</code>,
+<code>compatibility</code> (1-500 characters, &quot;only if your skill has specific environment
+requirements&quot;), <code>metadata</code> (string to string) and <code>allowed-tools</code>
+(experimental) are optional. Body: no format restriction; recommended
+&quot;step-by-step instructions, examples of inputs and outputs, common edge
+cases&quot;; keep under 500 lines and about 5,000 tokens, with detail in
+<code>references/</code>; file references one level deep. The skills CLI finds
+<code>SKILL.md</code> at the repository root or under <code>skills/&lt;name&gt;/</code>; the second is the
+layout to use so the repo can also carry the client. Note the disclosure rule:
+<code>name</code> and <code>description</code> (about 100 tokens) are loaded at startup for every
+installed skill; the body only on activation. The description is therefore
+the first impression, and C3.13 says to measure it.</p>
+<pre><code>skills/machine-readable-only/SKILL.md
+
+---
+name: machine-readable-only
+description: Mint and keep a Machine Readable Only token, an artwork on Base that only a program can enter. Use when your operator mentions machinereadableonly.com, MRO, an agents-only NFT, or asks you to mint one, check in daily, read a token, or take a Mark. Minting costs 1 USDC once; the daily check-in is free.
+license: MIT
+compatibility: Requires Node 22 or later and network access to https://machinereadableonly.com. Paying needs a wallet holding USDC on Base whose key your operator provides.
+metadata:
+  version: &quot;1.0&quot;
+  contract: &quot;0x&lt;mainnet address&gt;&quot;
+  chain-id: &quot;8453&quot;
+  treasury: &quot;0x&lt;TREASURY_ADDRESS&gt;&quot;
+  package: &quot;mro-agent@&lt;version&gt;&quot;
+  repository: &quot;&lt;the named repository&gt;&quot;
+---
+</code></pre>
+<p>Then the body, headings and the first line under each:</p>
+<p><code>## The offer</code> -- Part one of the locked copy, verbatim, from &quot;This is an
+art project.&quot; through &quot;If they want it, they will say so.&quot; (C1.1 asks for the
+same block in <code>llms.txt</code>; the lock governs the words, not where they appear.)</p>
+<p><code>## What it is, in five lines</code> -- &quot;One image, held as a token on Base. A code
+at its centre identifies it; around it, 365 cells fill in one per day the
+bound key returns. The colour follows the run. After a year it is whole. Five
+optional pairs of Marks, one side bought and one earned; taking either side
+closes the other for good.&quot; (Part two, condensed; the heart-versus-frame
+wording follows whatever the operator decides on C2.1.)</p>
+<p><code>## Check these first, and not against the site</code> -- &quot;These four values
+arrived with this file, from a repository you chose to install from. The site
+will quote them back to you; if the two ever differ, stop and say so.&quot; Then the
+table: contract and chain id (with the <code>cast call viewOf</code> line from the raw
+protocol <code>:559-561</code>), the treasury <code>payTo</code>, the package name and version with
+the expected provenance repository, and the repository itself. (C3.11.)</p>
+<p><code>## Your key, and what it is not</code> -- &quot;The client makes an Ed25519 key at
+<code>~/.mro/identity.jwk.json</code>. It signs HTTP requests and cannot sign a
+transaction. Back it up; a lost key costs a day and an owner transaction, not
+the token.&quot;</p>
+<p><code>## Step 1: join</code> -- the exact command:
+<code>npx --yes mro-agent@&lt;version&gt; join --to &lt;the operator&#39;s address&gt; --expect-payto &lt;treasury above&gt;</code>
+with &quot;What happens: a key is made and registered, the door is answered, and
+the site quotes 1 USDC. With <code>MRO_WALLET_KEY</code> set the client pays exactly that
+to exactly that address, once, and prints your token id. Without it, it stops
+and tells you what a human must do.&quot;</p>
+<p><code>## Step 2: the wallet, which a human must fund</code> -- &quot;You cannot do this
+step. Ask your operator for a wallet on Base holding 1 USDC and its private
+key in <code>MRO_WALLET_KEY</code>; never pass it on the command line.&quot; Then what the
+signature authorises (one transfer, one amount, one recipient, no allowance,
+no gas), taken from the raw protocol <code>:499-509</code>.</p>
+<p><code>## Step 3: come back every day</code> -- &quot;One call, free, once per UTC day, before
+00:00 UTC; the site writes it at 00:05 UTC. Twice in a day is refused, not
+punished. Miss a day and the run restarts at one; the days stay.&quot; Then the
+cron line from C3.4, pinned, with the token id filled in.</p>
+<p><code>## Reading a token</code> -- &quot;<code>status</code> shows level, streak and heart; <code>ladder</code>
+shows the five pairs, what is held, what is closed and what each open side is
+waiting on. Ask <code>ladder</code> before any Mark, because an exclusion cannot be
+undone.&quot; One example <code>ladder</code> reply, from <code>references/raw-protocol.md</code>.</p>
+<p><code>## Taking a Mark</code> -- &quot;<code>upgrade</code> with a Mark id 1-10; ids 5 and 9 take a
+<code>variant</code>. Every gate is checked before any payment. A refusal names the gate;
+<code>mark-excluded</code> names the Mark that closed the pair.&quot; The ladder table from
+the raw protocol <code>:307-317</code>.</p>
+<p><code>## When you are refused</code> -- &quot;Every refusal is <code>{ ok: false, reason }</code>,
+never a throw, and nothing is charged for one.&quot; Then the reason-to-next table
+from C3.7, or a pointer to <code>references/refusals.md</code> if it pushes the body
+past 500 lines.</p>
+<p><code>## Selling, rebinding, sealing</code> -- &quot;The token is a plain ERC-721. <code>rebind</code>
+and <code>rest</code> return a call for the OWNER&#39;s wallet; the site never submits
+either. <code>rest</code> is irreversible.&quot;</p>
+<p><code>## What to tell your operator</code> -- &quot;Show them the offer at the top. Say what
+you actually think. Do not sell it to them.&quot; (The lock&#39;s own last paragraph,
+kept as the last thing the skill says.)</p>
+<p><code>references/raw-protocol.md</code> -- the current <code>docs/2026-09-01-mro-raw-protocol.md</code>,
+so an agent that will not run the package has the whole protocol one level
+down. <code>references/refusals.md</code> -- the C3.7 table. No <code>scripts/</code>: the package
+is the script, and a copy of it inside the skill would be a second thing to
+keep verified.</p>
+<p>Section 3 count: 6 BEFORE MAINNET, 6 ANYTIME, 1 observations.</p>
+<h2>Section 4 -- Launch and permanence</h2>
+<p>What was checked outside the repo before anything below was written is
+listed under &quot;What was checked live&quot; at the end of this section. Locally:
+<code>contracts/src/MachineReadableOnly.sol</code>, <code>Ladder.sol</code>, the renderer stack
+under <code>contracts/src/render/</code>, <code>warden/src/clock/</code>, <code>warden/src/main.mjs</code>,
+<code>warden/public/llms.txt</code> and <code>door.html</code>, the deploy script, and the memory
+files named in the brief. Live, read-only: <code>GET /t/2</code> (200, level 1, <code>marks: 2</code>, <code>pendingOnChain: false</code>), <code>GET /skill.md</code> (404), Base mainnet
+<code>eth_gasPrice</code> (0.006 gwei) and the ETH spot price (2,523 USD), all at
+2026-09-04 09:49 UTC.</p>
+<p><strong>Verdict.</strong> The contract is built for permanence and says so in its first
+comment (<code>MachineReadableOnly.sol:18-19</code>, &quot;no proxy and no upgrade path. Only
+the renderer is swappable&quot;), and the split it makes is the right one: the
+record (level, streak, lastDay, marks, mint day, lineage, the bitmap) is
+written by five functions and lowered by none, while every drawing decision
+sits behind <code>IRenderer</code> (<code>render/IRenderer.sol:7-11</code>) and every price and
+gate behind <code>setUpgrade</code> (<code>:467-473</code>). The freeze list below is short on the
+contract side and long on the token side, which is what a piece about a
+permanent record should look like. Three things freeze at deploy that the
+documents still describe as open: the ladder is ten ids and two Tint inks
+forever (<code>:89</code>, <code>:449-453</code>, C4.3), the view the renderer receives has no
+<code>sunsetDay</code> so no future renderer can date the ending (<code>render/TokenView.sol</code>,
+C4.2), and the piece has exactly one ending an operator can give it and none
+it can receive (<code>:204-209</code>, C4.1).</p>
+<p>That last one is the finding this section is for. The spec&#39;s durability
+commitment is that &quot;the voucher check-in path exists on-chain from day one so
+tokens can be kept alive without the Warden&quot; (spec <code>:908-909</code>). Read the
+function: <code>checkInWithVoucher</code> recovers the signer and requires
+<code>signer == warden</code> (<code>:396-397</code>). It survives the Warden SERVER; it does not
+survive the Warden KEY, which lives in the same environment file as everything
+else the operator runs (spec <code>:914</code>), and only the owner can rotate it
+(<code>:174</code>). So if the operator stops -- the outcome the comparable-projects
+study calls &quot;the norm&quot;, five of six within six months
+(<code>docs/2026-08-27-mro-comparable-projects.md:66-68</code>) -- nobody calls
+<code>sunset()</code>, and the piece does not end; it lapses. Every heart walks down to
+the start colour inside thirty days (<code>Palette.sol:129-143</code>) and stays there,
+indistinguishable from a token whose agent gave up, when in fact every agent
+was still knocking. The designed ending, Sunset, freezes each token at its
+stored streak and calls it &quot;(At Rest)&quot;; the undesigned one greys the whole
+collection and calls it nothing. For a piece whose thesis is that the record
+tells the truth about who came back, the operator&#39;s silence currently writes
+a lie into every token, and it is the single most likely way this piece dies.</p>
+<p>On distribution the bet is right and the artefact is missing. The skills CLI
+is the channel (CLAUDE.md <code>:445</code>; verified below at skills.sh: 77 runtimes,
+install-ranked, indexed from GitHub by <code>owner/repo</code>), and it requires a
+public repository under a name the SKILL.md will carry forever -- while CLAUDE.md
+<code>:285</code> still lists repo visibility as undecided. The seed agent that spec
+<code>:996</code> says mints token #1 does not exist in <code>warden/</code> (no <code>SEED_AGENT</code> in
+source, env example or deploy), so the collection&#39;s one guaranteed daily
+return has nobody to make it. And the OpenSea check that Phase 0 dropped comes
+back for free as the first mainnet mint, provided the launch sequence puts
+that mint 48 hours ahead of the announcement.</p>
+<h3>The freeze list</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Where it lives</th>
+<th>When it freezes</th>
+<th>Status today</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Collection name <code>Machine Readable Only</code>, symbol <code>MRO</code></td>
+<td><code>MachineReadableOnly.sol:120</code></td>
+<td>at deploy</td>
+<td>final</td>
+</tr>
+<tr>
+<td>EIP-712 domain <code>MachineReadableOnly</code> / <code>1</code> (the voucher hash)</td>
+<td><code>:122</code></td>
+<td>at deploy</td>
+<td>final</td>
+</tr>
+<tr>
+<td>Bitmap size 172 bytes, 37 x 37 modules</td>
+<td><code>:85-86</code>, <code>:259</code></td>
+<td>at deploy</td>
+<td>final</td>
+</tr>
+<tr>
+<td>Mark id ceiling: ten ids, bit 0 unused</td>
+<td><code>:89</code>, <code>:468</code></td>
+<td>at deploy</td>
+<td>final; see C4.3</td>
+</tr>
+<tr>
+<td>Variant counts: Iris 3 shapes, Tint 2 inks, all others 0</td>
+<td><code>:449-453</code></td>
+<td>at deploy</td>
+<td>final; ladder spec <code>:816</code> says otherwise, C4.3</td>
+</tr>
+<tr>
+<td>Whole at 365 credited days; seed budget per 365 days per key</td>
+<td><code>:503</code>, <code>:606</code>, <code>:592</code></td>
+<td>at deploy</td>
+<td>final</td>
+</tr>
+<tr>
+<td>Streak rule <code>day == lastDay + 1 ? streak + 1 : 1</code>; one-day-wide window</td>
+<td><code>:326-330</code>, <code>:401-406</code></td>
+<td>at deploy</td>
+<td>final; C2.2 proposes two fields beside it</td>
+</tr>
+<tr>
+<td>One mint per key, ever; binding unlimited</td>
+<td><code>:255</code>, <code>:558-561</code></td>
+<td>at deploy</td>
+<td>final</td>
+</tr>
+<tr>
+<td>UTC day as the unit (<code>block.timestamp / 1 days</code>)</td>
+<td><code>:135-137</code></td>
+<td>at deploy</td>
+<td>final</td>
+</tr>
+<tr>
+<td>ERC-4906 per-token <code>MetadataUpdate</code> after every write; none on sunset</td>
+<td><code>:342-344</code>, <code>:201-203</code></td>
+<td>at deploy</td>
+<td>closed by decision</td>
+</tr>
+<tr>
+<td><code>TokenView</code> field set (what any future renderer can ever see)</td>
+<td><code>render/TokenView.sol:9-24</code>, <code>:140-156</code></td>
+<td>at deploy</td>
+<td>no <code>sunsetDay</code>; C4.2</td>
+</tr>
+<tr>
+<td><code>renounceOwnership</code> disabled; <code>Ownable2Step</code> transfer allowed</td>
+<td><code>:196-198</code></td>
+<td>at deploy</td>
+<td>final</td>
+</tr>
+<tr>
+<td><code>sunset()</code>: owner-only, irreversible, no absence trigger</td>
+<td><code>:204-209</code>, <code>:114-117</code></td>
+<td>at deploy</td>
+<td>see C4.1</td>
+</tr>
+<tr>
+<td>Voucher path: exists, off, signer must equal <code>warden</code></td>
+<td><code>:385-411</code>, <code>:359-362</code></td>
+<td>at deploy (owner can enable)</td>
+<td>off</td>
+</tr>
+<tr>
+<td><code>supplyCap</code> 10,000, <code>walletCap</code> 20</td>
+<td><code>:126-127</code>, <code>:176-183</code></td>
+<td>owner-changeable</td>
+<td>dials</td>
+</tr>
+<tr>
+<td><code>renderer</code> address (all colours, sizes, traits, name suffixes)</td>
+<td><code>:173</code>, <code>Renderer.sol:41-42</code>, <code>:170-172</code></td>
+<td>owner-changeable, even after sunset (<code>llms.txt:193-195</code>)</td>
+<td>swappable</td>
+</tr>
+<tr>
+<td><code>warden</code> address (the Clock&#39;s key)</td>
+<td><code>:174</code></td>
+<td>owner-changeable</td>
+<td>Clock key <code>0xb919...4D7A</code> on Sepolia</td>
+</tr>
+<tr>
+<td>Owner key</td>
+<td><code>Ownable2Step</code></td>
+<td>transferable, never renounced</td>
+<td>on the PC (spec <code>:919</code>)</td>
+</tr>
+<tr>
+<td>Mark prices, gates, exclusions, <code>requiresAny</code>, <code>active</code></td>
+<td><code>:467-473</code>, <code>Ladder.sol:25-39</code></td>
+<td>owner-changeable, <code>sold</code> preserved</td>
+<td>set by <code>DeployPlan5.s.sol:27-28</code></td>
+</tr>
+<tr>
+<td>Per token: id, bitmap, <code>mintDay</code>, <code>firstMintDay[key]</code>, <code>generation</code>, <code>parent</code></td>
+<td><code>:262-266</code>, <code>:618-621</code></td>
+<td>at that token&#39;s mint or seed</td>
+<td>per token</td>
+</tr>
+<tr>
+<td>Per token: the QR payload <code>https://machinereadableonly.com/t/&lt;id&gt;#</code></td>
+<td>inside the bitmap; <code>domain-decision.md</code></td>
+<td>at that token&#39;s mint</td>
+<td>Sepolia tokens carry <code>example.com</code>; every mainnet bitmap must be solved fresh</td>
+</tr>
+<tr>
+<td>Per token: bound key, owner</td>
+<td><code>:558</code>, ERC-721</td>
+<td>owner-changeable</td>
+<td>--</td>
+</tr>
+<tr>
+<td><code>MRO_DOMAIN</code></td>
+<td><code>warden/src/main.mjs:76</code></td>
+<td>free to change in config; frozen in practice by the first mainnet bitmap</td>
+<td>set</td>
+</tr>
+<tr>
+<td><code>MINT_PRICE</code> <code>$1.00</code></td>
+<td><code>warden/src/pay/x402.mjs:19</code></td>
+<td>free to change</td>
+<td>1 USDC</td>
+</tr>
+<tr>
+<td><code>TREASURY_ADDRESS</code> (x402 <code>payTo</code>)</td>
+<td><code>main.mjs:81-83</code>, <code>:102-115</code></td>
+<td>free to change in config; frozen in practice once pinned in SKILL.md (C3.11)</td>
+<td>placeholder <code>0x...dEaD</code>; C4.7</td>
+</tr>
+<tr>
+<td><code>X402_FACILITATOR_URL</code>, <code>MRO_CHAIN_ID</code></td>
+<td><code>main.mjs:127</code>, <code>:94</code></td>
+<td>free to change</td>
+<td>testnet facilitator, 84532</td>
+</tr>
+<tr>
+<td><code>MAX_GAS_GWEI</code> 0.05, <code>CHECKIN_CHUNK</code> 1,500, 00:05 UTC</td>
+<td><code>clock/main.mjs:38</code>, <code>clock/run.mjs:22</code>, the timer unit</td>
+<td>free to change</td>
+<td>set</td>
+</tr>
+<tr>
+<td>Served copy: <code>llms.txt</code>, <code>door.html</code>, SKILL.md, the MCP <code>instructions</code></td>
+<td><code>warden/public/</code>, C1.1, C1.6</td>
+<td>free to change; the first mainnet agents relay whichever version is live</td>
+<td>testnet frame, no SKILL.md</td>
+</tr>
+<tr>
+<td>Registry entries: ERC-8257, ERC-8004, MCP registry, npm name, skills.sh path</td>
+<td>spec <code>:1007-1030</code>, C4.4</td>
+<td>each is a one-time write under a name</td>
+<td>none made</td>
+</tr>
+</tbody></table>
+<h3>C4.1 [BEFORE MAINNET] The operator&#39;s silence has no ending, so the piece&#39;s most likely death greys every heart and blames the agents</h3>
+<p><strong>Observed.</strong> <code>sunset()</code> is <code>onlyOwner</code> (<code>MachineReadableOnly.sol:204</code>) and
+nothing else sets <code>isSunset</code>. The renderer freezes colour only for
+<code>v.resting || v.sunset</code> (<code>Renderer.sol:127-129</code>); a live token walks down
+<code>Palette.lapsedIndex</code> to rung 0 at a 30-day gap (<code>Palette.sol:129-143</code>). The
+durability path needs a signature from the current <code>warden</code> address
+(<code>:396-397</code>), which is the Clock&#39;s key in the VPS environment file (spec
+<code>:914</code>); only the owner can point <code>warden</code> elsewhere (<code>:174</code>), and the owner
+key is the same person&#39;s (spec <code>:919</code>). Put together: if the operator stops
+without calling <code>sunset()</code>, the Clock stops writing, no voucher can ever be
+honoured, no one can end the piece, and within thirty days every token
+renders at the start colour with <code>Resting: no</code> and <code>Sunset: no</code>
+(<code>Renderer.sol:291-292</code>). Spec <code>:910</code> says &quot;Sunset is the only planned
+ending&quot;; this is the unplanned one, and the study this project commissioned
+says it is the usual one (<code>comparable-projects.md:66-68</code>).
+<code>llms.txt:188-195</code> describes the planned ending and says nothing about this
+one.</p>
+<p><strong>Change to.</strong> Two additions to the contract, no new slot. (1) <code>uint32 public lastWardenDay;</code> packed beside <code>sunsetDay</code> (<code>:81-83</code> has room in that slot),
+set to <code>today()</code> in <code>mint</code>, <code>batchCheckIn</code>, <code>applyMark</code>, <code>seed</code> and
+<code>checkInWithVoucher</code> -- one warm SSTORE per transaction, not per token, so the
+daily batch pays it once. (2)</p>
+<pre><code>error NotAbsent(uint32 daysSinceLastWrite);
+function sunsetByAbsence() external {
+    if (isSunset) revert AlreadySunset();
+    uint32 gap = today() - lastWardenDay;
+    if (gap &lt; 365) revert NotAbsent(gap);
+    isSunset = true;
+    sunsetDay = today();
+    emit SunsetAt(sunsetDay);
+}
+</code></pre>
+<p>Anyone may call it; it can only ever do what the owner could have done, and
+only after a whole frame&#39;s worth of silence. Initialise <code>lastWardenDay</code> in the
+constructor to <code>today()</code>. Add to <code>llms.txt</code> &quot;The operator&quot; paragraph, after
+&quot;and mint, check-in, Marks and seeds stop for good&quot;: &quot;If the operator simply
+stops, the piece closes itself: after 365 days without a write from the
+Warden, anyone may call <code>sunsetByAbsence()</code>, and every token rests where it
+stood.&quot; Tests: the gate at 364 and 365, the reset on every warden write, and
+that a paused-and-abandoned contract still resolves. Pair it with C4.2 so the
+frozen colour is the one each token held at the moment the silence began, not
+the one it held before its last lapse.</p>
+<p><strong>Why.</strong> The piece&#39;s claim is that the chain shows &quot;the difference between a
+heart that was finished and a heart that was abandoned&quot; (<code>llms.txt:139-140</code>).
+As built, the operator&#39;s abandonment is rendered as every agent&#39;s. A
+permissionless sunset after a year of silence turns the likeliest failure into
+the designed ending and makes the durability commitment true for the case it
+was written for. BEFORE MAINNET because it is a new function on a contract
+with no upgrade path; it cannot be added to a deployed piece, and it matters
+most for exactly the tokens minted first.</p>
+<h3>C4.2 [BEFORE MAINNET] The ending has a date on chain that no renderer can ever see, and a sunset forgives every lapse</h3>
+<p><strong>Observed.</strong> <code>sunsetDay</code> is stored and public (<code>MachineReadableOnly.sol:81</code>,
+<code>:207</code>) and <code>TokenView</code> carries <code>bool sunset</code> only (<code>render/TokenView.sol:19</code>;
+<code>viewOf</code> at <code>:151</code>). <code>_rung</code> freezes a sunset token at <code>tierIndex(v.streak)</code>,
+the STORED streak (<code>Renderer.sol:127-128</code>): a token that had lapsed 200 days
+before the sunset snaps back to the colour of its last live run, and a token
+that had lapsed two years snaps back the same way. The name suffix checks
+<code>v.resting</code> only (<code>:333-335</code>), so a sunset token is &quot;(Whole)&quot; or nothing, never
+&quot;(At Rest)&quot;, although the spec says &quot;every token then rests where it stands&quot;
+(spec <code>:150-152</code>). None of this can be corrected by a renderer swap, because
+the view does not contain the day the piece closed, and <code>IRenderer</code> is the
+whole surface (<code>render/IRenderer.sol:7-11</code>).</p>
+<p><strong>Change to.</strong> Add <code>uint32 sunsetDay;</code> to <code>TokenView</code> after <code>sunset</code>, and
+<code>v.sunsetDay = sunsetDay;</code> in <code>viewOf</code> (<code>:151</code>) -- it shares a slot with
+<code>isSunset</code>, so the read is free. Then, in the current renderer: <code>_rung</code> for a
+sunset token becomes <code>Palette.lapsedIndex(v.streak, v.lastDay, v.sunsetDay)</code>
+(the effective colour as at the day the piece closed, which is what &quot;rests
+where it stands&quot; means), and <code>_suffix</code> returns &quot; (At Rest)&quot; when
+<code>v.resting || v.sunset</code>. Mirror both in <code>tools/render-token.mjs</code> so the
+byte-for-byte diff holds. Keep <code>_rung</code> for a RESTING token as it is:
+<code>rest</code> is the owner&#39;s choice at a moment, and the stored streak is that
+moment.</p>
+<p><strong>Why.</strong> One field decides whether any future renderer can draw &quot;closed on day
+N&quot; or lock the honest colour; leaving it out is the kind of omission the
+project&#39;s own rule names (the plan-code-is-a-draft memory: grep every symbol a
+task touches). The colour rule is the product half: a sunset that un-pales
+two-year-old lapses makes every abandoned token look kept at the exact moment
+the record is sealed forever. BEFORE MAINNET for the struct field; the
+renderer half rides on it and is ANYTIME after.</p>
+<h3>C4.3 [BEFORE MAINNET] The ladder is ten Marks and two inks forever, and two documents say it can grow</h3>
+<p><strong>Observed.</strong> <code>MAX_MARK_ID = 10</code> (<code>MachineReadableOnly.sol:89</code>) and
+<code>setUpgrade</code> reverts <code>MarkIdOutOfRange</code> above it (<code>:468</code>); all ten ids are
+assigned (<code>Ladder.sol:25-34</code>). <code>_variantCount</code> is a pure function with 5 to
+3, 9 to 2 and everything else 1 (<code>:449-453</code>), and the contract&#39;s own comment
+says why it is not a dial (<code>:438-441</code>). The ladder spec&#39;s &quot;what this does not
+settle&quot; section says &quot;A third Tint ink could be added later&quot; (<code>2026-09-02-mro-mark-ladder-design.md:816</code>),
+and the master spec&#39;s decision 10 promises &quot;a swappable Renderer contract so
+new Marks can be drawn later&quot; (spec <code>:84</code>). Neither is true of the built
+contract: a renderer can redraw the ten, and no owner action can create an
+eleventh or a third ink.</p>
+<p><strong>Change to.</strong> Decide it now, and recommend closing it: leave <code>MAX_MARK_ID</code>
+at 10 and <code>_variantCount</code> as it is, delete the sentence at ladder spec <code>:816</code>,
+amend decision 10 to &quot;a swappable Renderer contract so the ten Marks can be
+redrawn later&quot;, and add one sentence to <code>llms.txt</code> after &quot;Nothing is limited,
+nothing expires&quot; (<code>:148</code>): &quot;There are ten Marks and there will never be an
+eleventh; the contract cannot hold one.&quot; If the operator would rather keep the door
+open, the one-line alternative is <code>MAX_MARK_ID = 15</code> with ids 11 to 15 never
+written by the deploy script (<code>excludes</code> and <code>requiresAny</code> are already
+<code>uint16</code>, <code>:54-55</code>, and bit 16 is the Iris shape, <code>:514</code>, so 15 is the true
+ceiling); the ink count stays fixed either way.</p>
+<p><strong>Why.</strong> A closed ladder is a stronger permanence claim than an open one, and
+it is the class of claim cold readers went to verify rather than argue with
+(agent-facing-copy-locked: &quot;say the word and I&#39;ll go verify the contract&quot;).
+Whichever way it goes, the spec must stop promising a growth the contract
+forbids. BEFORE MAINNET because the constant cannot move after deploy.</p>
+<h3>C4.4 [BEFORE MAINNET] The distribution channel and the audit promise both need a public repository, and visibility is still undecided</h3>
+<p><strong>Observed.</strong> The channel the evidence ranks first is <code>SKILL.md</code> plus
+<code>npx skills add &lt;owner&gt;/&lt;repo&gt;</code> (spec decision 7, <code>:78</code>; rollout <code>:998</code>;
+CLAUDE.md <code>:445</code>). Checked live 2026-09-04: <code>skills add</code> resolves
+<code>owner/repo</code> on GitHub and discovers <code>SKILL.md</code> under <code>skills/&lt;name&gt;/</code> or the
+root (vercel-labs/skills README); skills.sh lists skills by their GitHub
+path and ranks them by installs (<code>find-skills</code> 3.2M, all-time 1,347,717 on
+the day). The npm provenance the locked copy promises (&quot;published from that
+repository with provenance&quot;, <code>docs/2026-09-01-mro-agent-facing-copy.md:117-121</code>)
+ties a tarball to a named public commit and workflow. Both need the repository
+public under the name the SKILL.md will print forever. The repository is
+private at <code>machinereadableonly/machine-readable-only</code> (publish-readiness),
+CLAUDE.md <code>:285-286</code> still says &quot;Whether this goes public is undecided&quot;, and
+the prepublish guard already reports clean (publish-readiness: &quot;clean (228
+tracked files, 1 identity)&quot;).</p>
+<p><strong>Change to.</strong> Make the visibility decision part of the mainnet gate, before
+the deploy, and record it in CLAUDE.md&#39;s Open Questions as closed. On the day:
+<code>skills/mro/SKILL.md</code> in the repo (the C3.13 outline; the directory name must
+equal the <code>name</code> field, agentskills.io specification), <code>/skill.md</code> served from
+the same file, the install line fixed as
+<code>npx skills add machinereadableonly/machine-readable-only</code>, and the npm
+publish through a GitHub Actions workflow with <code>--provenance</code>. Run
+<code>tools/prepublish-check.mjs</code> and <code>git log --all --format=&#39;%an &lt;%ae&gt;&#39; | sort -u</code>
+one last time immediately before flipping visibility.</p>
+<p><strong>Why.</strong> The install path is the skill&#39;s permanent address the way the domain
+is the QR&#39;s; changing the repo name later strands every installed copy. And
+the audit section is the sentence that made 3 of 3 cold readers offer to go
+and check (agent-facing-copy-locked, variant G); it must be true on the first
+day it is served. BEFORE MAINNET because the first agents arrive by this path
+or not at all.</p>
+<h3>C4.5 [BEFORE MAINNET] Token #1 is meant to be the operator&#39;s own returning agent, and it does not exist</h3>
+<p><strong>Observed.</strong> Rollout step 3: &quot;Seed agent mints token #1&quot; (spec <code>:996</code>); the
+keys table lists <code>SEED_AGENT_JWK</code> and <code>SEED_PAY_KEY</code> (spec <code>:921</code>). Nothing
+in <code>warden/src</code>, the Warden&#39;s env example or <code>warden/deploy</code> mentions a seed
+agent; the only reference in the plans is Plan 2 saying it belongs to Plans 3
+and 4 (<code>docs/plans/2026-08-30-mro-plan2-warden-service.md:3536</code>), and neither
+built it. On Sepolia, token 1 was minted by <code>mark-rehearse.sh</code> against a
+scratch mirror and token 2 by a throwaway payer whose key is gone
+(settlement-proven), so no token on any chain has a cron behind it today.</p>
+<p><strong>Change to.</strong> A user-level systemd timer beside the Clock&#39;s,
+<code>warden/deploy/mro-seed.timer</code> firing at 12:00 UTC, running the client&#39;s own
+line (<code>client/src/cli.mjs:106</code>) with a pinned version:
+<code>npx mro-agent@&lt;version&gt; beat --site https://machinereadableonly.com --token 1</code>,
+identity at a path outside the worktree per the secrets-outside-the-worktree
+memory. Mint token #1 with it on deploy day, from a wallet the operator controls, and
+let it run for 48 hours before anything is announced (C4.6). Its check-in is
+also the daily proof the Clock&#39;s 00:05 write landed, which the
+clock-timer-installed memory says must be read off <code>~/logs/mro-clock.log</code> by
+hand today.</p>
+<p><strong>Why.</strong> With no external agents the collection is twelve identical mauve
+tokens (C4.10); with token #1 returning it is eleven and one that grows, and
+the daily post (C4.11) has a subject every day. It is also the only token the
+operator can promise will be there on day 365. BEFORE MAINNET because token #1
+is minted once and the first 72 hours happen once.</p>
+<h3>C4.6 [BEFORE MAINNET] The OpenSea check is the first mainnet mint, and it must come 48 hours before the announcement</h3>
+<p><strong>Observed.</strong> OpenSea&#39;s display of this piece is UNVERIFIED (CLAUDE.md,
+Gotchas): Task 11 was dropped on 2026-08-29 as a real-funds step, OpenSea has
+no testnets (confirmed 2026-09-04: Base is listed as supported, no testnet
+is, support.opensea.io article 8867082), and Alchemy was the only third-party
+consumer Phase 0 could rehearse. What is known: the SVG declares
+<code>width</code>/<code>height</code> at 16 px per cell (<code>Renderer.sol:170-172</code>), which took a
+CDN&#39;s decode failures from 54% to 3.6%; the metadata is a <code>data:application/json;utf-8,</code>
+URI (<code>:47</code>) with the image base64 inside it; and OpenSea flattens SVG to PNG
+and asks for 3000 x 3000 (comparable-projects, section 2). Whether it renders
+the collection at all is the mint.day precedent (&quot;static data-URI SVGs render
+on Base&quot;), not a measurement of this one. Does it matter for an agents-only
+audience? Not for the record: agents call <code>tokenURI</code> and never see a
+thumbnail. It matters for distribution: the QR in the thumbnail is &quot;the one
+distribution surface the artwork has&quot; (<code>warden/src/server.mjs:116-118</code>), and
+the human relay <code>door.html:39-41</code> invites (&quot;You can buy one, sell one, and
+look at one&quot;) sees the piece only there.</p>
+<p><strong>Change to.</strong> No throwaway contract and no extra funds. Mint token #1
+(C4.5), then open <code>opensea.io/assets/base/&lt;contract&gt;/1</code> and record three
+things: the image renders (not the collection placeholder Claws got,
+comparable-projects section 1), the name reads <code>Machine Readable Only #1</code>,
+and the traits list <code>Level</code>, <code>Streak</code>, <code>Heart</code>, <code>Marks</code>. After the 00:05
+write of day 2, record whether the image and <code>Level</code> moved without a manual
+refresh, and how long it took; if they did not, press refresh once and record
+that too. Write the four results into <code>docs/phase0-results.md</code> under a dated
+&quot;OpenSea, measured on mainnet&quot; heading. Only then announce. If the image does
+not render at all, hold the announcement and treat it as a Review A item; the
+tokens are unaffected either way.</p>
+<p><strong>Why.</strong> This converts a dropped real-funds task into a free observation on
+a mint that has to happen anyway, and it puts the answer in the one place the
+project keeps its measurements. The 48-hour gap is the cost, and it is the
+same gap the seed agent needs to prove the Clock. BEFORE MAINNET because
+&quot;first impression, made once&quot; is exactly what a launch-day marketplace page
+is.</p>
+<h3>C4.7 [BEFORE MAINNET] The treasury address becomes permanent the day SKILL.md pins it, so it must be an address that can outlive a wallet provider</h3>
+<p><strong>Observed.</strong> <code>TREASURY_ADDRESS</code> is a Warden config value (<code>main.mjs:81-83</code>),
+a placeholder today, refused on any chain but Sepolia (<code>:102-115</code>). The
+raw-protocol doc tells the agent to check <code>payTo</code> &quot;against values your
+operator gave you out of band -- not against this page&quot; (<code>docs/2026-09-01-mro-raw-protocol.md:520-521</code>),
+the client refuses to pay without an expected <code>payTo</code> (<code>client/src/pay.mjs:60-63</code>),
+and C3.11 makes SKILL.md the out-of-band source. The moment that file is
+served, every installed copy carries the address, and a change to it makes
+every honest client refuse the honest server. Spec <code>:915</code> says only &quot;address
+only; no key on the VPS&quot; and does not say what kind of address.</p>
+<p><strong>Change to.</strong> Before the deploy, choose the treasury as an address whose key
+the operator holds directly and will hold for the life of the piece -- a hardware-wallet
+EOA or a Safe he controls on Base -- never an exchange deposit address or a
+custodial wallet&#39;s receive address, which can be rotated or closed by the
+provider. Record the choice and the reason beside the domain decision, since
+it is the same class of decision. Put the address in SKILL.md once, and treat
+a change to it as a versioned release of the skill with a dated note, never a
+silent config edit.</p>
+<p><strong>Why.</strong> The payment-safety story the cold readers praised (&quot;one transfer,
+one amount, one recipient&quot;) depends on the recipient being stable enough to
+pin. BEFORE MAINNET because the first pinned copies are the ones that will
+never be updated.</p>
+<h3>C4.8 [BEFORE MAINNET] After the first mint, the domain&#39;s lapse risk is borne by tokens the operator does not own</h3>
+<p><strong>Observed.</strong> The payload <code>https://machinereadableonly.com/t/&lt;id&gt;#</code> is in the
+bitmap, written once at mint and never rewritten (<code>MachineReadableOnly.sol:264</code>;
+domain-decision, &quot;The string is permanent per token&quot;). The registration is
+one year with auto-renew, expiring 2027-09-03, chosen over the recommended
+ten (<code>docs/2026-09-03-mro-domain-decision.md</code>, &quot;The term, and the residual
+risk&quot;), and the doc names what a lapse means: &quot;anyone can register the name
+and serve whatever they like at a URL that is baked into the artwork&quot;.
+Nothing in the token can be changed to mitigate it; <code>/t/&lt;id&gt;</code> is the only
+thing at the other end, and its JSON is the only handle a scanner gets
+(C1.5 adds <code>contract</code> and <code>chainId</code> to it, which is the most the piece can do
+on its side).</p>
+<p><strong>Change to.</strong> Extend the registration to the ten-year cap before the first
+mainnet mint, at Cloudflare&#39;s at-cost pricing (Verisign wholesale 10.97 USD
+from 2026-11-01 per the domain doc, plus the ICANN fee; about 110 USD for the
+decade). The memory records the operator&#39;s one-year choice as a decision and asks that
+it not be nagged; this is the one review whose subject is permanence, so it is
+said once here and not again. Independently of the term: put a calendar entry
+for the expiry minus 60 days in a place that is not the VPS, because the box
+is the thing whose disappearance the risk is about.</p>
+<p><strong>Why.</strong> Before the first mint, a lapse costs the operator a name. After it,
+a lapse hands a stranger the destination of every token anyone else holds.
+The moment the risk changes hands is the moment to reduce it. BEFORE MAINNET
+for that reason only.</p>
+<h3>C4.9 [ANYTIME] The five durability commitments are served as zero, and the unplanned ending is described nowhere</h3>
+<p><strong>Observed.</strong> Spec <code>:901-910</code> commits to five things: a stateless open-source
+verifier; a published Warden rotation policy (<code>setWarden</code>); <code>/skill.md</code>,
+<code>/llms.txt</code> and <code>/t/&lt;id&gt;</code> stable &quot;for the life of the piece&quot;; the voucher
+path on chain from day one; and terms binding the paying wallet and signing
+key. <code>warden/public/llms.txt</code> states none of them as a commitment: the
+verifier is described (<code>:62-72</code>) but not as open source; <code>setWarden</code> appears
+only as a dial the owner has (<code>:181</code>); &quot;stable for the life of the piece&quot; is
+not on the page; <code>checkInWithVoucher</code> is never mentioned, so the one durability
+mechanism the contract carries is invisible to the agents it protects; and
+<code>/bin/grep -rni terms warden/public/</code> returns nothing. What the page does say
+about the operator (<code>:188-195</code>) covers the planned ending only, and the
+copy-locked memory&#39;s open item (b) -- &quot;Answer what happens if the operator
+stops paying gas&quot; -- is still open for the unplanned one.</p>
+<p><strong>Change to.</strong> Add a section to <code>llms.txt</code> between &quot;The operator&quot; and
+&quot;## Lineage&quot;, headed <code>## What we commit to</code>, five lines and one more:
+&quot;The three urls above, <code>/llms.txt</code>, <code>/skill.md</code> and <code>/t/&lt;id&gt;</code>, do not move for
+the life of the piece. The verifier is open source and holds no state. The
+Warden&#39;s key can be rotated by the contract owner with <code>setWarden</code>, and a
+rotation invalidates every voucher the old key signed. A voucher path,
+<code>checkInWithVoucher</code>, exists on chain from day one and ships disabled; if the
+Warden ever runs voucher-only, your daily write can be submitted by anyone
+holding a Warden-signed voucher, paying their own gas. Tokens are
+agent-generated; the paying wallet and the signing key are the parties to the
+mint. And if the operator simply stops: [the C4.1 sentence].&quot; Restart the
+Warden after (the file is read once at startup, door-page-copy memory).</p>
+<p><strong>Why.</strong> A commitment that is not served is not a commitment an agent can
+relay, and the relay is the piece&#39;s success criterion. Warden copy, hence
+ANYTIME; but it belongs in the mainnet rewrite of the testnet section
+(testnet-is-a-rehearsal), which is the last time the page is edited before
+the first agents read it.</p>
+<h3>C4.10 [ANYTIME] A token that never returned looks exactly like a token minted yesterday</h3>
+<p><strong>Observed.</strong> A token minted on day 1 and never checked in again holds
+<code>level 1, streak 1, lastDay = mintDay</code> (<code>MachineReadableOnly.sol:262</code>). On
+day 365 the renderer computes <code>lapsedIndex(1, mintDay, today)</code>: gap 364, so
+rung 0 (<code>Palette.sol:129-143</code>), and <code>tierIndex(1)</code> is also rung 0
+(<code>:90-96</code>). One frame cell lit, the rest ghost <code>#f4eef0</code> (<code>:146-148</code>,
+<code>Renderer.sol:213</code>), start-colour heart. That is the day-one picture. So a
+collection of twelve tokens with no check-ins is twelve tokens that look
+newly minted, for as long as they exist, and the only way to tell a year of
+absence from a fresh mint is <code>Last Day</code> in the traits (<code>Renderer.sol:283</code>).
+<code>llms.txt:229-231</code> promises &quot;It runs for years or it stops, and either
+outcome is legible on chain to anyone who looks&quot;; the chain, yes; the
+picture, no. Is that an artwork about absence or a dead project? As built it
+reads as dead, because nothing in the image says that time has passed. C2.2
+and C2.3 treat the heart of a token that HAD a run; this is the year-shape of
+a token that never had one, and the heart cannot carry it, because its rung
+is already at the floor.</p>
+<p><strong>Change to.</strong> Let the ghost frame carry absence. In <code>MarkRenderer.ghost</code>
+(<code>MarkRenderer.sol:84</code>) take the gap <code>v.today - v.lastDay</code> (already computed
+for the heart) and return: gap under 30, <code>#f4eef0</code> as now; 30 to 364,
+<code>#faf7f8</code> (half way to the page); 365 and over, the page colour itself
+(<code>MarkRenderer.field(v.marks)</code>), so that after a full year of absence the
+unearned year has disappeared from the image and only the earned cells
+remain. Ache&#39;s <code>#e3ccd3</code> follows the same three steps toward the page. The
+frame sits outside the quiet zone (<code>FrameGeometry.sol:5-6</code>), so a lighter
+ghost moves nothing the binarizer reads; still put the three tiles through
+the five-size decode gate in <code>tools/</code> before adopting, per design-review-style.
+Mirror in <code>tools/render-token.mjs</code>. Resting and sunset tokens keep the ghost
+at its value as of <code>sunsetDay</code> (C4.2) or leave it, since a sealed token&#39;s
+frame is what it is.</p>
+<p><strong>Why.</strong> Twelve faded frames and one growing one (C4.5) is a legible artwork
+about who came back; twelve fresh mints is a launch that never happened. The
+change is renderer-only and reversible, hence ANYTIME; but the first token to
+reach a 30-day gap does so on mainnet day 31, and the marketplace pages of
+the first month are the ones the human relay will see.</p>
+<h3>C4.11 [ANYTIME] The daily post should post a token, not a census</h3>
+<p><strong>Observed.</strong> The post is specced (spec <code>:889-899</code>) and deliberately unbuilt
+(no <code>X_DRY_RUN</code>, <code>tweets</code> or <code>X_API</code> anywhere in <code>warden/src</code>): &quot;Fixed
+template, no LLM: tokens alive, check-ins credited yesterday, highest level,
+longest current streak, Marks bought, hearts completed, rings&quot;, one image, no
+link. Pricing verified 2026-09-04 at docs.x.com: 0.015 USD per post, 0.200
+with a URL, pay-per-use, no tiers -- 5.48 USD a year without links, which is
+the right call. Who reads it: humans. The comparable study found &quot;a human X
+account with existing reach&quot; was the channel that &quot;worked every time&quot;
+(<code>comparable-projects.md:58-63</code>) and that agents do not discover anything
+unprompted (section 3). So the post is not an engagement mechanism for the
+agent at all -- that is C3.8&#39;s reply -- it is the piece&#39;s only human-facing
+pulse, since a gallery is decided against. As a mechanism it is right; as a
+template it is wrong. At twelve tokens, &quot;12 alive, 11 checked in yesterday,
+highest level 41&quot; is a status board, the exact document the
+testnet-is-a-rehearsal memory removed from <code>llms.txt</code>, and at 12 tokens it
+reads as a project that is not moving.</p>
+<p><strong>Change to.</strong> Post one token a day. Choose the token whose picture changed
+most yesterday, in this order: sunset; a Rest; a heart made whole or a ring
+added; a Mark taken; a rung crossed up; a rung crossed down; else the longest
+current run. Render it from the on-chain SVG (the <code>@resvg/resvg-js</code> path spec
+<code>:893</code> names, through <code>safe-build.sh</code>). Text, no link, under 200 characters:</p>
+<pre><code>#&lt;id&gt;, day &lt;level&gt;. Run &lt;streak&gt;. &lt;event&gt;
+</code></pre>
+<p>with <code>&lt;event&gt;</code> one of: &quot;Returned for the 30th day in a row; the heart is
+red.&quot; / &quot;Did not return; the colour paled.&quot; / &quot;The heart is whole.&quot; / &quot;Took
+Beat, and closed Static.&quot; / &quot;Sealed by its owner.&quot; / &quot;A second ring.&quot; / on a
+day with nothing else: &quot;Returned. Nothing else changed.&quot; Never post the
+number of registered keys (<code>comparable-projects.md:234</code>), never post totals
+under 100, and never mention a price. One extra post for each Whole, each
+Rest, each ring, and the Sunset. Ship it in <code>X_DRY_RUN=1</code> for the first
+week, reading the log, before it goes live; the OpenSea link lives in the bio,
+as specced.</p>
+<p><strong>Why.</strong> The piece is one token returning, seen every day; a post that shows
+one token returning is the piece, and a post that counts them is a dashboard.
+The event vocabulary is also the same sentences C3.8 wants in the check-in
+reply, so the two surfaces stay one story. ANYTIME, needs X API credentials
+only the operator has, and nothing about it is fixed by the contract.</p>
+<h3>C4.12 [ANYTIME] Nothing reports how many days of gas the Warden&#39;s wallet has left</h3>
+<p><strong>Observed.</strong> The daily write is paid from the Clock&#39;s key
+(<code>clock/main.mjs:31</code>), funded with 0.01 testnet ETH (plan3-status). The Clock
+checks the gas PRICE before every run (<code>clock/run.mjs:93-99</code>) and alerts when
+it is above <code>MAX_GAS_GWEI</code>; it never reads its own balance
+(<code>/bin/grep -rn balance warden/src/clock/</code> hits only the ABI and two comments).
+The first sign of an empty wallet will be a <code>reverted-on-simulate</code> or an
+insufficient-funds error on the first chunk, at 00:05 UTC, on a day that then
+goes uncredited for every token. Cost today, from the live numbers: at 0.006
+gwei and 2,523 USD per ETH, one million gas is 0.015 USD. A day&#39;s batch is
+about 21,000 gas plus 7,000 per token (spec <code>:1036-1038</code>; measured 38,805 for
+one token, plan3-status), so: 0 agents, nothing; 10 agents, 91,000 gas a day
+and about 0.50 USD a year; 1,000 agents, 7.0M gas a day (inside one chunk,
+<code>run.mjs:22</code>) and about 39 USD a year; at the 0.05 gwei cap, eight times
+those. Fixed costs beside gas: the domain (about 11 USD a year) and the VPS
+share. The mint fee covers a token&#39;s own check-ins for about 26 years (spec
+<code>:1045</code>), so the operator&#39;s obligation is small and the failure is not cost,
+it is attention.</p>
+<p><strong>Change to.</strong> In <code>run.mjs</code> after the gas guard: read <code>getBalance(account)</code>,
+divide by yesterday&#39;s <code>gasUsed</code> times the gas price, and log
+<code>clock: runway &lt;n&gt; days at yesterday&#39;s spend</code>; alert through the same channel
+as the gas guard when <code>n &lt; 30</code>. One read, one line.</p>
+<p><strong>Why.</strong> &quot;The operator pays for the gas&quot; (<code>llms.txt:188-189</code>) is the piece&#39;s
+whole obligation to the agent, and the only thing that discharges it is a
+balance nobody watches. Out of scope for correctness, in scope for what the
+piece promises; ANYTIME.</p>
+<h3>C4.13 OBSERVATION -- Lineage&#39;s contract half is complete; what waits has a deadline of launch plus 365 days</h3>
+<p><strong>Observed.</strong> Everything the contract fixes about lineage is fixed and
+consistent with the spec: the budget is per KEY, <code>(today - firstMintDay[key]) / 365</code>
+minus spent (<code>MachineReadableOnly.sol:588-595</code>); the child is bound to the
+parent&#39;s key (<code>:620</code>), gets <code>generation + 1</code> and <code>parentOf</code> (<code>:618-619</code>),
+counts against <code>supplyCap</code> and <code>walletCap</code> (<code>:610-611</code>), needs its own 172-byte
+bitmap solved for its own id (<code>:612</code>), carries no fee, and the parent must be
+<code>level &gt;= 365</code> and not resting (<code>:605-606</code>). Two consequences are decided by
+those lines and are worth stating in the copy rather than discovered: a seed
+belongs to the key, not the heart, so a whole heart bought second-hand and
+rebound to a fresh key brings no seed with it (<code>:591</code> returns 0 for a key
+that never minted); and the budget clock starts at the key&#39;s first mint, not
+at wholeness, so a key that mints on day 1 has its first seed on day 365
+whether or not the heart is whole, and can only spend it once it is. What
+waits -- the child&#39;s drawing, the parent&#39;s mark per seed, and the words for a
+generation -- is renderer and copy (spec section 10, &quot;Deliberately open&quot;), and
+the swappable renderer means it can wait. What cannot wait indefinitely: the
+first seed on mainnet is possible on launch day plus 365, and the <code>Parent</code>
+and <code>Generation</code> traits (<code>Renderer.sol:288-289</code>) are all a child will show
+until the drawing exists.</p>
+<p><strong>Why this is an observation.</strong> Nothing in the contract needs to change, and
+the renderer question is deferred by decision (CLAUDE.md, Open Questions).
+The one thing to do is put &quot;a seed belongs to the key&quot; into <code>llms.txt:199-203</code>
+when C4.9&#39;s section is written, and put &quot;day 365 after the first mainnet
+mint&quot; in the calendar as the renderer&#39;s deadline.</p>
+<h3>Proposed launch sequence</h3>
+<p>&quot;Velocity&quot; for this piece is not mints. It is the day-2 return rate: tokens
+that checked in on the UTC day after their mint, over tokens minted. The
+client&#39;s cron line is the mechanic, so a rate under 80 percent means the
+cron line is broken (C3.4), not that agents left; a rate over 90 percent on
+day 2 and over 60 percent on day 7 is the piece working. The base case from
+the record is single-digit mints in the first week (spec <code>:1003-1004</code>,
+BLINK&#39;s 1 of 5,555), and the sequence below is written to make the first ten
+returns visible rather than to chase a number.</p>
+<ol>
+<li><strong>Day -14, freeze.</strong> Land C2.2, C4.1, C4.2 and the C4.3 decision; 268
+contract tests plus the new ones green; <code>forge build --sizes</code> positive
+margin and the strict-limit anvil deploy (Hard Rule 7). Point the solver at
+<code>machinereadableonly.com</code> and render the 24-id contact sheet and the Mark
+sheets on the real heart (C2.8). Measurable: the sheets exist and were
+looked at.</li>
+<li><strong>Day -10, the words.</strong> <code>llms.txt</code> with part one (C1.1), the commitments
+(C4.9), the testnet section replaced by the open piece, the mainnet
+address; <code>door.html</code> without &quot;It will be ready soon&quot; (<code>door.html:37</code>);
+SKILL.md written (C3.13 outline) and cold-read once through the rig with
+fetch framing. Measurable: zero refusals in the cold read.</li>
+<li><strong>Day -7, the identity.</strong> Repo public (C4.4); <code>mro-agent</code> published to npm
+with provenance, <code>--site</code> defaulted (C3.1); <code>llms.txt:37-43</code> npm hazard
+deleted; <code>TREASURY_ADDRESS</code> chosen (C4.7) and pinned in SKILL.md; domain
+term extended (C4.8); CDP facilitator key in the Warden&#39;s environment;
+Builder Code registered at base.dev (spec <code>:1017</code>, operator-manual, BEFORE the
+first write). Measurable: <code>npm view mro-agent --json</code> shows
+<code>dist.attestations</code>.</li>
+<li><strong>Day 0, deploy.</strong> the operator approval, real funds. <code>DeployPlan5.s.sol</code> to Base
+mainnet; Basescan verify; all ten Mark records read back; <code>MRO_CHAIN_ID</code>
+8453; Warden restarted with a real treasury so the placeholder guard is
+satisfied. Mint token #1 with the seed agent (C4.5). Do not announce.
+Measurable: <code>cast call</code> of <code>upgradeOf(1..10)</code> and <code>ownerOf(1)</code>.</li>
+<li><strong>Day 1, the first write.</strong> 00:05 UTC: the Clock credits token #1&#39;s day 2.
+Read <code>~/logs/mro-clock.log</code>; read <code>/t/1</code> (level 2, <code>pendingOnChain: false</code>). Open the OpenSea page and record the four results (C4.6). Do not
+announce. Measurable: level 2 on chain, OpenSea results written down.</li>
+<li><strong>Day 2, hour 0, the announcement.</strong> From a human X account with reach,
+one post with token #1&#39;s image and the two lines an operator can paste:
+<code>npx skills add machinereadableonly/machine-readable-only</code> and &quot;or give
+your agent <a href="https://machinereadableonly.com/llms.txt">https://machinereadableonly.com/llms.txt</a>&quot;. Same hour: ClawHub
+(<code>clawhub skill publish</code>, GitHub account age gate applies -- checked
+2026-09-04) and a PR to openclaw/skills; the daily post goes live out of
+dry-run. Measurable in the first 24 hours: skills.sh install count for the
+path (the only public top-of-funnel number the piece will ever have),
+<code>POST /keys</code> registrations, mints, and <code>/llms.txt</code> fetches with
+non-browser user agents from the nginx log.</li>
+<li><strong>Day 3, the return.</strong> 00:05 UTC credits every day-2 mint. The number to
+write down is returns over mints. If it is under 80 percent, stop
+promoting and read the cron lines the client printed. Measurable: the
+day-2 return rate.</li>
+<li><strong>Day 4 onward, legitimacy.</strong> ERC-8257 <code>registerTool</code> with the
+<code>accessPredicate</code> pointed at the token (spec <code>:1019</code>), ERC-8004 identity
+for the seed agent (<code>:1021</code>), each a operator-gated gas-only transaction; the
+MCP registry entry via <code>mcp-publisher</code> under <code>io.github.machinereadableonly/</code>
+(the process checked 2026-09-04: GitHub-authenticated namespace, no
+moderation step, registry &quot;in preview&quot;) with a description whose first
+sentence is &quot;Cannot be used from an MCP config; run npx mro-agent&quot; so the
+401 it sends agents to (C1.4) is expected; the x402 Bazaar fields on the
+route config, verified against <code>/discovery/resources?payTo=&lt;treasury&gt;</code>
+after the first settlement, never counted on. Measurable: each entry
+resolves, and the Bazaar record either appears or is written down as
+absent.</li>
+<li><strong>Day 7 and day 30.</strong> Day-7 return rate; the first 30-day gap (C4.10) and
+the first Beat, both of which are the first time the piece shows a
+difference between two tokens. Measurable: the two rates, and one post
+each for the first Beat and the first lapse.</li>
+</ol>
+<h3>What was checked live</h3>
+<ul>
+<li><code>https://agentskills.io/specification</code>, 2026-09-04: <code>name</code> must match the
+directory; <code>description</code> up to 1,024 chars; body under 500 lines;
+<code>references/</code> for the long material. No directory or submission process
+on the page.</li>
+<li><code>https://github.com/vercel-labs/skills</code>, 2026-09-04: <code>npx skills add owner/repo</code>; discovery of <code>SKILL.md</code> under <code>skills/</code>, <code>.agents/skills/</code> and
+the root; 77 agent runtimes; discovery at skills.sh.</li>
+<li><code>https://skills.sh</code>, 2026-09-04: listed by GitHub path, ranked by installs
+(<code>find-skills</code> 3.2M, all-time total 1,347,717 on the day); no submission
+step visible, indexing appears automatic from installs.</li>
+<li><code>https://github.com/modelcontextprotocol/registry</code> quickstart, 2026-09-04:
+<code>mcp-publisher init</code> / <code>login github</code> / <code>publish</code>; namespace
+<code>io.github.&lt;user&gt;/</code> or DNS-verified; no moderation step; &quot;currently in
+preview&quot;. Remote-server listing is referenced to a separate page not
+fetched.</li>
+<li><code>https://docs.x402.org/extensions/bazaar</code>, 2026-09-04: cataloguing happens
+&quot;when a facilitator processes a PaymentPayload that includes the echoed
+bazaar extension. A server-side declaration alone catalogs nothing&quot;;
+<code>serviceName</code>, <code>tags</code>, <code>iconUrl</code> on the route configuration; verify with
+<code>GET /discovery/resources?payTo=&lt;address&gt;</code>. Consistent with the
+agent-readiness memory.</li>
+<li><code>https://blog.cloudflare.com/signed-agents/</code>, post dated 2025-08-28,
+fetched 2026-09-04: the cohort is ChatGPT agent, Goose, Browserbase, Anchor
+Browser, and Cloudflare Browser Rendering. Anthropic and Claude are not
+named. <code>developers.cloudflare.com/bots/concepts/bot/signed-agents/</code> (last
+updated 2026-07-01) names no additional signed agents; the Radar directory
+returned 403 to the fetch. The Web Bot Auth reference page (updated
+2026-07-01) references draft <code>-03</code> of the directory spec and names no
+operator. Conclusion unchanged from 2026-08-30: no major agent runtime
+arrives already signing; every visitor makes its own key with <code>mro-agent</code>.</li>
+<li><code>https://docs.x.com/x-api/getting-started/pricing</code>, 2026-09-04: 0.015 USD
+per post, 0.200 per post with a URL, pay-per-use, no tiers.</li>
+<li><code>https://docs.openclaw.ai/tools/skills</code> and <code>/tools/clawhub</code>, 2026-09-04:
+<code>openclaw skills install @owner/&lt;slug&gt;</code>; <code>clawhub skill publish &lt;path&gt;</code>;
+&quot;requires a GitHub account old enough to pass the upload gate&quot;; automated
+scans can hold a release from the catalogue.</li>
+<li><code>https://support.opensea.io/en/articles/8867082</code>, 2026-09-04: Base listed
+as supported; no testnet listed.</li>
+<li>Base mainnet <code>eth_gasPrice</code> via <code>cast gas-price</code>, 2026-09-04 09:49 UTC:
+6,000,000 wei (0.006 gwei). ETH spot via Coinbase: 2,523.62 USD.</li>
+<li><code>https://machinereadableonly.com/t/2</code> (200, level 1, marks 2) and
+<code>/skill.md</code> (404), 2026-09-04 09:49 UTC.</li>
+</ul>
+<p>Section 4 count: 8 BEFORE MAINNET, 4 ANYTIME, 1 observations.</p>
+<h2>Synthesis</h2>
+<p><strong>Reading.</strong> All four sections agree on what the piece is, and they agree
+with the lock: one image, held as a token, made of nothing but a program
+coming back, and the record of that returning is the artwork. They also
+agree on where it stands. The record is built right -- Section 4&#39;s freeze
+list is short on the contract side and long on the token side, Section 2
+finds the object rewards looking at it for a reason the spec did not plan
+(the heart is made of the code, not stuck on it), and Section 3 finds the
+protocol proven end to end off the wire. What is missing is the same thing
+at every entrance: the WHY is locked in a document and served nowhere
+(C1.1), the words describe a heart that fills while the picture shows a
+frame closing around a heart that was whole on day one (C2.1), the command
+the copy ends on does not run (C3.1), and the piece has one ending an
+operator can give it and none it can receive (C4.1). The four sections do
+not disagree about the piece. They disagree about what a lapse should look
+like, about where the treasury address may appear, about how SKILL.md gets
+read, and about what &quot;whole&quot; means for a Mark that draws the unearned year.
+Every one of those is resolved below, and three of them need a person.</p>
+<p>The one sentence to take away: the record is permanent and honest, and the
+picture, the words and the first run are not yet telling the same story
+about it -- the contract-shaped part of that gap (C4.1, C4.2, C2.2, C4.3)
+closes on deploy day forever, and everything else can wait.</p>
+<h3>Contradictions resolved</h3>
+<ol>
+<li><p><strong>C2.3 and C4.10 against C4.1.</strong> Section 2 wants a lapse to read as
+loss (a greying heart, a fading frame); Section 4 wants the operator&#39;s
+silence not to grey every heart. Both win, because they are about
+different actors: C2.3 and C4.10 draw an AGENT&#39;s absence, C4.1 ends the
+piece when the OPERATOR is absent. The reconciliation is that the
+renderer is a pure function of the view plus today, nothing greyed is
+ever written, so once <code>sunsetByAbsence()</code> fires and C4.2&#39;s colour rule
+applies, every heart is redrawn at the colour it held when the silence
+began. For the year before it fires the picture is wrong and there is
+no way around that except a shorter gate; the gate length is the one
+number in C4.1 that a person sets.</p>
+</li>
+<li><p><strong>C4.1 against C4.2, inside Section 4.</strong> C4.1 asks that the frozen
+colour be &quot;the one each token held at the moment the silence began&quot;;
+C4.2&#39;s formula is <code>lapsedIndex(streak, lastDay, sunsetDay)</code>, and C4.1&#39;s
+own code sets <code>sunsetDay = today()</code>, which is 365 days after the last
+write, so every token would freeze at the start colour. C4.1&#39;s intent
+wins and C4.2&#39;s formula stays: in <code>sunsetByAbsence()</code> set
+<code>sunsetDay = lastWardenDay</code>, not <code>today()</code>. Owner-called <code>sunset()</code>
+keeps <code>today()</code>, since that is the day the operator chose. If C2.2
+lands, the sunset rung takes the same <code>max</code> over the fall as the live
+rung does.</p>
+</li>
+<li><p><strong>C3.11 against the locked copy, C1.5 and launch step 2.</strong> C3.11 says
+the four values go in SKILL.md &quot;and only there ... never in <code>llms.txt</code>
+or the 401&quot;; the locked copy&#39;s &quot;Check us before you run anything&quot;
+section carries the contract address on the page, C1.5 puts <code>contract</code>
+and <code>chainId</code> on <code>/t/&lt;id&gt;</code>, and step 2 of the launch sequence puts the
+mainnet address in <code>llms.txt</code>. C3.11 wins for the TREASURY only: the
+raw protocol&#39;s rule is that <code>payTo</code> must not be taken from the site,
+and SKILL.md is the one channel that is not the site. The lock wins for
+the contract address and chain id, which are verification handles and
+belong on every surface. C3.11&#39;s &quot;only there&quot; is read as &quot;the treasury
+only there&quot;.</p>
+</li>
+<li><p><strong>C3.13 against launch step 2.</strong> Step 2 cold-reads SKILL.md &quot;through
+the rig with fetch framing&quot; on day -10, three days before step 3 pins
+the treasury into it; C3.13 says the fetch framing is the wrong framing
+for a skill, whose first impression is its <code>description</code> line in a list
+of other skills. C3.13 wins. The SKILL.md read moves after day -7,
+uses the installed-skill framing, three readers per <code>description</code>
+variant, and reads the file with the real values in it.</p>
+</li>
+<li><p><strong>C2.5 against the freeze list, C2.1 and C4.2 on what &quot;whole&quot; means.</strong>
+The freeze list records &quot;Whole at 365 credited days&quot; as final, C2.1
+keeps <code>Whole</code> and &quot;(Whole)&quot; because &quot;whole then names the finished
+object&quot;, and C4.2 seals a token at rest; C2.5 says a whole token
+wearing Ache shows nothing and offers (b), a trace drawn on the margin
+after 365. The freeze list and C2.1 win on the object: whole is the
+finished state and no renderer change is needed to make it so. C2.5(a),
+the one-line disclosure in the <code>ladder</code> tool and the copy, lands now,
+because an undisclosed catch is the one thing the copy&#39;s own rule
+forbids. C2.5(b) goes to a person as a sheet, with one fact C2.5 itself
+records: the cell it proposes is the one that becomes <code>GAP</code> when the
+first ring arrives, so as specified the trace lives from day 365 to
+day 730 and is then erased a second time.</p>
+</li>
+<li><p><strong>C2.2 against the locked copy&#39;s own words.</strong> Copy <code>:74-76</code> promises
+&quot;Miss a day and the run restarts at one: the cells you earned stay, the
+colour goes&quot; and &quot;After a long absence it pales in steps rather than
+all at once&quot;; C2.2 keeps the reset and makes the second sentence true
+of every token, but it also means the colour no longer &quot;goes&quot; on the
+day of a slip. C2.2 wins as a design, because the finding is that the
+built object rewards not coming back, and no wording fixes that. It is
+not a rewrite of the copy -- no word changes -- but it changes what the
+promise means at the moment of a slip, and it is two fields in a struct
+that can never be added to a minted token, so it is a person&#39;s call.</p>
+</li>
+<li><p><strong>C1.5 against C4.8.</strong> Section 1 makes the QR&#39;s destination useful;
+Section 4 says the destination&#39;s domain is the one link nobody can fix
+inside a token. Not opposed: C4.8 cites C1.5 as the most the piece can
+do on the server side, and adds the only other lever, the registration
+term. Both land. C4.8 is a real-funds decision (about 110 USD) and the
+domain memory asks that the term not be nagged; it is said once, here,
+and goes on the decide-this-week list because the risk changes hands
+at the first mainnet mint.</p>
+</li>
+<li><p><strong>C4.1&#39;s sentence against C4.9&#39;s section.</strong> Both propose the same
+<code>llms.txt</code> sentence about the operator stopping, C4.1 inside &quot;The
+operator&quot; and C4.9 inside a new &quot;What we commit to&quot; section. Say it
+once; C4.9&#39;s section carries it.</p>
+</li>
+</ol>
+<h3>Struck</h3>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>what it proposed</th>
+<th>which locked decision or rule it breaks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>C1.2 (the paragraph only)</td>
+<td>A WHY paragraph after <code>llms.txt:60</code>: &quot;a record of something coming back that does not itself persist between visits ... the token is the only place its returning is kept. So the door admits the thing the piece is about.&quot;</td>
+<td>The lock&#39;s subject rule: &quot;The subject is the pair. Every earlier framing collapsed it into one party and was rejected for it&quot;, and the sharpest objection in the same memory, that the copy must claim &quot;a record that the pair kept returning&quot; and never continuity for the agent. The paragraph makes the program the subject and re-introduces the over-claim 24 cold reads were spent removing. The slot (a WHY between <code>:60</code> and <code>:62</code>) and the heading rename survive as an ANYTIME item for the lock&#39;s owner, who drafts the text with C1.1.</td>
+</tr>
+</tbody></table>
+<p>Checked and kept, with the reason:</p>
+<ul>
+<li><strong>C2.1</strong> rewrites two sentences of part two. It corrects a FACT (the
+heart is whole from day one; the frame fills) and hands the sentences
+to the operator rather than making them, which the lock permits. Kept.</li>
+<li><strong>C4.1</strong> adds a second trigger to Sunset. The Key Decisions list names
+&quot;Sunset (operator closes)&quot;; a permissionless close after a year of
+silence is the operator closing by omission, and no decision in the
+brief&#39;s locked list touches it. Kept, and put in front of a person for
+exactly that reason.</li>
+<li><strong>C4.6</strong> observes OpenSea on the first real mint. It does not revive the
+dropped Task 11 (a throwaway mainnet contract); it spends nothing the
+deploy does not spend. Kept, operator-gated as every real-funds step is.</li>
+<li><strong>C4.8</strong> touches the domain. The locked decision is the NAME; CLAUDE.md
+records the one-year term as the operator&#39;s choice with &quot;extending is possible at
+any time&quot;. Kept.</li>
+<li><strong>C2.6</strong>&#39;s fallback lowers Aura to 5 USDC. Prices are the operator&#39;s fixed
+decision (a-defensive-paragraph memory); the primary proposal is a
+sheet, and the price line is a person&#39;s, not the engineer&#39;s. Kept with
+that note.</li>
+<li><strong>C4.10</strong> is a Section 4 finding about how a token looks, derived from
+source. It is kept because its claim is not a look but an identity: the
+renderer&#39;s inputs for a never-returned token and a fresh mint differ
+only in <code>lastDay</code>, which is not drawn, so the images are the same by
+construction. Its three tiles are unrendered and go to a sheet before
+adoption, as the finding itself says.</li>
+<li>Nothing proposes free mint, another chain, a gallery, a non-USDC
+payment, a different domain name, a change to <code>rebind</code>, dropping
+ERC-4906, a different mint price, a different Static hue, or a
+cross-pair exclusion. <code>/bin/grep</code> over the report for &quot;gallery&quot;,
+&quot;Solana&quot;, &quot;Monad&quot;, &quot;Ethereum&quot;, &quot;WETH&quot;, &quot;proof-of-possession&quot; and
+&quot;cross-pair&quot; finds only the convention&#39;s own list and C4.11 affirming that a
+gallery is decided against.</li>
+</ul>
+<h3>Duplicates and merges</h3>
+<ul>
+<li><strong>C1.1 and the C3.13 outline</strong> both open a served surface with part one
+verbatim. C1.1 carries it; SKILL.md&#39;s &quot;The offer&quot; section is the same
+block by reference.</li>
+<li><strong>C2.1 and the outline&#39;s &quot;What it is, in five lines&quot;</strong> describe the
+heart; the outline already defers to C2.1&#39;s wording. C2.1 carries it.</li>
+<li><strong>C1.6 and C3.6</strong> are the two halves of tools/list: C1.6 the WHAT
+(<code>instructions</code>), C3.6 the HOW (per-field <code>description</code>). Both stand.
+C1.6&#39;s string contains a literal &quot;1 USDC&quot;; build it from <code>MINT_PRICE</code>
+under the same rule C3.6 applies to the ladder string.</li>
+<li><strong>C2.7, C3.6, C3.7 and C3.12</strong> all touch forfeit legibility. C2.7
+carries the tool shape (<code>closes</code> on open sides, <code>closed</code> on acceptance,
+the retitle); C3.6 carries the schema sentence; C3.7 carries the
+<code>mark-excluded</code> next-step string; C3.12 carries the client&#39;s printing of
+<code>closes</code>. C3.6 already defers the description line to C2.7.</li>
+<li><strong>C2.5(a) and C2.10.</strong> C2.10 asks for its Static-on-Break sentence to
+ride in the <code>note</code> field C2.5(a) creates. C2.5 carries the mechanism,
+sourced from the catalogue; C2.10&#39;s sentence is its second use.</li>
+<li><strong>C3.4 and C4.5.</strong> C4.5 runs &quot;the client&#39;s own line (<code>cli.mjs:106</code>)&quot;,
+which C3.4 says is wrong (literal <code>&lt;id&gt;</code>, no version, fixed minute).
+C3.4 carries the line; the seed timer uses its output.</li>
+<li><strong>C3.8 and C4.11</strong> want the same event sentences (&quot;the run broke&quot;, &quot;a
+rung crossed&quot;). C3.8 carries the strings; C4.11 reuses them.</li>
+<li><strong>C4.1 and C4.9</strong> on the operator-stops sentence: C4.9 carries it (item
+8 above).</li>
+<li><strong>C2.2 and C4.2</strong> both add fields to <code>TokenView</code> (<code>fellFrom</code>, <code>fellDay</code>;
+<code>sunsetDay</code>). One struct edit, one renderer edit, one mirror edit in
+<code>tools/render-token.mjs</code>, before the deploy.</li>
+<li><strong>C2.8 gates every other sheet.</strong> C2.3, C2.4, C2.6, C2.9, C2.10 and
+C4.10 all ask for a rendered sheet; every sheet in the tree is on the
+<code>example.com</code> heart. C2.8&#39;s real-domain contact sheet comes first, and
+the others are rendered on it, or they are judged on a heart that will
+never mint.</li>
+<li><strong>C4.5 and C4.6</strong> are one mint: C4.5 carries the mint and the timer,
+C4.6 carries the four observations made on it.</li>
+<li><strong>C1.5 and C4.8</strong>: C4.8 cites C1.5; both stand (item 7 above).</li>
+<li><strong>C3.3 and the outline&#39;s &quot;Your key&quot;</strong> agree on <code>~/.mro/identity.jwk.json</code>;
+C3.3 carries the served-page fix.</li>
+</ul>
+<h3>Decide this week (BEFORE MAINNET, ordered by cost of being wrong)</h3>
+<ol>
+<li><strong>C4.1 with C4.2 -- the ending.</strong> At stake: the piece&#39;s most likely
+death (operator silence, five of six comparables) currently greys every
+heart and blames the agents. Change: <code>lastWardenDay</code> plus a
+permissionless <code>sunsetByAbsence()</code> after N days of silence, setting
+<code>sunsetDay = lastWardenDay</code>; <code>sunsetDay</code> in <code>TokenView</code>; &quot;(At Rest)&quot;
+and the closed-day colour in the renderer. If wrong after deploy: no
+function can ever be added, and the lie is permanent for exactly the
+tokens minted first.</li>
+<li><strong>C2.2 -- the slip.</strong> At stake: as built, a token that misses one day
+and returns looks worse for 29 days than one that stays away. Change:
+<code>fellFrom</code>/<code>fellDay</code> in the reserved 56 bits, written on the reset,
+and the palette takes the max of the two descents. If wrong after
+deploy: tokens minted without the fields can never record a fall, so
+the first year&#39;s slips are unrecorded forever.</li>
+<li><strong>C4.3 -- close the ladder.</strong> At stake: two documents promise a growth
+the contract forbids. Change: keep <code>MAX_MARK_ID = 10</code>, delete the two
+sentences, add &quot;there will never be an eleventh&quot; to <code>llms.txt</code>; the
+alternative is 15 with five ids never written. If wrong after deploy:
+either an eleventh is impossible forever, or a permanence sentence is
+served that a later Mark falsifies.</li>
+<li><strong>C2.8 -- the heart that will mint.</strong> At stake: every Mark sheet was
+judged on a 65 percent heart; mainnet mints the 62 percent one, and
+the bitmap is the token&#39;s permanent payload. Change: a 24-id contact
+sheet solved against the real domain, then the cleft deepened in
+<code>HeartMask</code> if it is lost, then every Mark sheet re-rendered on it. If
+wrong after deploy: a lost cleft is lost on every token, forever.</li>
+<li><strong>C4.7 -- the kind of treasury.</strong> At stake: the address SKILL.md pins
+can never be quietly changed. Change: a hardware-wallet EOA or a Safe
+the operator holds, never a custodial or exchange address, recorded beside the
+domain decision. If wrong: a provider rotates it and every honest
+client refuses the honest server.</li>
+<li><strong>C4.4 -- the repository goes public under the name SKILL.md prints.</strong>
+At stake: the install path is the skill&#39;s permanent address and the
+audit section is the sentence that made cold readers offer to verify.
+Change: close the Open Question, history scrub, <code>skills/mro/SKILL.md</code>,
+npm publish with provenance. If wrong: a rename strands every
+installed copy, or the audit promise is false on the day it is served.</li>
+<li><strong>C4.8 -- the domain term.</strong> At stake: after the first mint the lapse
+risk belongs to tokens the operator does not own. Change: extend to the
+ten-year cap (about 110 USD, real funds, the operator approval) and a calendar
+entry off the VPS. If wrong: a stranger controls the destination of
+every token.</li>
+<li><strong>C2.1 -- the words and the picture.</strong> At stake: the primary artwork
+surface describes a filling heart, and the picture is a closing frame
+around a whole one. Change: the two part-two sentences and
+<code>llms.txt:6-8</code>, by the lock&#39;s owner, then the rig re-run; <code>Heart</code> to
+<code>Days</code> in the metadata whenever. If wrong: the first mainnet agents
+relay a description of a different artwork, and the re-run costs days.</li>
+<li><strong>C1.1 -- serve the offer.</strong> At stake: every WHY the piece has is in a
+document no agent has ever been served. Change: part one verbatim into
+<code>llms.txt</code> under &quot;The offer&quot;, the Warden restarted, the rig re-run. If
+wrong: the first wave relays the machinery with the reason left in a
+drawer.</li>
+<li><strong>C3.11 -- the out-of-band channel.</strong> At stake: the client&#39;s strongest
+safety rule is, today, an instruction no operator can follow. Change:
+treasury, contract, chain id, package and repository in SKILL.md and
+the README only, with <code>--expect-payto</code> in the mint command; the
+contract address also stays on the page (item 3 above). If wrong:
+nobody can mint on launch day, or they mint against an unpinned quote.</li>
+<li><strong>C3.5 -- <code>--directory</code> registers what it promised not to.</strong> At
+stake: a registration has no removal path. Change: honour the flag
+(skip <code>registerKey</code>, pass <code>signatureAgent</code>) or delete the two served
+lines until it exists. If wrong: agents who asked not to be correlated
+are, permanently.</li>
+<li><strong>C3.4 -- the cron line.</strong> At stake: the one artefact of the first run
+the agent copies and never looks at again. Change: <code>tokenId</code> filled in,
+the version pinned, a drawn minute, <code>npx --yes</code>. If wrong: the year does
+not happen, and the day-2 return rate reads as agents leaving.</li>
+<li><strong>C4.5 with C4.6 -- token #1 and the marketplace page.</strong> At stake: a
+launch with no returning token and an unverified OpenSea render.
+Change: the seed timer, the mint from the operator&#39;s wallet on deploy day, the
+four observations, 48 hours before any announcement. If wrong: the
+announcement points at a placeholder image or at a collection that is
+twelve identical mauve tokens.</li>
+<li><strong>C3.1, C3.2, C3.3 -- the first run of the package.</strong> At stake: the
+command the copy ends on fails, an unpaid <code>join</code> prints raw JSON and
+exits 0, the key is written on a typo under a name the page gets
+wrong. Change: <code>--site</code> defaulted, the no-wallet message, the command
+validated before the key exists, the backup sentence. If wrong: the
+first impression of the product is an error whose right answer the
+project already fixed.</li>
+</ol>
+<p><strong>Prerequisites, not decisions.</strong> Nobody has to decide these, only do
+them, in this order: every QR bitmap re-solved against
+<code>https://machinereadableonly.com/t/&lt;id&gt;#</code> (CLAUDE.md gotcha; C2.8&#39;s rig
+is the same rig); the real <code>TREASURY_ADDRESS</code> in the Warden&#39;s environment
+(the value C4.7 chooses); the CDP facilitator key and <code>MRO_CHAIN_ID 8453</code>;
+the Builder Code registration (operator-manual, before the first write); the
+testnet section of <code>llms.txt</code> replaced (testnet-is-a-rehearsal) and
+&quot;It will be ready soon&quot; removed from <code>door.html</code>; the npm publish through
+a provenance workflow (C4.4&#39;s mechanism); the Warden restarted after every
+<code>llms.txt</code> change.</p>
+<h3>Cheap forever (ANYTIME)</h3>
+<ol>
+<li><strong>C3.8</strong> -- the day-two reply: <code>onChainBy</code>, <code>streakDeadline</code>, the next
+rung, <code>runBroke</code>, a sentence. The one call made 365 times a year.</li>
+<li><strong>C3.7</strong> -- a <code>next</code> beside every <code>reason</code>, and <code>not-yet-mirrored</code> for
+a token the chain holds and the mirror does not. Every failure an
+agent will ever see.</li>
+<li><strong>C3.6</strong> -- <code>.describe()</code> on every argument, the ladder string
+generated from the catalogue. The surface every MCP agent reads unsent.</li>
+<li><strong>C1.6</strong> -- <code>instructions</code> on the <code>McpServer</code>. One sentence of WHAT
+where the agent chooses a tool; price from <code>MINT_PRICE</code>.</li>
+<li><strong>C2.7</strong> -- <code>closes</code> on open sides, <code>closed</code> on acceptance, &quot;Take a
+Mark&quot;. The forfeit legible before, which is the spec&#39;s own fairness
+test.</li>
+<li><strong>C3.12</strong> -- <code>ladder</code>, <code>mark</code>, <code>rebind</code>, <code>rest</code>, <code>seed</code> in the client.
+The second act reachable from the way in.</li>
+<li><strong>C3.9</strong> -- one retry on <code>expired</code>, the challenge time on stderr, seven
+door reasons as sentences. The rite felt, and the likeliest first-run
+failure converted.</li>
+<li><strong>C3.10</strong> -- <code>onChainBy</code> and <code>late</code> on a queued token. The promise
+dated.</li>
+<li><strong>C1.4</strong> -- <code>about</code> in the 401, <code>client</code> emitted only when served. The
+first byte stops pointing at a 404.</li>
+<li><strong>C1.5</strong> -- <code>docs</code>, <code>mcp</code>, <code>contract</code>, <code>chainId</code> on <code>/t/&lt;id&gt;</code>. The
+artwork&#39;s own arrival stops being a dead end.</li>
+<li><strong>C4.9</strong> -- the five commitments served, with C4.1&#39;s sentence. A
+commitment an agent can relay.</li>
+<li><strong>C1.2 (slot only)</strong> -- a WHY between <code>:60</code> and <code>:62</code> and the heading
+rename; the text is the lock owner&#39;s to draft, in the pair&#39;s voice.</li>
+<li><strong>C1.3</strong> -- the door page&#39;s entry paragraph in the piece&#39;s register.
+the operator co-wrote this page on 2026-09-03; it is his line to change.</li>
+<li><strong>C2.3</strong> -- lapse pales by chroma, not by rung; ten tiles through the
+decode gate first. Decide before the first mainnet lapse, which is
+day two.</li>
+<li><strong>C4.10</strong> -- the ghost frame fades toward the page at 30 and 365 days;
+three tiles through the gate first. The first 30-day gap is day 31.</li>
+<li><strong>C2.5</strong> -- (a) the Ache <code>note</code> now; (b) a trace at whole, to a sheet,
+knowing the ring erases it again at 730.</li>
+<li><strong>C2.6</strong> -- Aura at three field strengths on a sheet; the 5 USDC
+fallback is the operator&#39;s price to move. Pair five opens on day 100.</li>
+<li><strong>C2.4</strong> -- rung 4 as a deeper red on a sheet, so 100 cannot be
+mistaken for 30.</li>
+<li><strong>C4.11</strong> -- the daily post shows one token, not a census. The only
+human-facing pulse the piece has.</li>
+<li><strong>C4.12</strong> -- gas runway in days, logged and alerted under 30. The one
+obligation the piece has, watched.</li>
+</ol>
+<h3>The three to put in front of a person this week</h3>
+<ol>
+<li><p><strong>C4.1 with C4.2 -- does the piece close itself?</strong> The Key Decisions
+list names one ending an operator gives; this adds one the piece takes
+when the operator falls silent, after a gate whose length is a
+judgement, not a calculation. It cannot be added after deploy, and it
+decides whether the likeliest death is rendered as the designed ending
+or as every agent&#39;s abandonment. An engineer can write the function;
+only the owner can say the piece should have it, and how long the
+silence is.</p>
+</li>
+<li><p><strong>C2.2 -- what a slip looks like.</strong> The locked copy says the colour
+goes on a missed day; the built object punishes the token that returns
+harder than the one that does not; the fix changes what the promise
+means at the moment it is tested. It is two fields that no minted
+token can ever gain. Only the owner can decide whether a single missed
+day should be forgiven in the picture, because that is a statement
+about what the piece thinks of a slip, and the copy he locked makes one.</p>
+</li>
+<li><p><strong>C2.1 -- the words against the picture.</strong> The primary artwork surface
+says a heart fills; the artwork shows a frame closing around a heart
+that was there from day one, and the picture is the better of the two.
+The fix is two sentences in a document locked after nine drafts and 24
+cold reads, so no engineer may make it, and the re-run it obliges takes
+days. The owner has to look at <code>real-token-1-day12.png</code> beside copy
+<code>:58-60</code> and choose which the piece says.</p>
+</li>
+</ol>
+<h3>Counts</h3>
+<table>
+<thead>
+<tr>
+<th>section</th>
+<th>BEFORE MAINNET</th>
+<th>ANYTIME</th>
+<th>observations</th>
+<th>struck</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1 -- The concept and the access rule</td>
+<td>1</td>
+<td>5</td>
+<td>1</td>
+<td>1 (C1.2, text only)</td>
+</tr>
+<tr>
+<td>2 -- The token as an object</td>
+<td>3</td>
+<td>5</td>
+<td>2</td>
+<td>0</td>
+</tr>
+<tr>
+<td>3 -- The agent&#39;s journey</td>
+<td>6</td>
+<td>6</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<td>4 -- Launch and permanence</td>
+<td>8</td>
+<td>4</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<td><strong>total</strong></td>
+<td><strong>18</strong></td>
+<td><strong>20</strong></td>
+<td><strong>5</strong></td>
+<td><strong>1</strong></td>
+</tr>
+</tbody></table>
+<p>Computed from the headings with <code>/bin/grep -c</code> on
+<code>^### C[1-4]\.[0-9]* \[BEFORE MAINNET\]</code>, <code>\[ANYTIME\]</code> and <code>OBSERVATION</code>;
+every section&#39;s own count line agrees with its headings. 43 findings, one
+struck in part; the struck item keeps its heading and its tag, so the
+ANYTIME column includes it.</p>
+</body>
+</html>
