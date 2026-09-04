@@ -70,6 +70,54 @@ async function initResourceServer(facilitatorUrl, network) {
 }
 
 /**
+ * Make a post-gate refusal legible to the PAYMENT LAYER, so the agent is not
+ * charged for it.
+ *
+ * MEASURED 2026-09-03 against the real facilitator, not inferred. `@x402/evm`'s
+ * `exact` scheme defaults to the `authorization` payment flow, and @x402/core's
+ * PAYMENT_FLOWS table gives that flow `settleBeforeHandler: false,
+ * settleAfterHandler: true`: the payment is VERIFIED before the handler and
+ * SETTLED after it returns. @x402/mcp then decides which of those to do by
+ * reading ONE field of what the handler returned --
+ *
+ *     if (result.isError) { ...cancel... }
+ *     return settlePaymentResult(...)      // otherwise: take the money
+ *
+ * -- and our tools answer with plain `{ ok: false, ... }` values that have no
+ * `isError` at all. So every `paid-but-unavailable` ever returned was read as a
+ * SUCCESS by the payment layer and settled: an agent paid 1 USDC and got a
+ * refusal. Reproduced on Base Sepolia (payer 18.0 -> 17.0 USDC, settlement tx
+ * 0x019854ce...), and reproduced as 0.00 USDC with this wrapper in place.
+ *
+ * Nothing has been settled at the moment a post-gate refusal is produced, so
+ * cancelling costs the payer nothing: the signed EIP-3009 authorisation is
+ * simply never submitted. The agent still proved it could pay, and keeps its
+ * money.
+ *
+ * WHY HERE AND NOT IN THE TOOLS. Everything inside `paid()` is by construction
+ * a post-gate refusal -- both tools decide every gate they can BEFORE asking
+ * for payment -- so one conversion covers `mint` and `upgrade` together and
+ * cannot come apart when a third paid tool is added. It also keeps the tools
+ * answering in plain values, which is what every other tool here returns.
+ *
+ * The result is a COMPLETE MCP tool result. `content` is what makes
+ * mcp/server.mjs pass it through untouched instead of wrapping it and burying
+ * `isError` one level down -- the exact defect that made the piece unenterable
+ * in eaac15a, and it would land here in the other direction.
+ */
+function cancelSettlementOnRefusal(handler) {
+  return async (...callArgs) => {
+    const result = await handler(...callArgs);
+    if (!result || result.ok !== false) return result;
+    return {
+      content: [{ type: "text", text: JSON.stringify(result) }],
+      structuredContent: result,
+      isError: true,
+    };
+  };
+}
+
+/**
  * The `paid()` wrapper both paid tools call through.
  *
  * WHY THIS IS LAZY. Building the real thing needs `initialize()`, which is a
@@ -179,7 +227,7 @@ export function makePaymentGateway({
         alert(`payment unavailable (${facilitatorUrl}, ${network}): ${err.message}`);
         return { ok: false, reason: "payment-unavailable" };
       }
-      return wrap(handler)(args, adaptContext(ctx.mcpCtx));
+      return wrap(cancelSettlementOnRefusal(handler))(args, adaptContext(ctx.mcpCtx));
     };
   }
 
