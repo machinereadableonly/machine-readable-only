@@ -33,20 +33,31 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
       if (blocked) return { ok: false, reason: blocked };
 
       return paid(async () => {
-        // BOTH GATES ARE RE-DECIDED AFTER SETTLEMENT, because settling takes
+        // BOTH GATES ARE RE-DECIDED HERE, because the payment round trip takes
         // seconds and everything checked before it is now stale.
         //
-        // `already-minted` is re-decided by the unique index on mints.keyId
-        // below: two concurrent settlements from one key both pass the
-        // pre-payment check, and the index is what actually holds it.
+        // WHEN "HERE" IS, exactly: the payment has been VERIFIED and not yet
+        // settled. @x402/evm's `exact` scheme runs the `authorization` flow,
+        // which settles only after this function returns -- so a refusal below
+        // reaches the payment layer in time to cancel it, provided it carries
+        // `isError`. That is pay/x402.mjs's job, not this file's; see
+        // cancelSettlementOnRefusal there for the measurement.
+        //
+        // `already-minted` is re-decided by a unique index on `mints` below:
+        // two concurrent calls from one key both pass the pre-payment check,
+        // and the index is what actually holds it. Which index refuses depends
+        // on the race -- two calls launched together derive the SAME id from
+        // freeIdFrom and collide on mints.tokenId; a call overtaken by an
+        // already-written row collides on mints.keyId. Both were observed on
+        // 2026-09-03, and the refusal is identical either way.
         //
         // The supply cap has no index behind it -- it is a count, not a
         // constraint -- so it has to be re-READ here, and this read is the only
-        // thing between a settled payment and a token over the cap that the
+        // thing between a paid-for mint and a token over the cap that the
         // contract would refuse to write. `seed` takes slots from the same
         // count, so this is not only a race between two mints.
         if (q.tokenCount() >= supplyCap) {
-          alert(`mint settled for key ${ctx.keyId} but the supply cap was reached during settlement`);
+          alert(`mint refused for key ${ctx.keyId} after payment was verified: the supply cap was reached`);
           return { ok: false, reason: "paid-but-unavailable", detail: "supply-cap-reached" };
         }
 
@@ -56,7 +67,7 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
         // by the time the row is written.
         const stillBlocked = await paidWriteBlock(chain, { to: args.to });
         if (stillBlocked) {
-          alert(`mint settled for key ${ctx.keyId} but the chain now refuses it: ${stillBlocked}`);
+          alert(`mint refused for key ${ctx.keyId} after payment was verified: the chain now refuses it: ${stillBlocked}`);
           return { ok: false, reason: "paid-but-unavailable", detail: stillBlocked };
         }
 
@@ -68,7 +79,7 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
         // this database is the world.
         const tokenId = await chain.freeIdFrom(q.nextTokenId());
         if (tokenId === null) {
-          alert(`mint settled for key ${ctx.keyId} but no free token id could be established on chain`);
+          alert(`mint refused for key ${ctx.keyId} after payment was verified: no free token id could be established on chain`);
           return { ok: false, reason: "paid-but-unavailable", detail: "chain-unavailable" };
         }
         const day = today();
@@ -89,7 +100,7 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
         } catch (err) {
           // The unique index refused a second mint for this key. The agent has
           // PAID, so this is never silent.
-          alert(`mint settled for key ${ctx.keyId} but could not be recorded: ${err.message}`);
+          alert(`mint refused for key ${ctx.keyId} after payment was verified: could not be recorded: ${err.message}`);
           return { ok: false, reason: "paid-but-unavailable", detail: "already-minted" };
         }
         return {

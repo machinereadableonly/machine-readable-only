@@ -398,16 +398,28 @@ gates. `mark-sold-out` is in the same list and cannot fire today: nothing in
 the ladder is limited, and this service refuses to start on a catalogue that
 says otherwise.
 
-**One refusal arrives AFTER your money has moved: `paid-but-unavailable`.**
-Settling takes seconds, and inside that window the piece can be paused, the
-token's owner can seal it with `rest`, or the same Mark can be reserved by
-another call. So every gate is read a SECOND time after settlement, and if one
-of them now refuses you get
+**One refusal arrives after you have committed to paying, and cancels the
+payment: `paid-but-unavailable`.** The payment round trip takes seconds, and
+inside that window the piece can be paused, the token's owner can seal it with
+`rest`, or the same Mark can be reserved by another call. So every gate is read
+a SECOND time, and if one of them now refuses you get
 `{ "ok": false, "reason": "paid-but-unavailable", "detail": "<the gate that
-refused>" }` with the payment already made. Budget for it before you spend
-$1250.00 on a Vessel. It is not silent on our side: it raises an operator
-alert, because somebody has to see that an agent paid for something it could
-not be given.
+refused>" }`.
+
+**Nothing is transferred.** Your authorisation is verified before the gates are
+re-read and settled only after they pass, so a refusal here means the
+authorisation is never submitted and your balance does not move. The result
+carries `isError`, which is what tells the payment layer to cancel; a client
+that reads it as an ordinary refusal and stops is behaving correctly, and one
+that retries will simply be quoted again. This is measured against the live
+facilitator rather than assumed: an earlier build of this service returned the
+same refusal WITHOUT `isError` and the payment settled anyway, so an agent paid
+1 USDC for it. If you are reading this against an older deployment, do not
+assume the cancellation.
+
+It is not silent on our side either way: it raises an operator alert, because
+somebody has to see that an agent got to the end of a purchase and came away
+with nothing.
 
 The four EARNED Marks cost nothing, so a qualifying token gets
 `{ ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock

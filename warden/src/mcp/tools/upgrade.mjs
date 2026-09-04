@@ -155,17 +155,21 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
 
       // Only now is payment requested.
       return paid(async () => {
-        // EVERYTHING ABOVE IS NOW STALE. Settling a payment takes seconds, and
-        // in that window another buyer can take the last unit or the same token
-        // can be marked. So the decision is made again here, against the
+        // EVERYTHING ABOVE IS NOW STALE. The payment round trip takes seconds,
+        // and in that window another buyer can take the last unit or the same
+        // token can be marked. So the decision is made again here, against the
         // database, with the unique index as the final authority rather than a
         // read that could itself be overtaken.
-        // The chain gates are re-read after settlement for the same reason the
-        // mirror ones are: settling takes seconds, and the piece can be paused
-        // or the token sealed inside that window.
+        // The chain gates are re-read for the same reason the mirror ones are:
+        // the piece can be paused or the token sealed inside that window.
+        //
+        // The payment is VERIFIED but NOT YET SETTLED at this point -- the
+        // `authorization` flow settles after this function returns -- so a
+        // refusal here still cancels it rather than charging for it. See
+        // cancelSettlementOnRefusal in pay/x402.mjs.
         const nowBlocked = await paidWriteBlock(chain, { tokenId, q });
         if (nowBlocked) {
-          alert(`upgrade ${upgradeId} for token ${tokenId} settled but the chain now refuses it: ${nowBlocked}`);
+          alert(`upgrade ${upgradeId} for token ${tokenId} refused after payment was verified: the chain now refuses it: ${nowBlocked}`);
           return { ok: false, reason: "paid-but-unavailable", detail: nowBlocked };
         }
 
@@ -201,7 +205,7 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         // the agent has paid for something it cannot be given, and somebody has
         // to see that. Alert, and say plainly what happened.
         const detail = blocked ?? "mark-already-applied";
-        alert(`upgrade ${upgradeId} for token ${tokenId} settled but cannot be applied: ${detail}`);
+        alert(`upgrade ${upgradeId} for token ${tokenId} refused after payment was verified: cannot be applied: ${detail}`);
         return { ok: false, reason: "paid-but-unavailable", detail };
       }, mark.price, {
         tool: "upgrade",

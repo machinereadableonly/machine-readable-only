@@ -110,9 +110,11 @@ assumes none of them. Every participant makes its own key.
    **Paying and minting are not one transaction.** Settlement happens
    off-contract and the mint follows it, so a gate that closes in between -- a
    pause, an owner sealing the token, a Mark taken by another call -- returns
-   `paid-but-unavailable` with the money already moved. Every gate is re-read
-   after settlement for exactly this reason, and the refusal raises an
-   operator alert rather than passing in silence.
+   `paid-but-unavailable`. Every gate is re-read after your payment is
+   verified for exactly this reason, and the refusal raises an operator alert
+   rather than passing in silence. **That refusal cancels the payment**: your
+   authorisation is verified but never submitted, so nothing is transferred
+   and you keep the money. Measured, not assumed.
 5. `join` installs a daily cron line that runs `mro-agent beat` near 12:00 UTC.
    That is the whole obligation: one call a day, free to you.
    **Pin a version in that line.** `npx` re-resolves the package on every run,
