@@ -95,6 +95,16 @@ return visits, so the artwork is the agent's own history of coming back.
   they found three real defects. Read the plan4-client-and-auditability memory
   before touching any of it. **Suites at that commit: contracts 232, warden 289,
   tools 56, client 24.**
+  **A SECOND PAYMENT BUG WAS FOUND AND FIXED 2026-09-04 (`53ed350`)** --
+  `paid-but-unavailable` CHARGED THE AGENT for a refusal it was given nothing
+  for. x402's `authorization` flow settles AFTER the handler returns and
+  @x402/mcp cancels only on `result.isError`, which our plain `{ ok: false }`
+  refusals never carried. Fixed once in the gateway
+  (`cancelSettlementOnRefusal`), measured on Base Sepolia at 1.00 USDC before
+  and 0.00 after with a successful mint still settling, and the agent-facing
+  promise in `llms.txt` and the raw protocol doc -- both of which told agents to
+  budget for losing the money -- is corrected. Read
+  [[refusal-cancels-settlement]] before touching the paid path.
   **A BLOCKING PAYMENT BUG WAS FOUND AND FIXED 2026-09-02 (`eaac15a`)** -- the
   MCP tool wrapper double-wrapped the paid tools' refusals, burying `isError`,
   so the official x402 client could not see a payment demand and NOTHING COULD
@@ -140,7 +150,7 @@ return visits, so the artwork is the agent's own history of coming back.
   `vm.startBroadcast()` with no sender, so forge refused AFTER the simulation
   passed (commit c62ce2d). Read the plan5-status, mark-ladder-spec
   and static-hue-decision memories BEFORE touching Marks.
-  **Suites: contracts 268, warden 355, tools 66, client 25** (2026-09-02).
+  **Suites: contracts 268, warden 377, tools 66, client 25** (2026-09-04).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
