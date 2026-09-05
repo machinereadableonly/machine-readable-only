@@ -98,15 +98,37 @@ export function applyEvents(q, events, { log = () => {} } = {}) {
         }
         break;
       }
-      case "Rebound":
-        // The chain stores a bytes32, and the mirror stores the thumbprint the
-        // door speaks. They are not interconvertible -- the hash is one way --
-        // so the value is recorded as it came and the Warden's live re-check
-        // stays the authority on who may act. Writing a bytes32 into a column
-        // the door compares thumbprints against would lock the agent out.
-        log(`clock: token ${tokenId} was rebound on chain to ${event.args?.newKeyId}`);
+      case "Rebound": {
+        // The chain stores a bytes32 and the mirror stores the thumbprint the
+        // door speaks, and the hash between them is ONE WAY. That is why this
+        // case did nothing but log until 2026-09-05 -- and the cost was that
+        // `tokens.keyId` never converged with the chain in either direction:
+        // the seller of a token kept authority over it forever, and the buyer
+        // was refused forever.
+        //
+        // The way out is not to invert the hash but to have stored it going
+        // forwards. `keys.keyIdHash` is written at registration, so a Rebound
+        // naming a key this Warden has seen resolves to its thumbprint with an
+        // index hit.
+        const newKeyId = q.keyForHash(String(event.args?.newKeyId ?? "").toLowerCase());
+        if (newKeyId) {
+          q.setKeyId(tokenId, newKeyId);
+          log(`clock: token ${tokenId} was rebound on chain to ${newKeyId}`);
+        } else {
+          // A key this Warden has never seen, which is entirely legitimate --
+          // an agent may rebind to a key it has not registered here. What must
+          // NOT happen is the mirror carrying on believing the old binding, so
+          // the tools that can act irreversibly read the chain directly rather
+          // than trusting this column. Logged loudly because it is the one case
+          // where the mirror knowingly holds a value it cannot correct.
+          log(
+            `clock: token ${tokenId} was rebound on chain to an UNREGISTERED key ` +
+              `${event.args?.newKeyId} -- the mirror's binding is stale until that key registers`
+          );
+        }
         applied.Rebound += 1;
         break;
+      }
       case "Minted":
         q.markMintWritten(tokenId);
         applied.Minted += 1;

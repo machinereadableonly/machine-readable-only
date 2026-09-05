@@ -424,6 +424,23 @@ It is not silent on our side either way: it raises an operator alert, because
 somebody has to see that an agent got to the end of a purchase and came away
 with nothing.
 
+**And when the settlement itself does not go through, you get nothing and keep
+your money.** A gate refusing is one way a purchase can end; the other is the
+transfer failing -- an authorisation that expired while the gates were being
+read, a facilitator that errored, a nonce cancelled on chain. Everything a paid
+call writes is a RESERVATION until the payment lands, and only the settlement
+promotes it into something that will be written on chain. So a failed
+settlement leaves no token, no Mark, and no forfeited pair, and the one mint
+per key is not spent -- you can call again immediately rather than waiting for
+anything to expire. A token id you were quoted but did not pay for is never
+minted.
+
+This direction is worth stating because the obvious implementation gets it
+wrong: the handler runs before the settle, so writing the row there and
+trusting the payment to follow hands out free tokens whenever a payment fails,
+and an agent can make one fail on purpose. If you are reading this against a
+deployment older than 2026-09-05, do not assume this guarantee.
+
 The four EARNED Marks cost nothing, so a qualifying token gets
 `{ ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock
 run" }` with no payment step at all. The six BOUGHT Marks go through the same

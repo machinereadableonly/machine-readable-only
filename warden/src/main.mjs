@@ -159,6 +159,19 @@ async function main() {
     facilitatorUrl,
     network: paymentNetwork,
     payTo: treasuryAddress,
+    // What turns a reservation into a sale. Until this fires the row the tool
+    // wrote is 'awaiting-payment' and the Clock will not touch it, so a
+    // settlement that never lands costs the piece nothing and costs the agent
+    // nothing.
+    onSettled: (payNonce, tx) => {
+      const moved = q.settleByNonce(payNonce, tx);
+      if (moved) console.log(`warden: settled ${moved.kind} for token ${moved.tokenId} (${tx})`);
+      return moved;
+    },
+    // And the other direction: a reservation whose settlement never happened is
+    // released at once, so the agent is free to try again rather than waiting
+    // for the row to age out.
+    onUnsettled: (payNonce) => q.releaseReservation(payNonce),
   });
 
   // Ask it to build now anyway, and carry on regardless. Without this a

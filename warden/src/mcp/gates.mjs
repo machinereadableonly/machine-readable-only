@@ -69,6 +69,33 @@ export async function paidWriteBlock(chain, { tokenId, to, q } = {}) {
   return contractState ?? token ?? wallet ?? null;
 }
 
+/**
+ * Refuse when the CHAIN does not say this token is bound to this caller.
+ *
+ * THE MIRROR IS NOT AN ANSWER TO THIS QUESTION. `rebind` is called by the token
+ * owner straight on chain and never routed through this service, so
+ * `tokens.keyId` learns of it only when the Clock next reconciles -- and only
+ * then if the new key happens to be registered here. Until 2026-09-05 it never
+ * learned at all.
+ *
+ * BOTH DIRECTIONS, which is what makes this different from the older check in
+ * `checkin`. That one asks the chain only when the mirror does NOT recognise
+ * the caller, so it lets a rebound buyer in but never shuts the seller out.
+ * Here the chain is the only authority consulted, so a seller who has already
+ * transferred and been rebound away from cannot act, whatever the mirror still
+ * says. That matters because the calls guarded by this are irreversible: taking
+ * one side of an exclusive pair forecloses the other permanently, and spending
+ * a token's yearly seed cannot be undone.
+ *
+ * A null from the chain is refused, not admitted -- the same rule every other
+ * gate here follows.
+ */
+export async function bindingBlock(chain, tokenId, keyId, toBytes32) {
+  const onChain = await chain.boundKeyOf(tokenId);
+  if (!onChain) return "chain-unavailable";
+  return onChain === toBytes32(keyId) ? null : "not-bound-to-caller";
+}
+
 /// A dependency check for the tool factories. A tool that silently skipped its
 /// gates because `chain` was not passed would be indistinguishable from one
 /// that passed them -- which is exactly how these gates went missing.

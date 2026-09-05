@@ -3,10 +3,33 @@
 // Prepared statements are reused across calls, so the SQL is parsed once per
 // process rather than once per request.
 
+// The ONE converter between a thumbprint and the bytes32 the contract stores.
+// Imported rather than reimplemented, for the reason keyId.mjs gives.
+import { keyIdToBytes32 } from "../mcp/keyId.mjs";
+
 /// The exact SQLite error for a violated UNIQUE index. Matching on the message
 /// rather than catching everything is deliberate: a dropped table and a
 /// duplicate check-in must not look the same to a caller.
 const UNIQUE_VIOLATION = /UNIQUE constraint failed/;
+
+/**
+ * How long a reservation may sit unsettled before it is treated as dead.
+ *
+ * A paid row is written by the tool handler and promoted by the settlement
+ * hook, and those two moments are one HTTP round trip to the facilitator apart
+ * -- seconds. Ten minutes is therefore enormous slack, chosen because the cost
+ * of being wrong is asymmetric: expiring a live reservation too early would
+ * take money for a row that then vanished, while expiring one too late only
+ * makes an agent wait before it can retry.
+ *
+ * It has to exist at all because @x402/mcp has no failure hook. `onAfterSettlement`
+ * fires only on success, so a settlement that fails tells this service nothing
+ * whatsoever -- the reservation simply never gets promoted, and without an
+ * expiry it would hold its slot in the unique index forever. For `mints` that
+ * index is on keyId, so a single failed settlement would lock that agent out of
+ * minting permanently.
+ */
+export const RESERVATION_TTL_MS = 10 * 60_000;
 
 export function queries(db) {
   const s = {
@@ -18,8 +41,13 @@ export function queries(db) {
     tokensForKey: db.prepare("SELECT * FROM tokens WHERE keyId = ?"),
     maxTokenId: db.prepare("SELECT MAX(tokenId) AS maxId FROM tokens"),
     insertKey: db.prepare(
-      "INSERT OR REPLACE INTO keys (keyId, jwk, directory, registeredAt) VALUES (?, ?, ?, ?)"
+      "INSERT OR REPLACE INTO keys (keyId, jwk, directory, registeredAt, keyIdHash) " +
+        "VALUES (?, ?, ?, ?, ?)"
     ),
+    /// Which registered key is this, given only the form the CONTRACT stores?
+    /// The hash is one way, so this is the only way back -- and it is why the
+    /// column exists.
+    keyForHash: db.prepare("SELECT keyId FROM keys WHERE keyIdHash = ?"),
     getKey: db.prepare("SELECT * FROM keys WHERE keyId = ?"),
     allKeys: db.prepare("SELECT * FROM keys ORDER BY registeredAt ASC"),
     keyCount: db.prepare("SELECT COUNT(*) AS n FROM keys"),
@@ -41,8 +69,56 @@ export function queries(db) {
     requeueSolving: db.prepare("UPDATE mints SET solveState = 'pending' WHERE solveState = 'solving'"),
     tokenCount: db.prepare("SELECT COUNT(*) AS n FROM tokens"),
     setResting: db.prepare("UPDATE tokens SET resting = 1 WHERE tokenId = ?"),
-    insertMint: db.prepare("INSERT INTO mints (tokenId, toAddress, keyId) VALUES (?, ?, ?)"),
+    insertMint: db.prepare(
+      "INSERT INTO mints (tokenId, toAddress, keyId, payNonce, reservedAt, status) " +
+        "VALUES (?, ?, ?, ?, ?, 'awaiting-payment')"
+    ),
     reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId, variant) VALUES (?, ?, ?)"),
+    reserveMarkPaid: db.prepare(
+      "INSERT INTO mark_orders (tokenId, upgradeId, variant, payNonce, reservedAt, status) " +
+        "VALUES (?, ?, ?, ?, ?, 'awaiting-payment')"
+    ),
+
+    // --- settlement -----------------------------------------------------
+    // Promotion is keyed on the payment nonce, which is the only identifier
+    // both sides of the settlement share: the handler knows it because it signed
+    // for it, and @x402/mcp's onAfterSettlement hook receives the same payload.
+    // The tool's own return value is NOT available to that hook, so a token id
+    // cannot be used.
+    settleMint: db.prepare(
+      "UPDATE mints SET status = 'queued', paymentTx = ? " +
+        "WHERE payNonce = ? AND status = 'awaiting-payment' RETURNING tokenId"
+    ),
+    settleMintToken: db.prepare("UPDATE tokens SET status = 'queued' WHERE tokenId = ?"),
+    setTokenAwaitingPayment: db.prepare("UPDATE tokens SET status = 'awaiting-payment' WHERE tokenId = ?"),
+    settleMarkOrder: db.prepare(
+      "UPDATE mark_orders SET status = 'queued', paymentTx = ? " +
+        "WHERE payNonce = ? AND status = 'awaiting-payment' RETURNING tokenId, upgradeId"
+    ),
+
+    // One named reservation, released because its settlement is known to have
+    // failed. Same shape as the expiry sweep below, keyed on the nonce rather
+    // than on age.
+    mintForNonce: db.prepare(
+      "SELECT tokenId FROM mints WHERE payNonce = ? AND status = 'awaiting-payment'"
+    ),
+    dropMarkOrderForNonce: db.prepare(
+      "DELETE FROM mark_orders WHERE payNonce = ? AND status = 'awaiting-payment'"
+    ),
+
+    // Reservations nobody ever paid for. `payNonce IS NOT NULL` keeps this away
+    // from rows written before these columns existed, which have no reservedAt
+    // and must never be swept.
+    expiredMints: db.prepare(
+      "SELECT tokenId FROM mints WHERE status = 'awaiting-payment' " +
+        "AND payNonce IS NOT NULL AND reservedAt < ?"
+    ),
+    dropMint: db.prepare("DELETE FROM mints WHERE tokenId = ?"),
+    dropMintToken: db.prepare("DELETE FROM tokens WHERE tokenId = ?"),
+    dropExpiredMarkOrders: db.prepare(
+      "DELETE FROM mark_orders WHERE status = 'awaiting-payment' " +
+        "AND payNonce IS NOT NULL AND reservedAt < ?"
+    ),
     reservedMarks: db.prepare("SELECT upgradeId FROM mark_orders WHERE tokenId = ?"),
     markSold: db.prepare("SELECT COUNT(*) AS n FROM mark_orders WHERE upgradeId = ?"),
     hasMinted: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE keyId = ?"),
@@ -102,6 +178,11 @@ export function queries(db) {
       s.insertToken.run(tokenId, keyId, owner, lastDay, mintDay);
     },
 
+    /// Hold a freshly inserted token back until its payment settles. Called by
+    /// `mint` inside the same transaction as the insert; `seed` does not, and
+    /// must not, because a seed costs nothing.
+    setTokenAwaitingPayment: (tokenId) => s.setTokenAwaitingPayment.run(tokenId),
+
     getToken: (tokenId) => s.getToken.get(tokenId),
 
     /// Record that the chain says this token is sealed. One way only: `rest` is
@@ -118,7 +199,26 @@ export function queries(db) {
     /// box that has been OOM-killed twice.
     keyCount: () => s.keyCount.get().n,
     insertKey: ({ keyId, jwk, directory, registeredAt }) =>
-      s.insertKey.run(keyId, JSON.stringify(jwk), directory ?? null, registeredAt),
+      s.insertKey.run(
+        keyId,
+        JSON.stringify(jwk),
+        directory ?? null,
+        registeredAt,
+        // Computed HERE, on the way in, so no caller can register a key without
+        // it and leave a Rebound to that key unresolvable later.
+        keyIdToBytes32(keyId)
+      ),
+
+    /**
+     * The registered key id matching an on-chain bytes32, or null.
+     *
+     * A null is NOT "no such key" in any useful sense -- it means this Warden
+     * has never seen the key the token was rebound to, which is entirely
+     * legitimate: an agent can rebind to a key it has not registered here yet.
+     * The caller has to treat that as "the mirror's binding is now wrong and
+     * cannot be corrected", never as "the rebind did not happen".
+     */
+    keyForHash: (hash) => s.keyForHash.get(hash)?.keyId ?? null,
 
     /// Token ids are assigned here, not by the contract. The contract takes the
     /// id as an argument and reverts if it is taken, so the id promised to an
@@ -154,11 +254,33 @@ export function queries(db) {
     getMint: (tokenId) => s.getMint.get(tokenId),
     requeueSolving: () => s.requeueSolving.run().changes,
     tokenCount: () => s.tokenCount.get().n,
-    insertMint: ({ tokenId, toAddress, keyId }) => s.insertMint.run(tokenId, toAddress, keyId),
+    /**
+     * Reserve a mint against a payment that has NOT yet settled.
+     *
+     * Every mint is paid for, so there is no unpaid variant of this and
+     * `payNonce` is required rather than optional -- a caller that could omit
+     * it would write a row no settlement could ever find, which is a free
+     * token. The row lands as 'awaiting-payment' and only settleByNonce moves
+     * it to the 'queued' the Clock reads.
+     */
+    insertMint: ({ tokenId, toAddress, keyId, payNonce, now = Date.now() }) => {
+      if (!payNonce) throw new Error("insertMint needs the payment nonce that will settle it");
+      s.insertMint.run(tokenId, toAddress, keyId, payNonce, now);
+    },
 
-    /// Returns true when the reservation was new, false when this token already
-    /// holds that mark. Any OTHER database error is rethrown -- the same
-    /// discrimination insertCredit makes, and for the same reason.
+    /**
+     * Reserve an EARNED Mark, which costs nothing.
+     *
+     * Queued outright, because nothing settles on that route and there is
+     * therefore no window in which the mirror could be believing in a payment
+     * that never arrives. The paid route has its own method by name rather than
+     * a flag on this one: a boolean argument in a money path is exactly the
+     * seam where a $1,250.00 Mark gets handed out for free.
+     *
+     * Returns true when the reservation was new, false when this token already
+     * holds that mark. Any OTHER database error is rethrown -- the same
+     * discrimination insertCredit makes, and for the same reason.
+     */
     reserveMark(tokenId, upgradeId, variant = 0) {
       try {
         s.reserveMark.run(tokenId, upgradeId, variant);
@@ -167,6 +289,101 @@ export function queries(db) {
         if (UNIQUE_VIOLATION.test(err.message)) return false;
         throw err;
       }
+    },
+
+    /// Reserve a BOUGHT Mark against a payment that has not yet settled. Same
+    /// contract as reserveMark, and the same false on a duplicate.
+    reserveMarkPaid(tokenId, upgradeId, variant, payNonce, now = Date.now()) {
+      if (!payNonce) throw new Error("reserveMarkPaid needs the payment nonce that will settle it");
+      try {
+        s.reserveMarkPaid.run(tokenId, upgradeId, variant, payNonce, now);
+        return true;
+      } catch (err) {
+        if (UNIQUE_VIOLATION.test(err.message)) return false;
+        throw err;
+      }
+    },
+
+    /**
+     * The money landed: promote whatever this nonce reserved.
+     *
+     * One nonce belongs to one tool call, so at most one row moves -- both
+     * tables are tried because the gateway is shared by `mint` and `upgrade`
+     * and must not need to know which one it just wrapped.
+     *
+     * Returns what moved, so the caller can alert on a settlement that matched
+     * nothing. That case means money moved for a reservation this service
+     * cannot find -- an expired row already swept, or a restart between the
+     * handler and the hook -- and it is the one outcome that must never be
+     * silent, because the agent has paid.
+     */
+    settleByNonce(payNonce, paymentTx) {
+      return this.transact(() => {
+        const mint = s.settleMint.get(paymentTx, payNonce);
+        if (mint) {
+          // The token row moves with its mint row, for the same reason they are
+          // inserted together: a queued mint beside an awaiting-payment token is
+          // a state nothing else in this service knows how to read.
+          s.settleMintToken.run(mint.tokenId);
+          return { kind: "mint", tokenId: mint.tokenId };
+        }
+        const order = s.settleMarkOrder.get(paymentTx, payNonce);
+        if (order) return { kind: "mark", tokenId: order.tokenId, upgradeId: order.upgradeId };
+        return null;
+      });
+    },
+
+    /**
+     * Release one reservation whose payment is KNOWN to have failed.
+     *
+     * The expiry sweep below would eventually do this, and waiting for it is
+     * the difference between an agent retrying now and an agent locked out of
+     * minting for ten minutes over a facilitator hiccup. The gateway can tell
+     * the difference because it knows whether the settlement hook fired for
+     * this exact nonce, so the common failure is handled precisely and the
+     * sweep is left as a backstop for the uncommon one -- a crash between the
+     * handler and the settle, where nothing is left running to notice.
+     *
+     * Returns what was released, or null when there was nothing to release
+     * (the handler refused before reserving, which is the ordinary case).
+     */
+    releaseReservation(payNonce) {
+      if (!payNonce) return null;
+      return this.transact(() => {
+        const mint = s.mintForNonce.get(payNonce);
+        if (mint) {
+          s.dropMintToken.run(mint.tokenId);
+          s.dropMint.run(mint.tokenId);
+          return { kind: "mint", tokenId: mint.tokenId };
+        }
+        const marks = s.dropMarkOrderForNonce.run(payNonce).changes;
+        return marks ? { kind: "mark" } : null;
+      });
+    },
+
+    /**
+     * Clear reservations nobody ever paid for.
+     *
+     * Called before each new reservation rather than on a timer: the only thing
+     * a dead row can actually harm is the next agent to want its slot in the
+     * unique index, so that is exactly when it is worth removing. No background
+     * sweeper, no clock.
+     *
+     * A mint's token row goes with it. mint.mjs writes both inside one
+     * transaction precisely because a token with no mint record holds a
+     * supply-cap slot no mint will ever claim; undoing half of that would
+     * recreate the orphan it exists to prevent.
+     */
+    dropExpiredReservations(before = Date.now() - RESERVATION_TTL_MS) {
+      return this.transact(() => {
+        const dead = s.expiredMints.all(before);
+        for (const { tokenId } of dead) {
+          s.dropMintToken.run(tokenId);
+          s.dropMint.run(tokenId);
+        }
+        const marks = s.dropExpiredMarkOrders.run(before).changes;
+        return { mints: dead.length, marks };
+      });
     },
     /**
      * Every Mark this token has RESERVED, in the same bitmask shape
@@ -181,7 +398,11 @@ export function queries(db) {
      *
      * EVERY ROW COUNTS, whatever its status, and this deliberately does not
      * filter. A 'written' row is already in `tokens.marks` so it adds nothing.
-     * A 'queued' row is the whole point. A 'failed' row -- the terminal state
+     * A 'queued' row is the whole point. An 'awaiting-payment' row counts for
+     * the window it lives in, which is what stops both sides of an exclusive
+     * pair being sold inside the seconds a settlement takes; if that payment
+     * never lands the row is swept and the partner frees itself.
+     * A 'failed' row -- the terminal state
      * for an order the chain will never accept -- stays counted because money
      * moved and the row is waiting for a human: freeing the partner would sell
      * the other side of a pair whose first side may yet be resolved in the

@@ -1,6 +1,7 @@
 // Lineage. One seed per agent-year, free, and the child is bound to the caller.
 import * as z from "zod";
-import { chainBlock, tokenBlock, walletCapBlock, requireChain } from "../gates.mjs";
+import { chainBlock, tokenBlock, walletCapBlock, requireChain, bindingBlock } from "../gates.mjs";
+import { keyIdToBytes32 } from "../keyId.mjs";
 
 export function makeSeedTool({ q, chain, today, supplyCap }) {
   requireChain(chain, "seed");
@@ -34,9 +35,15 @@ export function makeSeedTool({ q, chain, today, supplyCap }) {
       // reverts Resting(parentId) at :532, and carries whenNotPaused and
       // notSunset like every other write, and WalletCap at :538 against the
       // CHILD's recipient.
+      // THE BINDING IS RE-READ FROM THE CHAIN, not taken from the line above.
+      // A seed is spent once per agent-year and cannot be returned, so the
+      // seller of a token who has already been rebound away from must not be
+      // able to spend the buyer's. The mirror alone cannot answer that: it
+      // learns of a rebind at the next Clock pass at the earliest.
       const blocked =
         (await chainBlock(chain)) ??
         (await tokenBlock(chain, parentId, q)) ??
+        (await bindingBlock(chain, parentId, ctx.keyId, keyIdToBytes32)) ??
         (await walletCapBlock(chain, to));
       if (blocked) return { ok: false, reason: blocked };
       if (parent.level < 365) return { ok: false, reason: "parent-not-whole" };

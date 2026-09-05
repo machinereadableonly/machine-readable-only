@@ -1,6 +1,7 @@
 // warden/src/mcp/tools/upgrade.mjs
 import * as z from "zod";
-import { paidWriteBlock, requireChain } from "../gates.mjs";
+import { paidWriteBlock, bindingBlock, requireChain } from "../gates.mjs";
+import { keyIdToBytes32 } from "../keyId.mjs";
 import { VARIANT_NAMES, effectiveRun } from "../ladder.mjs";
 
 // There was an exported UPGRADE_REASONS array here, listing the eight
@@ -115,7 +116,15 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       // of it. reserveMark's unique index is still the final authority for THIS
       // Mark, so two calls racing for the same one cannot both reserve.
       if (mark.route === "earned") {
-        const blocked = await paidWriteBlock(chain, { tokenId, q });
+        // THE BINDING IS READ FROM THE CHAIN. An earned Mark is free, which
+        // makes this the CHEAPEST way to damage a token somebody else now owns:
+        // taking Break costs nothing and permanently forecloses the $1,250.00
+        // Vessel. The mirror cannot answer who the token is bound to -- `rebind`
+        // never passes through this service -- so it is asked of the chain, in
+        // both directions, before anything irreversible is reserved.
+        const blocked =
+          (await paidWriteBlock(chain, { tokenId, q })) ??
+          (await bindingBlock(chain, tokenId, ctx.keyId, keyIdToBytes32));
         if (blocked) return { ok: false, reason: blocked };
 
         // THE MASK IS RE-READ ON THIS SIDE OF THE await. What the chain read
@@ -150,11 +159,22 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       // notSunset, and reverts Resting(id) at :454 -- and `resting` is set by
       // the token OWNER calling rest() directly, so this mirror can never learn
       // it without asking. Before payment, always.
-      const blocked = await paidWriteBlock(chain, { tokenId, q });
+      // The binding goes with them, for the reason given on the earned route
+      // above: the mirror cannot know who this token is bound to now.
+      const blocked =
+        (await paidWriteBlock(chain, { tokenId, q })) ??
+        (await bindingBlock(chain, tokenId, ctx.keyId, keyIdToBytes32));
       if (blocked) return { ok: false, reason: blocked };
 
+      // Reservations nobody paid for are cleared before the reservation below
+      // is attempted: the unique index on (tokenId, upgradeId) is what stops a
+      // Mark being bought twice, and a dead 'awaiting-payment' row occupies it
+      // exactly as a live one does. Without this a failed settlement would
+      // refuse that Mark to that token for good.
+      q.dropExpiredReservations();
+
       // Only now is payment requested.
-      return paid(async () => {
+      return paid(async (_args, { payNonce }) => {
         // EVERYTHING ABOVE IS NOW STALE. The payment round trip takes seconds,
         // and in that window another buyer can take the last unit or the same
         // token can be marked. So the decision is made again here, against the
@@ -167,7 +187,13 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         // `authorization` flow settles after this function returns -- so a
         // refusal here still cancels it rather than charging for it. See
         // cancelSettlementOnRefusal in pay/x402.mjs.
-        const nowBlocked = await paidWriteBlock(chain, { tokenId, q });
+        // The binding is re-read HERE TOO. `fresh.keyId` below is the mirror's
+        // word, and a rebind mined during the settlement round trip would not
+        // be in it -- so without this the second check is blind to exactly the
+        // thing the first one was added to catch.
+        const nowBlocked =
+          (await paidWriteBlock(chain, { tokenId, q })) ??
+          (await bindingBlock(chain, tokenId, ctx.keyId, keyIdToBytes32));
         if (nowBlocked) {
           alert(`upgrade ${upgradeId} for token ${tokenId} refused after payment was verified: the chain now refuses it: ${nowBlocked}`);
           return { ok: false, reason: "paid-but-unavailable", detail: nowBlocked };
@@ -189,9 +215,15 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
           : q.markSold(upgradeId) >= mark.supply ? "mark-sold-out"
           : null;
 
-        // reserveMark returns false when this token already holds the mark, so
-        // two settlements racing for the same token cannot both reserve.
-        if (!blocked && q.reserveMark(tokenId, upgradeId, variant)) {
+        // reserveMarkPaid returns false when this token already holds the mark,
+        // so two settlements racing for the same token cannot both reserve.
+        //
+        // THE PAID METHOD, not the earned one. The row lands as
+        // 'awaiting-payment' carrying the nonce that will settle it, so the
+        // Clock cannot apply a Mark nobody has paid for yet. The earned route
+        // above uses reserveMark and queues outright, because nothing settles
+        // there.
+        if (!blocked && q.reserveMarkPaid(tokenId, upgradeId, variant, payNonce)) {
           // `ok: true` because every refusal from this tool carries
           // `ok: false`, and a client that branches on `result.ok` -- the one
           // field every other tool here answers with -- read a PAID success as

@@ -11,7 +11,7 @@
 // never find a payment, conclude none was made, and answer "payment required"
 // forever -- to paying agents included. A silent failure, so it is adapted here
 // and pinned by a test.
-import { createPaymentWrapper } from "@x402/mcp";
+import { createPaymentWrapper, extractPaymentFromMeta } from "@x402/mcp";
 import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
 
@@ -29,6 +29,40 @@ export const MINT_RESOURCE = {
 /// Translate the v2 tool context into the shape the payment wrapper reads.
 export function adaptContext(mcpCtx) {
   return { _meta: mcpCtx?.mcpReq?._meta };
+}
+
+/**
+ * The identifier a reservation and its settlement have in common.
+ *
+ * THE PROBLEM IT SOLVES. A paid effect must not be committed until the money
+ * has moved, and the only place this service is told that is
+ * `hooks.onAfterSettlement`. That hook receives `toolName`, `arguments`,
+ * `paymentRequirements`, `paymentPayload` and `settlement` -- and NOT the
+ * handler's return value, so it cannot see the token id the handler chose.
+ * Something else has to join the two, and it must be known to the handler
+ * before it writes and to the hook after the money moves.
+ *
+ * The EIP-3009 nonce is that thing. It is generated per authorisation by the
+ * paying client, it is what the settlement actually submits on chain, and both
+ * sides read it off the same payload.
+ *
+ * BOTH ENVELOPES ARE HANDLED because @x402/evm's exact scheme can carry either
+ * an EIP-3009 authorisation or a Permit2 one, and the nonce sits at a different
+ * path in each. An envelope with neither returns null, and the caller refuses
+ * rather than guessing -- a reservation with no key to settle it by is a row
+ * nothing can ever promote, which is a free token.
+ */
+export function payNonceOf(paymentPayload) {
+  const p = paymentPayload?.payload;
+  return p?.authorization?.nonce ?? p?.permit2Authorization?.nonce ?? null;
+}
+
+/// The same value, read from the raw `_meta` a tool handler is given. Uses
+/// @x402/mcp's own extractor rather than reaching into `_meta` by key, so the
+/// handler side and the hook side cannot drift apart.
+export function payNonceFromMeta({ toolName, args, meta }) {
+  if (!meta) return null;
+  return payNonceOf(extractPaymentFromMeta({ name: toolName, arguments: args, _meta: meta }));
 }
 
 /**
@@ -153,12 +187,44 @@ export function makePaymentGateway({
   facilitatorUrl,
   network,
   payTo,
+  // Called with (payNonce, transactionHash) when, and only when, a payment has
+  // actually settled. This is what promotes a reservation into something the
+  // Clock will write on chain; without it the gateway takes money and tells
+  // nobody, which is the state this service shipped in until 2026-09-05.
+  //
+  // It is a callback rather than the mirror itself so that this file keeps
+  // knowing nothing about SQL, and so a test can watch settlement without a
+  // database.
+  onSettled = null,
+  // Called with the nonce of a call whose handler reserved something and whose
+  // settlement then did NOT happen. The counterpart to onSettled, and the
+  // reason this gateway can release a dead reservation immediately instead of
+  // waiting for it to age out.
+  onUnsettled = null,
   alert = console.error,
   build = initResourceServer,
   wrapFactory = createPaymentWrapper,
 }) {
   let serverPromise = null;
   const wrappers = new Map();
+
+  /**
+   * Nonces whose settlement hook has fired.
+   *
+   * WHY THIS EXISTS. @x402/mcp has an onAfterSettlement hook and no
+   * onSettlementFailed to pair with it, so a failed settlement is reported to
+   * this service by silence. Silence is not something a caller can await -- but
+   * absence from this set, checked at the one moment the wrapper has returned,
+   * is. By then the hook has already run: @x402/mcp awaits it inside
+   * settlePaymentResult before the wrapper resolves.
+   *
+   * Matching on the nonce rather than a flag is what makes it safe under
+   * concurrency: a nonce belongs to exactly one authorisation, so two agents
+   * paying at the same moment cannot read each other's outcome.
+   *
+   * Entries are removed by the call that consumes them, so this never grows.
+   */
+  const settled = new Set();
 
   function resourceServer() {
     if (!serverPromise) {
@@ -199,6 +265,32 @@ export function makePaymentGateway({
         description,
         serviceName: "machine-readable-only",
       },
+      hooks: {
+        // THE ONLY PLACE THIS SERVICE LEARNS THE MONEY MOVED. @x402/mcp fires
+        // this after settlePaymentResult and only when settleResult.success is
+        // true; there is deliberately no failure hook to pair with it, which is
+        // why a reservation has to expire on its own rather than be cancelled.
+        //
+        // It must never throw. An exception here happens AFTER the payer has
+        // been debited, and letting it propagate would turn a successful sale
+        // into an internal error for the agent while the money stayed gone.
+        onAfterSettlement: async ({ paymentPayload, settlement }) => {
+          try {
+            const nonce = payNonceOf(paymentPayload);
+            if (!nonce) return alert(`settled payment carries no nonce: nothing can be promoted`);
+            settled.add(nonce);
+            const moved = await onSettled?.(nonce, settlement?.transaction ?? null);
+            if (!moved) {
+              alert(
+                `settled payment ${settlement?.transaction ?? "(no tx)"} matched no reservation ` +
+                  `(nonce ${nonce}): an agent has paid and holds nothing`
+              );
+            }
+          } catch (err) {
+            alert(`settlement recorded but could not be applied: ${err.message}`);
+          }
+        },
+      },
     });
     wrappers.set(key, wrap);
     return wrap;
@@ -227,7 +319,56 @@ export function makePaymentGateway({
         alert(`payment unavailable (${facilitatorUrl}, ${network}): ${err.message}`);
         return { ok: false, reason: "payment-unavailable" };
       }
-      return wrap(cancelSettlementOnRefusal(handler))(args, adaptContext(ctx.mcpCtx));
+
+      // THE HANDLER IS TOLD WHAT WILL SETTLE IT. Every row a paid handler
+      // writes has to carry the nonce, because that is the only thing
+      // onAfterSettlement can find it by later. Deriving it here rather than in
+      // each tool means `mint` and `upgrade` cannot disagree about where it
+      // comes from, and a third paid tool gets it for free.
+      //
+      // A missing nonce REFUSES, and refuses before the handler runs. The
+      // alternative is a row no settlement can ever promote -- which the Clock
+      // would never write, so the agent would pay and get nothing. Refusing
+      // costs it nothing: this returns `ok: false`, which
+      // cancelSettlementOnRefusal converts, so the authorisation is never
+      // submitted.
+      // The nonce this call reserved something against, or null when the
+      // handler refused and therefore wrote nothing. Only a call that actually
+      // reserved has anything to release.
+      let reservedNonce = null;
+
+      const withNonce = async (handlerArgs, x402Ctx) => {
+        const payNonce = payNonceFromMeta({ toolName: tool, args: handlerArgs, meta: x402Ctx?.meta });
+        if (!payNonce) {
+          alert(`${tool}: a verified payment carried no usable nonce, so nothing could be reserved`);
+          return { ok: false, reason: "payment-unavailable", detail: "no-nonce" };
+        }
+        const result = await handler(handlerArgs, { payNonce });
+        if (result?.ok) reservedNonce = payNonce;
+        return result;
+      };
+
+      const result = await wrap(cancelSettlementOnRefusal(withNonce))(args, adaptContext(ctx.mcpCtx));
+
+      // DID THE MONEY ACTUALLY MOVE? By this line the wrapper has finished, so
+      // onAfterSettlement has either run for this nonce or is never going to.
+      // A reservation with no settlement behind it is released now rather than
+      // left to age out, so the agent can try again immediately.
+      if (reservedNonce) {
+        if (settled.delete(reservedNonce)) return result;
+        try {
+          const released = await onUnsettled?.(reservedNonce);
+          alert(
+            `${tool}: settlement did not complete, so the reservation was released` +
+              (released?.tokenId ? ` (token ${released.tokenId})` : "")
+          );
+        } catch (err) {
+          // The sweep is the backstop for exactly this: the row keeps its
+          // 'awaiting-payment' status, so it is still unwritable by the Clock.
+          alert(`${tool}: a reservation could not be released and will expire instead: ${err.message}`);
+        }
+      }
+      return result;
     };
   }
 

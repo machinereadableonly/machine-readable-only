@@ -28,6 +28,22 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // is the word this tool has always used and something may read it.
       if (!token) return { ok: false, accepted: false, reason: "unknown-token" };
 
+      // THIS CHECK IS ONE-SIDED, AND THAT IS A DECISION (the operator, 2026-09-05), not
+      // an oversight. It asks the chain only when the mirror does NOT recognise
+      // the caller, so a seller who has already been rebound away from can go
+      // on checking in on a token they sold. `upgrade` and `seed` were made
+      // two-sided in the same change; this one deliberately was not.
+      //
+      // WHY. A credit lands on the TOKEN, which the buyer now owns -- the
+      // seller is donating a day, not taking one, and there is nothing to gain
+      // by it. Against that, check-in is the most-called tool in the piece and
+      // making it two-sided would put a chain read on every one of them, which
+      // turns an RPC outage into a day nobody can claim. The two irreversible
+      // tools pay that cost because their downside is a permanent forfeit; this
+      // one does not, because its downside is a gift.
+      //
+      // Do not "fix" this by copying the guard from upgrade. If it changes, it
+      // is because the cost calculation changed, not because it was missed.
       if (token.keyId !== ctx.keyId) {
         // The mirror does not recognise this caller. Before refusing, ask the
         // chain once: a rebind may have been mined since the last reconcile.

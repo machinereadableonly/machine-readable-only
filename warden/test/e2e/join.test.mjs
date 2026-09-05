@@ -34,6 +34,7 @@ import { openDb } from "../../src/mirror/db.mjs";
 import { queries } from "../../src/mirror/queries.mjs";
 import { utcDay } from "../../src/mcp/tools/checkin.mjs";
 import { openChain } from "../chain-stub.mjs";
+import { keyIdToBytes32 } from "../../src/mcp/keyId.mjs";
 import { LADDER, assertLadderSane } from "../../src/mcp/ladder.mjs";
 
 const DOMAIN = "example.com";
@@ -80,16 +81,32 @@ function startJourney({ catalogue = STUB_CATALOGUE } = {}) {
     // takes a handler and returns a callable. Passing the handler straight
     // through settles nothing and reaches no network, while still proving the
     // tool runs its work INSIDE the payment wrapper rather than beside it.
-    paid: (handler) => (args, ctx) => {
+    // It SETTLES, because this journey is an agent that paid successfully and
+    // then goes on to check in and be scanned -- and none of that is reachable
+    // from a reservation the money never arrived for. Passing the handler
+    // straight through would leave every row 'awaiting-payment', which is a
+    // faithful model of a FAILED payment, not a mocked one.
+    paid: (handler) => async (args, ctx) => {
       paidCalls.push(args);
-      return handler(args, ctx);
+      const payNonce = `0xjourney${paidCalls.length}`;
+      const result = await handler(args, { payNonce, ctx });
+      if (result?.ok) q.settleByNonce(payNonce, `0xtx${paidCalls.length}`);
+      return result;
     },
     supplyCap: 5555,
     today: () => utcDay() + clock.offset,
     catalogue,
-    // A null from the chain means "could not be reached", which checkin treats
-    // as a refusal. Our caller is the bound key, so this is never consulted.
-    chain: openChain(),
+    // A CHAIN THAT AGREES WITH THE MIRROR about who each token is bound to.
+    // This journey registers a fresh key at runtime, so no literal could be
+    // passed to the stub -- and nothing here ever rebinds, so "the chain says
+    // what the mirror says" is the honest model of it. The gated tools read
+    // this rather than the mirror, which is the point of the guard.
+    chain: openChain({
+      boundKeyOf: async (tokenId) => {
+        const t = q.getToken(tokenId);
+        return t ? keyIdToBytes32(t.keyId) : null;
+      },
+    }),
     contract: "0xcontract",
     llmsTxt: "# machine readable only",
     challengeSecret: SECRET,

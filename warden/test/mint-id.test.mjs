@@ -14,10 +14,11 @@ import { makeMintTool } from "../src/mcp/tools/mint.mjs";
 import { makeSeedTool } from "../src/mcp/tools/seed.mjs";
 import { openChain, takenIdsChain, unreadableChain } from "./chain-stub.mjs";
 import { makeChainReader } from "../src/chain/read.mjs";
+import { seedPaidMint } from "./mirror-seed.mjs";
 
 /// Settlement that always succeeds, so these tests are about the id and
 /// nothing else.
-const settleNow = (fn) => fn;
+import { settleNow } from "./paid-stub.mjs";
 
 const fresh = () => {
   const db = openDb(":memory:");
@@ -58,7 +59,7 @@ test("a mint whose free id cannot be established refuses AFTER paying, and write
 test("a seed skips a taken id the same way a mint does", async () => {
   const { db, q } = fresh();
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0x" + "1".repeat(40), lastDay: 100, mintDay: 100 - 365 });
-  q.insertMint({ tokenId: 1, toAddress: "0x" + "1".repeat(40), keyId: "k1" });
+  seedPaidMint(q, { tokenId: 1, toAddress: "0x" + "1".repeat(40), keyId: "k1" });
   db.exec("UPDATE tokens SET level = 365 WHERE tokenId = 1");
 
   const tool = makeSeedTool({ q, chain: takenIdsChain([2, 3]), today: () => 100, supplyCap: 10 });
