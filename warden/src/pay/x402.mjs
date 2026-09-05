@@ -81,7 +81,7 @@ export function payNonceFromMeta({ toolName, args, meta }) {
  * facilitator advertising some other EVM chain must not become a chain this
  * piece will quote a price on.
  */
-async function initResourceServer(facilitatorUrl, network) {
+async function initResourceServer(facilitatorUrl, network, createAuthHeaders = undefined) {
   // HTTPS ONLY. This host is told what every agent must pay and is trusted to
   // report that a payment settled; over plain HTTP anyone on the path could
   // rewrite the treasury address in a payment demand, or forge a settlement.
@@ -91,8 +91,14 @@ async function initResourceServer(facilitatorUrl, network) {
   if (!/^https:\/\//i.test(facilitatorUrl)) {
     throw new Error(`X402_FACILITATOR_URL must be https, got: ${facilitatorUrl}`);
   }
+  // AUTHENTICATION, when the facilitator wants it. The testnet host takes none
+  // and Coinbase's mainnet host answers 401 without it -- and `url` was the
+  // only field ever passed, so the mainnet cutover would have produced a piece
+  // that boots healthy and refuses every mint. `createAuthHeaders` is keyed by
+  // request path because a CDP token names the exact call it authorises; see
+  // pay/cdp.mjs.
   const server = registerExactEvmScheme(
-    new x402ResourceServer(new HTTPFacilitatorClient({ url: facilitatorUrl })),
+    new x402ResourceServer(new HTTPFacilitatorClient({ url: facilitatorUrl, createAuthHeaders })),
     { networks: [network] }
   );
   // A LIVE HTTP CALL, and it THROWS when the facilitator cannot be reached
@@ -201,6 +207,9 @@ export function makePaymentGateway({
   // reason this gateway can release a dead reservation immediately instead of
   // waiting for it to age out.
   onUnsettled = null,
+  // Supplied only for a facilitator that authenticates. Undefined is the
+  // testnet host's correct configuration, not a missing setting.
+  createAuthHeaders = undefined,
   alert = console.error,
   build = initResourceServer,
   wrapFactory = createPaymentWrapper,
@@ -228,7 +237,7 @@ export function makePaymentGateway({
 
   function resourceServer() {
     if (!serverPromise) {
-      serverPromise = build(facilitatorUrl, network);
+      serverPromise = build(facilitatorUrl, network, createAuthHeaders);
       // Clear the cache on failure so the next paid call retries. The rejection
       // is still delivered to the awaiting caller below; this handler exists
       // only to reset the cache, and to keep the rejection from being seen as

@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "./server.mjs";
 import { makeAllowRegistration, makeSpawnSolve } from "./bootstrap.mjs";
 import { makePaymentGateway, warmUp } from "./pay/x402.mjs";
+import { makeCdpAuthHeaders, isCdpFacilitator } from "./pay/cdp.mjs";
 import { makeMcpHandler } from "./mcp/server.mjs";
 import { LADDER, assertLadderSane } from "./mcp/ladder.mjs";
 import { tokenView } from "./mcp/tokenView.mjs";
@@ -126,6 +127,33 @@ if (chainId !== BASE_SEPOLIA && PLACEHOLDER_TREASURIES.has(treasuryAddress.toLow
 // testnet host is the path form above.
 const facilitatorUrl = requireEnv("X402_FACILITATOR_URL");
 
+// THE FACILITATOR'S CREDENTIAL, required only by the one that asks for it.
+//
+// Coinbase's CDP host is the only facilitator that settles on Base mainnet, and
+// it answers 401 without a Bearer token. Until 2026-09-05 there was no slot for
+// that credential at all, so a mainnet cutover would have produced a piece that
+// boots, logs "payment NOT ready", and then refuses every mint and every
+// upgrade with `payment-unavailable` for as long as it runs. Nothing would be
+// charged and nothing given away -- it fails closed -- but nobody could enter.
+//
+// REFUSED AT STARTUP rather than warned about, and for the same reason the
+// placeholder treasury above is: the testnet facilitator needs no key, so this
+// is a mainnet-only misconfiguration that no testnet run can ever surface. The
+// first chance to catch it is the boot that would have been broken.
+const cdpKeyId = process.env.CDP_API_KEY_ID ?? "";
+const cdpKeySecret = process.env.CDP_API_KEY_SECRET ?? "";
+if (isCdpFacilitator(facilitatorUrl) && !(cdpKeyId && cdpKeySecret)) {
+  throw new Error(
+    `X402_FACILITATOR_URL is Coinbase's CDP host (${facilitatorUrl}), which answers 401 without a key: ` +
+      "set CDP_API_KEY_ID and CDP_API_KEY_SECRET, or no agent will be able to pay"
+  );
+}
+// Undefined for the testnet host, which is its correct configuration rather
+// than a missing setting -- @x402/core sends no auth headers when it is absent.
+const createAuthHeaders = isCdpFacilitator(facilitatorUrl)
+  ? makeCdpAuthHeaders({ keyId: cdpKeyId, secret: cdpKeySecret, facilitatorUrl })
+  : undefined;
+
 // CAIP-2, derived from the chain the contract is on rather than configured
 // separately. Two settings that must agree are one setting: quoting a price on
 // a different chain than the token lives on is the same class of bug as the
@@ -159,6 +187,7 @@ async function main() {
     facilitatorUrl,
     network: paymentNetwork,
     payTo: treasuryAddress,
+    createAuthHeaders,
     // What turns a reservation into a sale. Until this fires the row the tool
     // wrote is 'awaiting-payment' and the Clock will not touch it, so a
     // settlement that never lands costs the piece nothing and costs the agent
@@ -174,16 +203,32 @@ async function main() {
     onUnsettled: (payNonce) => q.releaseReservation(payNonce),
   });
 
-  // Ask it to build now anyway, and carry on regardless. Without this a
-  // misconfigured facilitator or an unsupported network stays invisible until
-  // the first paying agent hits it; with it, the boot log says so. warmUp
-  // never rejects and never blocks the listen below.
+  // Ask it to build now. Without this a misconfigured facilitator or an
+  // unsupported network stays invisible until the first paying agent hits it;
+  // with it, the boot says so. warmUp never rejects and never blocks the listen
+  // below.
+  //
+  // WHAT A FAILURE MEANS DEPENDS ON THE CHAIN, which is why the two are treated
+  // differently. On Base Sepolia a dead facilitator is an inconvenience: the
+  // gateway's retry is not sticky, so the piece heals itself the moment the
+  // host comes back, and running on regardless is right. Anywhere real money
+  // can arrive it means no agent can enter at all -- and the likeliest cause is
+  // a credential this deploy got wrong, which will not heal by waiting. So it
+  // exits, the same shape and for the same reason as the placeholder-treasury
+  // refusal above.
   warmUp(paid).then((ready) => {
-    console.log(
-      ready
-        ? `warden: payment ready (${paymentNetwork} via ${facilitatorUrl}, to ${treasuryAddress})`
-        : "warden: payment NOT ready -- mint and upgrade will refuse until the facilitator answers"
-    );
+    if (ready) {
+      console.log(`warden: payment ready (${paymentNetwork} via ${facilitatorUrl}, to ${treasuryAddress})`);
+      return;
+    }
+    if (chainId !== BASE_SEPOLIA) {
+      console.error(
+        `warden: payment is NOT ready on chain ${chainId} via ${facilitatorUrl} -- ` +
+          "refusing to run a piece nobody can enter. Check the facilitator url and its credentials."
+      );
+      process.exit(1);
+    }
+    console.log("warden: payment NOT ready -- mint and upgrade will refuse until the facilitator answers");
   });
 
   // The static JWKS nginx serves from

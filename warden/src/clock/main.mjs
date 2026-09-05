@@ -17,6 +17,7 @@ import { openDb } from "../mirror/db.mjs";
 import { queries } from "../mirror/queries.mjs";
 import { makeWriter, chainFor } from "./write.mjs";
 import { runClock } from "./run.mjs";
+import { DEPLOY_BLOCK } from "./reconcile.mjs";
 import { utcDay } from "../mcp/tools/checkin.mjs";
 
 function requireEnv(name) {
@@ -57,6 +58,27 @@ function readCursor() {
 function writeCursor(block) {
   mkdirSync(dirname(CURSOR), { recursive: true });
   writeFileSync(CURSOR, String(block));
+}
+
+// THE DEPLOY BLOCK IS CHECKED BEFORE ANYTHING IS WRITTEN, not when reconcile
+// reaches for it.
+//
+// reconcile is deliberately the LAST step of a run, after mints, check-ins and
+// Marks. So on a chain with no recorded deploy block -- which is every chain
+// but Base Sepolia today -- the old behaviour was to do every write correctly
+// and THEN throw, leaving the cursor unmoved so the same failure repeated every
+// night. The writes were fine; the three things only reconcile can see
+// (`Rested`, `Transfer`, `Rebound`) never reached the mirror, so a token its
+// owner had sealed went on telling every scanner at /t/<id> that it was alive.
+//
+// Failing here instead costs one night's writes and says exactly what is
+// missing, on the first run rather than the hundredth.
+if (DEPLOY_BLOCK[chainId] === undefined) {
+  throw new Error(
+    `no deploy block recorded for chain ${chainId}: add it to DEPLOY_BLOCK in src/clock/reconcile.mjs ` +
+      "as part of the deploy, or reconcile would guess at its own history " +
+      `(known chains: ${Object.keys(DEPLOY_BLOCK).join(", ")})`
+  );
 }
 
 async function main() {
