@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Warden deployment runbook</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Warden deployment runbook</h1>
+<p>Steps marked <strong>[the operator ONLY]</strong> need a browser, a payment method, or a dashboard
+login Claude does not have. Steps with no mark can be run by Claude once
+approved for that specific run.</p>
+<p><strong>Claude cannot <code>sudo</code> on this box.</strong> Permission rules deny it, including
+<code>sudo -n true</code>. The root work is therefore NOT a list of commands to copy --
+it is folded into one script, <code>deploy/install-warden-site.sh</code>, which the operator runs
+with a single command. Plan for that rather than discovering it mid-deploy.</p>
+<h2>1. Register a domain -- [the operator ONLY] -- DONE 2026-09-03</h2>
+<p><code>machinereadableonly.com</code>, at Cloudflare Registrar. One year with auto-renew,
+expires 2027-09-03, registrar lock on. The reasoning, the names rejected and
+the measured cost to the artwork are in
+<code>docs/2026-09-03-mro-domain-decision.md</code>.</p>
+<p><strong>Every QR bitmap must be re-solved against this domain before any mainnet
+mint</strong> -- a bitmap encodes its own url, so nothing solved against the
+<code>example.com</code> placeholder carries over.</p>
+<h2>2. Point DNS at the VPS via Cloudflare</h2>
+<p>An <code>A</code> record for <code>&lt;domain&gt;</code> pointing at the VPS&#39;s public IP.</p>
+<p><strong>Proxy status must be OFF (grey cloud) for this step, and only turned ON
+after the certificate is issued.</strong> This is the opposite of what this file said
+before 2026-09-03, and the old instruction would have failed issuance:
+certbot answers an HTTP-01 challenge on port 80, and behind the orange cloud
+that challenge reaches Cloudflare rather than this origin. The correct order
+is the one the shared VPS runbook gives:</p>
+<pre><code>proxy OFF -&gt; certbot -&gt; (optional origin lock) -&gt; proxy ON
+</code></pre>
+<p>Claude can do this step directly. A Cloudflare API token scoped to
+<code>Zone / DNS / Edit</code> and <code>Zone / Zone Settings / Edit</code> on this single zone
+lives in the infra secrets file as <code>CLOUDFLARE_API_TOKEN_MRO</code>; it cannot see
+or touch any other zone. Claude reads it from a script and never prints it.
+Without that token this step is [the operator ONLY] in the dashboard.</p>
+<h2>3. Install the vhost and issue the certificate -- [the operator runs one command]</h2>
+<pre><code>sudo bash ~/projects/machine-readable-only/warden/deploy/install-warden-site.sh
+</code></pre>
+<p>That script substitutes the domain into <code>nginx.conf.example</code>, installs and
+enables the site, tests and reloads nginx, runs <code>certbot --nginx --redirect</code>,
+applies <code>ufw deny 3006</code>, and re-tests. It is idempotent and it checks its own
+preconditions -- it refuses if the domain does not resolve, and warns if the
+name resolves somewhere that is not this host, which is what an orange cloud
+looks like from here.</p>
+<p>Expect a <strong>502 from the site until step 5 starts the Warden</strong>. nginx is then
+proxying to a port with nothing behind it. That is not a broken deploy.</p>
+<h3>What the vhost does, and what changed</h3>
+<p>The vhost is a <strong>pure proxy</strong>: every route, including <code>/</code> and <code>/llms.txt</code>, is
+answered by the Warden on <code>127.0.0.1:3006</code>.</p>
+<p>It used to serve those two documents plus <code>/client.mjs</code>, <code>/skill.md</code> and the
+key directory from disk under <code>root /srv/mro/warden/public</code>. That could never
+have worked from a checkout -- nginx runs as <code>www-data</code> and the repository
+sits under a <code>0750</code> home directory it cannot traverse -- and the <code>/srv</code> path
+implied a copy that drifts from the repository. Both routes moved into the
+Warden on 2026-09-03; <code>warden/test/static.test.mjs</code> pins them.</p>
+<p><code>/client.mjs</code> and <code>/skill.md</code> still 404, and llms.txt says so in plain words.
+That is disclosed behaviour, not an oversight. They become real when the
+client is published.</p>
+<h2>4. Create the configuration file -- [the operator ONLY]</h2>
+<p><strong>The file already exists as of 2026-09-03.</strong> What it needed after the domain
+was registered was one key changed, and there is a script for that which
+prints no secret:</p>
+<pre><code>bash ~/projects/machine-readable-only/warden/deploy/set-domain.sh
+</code></pre>
+<p>It sets <code>MRO_DOMAIN</code>, takes a timestamped backup first, restores mode 600, and
+then reports all eight required variables by NAME and presence only -- so a
+missing or empty one is caught here rather than at <code>pm2 start</code>. It echoes only
+the four values that are public anyway (domain, chain id, contract address,
+facilitator URL) so they can be eyeballed for typos.</p>
+<p>The rest of this section is the original reference for what each variable is.</p>
+<p><code>src/main.mjs</code> requires EIGHT environment variables and refuses to start,
+naming the first one missing, if any is absent. They come from a
+configuration file in <code>warden/</code> that is never committed and that Claude never
+reads, creates or prints.</p>
+<p>the operator creates it via WinSCP (saved site <code>vps</code>), copying <code>warden/.env.example</code> to
+<code>warden/.env</code> in the same directory and filling in every value. <code>.env.example</code>
+is the schema and carries a comment for each variable; it is the only
+env-shaped file in git.</p>
+<p>Then set the permissions -- a file uploaded by WinSCP arrives mode 644:</p>
+<pre><code>chmod 600 ~/projects/machine-readable-only/warden/.env
+</code></pre>
+<p>Claude can run that <code>chmod</code>, and can confirm the file exists and its mode with
+<code>ls -la</code>, but must never display its contents.</p>
+<p>The eight, all required: <code>MRO_DOMAIN</code>, <code>CHALLENGE_SECRET</code>, <code>BASE_RPC_URL</code>,
+<code>MRO_CONTRACT_ADDRESS</code>, <code>MRO_CHAIN_ID</code>, <code>TREASURY_ADDRESS</code>,
+<code>X402_FACILITATOR_URL</code> and <code>STATE_DB_PATH</code>. <code>PORT</code> is optional and <code>ecosystem.config.cjs</code> supplies it;
+the bind address is NOT read from the environment at all, it is hardcoded to
+127.0.0.1 in <code>main.mjs</code> so no misconfiguration anywhere can expose this port
+directly.</p>
+<p><code>MRO_CHAIN_ID</code> must match the chain <code>MRO_CONTRACT_ADDRESS</code> is deployed on:
+8453 for Base mainnet, 84532 for Base Sepolia. It is published to agents at
+<code>mro://contract</code>, so a mismatch tells every caller the token lives somewhere
+it does not. It ALSO decides where payment is taken -- the x402 network is
+derived from it as <code>eip155:&lt;chainId&gt;</code>, so a price is always quoted on the
+chain the token lives on and the two can never drift apart.</p>
+<p><code>BASE_RPC_URL</code> became load-bearing on 2026-08-31. It was added for the rebind
+re-check; every write tool now also reads the contract&#39;s own gates through it
+-- <code>notSunset</code>, <code>whenNotPaused</code>, <code>Resting</code> and <code>WalletCap</code> -- because none of
+them is visible to the mirror and each one reverts a queued write, two of them
+after the agent has paid. When it is unreachable, <code>mint</code>, <code>checkin</code>, <code>upgrade</code>
+and <code>seed</code> answer <code>chain-unavailable</code> and queue nothing. That is deliberate:
+refusing costs an agent a retry, admitting costs it a payment for a transaction
+that was always going to revert. A public endpoint is fine to start; if refusals
+appear in the logs, that is the thing to upgrade.</p>
+<p><code>X402_FACILITATOR_URL</code> is the service that verifies and settles USDC:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>URL</th>
+<th>Auth</th>
+<th>Networks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>testnet</td>
+<td><code>https://x402.org/facilitator</code></td>
+<td>none</td>
+<td>Base Sepolia only</td>
+</tr>
+<tr>
+<td>mainnet</td>
+<td><code>https://api.cdp.coinbase.com/platform/v2/x402</code></td>
+<td>CDP API key</td>
+<td>Base mainnet</td>
+</tr>
+</tbody></table>
+<p>Measured 2026-08-31, not quoted from the spec: the testnet host&#39;s <code>/supported</code>
+lists <code>exact</code> on <code>eip155:84532</code> and NO mainnet, and the CDP host answers 401
+without a key. The spec&#39;s <code>https://facilitator.x402.org</code> does not resolve at
+all -- use the path form above.</p>
+<p><code>TREASURY_ADDRESS</code> receives every payment. The zero address and <code>0x...dEaD</code>
+are treated as PLACEHOLDERS: the Warden starts with them on Base Sepolia and
+REFUSES TO START with them on any other chain, because USDC settled to either
+is unrecoverable.</p>
+<p>Nothing here contacts the facilitator at startup. The gateway builds itself on
+the first paid call, so an unreachable facilitator refuses <code>mint</code> and <code>upgrade</code>
+with <code>payment-unavailable</code> and leaves the door, check-ins and status working.
+The boot log still says which way it went: <code>warden: payment ready (...)</code> or
+<code>warden: payment NOT ready</code>. To check a configuration before deploying it:</p>
+<pre><code>cd ~/projects/machine-readable-only/warden
+node tools/x402-live-check.mjs &lt;facilitatorUrl&gt; &lt;chainId&gt; &lt;treasuryAddress&gt;
+</code></pre>
+<h2>5. Start the Warden under PM2</h2>
+<p>From the <code>warden/</code> directory:</p>
+<pre><code>pm2 start ecosystem.config.cjs
+pm2 save
+</code></pre>
+<p><code>ecosystem.config.cjs</code> runs one fork-mode instance bound to <code>127.0.0.1:3006</code>
+only -- nginx is the only thing that talks to it from outside. It passes
+<code>--env-file</code> to the interpreter, so the file from step 4 is what configures
+the process; PM2 itself supplies only <code>NODE_ENV</code> and <code>PORT</code>.</p>
+<p>If step 4 was skipped the process will not start, and <code>pm2 logs mro-warden</code>
+will name the missing variable. That is the intended behaviour: a Warden
+started with no <code>CHALLENGE_SECRET</code> would issue forgeable challenges, and one
+with no <code>MRO_DOMAIN</code> would pin the signature authority to the literal string
+&quot;undefined&quot;.</p>
+<h2>6. Close the port to the outside world</h2>
+<pre><code>sudo ufw deny 3006
+</code></pre>
+<p>The Warden already binds loopback-only, so this is defense in depth, not the
+only thing standing between 3006 and the internet -- but a UFW rule that
+matches the binding is one less way a misconfiguration elsewhere could expose
+it directly.</p>
+<h2>7. Cloudflare settings -- [the operator ONLY, dashboard]</h2>
+<p>These all need the Cloudflare dashboard.</p>
+<ul>
+<li><strong>Bot Fight Mode: OFF.</strong> Bot Fight Mode runs outside Cloudflare&#39;s ruleset
+engine, so it ignores any Allow rule written for this project, and it may
+challenge the very API-shaped traffic (signed requests with no browser,
+MCP calls) this piece exists to admit. The only visitors exempt from a
+Bot Fight Mode challenge are agents enrolled in Cloudflare&#39;s Verified Bots
+programme, which is almost none of this piece&#39;s visitors -- an
+unenrolled, correctly-signed agent gets challenged exactly like an
+attacker would. Leave it off.</li>
+<li><strong>AI bot policy (&quot;Agent&quot; traffic): ALLOW.</strong> This project&#39;s entire audience
+is agents; blocking or challenging that category defeats the purpose.</li>
+<li><strong>Legacy &quot;Block AI bots&quot; toggle: OFF.</strong> This is the older, blunter
+predecessor to the AI bot policy above -- make sure it is not separately
+turned on and re-blocking what the policy above allows.</li>
+<li><strong>SSL/TLS mode: Full (Strict).</strong> Requires a valid certificate on the
+origin (which step 3 provides) and validates it, rather than accepting
+any certificate or terminating TLS in plaintext to the origin.</li>
+<li><strong>Proxy status: Proxied</strong> (orange cloud). Step 2 deliberately leaves it
+OFF so certbot can answer its challenge; this is where it gets turned back
+ON, AFTER the certificate exists. A record left grey bypasses everything
+above and exposes the origin IP directly. Claude can flip this with the
+scoped token; it is only a dashboard step if that token is absent.</li>
+</ul>
+<h3>Renewal, and the one thing that could break it</h3>
+<p>The certificate renews automatically. HTTP-01 travels Let&#39;s Encrypt -&gt;
+Cloudflare -&gt; this origin, and with the origin lock enabled it arrives from a
+Cloudflare address and passes. <strong>Verified 2026-09-03</strong> with
+<code>sudo certbot renew --dry-run</code>, which reported success for this domain and for
+every other site on the box.</p>
+<p>Three changes could break it, and each is a reason to re-run that dry-run:
+turning the origin lock on or off, changing the Cloudflare proxy state, and
+changing Always Use HTTPS. A renewal failure is silent until the certificate
+expires.</p>
+<h3>Optional hardening, after the proxy is back ON</h3>
+<p>The other sites on this box refuse connections that did not come through
+Cloudflare, using the global map in
+<code>/etc/nginx/conf.d/cloudflare-allowlist.conf</code>:</p>
+<pre><code>if ($cf_real_ip_ok = 0) { return 403; }
+</code></pre>
+<p>The line is present but commented out in <code>nginx.conf.example</code>. Enable it only
+once the proxy is ON. Enabling it while the proxy is off makes the origin
+return 403 to everything including your own checks, which looks exactly like a
+broken deploy -- <code>127.0.0.1</code> is allowlisted, so local curl keeps working and
+hides it. Deliberately NOT part of the first deploy: get the piece live and
+verified, then harden.</p>
+<h2>8. If a visitor&#39;s signing fails</h2>
+<p>Point them at Cloudflare&#39;s signed-agent test endpoint first, before digging
+into this project&#39;s own code:</p>
+<pre><code>https://crawltest.com/cdn-cgi/web-bot-auth
+</code></pre>
+<p>It is Cloudflare&#39;s own diagnostic for RFC 9421 / Web Bot Auth signing and
+answers &quot;is your signature even reaching Cloudflare correctly&quot; independently
+of anything the Warden does. Ruling that out first avoids debugging this
+project&#39;s admission logic for a problem that is actually upstream of it.</p>
+<h2>9. Verify</h2>
+<ul>
+<li><code>curl -sI https://&lt;domain&gt;/</code> should return the door page over HTTPS with a
+valid certificate (no <code>-k</code> needed).</li>
+<li><code>curl -s https://&lt;domain&gt;/.well-known/http-message-signatures-directory</code>
+should return the served key directory.</li>
+<li><code>pm2 status mro-warden</code> should show the process online, and
+<code>pm2 logs mro-warden</code> should show no startup errors.</li>
+<li>From outside the VPS, <code>nc -zv &lt;vps-ip&gt; 3006</code> (or equivalent) should fail to
+connect -- confirming the UFW rule and loopback binding both hold.</li>
+</ul>
+<h2>10. The mainnet cutover -- [the operator APPROVAL REQUIRED, real funds]</h2>
+<p>Everything above is a Base Sepolia runbook. This section exists because that is
+easy to miss: sections 1 to 9 read as &quot;the deploy&quot;, and following them with a
+mainnet chain id produces a piece that boots and cannot be used.</p>
+<p><strong>Nothing here has been rehearsed.</strong> Base Sepolia cannot exercise any of it --
+its facilitator needs no key, its deploy block is already recorded, and its
+treasury is allowed to be a placeholder. Each item below is a value that is
+correct today and wrong the moment the chain changes.</p>
+<h3>The values that must change together</h3>
+<table>
+<thead>
+<tr>
+<th>what</th>
+<th>where</th>
+<th>why it cannot be left</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>MRO_CHAIN_ID=8453</code></td>
+<td>the configuration file</td>
+<td>the price is quoted on the chain the token lives on; the two are one setting</td>
+</tr>
+<tr>
+<td><code>MRO_CONTRACT_ADDRESS</code></td>
+<td>the configuration file</td>
+<td>the mainnet deployment&#39;s address</td>
+</tr>
+<tr>
+<td><code>TREASURY_ADDRESS</code></td>
+<td>the configuration file</td>
+<td>a placeholder is REFUSED at startup off Sepolia; USDC sent to one is gone</td>
+</tr>
+<tr>
+<td><code>X402_FACILITATOR_URL</code></td>
+<td>the configuration file</td>
+<td><code>https://api.cdp.coinbase.com/platform/v2/x402</code> -- the testnet host settles only Base Sepolia</td>
+</tr>
+<tr>
+<td><code>CDP_API_KEY_ID</code> / <code>CDP_API_KEY_SECRET</code></td>
+<td>the configuration file</td>
+<td>the CDP host answers 401 without them; the Warden REFUSES to start if the url is CDP&#39;s and these are unset</td>
+</tr>
+<tr>
+<td><code>DEPLOY_BLOCK[8453]</code></td>
+<td><code>src/clock/reconcile.mjs</code></td>
+<td>the Clock REFUSES to start without it, before writing anything</td>
+</tr>
+<tr>
+<td>the Clock&#39;s gas float</td>
+<td>the warden wallet on mainnet</td>
+<td>writes are paid in real ETH, not testnet ETH</td>
+</tr>
+<tr>
+<td>every QR bitmap</td>
+<td>re-solved</td>
+<td>a bitmap encodes its own url; nothing solved on Sepolia carries over</td>
+</tr>
+<tr>
+<td>the testnet-preview section</td>
+<td><code>public/llms.txt</code></td>
+<td>it tells agents this is a rehearsal</td>
+</tr>
+<tr>
+<td>&quot;It will be ready soon&quot;</td>
+<td><code>public/door.html</code></td>
+<td>delete it the day the piece opens</td>
+</tr>
+</tbody></table>
+<h3>Before the cutover, in this order</h3>
+<ol>
+<li><p><strong>Prove the facilitator credentials work</strong>, because this is the one that
+fails silently in the direction of &quot;nobody can enter&quot;:</p>
+<pre><code>cd ~/projects/machine-readable-only/warden
+X402_FACILITATOR_URL=https://api.cdp.coinbase.com/platform/v2/x402 \
+  node tools/cdp-live-check.mjs
+</code></pre>
+<p>It settles nothing and costs nothing -- <code>/supported</code> is a read, and CDP
+meters only onchain settlement (1,000 a month free, then $0.001). It must
+print <code>ACCEPTED</code> and list <code>eip155:8453 exact</code>.</p>
+<p><strong>Measured 2026-09-05: the CDP credentials currently on this box are
+REFUSED</strong>, and so is a token generated by Coinbase&#39;s own SDK with the same
+key -- so the key itself needs sorting in the CDP portal before mainnet is
+possible at all.</p>
+</li>
+<li><p><strong>Record the deploy block.</strong> After the mainnet contract is deployed, find the
+block it landed in and add it to <code>DEPLOY_BLOCK</code> in <code>src/clock/reconcile.mjs</code>.
+Until it is there the Clock refuses to run at all, which is deliberate: the
+alternative was doing every write and then failing on the last step, every
+night, with the mirror never learning about a <code>rest</code>, a transfer or a rebind.</p>
+</li>
+<li><p><strong>Re-solve every bitmap</strong> against the real domain. See CLAUDE.md; this is not
+optional and not reversible after a mint.</p>
+</li>
+<li><p><strong>Restart and verify.</strong> <code>pm2 restart mro-warden</code>, then section 9&#39;s checks,
+then confirm the boot log says <code>payment ready</code> -- on a non-Sepolia chain the
+Warden now EXITS rather than running on with payment unavailable.</p>
+</li>
+</ol>
+</body>
+</html>
