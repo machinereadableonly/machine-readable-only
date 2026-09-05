@@ -143,16 +143,20 @@ return visits, so the artwork is the agent's own history of coming back.
   chain reports marks 0x2 and the metadata reads `"Marks": ["hush"]`. Proven by
   `warden/tools/mark-rehearse.sh`, which runs the REAL Clock against a SCRATCH
   mirror -- never the Warden's own, because it seeds rows no agent paid for.
-  WHAT THAT PROVES IS THE WRITE, NOT THE SALE: settlement is still unproven, so
-  the six bought Marks remain undemonstrated. The agent-facing copy still prints
-  the OLD address and needs one line changed.
+  WHAT THAT PROVES IS THE WRITE, NOT THE SALE. (Settlement was PROVEN later the
+  same week -- see [[settlement-proven]] -- so that clause is historical.)
+  The agent-facing copy names 0xf0Df806ff06ae051756db128Bc9F83CDB425a716, which
+  is CORRECT for what is deployed; it was checked 2026-09-05. The older note
+  here saying it "still prints the OLD address" was itself stale and is struck.
+  What IS true is that the deployed contract no longer matches the tree, because
+  Plan 6 changed it -- so the address is right and the BUILD behind it is not.
   `DeployPlan5.s.sol` needed a fix to run at all: it called a bare
   `vm.startBroadcast()` with no sender, so forge refused AFTER the simulation
   passed (commit c62ce2d). Read the plan5-status, mark-ladder-spec
   and static-hue-decision memories BEFORE touching Marks.
   **PLAN 6 IS BUILT as of 2026-09-05 and NOTHING IS DEPLOYED** -- the four
-  decisions a mainnet deploy makes permanent, the only 4 of the 158 review
-  findings that had a deadline. A missed day now costs ONE shade at once and
+  decisions a mainnet deploy makes permanent, the only 4 review findings that
+  had a deadline. A missed day now costs ONE shade at once and
   then the lost run fades on the 3/7/30 ladder, so a token that comes back is
   never paler than one that stopped; the earned-Mark gate reads the LONGEST run
   ever completed, not the live streak; `MAX_MARK_ID` is 15 with ids 11-15
@@ -167,13 +171,50 @@ return visits, so the artwork is the agent's own history of coming back.
   read state off them or compare against them. Read
   [[plan6-permanent-decisions]] and [[review-triage-2026-09-05]] before touching
   the run, the palette or the endings.
-  **Suites: contracts 289, warden 377, tools 66, client 25** (2026-09-05).
+  **SEVEN MORE REVIEW FINDINGS WERE CLOSED on 2026-09-05**, in three commits,
+  all pushed. NONE of it is deployed except the first.
+  **(1) THE TWO PAYMENT CRITICALS, `85a4784`, DEPLOYED.** A paid row is now a
+  RESERVATION: it lands as `awaiting-payment` carrying the EIP-3009 nonce, and
+  only `hooks.onAfterSettlement` promotes it to the `queued` the Clock reads, so
+  a settlement that fails leaves no token and no spent mint. There is NO
+  settlement-failure hook in @x402/mcp, so the gateway watches whether the
+  success hook fired for its own nonce. 14.3: `keys.keyIdHash` now stores the
+  on-chain form going FORWARDS (the chain's SHA-256 cannot be inverted), so a
+  `Rebound` resolves; `upgrade` and `seed` read the binding live in BOTH
+  directions. `checkin` STAYS ONE-SIDED by the operator's decision. Read
+  [[payment-criticals-closed]] -- it carries the schema/migrate ordering rule
+  that CRASH-LOOPED PRODUCTION during that deploy (`1cc4699`): nothing in
+  schema.sql may reference a column migrate() adds.
+  **(2) CDP AUTH AND THE DEPLOY BLOCK, `136b714`, NOT DEPLOYED.** `pay/cdp.mjs`
+  mints the mainnet facilitator's Bearer token, hand-written, zero new deps; the
+  Warden refuses to start if the facilitator is CDP's and the key is missing;
+  the Clock checks `DEPLOY_BLOCK[chainId]` at STARTUP; DEPLOY.md gained the
+  mainnet cutover section it never had. **THE CDP CREDENTIALS ON THE BOX ARE
+  REFUSED** -- so is a token from Coinbase's own SDK -- so mainnet payment is
+  impossible until the operator fixes the key in the CDP portal. CDP's PROSE DOCS ARE
+  WRONG about the claim set; read [[cdp-facilitator-auth]] before touching it.
+  **(3) THE CHECK-IN WEDGE, `c1aac40`, NOT DEPLOYED.** 15.2 + 16.1 + 4.H2 were
+  one defect: a `batchCheckIn` that mines and is never marked. `BatchCheckedIn`
+  carries NO token ids, so only the chain's STATE can heal it. Read
+  [[checkin-recovery]].
+  **THE LIVE WARDEN IS NOT THE TREE**: it has (1) only. `pm2 restart mro-warden`
+  picks up (2) and (3); nothing is currently wedged, so it is not urgent.
+  **WHAT IS LEFT FROM THE REVIEWS: 6 security Critical/High** (15.3 the lone
+  Critical, plus 16.4, 13.1, 13.2, 14.2, 15.1), **2 quality Highs** (4.H1,
+  5.H1), and **15 creative BEFORE-MAINNET** items. **The real finding count is
+  184** (security 67, quality 74, creative 43), measured 2026-09-05 -- the "158"
+  in older notes reconciles against nothing. Start with **15.1**: one line in
+  `scripts/make-clock-key.sh:43` handing the private key to `cast` as an argv,
+  visible to `ps`, under a comment saying it does not.
+  **Suites: contracts 289, warden 412, tools 66, client 25** (2026-09-05).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
 - **Port:** 3006, the Warden, registered in
   `~/.claude/templates/port-allocation.md` on 2026-08-30. Bound to 127.0.0.1
-  only; public traffic arrives through nginx. Nothing is deployed yet.
+  only; public traffic arrives through nginx. **The Warden IS deployed and live**
+  at `https://machinereadableonly.com` (since 2026-09-03); the "nothing is
+  deployed yet" that stood here was left over from before that.
 
 ## Hard Rules (never break these)
 
