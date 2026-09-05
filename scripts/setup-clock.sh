@@ -23,6 +23,14 @@
 # Safe to run again. It never overwrites an existing value.
 set -euo pipefail
 
+# EVERY FILE THIS SCRIPT CREATES IS OWNER-ONLY FROM THE MOMENT IT EXISTS.
+# `cat >` creates at 0666 & ~umask, which on this box is 664, so the old order
+# -- write the CHALLENGE_SECRET, then chmod 600 -- left the HMAC key behind the
+# entry challenge group-readable for the length of the write. Setting the umask
+# here closes that window instead of narrowing it, and applies to the key
+# written by make-clock-key.sh below as well.
+umask 077
+
 # Overridable ONLY so this script can be exercised against a scratch copy
 # before it is ever pointed at the real one. Defaults to the real project.
 PROJECT="${MRO_PROJECT_DIR:-$HOME/projects/machine-readable-only}"
