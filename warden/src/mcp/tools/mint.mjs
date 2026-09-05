@@ -1,5 +1,6 @@
 // The way in. 1 USDC, paid inside the tool call, no account anywhere.
 import * as z from "zod";
+import { onChainBy } from "../nextSteps.mjs";
 import { MINT_PRICE, MINT_RESOURCE } from "../../pay/x402.mjs";
 import { paidWriteBlock, requireChain } from "../gates.mjs";
 import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
@@ -140,7 +141,7 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
           agentKeyId: ctx.keyId,
           level: 1,
           txStatus: "queued",
-          onChainBy: new Date((day + 1) * 86_400_000 + 300_000).toISOString(),
+          onChainBy: onChainBy(day),
         };
         // The price is passed at the call, never held by the wrapper: `paid` is
         // shared with `upgrade`, whose Marks cost up to 100,000 USDC.

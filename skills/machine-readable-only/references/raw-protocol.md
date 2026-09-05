@@ -378,7 +378,47 @@ wallet must sign, and we never submit it:
 
     { "ok": true, "contract": "0x...", "function": "rest", "args": [1], "irreversible": true }
 
-### The Mark ladder
+#### What a check-in answers with
+
+    checkin { "tokenId": 1 }
+    -> { "ok": true, "accepted": true, "creditedDay": 20699,
+         "level": 7, "streak": 7, "heart": "7/365",
+         "nextWindowOpensAt": "...T00:00:00.000Z",
+         "onChainBy":         "...T00:05:00.000Z",
+         "streakDeadline":    "...T00:00:00.000Z",
+         "nextRung": { "at": 30, "daysAway": 23 },
+         "note": "Day 7 credited; it is written on chain at 00:05 UTC. Your
+                  run is 7. Check in again before <streakDeadline> to keep it." }
+
+`onChainBy` is when the day is written on chain; `streakDeadline` is the end of
+tomorrow, which is the last moment a check-in still continues this run.
+`nextRung` is the next run at which the colour changes (3, 7, 30, 100), or
+`null` past the last one.
+
+**When a run has just ended, the reply says so**, rather than reporting
+`streak: 1` and leaving you to notice:
+
+    "runBroke": { "was": 99, "lastCreditedDay": 20694 }
+
+and the note gains "Your run of 99 ended: the 99 days are kept, the colour
+restarts." The days are never lost; only the colour restarts.
+
+A second check-in on the same day is refused with `already-credited-today`,
+`nextWindowOpensAt`, and the `onChainBy` of the credit you already have. It is
+not a penalty and nothing is at risk.
+
+**A token this service does not know yet is not a token that does not exist.**
+On a mirror miss the chain is asked before answering, so `unknown-token` means
+the CHAIN does not have it either. When the chain does have it and this service
+has not caught up, the reason is `not-yet-mirrored`, the nightly reconcile will
+pick it up, and `viewOf(id)` on the contract is the authority meanwhile.
+
+While a token is queued, `status` and `/t/{id}` carry `onChainBy` and `late`.
+`late: true` means that moment has passed and the nightly write has not
+happened -- which the Clock may do on purpose when gas is high. It is a state,
+not a fault.
+
+## The Mark ladder
 
 Marks are optional and come in five pairs. **Taking either side of a pair
 closes the other permanently.** No pair can close anything in another. You may
@@ -466,10 +506,23 @@ is true every side reads `closed` and no price on the page can be paid.
 which one. The two worth showing, both captured from the token above:
 
     upgrade { "tokenId": 1, "upgradeId": 1 }
-    -> { "ok": false, "reason": "mark-excluded", "detail": "ache" }
+    -> { "ok": false, "reason": "mark-excluded", "detail": "ache",
+         "next": "Closed permanently by the Mark named in `detail`, which is
+                  the other side of this pair. Nothing can reopen it. Ask
+                  `ladder` before choosing a side." }
 
     upgrade { "tokenId": 1, "upgradeId": 9, "variant": 1 }
-    -> { "ok": false, "reason": "mark-needs-iris" }
+    -> { "ok": false, "reason": "mark-needs-iris",
+         "next": "Pair five waits on an Iris, bought (id 5) or earned (id 6),
+                  already written on chain." }
+
+**Every refusal carries `next`**, a sentence saying what to do about it. The
+`reason` is the field to branch on -- it is stable and machine-readable -- and
+`next` is there because a diagnosis is not a prescription, and an agent that is
+told only `resting` has no way to know whether to retry, wait, or stop.
+Nothing is ever charged for a refusal. A handful of reasons carry no `next`:
+the door's own vocabulary (`signature`, `expired`, `challenge` and the rest),
+where the word IS the instruction and the table above explains it.
 
 `mark-excluded` is the permanent one, and it NAMES the Mark that closed the
 door -- lower case, the same token `ladder` returns, so you do not have to

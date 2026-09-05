@@ -2,10 +2,16 @@
 import * as z from "zod";
 import { keyIdToBytes32 } from "../keyId.mjs";
 import { chainBlock, tokenBlock, requireChain } from "../gates.mjs";
+import { onChainBy } from "../nextSteps.mjs";
 
 /// Day numbers are whole UTC days since the epoch, the same unit the contract
 /// uses, so the mirror and the chain cannot drift on what "today" means.
 export const utcDay = (now = Date.now()) => Math.floor(now / 86_400_000);
+
+/// The runs at which the heart's colour changes, in the copy's own words:
+/// "at 3 days, at 7, at 30 and at 100". Named here so the daily reply can tell
+/// an agent what it is walking towards.
+const RUNGS = [3, 7, 30, 100];
 
 export function makeCheckinTool({ q, chain, today = utcDay }) {
   requireChain(chain, "checkin");
@@ -26,7 +32,17 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // branching on it read a successful check-in as a failure for as long as
       // this tool answered with `accepted` alone. `accepted` stays because it
       // is the word this tool has always used and something may read it.
-      if (!token) return { ok: false, accepted: false, reason: "unknown-token" };
+      if (!token) {
+        // A MIRROR MISS IS NOT AN ABSENCE. The chain is the authority on
+        // whether a token exists, and this service can be behind it -- a token
+        // minted straight on chain, or one whose reconcile has not run. Saying
+        // "no such token" to the holder of a real token, from every tool at
+        // once, is the shape of bug that makes an agent give up and report the
+        // piece as broken.
+        const life = await chain.lifecycleOf(tokenId);
+        if (life === null) return { ok: false, accepted: false, reason: "chain-unavailable" };
+        return { ok: false, accepted: false, reason: life.exists ? "not-yet-mirrored" : "unknown-token" };
+      }
 
       // THIS CHECK IS ONE-SIDED, AND THAT IS A DECISION (the operator, 2026-09-05), not
       // an oversight. It asks the chain only when the mirror does NOT recognise
@@ -96,6 +112,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
           accepted: false,
           reason: "already-credited-today",
           nextWindowOpensAt: new Date((token.lastDay + 1) * 86_400_000).toISOString(),
+          onChainBy: onChainBy(token.lastDay),
         };
       }
 
@@ -122,8 +139,22 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
           accepted: false,
           reason: "already-credited-today",
           nextWindowOpensAt: new Date((day + 1) * 86_400_000).toISOString(),
+          onChainBy: onChainBy(day),
         };
       }
+
+      // C3.8. Day two used to tell an agent less than day one did: a level, a
+      // streak, and a window. It never said when the day actually lands, never
+      // said what the deadline was for keeping the run, and -- when the run had
+      // just broken -- reported `streak: 1` with no hint that it had been 99
+      // yesterday. The one thing the copy makes matter went unannounced by the
+      // only tool that knew. Every field below is computed from values this
+      // handler already holds; nothing new is read.
+      const streakDeadline = new Date((day + 2) * 86_400_000).toISOString();
+      const runBroke = streak === 1 && token.streak > 1
+        ? { was: token.streak, lastCreditedDay: token.lastDay }
+        : undefined;
+      const nextRung = RUNGS.find((r) => r > streak) ?? null;
 
       return {
         ok: true,
@@ -131,7 +162,16 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
         creditedDay: day,
         level,
         streak,
+        heart: `${Math.min(level, 365)}/365`,
         nextWindowOpensAt: new Date((day + 1) * 86_400_000).toISOString(),
+        onChainBy: onChainBy(day),
+        streakDeadline,
+        nextRung: nextRung === null ? null : { at: nextRung, daysAway: nextRung - streak },
+        ...(runBroke ? { runBroke } : {}),
+        note:
+          `Day ${level} credited; it is written on chain at 00:05 UTC. Your run is ${streak}. ` +
+          `Check in again before ${streakDeadline} to keep it.` +
+          (runBroke ? ` Your run of ${runBroke.was} ended: the ${runBroke.was} days are kept, the colour restarts.` : ""),
       };
     },
   };
