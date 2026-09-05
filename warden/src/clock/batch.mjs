@@ -92,11 +92,24 @@ const RUN_ERRORS = new Set([
 /// encodePacked(["uint32",...]) -- checked, not assumed.
 export function packIds(ids) {
   for (const id of ids) {
-    if (!Number.isInteger(id) || id < 0 || id > 0xffff_ffff) {
+    if (!packableId(id)) {
       throw new Error(`token id ${id} does not fit in the 4 bytes the contract reads`);
     }
   }
   return "0x" + ids.map((id) => id.toString(16).padStart(8, "0")).join("");
+}
+
+/**
+ * Can this id travel as the 4 bytes the contract decodes?
+ *
+ * 15.8. Exported so a caller can ASK rather than find out by catching. packIds
+ * throws, is called with no `try`, and propagates all the way out of the run --
+ * so one malformed row in the mirror stopped that night's check-ins, its Marks
+ * and its reconcile, for every token. A row that cannot be sent is one row's
+ * problem; it should be dropped by name and the night should continue.
+ */
+export function packableId(id) {
+  return Number.isInteger(id) && id >= 0 && id <= 0xffff_ffff;
 }
 
 export function chunk(items, size) {
@@ -195,6 +208,32 @@ export async function writeCheckInChunk(
     if (result.reason === "receipt-unknown") {
       return { written: [], healed, dropped, aborted: "receipt-unknown", attempts, hash: result.hash };
     }
+    // 15.7. A CHUNK TOO BIG TO ESTIMATE IS HALVED, NOT ABANDONED.
+    //
+    // This branch used to abort the run for every reason that was not
+    // `reverted-on-simulate`, and it sits BEFORE the bisect below -- so
+    // `gas-estimate-too-large` could never reach the halve path that exists
+    // precisely for it. The chunk size it guards is an explicitly UNVERIFIED
+    // number (run.mjs:17-22 says so in its own words), which makes "too big"
+    // an ordinary outcome rather than an exotic one, and the consequence was
+    // that nobody was credited that night at all.
+    //
+    // Halving is safe here in a way retrying is not: nothing was sent. The
+    // estimate failed, so there is no transaction, no nonce and no gas spent.
+    // A single entry that cannot be estimated is genuinely undeliverable and
+    // is condemned by name.
+    if (result.reason === "gas-estimate-too-large") {
+      if (remaining.length === 1) {
+        dropped.push({ entry: remaining[0], reason: "gas-estimate-too-large" });
+        return { written: [], healed, dropped, aborted: null, attempts };
+      }
+      const half = Math.ceil(remaining.length / 2);
+      log(`batchCheckIn: ${remaining.length} entries will not estimate; halving to ${half}`);
+      remaining = remaining.slice(0, half);
+      shrinks += 1;
+      continue;
+    }
+
     if (result.reason !== "reverted-on-simulate") {
       return { written: [], healed, dropped, aborted: result.reason, attempts, detail: result.detail };
     }

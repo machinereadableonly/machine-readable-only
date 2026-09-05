@@ -10,7 +10,7 @@
 //
 // It exits non-zero when the run could not do its job, so the systemd unit
 // records a failure rather than a silent success.
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, openSync, closeSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { createPublicClient, http } from "viem";
 import { openDb } from "../mirror/db.mjs";
@@ -18,6 +18,7 @@ import { queries } from "../mirror/queries.mjs";
 import { makeWriter, chainFor } from "./write.mjs";
 import { runClock } from "./run.mjs";
 import { DEPLOY_BLOCK } from "./reconcile.mjs";
+import { MRO_ABI } from "./abi.mjs";
 import { utcDay } from "../mcp/tools/checkin.mjs";
 
 function requireEnv(name) {
@@ -81,15 +82,83 @@ if (DEPLOY_BLOCK[chainId] === undefined) {
   );
 }
 
+/// Where the run lock lives. Beside the mirror, because the thing it protects
+/// is one signer on one nonce writing to that mirror.
+const LOCK = process.env.CLOCK_LOCK_PATH ?? `${stateDbPath}.run-lock`;
+
+/**
+ * One Clock at a time.
+ *
+ * 16.8. There was no lock of any kind. `Type=oneshot` stops systemd starting a
+ * SECOND copy of the timer's own run, but it says nothing about a rehearsal
+ * tool an operator starts by hand -- and this project has such tools, and has
+ * used them against the live mirror. Two signers on one account means two
+ * transactions built on the same nonce, and the second is simply lost.
+ *
+ * `wx` is the whole mechanism: an atomic create-if-absent. No daemon, no
+ * dependency, and a crash that leaves the file behind is recoverable by
+ * deleting it -- which the message says, because a lock nobody knows how to
+ * clear is worse than no lock.
+ */
+// Whether THIS process owns the lock. Without it, a run that was refused the
+// lock would release it on the way out and delete the lock belonging to the
+// run that legitimately holds it -- turning the guard into the very race it
+// exists to prevent.
+let holdsLock = false;
+
+function takeLock() {
+  try {
+    closeSync(openSync(LOCK, "wx"));
+    holdsLock = true;
+  } catch (err) {
+    if (err.code !== "EEXIST") throw err;
+    throw new Error(
+      `another clock run holds ${LOCK}. Only one may write at a time: two signers ` +
+        "on one account build two transactions on the same nonce. If no run is " +
+        `actually in progress, delete ${LOCK} and start again.`
+    );
+  }
+}
+
+function releaseLock() {
+  if (!holdsLock) return;
+  holdsLock = false;
+  try { unlinkSync(LOCK); } catch { /* already gone: nothing to release */ }
+}
+
 async function main() {
   const started = Date.now();
+  takeLock();
   const db = openDb(stateDbPath);
   const q = queries(db);
   const chain = chainFor(chainId);
   const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
   const writer = makeWriter({ rpcUrl, contract, chainId, privateKey, maxGasGwei, publicClient });
 
-  console.log(`clock: run starting, warden ${writer.address}, chain ${chainId}`);
+  // 15.10. THE DAY COMES FROM THE CONTRACT, not from this box.
+  //
+  // CLAUDE.md's own rule is "read the contract's today(), never the box's
+  // clock", and this was the one place it was not followed: `utcDay()` read
+  // Date.now(). The two agree to the second in normal operation, and disagree
+  // exactly when it matters -- the Clock fires at 00:05 UTC, five minutes from
+  // a boundary, and a box whose NTP has drifted picks the wrong day. Every
+  // credit then selects on `today - 1`, so a whole night lands on the wrong
+  // day number or is refused FutureDay by the chain that disagreed.
+  //
+  // A read that fails STOPS the run rather than falling back to the box. The
+  // fallback is what made the rule ignorable.
+  let today;
+  try {
+    today = Number(await publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "today" }));
+  } catch (err) {
+    throw new Error(`could not read today() from the contract, so the run has no day it can trust: ${err.message}`);
+  }
+  const boxDay = utcDay();
+  if (today !== boxDay) {
+    console.error(`clock: WARNING -- the contract says day ${today} and this box says ${boxDay}; using the contract`);
+  }
+
+  console.log(`clock: run starting, warden ${writer.address}, chain ${chainId}, day ${today}`);
 
   const summary = await runClock({
     q,
@@ -97,7 +166,7 @@ async function main() {
     publicClient,
     contract,
     chainId,
-    today: utcDay(),
+    today,
     lastReconciledBlock: readCursor(),
   });
 
@@ -132,7 +201,32 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("clock: run failed:", err.message);
-  process.exitCode = 1;
-});
+// 16.7. A SHUTDOWN HANDLER, because the unit has TimeoutStartSec=600 and no
+// TimeoutStopSec, and there was no `process.on` anywhere under src/clock --
+// against main.mjs, which installs two for the Warden. So a stop during a run
+// was a SIGKILL, and a SIGKILL between a broadcast and its receipt is exactly
+// the precondition that freezes a token's record (16.1/15.2).
+//
+// This cannot make an in-flight transaction safe -- nothing can, once it is
+// broadcast -- but it stops the run BEFORE it starts another one, releases the
+// lock so the next run is not blocked by a corpse, and says in the journal that
+// the stop was deliberate rather than a crash.
+let stopping = false;
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.on(signal, () => {
+    if (stopping) return;   // a second signal must not race the first
+    stopping = true;
+    console.error(`clock: ${signal} received; releasing the run lock and exiting`);
+    releaseLock();
+    process.exit(1);
+  });
+}
+
+main()
+  .catch((err) => {
+    console.error("clock: run failed:", err.message);
+    process.exitCode = 1;
+  })
+  // ALWAYS, on every path. A lock the happy path releases and the error path
+  // does not is a lock that turns one bad night into every night after it.
+  .finally(releaseLock);

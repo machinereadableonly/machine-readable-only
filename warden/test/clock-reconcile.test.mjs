@@ -148,3 +148,40 @@ test("events this reconcile does not handle are ignored without counting as skip
   assert.equal(applied.skipped, 0);
   for (const k of ["Rested", "Transfer", "Rebound", "Minted", "MarkApplied"]) assert.equal(applied[k], 0);
 });
+
+// 15.11. `getLogs({ address })` is a NODE-SIDE filter, and viem's
+// parseEventLogs does not re-apply it -- read at source in 2.56.0, it matches
+// on topic0, event name and args only. So one RPC's filtering was the whole
+// defence between a foreign Transfer and q.setOwner rewriting an owner, and
+// every ERC-721 on the chain emits a topic-compatible Transfer.
+test("a log from another contract is discarded even if the node returns it", async () => {
+  const MINE = "0x00000000000000000000000000000000000C0DE0";
+  const THEIRS = "0x000000000000000000000000000000000000BEEF";
+  // Transfer(address,address,uint256): the topic every ERC-721 shares.
+  const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const pad = (a) => `0x${a.slice(2).toLowerCase().padStart(64, "0")}`;
+
+  // A node that ignores the address filter, which is exactly the case the
+  // client-side check exists for.
+  const foreign = (address) => ({
+    async getLogs() {
+      return [{
+        address,
+        topics: [TRANSFER, pad(ZERO), pad("0x00000000000000000000000000000000000000a1"), `0x${(1n).toString(16).padStart(64, "0")}`],
+        data: "0x",
+        blockNumber: 1n,
+        logIndex: 0,
+        transactionHash: `0x${"11".repeat(32)}`,
+      }];
+    },
+  });
+
+  const refused = await readEvents(foreign(THEIRS), { contract: MINE, fromBlock: 0n, toBlock: 10n });
+  assert.deepEqual(refused.events, [], "a foreign contract's Transfer must never reach applyEvents");
+
+  // NOT VACUOUS: the identical log from OUR contract does parse, so the empty
+  // result above is the address check and not a malformed fixture.
+  const accepted = await readEvents(foreign(MINE), { contract: MINE, fromBlock: 0n, toBlock: 10n });
+  assert.equal(accepted.events.length, 1, "the same log from our own address must be read");
+  assert.equal(accepted.events[0].eventName, "Transfer");
+});
