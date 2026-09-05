@@ -20,12 +20,61 @@
 /// Errors that condemn ONE entry, and which of the error's arguments says so.
 /// `by: "id"` means the argument is a token id; `by: "day"` means a day number,
 /// which condemns every entry for that day rather than one token.
+///
+/// `DayNotAdvanced` IS NOT IN THIS TABLE, and that is the point of the whole
+/// heal path below. It is the one entry error that does not mean "this can
+/// never be written" -- it means "the chain already has this day", which is a
+/// statement about the MIRROR being behind, not about the entry being bad.
+/// Treating it as a condemnation is what wedged the queue: see healDayNotAdvanced.
 const ENTRY_ERRORS = {
   NoSuchToken: { by: "id" },
   Resting: { by: "id" },
-  DayNotAdvanced: { by: "id" },
   FutureDay: { by: "day" },
 };
+
+/**
+ * Resolve a `DayNotAdvanced(id)` refusal against what the chain actually holds.
+ *
+ * THE STATE THIS EXISTS FOR. A `batchCheckIn` can land on chain and never be
+ * marked in the mirror -- the transaction mines and the process ceases to exist
+ * before the receipt arrives. Mints and Marks both recover from that, because
+ * `Minted` and `MarkApplied` name their token and `TokenExists` triggers a
+ * chain read. Check-ins cannot: `BatchCheckedIn(fromDay, toDay, count)` carries
+ * no ids, so no event will ever tell this service which tokens landed.
+ *
+ * So it asks the chain's STATE instead. `lastDayOf(tokenId)` is the token's
+ * `lastDay` on chain; every queued entry at or below it is already written, and
+ * every entry above it is still writable. That splits the token's entries
+ * precisely rather than condemning all of them.
+ *
+ * A NULL READ IS "COULD NOT ASK", never "not on chain". Nothing is healed on a
+ * failed read -- healing a row that did not land would lose that day forever,
+ * because `batchCheckIn` refuses `day <= lastDay` and a missed day can never be
+ * backfilled. The fallback condemns exactly ONE entry: the contract reverts on
+ * the FIRST offending entry in array order, so that is the only one it named.
+ *
+ * Returns `{ healed, remaining, dropped }`.
+ */
+async function healDayNotAdvanced(entries, tokenId, lastDayOf) {
+  const mine = entries.filter((e) => String(e.tokenId) === String(tokenId));
+  const others = entries.filter((e) => String(e.tokenId) !== String(tokenId));
+
+  const lastDay = lastDayOf ? await lastDayOf(Number(tokenId)) : null;
+  if (lastDay === null || lastDay === undefined) {
+    // Could not ask. Condemn the first entry for that id and keep the rest, so
+    // one unreadable moment cannot cost the token its other days.
+    const [first, ...rest] = mine;
+    return {
+      healed: [],
+      dropped: first ? [{ entry: first, reason: "DayNotAdvanced" }] : [],
+      remaining: [...others, ...rest],
+    };
+  }
+
+  const healed = mine.filter((e) => e.day <= lastDay);
+  const stillWritable = mine.filter((e) => e.day > lastDay);
+  return { healed, dropped: [], remaining: [...others, ...stillWritable] };
+}
 
 /// Errors that condemn the WHOLE RUN, not an entry. Bisecting on these would
 /// split down to single entries, fail on every one, and turn one refusal into
@@ -61,25 +110,50 @@ export function chunk(items, size) {
  * Write one chunk of `{ tokenId, day }` entries, shrinking it around whatever
  * the chain refuses.
  *
- * Returns `{ written, dropped, aborted, attempts }`:
+ * Returns `{ written, healed, dropped, aborted, attempts }`:
  *   written  - entries the chain accepted, in a landed transaction
+ *   healed   - entries the chain ALREADY HELD. Not written by this run and not
+ *              condemned either: the mirror was behind, and these rows must be
+ *              marked written or they come back every night forever.
  *   dropped  - `{ entry, reason }` for each entry the chain condemned
  *   aborted  - a run-level reason, or null. When set, NOTHING was written and
  *              the caller must stop the whole run rather than continue.
+ *
+ * `lastDayOf(tokenId)` reads one token's `lastDay` from the chain, or null when
+ * it cannot be read. It is what makes `DayNotAdvanced` recoverable; without it
+ * the fallback is to condemn one entry per refusal, which is correct but slow.
  *
  * `maxAttempts` bounds the shrink loop. Without it a pathological chunk where
  * every entry is bad would make one call per entry; with it, the remainder is
  * reported as dropped for a named reason rather than hammering the node.
  */
-export async function writeCheckInChunk(writer, entries, { maxAttempts = 12, log = () => {} } = {}) {
+export async function writeCheckInChunk(
+  writer,
+  entries,
+  { maxAttempts = 12, log = () => {}, lastDayOf = null } = {}
+) {
   let remaining = [...entries];
   const dropped = [];
+  const healed = [];
+  // `attempts` is every call made, for reporting. `shrinks` is the budget:
+  // only calls that CONDEMNED something count against it.
+  //
+  // WHY HEALING IS NOT CHARGED TO IT. maxAttempts exists to stop a loop that is
+  // not making progress from making one call per entry. A heal always makes
+  // progress -- healDayNotAdvanced removes at least one entry from `remaining`
+  // every time, or the caller falls through to the bisect -- so the loop is
+  // already bounded by the chunk length. Charging heals to the same budget put
+  // a hard ceiling of twelve on how many stale tokens could ever be recovered:
+  // the thirteenth exhausted the loop, `written` came back empty, and NOTHING
+  // was credited that night, on any token. That is the wedge, reintroduced by
+  // its own fix.
   let attempts = 0;
+  let shrinks = 0;
 
   while (remaining.length > 0) {
-    if (attempts >= maxAttempts) {
+    if (shrinks >= maxAttempts) {
       for (const entry of remaining) dropped.push({ entry, reason: "attempts-exhausted" });
-      return { written: [], dropped, aborted: null, attempts };
+      return { written: [], healed, dropped, aborted: null, attempts };
     }
     attempts += 1;
 
@@ -92,6 +166,7 @@ export async function writeCheckInChunk(writer, entries, { maxAttempts = 12, log
     if (result.ok) {
       return {
         written: remaining,
+        healed,
         dropped,
         aborted: null,
         attempts,
@@ -109,15 +184,49 @@ export async function writeCheckInChunk(writer, entries, { maxAttempts = 12, log
     // simulation and the block, and the honest response is to stop and let the
     // next run re-read the world rather than guess at it.
     if (result.reason === "reverted-on-chain") {
-      return { written: [], dropped, aborted: "reverted-on-chain", attempts, hash: result.hash };
+      return { written: [], healed, dropped, aborted: "reverted-on-chain", attempts, hash: result.hash };
+    }
+    // A RECEIPT THAT NEVER ARRIVED IS NOT A FAILED SEND. The transaction is in
+    // the mempool and may yet land, so this chunk must not be shrunk and it
+    // must not be retried: retrying would double-send if it landed, and the
+    // shrink loop would condemn perfectly good entries if it had not. The run
+    // stops, naming the hash whose fate is unknown, and the next run resolves
+    // it against the chain's own state through healDayNotAdvanced above.
+    if (result.reason === "receipt-unknown") {
+      return { written: [], healed, dropped, aborted: "receipt-unknown", attempts, hash: result.hash };
     }
     if (result.reason !== "reverted-on-simulate") {
-      return { written: [], dropped, aborted: result.reason, attempts, detail: result.detail };
+      return { written: [], healed, dropped, aborted: result.reason, attempts, detail: result.detail };
     }
 
     const { errorName, errorArgs } = result;
     if (RUN_ERRORS.has(errorName)) {
-      return { written: [], dropped, aborted: errorName, attempts };
+      return { written: [], healed, dropped, aborted: errorName, attempts };
+    }
+
+    // DayNotAdvanced means the MIRROR is behind, not that the entry is bad, so
+    // it is resolved against the chain rather than condemned. This is the whole
+    // recovery path; see healDayNotAdvanced.
+    if (errorName === "DayNotAdvanced" && errorArgs.length > 0) {
+      const before = remaining.length;
+      const outcome = await healDayNotAdvanced(remaining, errorArgs[0], lastDayOf);
+      healed.push(...outcome.healed);
+      dropped.push(...outcome.dropped);
+      remaining = outcome.remaining;
+      // Only the fallback path condemns, and only that is charged to the budget.
+      if (outcome.dropped.length > 0) shrinks += 1;
+      if (remaining.length < before) {
+        if (outcome.healed.length > 0) {
+          log(
+            `clock: ${outcome.healed.length} check-in(s) for token ${errorArgs[0]} were already on chain; ` +
+              "the mirror was behind and is now caught up"
+          );
+        }
+        continue;
+      }
+      // The revert named a token with no entries here, which cannot happen from
+      // a chunk this function built. Fall through to the bisect rather than
+      // loop on a filter that removes nothing.
     }
 
     const rule = ENTRY_ERRORS[errorName];
@@ -130,6 +239,7 @@ export async function writeCheckInChunk(writer, entries, { maxAttempts = 12, log
         return !condemned;
       });
       if (remaining.length < before) {
+        shrinks += 1;
         log(`clock: dropped ${before - remaining.length} entr${before - remaining.length === 1 ? "y" : "ies"} for ${errorName}(${value}), retrying ${remaining.length}`);
         continue;
       }
@@ -142,20 +252,29 @@ export async function writeCheckInChunk(writer, entries, { maxAttempts = 12, log
     // half, and this converges in log2(n) calls rather than n.
     if (remaining.length === 1) {
       dropped.push({ entry: remaining[0], reason: errorName ?? "unknown-revert" });
-      return { written: [], dropped, aborted: null, attempts };
+      return { written: [], healed, dropped, aborted: null, attempts };
     }
     const half = Math.ceil(remaining.length / 2);
     log(`clock: ${errorName ?? "unknown revert"} named no entry, bisecting ${remaining.length} into ${half}`);
-    const first = await writeCheckInChunk(writer, remaining.slice(0, half), { maxAttempts: maxAttempts - attempts, log });
-    if (first.aborted) return { ...first, dropped: [...dropped, ...first.dropped], attempts: attempts + first.attempts };
-    const second = await writeCheckInChunk(writer, remaining.slice(half), { maxAttempts: maxAttempts - attempts, log });
+    const opts = { maxAttempts: maxAttempts - shrinks, log, lastDayOf };
+    const first = await writeCheckInChunk(writer, remaining.slice(0, half), opts);
+    if (first.aborted) {
+      return {
+        ...first,
+        healed: [...healed, ...first.healed],
+        dropped: [...dropped, ...first.dropped],
+        attempts: attempts + first.attempts,
+      };
+    }
+    const second = await writeCheckInChunk(writer, remaining.slice(half), opts);
     return {
       written: [...first.written, ...second.written],
+      healed: [...healed, ...first.healed, ...second.healed],
       dropped: [...dropped, ...first.dropped, ...second.dropped],
       aborted: second.aborted,
       attempts: attempts + first.attempts + second.attempts,
     };
   }
 
-  return { written: [], dropped, aborted: null, attempts };
+  return { written: [], healed, dropped, aborted: null, attempts };
 }

@@ -148,6 +148,10 @@ export function queries(db) {
     markMintWritten: db.prepare("UPDATE mints SET status = 'written' WHERE tokenId = ?"),
     markTokenWritten: db.prepare("UPDATE tokens SET status = 'written' WHERE tokenId = ?"),
     markCreditWritten: db.prepare("UPDATE credits SET status = 'written' WHERE tokenId = ? AND day = ?"),
+    failCredit: db.prepare("UPDATE credits SET status = 'failed' WHERE tokenId = ? AND day = ?"),
+    stuckCredits: db.prepare(
+      "SELECT tokenId, day FROM credits WHERE status = 'failed' ORDER BY day ASC, tokenId ASC"
+    ),
     markOrderWritten: db.prepare(
       "UPDATE mark_orders SET status = 'written' WHERE tokenId = ? AND upgradeId = ?"
     ),
@@ -463,6 +467,21 @@ export function queries(db) {
       s.markTokenWritten.run(tokenId);
     },
     markCreditWritten: (tokenId, day) => s.markCreditWritten.run(tokenId, day),
+
+    /**
+     * A credit the chain condemned. Terminal, and deliberately with no way back:
+     * requeueing something the chain refused is a decision for a human who has
+     * read the alert, exactly as it is for a mark order.
+     *
+     * This is NOT for a day the chain already holds -- that is the mirror being
+     * behind, and it is marked WRITTEN by the Clock's heal path. Failing it
+     * would tell an operator a landed day had been lost.
+     */
+    failCredit: (tokenId, day) => s.failCredit.run(tokenId, day),
+
+    /// Credits waiting for a human. The `stuckMints` / `stuckMarkOrders`
+    /// pattern, applied to the one queue that lacked it.
+    stuckCredits: () => s.stuckCredits.all(),
 
     /// A Mark landed. The bit is set here rather than by the Warden, because
     /// until the chain has it the token does not really carry the Mark.
