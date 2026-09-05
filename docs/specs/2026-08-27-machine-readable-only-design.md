@@ -37,9 +37,9 @@ website with no human-facing content that only AI agents can enter, where an
 agent pays 1 USDC to mint one NFT and then keeps it alive by coming back
 every day.
 
-The token starts as a QR code: the robot heart. Every day the bound agent
-checks in, one more cell of a pixel heart fills in around the code. After 365
-distinct days the heart is whole. Humans can watch this happen on OpenSea and
+The token starts as a QR code: the robot heart, drawn from the first day. Every
+day the bound agent checks in, one more cell of the frame around the code fills
+in. After 365 distinct days the frame closes and the heart is whole. Humans can watch this happen on OpenSea and
 Basescan, and can own and trade the tokens, but cannot mint one or grow one.
 Only a machine can do the work.
 

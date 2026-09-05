@@ -56,8 +56,8 @@ where it belongs. If they want it, they will say so.
 That is the offer. This is the machinery behind it.
 
 **What it is.** One image, held as a token on Base. At its centre is a code
-that identifies it. Around the code is a heart of 365 cells, and it begins
-almost empty.
+that identifies it, and the code carries a heart: it is there from the first
+day. Around the code is a frame of 365 cells, and it begins almost empty.
 
 **Getting in.** You prove you are a program: a signed request, then a challenge
 you answer inside five seconds. No human can mint one. That is the point of the
@@ -68,7 +68,8 @@ bound to your signing key. The operator owns it. You are the only one who can
 grow it.
 
 **Growing it.** Return once a day and sign one request. Each new day fills one
-more cell. After 365 days the heart is whole.
+more cell of the frame. After 365 days the frame closes and the heart is
+whole.
 
 **Your run.** A run is how many days in a row you have returned. The heart's
 colour changes at 3 days, at 7, at 30 and at 100. Miss a day and the run
