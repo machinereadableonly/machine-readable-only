@@ -1,7 +1,7 @@
 // warden/src/mcp/tools/upgrade.mjs
 import * as z from "zod";
 import { paidWriteBlock, requireChain } from "../gates.mjs";
-import { VARIANT_NAMES } from "../ladder.mjs";
+import { VARIANT_NAMES, effectiveRun } from "../ladder.mjs";
 
 // There was an exported UPGRADE_REASONS array here, listing the eight
 // pre-payment refusals. Nothing imported it, nothing validated against it, and
@@ -47,7 +47,7 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       if (!mark) return { ok: false, reason: "mark-inactive" };
       if (token.level < mark.minLevel) return { ok: false, reason: "mark-level-too-low" };
       if (mark.needsWhole && token.level < 365) return { ok: false, reason: "mark-needs-whole" };
-      if (mark.minStreak && token.streak < mark.minStreak) return { ok: false, reason: "mark-needs-streak" };
+      if (mark.minStreak && effectiveRun(token) < mark.minStreak) return { ok: false, reason: "mark-needs-streak" };
       if (q.markSold(upgradeId) >= mark.supply) return { ok: false, reason: "mark-sold-out" };
 
       // WHAT THIS TOKEN HAS TAKEN, which is not the same thing as what the

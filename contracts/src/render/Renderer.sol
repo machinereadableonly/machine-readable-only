@@ -124,9 +124,34 @@ contract Renderer is IRenderer {
     /// ink must come from the same rung -- they are matched in luminance, and a
     /// mismatch stops the code decoding at large rasters. See Palette's header.
     function _rung(TokenView memory v) private pure returns (uint256) {
-        return (v.resting || v.sunset)
-            ? Palette.tierIndex(v.streak)
-            : Palette.lapsedIndex(v.streak, v.lastDay, v.today);
+        // Rest is the owner sealing the token at a chosen moment, and the
+        // stored run IS that moment. Unchanged.
+        if (v.resting) return Palette.tierIndex(v.streak);
+
+        // A sunset seals every token at the day the PIECE closed, not at today.
+        // Reading it as `today` would keep paling tokens after the record was
+        // final; reading it as the stored run would un-pale a two-year-old
+        // lapse and make every abandoned token look kept at the exact moment
+        // the record is sealed forever.
+        if (v.sunset) return Palette.lapsedIndex(v.streak, v.lastDay, v.sunsetDay);
+
+        uint256 live = Palette.lapsedIndex(v.streak, v.lastDay, v.today);
+        if (v.fellRun == 0) return live;
+
+        // THE RUN THAT FELL STILL COLOURS THE TOKEN AS IT FADES. Without this a
+        // missed day reset the run to 1 and snapped the heart to the day-one
+        // colour at once, so a token that came back rendered PALER than one
+        // that had been gone a month -- the piece rewarding the wrong thing.
+        //
+        // Capped one rung below the run that fell, because a slip must still
+        // cost something the day it happens: uncapped, a token that missed a
+        // day was indistinguishable from one that never had, and the served
+        // copy says the colour goes.
+        uint256 fell = Palette.lapsedIndex(v.fellRun, v.fellDay, v.today);
+        uint256 cap = Palette.tierIndex(v.fellRun);
+        cap = cap == 0 ? 0 : cap - 1;
+        if (fell > cap) fell = cap;
+        return fell > live ? fell : live;
     }
 
     /// @dev Where the 45-cell block sits on the canvas, in cells.
@@ -330,8 +355,10 @@ contract Renderer is IRenderer {
 
     /// @dev The spec gives a whole token "(Whole)" and a sealed one "(At Rest)".
     /// Resting wins when both apply: it is the more final of the two states.
+    /// A SUNSET token is at rest too -- the spec's own words are "every token
+    /// then rests where it stands" -- and it used to read "(Whole)" or nothing.
     function _suffix(TokenView memory v) private pure returns (string memory) {
-        if (v.resting) return " (At Rest)";
+        if (v.resting || v.sunset) return " (At Rest)";
         if (v.level >= FrameGeometry.DAY_CELLS) return " (Whole)";
         return "";
     }

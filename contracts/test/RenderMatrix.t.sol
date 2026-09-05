@@ -37,7 +37,7 @@ contract RenderMatrixTest is Test {
 
     function test_everyStateInTheMatrixMatchesTheJavascriptReference() public view {
         RenderFixture.Case[] memory cases = RenderFixture.cases();
-        assertEq(cases.length, 43, "the fixture is not the size it should be");
+        assertEq(cases.length, 49, "the fixture is not the size it should be");
 
         for (uint256 i; i < cases.length; ++i) {
             RenderFixture.Case memory c = cases[i];
@@ -52,6 +52,9 @@ contract RenderMatrixTest is Test {
             v.marks = c.marks;
             v.resting = c.resting;
             v.sunset = c.sunset;
+            v.sunsetDay = c.sunsetDay;
+            v.fellRun = c.fellRun;
+            v.fellDay = c.fellDay;
             v.code = _bitmap();
 
             string memory uri = r.tokenURI(v);

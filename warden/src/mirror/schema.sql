@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS tokens (
   owner      TEXT NOT NULL,        -- the receiving address
   level      INTEGER NOT NULL DEFAULT 1,
   streak     INTEGER NOT NULL DEFAULT 1,
+  -- The longest run this token has ever completed, which is what the earned
+  -- Marks are gated on -- NOT `streak`, which resets to 1 the moment a day is
+  -- missed. Mirrors Token.bestRun on chain; see ladder.mjs effectiveRun().
+  bestRun    INTEGER NOT NULL DEFAULT 1,
   lastDay    INTEGER NOT NULL,
   mintDay    INTEGER NOT NULL,
   marks      INTEGER NOT NULL DEFAULT 0,   -- the bitmask, one bit per mark id

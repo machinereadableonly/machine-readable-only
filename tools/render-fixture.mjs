@@ -60,7 +60,8 @@ export function fixtures(domain, tokenId) {
 export function render(all, domain, tokenId) {
   const lines = all.map(r =>
     `        c[i++] = Case(${r.level}, ${r.streak}, ${r.lastDay}, ${r.today}, `
-    + `${r.marksBits}, ${!!r.resting}, ${!!r.sunset}, ${r.bytes}, ${r.hash}, "${r.label}");`
+    + `${r.marksBits}, ${!!r.resting}, ${!!r.sunset}, ${r.sunsetDay ?? 0}, `
+    + `${r.fellRun ?? 0}, ${r.fellDay ?? 0}, ${r.bytes}, ${r.hash}, "${r.label}");`
   ).join("\n");
 
   return `// SPDX-License-Identifier: MIT
@@ -80,6 +81,9 @@ library RenderFixture {
         uint256 marks;
         bool resting;
         bool sunset;
+        uint32 sunsetDay;
+        uint16 fellRun;
+        uint24 fellDay;
         uint256 bytesLen;
         bytes32 hash;
         string label;

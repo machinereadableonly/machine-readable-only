@@ -167,6 +167,35 @@ export function lapsedRung(streak, lastDay, today) {
 export function lapsedColour(streak, lastDay, today) {
   return colourAt(lapsedRung(streak, lastDay, today));
 }
+
+/**
+ * The rung a token is drawn at, across every lifecycle state.
+ *
+ * MUST stay identical to Renderer._rung in Solidity. That contract is the
+ * authority; this exists so the differential test can prove they agree byte for
+ * byte, so a divergence here fails a suite rather than shipping.
+ *
+ * The `fellRun` branch is the fix for the piece rewarding the wrong thing: a
+ * missed day resets the run to 1, which used to snap the heart straight to the
+ * day-one colour, so a token that came back rendered PALER than one that had
+ * been gone a month. The lost run keeps colouring it as it fades -- capped one
+ * rung below what fell, because a slip must still cost something on the day,
+ * and the served copy says the colour goes.
+ */
+export function rungFor({
+  streak, lastDay, today,
+  resting = false, sunset = false, sunsetDay = 0, fellRun = 0, fellDay = 0,
+}) {
+  if (resting) return rungOf(streak);
+  if (sunset) return lapsedRung(streak, lastDay, sunsetDay);
+
+  const live = lapsedRung(streak, lastDay, today);
+  if (!fellRun) return live;
+
+  const cap = Math.max(0, rungOf(fellRun) - 1);
+  const fell = Math.min(lapsedRung(fellRun, fellDay, today), cap);
+  return Math.max(fell, live);
+}
 // Completed-year rings stop growing the canvas at MAX_RINGS.
 //
 // Ten, decided 2026-08-29 after rendering the same token at every ring count
@@ -311,6 +340,10 @@ export function renderSvg(modules, want, size, state) {
   const {
     level = 0, streak = 0, years: rawYears = 0, marks = [],
     lastDay = 0, today = 0, resting = false, sunset = false,
+    // The day the piece closed, and the run that most recently ended with the
+    // day it ended. All three default to 0, which is what a token that has
+    // never slipped holds on a piece that is still open.
+    sunsetDay = 0, fellRun = 0, fellDay = 0,
     // Pixels per cell declared as the SVG's intrinsic size. Mirrors
     // Renderer.pxPerCell(), adopted 2026-08-29 on a measured A/B: it took
     // third-party decode failures from 54% to 3.6%. The two languages must
@@ -328,11 +361,11 @@ export function renderSvg(modules, want, size, state) {
   const codeOff = blockOff + QUIET;      // where the modules start
 
   // A token that has stopped checking in pales, walking back down the tier
-  // ladder. A sealed or sunset token does not: its image is final, so the
-  // stored streak colours it forever. Both branches must mirror Palette.tier
-  // and Palette.lapsed in Solidity exactly.
-  const frozen = resting || sunset;
-  const rung = frozen ? rungOf(streak) : lapsedRung(streak, lastDay, today);
+  // ladder. A sealed token does not: its image is final, so the stored streak
+  // colours it forever. A sunset token pales only up to the day the PIECE
+  // closed. A token that slipped keeps fading from the run it lost, capped one
+  // rung below it. Every branch must mirror Renderer._rung in Solidity exactly.
+  const rung = rungFor({ streak, lastDay, today, resting, sunset, sunsetDay, fellRun, fellDay });
   const colour = colourAt(rung);
   // Static claims the noise ink -- the one surface no other Mark touches.
   // Selected by RUNG, not by colour, so the heart and the noise can never be
@@ -507,7 +540,8 @@ export function tokenUri(modules, want, size, state) {
   const {
     tokenId = 0, level = 0, streak = 0, lastDay = 0, mintDay = 0, today = 0,
     generation = 0, seedsGiven = 0, parent = 0, agentKeyId = 0,
-    resting = false, sunset = false, marks = [],
+    resting = false, sunset = false, sunsetDay = 0, fellRun = 0, fellDay = 0,
+    marks = [],
     irisVariant = 0, tintVariant = 0, irisRun = 0,
   } = state;
 
@@ -515,11 +549,14 @@ export function tokenUri(modules, want, size, state) {
   // Cells shown is capped at 365 even though level is not.
   const shown = Math.min(level, DAY_CELLS);
   // Resting wins over whole: it is the more final of the two states.
-  const suffix = resting ? " (At Rest)" : level >= DAY_CELLS ? " (Whole)" : "";
+  // A sunset token rests too -- the spec's words are "every token then rests
+  // where it stands". Mirrors Renderer._suffix.
+  const suffix = resting || sunset ? " (At Rest)" : level >= DAY_CELLS ? " (Whole)" : "";
   // BigInt so a plain number and a 0x..n literal both render the same 66 chars.
   const keyHex = `0x${BigInt(agentKeyId).toString(16).padStart(64, "0")}`;
   const svg = renderSvg(modules, want, size,
-    { level, streak, years, marks, lastDay, today, resting, sunset, irisVariant, tintVariant, irisRun });
+    { level, streak, years, marks, lastDay, today, resting, sunset,
+      sunsetDay, fellRun, fellDay, irisVariant, tintVariant, irisRun });
   const image = Buffer.from(svg, "utf8").toString("base64");
 
   // "Iris Shape" is emitted for BOTH routes -- the earned Iris does have a
