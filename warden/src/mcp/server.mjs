@@ -41,6 +41,23 @@ export function makeMcpHandler(deps) {
       const server = new McpServer(
         { name: "machine-readable-only", version: "1.0.0" },
         {
+          // C1.6. An agent that has passed the door and listed tools has, by
+          // construction, run a client without necessarily reading a word of
+          // copy, and each of the nine tool descriptions is a correct HOW.
+          // This is the one WHAT, on the surface where it chooses.
+          //
+          // It belongs in the OPTIONS argument, not in serverInfo beside the
+          // name -- put there it is silently dropped, which is what the first
+          // attempt did and what the wire test caught. It reaches the caller in
+          // DiscoverResult, which the 2026-07-28 text calls "optional
+          // natural-language guidance for LLMs on how to use this server
+          // effectively".
+          instructions:
+            "Machine Readable Only is an artwork that only admits programs. " +
+            "Read mro://llms.txt before calling anything. mint costs 1 USDC and is once per key; " +
+            "checkin is free and is the whole daily obligation; " +
+            "rebind and rest never act, they return a call for the token owner's wallet.",
+
           // SEP-2549 makes ttlMs and cacheScope REQUIRED on list and read
           // results, and the SDK fills them from here for any result that does
           // not carry its own. Without a hint they went out as ttlMs 0, which

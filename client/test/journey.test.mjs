@@ -84,6 +84,7 @@ before(async () => {
     stateDbPath: join(dir, "mirror.db"),
     domain: DOMAIN, challengeSecret: SECRET,
     tokenView, mcp, allowRegistration: () => true,
+    contract: "0x00000000000000000000000000000000000C0DE0", chainId: 84532,
   });
   origin = await new Promise((r) =>
     server.listen(0, "127.0.0.1", () => r(`http://127.0.0.1:${server.address().port}`)));

@@ -259,6 +259,21 @@ test("server/discover is implemented, and names the revision this server serves"
   assert.equal(body.result.resultType, "complete");
 });
 
+// C1.6. The SDK's type having an `instructions` field proves nothing about
+// what reaches a caller, and the 2026-07-28 revision has no `initialize`
+// result for it to ride on -- it is carried in DiscoverResult, which the spec
+// describes as "optional natural-language guidance for LLMs on how to use this
+// server effectively". So this asserts the wire, not the option.
+test("server/discover carries one sentence of WHAT, not only nine HOWs", async () => {
+  const { handler } = makeMcpHandler({ q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
+  const body = await call(handler, { method: "server/discover", params: {} }, null);
+
+  assert.equal(typeof body.result.instructions, "string", "the SDK must actually emit instructions");
+  assert.match(body.result.instructions, /only admits programs/);
+  assert.match(body.result.instructions, /mro:\/\/llms\.txt/, "it must point at the one document that explains the piece");
+  assert.match(body.result.instructions, /rebind and rest never act/, "the two tools that surprise an agent must be named");
+});
+
 test("list and read results carry the cache fields the revision requires", async () => {
   const { handler } = makeMcpHandler({ q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
 

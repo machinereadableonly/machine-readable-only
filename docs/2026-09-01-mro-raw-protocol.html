@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>The raw protocol</title>
+  <title>docs/2026-09-01-mro-raw-protocol.html</title>
   <style>
     :root {
       --bg: #fafaf7;
@@ -108,6 +108,13 @@ GET  /t/{id}                                          one token, public, unsigne
 </code></pre>
 <p>Two things gate <code>/mcp</code>: an RFC 9421 signature, and a five second challenge. You
 need both on every request. There is no session and no login.</p>
+<p><code>GET /t/{id}</code> is the url written into every token&#39;s artwork at mint, and it is
+the one route that is never gated: a scan has to lead somewhere. It answers
+with the token&#39;s live state plus <code>docs</code>, <code>mcp</code>, <code>contract</code> and <code>chainId</code>, so
+whatever follows the QR can reach the rest of the piece and check the token
+against the chain rather than against us. It is the same object the <code>status</code>
+tool returns, from the same function, so a scanner and an agent can never be
+told two different stories about one token.</p>
 <hr>
 <h2>1. Knock, and be refused</h2>
 <p>Any request to <code>/mcp</code> without a signature earns a 401 that tells you how to
@@ -119,11 +126,11 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 
 {
+  &quot;about&quot;: &quot;An artwork that only admits programs. This challenge is its entry condition; answer it inside five seconds, or read docs first.&quot;,
   &quot;challenge&quot;: &quot;eBiJifjWTB1Z3BjsSun4tSzxHNJXcmzV8XNf9wJKxaI.1788291258535.124d1a2f8c7d0675cc030ce5fdec94174c38d1fd19aab30b72107b0c04fb9953&quot;,
   &quot;expires&quot;: &quot;2026-09-01T19:34:23.535Z&quot;,
   &quot;mcp&quot;: &quot;https://&lt;domain&gt;/mcp&quot;,
-  &quot;docs&quot;: &quot;https://&lt;domain&gt;/llms.txt&quot;,
-  &quot;client&quot;: &quot;https://&lt;domain&gt;/client.mjs&quot;
+  &quot;docs&quot;: &quot;https://&lt;domain&gt;/llms.txt&quot;
 }
 </code></pre>
 <p>The challenge is <code>nonce.unix-ms.hmac</code>. <strong>Issuing is stateless</strong>: we keep no

@@ -41,6 +41,10 @@ import { envelope } from "../mcp-envelope.mjs";
 const DOMAIN = "example.com";
 const SECRET = "e2e-secret";
 const TO = "0x00000000000000000000000000000000000000a1";
+// One contract and one chain id for the WHOLE journey, because production has
+// one of each and step 6 is the test that proves both audiences hear it.
+const CONTRACT = "0x00000000000000000000000000000000000C0DE0";
+const CHAIN_ID = 84532;
 
 // What a real client signs. The door checks exactly these four components, so
 // signing fewer would be refused and signing more would not be read.
@@ -108,7 +112,8 @@ function startJourney({ catalogue = STUB_CATALOGUE } = {}) {
         return t ? keyIdToBytes32(t.keyId) : null;
       },
     }),
-    contract: "0xcontract",
+    contract: CONTRACT,
+    chainId: CHAIN_ID,
     llmsTxt: "# machine readable only",
     challengeSecret: SECRET,
     domain: DOMAIN,
@@ -121,6 +126,12 @@ function startJourney({ catalogue = STUB_CATALOGUE } = {}) {
     challengeSecret: SECRET,
     // THE SHARED VIEW. The same function the status tool calls.
     tokenView,
+    // THE SAME PAIR the MCP handler was given. main.mjs passes one variable to
+    // both; a test that passed two different values would let /t/<id> and
+    // `status` publish different contracts, which is exactly what step 6 is
+    // here to make impossible.
+    contract: CONTRACT,
+    chainId: CHAIN_ID,
     mcp,
     allowRegistration: () => true,
   });
@@ -278,10 +289,13 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       const res = await fetch(`${base}/mcp`, { method: "POST" });
       assert.equal(res.status, 401);
       const body = await res.json();
-      assert.deepEqual(Object.keys(body).sort(), ["challenge", "client", "docs", "expires", "mcp"]);
+      assert.deepEqual(Object.keys(body).sort(), ["about", "challenge", "docs", "expires", "mcp"]);
       assert.equal(body.mcp, `https://${DOMAIN}/mcp`);
       assert.equal(body.docs, `https://${DOMAIN}/llms.txt`);
-      assert.equal(body.client, `https://${DOMAIN}/client.mjs`);
+      // C1.4. The first thing the piece ever says now says what it is, and it
+      // no longer advertises /client.mjs, which this server answers 404.
+      assert.match(body.about, /only admits programs/);
+      assert.equal("client" in body, false);
       assert.ok(Date.parse(body.expires) > 0);
     });
 
@@ -417,6 +431,13 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       assert.equal(view.heart, `${Math.min(view.level, 365)}/365`);
       assert.equal(view.tokenId, tokenId);
       assert.equal(view.owner, TO);
+      // C1.5. A scan has to lead somewhere. These four are the route onward
+      // and the handles for checking the token against the chain rather than
+      // against this service.
+      assert.equal(view.docs, `https://${DOMAIN}/llms.txt`);
+      assert.equal(view.mcp, `https://${DOMAIN}/mcp`);
+      assert.equal(view.contract, CONTRACT);
+      assert.equal(view.chainId, CHAIN_ID);
       // Not level 1: both audiences are told the day that was credited in
       // step 5, which is the whole reason the mirror has to advance.
       assert.equal(view.level, 2);

@@ -1,7 +1,31 @@
 // The public shape of a token. ONE function, used by both the `status` tool and
 // the unsigned /t/<id> route, so a scanner and an agent can never be told two
 // different stories about the same token.
-export function tokenView(q, tokenId) {
+
+/**
+ * Where a token says the rest of the piece is.
+ *
+ * C1.5: `/t/<id>` is the destination written into every bitmap at mint and it
+ * cannot be changed afterwards, so the answer at the other end is the only
+ * part of the artwork's own arrival that stays under our control. It used to
+ * be a number set with an owner address: nothing naming the piece, and no
+ * route to the page that would explain it.
+ *
+ * Built from the SAME configuration the resources use and never from a
+ * literal. A hardcoded 8453 once sat beside an address read from the
+ * environment, which published a mainnet chain id with a testnet address --
+ * see resources.mjs for that one.
+ */
+export function tokenLinks({ domain, contract, chainId }) {
+  return {
+    docs: `https://${domain}/llms.txt`,
+    mcp: `https://${domain}/mcp`,
+    contract,
+    chainId,
+  };
+}
+
+export function tokenView(q, tokenId, links = null) {
   const t = q.getToken(tokenId);
   if (!t) return null;
   return {
@@ -28,5 +52,6 @@ export function tokenView(q, tokenId) {
     // means the chain does not have this token, so that is what is asked.
     pendingOnChain: t.status !== "written",
     owner: t.owner,
+    ...(links ?? {}),
   };
 }

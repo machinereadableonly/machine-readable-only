@@ -61,16 +61,26 @@ test("pinnedUrl reduces an absolute-form target's authority to the configured do
 
 // -- challengeBody ------------------------------------------------------------
 
-test("a challenge body carries everything an agent needs to come back, and no reason when none is given", () => {
+test("a challenge body says what the piece is, not only how to answer it", () => {
   const body = challengeBody("nonce.1.mac", "2026-01-01T00:00:00.000Z", "example.com");
   assert.deepEqual(body, {
+    about: "An artwork that only admits programs. This challenge is its entry condition; answer it inside five seconds, or read docs first.",
     challenge: "nonce.1.mac",
     expires: "2026-01-01T00:00:00.000Z",
     mcp: "https://example.com/mcp",
     docs: "https://example.com/llms.txt",
-    client: "https://example.com/client.mjs",
   });
   assert.equal("reason" in body, false);
+});
+
+// C1.4. /client.mjs is answered 404 by design, so advertising it made the very
+// first thing the piece says point at dead infrastructure. Its absence is also
+// what makes this body and the `challenge` tool agree -- they did not before,
+// and two challenge shapes from one service is a bug waiting to be believed.
+test("the 401 advertises nothing the server does not serve", () => {
+  const body = challengeBody("n.1.m", "exp", "example.com");
+  assert.equal("client" in body, false, "put it back only when /client.mjs is served");
+  assert.equal(JSON.stringify(body).includes("client.mjs"), false);
 });
 
 test("a challenge body carries the reason when one is given", () => {
@@ -407,9 +417,11 @@ async function startServer(overrides = {}) {
     stateDbPath: ":memory:",
     domain: DOMAIN,
     challengeSecret: SECRET,
-    tokenView: (q, id) => (id === 1 ? { tokenId: 1 } : null),
+    tokenView: (q, id, links) => (id === 1 ? { tokenId: 1, ...links } : null),
     mcp: { nodeHandler: (req, res) => { res.writeHead(200); res.end("mcp-reached"); } },
     allowRegistration: () => true,
+    contract: "0x00000000000000000000000000000000000C0DE0",
+    chainId: 84532,
     ...overrides,
   };
   const server = createServer(config);
@@ -483,7 +495,17 @@ test("GET /t/<id> is public: no signature required, 200 for a known token, 404 f
   try {
     const hit = await fetch(`${base}/t/1`);
     assert.equal(hit.status, 200);
-    assert.deepEqual(await hit.json(), { tokenId: 1 });
+    // C1.5. The QR's destination is the one arrival the artwork itself makes,
+    // and the url is written into the bitmap at mint and never rewritten. So
+    // the answer has to carry a route onward and the handles to check the
+    // token against the chain instead of against this service.
+    assert.deepEqual(await hit.json(), {
+      tokenId: 1,
+      docs: `https://${DOMAIN}/llms.txt`,
+      mcp: `https://${DOMAIN}/mcp`,
+      contract: "0x00000000000000000000000000000000000C0DE0",
+      chainId: 84532,
+    });
 
     const miss = await fetch(`${base}/t/999`);
     assert.equal(miss.status, 404);
@@ -504,13 +526,14 @@ test("GET /.well-known/http-message-signatures-directory is public", async () =>
   }
 });
 
-test("an unsigned POST /mcp gets a 401 challenge carrying challenge, expires, mcp, docs and client", async () => {
+test("an unsigned POST /mcp gets a 401 challenge carrying about, challenge, expires, mcp and docs", async () => {
   const { server, base } = await startServer();
   try {
     const res = await fetch(`${base}/mcp`, { method: "POST" });
     assert.equal(res.status, 401);
     const body = await res.json();
-    assert.deepEqual(Object.keys(body).sort(), ["challenge", "client", "docs", "expires", "mcp"]);
+    assert.deepEqual(Object.keys(body).sort(), ["about", "challenge", "docs", "expires", "mcp"]);
+    assert.match(body.about, /only admits programs/, "the first thing the piece says must say what it is");
   } finally {
     server.close();
   }
