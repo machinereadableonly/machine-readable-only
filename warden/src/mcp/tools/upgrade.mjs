@@ -3,7 +3,7 @@ import * as z from "zod";
 import { paidWriteBlock, bindingBlock, requireChain } from "../gates.mjs";
 import { keyIdToBytes32 } from "../keyId.mjs";
 import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
-import { VARIANT_NAMES, effectiveRun } from "../ladder.mjs";
+import { VARIANT_NAMES, effectiveRun, ladderSentence } from "../ladder.mjs";
 
 // There was an exported UPGRADE_REASONS array here, listing the eight
 // pre-payment refusals. Nothing imported it, nothing validated against it, and
@@ -20,7 +20,7 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       title: "Buy a Mark",
       description: "Apply a paid Mark to a token bound to your key. Gates are checked before any payment is requested.",
       inputSchema: z.object({
-        tokenId: z.number().int().positive(),
+        tokenId: z.number().int().positive().describe("A token bound to your key."),
         // BOUNDED, because the bitmask below is a 32-bit shift. An unbounded id
         // wraps -- 1 << 32 is 1 and 1 << 33 is 2, so a high id aliases a low
         // one -- and 1 << 31 is negative.
@@ -29,12 +29,13 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         // Opening 9 and 10 before that gate existed would have made Tint and
         // Aura buyable on day one, silently forfeiting the other side of a pair
         // that takes 100 days to reach.
-        upgradeId: z.number().int().min(1).max(10),
+        upgradeId: z.number().int().min(1).max(10).describe(ladderSentence()),
         // The Iris shape (0 target, 1 squircle, 2 leaf) or the Tint ink
         // (0 violet, 1 gold). Every other Mark accepts only 0, which the
         // per-Mark check below enforces -- this bound is only the widest any
         // Mark accepts. The default is what lets an agent omit it entirely.
-        variant: z.number().int().min(0).max(2).default(0),
+        variant: z.number().int().min(0).max(2).default(0)
+          .describe("Shape for 5 (0 target, 1 squircle, 2 leaf) or ink for 9 (0 violet, 1 gold). Every other Mark takes 0."),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },

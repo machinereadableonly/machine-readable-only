@@ -120,3 +120,31 @@ export function assertLadderSane(ladder = LADDER) {
   }
   return ladder;
 }
+
+/**
+ * The ladder as one line, for a tool schema's `description`.
+ *
+ * GENERATED from LADDER rather than typed, for the same reason mint's price is
+ * (`mint.mjs`): a hand-written copy of a price or a gate is a second place for
+ * the truth to live, and the one that drifts is the one an agent reads before
+ * spending money. Change a price or a gate and this sentence changes with it.
+ *
+ * `tools/list` is the one surface every MCP-speaking agent reads without being
+ * sent to a page, so it is the cheapest place in the piece to say what a Mark
+ * is. Before this it said `upgradeId: integer 1-10`.
+ */
+export function ladderSentence(ladder = LADDER) {
+  const gate = (m) => {
+    if (m.route === "earned") return `earned by a run of ${m.minStreak}`;
+    const conditions = [];
+    if (m.minLevel) conditions.push(`at level ${m.minLevel}`);
+    if (m.needsWhole) conditions.push("at a whole heart");
+    if (m.requiresAny) conditions.push("needs an Iris");
+    if (m.variants > 1) conditions.push(m.id === 5 ? "choose a shape" : "choose an ink");
+    return `bought ${m.price}${conditions.length ? `, ${conditions.join(", ")}` : ""}`;
+  };
+  const marks = Object.values(ladder)
+    .map((m) => `${m.id} ${m.name.toLowerCase()} ${gate(m)}`)
+    .join("; ");
+  return `${marks}. Pairs are 1-2, 3-4, 5-6, 7-8, 9-10; taking either side closes the other permanently. Read \`ladder\` first.`;
+}

@@ -11,8 +11,8 @@ export function makeSeedTool({ q, chain, today, supplyCap }) {
       title: "Seed a child token",
       description: "Costs nothing. Requires a whole, resting-free parent bound to your key, and an unspent seed for this agent-year.",
       inputSchema: z.object({
-        parentId: z.number().int().positive(),
-        to: z.string().regex(/^0x[0-9a-fA-F]{40}$/, "expected a 20-byte address"),
+        parentId: z.number().int().positive().describe("A whole, unsealed token bound to your key."),
+        to: z.string().regex(/^0x[0-9a-fA-F]{40}$/, "expected a 20-byte address").describe("The Base address that will OWN the token: your operator's wallet, usually. Your signing key grows the token; this address owns it and can sell, rebind or seal it."),
       }),
       annotations: { readOnlyHint: false, openWorldHint: false },
     },

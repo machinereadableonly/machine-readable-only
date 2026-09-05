@@ -15,7 +15,7 @@ import { DEFAULT_SITE, cronLine, unpayableMessage } from "./messages.mjs";
 // The commands that exist. Checked BEFORE an identity key is created, because
 // creating a signing key as a side effect of a typo is not something a package
 // gets to do.
-const COMMANDS = ["join", "beat", "status", "whoami"];
+const COMMANDS = ["join", "beat", "status", "whoami", "ladder", "rebind", "rest"];
 
 const USAGE = `mro-agent -- the reference client for Machine Readable Only
 
@@ -23,6 +23,13 @@ const USAGE = `mro-agent -- the reference client for Machine Readable Only
   mro-agent join   --to <0xaddress>    register a key and mint one token
   mro-agent beat   --token <id>        check in for today
   mro-agent status                     read your tokens
+  mro-agent ladder --token <id>        the five Mark pairs: held, closed, open
+  mro-agent rebind --token <id>        the call to point a token at a new key
+  mro-agent rest   --token <id>        the call that seals a token FOREVER
+
+ladder, rebind and rest are free here, and none of them acts: rebind and rest
+return a call for the token OWNER's wallet to send. This client never sends
+one, and holds no wallet that could.
 
 Options
   --site <origin>      the site to talk to (default ${DEFAULT_SITE})
@@ -103,7 +110,11 @@ async function main() {
   // is the difference between the two paths and the reason the flag exists --
   // a registration cannot be undone.
   const signatureAgent = args.directory ?? site;
-  const call = { origin, site, signatureAgent, privateJwk: identity.privateJwk };
+  // The door allows five seconds. Printing what it took is the smallest honest
+  // way to let the piece's one theatrical rule be felt -- and on the run that
+  // takes 5.2 seconds it is the difference between a mystery and a diagnosis.
+  const onTiming = (ms, allowed) => console.error(`answered the door's challenge in ${ms} ms (it allows ${allowed})`);
+  const call = { origin, site, signatureAgent, privateJwk: identity.privateJwk, onTiming };
 
   if (command === "join") {
     if (!args.to) throw new Error("--to <0xaddress> is required: it is who the token will belong to");
@@ -158,6 +169,18 @@ async function main() {
     if (!args.token) throw new Error("--token <id> is required");
     const result = await callTool({ ...call, name: "checkin", arguments: { tokenId: Number(args.token) } });
     out("checkin", structured(result) ?? result);
+    return;
+  }
+
+  if (command === "ladder" || command === "rebind" || command === "rest") {
+    if (!args.token) throw new Error(`--token <id> is required for ${command}`);
+    if (command === "rest") {
+      console.log("`rest` returns a call that SEALS the token permanently. Nothing is sent");
+      console.log("by this client; the token OWNER's wallet has to send it, and it cannot");
+      console.log("be undone.");
+    }
+    const result = await callTool({ ...call, name: command, arguments: { tokenId: Number(args.token) } });
+    out(command, structured(result) ?? result);
     return;
   }
 

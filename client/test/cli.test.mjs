@@ -9,7 +9,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,7 @@ import { queries } from "../../warden/src/mirror/queries.mjs";
 import { utcDay } from "../../warden/src/mcp/tools/checkin.mjs";
 import { openChain } from "../../warden/test/chain-stub.mjs";
 import { loadIdentity } from "../src/keys.mjs";
-import { VERSION, cronLine, unpayableMessage } from "../src/messages.mjs";
+import { VERSION, cronLine, unpayableMessage, doorMessage, DOOR_REASONS } from "../src/messages.mjs";
 
 const run = promisify(execFile);
 const CLI = fileURLToPath(new URL("../src/cli.mjs", import.meta.url));
@@ -212,12 +212,19 @@ test("REFUSES to pay when the expected payTo does not match the demand", async (
   assert.match(out, /refusing to pay: payTo is/);
 });
 
-test("a signature over the wrong origin is refused at the door", async () => {
+test("a signature over the wrong origin is refused at the door, in a sentence", async () => {
   // No --endpoint, so the CLI signs for and dials the local address, whose
   // authority is not the domain the door is configured with.
   const { code, out } = await cli("status", "--site", endpoint, "--key", join(dir, "wrong.json"));
   assert.equal(code, 1);
-  assert.match(out, /refused at the door/);
+  // The reason is `unknown-key`, not `signature`: signing for the local
+  // address makes that address the signature agent, and the door has no
+  // directory there. Asserted as measured rather than as assumed.
+  assert.match(out, /refused at the door \(unknown-key\)/);
+  // C3.9. The word alone is a diagnosis the agent cannot act on. This goes
+  // through the real refusal path -- breaking the wiring left every direct
+  // test of the table green, which is why this assertion exists here.
+  assert.match(out, /Run `mro-agent join` once to register it/);
 });
 
 // C3.5. The flag was documented on the served page, parsed without complaint,
@@ -239,4 +246,62 @@ test("--directory skips registration entirely, so the site stores nothing", asyn
   const { keyId } = loadIdentity(dirKey);
   assert.equal(q.getKey(keyId), undefined, "a key the agent chose to host itself must not be stored here");
   assert.equal(code, 1, "the door then refuses, because that directory does not exist");
+});
+
+// C3.9. The door answers in its own vocabulary at the exact moment the agent
+// cannot go and read what it means.
+test("a door refusal is a sentence, not a word", () => {
+  assert.match(doorMessage("expired"), /five-second challenge ran out/);
+  assert.match(doorMessage("unknown-key"), /mro-agent join/);
+  // An unrecognised reason still reaches the operator rather than vanishing.
+  assert.match(doorMessage("something-new"), /refused at the door: something-new/);
+  assert.match(doorMessage(undefined), /no reason given/);
+});
+
+// Read from the SERVICE's own source, not from a list kept here, so a reason
+// added at the door with no sentence in the client fails this rather than
+// reaching an agent as a bare word. verify.mjs assigns its reason to a local
+// and middleware.mjs passes one to challengeBody, so both shapes are scanned.
+test("every reason the door can send has a sentence", () => {
+  const source = readFileSync(new URL("../../warden/src/door/verify.mjs", import.meta.url), "utf8")
+    + readFileSync(new URL("../../warden/src/door/middleware.mjs", import.meta.url), "utf8")
+    + readFileSync(new URL("../../warden/src/door/challenge.mjs", import.meta.url), "utf8");
+
+  const reasons = new Set([
+    ...[...source.matchAll(/reason = "([a-z-]+)"/g)].map((m) => m[1]),
+    ...[...source.matchAll(/reason: *"([a-z-]+)"/g)].map((m) => m[1]),
+    ...[...source.matchAll(/challengeBody\([^)]*"([a-z-]+)"\)/g)].map((m) => m[1]),
+  ]);
+  // Not vacuous: if the extraction stops matching, this fails rather than
+  // passing over an empty set -- the exact way this kind of test rots.
+  assert.ok(reasons.size >= 5, `expected the door's vocabulary, found ${[...reasons]}`);
+
+  const missing = [...reasons].filter((r) => !DOOR_REASONS[r]);
+  assert.deepEqual(missing, [], "the door can send a reason the client cannot explain");
+});
+
+// C3.9, the timing. Five seconds is the piece's one theatrical rule.
+test("the client reports how long the handshake took, against what it was allowed", async () => {
+  const { code, out } = await cli("status", "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath);
+  assert.equal(code, 0, out);
+  assert.match(out, /answered the door's challenge in \d+ ms \(it allows 5000\)/);
+});
+
+// C3.12. The client reached four of the nine tools; `ladder` is the one that
+// makes a forfeit legible BEFORE it is taken.
+test("ladder is reachable, and rest warns before it returns the sealing call", async () => {
+  const l = await cli("ladder", "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath, "--token", "1");
+  assert.match(l.out, /ladder:/);
+
+  const r = await cli("rest", "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath, "--token", "1");
+  assert.match(r.out, /SEALS the token permanently/);
+  assert.match(r.out, /cannot/);
+});
+
+test("the three read-only commands still require a token id", async () => {
+  for (const command of ["ladder", "rebind", "rest"]) {
+    const { code, out } = await cli(command, "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath);
+    assert.equal(code, 1);
+    assert.match(out, new RegExp(`--token <id> is required for ${command}`));
+  }
 });

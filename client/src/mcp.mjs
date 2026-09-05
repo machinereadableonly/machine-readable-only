@@ -4,6 +4,7 @@
 // server per request. So a "call" here really is one HTTP request, and there
 // is no connection to keep alive.
 import { admittedFetch } from "./door.mjs";
+import { doorMessage } from "./messages.mjs";
 
 /**
  * The revision this client speaks, sent in two places that MUST agree.
@@ -81,7 +82,7 @@ async function readRpc(res) {
 
 /// One JSON-RPC call through the door. Returns the whole envelope, because a
 /// payment demand arrives inside `result` and the caller has to see it.
-export async function rpc({ origin, site, privateJwk, signatureAgent, method, params = {}, id = 1, fetchImpl = fetch }) {
+export async function rpc({ origin, site, privateJwk, signatureAgent, method, params = {}, id = 1, fetchImpl = fetch, onTiming, retry = true }) {
   // The protocol fields go LAST so a caller cannot overwrite them. `_meta` is
   // shared with the x402 payment authorisation, which uses its own namespaced
   // keys, so the two sit side by side rather than competing.
@@ -95,6 +96,7 @@ export async function rpc({ origin, site, privateJwk, signatureAgent, method, pa
     },
   };
   const res = await admittedFetch({
+    onTiming,
     origin,
     site,
     privateJwk,
@@ -105,7 +107,17 @@ export async function rpc({ origin, site, privateJwk, signatureAgent, method, pa
   });
   if (res.status === 401) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(`refused at the door: ${body.reason ?? "no reason given"}`);
+
+    // C3.9. RETRY ONCE, and only for the two reasons a retry can fix: a
+    // challenge that went stale in flight, or one already spent. Five seconds
+    // is not long and a slow first handshake is the likeliest first-run
+    // failure, so the most common way to meet this piece used to be an error.
+    // Every other reason -- a wrong key, an unregistered key, an altered body
+    // -- is retried into the same refusal, so it is not.
+    if (retry && (body.reason === "expired" || body.reason === "challenge")) {
+      return rpc({ origin, site, privateJwk, signatureAgent, method, params, id, fetchImpl, onTiming, retry: false });
+    }
+    throw new Error(doorMessage(body.reason));
   }
   return readRpc(res);
 }

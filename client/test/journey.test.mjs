@@ -293,3 +293,51 @@ test("the client's content-digest is byte-identical to the door's", async () => 
   // And the shape is RFC 9530's, not something of our own invention.
   assert.match(clientDigest("x"), /^sha-256=:[A-Za-z0-9+/]+=*:$/);
 });
+
+// C3.9. Five seconds is not long and a slow first handshake is the likeliest
+// way to meet this piece for the first time; until now that meeting was an
+// error message and an exit code. The retry is deliberately narrow: only the
+// two reasons a fresh challenge can actually fix.
+test("a challenge that went stale in flight is retried once, and then succeeds", async () => {
+  const { privateJwk } = await generateIdentity();
+  await registerKey({ origin, privateJwk });
+
+  let injected = 0;
+  const flaky = async (url, init) => {
+    // Fail only the first ADMITTED post, never the unsigned knock before it.
+    if (init?.method === "POST" && init.headers?.["challenge-response"] && injected === 0) {
+      injected += 1;
+      return new Response(JSON.stringify({ reason: "expired" }), {
+        status: 401, headers: { "content-type": "application/json" },
+      });
+    }
+    return globalThis.fetch(url, init);
+  };
+
+  const tools = await listTools({ origin, site: `https://${DOMAIN}`, privateJwk, fetchImpl: flaky });
+  assert.equal(injected, 1, "one failure was injected");
+  assert.ok(tools.length > 0, "and the retry got through it");
+});
+
+test("a refusal a retry cannot fix is not retried", async () => {
+  const { privateJwk } = await generateIdentity();
+  await registerKey({ origin, privateJwk });
+
+  let attempts = 0;
+  const always401 = async (url, init) => {
+    if (init?.method === "POST" && init.headers?.["challenge-response"]) {
+      attempts += 1;
+      return new Response(JSON.stringify({ reason: "unknown-key" }), {
+        status: 401, headers: { "content-type": "application/json" },
+      });
+    }
+    return globalThis.fetch(url, init);
+  };
+
+  await assert.rejects(
+    () => listTools({ origin, site: `https://${DOMAIN}`, privateJwk, fetchImpl: always401 }),
+    /the site does not have this key/,
+    "and the reason arrives as a sentence, not a word"
+  );
+  assert.equal(attempts, 1, "a wrong key is not made right by asking again");
+});

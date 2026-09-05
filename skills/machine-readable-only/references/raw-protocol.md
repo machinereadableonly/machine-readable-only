@@ -448,6 +448,11 @@ choice between them is informed rather than forfeited by accident.
 write. Prices are the exact strings the x402 demand carries -- no thousands
 separator.
 
+Every argument in `tools/list` carries a `description`, and `upgrade`'s
+`upgradeId` carries the whole ladder -- ids, names, prices and gates --
+generated from the same catalogue the tool enforces, so it cannot quote a price
+the server does not charge. You do not have to read this page to buy a Mark.
+
 `ladder` answers the question `upgrade` cannot, because a refusal arrives after
 the choice has been made: what would I be giving up, and what am I still short
 of. It is free, reads nothing but this service's own mirror, and works on any

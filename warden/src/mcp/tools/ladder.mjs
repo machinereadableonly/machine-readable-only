@@ -91,7 +91,7 @@ export function makeLadderTool({ q, catalogue }) {
     config: {
       title: "Read the Mark ladder for a token",
       description: "Free. For each of the five pairs: what this token wears, what that has closed permanently, what each side costs and what it is still short of. Ask before you buy.",
-      inputSchema: z.object({ tokenId: z.number().int().positive() }),
+      inputSchema: z.object({ tokenId: z.number().int().positive().describe("A token id. Any token, not only your own.") }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
 

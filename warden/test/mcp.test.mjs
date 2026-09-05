@@ -4,6 +4,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeMcpHandler } from "../src/mcp/server.mjs";
 import { openChain } from "./chain-stub.mjs";
+import { LADDER, ladderSentence } from "../src/mcp/ladder.mjs";
 import { envelope } from "./mcp-envelope.mjs";
 
 test("the caller's key id reaches a tool from authInfo, never from an argument", async () => {
@@ -258,6 +259,39 @@ test("a refusal that came through the real handler carries its next step", async
   assert.equal(refusal.ok, false);
   assert.equal(typeof refusal.next, "string", "the wrapper must add the next step");
   assert.match(refusal.next, /00:05 UTC/);
+});
+
+// C3.6. tools/list is the one surface every MCP-speaking agent reads without
+// being sent to a page, and it said `upgradeId: integer 1-10` -- ten integers
+// and a regex, with the names, the prices and the pairing living only on pages
+// the agent may never have opened. Asserted on the SERVED schema, because
+// zod's .describe() reaching JSON Schema is the SDK's business, not ours.
+test("the served schemas name what their arguments are, and the ladder is generated", async () => {
+  const { handler } = makeMcpHandler({
+    q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract", chainId: 84532,
+    catalogue: LADDER,
+  });
+  const body = await call(handler, { method: "tools/list", params: {} }, null);
+  const byName = Object.fromEntries(body.result.tools.map((t) => [t.name, t]));
+
+  const upgradeId = byName.upgrade.inputSchema.properties.upgradeId;
+  // GENERATED, not typed: the sentence must equal what the catalogue produces,
+  // so a price change moves both or fails here.
+  assert.equal(upgradeId.description, ladderSentence(LADDER));
+  assert.match(upgradeId.description, /1 hush bought \$1\.00/);
+  assert.match(upgradeId.description, /closes the other permanently/);
+
+  assert.match(byName.mint.inputSchema.properties.to.description, /will OWN the token/);
+  assert.match(byName.rest.inputSchema.properties.tokenId.description, /seals it forever/);
+  assert.match(byName.ladder.inputSchema.properties.tokenId.description, /not only your own/);
+
+  // Every argument of every tool is described. A new one arriving bare is the
+  // regression this catches.
+  for (const tool of body.result.tools) {
+    for (const [arg, schema] of Object.entries(tool.inputSchema.properties ?? {})) {
+      assert.equal(typeof schema.description, "string", `${tool.name}.${arg} has no description`);
+    }
+  }
 });
 
 // -- the 2026-07-28 leg, asserted rather than assumed -----------------------
