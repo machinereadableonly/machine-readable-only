@@ -87,3 +87,80 @@ test("an older mirror without the column is migrated rather than left broken", (
   assert.deepEqual(q.pendingMarkOrders().map((o) => ({ ...o })),
     [{ tokenId: 7, upgradeId: 3, variant: 0 }]);
 });
+
+// -- forgetting keys that were never used -----------------------------------
+//
+// Registration is free and unauthenticated, so the per-thumbprint limit never
+// binds an attacker using a fresh keypair each time. The only aggregate limit
+// is the 10,000-key ceiling, and reaching it used to close POST /keys forever
+// -- which shuts out precisely the agents that have no domain of their own.
+
+const DAY = 24 * 60 * 60 * 1000;
+const keyRow = (id, registeredAt) => ({ keyId: id, jwk: { kty: "OKP", x: id }, directory: null, registeredAt });
+
+test("a key that registered and never came through the door is forgotten", () => {
+  const { q } = fresh();
+  const now = Date.now();
+  q.insertKey(keyRow("never-used", now - 31 * DAY));
+
+  assert.equal(q.pruneUnusedKeys(now - 30 * DAY), 1);
+  assert.equal(q.getKey("never-used"), undefined);
+  assert.equal(q.keyCount(), 0);
+});
+
+test("a key that HAS been through the door is never forgotten, however old", () => {
+  const { q } = fresh();
+  const now = Date.now();
+  q.insertKey(keyRow("used-once", now - 400 * DAY));
+  q.markKeyUsed("used-once", now - 399 * DAY);
+
+  // Well past any window. A used key may be bound to a token on chain, and
+  // that binding is permanent.
+  assert.equal(q.pruneUnusedKeys(now), 0);
+  assert.equal(q.getKey("used-once").keyId, "used-once");
+});
+
+test("an unused key inside the window is left alone", () => {
+  const { q } = fresh();
+  const now = Date.now();
+  q.insertKey(keyRow("recent", now - 2 * DAY));
+
+  assert.equal(q.pruneUnusedKeys(now - 30 * DAY), 0);
+  assert.equal(q.getKey("recent").keyId, "recent");
+});
+
+test("the prune clears a flood without touching the agents already in", () => {
+  const { q } = fresh();
+  const now = Date.now();
+  q.insertKey(keyRow("honest", now - 90 * DAY));
+  q.markKeyUsed("honest", now - 89 * DAY);
+  for (let i = 0; i < 500; i++) q.insertKey(keyRow(`flood-${i}`, now - 31 * DAY));
+  assert.equal(q.keyCount(), 501);
+
+  assert.equal(q.pruneUnusedKeys(now - 30 * DAY), 500);
+  assert.equal(q.keyCount(), 1);
+  assert.equal(q.getKey("honest").keyId, "honest");
+});
+
+test("marking a key used is throttled to one write a day", () => {
+  const { q } = fresh();
+  const now = Date.now();
+  q.insertKey(keyRow("busy", now));
+
+  assert.equal(q.markKeyUsed("busy", now), 1, "the first use is recorded");
+  assert.equal(q.markKeyUsed("busy", now + 1000), 0, "a second use the same day writes nothing");
+  const stamp = q.getKey("busy").lastUsedAt;
+
+  assert.equal(q.markKeyUsed("busy", now + 2 * DAY), 1, "a later day is recorded");
+  assert.notEqual(q.getKey("busy").lastUsedAt, stamp);
+});
+
+test("a key used at any point survives, even if its last use is ancient", () => {
+  // The rule is "never used", not "used recently". A token bound to this key
+  // on chain outlives any idleness.
+  const { q } = fresh();
+  const now = Date.now();
+  q.insertKey(keyRow("dormant", now - 900 * DAY));
+  q.markKeyUsed("dormant", now - 899 * DAY);
+  assert.equal(q.pruneUnusedKeys(now - 30 * DAY), 0);
+});

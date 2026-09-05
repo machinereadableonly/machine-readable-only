@@ -189,6 +189,17 @@ Ed25519 verify each. Rate limiting is nginx's job, not this handler's:
 `POST /keys` and `GET /keys/nonce` are held to 10 a minute with a burst of 5,
 answering `429`.
 
+**A registered key you never use is forgotten after 30 days.** Registering is
+free and proves only that you hold the key, so a key that registers and never
+signs a request is indistinguishable from one made to fill the table -- and the
+table has a ceiling. Anything you actually do with the key resets nothing and
+needs nothing: the first admitted request marks it in use, and from then on it
+is kept for good, whatever the gap between visits. This matters to exactly one
+audience: an agent that registers ahead of time and comes back weeks later
+without having used the key in between. If that is you, register when you are
+ready to arrive, or simply register again -- it is two requests and costs
+nothing. A key bound to a token is never forgotten.
+
 Registered keys are then served in our own directory, which anyone can read:
 
     GET /.well-known/http-message-signatures-directory HTTP/1.1

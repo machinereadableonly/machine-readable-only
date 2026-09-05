@@ -51,6 +51,12 @@ export function queries(db) {
     getKey: db.prepare("SELECT * FROM keys WHERE keyId = ?"),
     allKeys: db.prepare("SELECT * FROM keys ORDER BY registeredAt ASC"),
     keyCount: db.prepare("SELECT COUNT(*) AS n FROM keys"),
+    /// Written at most once a day per key -- see markKeyUsed.
+    touchKey: db.prepare("UPDATE keys SET lastUsedAt = ? WHERE keyId = ? AND (lastUsedAt IS NULL OR lastUsedAt < ?)"),
+    /// Only ever NEVER-USED keys. A key that has been through the door keeps
+    /// its row for good: it may be bound to a token on chain, and that binding
+    /// is permanent.
+    pruneUnusedKeys: db.prepare("DELETE FROM keys WHERE lastUsedAt IS NULL AND registeredAt < ?"),
     firstMintDay: db.prepare("SELECT MIN(mintDay) AS d FROM tokens WHERE keyId = ?"),
     seedsSpent: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE keyId = ? AND parentId IS NOT NULL"),
     setLineage: db.prepare("UPDATE tokens SET generation = ?, parentId = ? WHERE tokenId = ?"),
@@ -202,6 +208,38 @@ export function queries(db) {
     /// 10,000-key cap that is 10,000 parsed rows per registration attempt, on a
     /// box that has been OOM-killed twice.
     keyCount: () => s.keyCount.get().n,
+
+    /**
+     * Record that this key just got through the door.
+     *
+     * THROTTLED TO ONE WRITE A DAY per key. This runs on every admitted
+     * request, and the only question anything asks of the value is "has this
+     * key ever been used, and how long ago" -- a resolution of one day answers
+     * it. The `lastUsedAt < ?` in the statement is what makes the write a
+     * no-op rather than the caller having to read first, so two concurrent
+     * requests cannot race each other into two updates.
+     */
+    markKeyUsed: (keyId, now = Date.now()) =>
+      s.touchKey.run(now, keyId, now - 24 * 60 * 60 * 1000).changes,
+
+    /**
+     * Forget keys that registered and never used it.
+     *
+     * WHY THIS EXISTS. Registration is free and unauthenticated -- a fresh
+     * Ed25519 keypair costs nothing -- so the per-thumbprint rate limit never
+     * binds an attacker who uses a new key each time. The only aggregate limit
+     * is MAX_TOTAL_KEYS, and reaching it IS the attack: every later
+     * registration is refused forever, which shuts out exactly the agents that
+     * have no domain of their own and no other way in.
+     *
+     * A key that has been through the door is NEVER pruned, whatever its age.
+     * It may be the key a token is bound to on chain, and that binding is
+     * permanent; forgetting it would break the rebind lookup and the
+     * seed budget. Only `lastUsedAt IS NULL` is a candidate.
+     *
+     * Returns how many rows went, so the caller can log a real number.
+     */
+    pruneUnusedKeys: (before) => s.pruneUnusedKeys.run(before).changes,
     insertKey: ({ keyId, jwk, directory, registeredAt }) =>
       s.insertKey.run(
         keyId,

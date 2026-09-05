@@ -23,6 +23,18 @@ export const REGISTRATION_WINDOW_MS = 60_000;
 export const REGISTRATION_MAX_PER_WINDOW = 20;
 export const MAX_TOTAL_KEYS = 10_000;
 
+/// How long a key that has NEVER been used to get through the door is kept.
+///
+/// Thirty days, and the asymmetry is what sets it. Expiring too eagerly costs
+/// an honest agent one repeat of a free, unauthenticated, two-request
+/// registration. Expiring too slowly leaves the piece with no entrance at all
+/// for every agent without a domain, for as long as the window lasts -- because
+/// reaching MAX_TOTAL_KEYS refuses every later registration and nothing else
+/// removes a row. Given that, the cheap mistake is the short window.
+///
+/// A key that HAS been through the door is never touched, at any age.
+export const UNUSED_KEY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 /// Above this many tracked callers, prune every expired window rather than only
 /// the caller's own. A flood of distinct thumbprints would otherwise leave one
 /// Map entry behind for each, forever.

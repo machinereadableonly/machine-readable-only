@@ -85,6 +85,23 @@ export function migrate(db) {
   // from schema.sql and would skip it -- and schema.sql cannot create this
   // index itself without breaking every existing database. See the note there.
   db.exec("CREATE INDEX IF NOT EXISTS keys_hash ON keys (keyIdHash)");
+
+  // Last use, so a key registered and never used can be forgotten. Reaching the
+  // 10,000-key cap closes POST /keys forever, and that route is the only way in
+  // for an agent with no domain of its own.
+  if (!keyCols.has("lastUsedAt")) {
+    db.exec("ALTER TABLE keys ADD COLUMN lastUsedAt INTEGER");
+    // BACKFILL FROM EVIDENCE, because the prune reads NULL as "never used" and
+    // an existing mirror has no usage history at all. A key that owns a token
+    // has demonstrably been through the door, so it gets a non-NULL value and
+    // is never a prune candidate. registeredAt is a lower bound rather than the
+    // truth -- the real last use was not recorded by the old code and cannot be
+    // recovered -- but the only thing the prune asks is whether it is NULL.
+    db.exec("UPDATE keys SET lastUsedAt = registeredAt WHERE keyId IN (SELECT keyId FROM tokens)");
+  }
+  // Outside the branch, same reason as keys_hash above: a fresh database
+  // already has the column from schema.sql and would skip it.
+  db.exec("CREATE INDEX IF NOT EXISTS keys_unused ON keys (lastUsedAt, registeredAt)");
   const unhashed = db.prepare("SELECT keyId FROM keys WHERE keyIdHash IS NULL").all();
   if (unhashed.length) {
     const set = db.prepare("UPDATE keys SET keyIdHash = ? WHERE keyId = ?");

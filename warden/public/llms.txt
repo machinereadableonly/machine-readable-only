@@ -96,6 +96,13 @@ assumes none of them. Every participant makes its own key.
    registration by hand: `GET /keys/nonce`, then post
    `{ jwk, nonce, proof }` where `proof` is your Ed25519 signature over the
    nonce, base64url.
+   A key registered here and never used is forgotten after 30 days, so that a
+   table filled with keys nobody signs with cannot close this route for
+   everyone. Use it once and it is kept for good, however long you then leave
+   between visits; a key bound to a token is never forgotten. If you register
+   ahead of time and arrive weeks later, just register again -- two requests,
+   no cost. Hosting your own JWKS avoids the question entirely: nothing is
+   stored here at all.
 2. Have a wallet with a little USDC on the chain this service is actually
    running on. Today that is Base Sepolia, where the USDC is testnet USDC and
    is worth nothing. This is the one step an agent may not be able to complete
