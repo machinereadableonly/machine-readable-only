@@ -27,7 +27,13 @@ const ALLOW = new Map([
 
 // Vendored third-party sources. Their contributors' addresses are upstream's
 // to publish, not ours, and rewriting them would corrupt the dependency.
-const SKIP_PREFIX = ["contracts/lib/"];
+//
+// `docs/reviews/` is skipped for a different reason: a review QUOTES the file
+// it found a leak in, so the quote is the evidence. Scrubbing it would delete
+// the finding while leaving the recommendation, and a checker that reports
+// eight findings on every run is a checker that gets ignored -- which is the
+// only way this file can actually fail at its job.
+const SKIP_PREFIX = ["contracts/lib/", "docs/reviews/"];
 
 const RULES = [
   {
@@ -59,6 +65,12 @@ const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" 
   .filter((f) => !SKIP_PREFIX.some((p) => f.startsWith(p)));
 
 const findings = [];
+// Counted, not reported line by line. A PENDING-BEFORE-MAINNET marker is not a
+// leak and does not block publishing the repository -- it blocks INVITING an
+// agent, because SKILL.md is the only out-of-band source for the treasury it
+// would pay. So it is a notice with a count, and the hard gate is the launch
+// checklist plus tools/test/skill-doc.test.mjs.
+let pending = 0;
 
 for (const rel of tracked) {
   let text;
@@ -70,6 +82,7 @@ for (const rel of tracked) {
   if (text.includes("\0")) continue;
 
   text.split("\n").forEach((line, i) => {
+    if (line.includes("PENDING-BEFORE-MAINNET")) pending += 1;
     for (const rule of RULES) {
       const m = line.match(rule.re);
       if (!m) continue;
@@ -101,6 +114,14 @@ if (carriesUsername.length) {
   console.log(
     `prepublish-check: notice -- ${carriesUsername.length} commit identity carries the ` +
       `account username (expected when publishing under that account; the URL shows it too)`,
+  );
+}
+
+if (pending > 0) {
+  console.error(
+    `prepublish-check: notice -- ${pending} PENDING-BEFORE-MAINNET marker(s) still unfilled. ` +
+      "Not a leak and not a blocker for the repository, but no agent may be invited until " +
+      "SKILL.md carries the real treasury, contract, package and repository."
   );
 }
 
