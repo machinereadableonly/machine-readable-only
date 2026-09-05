@@ -150,7 +150,24 @@ return visits, so the artwork is the agent's own history of coming back.
   `vm.startBroadcast()` with no sender, so forge refused AFTER the simulation
   passed (commit c62ce2d). Read the plan5-status, mark-ladder-spec
   and static-hue-decision memories BEFORE touching Marks.
-  **Suites: contracts 268, warden 377, tools 66, client 25** (2026-09-04).
+  **PLAN 6 IS BUILT as of 2026-09-05 and NOTHING IS DEPLOYED** -- the four
+  decisions a mainnet deploy makes permanent, the only 4 of the 158 review
+  findings that had a deadline. A missed day now costs ONE shade at once and
+  then the lost run fades on the 3/7/30 ladder, so a token that comes back is
+  never paler than one that stopped; the earned-Mark gate reads the LONGEST run
+  ever completed, not the live streak; `MAX_MARK_ID` is 15 with ids 11-15
+  unwritten; and `sunsetByAbsence()` lets anyone close the piece after 365 days
+  without a Warden write, sealing each token at the colour it held when the
+  writing stopped. `struct Token`'s spare `uint56` is now
+  `uint16 fellRun; uint16 bestRun; uint24 fellDay;` -- an exact fit, so a
+  check-in still costs about 5,000 gas.
+  **THE SEPOLIA BUILD IS THEREFORE SUPERSEDED BY SOURCE**: MachineReadableOnly
+  0xf0Df806ff06ae051756db128Bc9F83CDB425a716 and Renderer
+  0xb95D32292a5517415B9e4A61e4A30d97F4136539 no longer match the tree. Do not
+  read state off them or compare against them. Read
+  [[plan6-permanent-decisions]] and [[review-triage-2026-09-05]] before touching
+  the run, the palette or the endings.
+  **Suites: contracts 289, warden 377, tools 66, client 25** (2026-09-05).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -315,11 +332,12 @@ return visits, so the artwork is the agent's own history of coming back.
   (1) **1,633,224 gas / 8,924 bytes** is soak token 21 read over RPC, the number
   for what a real provider returns. It PREDATES Plan 5 and nothing has
   re-measured that path since the ladder was drawn.
-  (2) **1,749,915 gas / 10,651 bytes** is the GAS worst case in Foundry
+  (2) **1,750,425 gas / 10,651 bytes** is the GAS worst case in Foundry
   (`GasBudget.t.sol` token 9: level 364, run 400, maximal Mark set). This is
   `worstGas`, what the suite asserts and the one to compare across commits;
-  Plan 5 moved it from 1,585,616 / 9,223 on 2026-09-02. Gas margin 250,085.
-  (3) **1,679,943 gas / 11,550 bytes** is the BYTE worst case in Foundry (token
+  Plan 5 moved it from 1,585,616 / 9,223 on 2026-09-02 and Plan 6 from
+  1,749,915 on 2026-09-05. Gas margin 249,575.
+  (3) **1,680,468 gas / 11,550 bytes** is the BYTE worst case in Foundry (token
   7: level 3,650, the ring cap, run 400, maximal Mark set). This is `maxBytes`,
   and the byte margin is 20,000 - 11,550 = **8,450**, not the 9,349 you get by
   subtracting the gas worst case's byte count.
