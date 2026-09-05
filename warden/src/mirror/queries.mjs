@@ -26,7 +26,13 @@ export function queries(db) {
     firstMintDay: db.prepare("SELECT MIN(mintDay) AS d FROM tokens WHERE keyId = ?"),
     seedsSpent: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE keyId = ? AND parentId IS NOT NULL"),
     setLineage: db.prepare("UPDATE tokens SET generation = ?, parentId = ? WHERE tokenId = ?"),
-    creditDay: db.prepare("UPDATE tokens SET level = ?, streak = ?, lastDay = ? WHERE tokenId = ?"),
+    // `bestRun` only ever rises, in SQL rather than in the caller, so a caller
+    // that forgets to pass the larger of the two cannot lower it. Mirrors the
+    // contract, where a run that was completed stays completed.
+    creditDay: db.prepare(
+      "UPDATE tokens SET level = ?, streak = ?, lastDay = ?, " +
+        "bestRun = MAX(bestRun, ?) WHERE tokenId = ?"
+    ),
     nextPendingMint: db.prepare("SELECT * FROM mints WHERE solveState = 'pending' ORDER BY tokenId ASC LIMIT 1"),
     setSolveState: db.prepare("UPDATE mints SET solveState = ? WHERE tokenId = ?"),
     completeSolve: db.prepare("UPDATE mints SET qr = ?, solveState = 'done' WHERE tokenId = ?"),
@@ -138,7 +144,8 @@ export function queries(db) {
      * same transaction as the credit row, so a credit and the level it implies
      * land together or not at all.
      */
-    creditDay: (tokenId, day, level, streak) => s.creditDay.run(level, streak, day, tokenId),
+    creditDay: (tokenId, day, level, streak) =>
+      s.creditDay.run(level, streak, day, streak, tokenId),
 
     nextPendingMint: () => s.nextPendingMint.get() ?? null,
     setSolveState: (tokenId, state) => s.setSolveState.run(state, tokenId),

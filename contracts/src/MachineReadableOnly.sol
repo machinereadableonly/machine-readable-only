@@ -22,8 +22,26 @@ import {TokenView} from "./render/TokenView.sol";
 /// The storage rule that decides the gas bill: the daily write OVERWRITES one
 /// `Token` slot. Nothing is ever keyed by day.
 contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906 {
-    /// @dev Six uint32s (192 bits) plus a bool (8) plus 56 reserved = 256.
-    /// Keeping this in one slot is what makes a check-in about 5,000 gas.
+    /// @dev Six uint32s (192 bits) plus a bool (8) plus 56 bits of run history
+    /// = 256. Keeping this in ONE slot is what makes a check-in about 5,000
+    /// gas, and it is the only reason the three fields below are as narrow as
+    /// they are:
+    ///
+    ///   fellRun  uint16  the run that MOST RECENTLY fell    65,535 days, 179 years
+    ///   bestRun  uint16  the longest run ever completed     179 years
+    ///   fellDay  uint24  the day that run fell              about the year 47,000
+    ///
+    /// TWO run fields rather than one, because they answer different questions
+    /// and a single field cannot be both. The colour fades from the run that
+    /// most recently fell, starting the day it fell -- an old long run
+    /// colouring a fresh slip would be wrong. The earned-Mark gate instead asks
+    /// whether a run was EVER completed, which a recent small fall would
+    /// wrongly answer no.
+    ///
+    /// Both exist because the piece was rewarding an agent that stopped over
+    /// one that came back: a missed day reset `streak` to 1, so the image
+    /// snapped to the day-one colour while a token that simply walked away
+    /// paled gently over a month.
     struct Token {
         uint32 level;
         uint32 streak;
@@ -32,7 +50,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         uint32 generation;
         uint32 seedsGiven;
         bool resting;
-        uint56 reserved;
+        uint16 fellRun;
+        uint16 bestRun;
+        uint24 fellDay;
     }
 
     /// @dev One Mark tier. 240 of 256 bits, so still ONE storage slot and
@@ -79,6 +99,14 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     uint32 public walletCap;
     uint32 public totalMinted;
     uint32 public sunsetDay;
+    /// @notice The last day the Warden wrote anything at all.
+    /// @dev The piece's most likely death is the operator simply stopping, and
+    /// as built that had no ending: the Clock falls silent, no one can call
+    /// `sunset()` but the owner, and within thirty days every heart renders at
+    /// the start colour with `Sunset: no` -- the operator's abandonment drawn
+    /// as every agent's. This is what `sunsetByAbsence` measures. One warm
+    /// SSTORE per transaction, not per token, so the nightly batch pays it once.
+    uint32 public lastWardenDay;
     bool public isSunset;
     bool public vouchersEnabled;
 
@@ -86,7 +114,13 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     uint256 internal constant CODE_BYTES = 172;
 
     /// @dev Ten Marks in five pairs. Bit 0 is never a Mark.
-    uint8 internal constant MAX_MARK_ID = 10;
+    /// Ten are written by the deploy; the ceiling is 15 so the ladder can grow
+    /// without a redeploy, decided 2026-09-05. Fifteen is the TRUE ceiling and
+    /// not a round number: `excludes` and `requiresAny` are uint16 so bit 15 is
+    /// the last addressable Mark bit, and bit 16 is already the Iris shape.
+    /// Nothing is served promising an eleventh, and nothing is served
+    /// promising there will never be one.
+    uint8 internal constant MAX_MARK_ID = 15;
 
     /// @dev ERC-4906's interface id. OpenZeppelin ships the interface, not a mixin.
     bytes4 internal constant ERC4906_ID = 0x49064906;
@@ -106,8 +140,21 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     event WalletCapSet(uint32 cap);
     event SunsetAt(uint32 day);
 
+    /// @dev Also the heartbeat. Stamping `lastWardenDay` HERE rather than in
+    /// each of `mint`, `batchCheckIn`, `applyMark` and `seed` means a fifth
+    /// Warden function cannot be added without one, which is the failure mode
+    /// that would make `sunsetByAbsence` fire on a living piece.
+    ///
+    /// `checkInWithVoucher` deliberately does NOT stamp it, though it carries a
+    /// Warden signature. A voucher proves a signature EXISTED, not that the
+    /// operator is still there -- it can be signed today and submitted in three
+    /// years. Counting one as a heartbeat would let a hoarded voucher hold the
+    /// piece open forever against the very absence this measures. (The plan
+    /// listed it; the plan was wrong.)
     modifier onlyWarden() {
         if (msg.sender != warden) revert NotWarden();
+        uint32 d = today();
+        if (lastWardenDay != d) lastWardenDay = d;
         _;
     }
 
@@ -125,6 +172,10 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         _setWarden(warden_);
         supplyCap = 10_000;
         walletCap = 20;
+        // Deployment counts as a write. Leaving this at zero would make the
+        // piece closeable by anyone on day one, since the gap from day zero is
+        // 20,700 days and climbing.
+        lastWardenDay = today();
     }
 
     // ---------------------------------------------------------------------
@@ -149,6 +200,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         v.parent = _parentOf[id];
         v.resting = s.resting;
         v.sunset = isSunset;
+        v.sunsetDay = sunsetDay;
+        v.fellRun = s.fellRun;
+        v.fellDay = s.fellDay;
         v.marks = _marks[id];
         v.agentKeyId = _agentKeyOf[id];
         v.code = _codeOf[id];
@@ -208,6 +262,41 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         emit SunsetAt(sunsetDay);
     }
 
+    /// @notice How long the piece must be silent before anyone may close it.
+    uint32 public constant ABSENCE_DAYS = 365;
+
+    error NotAbsent(uint32 daysSinceLastWrite);
+
+    /// @notice Close the piece after a year in which the Warden wrote nothing.
+    /// Anyone may call it. Irreversible.
+    ///
+    /// @dev The operator stopping is this piece's most likely ending -- five of
+    /// six comparable projects died that way -- and it was the one ending the
+    /// contract could not express. Without this, silence is drawn as every
+    /// agent's abandonment: the Clock stops, no check-in lands, and thirty days
+    /// later every heart is at the start colour while `Sunset` still reads no,
+    /// with nobody on earth able to say otherwise.
+    ///
+    /// It grants no new power. It can only do what the owner could already have
+    /// done with `sunset()`, and only after a whole frame's worth of silence.
+    ///
+    /// `sunsetDay` IS `lastWardenDay` HERE, and that is load-bearing rather than
+    /// a shortcut. The renderer freezes a sunset token at
+    /// `lapsedIndex(streak, lastDay, sunsetDay)`. Setting it to `today()` -- a
+    /// year after the last write -- would give every token a gap of 365 and
+    /// freeze the whole collection at the start colour, which is precisely the
+    /// lie this function exists to prevent. The day the piece ENDED is the day
+    /// it stopped, not the day somebody noticed. Owner-called `sunset()` keeps
+    /// `today()`, because there the operator is choosing the moment.
+    function sunsetByAbsence() external {
+        if (isSunset) revert AlreadySunset();
+        uint32 gap = today() - lastWardenDay;
+        if (gap < ABSENCE_DAYS) revert NotAbsent(gap);
+        isSunset = true;
+        sunsetDay = lastWardenDay;
+        emit SunsetAt(sunsetDay);
+    }
+
     function _setRenderer(address r) internal {
         if (r == address(0)) revert ZeroRenderer();
         renderer = r;
@@ -259,7 +348,14 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (code.length != CODE_BYTES) revert BadCodeLength(code.length);
 
         uint32 d = today();
-        _tokens[id] = Token(1, 1, d, d, 0, 0, false, 0);
+        // Named rather than positional: the struct now carries ten fields, three
+        // of them adjacent small ints, and a positional list is how one of those
+        // silently lands in the wrong one. `bestRun` is 1 because the token's run
+        // IS 1 from the moment it exists.
+        _tokens[id] = Token({
+            level: 1, streak: 1, lastDay: d, mintDay: d, generation: 0,
+            seedsGiven: 0, resting: false, fellRun: 0, bestRun: 1, fellDay: 0
+        });
         _agentKeyOf[id] = keyId;
         _codeOf[id] = code;
         _hasMinted[keyId] = true;
@@ -281,6 +377,60 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     error EmptyBatch();
 
     event BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count);
+
+    /// @dev The bookkeeping both check-in paths share: level, run, run history,
+    /// and the day.
+    ///
+    /// It lives in one function because the two paths used to be identical
+    /// lines that merely HAD to stay identical. With one field to maintain that
+    /// held; with four it would not, and `checkInWithVoucher` is the path that
+    /// ships paused and therefore gets read least.
+    ///
+    /// Every write lands in a slot this function is already dirtying, so a
+    /// check-in costs what it always did.
+    function _credit(Token storage s, uint32 day) private {
+        uint32 run;
+        unchecked {
+            s.level += 1;
+            if (day == s.lastDay + 1) {
+                run = s.streak + 1;
+            } else {
+                // The run ends here. Record WHAT fell and WHEN before the
+                // reset, so the renderer can pale from the run that was lost
+                // instead of snapping to the day-one colour. Without this a
+                // token that missed one day and came back rendered paler than
+                // one that had been gone a month.
+                s.fellRun = _toU16(s.streak);
+                // Bounded by `today()`, which both callers check `day` against,
+                // so this cannot truncate until about the year 47,000.
+                s.fellDay = uint24(s.lastDay);
+                run = 1;
+            }
+            s.streak = run;
+        }
+        // The longest run ever completed, which is what the earned-Mark gate
+        // asks about. Written on the way UP only, so a later fall never lowers
+        // it -- a run that was completed stays completed.
+        if (run > s.bestRun) s.bestRun = _toU16(run);
+        s.lastDay = day;
+    }
+
+    /// @dev A run cannot reach 65,535 days here -- that is 179 years -- but a
+    /// silent wrap in a value a Mark gate reads is not an acceptable failure
+    /// mode, so it saturates rather than truncating.
+    function _toU16(uint32 v) private pure returns (uint16) {
+        return v > type(uint16).max ? type(uint16).max : uint16(v);
+    }
+
+    /// @notice The longest run this token has ever completed.
+    /// @dev `bestRun` is only written on the way up, so the live `streak` can
+    /// exceed it by exactly one credit -- the one that has not yet been folded
+    /// in. Taking the larger of the two costs nothing and means the gate never
+    /// lags the token by a day.
+    function _effectiveRun(Token storage s) private view returns (uint32) {
+        uint32 best = s.bestRun;
+        return s.streak > best ? s.streak : best;
+    }
 
     /// @notice Credit a day to each of many tokens, in one transaction.
     ///
@@ -325,11 +475,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
             if (day > tday) revert FutureDay(day);
             if (day <= s.lastDay) revert DayNotAdvanced(id);
 
-            unchecked {
-                s.level += 1;
-                s.streak = (day == s.lastDay + 1) ? s.streak + 1 : 1;
-            }
-            s.lastDay = day;
+            _credit(s, day);
 
             if (day < lo) lo = day;
             if (day > hi) hi = day;
@@ -401,11 +547,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (day > today()) revert FutureDay(day);
         if (day <= s.lastDay) revert DayNotAdvanced(id);
 
-        unchecked {
-            s.level += 1;
-            s.streak = (day == s.lastDay + 1) ? s.streak + 1 : 1;
-        }
-        s.lastDay = day;
+        _credit(s, day);
 
         emit MetadataUpdate(id);
     }
@@ -499,7 +641,14 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (s.level == 0) revert NoSuchToken(id);
         if (s.resting) revert Resting(id);
         if (s.level < u.minLevel) revert MarkGate();
-        if (s.streak < u.minStreak) revert MarkGate();
+        // THE RUN A MARK IS EARNED BY IS THE LONGEST ONE EVER COMPLETED, not
+        // the one standing today. `streak` alone rewarded an agent that stopped
+        // over one that came back: a token that reached 365 and went dark keeps
+        // `streak == 365` forever and could take Break, while one that reached
+        // 365, missed a single day and RETURNED was reset to 1 and refused.
+        // Decided 2026-09-05; the ladder spec says so in the same words.
+        uint32 run = _effectiveRun(s);
+        if (run < u.minStreak) revert MarkGate();
         if (u.requiresWhole && s.level < 365) revert MarkGate();
 
         if (u.excludes != 0 && held & u.excludes != 0) {
@@ -518,7 +667,10 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         // breaks if minStreak is ever turned down with setUpgrade) and not the
         // colour (which would freeze a swappable renderer's decision into token
         // state forever).
-        if (upgradeId == 6) next |= uint256(s.streak) << 32;
+        // The SAME value the gate above admitted it on, so the Mark records the
+        // run it was actually granted for. Reading `s.streak` here would store
+        // 1 for a token admitted on a completed run it had since slipped from.
+        if (upgradeId == 6) next |= uint256(run) << 32;
         _marks[id] = next;
 
         unchecked { u.sold += 1; }
@@ -615,7 +767,11 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         bytes32 key = _agentKeyOf[parentId];
         uint32 d = today();
 
-        _tokens[childId] = Token(1, 1, d, d, p.generation + 1, 0, false, 0);
+        _tokens[childId] = Token({
+            level: 1, streak: 1, lastDay: d, mintDay: d,
+            generation: p.generation + 1,
+            seedsGiven: 0, resting: false, fellRun: 0, bestRun: 1, fellDay: 0
+        });
         _parentOf[childId] = parentId;
         _agentKeyOf[childId] = key;
         _codeOf[childId] = code;

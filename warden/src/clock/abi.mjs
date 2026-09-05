@@ -24,6 +24,19 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "ABSENCE_DAYS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "acceptOwnership",
     "inputs": [],
     "outputs": [],
@@ -225,6 +238,19 @@ export const MRO_ABI = [
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "lastWardenDay",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "stateMutability": "view"
@@ -679,6 +705,13 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "sunsetByAbsence",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "sunsetDay",
     "inputs": [],
     "outputs": [
@@ -954,6 +987,21 @@ export const MRO_ABI = [
             "name": "sunset",
             "type": "bool",
             "internalType": "bool"
+          },
+          {
+            "name": "sunsetDay",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "fellRun",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "fellDay",
+            "type": "uint24",
+            "internalType": "uint24"
           },
           {
             "name": "marks",
@@ -1740,6 +1788,17 @@ export const MRO_ABI = [
         "name": "id",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NotAbsent",
+    "inputs": [
+      {
+        "name": "daysSinceLastWrite",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ]
   },

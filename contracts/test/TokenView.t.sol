@@ -22,6 +22,9 @@ contract TokenViewTest is Test {
             parent: 88,
             resting: false,
             sunset: false,
+            sunsetDay: 0,
+            fellRun: 0,
+            fellDay: 0,
             marks: 0,
             agentKeyId: bytes32(uint256(0xa9e)),
             code: new bytes(HeartMask.BYTES),
@@ -41,6 +44,9 @@ contract TokenViewTest is Test {
         assertEq(v.parent, 88);
         assertFalse(v.resting);
         assertFalse(v.sunset);
+        assertEq(v.sunsetDay, 0);
+        assertEq(v.fellRun, 0);
+        assertEq(v.fellDay, 0);
         assertEq(v.marks, 0);
         assertEq(v.agentKeyId, bytes32(uint256(0xa9e)));
         assertEq(v.today, 20_000);

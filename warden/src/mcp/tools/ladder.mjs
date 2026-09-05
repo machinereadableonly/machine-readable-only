@@ -9,7 +9,7 @@
 // Free, unsigned-in-effect and ownerless on purpose. It reads nothing but the
 // mirror row and the catalogue: no payment wrapper, no chain read, no write.
 import * as z from "zod";
-import { VARIANT_NAMES } from "../ladder.mjs";
+import { VARIANT_NAMES, effectiveRun } from "../ladder.mjs";
 
 /**
  * What a side is still short of, or undefined when nothing stands in its way.
@@ -41,7 +41,7 @@ function waitingOn(mark, token, catalogue) {
   // "Level" is credited days and never falls; "run" is the live streak. Two
   // different numbers on the two sides of a pair, and reporting one for the
   // other would send an agent after the wrong thing for seventy days.
-  if (mark.minStreak && token.streak < mark.minStreak) return `a run of ${mark.minStreak} days`;
+  if (mark.minStreak && effectiveRun(token) < mark.minStreak) return `a run of ${mark.minStreak} days`;
   if (mark.needsWhole && token.level < 365) return "a whole heart, 365 days";
   if (mark.minLevel && token.level < mark.minLevel) return `a level of ${mark.minLevel} days`;
   return undefined;

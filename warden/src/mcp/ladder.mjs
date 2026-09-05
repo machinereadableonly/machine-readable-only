@@ -39,6 +39,27 @@ const earned = (id, name, minStreak, { needsWhole = false, variants = 1 } = {}) 
   excludes: 1 << partnerOf(id), requiresAny: 0, variants,
 });
 
+/**
+ * The run an earned Mark is measured against: the LONGEST this token has ever
+ * completed, not the one standing today.
+ *
+ * MUST mirror `MachineReadableOnly._effectiveRun`. The contract is the
+ * authority and it will refuse anything this admits wrongly -- after the agent
+ * has been told it qualifies -- so a divergence here is an agent quoted a Mark
+ * the chain then rejects.
+ *
+ * `streak` alone rewarded an agent that stopped over one that came back: a
+ * token that reached 365 and went dark keeps its run forever, while one that
+ * reached 365, missed a single day and RETURNED was reset to 1 and refused.
+ * Decided 2026-09-05.
+ *
+ * `bestRun` is defaulted rather than assumed: a row written before the column
+ * existed reads undefined, and `Math.max(n, undefined)` is NaN, which would
+ * compare false against every gate and silently refuse every earned Mark.
+ */
+export const effectiveRun = (token) =>
+  Math.max(token?.streak ?? 0, token?.bestRun ?? 0);
+
 export const LADDER = {
   1:  bought(1,  "Hush",   1_000_000),
   2:  earned(2,  "Ache",   7),

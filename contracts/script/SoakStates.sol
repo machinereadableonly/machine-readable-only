@@ -17,7 +17,7 @@ library SoakStates {
         string label;
     }
 
-    uint256 internal constant COUNT = 37;
+    uint256 internal constant COUNT = 42;
 
     function all() internal pure returns (State[] memory s) {
         s = new State[](COUNT);
@@ -58,5 +58,10 @@ library SoakStates {
         s[34] = State(365, 400, 0, 272, false, "break with beat");
         s[35] = State(365, 100, 30, 429496729920, false, "break on earned iris, lapsed to the start tier");
         s[36] = State(365, 400, 8999, 0, true, "resting");
+        s[37] = State(365, 1, 0, 0, false, "slipped, day of return");
+        s[38] = State(365, 4, 0, 0, false, "slipped, 3 days on");
+        s[39] = State(365, 8, 0, 0, false, "slipped, 7 days on");
+        s[40] = State(365, 31, 0, 0, false, "slipped, 30 days on");
+        s[41] = State(365, 100, 0, 0, false, "slipped, new run overtakes the fall");
     }
 }

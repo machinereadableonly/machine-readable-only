@@ -35,6 +35,16 @@ export function migrate(db) {
     db.exec("ALTER TABLE tokens ADD COLUMN resting INTEGER NOT NULL DEFAULT 0");
   }
 
+  if (!columns.has("bestRun")) {
+    db.exec("ALTER TABLE tokens ADD COLUMN bestRun INTEGER NOT NULL DEFAULT 1");
+    // Seed it from what the row already knows. A live mirror's `streak` is the
+    // run standing at the last check-in, which is the best lower bound
+    // available -- the runs that fell before it were never recorded anywhere,
+    // so no migration can recover them. Leaving the default of 1 instead would
+    // silently refuse every earned Mark to every token that already exists.
+    db.exec("UPDATE tokens SET bestRun = streak WHERE streak > bestRun");
+  }
+
   const orderCols = new Set(db.prepare("PRAGMA table_info(mark_orders)").all().map((c) => c.name));
   if (!orderCols.has("variant")) {
     db.exec("ALTER TABLE mark_orders ADD COLUMN variant INTEGER NOT NULL DEFAULT 0");

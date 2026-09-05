@@ -137,6 +137,39 @@ export function renderCases() {
   out.push({ label: "resting", ...base, today: 9999, resting: true });
   out.push({ label: "sunset", ...base, today: 9999, sunset: true });
 
+  // A sunset that closed while this token had ALREADY lapsed. The freeze is
+  // taken at the day the piece closed, so the token keeps the paled colour it
+  // had earned rather than snapping back to its last live run. Without a
+  // `sunsetDay` in the view this state could not be drawn at all, and every
+  // abandoned token would have looked kept at the moment the record sealed.
+  out.push({
+    label: "sunset after this token lapsed",
+    ...base, today: 9999, sunset: true, sunsetDay: 1040,
+  });
+
+  // The slip, at each boundary of the ladder it now fades down. A token on a
+  // 400-day run that missed one day and came back: `streak` is the new run,
+  // `fellRun`/`fellDay` are the one it lost. Capped one rung below what fell,
+  // so the day of the return is not the same picture as never having slipped.
+  for (const [label, day, streak] of [
+    ["slipped, day of return", 1002, 1],
+    ["slipped, 3 days on", 1005, 4],
+    ["slipped, 7 days on", 1009, 8],
+    ["slipped, 30 days on", 1032, 31],
+  ]) {
+    out.push({
+      label, ...base, streak, lastDay: day, today: day, fellRun: 400, fellDay: 1000,
+    });
+  }
+
+  // The fall outliving the new run is the whole point, but the new run must be
+  // able to overtake it again. At a 100-day new run the live rung is the top
+  // one and the fall is irrelevant.
+  out.push({
+    label: "slipped, new run overtakes the fall",
+    ...base, streak: 100, lastDay: 1100, today: 1100, fellRun: 400, fellDay: 1000,
+  });
+
   return out;
 }
 

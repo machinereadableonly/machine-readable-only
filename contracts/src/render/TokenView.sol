@@ -17,7 +17,10 @@ struct TokenView {
     uint256 parent;      // 0 for a founding token, else the id it was seeded from
     bool resting;        // owner sealed it: the image is final and never pales
     bool sunset;         // operator closed the piece: same freeze, piece-wide
-    uint256 marks;       // bit n set = mark id n (1 Vein .. 7 Singularity)
+    uint32 sunsetDay;    // the day the piece closed; 0 while it is open
+    uint16 fellRun;      // the run that most recently ended; 0 if none ever has
+    uint24 fellDay;      // the day that run ended
+    uint256 marks;       // bit n set = mark id n; see Ladder.sol for the ten
     bytes32 agentKeyId;  // which agent key minted it
     bytes code;          // 172 bytes, the packed 37x37 code, written once at mint
     uint32 today;        // UTC day index now, supplied by the token contract
