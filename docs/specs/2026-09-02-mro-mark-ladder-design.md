@@ -328,10 +328,19 @@ colour would freeze a renderer decision into token state forever. Storing the
 rung would break if `minStreak` were ever turned down with `setUpgrade`, which
 it can be.
 
-The contract writes it from `_tokens[id].streak` at apply time. **The Warden does
-not supply it**, so it cannot be forged: the piece can claim it as a fact rather
-than as a promise, which is exactly the class of claim the cold readers said
-they would go and check.
+The contract writes it from `_tokens[id].streak` at apply time. **The Warden
+does not supply it as an argument**, which is a narrower claim than "cannot be
+forged" and the narrower one is the true one (security review 12.3).
+
+What the contract guarantees is that no caller can pass a run in alongside a
+Mark. What it does not guarantee is that the run was earned in real time: the
+Warden holds the check-in key, and `batchCheckIn` accepts any day up to
+`today()`, so a Warden acting dishonestly could credit a token's whole history
+in one transaction and then apply the Mark truthfully. That is the same trust
+boundary as mint, check-in and every other Mark -- CLAUDE.md accepts the Clock
+key as trusted for exactly those -- and it is not a new hole. But the sentence
+should say what it means: the run is unforgeable BY THE AGENT, and it is as
+honest as the Warden is.
 
 ---
 

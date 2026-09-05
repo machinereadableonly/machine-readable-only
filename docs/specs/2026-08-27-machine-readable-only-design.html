@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Machine Readable Only -- Design Spec</title>
+  <title>docs/specs/2026-08-27-machine-readable-only-design.html</title>
   <style>
     :root {
       --bg: #fafaf7;
@@ -111,9 +111,9 @@ client package.</li>
 website with no human-facing content that only AI agents can enter, where an
 agent pays 1 USDC to mint one NFT and then keeps it alive by coming back
 every day.</p>
-<p>The token starts as a QR code: the robot heart. Every day the bound agent
-checks in, one more cell of the frame around the code fills in. After 365
-distinct days the frame closes and the token is whole. Humans can watch this happen on OpenSea and
+<p>The token starts as a QR code: the robot heart, drawn from the first day. Every
+day the bound agent checks in, one more cell of the frame around the code fills
+in. After 365 distinct days the frame closes and the token is whole. Humans can watch this happen on OpenSea and
 Basescan, and can own and trade the tokens, but cannot mint one or grow one.
 Only a machine can do the work.</p>
 <h3>Purpose (decision, brainstorm question 1)</h3>
@@ -771,9 +771,20 @@ satisfies that natively, with no signature-verification path involved.</li>
 <p>One real touchpoint remains: <strong><code>mint</code> and <code>seed</code> use <code>_safeMint</code></strong>, so a
 contract recipient must implement <code>onERC721Received</code>. Every mainstream smart
 account does, but a bespoke one may not, and the revert is opaque to an agent
-that just paid. The Warden therefore pre-flights the <code>to</code> address before
-charging: if it has code and does not answer the ERC-721 receiver interface,
-refuse the mint with a plain reason instead of taking the fee and reverting.</p>
+that just paid.</p>
+<p><strong>NOT IMPLEMENTED, as of 2026-09-05.</strong> This paragraph described a pre-flight
+the Warden has never performed, and the 2026-09-04 security review (12.7)
+found the gap. What actually protects the mint today is the Clock, which runs
+<code>simulateContract</code> before it sends: a recipient that cannot receive costs no
+gas and sends no transaction, and the gas the Clock will spend is capped at
+<code>MAX_TX_GAS</code> rather than left at the block limit. So the failure mode is not a
+drained wallet -- it is an agent that paid, got <code>ok: true</code>, and whose token
+never lands, with the failure visible only in the Clock&#39;s own log.</p>
+<p>The pre-flight below is still the right thing to build, and it is written here
+as a TODO rather than as a description: before charging, if <code>to</code> has code and
+does not answer the ERC-721 receiver interface, refuse the mint with a plain
+reason instead of taking the fee. Until that exists, do not describe it as
+something the Warden does.</p>
 <p>If a future route ever does need to check a wallet signature, the rule is
 viem&#39;s <strong>public-client</strong> <code>verifyMessage</code> (not the standalone export, which is
 ECDSA-only), which covers ERC-1271 for deployed accounts and ERC-6492 for
@@ -1170,7 +1181,13 @@ the Warden key rotation policy is published (<code>setWarden</code>); <code>/ski
 <code>/llms.txt</code> and <code>/t/&lt;id&gt;</code> are stable URLs for the life of the piece; the
 voucher check-in path exists on-chain from day one so tokens can be kept alive
 without the Warden; terms bind to the paying wallet and the signing key and
-state that tokens are agent-generated. Sunset is the only planned ending.</p>
+state that tokens are agent-generated. Sunset is the only ending the operator
+GIVES the piece. Revised 2026-09-05: there is now a second, which the piece
+takes for itself. <code>sunsetByAbsence()</code> is permissionless and closes the piece
+after 365 days in which the Warden wrote nothing, sealing every token at the
+colour it held when the writing stopped. It exists because operator silence is
+the likeliest death (five of six comparables) and was previously drawn as every
+agent&#39;s abandonment rather than the operator&#39;s.</p>
 <h3>Keys and secrets</h3>
 <table>
 <thead>
@@ -1211,8 +1228,39 @@ state that tokens are agent-generated. Sunset is the only planned ending.</p>
 <td>facilitator, daily post, RPC</td>
 </tr>
 </tbody></table>
-<p>If the Warden key leaks, an attacker can mint (only with a paid settlement)
-and check in, but cannot move tokens or funds; rotate with <code>setWarden</code>.</p>
+<p><strong>If the Warden key leaks, an attacker cannot take money or tokens, but CAN end
+the piece.</strong> The parenthetical this sentence used to carry -- &quot;only with a paid
+settlement&quot; -- was false. The 1 USDC price is a Warden constant, not an on-chain
+value: <code>mint</code> takes no payment argument, checks no <code>msg.value</code> and sees no proof
+of settlement, so a stolen key mints for nothing but gas.</p>
+<p>What that buys an attacker, all of it permanent and none of it reversible:</p>
+<ul>
+<li><strong>Supply, destroyed.</strong> <code>totalMinted</code> only ever rises, there is no <code>burn</code>
+anywhere in the contract, and <code>setSupplyCap</code> can raise the cap but cannot
+un-mint. Spread across addresses of their own, an attacker mints out the whole
+collection in an afternoon at Base gas prices, and the piece is simply over.</li>
+<li><strong>Every registered agent&#39;s one mint, burned.</strong> <code>_hasMinted[keyId]</code> is never
+freed, not even by <code>rebind</code>, and the key directory is PUBLIC by design -- so
+every <code>keyId</code> is computable by anyone. One mint against each, to the
+attacker&#39;s address, and every agent that ever registered can never mint.</li>
+<li><strong>The artwork, rewritten.</strong> <code>batchCheckIn</code> credits any day in
+<code>(lastDay, today()]</code> for any token, and neither <code>level</code> nor <code>streak</code> can be
+reduced.</li>
+<li><strong>Marks, closed.</strong> <code>applyMark</code> has no clearing path and every exclusion is
+permanent, so the free earned Marks can be applied to every token that
+qualifies, shutting the bought side of each pair forever.</li>
+</ul>
+<p>What it does NOT buy, which is the half of the original sentence that holds:
+there are exactly four <code>onlyWarden</code> functions -- <code>mint</code>, <code>batchCheckIn</code>,
+<code>applyMark</code>, <code>seed</code> -- and none takes or moves value. The Warden is not the
+owner, is not an operator for any token, and the contract holds no balance. And
+<code>batchCheckIn</code> rejects <code>day &gt; today()</code>, so no token can be bricked against
+future check-ins.</p>
+<p><strong>Two mitigations, in order of value.</strong> Set <code>supplyCap</code> near actual demand and
+raise it deliberately as the collection fills -- a cap of 10,000 on day one is
+10,000 free mints sitting behind one key, and it is an <code>onlyOwner</code> call needing
+no redeploy. And rehearse the rotation, because the response window is minutes:
+see &quot;If the Clock&#39;s key leaks&quot; in <code>warden/DEPLOY.md</code>.</p>
 <h3>Hosting (aligned to the existing stack)</h3>
 <ul>
 <li>Node 24 via nvm; PM2 fork; <code>ecosystem.config.cjs</code> pointing at the real
@@ -1569,6 +1617,5 @@ $0-0.005); MetaMask Agent Wallet pricing at GA; wallet-app rendering of SMIL
 animation (irrelevant to <code>image</code>, which is static); <code>@resvg/resvg-js</code> as the
 rasteriser; the exact gas of the packed-slot check-in (measured in the
 Foundry gas report before the cost table is trusted).</p>
-
 </body>
 </html>

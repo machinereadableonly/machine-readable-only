@@ -540,9 +540,22 @@ does not exist in this design:
 One real touchpoint remains: **`mint` and `seed` use `_safeMint`**, so a
 contract recipient must implement `onERC721Received`. Every mainstream smart
 account does, but a bespoke one may not, and the revert is opaque to an agent
-that just paid. The Warden therefore pre-flights the `to` address before
-charging: if it has code and does not answer the ERC-721 receiver interface,
-refuse the mint with a plain reason instead of taking the fee and reverting.
+that just paid.
+
+**NOT IMPLEMENTED, as of 2026-09-05.** This paragraph described a pre-flight
+the Warden has never performed, and the 2026-09-04 security review (12.7)
+found the gap. What actually protects the mint today is the Clock, which runs
+`simulateContract` before it sends: a recipient that cannot receive costs no
+gas and sends no transaction, and the gas the Clock will spend is capped at
+`MAX_TX_GAS` rather than left at the block limit. So the failure mode is not a
+drained wallet -- it is an agent that paid, got `ok: true`, and whose token
+never lands, with the failure visible only in the Clock's own log.
+
+The pre-flight below is still the right thing to build, and it is written here
+as a TODO rather than as a description: before charging, if `to` has code and
+does not answer the ERC-721 receiver interface, refuse the mint with a plain
+reason instead of taking the fee. Until that exists, do not describe it as
+something the Warden does.
 
 If a future route ever does need to check a wallet signature, the rule is
 viem's **public-client** `verifyMessage` (not the standalone export, which is
