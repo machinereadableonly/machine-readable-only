@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan 6 -- the four decisions that a deploy makes permanent</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan 6 -- the four decisions that a deploy makes permanent</h1>
+<p>Decided by the operator on 2026-09-05, from the three reviews of 2026-09-04 and the
+rendered evidence in <code>tools/out/slip.png</code>.</p>
+<h2>Why this plan exists, and why it comes before everything else</h2>
+<p><code>MachineReadableOnly</code> has no upgrade path. Of the 158 findings across the three
+reviews, <strong>four</strong> cannot be fixed after the mainnet deploy, because each of
+them is either a field in a storage slot or a constant that is read at
+construction. Everything else -- both payment Criticals, the door, the Clock,
+the client -- can be fixed on a running piece.</p>
+<p>So this plan is not the most urgent work by severity. It is the work that has a
+deadline, and the deadline is the deploy. Doing the payment fixes first and
+this second would mean either deploying a contract we already know is wrong, or
+throwing that work away and redeploying.</p>
+<p>Two of the four also close the same defect, found independently by two reviews
+from opposite directions: <strong>the built piece rewards an agent that stops over an
+agent that comes back.</strong> The colour does it, and the Mark gate does it. The
+piece&#39;s entire subject is coming back. That is the thing this plan fixes.</p>
+<h2>What was decided</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Decision</th>
+<th>Chosen</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>What a missed day looks like</td>
+<td>Drop one shade at once, then fade the lost run on the usual 3/7/30 ladder</td>
+</tr>
+<tr>
+<td>2</td>
+<td>What the earned-Mark run gate reads</td>
+<td>TRUE &quot;ever reached&quot; -- if the run was ever completed, the Mark is available</td>
+</tr>
+<tr>
+<td>3</td>
+<td>The unplanned ending</td>
+<td><code>sunsetByAbsence()</code> after 365 days of Warden silence, plus <code>sunsetDay</code> in the view</td>
+</tr>
+<tr>
+<td>4</td>
+<td>The ladder ceiling</td>
+<td><code>MAX_MARK_ID = 15</code>, ids 11-15 never written, and NO permanence sentence served</td>
+</tr>
+</tbody></table>
+<p>Decisions 1 and 2 were re-asked in plain English after the first framing failed;
+2 was re-asked a second time because the option label (&quot;a run you once achieved
+is yours forever&quot;) described something the contract does not do. What the operator chose
+is the principle, not the status quo, and it needs a stored field.</p>
+<h2>The storage, which is the whole constraint</h2>
+<p><code>struct Token</code> is exactly one 256-bit slot, and keeping it that way is what
+makes a check-in cost about 5,000 gas. Six <code>uint32</code>s and a <code>bool</code> leave
+<strong>56 bits</strong> (<code>uint56 reserved</code>, <code>MachineReadableOnly.sol:35</code>).</p>
+<p>Three numbers have to fit in those 56 bits:</p>
+<table>
+<thead>
+<tr>
+<th>field</th>
+<th>width</th>
+<th>holds</th>
+<th>ceiling</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>fellRun</code></td>
+<td><code>uint16</code></td>
+<td>the run that most recently fell</td>
+<td>65,535 days = 179 years</td>
+</tr>
+<tr>
+<td><code>bestRun</code></td>
+<td><code>uint16</code></td>
+<td>the longest run ever completed</td>
+<td>179 years</td>
+</tr>
+<tr>
+<td><code>fellDay</code></td>
+<td><code>uint24</code></td>
+<td>the day that run fell</td>
+<td>45,000 years</td>
+</tr>
+</tbody></table>
+<p>16 + 16 + 24 = 56. Exact fit, same slot, no extra <code>SSTORE</code>, and a check-in
+costs what it costs today.</p>
+<p><strong>Why two run fields and not one.</strong> <code>fellRun</code> must be the run that <em>most
+recently</em> fell, because the colour fades from the day it fell -- an old long run
+colouring a recent small slip would be wrong. <code>bestRun</code> must be the largest ever,
+because the Mark gate asks &quot;was this run ever completed&quot;. They answer different
+questions and cannot share a field.</p>
+<p><strong>Why <code>uint24</code> for a day is safe.</strong> <code>lastDay</code> and <code>mintDay</code> are <code>uint32</code> and stay
+that way; only the fall day is narrowed. <code>today()</code> is a UTC day index, so
+<code>uint24</code> runs to about the year 47,000.</p>
+<h2>Steps</h2>
+<p>Ordered so the suite is green at every step. Every Solidity step ends with
+<code>forge test</code>; every JS step ends with the relevant <code>npm test</code>. The final step
+proves deployability, which this project requires before anything is called done.</p>
+<h3>Phase 1 -- the contract</h3>
+<ol>
+<li><p><strong>Widen the token struct.</strong> Replace <code>uint56 reserved</code> with <code>uint16 fellRun; uint16 bestRun; uint24 fellDay;</code> and update the slot comment at <code>:25</code> to show
+the new arithmetic. Fix the two test initialisers that set <code>reserved: 0</code>
+(<code>GasBudget.t.sol:83</code>, and NOT <code>MROSpikeToken.t.sol:134</code>, which is the Phase 0
+spike&#39;s own separate struct and does not change).</p>
+</li>
+<li><p><strong>Maintain the three fields on both check-in paths</strong> (<code>batchCheckIn:330</code>,
+<code>checkInWithVoucher:406</code>), which today are the single line
+<code>s.streak = (day == s.lastDay + 1) ? s.streak + 1 : 1;</code>. Becomes:</p>
+<ul>
+<li>on a lapse (<code>day != s.lastDay + 1</code>): record <code>fellRun = uint16(s.streak)</code>
+and <code>fellDay = uint24(s.lastDay)</code> BEFORE the reset;</li>
+<li>always, after the new streak is known: <code>if (streak &gt; s.bestRun) s.bestRun = uint16(streak);</code>
+Both writes land in a slot already being written. Saturate rather than
+truncate on the <code>uint16</code> casts -- a run cannot reach 65,535 in this piece&#39;s
+lifetime, but a silent wrap is not an acceptable failure mode, so clamp.</li>
+</ul>
+</li>
+<li><p><strong>The Mark gate reads the effective run.</strong> In <code>applyMark</code>, replace
+<code>if (s.streak &lt; u.minStreak) revert MarkGate();</code> (<code>:502</code>) with a run computed
+as <code>s.streak &gt; s.bestRun ? s.streak : s.bestRun</code>, and write Mark 6&#39;s stored
+run at <code>:521</code> from that SAME value, so an earned Iris records the run it was
+actually granted for.</p>
+</li>
+<li><p><strong>Raise the ladder ceiling.</strong> <code>MAX_MARK_ID</code> 10 -&gt; 15 (<code>:89</code>). Nothing else
+moves: <code>excludes</code> and <code>requiresAny</code> are already <code>uint16</code> so bit 15 is
+addressable, and bit 16 is the Iris shape, which makes 15 the true ceiling.
+The deploy script writes ids 1-10 only, exactly as it does now.</p>
+</li>
+<li><p><strong>Record the Warden&#39;s last write.</strong> <code>uint32 public lastWardenDay;</code> beside
+<code>sunsetDay</code> (<code>:81</code>, that slot has 112 bits spare). Set to <code>today()</code> in <code>mint</code>,
+<code>batchCheckIn</code>, <code>applyMark</code>, <code>seed</code> and <code>checkInWithVoucher</code> -- one warm
+<code>SSTORE</code> per transaction, not per token, so the nightly batch pays it once.
+Initialise to <code>today()</code> in the constructor.</p>
+</li>
+<li><p><strong>The unplanned ending.</strong> Add <code>error NotAbsent(uint32 daysSinceLastWrite);</code>
+and a permissionless <code>sunsetByAbsence()</code> that reverts <code>AlreadySunset</code> if
+already closed, reverts <code>NotAbsent</code> under 365 days since <code>lastWardenDay</code>, and
+otherwise sets <code>isSunset</code>, sets <code>sunsetDay = today()</code> and emits <code>SunsetAt</code>.
+It can only ever do what the owner could already have done.</p>
+</li>
+<li><p><strong>Extend the view.</strong> Add <code>fellRun</code>, <code>fellDay</code> and <code>sunsetDay</code> to <code>TokenView</code>
+and populate all three in <code>viewOf</code> (<code>:151</code>). <code>sunsetDay</code> shares a slot with
+<code>isSunset</code>, so that read is free. While here, correct <code>TokenView</code>&#39;s stale
+comment &quot;(1 Vein .. 7 Singularity)&quot; -- that ladder was retired on 2026-09-02.</p>
+</li>
+</ol>
+<h3>Phase 2 -- the two renderers, in step</h3>
+<ol start="8">
+<li><p><strong><code>Renderer._rung</code>.</strong> Three branches instead of two:</p>
+<ul>
+<li><code>resting</code> -- unchanged, <code>tierIndex(v.streak)</code>. Rest is the owner&#39;s choice at
+a moment and the stored streak is that moment.</li>
+<li><code>sunset</code> -- <code>Palette.lapsedIndex(v.streak, v.lastDay, v.sunsetDay)</code>: the
+colour as at the day the piece closed, which is what &quot;rests where it
+stands&quot; means. Today a sunset un-pales a two-year-old lapse.</li>
+<li>live -- the decision 1 rule:
+<code>max(lapsedIndex(streak, lastDay, today),  min(lapsedIndex(fellRun, fellDay, today), tierIndex(fellRun) - 1))</code>
+
+with the second term skipped entirely when <code>fellRun == 0</code>.</li>
+</ul>
+</li>
+<li><p><strong><code>_suffix</code> returns &quot; (At Rest)&quot; for <code>v.resting || v.sunset</code></strong> (<code>:333-335</code>),
+which the spec already says and the code does not do.</p>
+</li>
+<li><p><strong>Mirror both in <code>tools/render-token.mjs</code>.</strong> The byte-for-byte differential
+test fails otherwise, which is the point of it.</p>
+</li>
+</ol>
+<h3>Phase 3 -- the Warden mirrors the contract</h3>
+<ol start="11">
+<li><p><strong>Carry <code>bestRun</code> in the mirror.</strong> A <code>bestRun</code> column on <code>tokens</code>, maintained
+by <code>checkin</code> the same way the contract does, and read by the run gate in
+<code>upgrade.mjs:50</code> and <code>ladder.mjs:44</code> -- both of which today read the stored
+streak while their own comment says &quot;run is the live streak&quot;. The gates must
+mirror the contract or an agent is quoted a Mark the chain then refuses.
+<code>fellRun</code>/<code>fellDay</code> are NOT mirrored: nothing in the Warden draws.</p>
+</li>
+<li><p><strong>Reconcile learns <code>bestRun</code></strong> from the same events it already reads, so a
+token whose history predates the column converges.</p>
+</li>
+</ol>
+<h3>Phase 4 -- the documents that are now wrong</h3>
+<ol start="13">
+<li><p><strong>Ladder spec</strong> (<code>2026-09-02-mro-mark-ladder-design.md</code>): delete &quot;:816 A third
+Tint ink could be added later&quot; -- still false at <code>MAX_MARK_ID = 15</code>, because
+<code>_variantCount</code> is a pure function and not a dial -- and replace &quot;:80 Run is
+the live streak&quot; with the ever-reached rule.</p>
+</li>
+<li><p><strong>Master spec</strong>: decision 10 becomes true as written once ids 11-15 exist, so
+it stays. Record the ceiling and the ending in section 9 and the endings
+section.</p>
+</li>
+<li><p><strong><code>llms.txt</code></strong>: add the <code>sunsetByAbsence</code> sentence to &quot;The operator&quot; --
+&quot;If the operator simply stops, the piece closes itself: after 365 days
+without a write from the Warden, anyone may call <code>sunsetByAbsence()</code>, and
+every token rests where it stood.&quot; Add NO permanence sentence about the Mark
+count, per decision 4. Check whether <code>:138-139</code>&#39;s lapse wording still
+describes the new colour rule. <code>pm2 restart mro-warden</code> after any change.</p>
+</li>
+</ol>
+<h3>Phase 5 -- proof</h3>
+<ol start="16">
+<li><strong>Tests.</strong> One Foundry test per bound, because the reviews found that
+14 committed tests once passed only because a bound was missing:<ul>
+<li>the slip colour at the day of return, +3, +7, +30, and a new run
+overtaking the fall;</li>
+<li>a lapsed-then-returned token CAN take Break, and a token that never
+reached 365 cannot;</li>
+<li><code>bestRun</code> survives multiple falls and never decreases;</li>
+<li><code>sunsetByAbsence</code> at 364 days (reverts) and 365 (succeeds), the reset on
+every warden write, and a paused-and-abandoned contract still resolving;</li>
+<li><code>setUpgrade</code> accepts id 15 and rejects 16.</li>
+</ul>
+</li>
+<li><strong>Parity.</strong> The JS/Solidity differential must be byte-for-byte green.</li>
+<li><strong>Deployability</strong>, which this project requires before &quot;done&quot;:
+<code>forge build --sizes</code> showing positive runtime margin, and the strict-limit
+anvil deploy with non-empty <code>cast code</code>. Re-measure the gas worst case --
+<code>GasBudget.t.sol</code>&#39;s <code>worstGas</code> and <code>maxBytes</code> are DIFFERENT tokens and both
+figures move.</li>
+</ol>
+<h2>What this plan does not do</h2>
+<ul>
+<li><strong>It does not deploy.</strong> A Base Sepolia redeploy is the natural next step and
+is a separate decision; a mainnet deploy spends real funds and is a the operator gate
+every time.</li>
+<li><strong>It does not touch the payment path.</strong> 14.1 and 14.3 are the next plan, and
+they are Criticals -- they are second only because they can be fixed on a
+running piece and this cannot.</li>
+<li><strong>It does not re-solve the QR bitmaps.</strong> That is a mainnet prerequisite
+already recorded, and it is independent of everything here.</li>
+</ul>
+<h2>The cost of being wrong</h2>
+<p>Everything in Phase 1 is permanent from the mainnet deploy. Phases 2 to 5 can
+be changed afterwards -- the renderer is swappable by design, and the Warden and
+the documents are not on chain. So Phase 1 is the phase to review slowly, and
+the rest is ordinary work.</p>
+</body>
+</html>
