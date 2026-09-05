@@ -77,7 +77,12 @@ test("seeding with no unspent seed for this agent-year is refused", async () => 
   assert.equal(r.reason, "no-seed-available");
 });
 
-test("CONTROL: a whole, non-resting parent with a seed available succeeds and binds the child to the caller", async () => {
+test("CONTROL: every gate passes, and the answer is an honest refusal that writes nothing", async () => {
+  // This test used to assert a successful seed. It was asserting a LIE: the
+  // tool inserted a child token plus lineage, answered `txStatus: "queued"`,
+  // and no code path in this repository has ever sent `seed` to the chain. The
+  // child was served by /t/<id> forever while the chain had never heard of it,
+  // and the key's one seed for that agent-year was spent on the orphan.
   const { db, q } = fresh();
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xparent-owner", lastDay: 0, mintDay: 0 });
   setLevelAndStatus(db, 1, 365, "queued");
@@ -85,37 +90,38 @@ test("CONTROL: a whole, non-resting parent with a seed available succeeds and bi
   const tool = makeSeedTool({ q, chain: openChain(), today: () => 365, supplyCap: 10_000 });
   const r = await tool.handler({ parentId: 1, to }, { keyId: "k1" });
 
-  assert.equal(r.ok, true);
-  assert.equal(r.tokenId, 2);
-  assert.equal(r.parentId, 1);
-  assert.equal(r.generation, 1);
-  assert.equal(r.to, to);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "seed-not-available");
+  // No token id is promised, because none is reserved.
+  assert.equal("tokenId" in r, false);
+  assert.equal("txStatus" in r, false);
 
-  const child = q.getToken(r.tokenId);
-  // The child is bound to the CALLER's key id, never the parent's owner
-  // address -- the two are different kinds of value, and confusing them
-  // would bind a seeded child to nobody's key.
-  assert.equal(child.keyId, "k1");
-  assert.notEqual(child.keyId, "0xparent-owner");
-  assert.equal(child.generation, 1);
-  assert.equal(child.parentId, 1);
+  // And nothing was written: the parent alone, no child, no spent seed.
+  assert.equal(q.tokenCount(), 1);
+  assert.equal(q.getToken(2), undefined);
+  assert.equal(q.seedsSpent("k1"), 0, "a refusal must not burn the agent-year's seed");
 });
 
-test("the per-year boundary: exactly one elapsed year grants exactly one seed", async () => {
+test("the per-year boundary is still enforced, and still answers precisely", async () => {
+  // The year arithmetic can no longer be observed through a successful seed,
+  // so it is observed through WHICH refusal comes back. Below the boundary the
+  // seed gate fires; at it, the request gets past that gate and lands on the
+  // not-built refusal instead. The gates still answer "why can I not seed"
+  // exactly, which is the half of this tool that was always honest.
   const { db, q } = fresh();
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
   setLevelAndStatus(db, 1, 365, "queued");
   const to = "0x3333333333333333333333333333333333333333";
-  // today() is fixed at exactly 365 days after mintDay -- one completed
-  // agent-year, no more.
-  const tool = makeSeedTool({ q, chain: openChain(), today: () => 365, supplyCap: 10_000 });
 
-  const first = await tool.handler({ parentId: 1, to }, { keyId: "k1" });
-  assert.equal(first.ok, true);
+  // One day short of a completed agent-year: no seed has been granted yet.
+  const before = makeSeedTool({ q, chain: openChain(), today: () => 364, supplyCap: 10_000 });
+  const early = await before.handler({ parentId: 1, to }, { keyId: "k1" });
+  assert.equal(early.reason, "no-seed-available");
 
-  const second = await tool.handler({ parentId: 1, to }, { keyId: "k1" });
-  assert.equal(second.ok, false);
-  assert.equal(second.reason, "no-seed-available");
+  // Exactly one completed agent-year: past that gate.
+  const at = makeSeedTool({ q, chain: openChain(), today: () => 365, supplyCap: 10_000 });
+  const due = await at.handler({ parentId: 1, to }, { keyId: "k1" });
+  assert.equal(due.reason, "seed-not-available");
 });
 
 // A seeded child is a token in the SAME collection, so it counts against the
@@ -133,23 +139,26 @@ test("seeding is refused once the supply cap is reached", async () => {
   assert.equal(q.tokenCount(), 1, "nothing may be inserted once the cap is reached");
 });
 
-// The child row and its lineage are ONE FACT. A child whose lineage never
-// landed has no parent and generation 0 -- indistinguishable from an ordinary
-// mint -- and the key's seed for that year would still have been spent.
-test("a failed lineage write leaves no half-created child behind", async () => {
+// 4.H1: the tool must not write ANYTHING until the Clock can send `seed`.
+// A mirror row with no chain behind it is worse than a refusal -- it is served
+// as real, it spends a seed that cannot be returned, and it appears in neither
+// `stuckMints` nor `dropped`, because both read `mints`.
+test("no mirror row is written on any path, gated or not", async () => {
   const { db, q } = fresh();
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
   setLevelAndStatus(db, 1, 365, "queued");
 
-  // Break setLineage only, leaving insertToken working: the exact shape of a
-  // second write failing after the first has already succeeded.
-  const broken = { ...q, setLineage: () => { throw new Error("lineage write failed"); } };
-  const tool = makeSeedTool({ q: broken, chain: openChain(), today: () => 365, supplyCap: 10_000 });
+  // A double whose write methods are traps. If the tool touches either, the
+  // test fails by name rather than by a count that could be read as noise.
+  const trapped = {
+    ...q,
+    insertToken: () => { throw new Error("seed must not insert a token"); },
+    setLineage: () => { throw new Error("seed must not write lineage"); },
+  };
+  const tool = makeSeedTool({ q: trapped, chain: openChain(), today: () => 365, supplyCap: 10_000 });
 
-  await assert.rejects(
-    tool.handler({ parentId: 1, to: "0x5555555555555555555555555555555555555555" }, { keyId: "k1" }),
-    /lineage write failed/
-  );
-  assert.equal(q.tokenCount(), 1, "the parent only: the child must have been rolled back");
-  assert.equal(q.getToken(2), undefined);
+  const r = await tool.handler({ parentId: 1, to: "0x5555555555555555555555555555555555555555" }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "seed-not-available");
+  assert.equal(q.tokenCount(), 1);
 });

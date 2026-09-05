@@ -36,6 +36,7 @@ import { utcDay } from "../../src/mcp/tools/checkin.mjs";
 import { openChain } from "../chain-stub.mjs";
 import { keyIdToBytes32 } from "../../src/mcp/keyId.mjs";
 import { LADDER, assertLadderSane } from "../../src/mcp/ladder.mjs";
+import { envelope } from "../mcp-envelope.mjs";
 
 const DOMAIN = "example.com";
 const SECRET = "e2e-secret";
@@ -204,17 +205,18 @@ async function callMcp(base, privateJwk, payload) {
   const { challenge } = await challengeRes.json();
 
   // Serialised once: the bytes that are signed must be the bytes that are
-  // sent, or the door's digest check refuses them.
-  const raw = JSON.stringify({ jsonrpc: "2.0", id: 1, ...payload });
+  // sent, or the door's digest check refuses them. The envelope is the
+  // 2026-07-28 one -- the server rejects the legacy shape outright, so an
+  // end-to-end test that sent it would be exercising a leg no agent can use.
+  const { raw, headers: transport } = envelope(payload);
   const { headers, keyId } = await signHeaders(privateJwk, "/mcp", raw);
   const res = await fetch(`${base}/mcp`, {
     method: "POST",
     headers: {
       ...headers,
+      ...transport,
       challenge,
       "challenge-response": answerFor(challenge, keyId),
-      "content-type": "application/json",
-      accept: "application/json, text/event-stream",
     },
     body: raw,
   });

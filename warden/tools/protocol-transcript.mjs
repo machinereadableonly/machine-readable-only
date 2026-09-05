@@ -23,6 +23,7 @@ import { tokenView } from "../src/mcp/tokenView.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { utcDay } from "../src/mcp/tools/checkin.mjs";
+import { envelope } from "../test/mcp-envelope.mjs";
 import { makePaymentGateway } from "../src/pay/x402.mjs";
 import { makeChainReader } from "../src/chain/read.mjs";
 import { LADDER, assertLadderSane } from "../src/mcp/ladder.mjs";
@@ -111,14 +112,13 @@ async function call(payload) {
   const cr = new Date();
   // Serialised ONCE. The bytes signed must be the bytes sent, or the door
   // refuses with reason "digest".
-  const raw = JSON.stringify({ jsonrpc: "2.0", id: 1, ...payload });
+  const { raw, headers: transport } = envelope(payload);
   const msg = messageFor(raw);
   const s = await signatureHeaders(msg, signer, {
     created: cr, expires: new Date(cr.getTime() + 60_000), components: COMPONENTS });
   const res = await fetch(`${base}/mcp`, { method: "POST",
-    headers: { ...msg.headers, ...s, challenge: c,
-      "challenge-response": createHash("sha256").update(c + signer.keyid).digest("hex"),
-      "content-type": "application/json", accept: "application/json, text/event-stream" },
+    headers: { ...msg.headers, ...s, ...transport, challenge: c,
+      "challenge-response": createHash("sha256").update(c + signer.keyid).digest("hex") },
     body: raw });
   const text = await res.text();
   const line = text.split("\n").find((l) => l.startsWith("data:"));

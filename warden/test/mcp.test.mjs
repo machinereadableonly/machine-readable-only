@@ -4,6 +4,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeMcpHandler } from "../src/mcp/server.mjs";
 import { openChain } from "./chain-stub.mjs";
+import { envelope } from "./mcp-envelope.mjs";
 
 test("the caller's key id reaches a tool from authInfo, never from an argument", async () => {
   const q = queries(openDb(":memory:"));
@@ -17,18 +18,12 @@ test("the caller's key id reaches a tool from authInfo, never from an argument",
     onToolCall: (name, ctxKeyId) => seen.push([name, ctxKeyId]),
   });
 
-  const req = new Request("https://example.com/mcp", {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
+  const built = envelope({ method: "tools/call",
       // A caller trying to act as somebody else by naming a key id in the
       // arguments. It must have no effect: the tool reads only authInfo.
       params: { name: "checkin", arguments: { tokenId: 1, keyId: "impostor" } },
-    }),
   });
+  const req = new Request("https://example.com/mcp", { method: "POST", headers: built.headers, body: built.raw });
 
   const res = await handler.fetch(req, {
     authInfo: { token: "n/a", clientId: "real-caller", scopes: [], extra: { keyId: "real-caller" } },
@@ -56,16 +51,10 @@ test("an unexpected throw from a tool handler never leaks its message to the cal
     contract: "0xcontract",
   });
 
-  const req = new Request("https://example.com/mcp", {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
+  const built = envelope({ method: "tools/call",
       params: { name: "status", arguments: { tokenId: 1 } },
-    }),
   });
+  const req = new Request("https://example.com/mcp", { method: "POST", headers: built.headers, body: built.raw });
 
   const res = await handler.fetch(req, {
     authInfo: { token: "n/a", clientId: "caller", scopes: [], extra: { keyId: "caller" } },
@@ -90,16 +79,10 @@ test("CONTROL: a tool that returns normally still delivers its real structured r
     contract: "0xcontract",
   });
 
-  const req = new Request("https://example.com/mcp", {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
+  const built = envelope({ method: "tools/call",
       params: { name: "status", arguments: { tokenId: 1 } },
-    }),
   });
+  const req = new Request("https://example.com/mcp", { method: "POST", headers: built.headers, body: built.raw });
 
   const res = await handler.fetch(req, {
     authInfo: { token: "n/a", clientId: "real-caller", scopes: [], extra: { keyId: "real-caller" } },
@@ -107,8 +90,11 @@ test("CONTROL: a tool that returns normally still delivers its real structured r
 
   assert.equal(res.status, 200);
   const bodyText = await res.text();
+  // The modern leg answers a single request with application/json; the legacy
+  // leg wrapped the same message in an SSE `data:` line. Accept either, so
+  // this test asserts the RESULT rather than the framing.
   const dataLine = bodyText.split("\n").find((line) => line.startsWith("data: "));
-  const payload = JSON.parse(dataLine.slice("data: ".length));
+  const payload = JSON.parse(dataLine ? dataLine.slice("data: ".length) : bodyText);
 
   // The try/catch wrapper must be transparent on the success path: no
   // isError, and the tool's real structured result comes through untouched.
@@ -121,11 +107,8 @@ test("CONTROL: a tool that returns normally still delivers its real structured r
 /// 2026-07-28 transport answers over SSE, so the message arrives on a `data:`
 /// line rather than as the whole body.
 async function call(handler, payload, authInfo) {
-  const req = new Request("https://example.com/mcp", {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...payload }),
-  });
+  const { raw, headers } = envelope(payload);
+  const req = new Request("https://example.com/mcp", { method: "POST", headers, body: raw });
   const res = await handler.fetch(req, { authInfo });
   const text = await res.text();
   const line = text.split("\n").find((l) => l.startsWith("data: "));
@@ -238,16 +221,10 @@ test("a payment demand survives the tool wrapper intact for the official x402 cl
     paid: () => async () => wrapperResult,
   });
 
-  const req = new Request("https://example.com/mcp", {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
+  const built = envelope({ method: "tools/call",
       params: { name: "mint", arguments: { to: "0x" + "a1".repeat(20) } },
-    }),
   });
+  const req = new Request("https://example.com/mcp", { method: "POST", headers: built.headers, body: built.raw });
 
   const res = await handler.fetch(req, {
     authInfo: { token: "n/a", clientId: "payer", scopes: [], extra: { keyId: "payer" } },
@@ -262,4 +239,52 @@ test("a payment demand survives the tool wrapper intact for the official x402 cl
   assert.ok(found, "the official x402 client must find a payment demand in the refusal");
   assert.equal(found.accepts[0].amount, "1000000");
   assert.equal(found.accepts[0].payTo, "0x000000000000000000000000000000000000dEaD");
+});
+
+// -- the 2026-07-28 leg, asserted rather than assumed -----------------------
+//
+// Every request this project made used to take the SDK's LEGACY leg: no
+// protocol claim in `_meta` meant the 2025-era compatibility path answered.
+// Nothing could see it. `server/discover` returned "method not found" while
+// the spec says a server MUST implement it, and no list result carried the
+// ttlMs and cacheScope that SEP-2549 requires -- all three contradicted by
+// this project's own documents. These tests fail on the legacy leg.
+
+test("server/discover is implemented, and names the revision this server serves", async () => {
+  const { handler } = makeMcpHandler({ q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
+  const body = await call(handler, { method: "server/discover", params: {} }, null);
+
+  assert.equal(body.error, undefined, `server/discover must exist: ${JSON.stringify(body.error)}`);
+  assert.ok(body.result.supportedVersions.includes("2026-07-28"));
+  assert.equal(body.result.resultType, "complete");
+});
+
+test("list and read results carry the cache fields the revision requires", async () => {
+  const { handler } = makeMcpHandler({ q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
+
+  const tools = await call(handler, { method: "tools/list", params: {} }, null);
+  // ttlMs 0 is what an unconfigured server sends: a valid value meaning "do
+  // not cache", and wrong for a list that changes only on redeploy.
+  assert.ok(tools.result.ttlMs > 0, `tools/list ttlMs was ${tools.result.ttlMs}`);
+  assert.equal(tools.result.cacheScope, "private");
+  assert.equal(tools.result.resultType, "complete");
+
+  const resources = await call(handler, { method: "resources/list", params: {} }, null);
+  assert.ok(resources.result.ttlMs > 0);
+  assert.equal(resources.result.cacheScope, "public");
+});
+
+test("a request with no protocol claim is refused, not quietly served by an older leg", async () => {
+  // The regression this guards. Left at the SDK default, a claim-less request
+  // is answered by a compatibility leg that a future release removes in one
+  // line -- on a piece meant to run for years.
+  const { handler } = makeMcpHandler({ q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
+  const req = new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+  });
+
+  const res = await handler.fetch(req, { authInfo: null });
+  assert.notEqual(res.status, 200, "a legacy-shaped request must not be served");
 });

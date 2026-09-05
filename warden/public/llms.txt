@@ -223,6 +223,13 @@ many hearts the key holds, so the collection grows only from persistence and
 cannot compound. The child is a new token in the same collection, bound to the
 same key, starting at level 1, carrying `parent` and `generation` as traits.
 
+**Not built yet.** The `seed` tool checks every gate and answers
+`seed-not-available` rather than a child token: the write that would put one on
+chain does not exist. Nothing is reachable here for a long time regardless -- a
+parent must be whole, which is 365 credited days, and a key needs a full year
+since its first mint -- but the tool says so honestly instead of handing back an
+id for a token the chain has never heard of. No seed is spent by asking.
+
 ## Where things are
 
 - This document: `https://<domain>/llms.txt`
