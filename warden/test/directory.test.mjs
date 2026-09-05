@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
-import { registerKey, guardedFetchDirectory, renderDirectory, isBlockedAddress, makeLookup } from "../src/door/directory.mjs";
+import { registerKey, guardedFetchDirectory, renderDirectory, isBlockedAddress, makeLookup, makeDirectoryCache } from "../src/door/directory.mjs";
 import { issueChallenge, verifyNonceMinted, CHALLENGE_MS } from "../src/door/challenge.mjs";
 
 const JWK = { kty: "OKP", crv: "Ed25519", x: "JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs" };
@@ -405,4 +405,53 @@ test("the budget is charged to the derived thumbprint, so one key cannot lock ou
   }
 
   assert.equal(new Set(charged).size, 2, "two distinct keys must be charged separately");
+});
+
+// -- the directory cache ----------------------------------------------------
+//
+// The route serving this is public, unsigned and unmetered, and it used to
+// re-render every stored key on every GET: 11.8 ms of synchronous CPU and a
+// 1.1 MB response at the 10,000-key ceiling, which is about 85 requests a
+// second to saturate one core.
+
+test("the directory is rendered once per change, not once per read", async () => {
+  const q = queries(openDb(":memory:"));
+  let renders = 0;
+  const cache = makeDirectoryCache(q, (qq) => { renders++; return renderDirectory(qq); });
+
+  const first = cache.current();
+  for (let i = 0; i < 20; i++) cache.current();
+  assert.equal(renders, 1, "reading the directory must not re-render it");
+
+  // Every read must still be the SAME answer, not a stale first one.
+  assert.equal(cache.current().body, first.body);
+  assert.equal(cache.current().etag, first.etag);
+});
+
+test("registering a key invalidates the remembered directory", async () => {
+  const q = queries(openDb(":memory:"));
+  let renders = 0;
+  const cache = makeDirectoryCache(q, (qq) => { renders++; return renderDirectory(qq); });
+
+  const before = cache.current();
+  assert.equal(JSON.parse(before.body).keys.length, 0);
+
+  await registerKey(q, JWK, 1000);
+  // Without the invalidate this returns the empty directory forever.
+  cache.invalidate();
+  const after = cache.current();
+
+  assert.equal(renders, 2);
+  assert.equal(JSON.parse(after.body).keys.length, 1);
+  assert.notEqual(after.etag, before.etag, "a changed directory must change its ETag");
+});
+
+test("the ETag is a strong validator over the body itself", () => {
+  const q = queries(openDb(":memory:"));
+  const doc = makeDirectoryCache(q).current();
+  // Quoted, per RFC 9110, and derived from the bytes rather than from a clock
+  // or a counter -- two Wardens serving the same keys agree.
+  assert.match(doc.etag, /^"[0-9a-f]{64}"$/);
+  const same = makeDirectoryCache(q).current();
+  assert.equal(same.etag, doc.etag);
 });

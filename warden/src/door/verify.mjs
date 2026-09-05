@@ -104,6 +104,7 @@ export async function verifyRequest(request, lookupKey) {
   const signatureAgent = headerOf(request, "signature-agent");
   let reason = "signature";
   let verifiedKeyId = null;
+  let verifiedExpiresAt = null;
 
   try {
     await verify(request, async (data, signature, params) => {
@@ -146,6 +147,10 @@ export async function verifyRequest(request, lookupKey) {
       // raw header afterwards would mean trusting a regex over attacker-shaped
       // text to agree with what the cryptography actually checked.
       verifiedKeyId = params.keyid;
+      // Taken from the VERIFIED parameters for the same reason as the key id:
+      // it decides how long the door must remember this signature, and reading
+      // it off the raw header would let a replayer shorten its own sentence.
+      verifiedExpiresAt = params.expires.getTime();
       reason = null;
     });
   } catch {
@@ -156,7 +161,7 @@ export async function verifyRequest(request, lookupKey) {
   }
 
   if (!verifiedKeyId) return { ok: false, reason: "signature" };
-  return { ok: true, keyId: verifiedKeyId };
+  return { ok: true, keyId: verifiedKeyId, expiresAt: verifiedExpiresAt };
 }
 
 /**

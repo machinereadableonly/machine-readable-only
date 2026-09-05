@@ -6,9 +6,9 @@ import { createServer as createHttpServer } from "node:http";
 import { writeFileSync } from "node:fs";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
-import { admit, sweepSeen, pinnedUrl } from "./door/middleware.mjs";
+import { admit, sweepSeen, sweepSpent, pinnedUrl } from "./door/middleware.mjs";
 import { issueChallenge, verifyNonceMinted } from "./door/challenge.mjs";
-import { makeLookup, guardedFetchDirectory, renderDirectory, registerRoute } from "./door/directory.mjs";
+import { makeLookup, guardedFetchDirectory, makeDirectoryCache, registerRoute } from "./door/directory.mjs";
 // tokenView and the MCP handler are NOT imported: they belong to Tasks 6 and 7
 // and arrive through config, so this router is runnable the day it is written.
 
@@ -86,10 +86,20 @@ export function createServer(config) {
   const db = openDb(config.stateDbPath);
   const q = queries(db);
   const seen = new Set();
+  // Spent SIGNATURES, kept apart from spent challenges: a challenge is dead in
+  // five seconds, a signature can live five minutes, and one set swept on the
+  // shorter schedule would forget signatures while they were still replayable.
+  // sigHash -> the signature's own expiry, in ms.
+  const spent = new Map();
   const lookupKey = makeLookup(q, guardedFetchDirectory, config.domain);
   const allowRegistration = config.allowRegistration;
+  // Rendered once per CHANGE, not once per read. The route below is public,
+  // unsigned and unmetered, and re-rendering every key on every GET was the
+  // cheapest way to load this process from the outside.
+  const directory = makeDirectoryCache(q);
 
   setInterval(() => sweepSeen(seen), 10_000).unref();
+  setInterval(() => sweepSpent(spent), 30_000).unref();
 
   return createHttpServer(async (req, res) => {
     try {
@@ -161,8 +171,20 @@ export function createServer(config) {
       // The served key directory. Also public: a directory nobody can read is
       // not a directory.
       if (req.method === "GET" && path === "/.well-known/http-message-signatures-directory") {
-        res.writeHead(200, { "content-type": "application/http-message-signatures-directory+json" });
-        return res.end(renderDirectory(q));
+        const doc = directory.current();
+        // A conditional GET costs no body. The directory changes only when a
+        // key registers, so a caller that polls it is asking the same question
+        // over and over and can be told "still the same" for free.
+        if (req.headers["if-none-match"] === doc.etag) {
+          res.writeHead(304, { etag: doc.etag });
+          return res.end();
+        }
+        res.writeHead(200, {
+          "content-type": "application/http-message-signatures-directory+json",
+          "content-length": Buffer.byteLength(doc.body),
+          etag: doc.etag,
+        });
+        return res.end(doc.body);
       }
 
       // The nonce a POST /keys proof signs. Public by necessity: it is issued
@@ -217,8 +239,12 @@ export function createServer(config) {
             return true;
           }
         );
-        if (result.ok && config.directoryPath) {
-          writeFileSync(config.directoryPath, renderDirectory(q));
+        if (result.ok) {
+          // The table changed, so the remembered copy is stale. Invalidate
+          // FIRST, then reuse the one re-render for the file on disk -- the
+          // old code rendered the whole directory again for that write.
+          directory.invalidate();
+          if (config.directoryPath) writeFileSync(config.directoryPath, directory.current().body);
         }
         // Only "rate-limited" is a 429. A bad or replayed nonce and an
         // invalid proof are the caller's own mistake, not a rate limit, so
@@ -243,7 +269,7 @@ export function createServer(config) {
       }
 
       const decision = await admit(req, {
-        secret: config.challengeSecret, lookupKey, seen, domain: config.domain, body: raw,
+        secret: config.challengeSecret, lookupKey, seen, spent, domain: config.domain, body: raw,
       });
       if (!decision.ok) return json(res, decision.status, decision.body);
 

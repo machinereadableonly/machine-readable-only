@@ -5,8 +5,8 @@ import { request as httpRequest } from "node:http";
 import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
-import { toRequestLike, pinnedUrl, challengeBody, admit, sweepSeen } from "../src/door/middleware.mjs";
-import { contentDigest } from "../src/door/verify.mjs";
+import { toRequestLike, pinnedUrl, challengeBody, admit, sweepSeen, sweepSpent } from "../src/door/middleware.mjs";
+import { contentDigest, MAX_WINDOW_MS } from "../src/door/verify.mjs";
 import { issueChallenge, CHALLENGE_MS } from "../src/door/challenge.mjs";
 import { createServer } from "../src/server.mjs";
 
@@ -115,7 +115,7 @@ function answerFor(challenge, keyId) {
 test("a request with no signature header gets a 401 challenge, undefined reason", async () => {
   const seen = new Set();
   const req = { method: "POST", url: "/mcp", headers: { host: DOMAIN } };
-  const decision = await admit(req, { secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN });
+  const decision = await admit(req, { secret: SECRET, lookupKey: lookupED, seen, spent: new Map(), domain: DOMAIN });
   assert.equal(decision.ok, false);
   assert.equal(decision.status, 401);
   assert.equal("reason" in decision.body, false);
@@ -126,7 +126,7 @@ test("a request with no signature header gets a 401 challenge, undefined reason"
 test("a signed request with no challenge answer is refused with reason challenge", async () => {
   const seen = new Set();
   const req = await signedRequest();
-  const decision = await admit(req, { secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN });
+  const decision = await admit(req, { secret: SECRET, lookupKey: lookupED, seen, spent: new Map(), domain: DOMAIN });
   assert.equal(decision.ok, false);
   assert.equal(decision.status, 401);
   assert.equal(decision.body.reason, "challenge");
@@ -139,7 +139,7 @@ test("a signed request with a correct challenge answer is admitted", async () =>
   const req = await signedRequest({
     extraHeaders: { challenge, "challenge-response": answerFor(challenge, signer.keyid) },
   });
-  const decision = await admit(req, { secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN });
+  const decision = await admit(req, { secret: SECRET, lookupKey: lookupED, seen, spent: new Map(), domain: DOMAIN });
   assert.equal(decision.ok, true, `expected admission, got ${JSON.stringify(decision)}`);
   assert.equal(decision.keyId, signer.keyid);
 });
@@ -150,19 +150,138 @@ test("the same challenge answer cannot be replayed", async () => {
   const { challenge } = issueChallenge(SECRET);
   const answer = answerFor(challenge, signer.keyid);
   const req1 = await signedRequest({ extraHeaders: { challenge, "challenge-response": answer } });
-  const first = await admit(req1, { secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN });
+  const first = await admit(req1, { secret: SECRET, lookupKey: lookupED, seen, spent: new Map(), domain: DOMAIN });
   assert.equal(first.ok, true);
 
   const req2 = await signedRequest({ extraHeaders: { challenge, "challenge-response": answer } });
-  const second = await admit(req2, { secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN });
+  const second = await admit(req2, { secret: SECRET, lookupKey: lookupED, seen, spent: new Map(), domain: DOMAIN });
   assert.equal(second.ok, false);
   assert.equal(second.body.reason, "challenge");
+});
+
+// -- one signature, one admission -------------------------------------------
+//
+// The test above pins the CHALLENGE burn and nothing more: it re-signs on each
+// attempt, so it never presents the same signature twice. The challenge is not
+// a second factor -- key ids are public, challenges are free and
+// unauthenticated, and the answer is a pure function of the two -- so until the
+// signature itself was recorded, one captured request was replayable for the
+// whole five-minute window. Demonstrated at four admissions with one signature.
+
+/// Swap in a fresh challenge pair, leaving the signature exactly as captured.
+/// The challenge headers are not covered by the signature, which is what makes
+/// this a replay rather than a forgery.
+function withFreshChallenge(req, keyId) {
+  const { challenge } = issueChallenge(SECRET);
+  return {
+    ...req,
+    headers: { ...req.headers, challenge, "challenge-response": answerFor(challenge, keyId) },
+  };
+}
+
+test("one captured signature cannot be presented twice, even with a fresh challenge", async () => {
+  const seen = new Set();
+  const spent = new Map();
+  const signer = await signerFromJWK(ED.key);
+  const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
+
+  const captured = await signedRequest();
+  const first = await admit(withFreshChallenge(captured, signer.keyid), deps);
+  assert.equal(first.ok, true, `expected the first presentation to be admitted, got ${JSON.stringify(first)}`);
+
+  const second = await admit(withFreshChallenge(captured, signer.keyid), deps);
+  assert.equal(second.ok, false);
+  assert.equal(second.body.reason, "replay");
+});
+
+test("a captured signature stays refused however many times it is presented", async () => {
+  const seen = new Set();
+  const spent = new Map();
+  const signer = await signerFromJWK(ED.key);
+  const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
+
+  const captured = await signedRequest();
+  const admitted = [];
+  for (let i = 0; i < 5; i++) {
+    const decision = await admit(withFreshChallenge(captured, signer.keyid), deps);
+    if (decision.ok) admitted.push(decision.sigHash);
+  }
+  // Before the fix this was five admissions carrying one identical sigHash.
+  assert.equal(admitted.length, 1);
+});
+
+test("two genuinely distinct signatures are both admitted", async () => {
+  // The control. A replay guard that refused everything would pass the two
+  // tests above and close the door.
+  const seen = new Set();
+  const spent = new Map();
+  const signer = await signerFromJWK(ED.key);
+  const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
+
+  const one = await admit(withFreshChallenge(await signedRequest(), signer.keyid), deps);
+  const two = await admit(
+    withFreshChallenge(await signedRequest({ body: '{"n":2}' }), signer.keyid),
+    { ...deps, body: '{"n":2}' }
+  );
+  assert.equal(one.ok, true);
+  assert.equal(two.ok, true, `expected a distinct signature to be admitted, got ${JSON.stringify(two)}`);
+  assert.notEqual(one.sigHash, two.sigHash);
+});
+
+test("a refused request records nothing, so its signature cannot be poisoned in advance", async () => {
+  // If the set were written before the proof verified, an attacker could
+  // pre-spend a signature it had seen but could not use, locking out the agent
+  // that legitimately holds it. The same mistake is filed against the
+  // registration nonce as 13.7.
+  const seen = new Set();
+  const spent = new Map();
+  const signer = await signerFromJWK(ED.key);
+
+  const captured = await signedRequest();
+  const refused = await admit(withFreshChallenge(captured, signer.keyid), {
+    secret: SECRET, lookupKey: async () => null, seen, spent, domain: DOMAIN,
+  });
+  assert.equal(refused.ok, false);
+  assert.equal(spent.size, 0, "an unverified signature was recorded");
+
+  // The same signature, once the key is known, is still good exactly once.
+  const admitted = await admit(withFreshChallenge(captured, signer.keyid), {
+    secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN,
+  });
+  assert.equal(admitted.ok, true, `expected admission, got ${JSON.stringify(admitted)}`);
+});
+
+test("a spent signature is forgotten once its own window has passed", async () => {
+  const seen = new Set();
+  const spent = new Map();
+  const signer = await signerFromJWK(ED.key);
+  const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
+
+  await admit(withFreshChallenge(await signedRequest(), signer.keyid), deps);
+  assert.equal(spent.size, 1);
+
+  // Sweeping while the signature is still live must keep it: dropping it early
+  // would reopen the replay window rather than merely wasting memory.
+  sweepSpent(spent, Date.now());
+  assert.equal(spent.size, 1);
+
+  sweepSpent(spent, Date.now() + MAX_WINDOW_MS + 1);
+  assert.equal(spent.size, 0);
+});
+
+test("admit refuses to run without a spent set rather than silently allowing replay", async () => {
+  // A security control that a caller can drop by forgetting an argument is not
+  // a control. server.mjs owns the only real one.
+  await assert.rejects(
+    () => admit({ method: "POST", url: "/mcp", headers: {} }, { secret: SECRET, lookupKey: lookupED, seen: new Set(), domain: DOMAIN }),
+    /spent/
+  );
 });
 
 test("an unknown key is refused before any challenge is checked", async () => {
   const seen = new Set();
   const req = await signedRequest();
-  const decision = await admit(req, { secret: SECRET, lookupKey: async () => null, seen, domain: DOMAIN });
+  const decision = await admit(req, { secret: SECRET, lookupKey: async () => null, seen, spent: new Map(), domain: DOMAIN });
   assert.equal(decision.ok, false);
   assert.equal(decision.body.reason, "unknown-key");
 });
@@ -199,7 +318,7 @@ test("a signature bought for one body does not admit a different one", async () 
   });
 
   const decision = await admit(req, {
-    secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN, body: BODY_B,
+    secret: SECRET, lookupKey: lookupED, seen, spent: new Map(), domain: DOMAIN, body: BODY_B,
   });
 
   assert.equal(decision.ok, false, "a swapped body must not be admitted");
@@ -218,7 +337,7 @@ test("a signature over the body it was made for is admitted", async () => {
   });
 
   const decision = await admit(req, {
-    secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN, body: BODY_A,
+    secret: SECRET, lookupKey: lookupED, seen, spent: new Map(), domain: DOMAIN, body: BODY_A,
   });
 
   assert.equal(decision.ok, true, `expected admission, got ${JSON.stringify(decision)}`);
@@ -238,7 +357,7 @@ test("a signature that does not cover content-digest is refused", async () => {
   });
 
   const decision = await admit(req, {
-    secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN, body: BODY_A,
+    secret: SECRET, lookupKey: lookupED, seen, spent: new Map(), domain: DOMAIN, body: BODY_A,
   });
 
   assert.equal(decision.ok, false);
@@ -256,7 +375,7 @@ test("a request carrying no content-digest at all is refused", async () => {
   delete req.headers["content-digest"];
 
   const decision = await admit(req, {
-    secret: SECRET, lookupKey: lookupED, seen, domain: DOMAIN, body: BODY_A,
+    secret: SECRET, lookupKey: lookupED, seen, spent: new Map(), domain: DOMAIN, body: BODY_A,
   });
 
   assert.equal(decision.ok, false);
@@ -308,7 +427,7 @@ function rawRequest(base, { method = "GET", path, headers = {}, body } = {}) {
     const req = httpRequest({ hostname, port, method, path, headers }, (res) => {
       const chunks = [];
       res.on("data", (c) => chunks.push(c));
-      res.on("end", () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString("utf8") }));
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, text: Buffer.concat(chunks).toString("utf8") }));
     });
     req.on("error", reject);
     if (body !== undefined) req.write(body);
@@ -673,6 +792,36 @@ test("a malformed percent-encoded target is a 400, never a 500 and never a dispa
     // only what it means to.
     const control = await rawRequest(base, { method: "GET", path: "/t/1" });
     assert.equal(control.status, 200);
+  } finally {
+    server.close();
+  }
+});
+
+// -- the public key directory is cheap to ask about -------------------------
+
+test("the key directory carries an ETag and answers a conditional GET with 304", async () => {
+  const { server, base } = await startServer();
+  try {
+    const first = await rawRequest(base, { path: "/.well-known/http-message-signatures-directory" });
+    assert.equal(first.status, 200);
+    assert.match(first.headers.etag, /^"[0-9a-f]{64}"$/);
+    assert.equal(first.headers["content-length"], String(Buffer.byteLength(first.text)));
+
+    const second = await rawRequest(base, {
+      path: "/.well-known/http-message-signatures-directory",
+      headers: { "if-none-match": first.headers.etag },
+    });
+    assert.equal(second.status, 304);
+    assert.equal(second.text, "", "a 304 must carry no body");
+    assert.equal(second.headers.etag, first.headers.etag);
+
+    // A caller offering the WRONG validator gets the document, not a 304.
+    const stale = await rawRequest(base, {
+      path: "/.well-known/http-message-signatures-directory",
+      headers: { "if-none-match": '"' + "0".repeat(64) + '"' },
+    });
+    assert.equal(stale.status, 200);
+    assert.equal(stale.text, first.text);
   } finally {
     server.close();
   }
