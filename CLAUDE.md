@@ -197,16 +197,33 @@ return visits, so the artwork is the agent's own history of coming back.
   one defect: a `batchCheckIn` that mines and is never marked. `BatchCheckedIn`
   carries NO token ids, so only the chain's STATE can heal it. Read
   [[checkin-recovery]].
-  **THE LIVE WARDEN IS NOT THE TREE**: it has (1) only. `pm2 restart mro-warden`
-  picks up (2) and (3); nothing is currently wedged, so it is not urgent.
-  **WHAT IS LEFT FROM THE REVIEWS: 6 security Critical/High** (15.3 the lone
-  Critical, plus 16.4, 13.1, 13.2, 14.2, 15.1), **2 quality Highs** (4.H1,
-  5.H1), and **15 creative BEFORE-MAINNET** items. **The real finding count is
-  184** (security 67, quality 74, creative 43), measured 2026-09-05 -- the "158"
-  in older notes reconciles against nothing. Start with **15.1**: one line in
-  `scripts/make-clock-key.sh:43` handing the private key to `cast` as an argv,
-  visible to `ps`, under a comment saying it does not.
-  **Suites: contracts 289, warden 412, tools 66, client 25** (2026-09-05).
+  (2) and (3) were NOT deployed when they landed; they went live with the
+  2026-09-05 restart below, so this no longer needs chasing.
+  **EVERY CRITICAL AND HIGH FROM THE THREE REVIEWS IS NOW CLOSED (2026-09-05,
+  third session), and ALL OF IT IS PUSHED AND DEPLOYED.** Five commits:
+  `9a08b42` (the Clock key stops reaching argv; umask/chmod ordering),
+  `39e1faa` (one signature admits once; the key directory is rendered per CHANGE
+  behind an ETag; nginx limit_req in the template), `472b866` (an unused
+  registered key is forgotten after 30 days -- the operator's decision, and told to agents
+  in llms.txt and the protocol doc), `8d671af` (one payment authorisation buys
+  one thing; every deploy script must STATE its chain; the leaked-key copy
+  corrected plus a rotation runbook), `e3530f6` (`seed` stops promising a token
+  it cannot write; the client and server move to the 2026-07-28 MCP leg and the
+  legacy leg is REJECTED).
+  **THE LIVE WARDEN IS THE TREE** -- verified after restart by serving the new
+  llms.txt paragraphs, not assumed.
+  **THE PUBLISHED WIRE CONTRACT CHANGED**: `legacy: 'reject'` means an agent
+  following the pre-2026-09-05 protocol document is refused. Safe because
+  nothing is invited yet.
+  **WHAT REMAINS: the 15 creative BEFORE-MAINNET items**, plus the Medium and
+  Low tiers. The real finding count is 184 (security 67, quality 74, creative
+  43) -- the "158" in older notes reconciles against nothing.
+  **THE NGINX RATE LIMITS ARE NOT LIVE**: the template has them, the installed
+  vhost was written from the old one, and applying them needs sudo.
+  Read [[security-quality-closeout-2026-09-05]] and
+  [[door-replay-and-key-argv]] before touching the door, the payment path or a
+  deploy script.
+  **Suites: contracts 289, warden 438, tools 66, client 25** (2026-09-05).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
