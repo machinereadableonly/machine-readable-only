@@ -2,6 +2,7 @@
 import * as z from "zod";
 import { MINT_PRICE, MINT_RESOURCE } from "../../pay/x402.mjs";
 import { paidWriteBlock, requireChain } from "../gates.mjs";
+import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
 
 export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console.error }) {
   requireChain(chain, "mint");
@@ -118,6 +119,15 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
             q.setTokenAwaitingPayment(tokenId);
           });
         } catch (err) {
+          // ONE AUTHORISATION PRESENTED TWICE. Not "already minted" -- nothing
+          // was refused about this agent or this token, the payment payload had
+          // simply already reserved something else. An honest client cannot do
+          // this by accident, and the refusal happens BEFORE settlement, so
+          // nothing is charged.
+          if (err instanceof PaymentNonceReusedError) {
+            alert(`mint refused for key ${ctx.keyId}: payment authorisation already used`);
+            return { ok: false, reason: "payment-already-used" };
+          }
           // The unique index refused a second mint for this key. The agent has
           // PAID, so this is never silent.
           alert(`mint refused for key ${ctx.keyId} after payment was verified: could not be recorded: ${err.message}`);

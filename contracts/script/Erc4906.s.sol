@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
+import {MroScript} from "./MroScript.sol";
 
 import {MROSpikeToken} from "../src/spike/MROSpikeToken.sol";
 
@@ -18,11 +19,15 @@ import {MROSpikeToken} from "../src/spike/MROSpikeToken.sol";
 ///
 ///   forge script script/Erc4906.s.sol:Erc4906 --sig "bump(address,uint256)" <token> <id> \
 ///     --rpc-url base_sepolia --broadcast
-contract Erc4906 is Script {
+contract Erc4906 is MroScript {
     /// @notice Put token `id` into a state nothing else in the soak occupies, so
     /// a stale read is unmistakable rather than a judgement call.
     function bump(address token, uint256 id) external {
-        vm.startBroadcast(vm.envUint("SPIKE_DEPLOYER_KEY"));
+        // Guarded like every other entry point: this one has no run(), it is
+        // invoked by --sig, and a --sig call is exactly as capable of landing
+        // on the wrong chain as a run() is.
+        guardChain();
+        vm.startBroadcast(deployerKey());
 
         MROSpikeToken t = MROSpikeToken(token);
         uint32 today = t.today();
@@ -51,7 +56,11 @@ contract Erc4906 is Script {
     /// state each round, and re-using the already-sacrificed token keeps the
     /// adopted contract's soak fixtures intact.
     function bumpTo(address token, uint256 id, uint32 level, uint32 streak) external {
-        vm.startBroadcast(vm.envUint("SPIKE_DEPLOYER_KEY"));
+        // Guarded like every other entry point: this one has no run(), it is
+        // invoked by --sig, and a --sig call is exactly as capable of landing
+        // on the wrong chain as a run() is.
+        guardChain();
+        vm.startBroadcast(deployerKey());
 
         MROSpikeToken t = MROSpikeToken(token);
         uint32 today = t.today();

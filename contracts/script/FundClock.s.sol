@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
+import {MroScript} from "./MroScript.sol";
 
 /// @notice Send the Clock's signer its gas float.
 /// @dev Plan 3, Task 1, step 2. The Clock holds ETH for gas and nothing else:
@@ -22,13 +23,16 @@ import {Script, console} from "forge-std/Script.sol";
 ///   forge script script/FundClock.s.sol:FundClock \
 ///     --sig "run(address)" <clock-address> \
 ///     --rpc-url base_sepolia --broadcast
-contract FundClock is Script {
+contract FundClock is MroScript {
     uint256 constant FLOAT = 0.01 ether;
 
     function run(address clock) external {
+        // FIRST, before anything is read or sent: the operator has to have
+        // stated which chain this is, and been right. See MroScript.
+        guardChain();
         require(clock != address(0), "clock address required");
 
-        uint256 deployerKey = vm.envUint("SPIKE_DEPLOYER_KEY");
+        uint256 deployerKey = deployerKey();
         address deployer = vm.addr(deployerKey);
 
         uint256 clockBefore = clock.balance;

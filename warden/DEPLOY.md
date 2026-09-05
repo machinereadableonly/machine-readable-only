@@ -272,6 +272,55 @@ project's admission logic for a problem that is actually upstream of it.
 - From outside the VPS, `nc -zv <vps-ip> 3006` (or equivalent) should fail to
   connect -- confirming the UFW rule and loopback binding both hold.
 
+## 9b. If the Clock's key leaks
+
+**Read this before you need it. The response window is minutes, and every
+consequence of not responding is permanent.**
+
+A stolen Clock key cannot take money or tokens -- there are four `onlyWarden`
+functions and none moves value, the Warden is not the owner, and the contract
+holds no balance. What it CAN do is end the piece: mint out the whole
+collection (the price is a Warden constant, not an on-chain one, so a stolen key
+mints for the cost of gas), burn every registered agent's one mint against the
+PUBLIC key directory, backfill every token's level and streak, and apply the
+free earned Marks to close the bought side of each pair forever. None of it can
+be undone; there is no burn, and neither level nor streak can be reduced.
+
+**Rotate first, investigate second.** `setWarden` is one owner call and
+`onlyWarden` reads `warden` live, so the old key is revoked the moment it mines.
+
+    # 1. Stop the Clock, so it cannot race the rotation with a run of its own.
+    systemctl --user stop mro-clock.timer mro-clock.service
+
+    # 2. Generate a replacement. Prints only the public address.
+    #    It REFUSES to overwrite, so move the old key line out of the
+    #    configuration file first (WinSCP).
+    bash ~/projects/machine-readable-only/scripts/make-clock-key.sh
+
+    # 3. Point the contract at the new address. Signed by the OWNER key, not
+    #    the Clock's -- on mainnet that is MAINNET_DEPLOYER_KEY. The contract
+    #    and the new address are ARGUMENTS, not environment variables.
+    cd ~/projects/machine-readable-only/contracts
+    EXPECTED_CHAIN_ID=<8453 or 84532> \
+      forge script script/SetClockWarden.s.sol:SetClockWarden \
+      --sig "run(address,address)" <contract> <the new address> \
+      --rpc-url <base or base_sepolia> --broadcast
+
+    # 4. Confirm the chain agrees, from the chain and not from a log.
+    cast call <contract> "warden()(address)" --rpc-url <rpc>
+
+    # 5. Fund the new address with gas, then start the timer again.
+    systemctl --user start mro-clock.timer
+
+**Then lower `supplyCap`.** It is an owner call, needs no redeploy, and it is
+the only thing that bounds the damage of the NEXT leak. A cap of 10,000 set on
+day one is 10,000 free mints sitting behind one key; set it near actual demand
+and raise it deliberately as the collection fills.
+
+**What not to bother with.** There is no point pausing first -- `pause` blocks
+`applyMark` but the attacker's mints are the expensive part, and rotation
+revokes everything in one transaction. Do not try to out-mint the attacker.
+
 ## 10. The mainnet cutover -- [the operator APPROVAL REQUIRED, real funds]
 
 Everything above is a Base Sepolia runbook. This section exists because that is

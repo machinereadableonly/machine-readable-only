@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
+import {MroScript} from "./MroScript.sol";
 
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
@@ -14,9 +15,12 @@ import {Renderer} from "../src/render/Renderer.sol";
 /// script falls back to the deployer's own address for a testnet smoke deploy,
 /// where the deployer acting as Warden is fine. A real deployment must set
 /// WARDEN_ADDRESS explicitly rather than rely on this fallback.
-contract DeployPlan1 is Script {
+contract DeployPlan1 is MroScript {
     function run() external {
-        uint256 key = vm.envUint("SPIKE_DEPLOYER_KEY");
+        // FIRST, before anything is read or sent: the operator has to have
+        // stated which chain this is, and been right. See MroScript.
+        guardChain();
+        uint256 key = deployerKey();
         address warden = vm.envOr("WARDEN_ADDRESS", address(0));
 
         if (warden == address(0)) {

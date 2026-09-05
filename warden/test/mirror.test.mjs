@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openDb, migrate } from "../src/mirror/db.mjs";
-import { queries } from "../src/mirror/queries.mjs";
+import { queries, PaymentNonceReusedError } from "../src/mirror/queries.mjs";
 
 /// Every test gets its own in-memory database, so no test can see another's rows.
 function fresh() {
@@ -163,4 +163,85 @@ test("a key used at any point survives, even if its last use is ancient", () => 
   q.insertKey(keyRow("dormant", now - 900 * DAY));
   q.markKeyUsed("dormant", now - 899 * DAY);
   assert.equal(q.pruneUnusedKeys(now - 30 * DAY), 0);
+});
+
+// -- one authorisation, one effect ------------------------------------------
+//
+// An x402 authorisation is bound to an AMOUNT and to nothing else: not a tool,
+// a token, a Mark or a variant. mint and Hush both cost $1.00, so their demands
+// are byte-identical and a payload obtained for one is accepted for the other.
+// The only single-use enforcement the scheme has is the chain's
+// authorizationState, which nothing consults until settlement -- and settlement
+// happens after both handlers have already run.
+
+test("the same payment authorisation cannot reserve two mints", () => {
+  const { q } = fresh();
+  q.transact(() => q.insertMint({ tokenId: 1, toAddress: "0xa", keyId: "k1", payNonce: "0xsame" }));
+
+  assert.throws(
+    () => q.transact(() => q.insertMint({ tokenId: 2, toAddress: "0xb", keyId: "k2", payNonce: "0xsame" })),
+    (err) => err instanceof PaymentNonceReusedError && err.payNonce === "0xsame"
+  );
+  // And the loser left NOTHING behind -- the throw unwound its whole
+  // transaction, not just the claim.
+  assert.equal(q.getMint(2), undefined);
+});
+
+test("a payload that reserved a mint cannot then reserve a Mark", () => {
+  // The cross-tool case, which is the one the byte-identical $1.00 demands
+  // actually enable.
+  const { q } = fresh();
+  q.transact(() => q.insertMint({ tokenId: 1, toAddress: "0xa", keyId: "k1", payNonce: "0xcross" }));
+
+  assert.throws(
+    () => q.reserveMarkPaid(1, 1, 0, "0xcross"),
+    (err) => err instanceof PaymentNonceReusedError
+  );
+  assert.equal(q.payNonceClaim("0xcross").tool, "mint");
+});
+
+test("two Marks cannot share one authorisation", () => {
+  const { q } = fresh();
+  assert.equal(q.reserveMarkPaid(1, 1, 0, "0xmark"), true);
+  assert.throws(
+    () => q.reserveMarkPaid(2, 1, 0, "0xmark"),
+    (err) => err instanceof PaymentNonceReusedError
+  );
+});
+
+test("distinct authorisations are unaffected", () => {
+  // The control: a guard that refused everything would pass the three above.
+  const { q } = fresh();
+  q.transact(() => q.insertMint({ tokenId: 1, toAddress: "0xa", keyId: "k1", payNonce: "0xone" }));
+  q.transact(() => q.insertMint({ tokenId: 2, toAddress: "0xb", keyId: "k2", payNonce: "0xtwo" }));
+  assert.equal(q.reserveMarkPaid(1, 1, 0, "0xthree"), true);
+  assert.equal(q.getMint(1).payNonce, "0xone");
+  assert.equal(q.getMint(2).payNonce, "0xtwo");
+});
+
+test("a Mark refused as already applied does NOT burn the authorisation", () => {
+  // The reservation is attempted BEFORE the claim precisely so that an agent
+  // refused for a reason of its own keeps a payload it can present again.
+  const { q } = fresh();
+  assert.equal(q.reserveMarkPaid(5, 1, 0, "0xfirst"), true);
+
+  // Same token, same Mark, a DIFFERENT payload: refused by the unique index.
+  assert.equal(q.reserveMarkPaid(5, 1, 0, "0xsecond"), false);
+  assert.equal(q.payNonceClaim("0xsecond"), undefined, "a refused reservation must not claim the nonce");
+
+  // So that payload is still good for something else.
+  assert.equal(q.reserveMarkPaid(6, 1, 0, "0xsecond"), true);
+});
+
+test("a released reservation does not free its authorisation for reuse", () => {
+  // An authorisation whose settlement failed cannot be settled later anyway,
+  // and re-signing costs the agent nothing -- no gas, no chain write.
+  const { q } = fresh();
+  q.transact(() => q.insertMint({ tokenId: 1, toAddress: "0xa", keyId: "k1", payNonce: "0xdead" }));
+  assert.equal(q.releaseReservation("0xdead").kind, "mint");
+
+  assert.throws(
+    () => q.transact(() => q.insertMint({ tokenId: 2, toAddress: "0xb", keyId: "k1", payNonce: "0xdead" })),
+    (err) => err instanceof PaymentNonceReusedError
+  );
 });

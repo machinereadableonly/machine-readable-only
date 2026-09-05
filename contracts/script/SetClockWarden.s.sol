@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
+import {MroScript} from "./MroScript.sol";
 
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 
@@ -26,11 +27,14 @@ import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 ///   forge script script/SetClockWarden.s.sol:SetClockWarden \
 ///     --sig "run(address,address)" <token-address> <clock-address> \
 ///     --rpc-url base_sepolia --broadcast
-contract SetClockWarden is Script {
+contract SetClockWarden is MroScript {
     function run(address token, address clock) external {
+        // FIRST, before anything is read or sent: the operator has to have
+        // stated which chain this is, and been right. See MroScript.
+        guardChain();
         require(clock != address(0), "clock address required");
 
-        uint256 ownerKey = vm.envUint("SPIKE_DEPLOYER_KEY");
+        uint256 ownerKey = deployerKey();
         MachineReadableOnly mro = MachineReadableOnly(token);
 
         address ownerBefore = mro.owner();

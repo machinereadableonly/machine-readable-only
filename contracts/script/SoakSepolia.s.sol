@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
+import {MroScript} from "./MroScript.sol";
 
 import {MROSpikeToken} from "../src/spike/MROSpikeToken.sol";
 import {Renderer} from "../src/render/Renderer.sol";
@@ -26,9 +27,12 @@ import {SoakStates} from "./SoakStates.sol";
 ///
 ///   forge script script/SoakSepolia.s.sol:SoakSepolia --sig "closeThePiece(address)" <token> \
 ///     --rpc-url base_sepolia --broadcast
-contract SoakSepolia is Script {
+contract SoakSepolia is MroScript {
     function run() external returns (address renderer, address token) {
-        uint256 key = vm.envUint("SPIKE_DEPLOYER_KEY");
+        // FIRST, before anything is read or sent: the operator has to have
+        // stated which chain this is, and been right. See MroScript.
+        guardChain();
+        uint256 key = deployerKey();
         vm.startBroadcast(key);
 
         Renderer r = new Renderer();
@@ -72,7 +76,7 @@ contract SoakSepolia is Script {
     /// freeze all twenty-six tokens and every state read afterwards would be
     /// wrong, so it is applied only once the rest have been verified.
     function closeThePiece(address token) external {
-        vm.startBroadcast(vm.envUint("SPIKE_DEPLOYER_KEY"));
+        vm.startBroadcast(deployerKey());
         MROSpikeToken(token).sunset();
         vm.stopBroadcast();
         console.log("sunset applied; every token is now frozen");
