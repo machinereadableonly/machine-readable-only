@@ -86,6 +86,7 @@ import { Resvg } from "@resvg/resvg-js";
 
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
+import * as SHEET from "./sheet-code.mjs";
 import {
   renderSvg, MARKS, IRIS_SHAPE_NAMES,
   HUSH, STATIC, BEAT, IRIS_BOUGHT, IRIS_EARNED, VESSEL, BREAK, TINT,
@@ -93,10 +94,10 @@ import {
 import { scanResult } from "./test/helpers/decode.mjs";
 
 const SELF = fileURLToPath(import.meta.url);
-const PAYLOAD = payloadFor("example.com", 1);
-const DEST = PAYLOAD.slice(0, -1);
-const CODE = solve(PAYLOAD, 7);
-const TARGET = heartTarget(CODE.size);
+// The reference code, shared so no sheet can be judged on a heart that will
+// never mint. See sheet-code.mjs -- this used to be four hardcoded lines in ten
+// separate files, all of them naming a domain that was decided against.
+const { PAYLOAD, DEST, CODE, TARGET } = SHEET;
 const OUT = new URL("./out/marks", import.meta.url).pathname;
 
 const args = process.argv.slice(2);
