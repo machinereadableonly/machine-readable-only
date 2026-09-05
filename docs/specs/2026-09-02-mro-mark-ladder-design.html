@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MRO Mark Ladder -- Design Spec</title>
+  <title>docs/specs/2026-09-02-mro-mark-ladder-design.html</title>
   <style>
     :root {
       --bg: #fafaf7;
@@ -227,7 +227,13 @@ eyes), and the inversion, which the old Singularity declared and never drew.</p>
 <td>the field</td>
 </tr>
 </tbody></table>
-<p>&quot;Level&quot; is credited days and never falls. &quot;Run&quot; is the live streak.</p>
+<p>&quot;Level&quot; is credited days and never falls. &quot;Run&quot; is the LONGEST run this token
+has ever completed, not the one standing today -- revised 2026-09-05. Reading
+the live streak rewarded an agent that stopped over one that came back: a token
+that reached 365 and went dark kept Break available forever, while one that
+reached 365, missed a single day and RETURNED was reset to 1 and refused. The
+contract stores <code>bestRun</code> alongside the live <code>streak</code> and gates on the larger
+of the two (<code>_effectiveRun</code>); <code>warden/src/mcp/ladder.mjs</code> mirrors it.</p>
 <p><strong>Why ten ids and not eight.</strong> Earlier notes recorded eight Marks for eight
 surfaces. That is one id short per shared surface: pair 3 offers the same
 surface by two routes with two different gates and two different prices, and one
@@ -522,10 +528,18 @@ run to colour is a rendering decision and the Renderer is swappable. Storing a
 colour would freeze a renderer decision into token state forever. Storing the
 rung would break if <code>minStreak</code> were ever turned down with <code>setUpgrade</code>, which
 it can be.</p>
-<p>The contract writes it from <code>_tokens[id].streak</code> at apply time. <strong>The Warden does
-not supply it</strong>, so it cannot be forged: the piece can claim it as a fact rather
-than as a promise, which is exactly the class of claim the cold readers said
-they would go and check.</p>
+<p>The contract writes it from <code>_tokens[id].streak</code> at apply time. <strong>The Warden
+does not supply it as an argument</strong>, which is a narrower claim than &quot;cannot be
+forged&quot; and the narrower one is the true one (security review 12.3).</p>
+<p>What the contract guarantees is that no caller can pass a run in alongside a
+Mark. What it does not guarantee is that the run was earned in real time: the
+Warden holds the check-in key, and <code>batchCheckIn</code> accepts any day up to
+<code>today()</code>, so a Warden acting dishonestly could credit a token&#39;s whole history
+in one transaction and then apply the Mark truthfully. That is the same trust
+boundary as mint, check-in and every other Mark -- CLAUDE.md accepts the Clock
+key as trusted for exactly those -- and it is not a new hole. But the sentence
+should say what it means: the run is unforgeable BY THE AGENT, and it is as
+honest as the Warden is.</p>
 <hr>
 <h2>5. The renderer change</h2>
 <p><code>MarkRenderer.sol</code>, <code>Renderer.sol</code>, and their byte-identical mirror in
@@ -945,8 +959,16 @@ schema, <code>docs/2026-09-01-mro-raw-protocol.md</code> and <code>warden/public
 <ul>
 <li>Nothing visual. Every rendered question the ladder raised is closed: the hue
 (7.2), the shapes and inks (7.3, 7.4), and Break&#39;s two new combinations (5.3).
-A third Tint ink could be added later, but it would need a new candidate
-rendered against the green first.</li>
+A THIRD TINT INK CANNOT BE ADDED, and the sentence that once said otherwise
+was deleted on 2026-09-05. <code>_variantCount</code> is a pure function (5 to 3, 9 to
+2, everything else 1) and not an owner dial, so the ink count is fixed at the
+deploy whatever <code>MAX_MARK_ID</code> is. An ELEVENTH MARK is a different matter and
+is now possible: the ceiling was raised to 15 on 2026-09-05, with ids 11 to
+15 left unwritten by the deploy. Fifteen is the true ceiling rather than a
+round number -- <code>excludes</code> and <code>requiresAny</code> are <code>uint16</code>, so bit 15 is the
+last addressable Mark bit, and bit 16 is already the Iris shape. Nothing
+served promises an eleventh, and nothing served promises there will never be
+one.</li>
 <li><strong>Whether the agent-facing copy needs any change.</strong> It should not: the copy
 describes five pairs, exclusions and free earned sides, and this spec is
 written to it. The one line that will need editing afterwards is the contract
@@ -979,6 +1001,5 @@ sheets behind section 7.</li>
 <li><code>docs/phase0-results.md</code> -- the gas and byte budget the renderer must stay
 inside.</li>
 </ul>
-
 </body>
 </html>

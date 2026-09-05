@@ -1841,6 +1841,11 @@ export const MRO_ABI = [
   },
   {
     "type": "error",
+    "name": "RendererNotContract",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "RenounceDisabled",
     "inputs": []
   },

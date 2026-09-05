@@ -52,6 +52,35 @@ contract LadderTest is MroTestBase {
         }
     }
 
+    /// @dev 12.8. The three tests around this one all derive their expectation
+    /// with `1 << n` -- the SAME expression Ladder.sol uses to build the value
+    /// -- so any shared arithmetic mistake cancels out and all three pass. The
+    /// verifier proved it: set every `excludes` to zero and the symmetry, the
+    /// no-cross-pair and the exactly-its-partner tests are all still green.
+    ///
+    /// So this one writes the numbers out. A literal table cannot share a bug
+    /// with the code it checks, and it is the only test here that fails when
+    /// the masks are simply absent.
+    function test_theExclusionMasksAreTheseExactNumbers() public pure {
+        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        uint16[11] memory expected = [
+            uint16(0),      // 0 is not a Mark
+            uint16(4),      // 1 hush   excludes 2 ache      -> 1 << 2
+            uint16(2),      // 2 ache   excludes 1 hush      -> 1 << 1
+            uint16(16),     // 3 static excludes 4 beat      -> 1 << 4
+            uint16(8),      // 4 beat   excludes 3 static    -> 1 << 3
+            uint16(64),     // 5 iris   excludes 6 iris      -> 1 << 6
+            uint16(32),     // 6 iris   excludes 5 iris      -> 1 << 5
+            uint16(256),    // 7 vessel excludes 8 break     -> 1 << 8
+            uint16(128),    // 8 break  excludes 7 vessel    -> 1 << 7
+            uint16(1024),   // 9 tint   excludes 10 aura     -> 1 << 10
+            uint16(512)     // 10 aura  excludes 9 tint      -> 1 << 9
+        ];
+        for (uint8 a = 1; a <= 10; a++) {
+            assertEq(u[a].excludes, expected[a], "an exclusion mask is not the number it must be");
+        }
+    }
+
     function test_eachMarkExcludesExactlyItsPartner() public pure {
         MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
         for (uint8 a = 1; a <= 10; a++) {

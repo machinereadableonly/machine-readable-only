@@ -127,6 +127,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
     error NotWarden();
     error ZeroRenderer();
+    error RendererNotContract();
     error ZeroWarden();
     error RenounceDisabled();
     /// @dev The piece is closed. Distinct from AlreadySunset, which is the
@@ -299,6 +300,13 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
     function _setRenderer(address r) internal {
         if (r == address(0)) revert ZeroRenderer();
+        // 12.6. Non-zero is not the same as usable. tokenURI STATICCALLs this
+        // address for every token, so an EOA here -- a mistyped or truncated
+        // paste of an address that is perfectly valid -- returns empty data and
+        // bricks the metadata of the entire collection at once. Code size does
+        // not prove it is the RIGHT contract, but it rules out the whole class
+        // of mistake that has no code at all.
+        if (r.code.length == 0) revert RendererNotContract();
         renderer = r;
         emit RendererSet(r);
     }
@@ -625,6 +633,13 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         whenNotPaused
         notSunset
     {
+        // 12.4. `1 << upgradeId` below is unbounded, and was safe only because
+        // setUpgrade (the sole writer of _upgrades) bounds the id, so no
+        // out-of-range entry can ever be `active`. That is an argument about a
+        // second function, and it stops being true the day anyone adds another
+        // writer. The bound belongs on the shift that needs it.
+        if (upgradeId == 0 || upgradeId > MAX_MARK_ID) revert MarkIdOutOfRange(upgradeId);
+
         Upgrade storage u = _upgrades[upgradeId];
         if (!u.active) revert MarkInactive();
 
@@ -708,6 +723,11 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// once per key forever; binding is unlimited. Clearing it would turn
     /// rebind into an unlimited mint.
     function rebind(uint256 id, bytes32 newKeyId) external onlyTokenOwner(id) {
+        // 12.5. `mint` rejects a zero key id explicitly; rebind accepted it, so
+        // the one value the piece refuses to start with could be arrived at by
+        // a second call. A token bound to zero is bound to nothing: no agent
+        // can ever sign for it again, and the record stops.
+        if (newKeyId == bytes32(0)) revert ZeroKeyId();
         _agentKeyOf[id] = newKeyId;
         emit Rebound(id, newKeyId);
         emit MetadataUpdate(id);

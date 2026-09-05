@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {MroTestBase} from "./MroTestBase.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
+import {Renderer} from "../src/render/Renderer.sol";
 
 /// @notice The bounds on Warden-supplied inputs, and the two owner-power fixes
 /// that go with them.
@@ -217,5 +218,82 @@ contract BoundsTest is MroTestBase {
         vm.prank(ALICE);
         t.acceptOwnership();
         assertEq(t.owner(), ALICE, "Ownable2Step transfer is unaffected");
+    }
+
+    // -------------------------------------------------------------------
+    // 12.4: applyMark bounds the id it shifts by
+    // -------------------------------------------------------------------
+
+    /// @dev `1 << upgradeId` was unbounded here. Nothing could reach it today,
+    /// because setUpgrade is the only writer of _upgrades and IT bounds the id,
+    /// so no out-of-range entry can be `active`. That is an argument about a
+    /// different function, and a second writer added later would make it false
+    /// silently. A shift of 256 or more is not a revert in Solidity -- it
+    /// wraps -- so the failure would be a Mark written to the wrong bit.
+    function test_applyMarkRejectsAnIdItCouldNeverShiftSafely() public {
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkIdOutOfRange.selector, uint8(16)));
+        t.applyMark(1, 16, 0);
+
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkIdOutOfRange.selector, uint8(0)));
+        t.applyMark(1, 0, 0);
+    }
+
+    /// @dev The boundary, provoked from both sides: 15 is in range and fails
+    /// later on `MarkInactive`, which is the guard AFTER the bound. Without
+    /// this the test above would pass on a bound that was off by one.
+    function test_theMarkIdBoundIsExactlyMaxMarkId() public {
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.MarkInactive.selector);
+        t.applyMark(1, 15, 0);
+    }
+
+    // -------------------------------------------------------------------
+    // 12.5: rebind refuses the one value mint refuses
+    // -------------------------------------------------------------------
+
+    /// @dev mint rejects the zero key explicitly and rebind did not, so the
+    /// state the piece refuses to start in was reachable in one further call.
+    /// A token bound to zero can never be signed for again: no agent can prove
+    /// possession of a key that is not a key, so the record simply stops.
+    function test_rebindRejectsTheZeroKey() public {
+        vm.prank(ALICE);
+        vm.expectRevert(MachineReadableOnly.ZeroKeyId.selector);
+        t.rebind(1, bytes32(0));
+
+        assertEq(t.viewOf(1).agentKeyId, KEY, "the binding is untouched");
+    }
+
+    /// @dev CONTROL: a real key still rebinds, so the guard above is a bound
+    /// and not a ban.
+    function test_rebindStillAcceptsARealKey() public {
+        bytes32 next = bytes32(uint256(0xbeef));
+        vm.prank(ALICE);
+        t.rebind(1, next);
+        assertEq(t.viewOf(1).agentKeyId, next);
+    }
+
+    // -------------------------------------------------------------------
+    // 12.6: a renderer has to be a contract
+    // -------------------------------------------------------------------
+
+    /// @dev tokenURI STATICCALLs the renderer for every token, so an EOA here
+    /// returns empty data and bricks the metadata of the whole collection at
+    /// once. Non-zero was the only check; a mistyped address is non-zero.
+    function test_setRendererRejectsAnAddressWithNoCode() public {
+        vm.expectRevert(MachineReadableOnly.RendererNotContract.selector);
+        t.setRenderer(ALICE);
+        assertEq(t.renderer(), address(r), "the working renderer is untouched");
+    }
+
+    /// @dev CONTROL: a real renderer still installs, and the token still
+    /// renders through it afterwards. Code size cannot prove it is the RIGHT
+    /// contract; it rules out the class of mistake that has no code at all.
+    function test_setRendererStillAcceptsAContract() public {
+        Renderer next = new Renderer();
+        t.setRenderer(address(next));
+        assertEq(t.renderer(), address(next));
+        assertGt(bytes(t.tokenURI(1)).length, 0, "the collection still renders");
     }
 }
