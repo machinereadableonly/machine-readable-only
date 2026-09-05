@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readEvents, applyEvents, MAX_LOG_SPAN, DEPLOY_BLOCK } from "../src/clock/reconcile.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
+import { seedPaidMint } from "./mirror-seed.mjs";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 
@@ -71,7 +72,7 @@ function mirrorWithToken(tokenId = 1) {
   const db = openDb(":memory:");
   const q = queries(db);
   q.insertToken({ tokenId, keyId: "k1", owner: "0xowner", lastDay: 100, mintDay: 100 });
-  q.insertMint({ tokenId, toAddress: "0xowner", keyId: "k1" });
+  seedPaidMint(q, { tokenId, toAddress: "0xowner", keyId: "k1" });
   return { db, q };
 }
 

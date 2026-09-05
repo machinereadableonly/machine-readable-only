@@ -7,6 +7,7 @@ import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
 import { runClock, CHECKIN_CHUNK } from "../src/clock/run.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
+import { seedPaidMint } from "./mirror-seed.mjs";
 
 const TODAY = 20_700;
 const QR = "ab".repeat(172);
@@ -18,7 +19,7 @@ function mirror() {
 
 /// A token that has been paid for and solved, ready to mint.
 function queueMint(q, db, tokenId, { solveState = "done" } = {}) {
-  q.insertMint({ tokenId, toAddress: "0x" + "11".repeat(20), keyId: `k${tokenId}` });
+  seedPaidMint(q, { tokenId, toAddress: "0x" + "11".repeat(20), keyId: `k${tokenId}` });
   q.insertToken({ tokenId, keyId: `k${tokenId}`, owner: "0x" + "11".repeat(20), lastDay: TODAY - 5, mintDay: TODAY - 5 });
   db.exec(`UPDATE mints SET qr = '${QR}', solveState = '${solveState}' WHERE tokenId = ${tokenId}`);
 }

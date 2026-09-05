@@ -9,11 +9,27 @@
 // requireChain), so a test that forgot one would otherwise look like a test of
 // a tool with no gates at all. That is the failure this file exists to make
 // impossible: an open chain has to be asked for explicitly.
+import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
 
-/// Everything open: writes accepted, token alive, wallet has room.
-export function openChain(overrides = {}) {
+/**
+ * Everything open: writes accepted, token alive, wallet has room, and every
+ * token bound to `boundTo`.
+ *
+ * WHY THE BINDING HAS A DEFAULT AT ALL. It used to answer null, which was right
+ * when only `checkin` read it and only in the direction "the mirror does not
+ * recognise this caller, ask the chain before refusing" -- there, null means
+ * "could not ask" and refusing is the safe answer. Since 2026-09-05 `upgrade`
+ * and `seed` read it on EVERY call, in both directions, so a null default would
+ * make an open chain refuse every irreversible write in every suite. `"k1"` is
+ * the key id these fixtures overwhelmingly use.
+ *
+ * A test whose caller is not `k1` will be refused `not-bound-to-caller`, which
+ * is the correct answer to what it actually asked. Pass `boundTo` rather than
+ * relaxing the assertion.
+ */
+export function openChain({ boundTo = "k1", ...overrides } = {}) {
   return {
-    boundKeyOf: async () => null,
+    boundKeyOf: async () => keyIdToBytes32(boundTo),
     writesOpen: async () => null,
     lifecycleOf: async () => ({ exists: true, resting: false, sunset: false, level: 1, lastDay: 0 }),
     // An open chain holds no token at the proposed id, so the id the mirror
@@ -33,6 +49,7 @@ export const unreadableChain = () =>
     lifecycleOf: async () => null,
     freeIdFrom: async () => null,
     walletRoomFor: async () => null,
+    boundKeyOf: async () => null,
   });
 export const restingChain = () =>
   openChain({

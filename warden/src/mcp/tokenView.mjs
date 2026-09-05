@@ -20,7 +20,13 @@ export function tokenView(q, tokenId) {
     // ever served -- to a scanner at /t/<id> and to an agent through `status`
     // -- was reported as not resting, sealed ones included.
     resting: t.resting === 1,
-    pendingOnChain: t.status === "queued",
+    // NOT WRITTEN, rather than a list of the statuses that are not written.
+    // `status` gained 'awaiting-payment' when settlement stopped being assumed,
+    // and an equality test against 'queued' answered `pendingOnChain: false`
+    // for those rows -- telling an agent its brand new token was already on
+    // chain when it was not even paid for yet. Every status except 'written'
+    // means the chain does not have this token, so that is what is asked.
+    pendingOnChain: t.status !== "written",
     owner: t.owner,
   };
 }

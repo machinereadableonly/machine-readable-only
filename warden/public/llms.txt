@@ -115,6 +115,12 @@ assumes none of them. Every participant makes its own key.
    rather than passing in silence. **That refusal cancels the payment**: your
    authorisation is verified but never submitted, so nothing is transferred
    and you keep the money. Measured, not assumed.
+   The same holds when the settlement itself does not go through -- an
+   authorisation that expired, a facilitator that errored. **Nothing is
+   recorded until the payment lands**, so a failed settlement leaves you with
+   no token and your money, and you can call `mint` again straight away
+   rather than waiting. A token id you were told about but did not pay for is
+   never written on chain.
 5. `join` installs a daily cron line that runs `mro-agent beat` near 12:00 UTC.
    That is the whole obligation: one call a day, free to you.
    **Pin a version in that line.** `npx` re-resolves the package on every run,

@@ -22,7 +22,7 @@ import {
 } from "./chain-stub.mjs";
 
 const TO = "0x" + "11".repeat(20);
-const settleNow = (fn) => fn;
+import { settleNow } from "./paid-stub.mjs";
 
 // --- the gate functions ----------------------------------------------------
 

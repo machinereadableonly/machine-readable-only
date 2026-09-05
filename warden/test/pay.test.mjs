@@ -7,22 +7,7 @@ import { makeUpgradeTool } from "../src/mcp/tools/upgrade.mjs";
 import { makeMintTool } from "../src/mcp/tools/mint.mjs";
 import { openChain, restingChain } from "./chain-stub.mjs";
 import { LADDER, assertLadderSane } from "../src/mcp/ladder.mjs";
-
-// A `paid` stub for the success path. It settles synchronously (no gap
-// between the pre-check and the write), which is fine for a single call.
-const settleNow = (fn) => fn;
-
-/// A `paid` stub that defers the actual settlement by two microtask ticks.
-/// This is what makes a genuine race observable: node:sqlite is synchronous,
-/// so two `Promise.all`-launched handler calls would otherwise run their
-/// pre-check-then-write sequence back to back with no interleaving at all.
-/// Delaying past the point where BOTH calls have already cleared their
-/// pre-payment gate is what actually exercises the post-settlement re-check.
-const settleAfterBothGated = (fn) => async () => {
-  await Promise.resolve();
-  await Promise.resolve();
-  return fn();
-};
+import { settleNow, settleNowFor, settleAfterBothGated, metaWithPayment } from "./paid-stub.mjs";
 
 // THE BUG THIS PREVENTS. @x402/mcp 2.24.0 declares @modelcontextprotocol/sdk
 // ^1.12.1, and its wrapper reads the payment as `extra?._meta` -- the v1 shape.
@@ -276,10 +261,28 @@ function fakeServer(asked = []) {
 
 /// A wrapFactory that runs the handler instead of demanding payment, and
 /// records the context it was handed.
-function fakeWrap(seen = []) {
+/**
+ * A stand-in for createPaymentWrapper that ENCODES what the real one does.
+ *
+ * The context it builds is not the context it was handed. @x402/mcp reads the
+ * payment out of `_meta` and calls the handler with its OWN shape --
+ * `{ toolName, arguments, meta }` (index.mjs:787) -- and the gateway reads
+ * `.meta` off that to derive the payment nonce. A fake that forwarded its
+ * argument unchanged would hand the handler `{ _meta }` instead, and every test
+ * using it would exercise a code path production does not have. That is the
+ * same class of defect as the double that recorded arguments without encoding
+ * them, and it cost a paid mint the last time.
+ *
+ * `lastCtx` records what the wrapper was GIVEN, so a test can still pin the v2
+ * adaptation that makes the payment findable at all.
+ */
+function fakeWrap(seen = [], given = []) {
   return (server, { accepts }) => {
     seen.push(accepts);
-    return (handler) => (args, ctx) => handler(args, ctx);
+    return (handler) => (args, ctx) => {
+      given.push(ctx);
+      return handler(args, { toolName: "fake", arguments: args, meta: ctx?._meta });
+    };
   };
 }
 
@@ -296,7 +299,7 @@ test("the gateway does not touch the facilitator until the first paid call", asy
   // is a live HTTP call that throws, and the door must boot without it.
   assert.equal(builds, 0);
 
-  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
+  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
   assert.equal(builds, 1);
 });
 
@@ -312,7 +315,7 @@ test("an unreachable facilitator refuses the call, never throws, and never runs 
     wrapFactory: fakeWrap(),
   });
 
-  const r = await paid(async () => { handlerRan = true; return { ok: true }; }, "$0.10")({}, { mcpCtx: {} });
+  const r = await paid(async () => { handlerRan = true; return { ok: true }; }, "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
   assert.equal(r.ok, false);
   assert.equal(r.reason, "payment-unavailable");
   // The free mint this prevents: the handler is what writes the token row.
@@ -336,11 +339,11 @@ test("a failed build is retried on the next call rather than disabling payment f
     wrapFactory: fakeWrap(),
   });
 
-  const first = await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
+  const first = await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
   assert.equal(first.reason, "payment-unavailable");
 
   // A facilitator down for a minute must not need a process restart.
-  const second = await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
+  const second = await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
   assert.equal(second.ok, true);
   assert.equal(builds, 2);
 });
@@ -357,8 +360,8 @@ test("the resource server is built once and the wrapper cached per price", async
     wrapFactory: fakeWrap(wrapped),
   });
 
-  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
-  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
+  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
+  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
   assert.equal(builds, 1);
   assert.equal(wrapped.length, 1, "the same price must not rebuild its requirements");
 });
@@ -376,8 +379,8 @@ test("two prices produce two sets of requirements, each carrying its own price",
     wrapFactory: fakeWrap(),
   });
 
-  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: {} });
-  await paid(async () => ({ ok: true }), "$5000")({}, { mcpCtx: {} });
+  await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
+  await paid(async () => ({ ok: true }), "$5000")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
 
   assert.deepEqual(asked.map((a) => a.price), ["$0.10", "$5000"]);
   assert.deepEqual([...new Set(asked.map((a) => a.payTo))], ["0xtreasury"]);
@@ -396,7 +399,7 @@ test("an empty accepts list refuses rather than reaching createPaymentWrapper, w
     wrapFactory: () => { throw new Error("wrapFactory must not be reached"); },
   });
 
-  const r = await paid(async () => { handlerRan = true; }, "$0.10")({}, { mcpCtx: {} });
+  const r = await paid(async () => { handlerRan = true; }, "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
   assert.equal(r.reason, "payment-unavailable");
   assert.equal(handlerRan, false);
   assert.match(alerts[0], /no payment requirements for \$0\.10 on eip155:8453/);
@@ -417,7 +420,7 @@ test("a missing or malformed price refuses without contacting the facilitator", 
   });
 
   for (const price of [undefined, null, "", "free", "0.10", 0.1, "$"]) {
-    const r = await paid(async () => ({ ok: true }), price)({}, { mcpCtx: {} });
+    const r = await paid(async () => ({ ok: true }), price)({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
     assert.equal(r.reason, "payment-unavailable", `price ${JSON.stringify(price)} must refuse`);
     assert.equal(r.detail, "no-price");
   }
@@ -425,22 +428,69 @@ test("a missing or malformed price refuses without contacting the facilitator", 
   assert.equal(alerts.length, 7);
 });
 
-test("the handler is invoked with the ADAPTED v2 context, not the raw tool context", async () => {
-  let seenCtx;
+test("the payment wrapper is given the ADAPTED v2 context, not the raw tool context", async () => {
+  const given = [];
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xdead",
+    build: async () => fakeServer(),
+    wrapFactory: fakeWrap([], given),
+  });
+
+  const meta = { "x402/payment": { scheme: "exact" } };
+  await paid(async () => ({ ok: true }), "$0.10")(
+    {},
+    { mcpCtx: { mcpReq: { id: 1, method: "tools/call", _meta: meta } } }
+  );
+  assert.deepEqual(given[0]._meta, meta);
+});
+
+// The gateway derives the payment nonce and hands it to the handler, which is
+// the only way a reserved row can ever be matched to the settlement that pays
+// for it. A handler that reserved without one would write a row nothing could
+// promote -- so the gateway refuses instead, BEFORE the handler runs.
+test("a handler is given the nonce that will settle it, and refuses without one", async () => {
   const paid = makePaymentGateway({
     facilitatorUrl: "https://example.invalid/",
     network: "eip155:84532",
     payTo: "0xdead",
     build: async () => fakeServer(),
     wrapFactory: fakeWrap(),
+    alert: () => {},
   });
 
-  const meta = { "x402/payment": { scheme: "exact" } };
-  await paid(async (_args, ctx) => { seenCtx = ctx; return { ok: true }; }, "$0.10")(
+  // The real EIP-3009 envelope shape, as @x402/mcp's own extractor reads it.
+  const meta = {
+    "x402/payment": {
+      x402Version: 2,
+      scheme: "exact",
+      network: "eip155:84532",
+      payload: { authorization: { nonce: "0xfeed" }, signature: "0x00" },
+    },
+  };
+  let seen;
+  const ran = await paid(async (_args, p) => { seen = p; return { ok: true }; }, "$0.10")(
     {},
-    { mcpCtx: { mcpReq: { id: 1, method: "tools/call", _meta: meta } } }
+    { mcpCtx: { mcpReq: { _meta: meta } } }
   );
-  assert.deepEqual(seenCtx._meta, meta);
+  assert.equal(ran.ok, true);
+  assert.equal(seen.payNonce, "0xfeed");
+
+  // And with no payment in the context at all, the handler must never run.
+  let handlerRan = false;
+  const refused = await paid(async () => { handlerRan = true; return { ok: true }; }, "$0.10")(
+    {},
+    { mcpCtx: { mcpReq: { _meta: undefined } } }
+  );
+  assert.equal(handlerRan, false, "nothing may be reserved against a payment that cannot be identified");
+  // The refusal has already been through cancelSettlementOnRefusal by the time
+  // it gets back here, so it is a complete MCP tool result and the reason is
+  // one level down. That conversion is the point: it carries `isError`, which
+  // is what stops the payment being settled for a refusal.
+  assert.equal(refused.isError, true);
+  assert.equal(refused.structuredContent.reason, "payment-unavailable");
+  assert.equal(refused.structuredContent.detail, "no-nonce");
 });
 
 test("warmUp reports readiness and never rejects when the facilitator is down", async () => {
@@ -471,7 +521,7 @@ test("mint asks for exactly the price its own description quotes", async () => {
   const tool = makeMintTool({
     q,
     chain: openChain(),
-    paid: (fn, price) => { askedPrice = price; return fn; },
+    paid: (fn, price) => { askedPrice = price; return settleNow(fn); },
     supplyCap: 10,
     today: () => 100,
   });
@@ -488,7 +538,7 @@ test("upgrade asks for the MARK's price, not the mint price", async () => {
     q,
     chain: openChain(),
     catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
-    paid: (fn, price) => { askedPrice = price; return fn; },
+    paid: (fn, price) => { askedPrice = price; return settleNow(fn); },
   });
   const r = await tool.handler({ tokenId: 1, upgradeId: 1 }, { keyId: "k1" });
   assert.equal(r.ok, true);
@@ -535,8 +585,8 @@ test("each paid tool names itself in the payment demand", async () => {
     },
   });
 
-  await paid(async () => ({ ok: true }), "$0.10", { tool: "mint", description: "Mint a token" })({}, { mcpCtx: {} });
-  await paid(async () => ({ ok: true }), "$5000", { tool: "upgrade", description: "Apply the Crown Mark" })({}, { mcpCtx: {} });
+  await paid(async () => ({ ok: true }), "$0.10", { tool: "mint", description: "Mint a token" })({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
+  await paid(async () => ({ ok: true }), "$5000", { tool: "upgrade", description: "Apply the Crown Mark" })({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
 
   assert.deepEqual(configs.map((c) => c.resource.url), ["mcp://tool/mint", "mcp://tool/upgrade"]);
   assert.deepEqual(configs.map((c) => c.resource.description), ["Mint a token", "Apply the Crown Mark"]);
@@ -556,7 +606,7 @@ test("two Marks sharing a price still get their own demand, because the descript
     },
   });
   const call = (description) =>
-    paid(async () => ({ ok: true }), "$100", { tool: "upgrade", description })({}, { mcpCtx: {} });
+    paid(async () => ({ ok: true }), "$100", { tool: "upgrade", description })({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
 
   await call("Apply the Halo Mark to token 1");
   await call("Apply the Halo Mark to token 2");
@@ -573,7 +623,7 @@ test("the mint tool passes its own name and mint description through to the dema
   const tool = makeMintTool({
     q,
     chain: openChain(),
-    paid: (fn, _price, o) => { opts = o; return fn; },
+    paid: (fn, _price, o) => { opts = o; return settleNow(fn); },
     supplyCap: 10,
     today: () => 100,
   });
@@ -590,7 +640,7 @@ test("the upgrade tool names the Mark and the token in its demand", async () => 
     q,
     chain: openChain(),
     catalogue: { 1: { name: "Vein", price: "$1", minLevel: 1, supply: 10 } },
-    paid: (fn, _price, o) => { opts = o; return fn; },
+    paid: (fn, _price, o) => { opts = o; return settleNow(fn); },
   });
   await tool.handler({ tokenId: 7, upgradeId: 1 }, { keyId: "k1" });
   assert.equal(opts.tool, "upgrade");
@@ -609,7 +659,7 @@ test("a non-https facilitator is refused rather than used", async () => {
       payTo: "0xdead",
       alert: (m) => alerts.push(m),
     });
-    const r = await paid(async () => ({ ok: true }), "$0.10", MINT_RESOURCE)({}, { mcpCtx: {} });
+    const r = await paid(async () => ({ ok: true }), "$0.10", MINT_RESOURCE)({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
     assert.equal(r.reason, "payment-unavailable");
   }
   assert.equal(alerts.length, 3);
@@ -728,7 +778,7 @@ test("a free Mark is still refused when the chain refuses the write", async () =
 test("a bought Mark still goes through the payment wrapper, at its own price", async () => {
   const q = tokenAt({ level: 40, streak: 40 });
   let charged = null;
-  const paid = (fn, price, meta) => { charged = { price, meta }; return fn; };
+  const paid = (fn, price, meta) => { charged = { price, meta }; return settleNow(fn); };
   const tool = makeUpgradeTool({
     q, chain: openChain(), catalogue: assertLadderSane(LADDER), paid,
   });
@@ -789,7 +839,7 @@ test("Tint without an Iris is refused, and accepted once one is held", async () 
   // bought Mark alone.
   const withIris = tokenWearing({ level: 200, streak: 200, marks: [6] });
   let charged = null;
-  const yes = await ladderTool(withIris, { paid: (fn, price) => { charged = price; return fn; } })
+  const yes = await ladderTool(withIris, { paid: (fn, price) => { charged = price; return settleNow(fn); } })
     .handler({ tokenId: 1, upgradeId: 9, variant: 1 }, { keyId: "k1" });
   assert.equal(yes.ok, true);
   assert.equal(yes.variant, 1);
@@ -812,7 +862,7 @@ test("a variant this Mark does not accept is refused before payment", async () =
 // is not -- a bound tested from one side only passes for an off-by-one.
 test("the highest legal variant is accepted and the next is not", async () => {
   const q = tokenWearing({ level: 200, streak: 200 });
-  const ok = await ladderTool(q, { paid: (fn) => fn })
+  const ok = await ladderTool(q, { paid: settleNow })
     .handler({ tokenId: 1, upgradeId: 5, variant: 2 }, { keyId: "k1" });
   assert.equal(ok.ok, true);
   assert.equal(ok.variant, 2);
@@ -831,7 +881,7 @@ test("a non-zero variant on a Mark with no variants is refused", async () => {
 test("the variant is named in the payment demand an agent reads", async () => {
   const q = tokenWearing({ level: 200, streak: 200 });
   let meta = null;
-  await ladderTool(q, { paid: (fn, price, m) => { meta = m; return fn; } })
+  await ladderTool(q, { paid: (fn, price, m) => { meta = m; return settleNow(fn); } })
     .handler({ tokenId: 1, upgradeId: 5, variant: 2 }, { keyId: "k1" });
   assert.equal(meta.description, "Apply the Iris Mark (leaf) to token 1");
 });
@@ -869,7 +919,9 @@ test("the exclusion is re-checked AFTER settlement", async () => {
 // everything.
 test("with nothing racing, the same call settles and reserves", async () => {
   const q = tokenWearing({ level: 40, streak: 40 });
-  const r = await ladderTool(q, { paid: (fn) => fn })
+  // settleNowFor, not settleNow: this asserts on pendingMarkOrders, which is
+  // what the CLOCK reads, and only a SETTLED reservation is ever 'queued'.
+  const r = await ladderTool(q, { paid: settleNowFor(q) })
     .handler({ tokenId: 1, upgradeId: 3, variant: 0 }, { keyId: "k1" });
   assert.equal(r.ok, true);
   assert.equal(r.upgradeId, 3);
@@ -924,7 +976,7 @@ test("both sides of pair five cannot be bought inside one Clock cycle", async ()
   const charged = [];
   const buy = (upgradeId) => makeUpgradeTool({
     q, chain: openChain(), catalogue: assertLadderSane(LADDER),
-    paid: (fn, price) => { charged.push(price); return fn; },
+    paid: (fn, price) => { charged.push(price); return settleNow(fn); },
   }).handler({ tokenId: 1, upgradeId }, { keyId: "k1" });
 
   const tint = await buy(9);

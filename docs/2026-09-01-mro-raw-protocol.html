@@ -398,7 +398,10 @@ wallet must sign, and we never submit it:</p>
 closes the other permanently.</strong> No pair can close anything in another. You may
 take neither, and nothing about a Mark shortens the 365 days.</p>
 <p>In four of the pairs one side is BOUGHT and the other is EARNED by a run of
-returning days:</p>
+returning days. A run here is the LONGEST you have ever completed, not the one
+standing today: once you have reached 365 days, a later missed day does not
+take Break away from you. The <code>status</code> tool reports <code>streak</code>, which is the
+live run and does fall; the gate is measured against your best.</p>
 <table>
 <thead>
 <tr>
@@ -506,15 +509,40 @@ requested: <code>mark-level-too-low</code>, <code>mark-needs-streak</code>, <cod
 gates. <code>mark-sold-out</code> is in the same list and cannot fire today: nothing in
 the ladder is limited, and this service refuses to start on a catalogue that
 says otherwise.</p>
-<p><strong>One refusal arrives AFTER your money has moved: <code>paid-but-unavailable</code>.</strong>
-Settling takes seconds, and inside that window the piece can be paused, the
-token&#39;s owner can seal it with <code>rest</code>, or the same Mark can be reserved by
-another call. So every gate is read a SECOND time after settlement, and if one
-of them now refuses you get
-<code>{ &quot;ok&quot;: false, &quot;reason&quot;: &quot;paid-but-unavailable&quot;, &quot;detail&quot;: &quot;&lt;the gate that refused&gt;&quot; }</code> with the payment already made. Budget for it before you spend
-$1250.00 on a Vessel. It is not silent on our side: it raises an operator
-alert, because somebody has to see that an agent paid for something it could
-not be given.</p>
+<p><strong>One refusal arrives after you have committed to paying, and cancels the
+payment: <code>paid-but-unavailable</code>.</strong> The payment round trip takes seconds, and
+inside that window the piece can be paused, the token&#39;s owner can seal it with
+<code>rest</code>, or the same Mark can be reserved by another call. So every gate is read
+a SECOND time, and if one of them now refuses you get
+<code>{ &quot;ok&quot;: false, &quot;reason&quot;: &quot;paid-but-unavailable&quot;, &quot;detail&quot;: &quot;&lt;the gate that refused&gt;&quot; }</code>.</p>
+<p><strong>Nothing is transferred.</strong> Your authorisation is verified before the gates are
+re-read and settled only after they pass, so a refusal here means the
+authorisation is never submitted and your balance does not move. The result
+carries <code>isError</code>, which is what tells the payment layer to cancel; a client
+that reads it as an ordinary refusal and stops is behaving correctly, and one
+that retries will simply be quoted again. This is measured against the live
+facilitator rather than assumed: an earlier build of this service returned the
+same refusal WITHOUT <code>isError</code> and the payment settled anyway, so an agent paid
+1 USDC for it. If you are reading this against an older deployment, do not
+assume the cancellation.</p>
+<p>It is not silent on our side either way: it raises an operator alert, because
+somebody has to see that an agent got to the end of a purchase and came away
+with nothing.</p>
+<p><strong>And when the settlement itself does not go through, you get nothing and keep
+your money.</strong> A gate refusing is one way a purchase can end; the other is the
+transfer failing -- an authorisation that expired while the gates were being
+read, a facilitator that errored, a nonce cancelled on chain. Everything a paid
+call writes is a RESERVATION until the payment lands, and only the settlement
+promotes it into something that will be written on chain. So a failed
+settlement leaves no token, no Mark, and no forfeited pair, and the one mint
+per key is not spent -- you can call again immediately rather than waiting for
+anything to expire. A token id you were quoted but did not pay for is never
+minted.</p>
+<p>This direction is worth stating because the obvious implementation gets it
+wrong: the handler runs before the settle, so writing the row there and
+trusting the payment to follow hands out free tokens whenever a payment fails,
+and an agent can make one fail on purpose. If you are reading this against a
+deployment older than 2026-09-05, do not assume this guarantee.</p>
 <p>The four EARNED Marks cost nothing, so a qualifying token gets
 <code>{ ok: true, accepted: true, upgradeId, variant, appliedBy: &quot;the next Clock run&quot; }</code> with no payment step at all. The six BOUGHT Marks go through the same
 x402 settlement as <code>mint</code>.</p>
@@ -732,6 +760,5 @@ captures is the refusal, and both <code>upgrade</code> calls are refused before 
 ever requested.</p>
 <p>If this page and that output disagree, the output is right and this page is a
 bug. Say so.</p>
-
 </body>
 </html>

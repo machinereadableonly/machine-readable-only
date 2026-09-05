@@ -6,8 +6,17 @@ CREATE TABLE IF NOT EXISTS keys (
   keyId        TEXT PRIMARY KEY,   -- RFC 7638 thumbprint of the JWK
   jwk          TEXT NOT NULL,      -- the public JWK, as JSON
   directory    TEXT,               -- the agent's own directory URL, or NULL for the easy path
-  registeredAt INTEGER NOT NULL    -- unix ms
+  registeredAt INTEGER NOT NULL,   -- unix ms
+  -- The SAME key id in the form the CONTRACT stores: keyIdToBytes32(keyId),
+  -- which is a SHA-256 and therefore one way. A `Rebound` event names the new
+  -- key only in that form, so without this column the Warden could see that a
+  -- token had been rebound and never work out to whom -- which is exactly why
+  -- the mirror's binding never converged with the chain's. Stored going
+  -- FORWARDS at registration, so the lookup a Rebound needs is an index hit
+  -- rather than an impossible inversion.
+  keyIdHash    TEXT
 );
+CREATE INDEX IF NOT EXISTS keys_hash ON keys (keyIdHash);
 
 CREATE TABLE IF NOT EXISTS tokens (
   tokenId    INTEGER PRIMARY KEY,
@@ -50,12 +59,27 @@ CREATE TABLE IF NOT EXISTS mark_orders (
   upgradeId INTEGER NOT NULL,
   variant   INTEGER NOT NULL DEFAULT 0,   -- the Iris shape or the Tint ink; 0 for every other Mark
   paymentTx TEXT,
-  -- queued | written | failed. 'failed' is the terminal state for an order the
-  -- chain refused on simulation: the same call against the same state will be
-  -- refused every night, so retrying it is noise and the row waits for a human
-  -- instead. It is deliberately NOT deleted -- the unique index below is what
-  -- stops a second reservation of the same Mark, and a Mark the chain refused
-  -- should stay refused until somebody has looked at it.
+  -- The EIP-3009 nonce of the authorisation that is paying for this row, and
+  -- when the row was reserved. NULL on both for the four EARNED Marks, which
+  -- take no payment at all and are therefore queued outright. See `status`.
+  payNonce   TEXT,
+  reservedAt INTEGER,
+  -- awaiting-payment | queued | written | failed.
+  --
+  -- 'awaiting-payment' is where a BOUGHT Mark starts. The `authorization` flow
+  -- settles only after the tool handler returns, so at the moment this row is
+  -- written the money has NOT moved and may never move -- the authorisation can
+  -- be cancelled or expire mid-handler. Only the settlement hook promotes it to
+  -- 'queued', which is the only status the Clock writes on chain. An
+  -- 'awaiting-payment' row older than the reservation window is dead and is
+  -- cleared by the next reservation that needs its slot.
+  --
+  -- 'failed' is the terminal state for an order the chain refused on
+  -- simulation: the same call against the same state will be refused every
+  -- night, so retrying it is noise and the row waits for a human instead. It is
+  -- deliberately NOT deleted -- the unique index below is what stops a second
+  -- reservation of the same Mark, and a Mark the chain refused should stay
+  -- refused until somebody has looked at it.
   status    TEXT NOT NULL DEFAULT 'queued'
 );
 
@@ -73,10 +97,20 @@ CREATE TABLE IF NOT EXISTS mints (
   tokenId   INTEGER PRIMARY KEY,
   toAddress TEXT NOT NULL,
   keyId     TEXT NOT NULL,
+  -- The settlement receipt. NULL until the payment has actually landed, which
+  -- is what separates a reservation from a sale.
   paymentTx TEXT,
+  -- The EIP-3009 nonce of the authorisation paying for this mint, and when the
+  -- row was reserved. Every mint is paid for, so unlike mark_orders these are
+  -- never NULL on a row this service wrote.
+  payNonce   TEXT,
+  reservedAt INTEGER,
   qr        TEXT,                            -- the solved bitmap, hex; NULL until solved
   solveState TEXT NOT NULL DEFAULT 'pending', -- pending | solving | done | failed
   solveTries INTEGER NOT NULL DEFAULT 0,
+  -- awaiting-payment | queued | written. Same meaning as in mark_orders above:
+  -- a mint is reserved before settlement is attempted and only promoted to
+  -- 'queued' when the money has actually moved.
   status    TEXT NOT NULL DEFAULT 'queued'
 );
 

@@ -32,7 +32,14 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
       const blocked = await paidWriteBlock(chain, { to: args.to });
       if (blocked) return { ok: false, reason: blocked };
 
-      return paid(async () => {
+      // Expire reservations nobody paid for BEFORE deciding anything. The
+      // unique index on mints.keyId is what makes one mint per key real, and a
+      // dead 'awaiting-payment' row sits in it just as solidly as a real one --
+      // so without this sweep an agent whose settlement failed once would be
+      // told `already-minted` forever, for a token it does not have.
+      q.dropExpiredReservations();
+
+      return paid(async (_args, { payNonce }) => {
         // BOTH GATES ARE RE-DECIDED HERE, because the payment round trip takes
         // seconds and everything checked before it is now stale.
         //
@@ -93,9 +100,22 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
           // mints.keyId before anything else is attempted; if it throws, the
           // whole transaction rolls back and insertToken never lands either.
           q.transact(() => {
-            // solveState 'pending' is what puts this token in front of the solver.
-            q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId });
+            // BOTH ROWS ARE A RESERVATION, NOT A SALE. The payment has been
+            // verified and NOT settled -- the `authorization` flow settles only
+            // after this function returns -- so these land as
+            // 'awaiting-payment' and the Clock, which reads only 'queued', will
+            // not write them. The settlement hook promotes them when the money
+            // actually moves; if it never does, dropExpiredReservations above
+            // clears them and this key can mint again.
+            //
+            // solveState 'pending' is what puts this token in front of the
+            // solver, and that is deliberate even before payment lands: solving
+            // takes about an hour and the mint has to be ready for the next
+            // Clock run. The solver only ever writes a bitmap into the row; it
+            // cannot promote it, so a solved unpaid row is still unwritable.
+            q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId, payNonce });
             q.insertToken({ tokenId, keyId: ctx.keyId, owner: args.to, lastDay: day, mintDay: day });
+            q.setTokenAwaitingPayment(tokenId);
           });
         } catch (err) {
           // The unique index refused a second mint for this key. The agent has
