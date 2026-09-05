@@ -9,6 +9,11 @@ import { toRequestLike, pinnedUrl, challengeBody, admit, sweepSeen, sweepSpent }
 import { contentDigest, MAX_WINDOW_MS } from "../src/door/verify.mjs";
 import { issueChallenge, CHALLENGE_MS } from "../src/door/challenge.mjs";
 import { createServer } from "../src/server.mjs";
+import { openDb } from "../src/mirror/db.mjs";
+import { queries } from "../src/mirror/queries.mjs";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const VECTORS = JSON.parse(
   readFileSync(new URL("./vectors/web_bot_auth_architecture_v1.json", import.meta.url), "utf8")
@@ -825,4 +830,42 @@ test("the key directory carries an ETag and answers a conditional GET with 304",
   } finally {
     server.close();
   }
+});
+
+// -- a key that gets in is marked as used -----------------------------------
+//
+// The unit tests for markKeyUsed and pruneUnusedKeys pass whether or not the
+// server ever CALLS them. That is the exact shape of this build's worst defect
+// -- mint and upgrade were built, tested, and never registered on the MCP
+// server -- so this one goes through the real door to a real file database.
+
+test("an admitted request marks its key used, so the prune will not forget it", async () => {
+  const path = join(mkdtempSync(join(tmpdir(), "mro-keyuse-")), "state.db");
+  const signer = await signerFromJWK(ED.key);
+
+  // A registered key that has never been used: exactly a prune candidate.
+  const setup = queries(openDb(path));
+  setup.insertKey({ keyId: signer.keyid, jwk: ED.key, directory: null, registeredAt: Date.now() });
+  assert.equal(setup.getKey(signer.keyid).lastUsedAt, null);
+  // Registered just now, so a 30-day cutoff must not reach it yet.
+  assert.equal(setup.pruneUnusedKeys(Date.now() - 30 * 24 * 60 * 60 * 1000), 0, "guard: not yet a candidate");
+
+  const { server, base } = await startServer({ stateDbPath: path });
+  try {
+    const knock = await rawRequest(base, { method: "POST", path: "/mcp" });
+    const { challenge } = JSON.parse(knock.text);
+    const req = await signedRequest({
+      extraHeaders: { challenge, "challenge-response": answerFor(challenge, signer.keyid) },
+    });
+    const res = await rawRequest(base, {
+      method: "POST", path: "/mcp", headers: req.headers, body: "",
+    });
+    assert.equal(res.status, 200, `expected to be admitted, got ${res.status} ${res.text}`);
+  } finally {
+    server.close();
+  }
+
+  const after = queries(openDb(path));
+  assert.notEqual(after.getKey(signer.keyid).lastUsedAt, null, "the door did not mark the key used");
+  assert.equal(after.pruneUnusedKeys(Date.now()), 0, "a key that just got in must survive the prune");
 });

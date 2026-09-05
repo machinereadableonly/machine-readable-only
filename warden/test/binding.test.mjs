@@ -125,6 +125,13 @@ test("a mirror created before the new columns existed opens, migrates and works"
   // A row written BEFORE these columns existed has no payNonce, and must never
   // be swept as an expired reservation -- that would delete real history.
   assert.deepEqual(q.dropExpiredReservations(Date.now() + 1), { mints: 0, marks: 0 });
+
+  // The USED key on an upgraded mirror must survive the prune. The old code
+  // recorded no usage at all, so without the backfill every pre-existing key
+  // reads as never-used and the first sweep deletes the lot -- including keys
+  // bound to tokens on chain.
+  assert.equal(q.pruneUnusedKeys(Date.now()), 0, "a key that owns a token must not be pruned");
+  assert.equal(q.getKey(SELLER).keyId, SELLER);
 });
 
 // AND THE CASE THAT CANNOT CONVERGE, which is legitimate rather than an error:

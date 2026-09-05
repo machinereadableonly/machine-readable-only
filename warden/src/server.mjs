@@ -8,6 +8,7 @@ import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
 import { admit, sweepSeen, sweepSpent, pinnedUrl } from "./door/middleware.mjs";
 import { issueChallenge, verifyNonceMinted } from "./door/challenge.mjs";
+import { UNUSED_KEY_TTL_MS } from "./bootstrap.mjs";
 import { makeLookup, guardedFetchDirectory, makeDirectoryCache, registerRoute } from "./door/directory.mjs";
 // tokenView and the MCP handler are NOT imported: they belong to Tasks 6 and 7
 // and arrive through config, so this router is runnable the day it is written.
@@ -100,6 +101,22 @@ export function createServer(config) {
 
   setInterval(() => sweepSeen(seen), 10_000).unref();
   setInterval(() => sweepSpent(spent), 30_000).unref();
+
+  // Forget keys that registered and never came through the door. Without this
+  // the 10,000-key ceiling is reached once and the only entrance for an agent
+  // with no domain of its own is shut permanently -- no eviction, no expiry, no
+  // operator route in the code. Hourly is far more often than a 30-day window
+  // needs; it costs one indexed DELETE and means a flood clears on its own
+  // rather than waiting for a restart.
+  const prunedDirectory = () => {
+    const gone = q.pruneUnusedKeys(Date.now() - UNUSED_KEY_TTL_MS);
+    if (gone > 0) {
+      // The served directory listed them, so it is now wrong.
+      directory.invalidate();
+      console.log(`warden: forgot ${gone} key(s) registered but never used`);
+    }
+  };
+  setInterval(prunedDirectory, 60 * 60 * 1000).unref();
 
   return createHttpServer(async (req, res) => {
     try {
@@ -272,6 +289,10 @@ export function createServer(config) {
         secret: config.challengeSecret, lookupKey, seen, spent, domain: config.domain, body: raw,
       });
       if (!decision.ok) return json(res, decision.status, decision.body);
+
+      // This key is in use, so it is never a candidate for the prune above.
+      // Throttled to one write a day inside the query itself.
+      q.markKeyUsed(decision.keyId);
 
       // `return await`, not a bare `return`. A bare return hands the promise
       // back OUTSIDE this try, so a rejecting handler becomes an unhandled

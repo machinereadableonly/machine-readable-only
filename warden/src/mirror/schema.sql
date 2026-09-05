@@ -14,7 +14,13 @@ CREATE TABLE IF NOT EXISTS keys (
   -- the mirror's binding never converged with the chain's. Stored going
   -- FORWARDS at registration, so the lookup a Rebound needs is an index hit
   -- rather than an impossible inversion.
-  keyIdHash    TEXT
+  keyIdHash    TEXT,
+  -- When this key was last used to get through the door, unix ms, or NULL if
+  -- it never has been. Registration alone does NOT count as use: registering
+  -- is free and unauthenticated, so a key that registers and never signs
+  -- anything is the shape a flood takes. See the prune in migrate()'s caller
+  -- and UNUSED_KEY_TTL_MS.
+  lastUsedAt   INTEGER
 );
 -- The index on keyIdHash is created by migrate(), NOT here. This file is
 -- exec'd WHOLE against an existing database before any migration runs, and
