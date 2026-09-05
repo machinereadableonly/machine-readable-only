@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
+import {MroScript} from "./MroScript.sol";
 
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {SpikeBitmaps} from "./SpikeBitmaps.sol";
@@ -18,9 +19,12 @@ import {SpikeBitmaps} from "./SpikeBitmaps.sol";
 ///
 ///   forge script script/MintOnePlan1.s.sol:MintOnePlan1 \
 ///     --sig "run(address)" <token-address> --rpc-url base_sepolia --broadcast
-contract MintOnePlan1 is Script {
+contract MintOnePlan1 is MroScript {
     function run(address token) external {
-        uint256 key = vm.envUint("SPIKE_DEPLOYER_KEY");
+        // FIRST, before anything is read or sent: the operator has to have
+        // stated which chain this is, and been right. See MroScript.
+        guardChain();
+        uint256 key = deployerKey();
         address to = vm.addr(key);
 
         vm.startBroadcast(key);

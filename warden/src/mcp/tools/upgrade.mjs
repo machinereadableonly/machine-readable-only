@@ -2,6 +2,7 @@
 import * as z from "zod";
 import { paidWriteBlock, bindingBlock, requireChain } from "../gates.mjs";
 import { keyIdToBytes32 } from "../keyId.mjs";
+import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
 import { VARIANT_NAMES, effectiveRun } from "../ladder.mjs";
 
 // There was an exported UPGRADE_REASONS array here, listing the eight
@@ -223,7 +224,19 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         // Clock cannot apply a Mark nobody has paid for yet. The earned route
         // above uses reserveMark and queues outright, because nothing settles
         // there.
-        if (!blocked && q.reserveMarkPaid(tokenId, upgradeId, variant, payNonce)) {
+        let reserved = false;
+        try {
+          reserved = !blocked && q.reserveMarkPaid(tokenId, upgradeId, variant, payNonce);
+        } catch (err) {
+          // See the same branch in mint.mjs: one signed authorisation presented
+          // for a second effect, refused before settlement so nothing is
+          // charged. The demands for mint and Hush are byte-identical at $1.00,
+          // which is precisely how a payload crosses between tools.
+          if (!(err instanceof PaymentNonceReusedError)) throw err;
+          alert(`upgrade ${upgradeId} for token ${tokenId} refused: payment authorisation already used`);
+          return { ok: false, reason: "payment-already-used" };
+        }
+        if (reserved) {
           // `ok: true` because every refusal from this tool carries
           // `ok: false`, and a client that branches on `result.ok` -- the one
           // field every other tool here answers with -- read a PAID success as

@@ -2,13 +2,17 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
+import {MroScript} from "./MroScript.sol";
 import {Ladder} from "../src/Ladder.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 
 /// @notice Deploy the pair and write all ten Marks. Modelled on DeployPlan1.s.sol.
-contract DeployPlan5 is Script {
+contract DeployPlan5 is MroScript {
     function run() external {
+        // FIRST, before anything is read or sent: the operator has to have
+        // stated which chain this is, and been right. See MroScript.
+        guardChain();
         address warden = vm.envAddress("WARDEN_ADDRESS");
         // THE DEPLOYER KEY, the same way DeployPlan1 and DeploySpike take it.
         // A bare startBroadcast() has no sender, so forge refuses the broadcast
@@ -20,7 +24,7 @@ contract DeployPlan5 is Script {
         // No WARDEN_ADDRESS fallback here, deliberately, unlike DeployPlan1:
         // only setWarden can correct a wrong value afterwards, and this
         // contract is meant to outlive the person running the script.
-        uint256 key = vm.envUint("SPIKE_DEPLOYER_KEY");
+        uint256 key = deployerKey();
         vm.startBroadcast(key);
         Renderer r = new Renderer();
         MachineReadableOnly t = new MachineReadableOnly(address(r), warden);

@@ -147,3 +147,25 @@ CREATE TABLE IF NOT EXISTS mints (
 -- the same key can both pass the pre-payment hasMinted check, so the index is
 -- what actually stops a second token from being recorded.
 CREATE UNIQUE INDEX IF NOT EXISTS mints_key ON mints (keyId);
+
+-- Every payment authorisation this service has ever accepted a reservation
+-- against, one row per EIP-3009 nonce.
+--
+-- WHY A TABLE AND NOT A CHECK. One signed authorisation is bound to an amount
+-- and to nothing else -- not to a tool, a token, a Mark or a variant -- so the
+-- demands for `mint` ($1.00) and Hush ($1.00) are byte-identical and a payload
+-- obtained for one is accepted for the other. Two calls carrying the SAME
+-- payload both verify, because the only single-use enforcement the scheme has
+-- is the chain's authorizationState, which is not consulted until settlement
+-- happens after both handlers have already run. The primary key here is what
+-- makes the second reservation lose, inside the same transaction that writes
+-- it, rather than both winning and the loser being cleaned up afterwards.
+--
+-- Rows are never deleted, including when a reservation is released. An
+-- authorisation that failed cannot be settled later anyway, and re-signing is
+-- free to the agent: no gas, no chain write, one more signature.
+CREATE TABLE IF NOT EXISTS pay_nonces (
+  payNonce   TEXT PRIMARY KEY,
+  tool       TEXT NOT NULL,     -- which tool claimed it, for the audit trail
+  claimedAt  INTEGER NOT NULL   -- unix ms
+);

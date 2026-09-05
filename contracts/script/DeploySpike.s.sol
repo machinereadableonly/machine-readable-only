@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
+import {MroScript} from "./MroScript.sol";
 
 import {MROSpikeToken} from "../src/spike/MROSpikeToken.sol";
 import {Renderer} from "../src/render/Renderer.sol";
@@ -24,7 +25,7 @@ import {SpikeBitmaps} from "./SpikeBitmaps.sol";
 ///
 ///   forge script script/DeploySpike.s.sol:DeploySpike \
 ///     --rpc-url local --private-key $KEY --broadcast
-contract DeploySpike is Script {
+contract DeploySpike is MroScript {
     /// @dev Break is left off token 3 on purpose: it draws nothing yet (the
     /// inversion lands in a later task), so wearing it here would change
     /// nothing while implying it did.
@@ -34,10 +35,13 @@ contract DeploySpike is Script {
     uint256 constant ACHE_AND_BEAT = MarkRenderer.ACHE | MarkRenderer.BEAT;
 
     function run() external returns (address renderer, address token) {
+        // FIRST, before anything is read or sent: the operator has to have
+        // stated which chain this is, and been right. See MroScript.
+        guardChain();
         // The key is read here rather than passed as --private-key so it never
         // has to pass through a shell, where it would land in history and in
         // any transcript of the session. Foundry loads the env file itself.
-        vm.startBroadcast(vm.envUint("SPIKE_DEPLOYER_KEY"));
+        vm.startBroadcast(deployerKey());
 
         Renderer r = new Renderer();
         MROSpikeToken t = new MROSpikeToken(address(r));

@@ -13,6 +13,22 @@ import { keyIdToBytes32 } from "../mcp/keyId.mjs";
 const UNIQUE_VIOLATION = /UNIQUE constraint failed/;
 
 /**
+ * One signed payment authorisation, presented for a second effect.
+ *
+ * Its own class rather than a boolean, because the two reservation paths sit
+ * inside transactions their callers own and a throw is the only thing that
+ * unwinds those. Named so a caller can tell it apart from the unique-index
+ * refusals that mean "you already have this", which are an ordinary answer.
+ */
+export class PaymentNonceReusedError extends Error {
+  constructor(payNonce) {
+    super(`payment authorisation ${payNonce} has already been used`);
+    this.name = "PaymentNonceReusedError";
+    this.payNonce = payNonce;
+  }
+}
+
+/**
  * How long a reservation may sit unsettled before it is treated as dead.
  *
  * A paid row is written by the tool handler and promoted by the settlement
@@ -51,6 +67,8 @@ export function queries(db) {
     getKey: db.prepare("SELECT * FROM keys WHERE keyId = ?"),
     allKeys: db.prepare("SELECT * FROM keys ORDER BY registeredAt ASC"),
     keyCount: db.prepare("SELECT COUNT(*) AS n FROM keys"),
+    claimPayNonce: db.prepare("INSERT INTO pay_nonces (payNonce, tool, claimedAt) VALUES (?, ?, ?)"),
+    payNonceClaim: db.prepare("SELECT * FROM pay_nonces WHERE payNonce = ?"),
     /// Written at most once a day per key -- see markKeyUsed.
     touchKey: db.prepare("UPDATE keys SET lastUsedAt = ? WHERE keyId = ? AND (lastUsedAt IS NULL OR lastUsedAt < ?)"),
     /// Only ever NEVER-USED keys. A key that has been through the door keeps
@@ -297,6 +315,36 @@ export function queries(db) {
     requeueSolving: () => s.requeueSolving.run().changes,
     tokenCount: () => s.tokenCount.get().n,
     /**
+     * Claim a payment authorisation for one tool call, once and for all.
+     *
+     * Returns true when this nonce had never been claimed, false when it had.
+     * MUST be called inside the same transaction as the reservation it is
+     * claiming for -- a claim that commits separately from the row it protects
+     * is two facts a caller can observe half-applied, which is the exact
+     * failure it exists to prevent.
+     *
+     * A false is not an error condition to be logged and shrugged at. It means
+     * one signed authorisation was presented for two different effects, which
+     * an honest client cannot do by accident.
+     */
+    claimPayNonce(payNonce, tool, now = Date.now()) {
+      if (!payNonce) throw new Error("claimPayNonce needs a payment nonce");
+      try {
+        s.claimPayNonce.run(payNonce, tool, now);
+        return true;
+      } catch (err) {
+        // Same discrimination as insertCredit and reserveMark: a duplicate is
+        // an answer, anything else is a fault.
+        if (UNIQUE_VIOLATION.test(err.message)) return false;
+        throw err;
+      }
+    },
+
+    /// What claimed this nonce, or undefined. For tests and for an operator
+    /// asking why a payment was refused.
+    payNonceClaim: (payNonce) => s.payNonceClaim.get(payNonce),
+
+    /**
      * Reserve a mint against a payment that has NOT yet settled.
      *
      * Every mint is paid for, so there is no unpaid variant of this and
@@ -305,9 +353,17 @@ export function queries(db) {
      * token. The row lands as 'awaiting-payment' and only settleByNonce moves
      * it to the 'queued' the Clock reads.
      */
-    insertMint: ({ tokenId, toAddress, keyId, payNonce, now = Date.now() }) => {
+    insertMint({ tokenId, toAddress, keyId, payNonce, now = Date.now() }) {
       if (!payNonce) throw new Error("insertMint needs the payment nonce that will settle it");
+      // THE ROW FIRST, THE CLAIM SECOND. If the unique index refuses this mint
+      // the throw unwinds both, so an agent refused for a reason of its own
+      // does not also lose its authorisation. The caller already holds a
+      // transaction (mint.mjs wraps both rows in one), so this claims inside
+      // it and any rollback un-claims with it.
       s.insertMint.run(tokenId, toAddress, keyId, payNonce, now);
+      if (!this.claimPayNonce(payNonce, "mint", now)) {
+        throw new PaymentNonceReusedError(payNonce);
+      }
     },
 
     /**
@@ -337,13 +393,24 @@ export function queries(db) {
     /// contract as reserveMark, and the same false on a duplicate.
     reserveMarkPaid(tokenId, upgradeId, variant, payNonce, now = Date.now()) {
       if (!payNonce) throw new Error("reserveMarkPaid needs the payment nonce that will settle it");
-      try {
-        s.reserveMarkPaid.run(tokenId, upgradeId, variant, payNonce, now);
+      // One transaction, so a claimed nonce and the order it paid for land
+      // together or not at all. Unlike mint's path this one owns the
+      // transaction, because its caller does not.
+      return this.transact(() => {
+        // Same order as insertMint: the reservation first, so a token that
+        // already holds this Mark is refused WITHOUT burning the agent's
+        // authorisation. Only a reservation that actually landed claims one.
+        try {
+          s.reserveMarkPaid.run(tokenId, upgradeId, variant, payNonce, now);
+        } catch (err) {
+          if (UNIQUE_VIOLATION.test(err.message)) return false;
+          throw err;
+        }
+        if (!this.claimPayNonce(payNonce, "upgrade", now)) {
+          throw new PaymentNonceReusedError(payNonce);
+        }
         return true;
-      } catch (err) {
-        if (UNIQUE_VIOLATION.test(err.message)) return false;
-        throw err;
-      }
+      });
     },
 
     /**

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
+import {MroScript} from "./MroScript.sol";
 
 import {MROSpikeToken} from "../src/spike/MROSpikeToken.sol";
 import {Renderer} from "../src/render/Renderer.sol";
@@ -30,9 +31,12 @@ import {SoakStates} from "./SoakStates.sol";
 /// --private-key, so it never travels through a shell.
 ///
 ///   forge script script/AbSepolia.s.sol:AbSepolia --rpc-url base_sepolia --broadcast --slow
-contract AbSepolia is Script {
+contract AbSepolia is MroScript {
     function run() external returns (address sizedToken, address unsizedToken) {
-        uint256 key = vm.envUint("SPIKE_DEPLOYER_KEY");
+        // FIRST, before anything is read or sent: the operator has to have
+        // stated which chain this is, and been right. See MroScript.
+        guardChain();
+        uint256 key = deployerKey();
         address to = vm.addr(key);
 
         vm.startBroadcast(key);

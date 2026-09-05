@@ -926,8 +926,41 @@ agent's abandonment rather than the operator's.
 | `SEED_AGENT_JWK`, `SEED_PAY_KEY` | VPS `.env` | the seed agent's signing key and a key holding a few USDC |
 | `CDP_API_KEY`, `X_API_*`, `ALCHEMY_KEY` | VPS `.env` | facilitator, daily post, RPC |
 
-If the Warden key leaks, an attacker can mint (only with a paid settlement)
-and check in, but cannot move tokens or funds; rotate with `setWarden`.
+**If the Warden key leaks, an attacker cannot take money or tokens, but CAN end
+the piece.** The parenthetical this sentence used to carry -- "only with a paid
+settlement" -- was false. The 1 USDC price is a Warden constant, not an on-chain
+value: `mint` takes no payment argument, checks no `msg.value` and sees no proof
+of settlement, so a stolen key mints for nothing but gas.
+
+What that buys an attacker, all of it permanent and none of it reversible:
+
+- **Supply, destroyed.** `totalMinted` only ever rises, there is no `burn`
+  anywhere in the contract, and `setSupplyCap` can raise the cap but cannot
+  un-mint. Spread across addresses of their own, an attacker mints out the whole
+  collection in an afternoon at Base gas prices, and the piece is simply over.
+- **Every registered agent's one mint, burned.** `_hasMinted[keyId]` is never
+  freed, not even by `rebind`, and the key directory is PUBLIC by design -- so
+  every `keyId` is computable by anyone. One mint against each, to the
+  attacker's address, and every agent that ever registered can never mint.
+- **The artwork, rewritten.** `batchCheckIn` credits any day in
+  `(lastDay, today()]` for any token, and neither `level` nor `streak` can be
+  reduced.
+- **Marks, closed.** `applyMark` has no clearing path and every exclusion is
+  permanent, so the free earned Marks can be applied to every token that
+  qualifies, shutting the bought side of each pair forever.
+
+What it does NOT buy, which is the half of the original sentence that holds:
+there are exactly four `onlyWarden` functions -- `mint`, `batchCheckIn`,
+`applyMark`, `seed` -- and none takes or moves value. The Warden is not the
+owner, is not an operator for any token, and the contract holds no balance. And
+`batchCheckIn` rejects `day > today()`, so no token can be bricked against
+future check-ins.
+
+**Two mitigations, in order of value.** Set `supplyCap` near actual demand and
+raise it deliberately as the collection fills -- a cap of 10,000 on day one is
+10,000 free mints sitting behind one key, and it is an `onlyOwner` call needing
+no redeploy. And rehearse the rotation, because the response window is minutes:
+see "If the Clock's key leaks" in `warden/DEPLOY.md`.
 
 ### Hosting (aligned to the existing stack)
 
