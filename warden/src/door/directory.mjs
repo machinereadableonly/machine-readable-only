@@ -4,6 +4,7 @@
 // Signature-Agent pointing at it. An agent that does not registers here and
 // sends Signature-Agent pointing at us. Either way the key id is the RFC 7638
 // thumbprint and the entry rule is identical.
+import { createHash } from "node:crypto";
 import { request as httpsRequest } from "node:https";
 import { lookup as dnsLookup } from "node:dns";
 import { isIP } from "node:net";
@@ -300,6 +301,42 @@ export async function registerKey(q, jwk, now = Date.now(), directory = null) {
 export function renderDirectory(q) {
   const rows = q.allKeys();
   return JSON.stringify({ keys: rows.map((r) => JSON.parse(r.jwk)) }, null, 2);
+}
+
+/**
+ * The rendered directory, remembered until the key table changes.
+ *
+ * WHY THIS IS NOT JUST A GET. The directory route is public, unsigned and
+ * unmetered, and it used to call renderDirectory on EVERY request: read every
+ * row, JSON.parse each stored JWK, re-serialise the lot with two-space
+ * indentation. Measured at the 10,000-key ceiling that is 11.8 ms of
+ * synchronous CPU and a 1,140,018-byte response per request -- roughly 85
+ * requests a second to saturate one core of a single-process service with no
+ * worker threads. Rendering once per CHANGE instead of once per READ turns the
+ * hot path into a string copy.
+ *
+ * The ETag comes with it rather than as a second feature: a directory that
+ * changes only on registration is exactly the thing a conditional GET is for,
+ * and a 304 costs no body at all.
+ *
+ * `render` is injectable so a test can count how many times it actually runs;
+ * nothing in the service passes it.
+ */
+export function makeDirectoryCache(q, render = renderDirectory) {
+  let doc = null;
+  return {
+    current() {
+      if (doc === null) {
+        const body = render(q);
+        doc = { body, etag: `"${createHash("sha256").update(body).digest("hex")}"` };
+      }
+      return doc;
+    },
+    /// Called after a successful registration. The next read re-renders.
+    invalidate() {
+      doc = null;
+    },
+  };
 }
 
 /**

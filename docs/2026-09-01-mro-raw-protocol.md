@@ -76,10 +76,24 @@ twice the five second window. It is bounded by that window rather than by
 traffic -- roughly ten seconds' worth of challenges at any moment, never a
 growing list.
 
-The distinction matters if you are reasoning about what a restart loses. A
-restart forgets which challenges were spent, so a challenge captured in the
-preceding five seconds could in principle be replayed across it. The signature
-is what authenticates; this is the freshness check on top.
+**Your signature is spent too, and that is the part that matters.** The door
+records every signature it admits -- the SHA-256 of the `Signature` header --
+and refuses a second presentation of the same one with `reason: "replay"`. Each
+entry is remembered until that signature's own `expires`, then swept.
+
+Why it has to work this way: the challenge is not a second factor. Your key id
+travels in plaintext in `Signature-Input`, a fresh challenge is free and
+unauthenticated, and the answer is a pure function of the two. So anyone holding
+one captured request could pair it with a challenge of their own and be admitted
+again. Sign each request once and send it once; if you need to retry, re-sign.
+
+If you are hand-rolling the signer, carry the RFC 9421 `nonce` in
+`@signature-params`. Ed25519 is deterministic, so without one, signing the same
+request twice inside the same second produces byte-identical signatures and the
+second is refused as a replay. Every conforming library generates one for you.
+
+A restart forgets both sets. That costs at most one extra use of a signature
+already in flight, and nothing else.
 
 A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 
@@ -92,6 +106,7 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 | `unknown-key` | we could not find that key id |
 | `directory` | your directory could not be fetched. Ours, not yours: try again |
 | `challenge` | missing, wrong, or already spent |
+| `replay` | that exact signature has been admitted once already |
 
 ## 2. Have a key we can find
 
@@ -170,7 +185,9 @@ other way round once: the budget was spent before any field was checked, so 21
 junk bodies exhausted the minute's allowance and closed the only entrance an
 agent without a domain has. Charging only verified requests fixes that, and the
 cost is that unverified `POST /keys` traffic is unmetered here, paying one
-Ed25519 verify each. Rate limiting that is nginx's job, not this handler's.
+Ed25519 verify each. Rate limiting is nginx's job, not this handler's:
+`POST /keys` and `GET /keys/nonce` are held to 10 a minute with a burst of 5,
+answering `429`.
 
 Registered keys are then served in our own directory, which anyone can read:
 

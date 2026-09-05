@@ -33,6 +33,40 @@
 # other sites on this box use, and it is why the challenge can be answered
 # before any certificate is present.
 
+# RATE LIMITS ON THE TWO UNSIGNED WRITE PATHS.
+#
+# `POST /keys` is the way in for an agent with no domain of its own, and
+# `GET /keys/nonce` is the value it signs to get there. Neither can carry a
+# signature -- registering is how a caller becomes able to sign at all -- so the
+# only budget the application can charge is per-thumbprint, and a fresh Ed25519
+# keypair is free. That makes the aggregate nginx's job, exactly as the protocol
+# document already claims: "Rate limiting that is nginx's job, not this
+# handler's". Until now that sentence described nothing.
+#
+# WHAT THIS DOES AND DOES NOT BUY, stated plainly because the difference
+# matters. `$binary_remote_addr` is the address nginx sees. This origin does NOT
+# have nginx's real_ip module configured, so for traffic arriving through
+# Cloudflare that address is a Cloudflare EDGE ip, not the client's. The limit
+# therefore buckets by edge node rather than by caller: real protection against
+# one host hammering the origin directly, partial against a distributed flood
+# through the proxy. Do not "improve" it by keying on CF-Connecting-IP or
+# X-Forwarded-For while the origin lock below is off -- those headers are
+# forgeable by anyone who can reach this box, and an attacker rotating one gets
+# a fresh bucket per request, which is worse than no limit because it reads
+# like one. The honest upgrade path is: turn the origin lock on, THEN configure
+# set_real_ip_from + real_ip_header, and this same directive starts metering
+# real clients.
+#
+# These live at file scope on purpose: sites-enabled/* is included inside
+# http{}, which is the only context limit_req_zone is valid in. 10m holds
+# roughly 160,000 addresses.
+limit_req_zone $binary_remote_addr zone=mro_keys:10m rate=10r/m;
+
+# 503 is the nginx default and means "the server is broken". A caller that has
+# been rate limited is not looking at a broken server, and 429 is the answer
+# that tells it to slow down rather than to retry harder or report an outage.
+limit_req_status 429;
+
 server {
     listen 80;
     listen [::]:80;
@@ -49,19 +83,40 @@ server {
     #
     #   if ($cf_real_ip_ok = 0) { return 403; }
 
-    # The whole piece is one upstream. /, /llms.txt, /t/<id>, /keys,
-    # /keys/nonce, /mcp and the key directory are all the Warden's.
+    # Declared once at server scope and INHERITED by every location below.
+    # Repeating them per location is how one of them eventually goes missing
+    # from the block that needed it.
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # MCP responses can stream. Buffering them would hold a reply until it
+    # completed, which turns an interactive tool call into a stall.
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_request_buffering off;
+
+    # The registration pair, metered. `burst=5 nodelay` lets a caller that has
+    # been idle register a handful of keys back to back -- an agent fleet coming
+    # up for the first time is a legitimate burst -- while holding the sustained
+    # rate at 10 a minute. Exact-match locations (`=`) so nothing else is
+    # accidentally caught by a prefix.
+    location = /keys {
+        limit_req zone=mro_keys burst=5 nodelay;
+        proxy_pass http://127.0.0.1:3006;
+    }
+
+    location = /keys/nonce {
+        limit_req zone=mro_keys burst=5 nodelay;
+        proxy_pass http://127.0.0.1:3006;
+    }
+
+    # The whole piece is one upstream. /, /llms.txt, /t/<id>, /mcp and the key
+    # directory are all the Warden's. NOT metered here: /mcp is authenticated by
+    # signature and the reads are cheap, and a limit on this block would meter
+    # the artwork's own QR destination.
     location / {
         proxy_pass http://127.0.0.1:3006;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # MCP responses can stream. Buffering them would hold a reply until it
-        # completed, which turns an interactive tool call into a stall.
-        proxy_http_version 1.1;
-        proxy_buffering off;
-        proxy_request_buffering off;
     }
 }
