@@ -156,7 +156,24 @@ export function makeWriter({
     }
     nonce += 1;
 
-    const receipt = await pub.waitForTransactionReceipt({ hash });
+    // THE ONE CALL IN THIS FUNCTION THAT USED TO BE UNWRAPPED, and the gap it
+    // left was not small. A transport error, a WaitForTransactionReceiptTimeout,
+    // or the systemd unit's TimeoutStartSec firing all leave the transaction IN
+    // THE MEMPOOL and abandon the run -- the write lands, the mirror never
+    // learns, and every later night rebuilds the same doomed chunk.
+    //
+    // "Unknown" is a THIRD outcome, not a failure. A failed send can be retried;
+    // this cannot, because the transaction may yet mine and a retry would send
+    // it twice. So it is named distinctly, the hash is handed back so a human
+    // can look it up, and recovery is left to the next run reading the chain's
+    // own state (see healDayNotAdvanced in batch.mjs).
+    let receipt;
+    try {
+      receipt = await pub.waitForTransactionReceipt({ hash });
+    } catch (err) {
+      log(`clock: ${label} was BROADCAST but its receipt never arrived, tx ${hash} -- fate unknown`);
+      return { ok: false, reason: "receipt-unknown", hash, detail: shortMessage(err) };
+    }
     if (receipt.status !== "success") {
       // viem RESOLVES here rather than throwing. Without this check the caller
       // would mark the row written on a transaction that reverted.

@@ -109,17 +109,25 @@ async function main() {
   console.log(
     `clock: run finished in ${Date.now() - started}ms -- ` +
       `${summary.minted.length} minted, ${summary.credited.length} credited, ` +
-      `${summary.marks.length} marks, ${summary.dropped.length} dropped, ${summary.stuck.length} stuck`
+      `${summary.healed.length} healed, ${summary.marks.length} marks, ` +
+      `${summary.dropped.length} dropped, ${summary.stuck.length} stuck`
   );
   db.close();
 
   // A run that stopped on gas is NOT a failure: it did exactly what it should,
   // and tomorrow's run writes the same rows with the same day numbers. Anything
   // aborted, or any token stuck with a paid agent and no artwork, is.
+  //
+  // A CONDEMNED CREDIT FAILS THE RUN TOO, added 2026-09-05. It used to exit
+  // ZERO: `dropped` was logged per entry as "stays queued", which reads exactly
+  // like the ordinary poison-row path, and systemd recorded success. A token's
+  // record is the artwork, so a day that cannot be written is not a routine
+  // refusal -- and this was the one queue with no terminal state and no failure
+  // signal at all.
   if (summary.aborted) {
     console.error(`clock: run ABORTED (${summary.aborted})`);
     process.exitCode = 1;
-  } else if (summary.stuck.length > 0) {
+  } else if (summary.stuck.length > 0 || summary.stuckCredits.length > 0) {
     process.exitCode = 1;
   }
 }

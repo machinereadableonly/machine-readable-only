@@ -39,6 +39,32 @@ export const STALE_AFTER_RUNS = 3;
  * null  - the chain could not be read, which is NEITHER of the above and must
  *         never be treated as either.
  */
+/**
+ * One token's `lastDay` as the CHAIN holds it, or null when it cannot be read.
+ *
+ * This is the only way a landed-but-unmarked check-in can ever be discovered.
+ * `BatchCheckedIn(fromDay, toDay, count)` names no tokens, so events cannot
+ * answer it; `viewOf` can.
+ *
+ * Null on ANY failure, and the caller must treat null as "could not ask" rather
+ * than "not on chain" -- healing a row that did not land would lose that day
+ * forever, because batchCheckIn refuses `day <= lastDay` and a missed day can
+ * never be backfilled.
+ */
+export async function chainLastDay({ publicClient, contract, tokenId }) {
+  try {
+    const view = await publicClient.readContract({
+      address: contract,
+      abi: MRO_ABI,
+      functionName: "viewOf",
+      args: [BigInt(tokenId)],
+    });
+    return Number(view.lastDay);
+  } catch {
+    return null;
+  }
+}
+
 export async function mintIsOnChain({ publicClient, contract, mint }) {
   try {
     const [owner, view] = await Promise.all([
@@ -76,6 +102,16 @@ export async function runClock({
     /// waiting for a human. Separate from `stuck`, which is mints whose artwork
     /// never solved -- the two need different answers from whoever reads them.
     stuckMarks: [],
+    /// Check-ins the chain ALREADY HELD. Not written by this run and not
+    /// refused: the mirror was behind, and these rows are now caught up. They
+    /// are counted separately because "we credited a day" and "we discovered a
+    /// day was credited months ago" are different facts about the night.
+    healed: [],
+    /// Credits the chain condemned outright -- a token that does not exist, or
+    /// one its owner has sealed. Terminal, like a refused mark order, so they
+    /// stop being re-offered every night; and they fail the run, because a
+    /// silent nightly drop is how this class of defect stayed invisible.
+    stuckCredits: [],
     aborted: null,
     reconciled: null,
     /// The block the last successful write landed in, or null. Anything that
@@ -163,21 +199,59 @@ export async function runClock({
   }
 
   // 4. CHECK-INS, in chunks, each shrinking around whatever the chain refuses.
+  //
+  // `lastDayOf` is what makes a landed-but-unmarked check-in recoverable. The
+  // contract's only check-in event carries no token ids, so no reconcile can
+  // ever heal one -- the chain's STATE is the only source, and this is the read
+  // that asks it. A failed read returns null, which the heal path treats as
+  // "could not ask" rather than "not on chain".
+  const lastDayOf = async (tokenId) => {
+    const life = await chainLastDay({ publicClient, contract, tokenId });
+    return life;
+  };
+
   const pending = q.pendingCredits(today - 1);
   for (const entries of chunk(pending, chunkSize)) {
-    const result = await writeCheckInChunk(writer, entries, { log });
+    const result = await writeCheckInChunk(writer, entries, { log, lastDayOf });
     for (const entry of result.written) {
       q.markCreditWritten(entry.tokenId, entry.day);
       summary.credited.push(entry);
     }
+    // A HEALED ROW IS MARKED WRITTEN, which is the whole point: a row that is
+    // merely forgotten stays queued and comes back tomorrow, and that loop is
+    // what froze a token's record permanently.
+    for (const entry of result.healed ?? []) {
+      q.markCreditWritten(entry.tokenId, entry.day);
+      summary.healed.push(entry);
+      alert(
+        `clock: token ${entry.tokenId} day ${entry.day} was already on chain; ` +
+          "the mirror was behind and is now caught up"
+      );
+    }
     if (result.blockNumber) summary.lastBlock = result.blockNumber;
     for (const drop of result.dropped) {
       summary.dropped.push(drop);
-      alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was refused (${drop.reason}) and stays queued`);
+      // TERMINAL, not "stays queued". A credit the chain condemned will be
+      // condemned again every night for the same reason, and re-offering it
+      // forever is how a real problem becomes a line somebody learns to scroll
+      // past. `attempts-exhausted` is the exception: that entry was never
+      // judged, only rationed, so it stays queued for tomorrow.
+      if (drop.reason === "attempts-exhausted") {
+        alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was not attempted (${drop.reason}) and stays queued`);
+        continue;
+      }
+      q.failCredit(drop.entry.tokenId, drop.entry.day);
+      summary.stuckCredits.push(drop);
+      alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was refused (${drop.reason}) and needs a human`);
     }
     if (result.aborted) {
       summary.aborted = result.aborted;
-      alert(`clock: check-ins aborted (${result.aborted})`);
+      alert(
+        result.aborted === "receipt-unknown"
+          ? `clock: check-ins aborted -- tx ${result.hash} was broadcast and its receipt never arrived. ` +
+            "It may yet land; tomorrow's run resolves it against the chain rather than resending."
+          : `clock: check-ins aborted (${result.aborted})`
+      );
       return summary;
     }
   }

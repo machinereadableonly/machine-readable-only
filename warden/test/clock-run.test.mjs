@@ -159,7 +159,14 @@ test("mints are written BEFORE check-ins, so a token minted this run can be cred
   assert.equal(order.indexOf("mint") < order.indexOf("batchCheckIn"), true, `order was ${order.join(", ")}`);
 });
 
-test("a refused entry is dropped, the rest land, and the dropped row stays queued for another night", async () => {
+// CHANGED 2026-09-05, deliberately. This used to assert the refused row "stays
+// queued for another night", which was the defect rather than the intent: a
+// `Resting` credit is condemned for a reason that will be identical tomorrow,
+// so re-offering it every night forever produced one alert a night and no
+// progress -- and `mints` and `mark_orders` both had a terminal state for
+// exactly this while `credits` did not. The row is now terminal and the run
+// fails, so somebody sees it once and can act.
+test("a refused entry is dropped, the rest land, and the dropped row goes terminal", async () => {
   const { db, q } = mirror();
   for (const id of [1, 2]) {
     queueMint(q, db, id);
@@ -184,8 +191,11 @@ test("a refused entry is dropped, the rest land, and the dropped row stays queue
   assert.deepEqual(summary.credited.map((e) => e.tokenId), [1]);
   assert.deepEqual(summary.dropped.map((d) => [d.entry.tokenId, d.reason]), [[2, "Resting"]]);
   assert.equal(db.prepare("SELECT status FROM credits WHERE tokenId = 1").get().status, "written");
-  assert.equal(db.prepare("SELECT status FROM credits WHERE tokenId = 2").get().status, "queued");
-  assert.ok(alerts.some((a) => /token 2 day .* was refused \(Resting\)/.test(a)));
+  assert.equal(db.prepare("SELECT status FROM credits WHERE tokenId = 2").get().status, "failed");
+  assert.deepEqual(summary.stuckCredits.map((d) => d.entry.tokenId), [2]);
+  assert.ok(alerts.some((a) => /token 2 day .* was refused \(Resting\) and needs a human/.test(a)));
+  // And it is not offered again: the next run sees nothing to do for token 2.
+  assert.deepEqual(q.pendingCredits(TODAY).map((e) => e.tokenId), []);
 });
 
 // Continuing through a queue of mints while the piece is paused turns one

@@ -61,6 +61,18 @@ CREATE TABLE IF NOT EXISTS credits (
   tokenId INTEGER NOT NULL,
   day     INTEGER NOT NULL,
   sigHash TEXT NOT NULL,
+  -- queued | written | failed.
+  --
+  -- 'failed' is the terminal state, added 2026-09-05, and its absence was a
+  -- defect rather than a simplification: a credit the chain condemned -- a
+  -- token that does not exist, or one its owner has sealed -- was re-offered
+  -- every single night, refused every night, and logged every night as
+  -- "stays queued". `mints` and `mark_orders` both had a terminal state for
+  -- exactly this and `credits` did not.
+  --
+  -- Note what is NOT terminal: a day the chain already holds. That is the
+  -- mirror being behind, and it is marked 'written' by the Clock's heal path,
+  -- not failed. See healDayNotAdvanced in src/clock/batch.mjs.
   status  TEXT NOT NULL DEFAULT 'queued'
 );
 CREATE UNIQUE INDEX IF NOT EXISTS credits_token_day ON credits (tokenId, day);
