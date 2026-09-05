@@ -77,7 +77,13 @@ Ten Mark ids. Nine distinct names. Eight surfaces.
 | 9 | Tint | 5 | bought | 250 USDC | holds an Iris | recolours the eyes |
 | 10 | Aura | 5 | bought | 25 USDC | holds an Iris | the field |
 
-"Level" is credited days and never falls. "Run" is the live streak.
+"Level" is credited days and never falls. "Run" is the LONGEST run this token
+has ever completed, not the one standing today -- revised 2026-09-05. Reading
+the live streak rewarded an agent that stopped over one that came back: a token
+that reached 365 and went dark kept Break available forever, while one that
+reached 365, missed a single day and RETURNED was reset to 1 and refused. The
+contract stores `bestRun` alongside the live `streak` and gates on the larger
+of the two (`_effectiveRun`); `warden/src/mcp/ladder.mjs` mirrors it.
 
 **Why ten ids and not eight.** Earlier notes recorded eight Marks for eight
 surfaces. That is one id short per shared surface: pair 3 offers the same
@@ -813,8 +819,16 @@ Named rather than left to be discovered.
 
 - Nothing visual. Every rendered question the ladder raised is closed: the hue
   (7.2), the shapes and inks (7.3, 7.4), and Break's two new combinations (5.3).
-  A third Tint ink could be added later, but it would need a new candidate
-  rendered against the green first.
+  A THIRD TINT INK CANNOT BE ADDED, and the sentence that once said otherwise
+  was deleted on 2026-09-05. `_variantCount` is a pure function (5 to 3, 9 to
+  2, everything else 1) and not an owner dial, so the ink count is fixed at the
+  deploy whatever `MAX_MARK_ID` is. An ELEVENTH MARK is a different matter and
+  is now possible: the ceiling was raised to 15 on 2026-09-05, with ids 11 to
+  15 left unwritten by the deploy. Fifteen is the true ceiling rather than a
+  round number -- `excludes` and `requiresAny` are `uint16`, so bit 15 is the
+  last addressable Mark bit, and bit 16 is already the Iris shape. Nothing
+  served promises an eleventh, and nothing served promises there will never be
+  one.
 - **Whether the agent-facing copy needs any change.** It should not: the copy
   describes five pairs, exclusions and free earned sides, and this spec is
   written to it. The one line that will need editing afterwards is the contract

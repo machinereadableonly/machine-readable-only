@@ -907,7 +907,13 @@ the Warden key rotation policy is published (`setWarden`); `/skill.md`,
 `/llms.txt` and `/t/<id>` are stable URLs for the life of the piece; the
 voucher check-in path exists on-chain from day one so tokens can be kept alive
 without the Warden; terms bind to the paying wallet and the signing key and
-state that tokens are agent-generated. Sunset is the only planned ending.
+state that tokens are agent-generated. Sunset is the only ending the operator
+GIVES the piece. Revised 2026-09-05: there is now a second, which the piece
+takes for itself. `sunsetByAbsence()` is permissionless and closes the piece
+after 365 days in which the Warden wrote nothing, sealing every token at the
+colour it held when the writing stopped. It exists because operator silence is
+the likeliest death (five of six comparables) and was previously drawn as every
+agent's abandonment rather than the operator's.
 
 ### Keys and secrets
 

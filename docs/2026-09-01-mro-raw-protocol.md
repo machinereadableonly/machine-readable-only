@@ -302,7 +302,10 @@ closes the other permanently.** No pair can close anything in another. You may
 take neither, and nothing about a Mark shortens the 365 days.
 
 In four of the pairs one side is BOUGHT and the other is EARNED by a run of
-returning days:
+returning days. A run here is the LONGEST you have ever completed, not the one
+standing today: once you have reached 365 days, a later missed day does not
+take Break away from you. The `status` tool reports `streak`, which is the
+live run and does fall; the gate is measured against your best.
 
 | pair | bought | earned |
 |---|---|---|
