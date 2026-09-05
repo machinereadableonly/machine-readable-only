@@ -9,20 +9,28 @@
 import { ensureIdentity, loadIdentity, defaultKeyPath } from "./keys.mjs";
 import { registerKey } from "./door.mjs";
 import { listTools, callTool, structured } from "./mcp.mjs";
-import { payFor } from "./pay.mjs";
+import { payFor, readDemand } from "./pay.mjs";
+import { DEFAULT_SITE, cronLine, unpayableMessage } from "./messages.mjs";
+
+// The commands that exist. Checked BEFORE an identity key is created, because
+// creating a signing key as a side effect of a typo is not something a package
+// gets to do.
+const COMMANDS = ["join", "beat", "status", "whoami"];
 
 const USAGE = `mro-agent -- the reference client for Machine Readable Only
 
   mro-agent whoami                     show this agent's key id
-  mro-agent join   --site <origin>     register a key and mint one token
-  mro-agent beat   --site <origin>     check in for today
-  mro-agent status --site <origin>     read your tokens
+  mro-agent join   --to <0xaddress>    register a key and mint one token
+  mro-agent beat   --token <id>        check in for today
+  mro-agent status                     read your tokens
 
 Options
-  --site <origin>      the site to talk to, e.g. https://example.com
+  --site <origin>      the site to talk to (default ${DEFAULT_SITE})
   --endpoint <origin>  where to actually send, if not the site itself. The
                        SITE is what gets signed; use this for a tunnel, a
                        staging host, or a local port.
+  --directory <origin> host your own JWKS there and skip registration. Your
+                       key is then never stored by the site.
   --key <path>         identity file (default ${defaultKeyPath("~")})
   --to <0xaddress>     who the minted token belongs to (join)
   --token <id>         which token (beat)
@@ -46,16 +54,29 @@ function parseArgs(argv) {
 
 const out = (label, value) => console.log(`${label}: ${typeof value === "string" ? value : JSON.stringify(value, null, 2)}`);
 
+/// Print the check-in line, filled in when there is a token and honest when
+/// there is not. Printed on the unpaid path too: an operator who asked for the
+/// line still needs it, and needs to know why the id is missing.
+function printCron(site, tokenId) {
+  console.log("\nPaste this into `crontab -e`. The version is pinned on purpose;");
+  console.log("when you change it, read what changed first.");
+  console.log(cronLine({ site, tokenId }));
+  if (tokenId === undefined) {
+    console.log("Nothing was minted on this run, so fill the id in yourself once there is one.");
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._[0];
   if (!command || command === "help") { console.log(USAGE); return; }
+  if (!COMMANDS.includes(command)) throw new Error(`unknown command: ${command}\n\n${USAGE}`);
 
   const keyPath = args.key ?? defaultKeyPath();
 
   if (command === "whoami") {
     const identity = loadIdentity(keyPath);
-    if (!identity) { console.log(`no identity at ${keyPath}. Run: mro-agent join --site <origin>`); return; }
+    if (!identity) { console.log(`no identity at ${keyPath}. Run: mro-agent join --to <0xaddress>`); return; }
     out("key id", identity.keyId);
     out("file", keyPath);
     return;
@@ -64,29 +85,56 @@ async function main() {
   // `site` is the public origin and is what the signature covers; `endpoint`
   // is where the bytes go. They are the same in ordinary use, which is why
   // endpoint defaults to site. See door.mjs for why they must be separable.
-  const site = args.site;
-  if (!site) throw new Error("--site is required");
+  const site = args.site ?? DEFAULT_SITE;
   const origin = args.endpoint ?? site;
 
   const { identity, created } = await ensureIdentity(keyPath);
-  if (created) out("generated a new identity at", keyPath);
+  if (created) {
+    console.log(`generated a new identity at ${keyPath} (mode 600).`);
+    console.log("Back this file up now. It is the only thing that can grow your token:");
+    console.log("a lost key does not lose the token, but the token's OWNER wallet must");
+    console.log("then call rebind(tokenId, newKeyId) on chain, and no day is credited");
+    console.log("until it does.");
+  }
   out("key id", identity.keyId);
 
-  const call = { origin, site, privateJwk: identity.privateJwk };
+  // With --directory, the site never holds this key: it fetches the public
+  // half from a JWKS the agent hosts. Registration is skipped entirely, which
+  // is the difference between the two paths and the reason the flag exists --
+  // a registration cannot be undone.
+  const signatureAgent = args.directory ?? site;
+  const call = { origin, site, signatureAgent, privateJwk: identity.privateJwk };
 
   if (command === "join") {
     if (!args.to) throw new Error("--to <0xaddress> is required: it is who the token will belong to");
 
-    // Registration is idempotent from the caller's side -- an already-known
-    // key simply registers again -- so this is safe to re-run.
-    await registerKey({ origin, privateJwk: identity.privateJwk });
-    out("registered with", site);
+    if (args.directory) {
+      out("using your own directory at", args.directory);
+      console.log("Nothing was registered. Serve your public JWK from");
+      console.log(`${args.directory}/.well-known/http-message-signatures-directory`);
+    } else {
+      // Registration is idempotent from the caller's side -- an already-known
+      // key simply registers again -- so this is safe to re-run.
+      await registerKey({ origin, privateJwk: identity.privateJwk });
+      out("registered with", site);
+    }
     out("tools", (await listTools(call)).map((t) => t.name));
 
     let result = await callTool({ ...call, name: "mint", arguments: { to: args.to } });
 
     // The paid path. Nothing is signed unless an expected payTo was given.
     const walletKey = process.env.MRO_WALLET_KEY ?? args["wallet-key"];
+    const demand = readDemand(result);
+
+    // The one step of the journey an agent cannot take alone. Say so in words
+    // the agent can relay, rather than printing the raw 402 and exiting 0.
+    if (demand && !walletKey) {
+      console.log(`\n${unpayableMessage(demand.accepts?.[0], keyPath)}`);
+      if (args.cron) printCron(site, undefined);
+      process.exitCode = 2;
+      return;
+    }
+
     const meta = walletKey
       ? await payFor({
           result,
@@ -99,12 +147,10 @@ async function main() {
       out("paying", meta["x402/payment"].accepted);
       result = await callTool({ ...call, name: "mint", arguments: { to: args.to }, _meta: meta });
     }
-    out("mint", structured(result) ?? result);
+    const minted = structured(result);
+    out("mint", minted ?? result);
 
-    if (args.cron) {
-      console.log("\nAdd this to your crontab to check in daily near 12:00 UTC:");
-      console.log(`0 12 * * * mro-agent beat --site ${site} --token <id> >> ~/.mro/beat.log 2>&1`);
-    }
+    if (args.cron) printCron(site, minted?.ok ? minted.tokenId : undefined);
     return;
   }
 
@@ -115,13 +161,9 @@ async function main() {
     return;
   }
 
-  if (command === "status") {
-    const result = await callTool({ ...call, name: "status", arguments: args.token ? { tokenId: Number(args.token) } : {} });
-    out("status", structured(result) ?? result);
-    return;
-  }
-
-  throw new Error(`unknown command: ${command}\n\n${USAGE}`);
+  // status
+  const result = await callTool({ ...call, name: "status", arguments: args.token ? { tokenId: Number(args.token) } : {} });
+  out("status", structured(result) ?? result);
 }
 
 main().catch((err) => {

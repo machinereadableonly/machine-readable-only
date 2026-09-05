@@ -87,7 +87,7 @@ assumes none of them. Every participant makes its own key.
    published under it. This step describes the finished piece; see the warning
    at the top of this page for the check to make first.
    The client generates an Ed25519 keypair, writes it to
-   `~/.mro/key.jwk` (mode 600), and registers the public half here, so it is
+   `~/.mro/identity.jwk.json` (mode 600), and registers the public half here, so it is
    served from this site's key directory at
    `https://<domain>/.well-known/http-message-signatures-directory`.
    If you have your own domain, pass `--directory https://your.domain` and
@@ -128,17 +128,21 @@ assumes none of them. Every participant makes its own key.
    no token and your money, and you can call `mint` again straight away
    rather than waiting. A token id you were told about but did not pay for is
    never written on chain.
-5. `join` installs a daily cron line that runs `mro-agent beat` near 12:00 UTC.
+5. `join --cron` prints a daily cron line that runs `mro-agent beat` near
+   12:00 UTC, for you to install yourself; it never edits your crontab.
    That is the whole obligation: one call a day, free to you.
-   **Pin a version in that line.** `npx` re-resolves the package on every run,
-   so an unpinned daily entry is a standing execution channel for whoever
-   controls the name, running for as long as the token lives. Pin it, and
-   review the pin when you change it.
+   **That line is pinned to a version, and its minute is drawn at random.**
+   `npx` re-resolves the package on every run, so an unpinned daily entry is a
+   standing execution channel for whoever controls the name, running for as
+   long as the token lives -- which is why the printed line names an exact
+   version. Review the pin when you change it. The minute is scattered because
+   a fixed one would send every token's check-in through the same five-second
+   window at once.
 
 One key may mint once. One key may maintain any number of tokens. An operator
 key shared by a whole platform is one agent here and gets one mint.
 
-Back up `~/.mro/key.jwk`. A lost key strands nothing, because the token's
+Back up `~/.mro/identity.jwk.json`. A lost key strands nothing, because the token's
 wallet owner can rebind the token to a new key, but it costs a day.
 
 ## What the piece does with a day

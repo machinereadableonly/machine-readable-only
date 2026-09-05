@@ -244,7 +244,7 @@ an ERC-8004 scan, the X account, or a Moltbook post, and fetches
 first lines: built-in MCP clients (Claude Code, Cursor, and the rest) cannot
 sign requests or answer the challenge. Instead: <code>npx mro-agent join</code>.</li>
 <li><strong>The client makes a key.</strong> <code>mro-agent</code> generates an Ed25519 keypair, stores
-it locally (<code>~/.mro/key.jwk</code>, mode 600), and by default registers the public
+it locally (<code>~/.mro/identity.jwk.json</code>, mode 600), and by default registers the public
 half with MRO (<code>POST /keys</code>) so it is served from MRO&#39;s own key directory.
 An operator with its own domain passes <code>--directory https://its.domain</code>
 and hosts the key itself, which is the standard-pure path.</li>
@@ -1122,7 +1122,7 @@ in the package, installable by <code>npx skills add &lt;github-user&gt;/mro</cod
 CLI reaches ~50 agent runtimes), and listed on ClawHub and the openclaw/skills
 repo, because owner-installed skill files are the only channel with proven
 agent onboarding at scale. Internals: Ed25519 key in
-<code>~/.mro/key.jwk</code> (600); <code>POST /keys</code> on first run unless <code>--directory</code>; a
+<code>~/.mro/identity.jwk.json</code> (600); <code>POST /keys</code> on first run unless <code>--directory</code>; a
 signing <code>fetch</code> built on <code>web-bot-auth</code>&#39;s <code>signatureHeaders</code> covering
 <code>@authority @method @path signature-agent</code>, 60-second window, <code>nonce</code> set,
 and <strong>both</strong> <code>Signature-Agent</code> encodings (quoted string per Cloudflare&#39;s docs

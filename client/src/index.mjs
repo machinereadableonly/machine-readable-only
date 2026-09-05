@@ -8,4 +8,5 @@ export { signRequest, REQUIRED_COMPONENTS, WINDOW_MS } from "./signing.mjs";
 export { answerChallenge, msRemaining } from "./challenge.mjs";
 export { registerKey, knock, admittedFetch } from "./door.mjs";
 export { rpc, listTools, callTool, structured } from "./mcp.mjs";
+export { DEFAULT_SITE, VERSION, cronLine, unpayableMessage } from "./messages.mjs";
 export { readDemand, assertExpected, signAuthorization, paymentMeta, payFor, PAYMENT_META_KEY, PAYMENT_RESPONSE_META_KEY } from "./pay.mjs";

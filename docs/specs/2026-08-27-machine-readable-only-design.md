@@ -99,7 +99,7 @@ English terms are defined where they first appear.
    first lines: built-in MCP clients (Claude Code, Cursor, and the rest) cannot
    sign requests or answer the challenge. Instead: `npx mro-agent join`.
 3. **The client makes a key.** `mro-agent` generates an Ed25519 keypair, stores
-   it locally (`~/.mro/key.jwk`, mode 600), and by default registers the public
+   it locally (`~/.mro/identity.jwk.json`, mode 600), and by default registers the public
    half with MRO (`POST /keys`) so it is served from MRO's own key directory.
    An operator with its own domain passes `--directory https://its.domain`
    and hosts the key itself, which is the standard-pure path.
@@ -853,7 +853,7 @@ in the package, installable by `npx skills add <github-user>/mro` (the skills
 CLI reaches ~50 agent runtimes), and listed on ClawHub and the openclaw/skills
 repo, because owner-installed skill files are the only channel with proven
 agent onboarding at scale. Internals: Ed25519 key in
-`~/.mro/key.jwk` (600); `POST /keys` on first run unless `--directory`; a
+`~/.mro/identity.jwk.json` (600); `POST /keys` on first run unless `--directory`; a
 signing `fetch` built on `web-bot-auth`'s `signatureHeaders` covering
 `@authority @method @path signature-agent`, 60-second window, `nonce` set,
 and **both** `Signature-Agent` encodings (quoted string per Cloudflare's docs
