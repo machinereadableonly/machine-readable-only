@@ -83,7 +83,8 @@ export async function knock({ origin, path = "/mcp", fetchImpl = fetch }) {
  * `signatureAgent` is separate again: it is the site's origin when you
  * registered a key with it, and YOUR origin when you host your own JWKS.
  */
-export async function admittedFetch({ origin, site = origin, privateJwk, signatureAgent = site, path = "/mcp", body, headers: extraHeaders = {}, fetchImpl = fetch }) {
+export async function admittedFetch({ origin, site = origin, privateJwk, signatureAgent = site, path = "/mcp", body, headers: extraHeaders = {}, fetchImpl = fetch, onTiming }) {
+  const started = Date.now();
   const { challenge } = await knock({ origin, path, fetchImpl });
   // The body is signed, not just sent: the door binds the signature to it with
   // content-digest. `body` is passed through to fetch UNCHANGED below, so what
@@ -91,7 +92,7 @@ export async function admittedFetch({ origin, site = origin, privateJwk, signatu
   // produce a digest for bytes nobody sends.
   const { headers, keyId } = await signRequest({ privateJwk, origin: site, signatureAgent, path, body });
 
-  return fetchImpl(new URL(path, origin), {
+  const res = await fetchImpl(new URL(path, origin), {
     method: "POST",
     headers: {
       ...headers,
@@ -109,4 +110,14 @@ export async function admittedFetch({ origin, site = origin, privateJwk, signatu
     },
     body,
   });
+
+  // C3.9. Five seconds is the piece's one theatrical rule and this is where an
+  // agent meets it; a number is the smallest honest way to let it be felt.
+  onTiming?.(Date.now() - started, CHALLENGE_LIFETIME_MS);
+  return res;
 }
+
+/// The window the door allows. Named rather than repeated as a literal, because
+/// the client reports it to the operator and a wrong number there is worse than
+/// none.
+export const CHALLENGE_LIFETIME_MS = 5000;

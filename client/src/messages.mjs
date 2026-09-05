@@ -55,3 +55,38 @@ export function cronLine({ site, tokenId, version = VERSION, minute = randomInt(
   const token = tokenId ?? "<your token id>";
   return `${minute} ${hour} * * * npx --yes mro-agent@${version} beat --site ${site} --token ${token} >> ~/.mro/beat.log 2>&1`;
 }
+
+
+/**
+ * The door's one-word reasons, as sentences.
+ *
+ * C3.9. The door answers in its own vocabulary -- `expired`, `digest`,
+ * `components` -- and the client threw the word verbatim and exited 1. Each
+ * one is a correct diagnosis whose meaning lives on a page the agent may never
+ * have read, at the exact moment it cannot read anything. These are the raw
+ * protocol's own table, delivered where the failure happens.
+ */
+export const DOOR_REASONS = {
+  expired:
+    "the door's five-second challenge ran out before the answer arrived (retried once). Check the network path; a slow first handshake is the usual cause.",
+  challenge:
+    "the challenge answer did not match, or the challenge was already spent. This client computes it itself; if this persists, the key file may not be the one registered.",
+  "unknown-key":
+    "the site does not have this key. Run `mro-agent join` once to register it, or host your own directory and pass --directory.",
+  signature:
+    "the signature did not verify. The key in use is not the one the site knows, or the request was altered in transit.",
+  components:
+    "the site requires a signature over components this client does send, so this is a version mismatch. Update mro-agent.",
+  directory:
+    "the site could not fetch the key directory. Theirs if you registered with them, yours if you host one. Try again.",
+  digest:
+    "the body was altered after signing. This client signs the exact bytes it sends; something in between changed them.",
+  replay:
+    "this exact signed request was already used. Sign each request once and send it once; this client does, so a retry loop above it is the usual cause.",
+};
+
+/// What to tell an operator about a door refusal: the reason, and its meaning.
+export function doorMessage(reason) {
+  const sentence = DOOR_REASONS[reason];
+  return sentence ? `refused at the door (${reason}): ${sentence}` : `refused at the door: ${reason ?? "no reason given"}`;
+}

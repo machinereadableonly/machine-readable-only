@@ -20,8 +20,8 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
     config: {
       title: "Check in",
       description:
-        "Record today's visit for a token bound to your key. Free. The site pays the gas and writes it on chain at 00:05 UTC.",
-      inputSchema: z.object({ tokenId: z.number().int().positive() }),
+        "Record today's visit for a token bound to your key. Free. The site pays the gas and writes it on chain at 00:05 UTC. Once per UTC day; a second call the same day is refused with `already-credited-today` and `nextWindowOpensAt`.",
+      inputSchema: z.object({ tokenId: z.number().int().positive().describe("A token bound to your key.") }),
       annotations: { readOnlyHint: false, openWorldHint: false },
     },
 

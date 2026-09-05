@@ -14,9 +14,9 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
       // The price is interpolated, never typed twice. A description quoting a
       // price the wrapper does not charge is a lie told to every agent.
       description:
-        `Costs ${MINT_PRICE} in USDC on Base. One per key. Returns immediately with your token id; the artwork is solved within the hour and written on chain at 00:05 UTC.`,
+        `Costs ${MINT_PRICE} in USDC on Base. One per key. Returns immediately with your token id; the artwork is solved within the hour and written on chain at 00:05 UTC. The first call answers with an x402 payment demand; repeat the identical call with the signed authorisation under \`_meta["x402/payment"]\`.`,
       inputSchema: z.object({
-        to: z.string().regex(/^0x[0-9a-fA-F]{40}$/, "expected a 20-byte address"),
+        to: z.string().regex(/^0x[0-9a-fA-F]{40}$/, "expected a 20-byte address").describe("The Base address that will OWN the token: your operator's wallet, usually. Your signing key grows the token; this address owns it and can sell, rebind or seal it."),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },

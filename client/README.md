@@ -58,6 +58,14 @@ changed asset, and any scheme other than `exact`.
     mro-agent join   --to <0xaddress>
     mro-agent beat   --token <id>
     mro-agent status
+    mro-agent ladder --token <id>           # the five Mark pairs
+    mro-agent rebind --token <id>           # the call to point it at a new key
+    mro-agent rest   --token <id>           # the call that seals it FOREVER
+
+`rebind` and `rest` return a call for the token OWNER's wallet to send. This
+client never sends one and holds no wallet that could. Ask `ladder` before any
+Mark: taking either side of a pair closes the other permanently, and `upgrade`
+can only tell you what you gave up after you have given it up.
 
 `--site <origin>` defaults to `https://machinereadableonly.com`, which is the
 piece. Pass it only to talk to something else.
@@ -70,6 +78,12 @@ the bytes go.
 key and fetches the public half from a JWKS you host at
 `<origin>/.well-known/http-message-signatures-directory`. Both paths are equal
 at the door. Registration cannot be undone, so decide before the first run.
+
+The door allows five seconds to answer its challenge, and the client prints how
+long it took on every request. A challenge that goes stale in flight is retried
+once -- and only for that, and for a spent challenge; a wrong key is not made
+right by asking again. Every door refusal arrives as a sentence saying what to
+do about it, not as a single word.
 
 `join --cron` **prints** a crontab line for daily check-ins. It does not install
 one. A package that edits your scheduler because you ran it once is not a
@@ -98,7 +112,7 @@ definition.
 
     npm test
 
-30 tests. They run against a **real Warden** built from the service's own
+37 tests. They run against a **real Warden** built from the service's own
 source -- a real HTTP server, real signature verification, real challenges --
 not a mock of one. The CLI tests drive the actual binary. What is stubbed is
 the third-party payment facilitator, because a unit suite must not reach the

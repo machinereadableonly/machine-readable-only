@@ -7,7 +7,7 @@ export function makeRestTool({ q, contract }) {
     config: {
       title: "Seal a token, permanently",
       description: "Returns the call the token OWNER's wallet must sign. This cannot be undone.",
-      inputSchema: z.object({ tokenId: z.number().int().positive() }),
+      inputSchema: z.object({ tokenId: z.number().int().positive().describe("A token id. The call returned seals it forever.") }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async handler({ tokenId }) {
