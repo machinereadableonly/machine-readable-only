@@ -6,13 +6,14 @@ import { writeFileSync } from "node:fs";
 import { Resvg } from "@resvg/resvg-js";
 import { solve, payloadFor } from "./qart.mjs";
 import { heartTarget } from "./heart-target.mjs";
+import * as SHEET from "./sheet-code.mjs";
 import { renderSvg, canvasFor } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
-const PAYLOAD = payloadFor("example.com", 1);
-const CODE = solve(PAYLOAD, 0);
-const TARGET = heartTarget(CODE.size);
-const DEST = PAYLOAD.slice(0, -1);
+// The reference code, shared so no sheet can be judged on a heart that will
+// never mint. See sheet-code.mjs -- this used to be four hardcoded lines in ten
+// separate files, all of them naming a domain that was decided against.
+const { PAYLOAD, DEST, CODE, TARGET } = SHEET;
 
 const RINGS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10];
 const SIZES = [900, 700, 500, 350];
