@@ -80,8 +80,11 @@ export function migrate(db) {
   const keyCols = new Set(db.prepare("PRAGMA table_info(keys)").all().map((c) => c.name));
   if (!keyCols.has("keyIdHash")) {
     db.exec("ALTER TABLE keys ADD COLUMN keyIdHash TEXT");
-    db.exec("CREATE INDEX IF NOT EXISTS keys_hash ON keys (keyIdHash)");
   }
+  // OUTSIDE the branch above, because a FRESH database already has the column
+  // from schema.sql and would skip it -- and schema.sql cannot create this
+  // index itself without breaking every existing database. See the note there.
+  db.exec("CREATE INDEX IF NOT EXISTS keys_hash ON keys (keyIdHash)");
   const unhashed = db.prepare("SELECT keyId FROM keys WHERE keyIdHash IS NULL").all();
   if (unhashed.length) {
     const set = db.prepare("UPDATE keys SET keyIdHash = ? WHERE keyId = ?");

@@ -19,6 +19,8 @@
 // independent -- either one alone still leaves a hole.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { readFileSync } from "node:fs";
 import { openDb, migrate } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { applyEvents } from "../src/clock/reconcile.mjs";
@@ -77,6 +79,52 @@ test("a key registered before the hash column existed is still resolvable", () =
   // precisely because the direction that is hard is the other one.
   migrate(db);
   assert.equal(q.keyForHash(keyIdToBytes32(SELLER)), SELLER);
+});
+
+// OPENING A DATABASE THAT PREDATES THE COLUMN. This is the case every test in
+// this project structurally could not reach, because they all open ":memory:"
+// -- a fresh database, where CREATE TABLE has already made every column and no
+// migration has anything to do.
+//
+// It took the live Warden down on 2026-09-05. schema.sql is exec'd WHOLE before
+// migrate() runs, so an index there naming a migrated column threw "no such
+// column: keyIdHash" against the production mirror and the process crash-looped.
+//
+// The database is built here the way a real old one is: the CURRENT schema with
+// the new column and index stripped out, which is exactly what the file looked
+// like before this change.
+test("a mirror created before the new columns existed opens, migrates and works", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec(`
+    CREATE TABLE keys (keyId TEXT PRIMARY KEY, jwk TEXT NOT NULL, directory TEXT, registeredAt INTEGER NOT NULL);
+    CREATE TABLE tokens (tokenId INTEGER PRIMARY KEY, keyId TEXT NOT NULL, owner TEXT NOT NULL,
+      level INTEGER NOT NULL DEFAULT 1, streak INTEGER NOT NULL DEFAULT 1, lastDay INTEGER NOT NULL,
+      mintDay INTEGER NOT NULL, marks INTEGER NOT NULL DEFAULT 0, generation INTEGER NOT NULL DEFAULT 0,
+      parentId INTEGER, status TEXT NOT NULL DEFAULT 'queued');
+    CREATE TABLE credits (tokenId INTEGER NOT NULL, day INTEGER NOT NULL, sigHash TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued');
+    CREATE TABLE mark_orders (tokenId INTEGER NOT NULL, upgradeId INTEGER NOT NULL, paymentTx TEXT,
+      status TEXT NOT NULL DEFAULT 'queued');
+    CREATE TABLE mints (tokenId INTEGER PRIMARY KEY, toAddress TEXT NOT NULL, keyId TEXT NOT NULL,
+      paymentTx TEXT, qr TEXT, solveState TEXT NOT NULL DEFAULT 'pending',
+      solveTries INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'queued');
+    INSERT INTO keys VALUES ('${SELLER}', '{}', NULL, 1);
+    INSERT INTO tokens (tokenId, keyId, owner, lastDay, mintDay) VALUES (7, '${SELLER}', '0xseller', 100, 100);
+  `);
+
+  // THE LINE THAT CRASHED PRODUCTION. Reverting the schema/migrate split makes
+  // this throw, exactly as the live Warden did.
+  db.exec(readFileSync(new URL("../src/mirror/schema.sql", import.meta.url), "utf8"));
+  migrate(db);
+
+  const q = queries(db);
+  assert.equal(q.keyForHash(keyIdToBytes32(SELLER)), SELLER, "the old key was backfilled");
+  // And the rest of the new surface works on the upgraded database.
+  q.insertMint({ tokenId: 8, toAddress: "0xa", keyId: SELLER, payNonce: "0xn" });
+  assert.equal(q.settleByNonce("0xn", "0xtx").kind, "mint");
+  // A row written BEFORE these columns existed has no payNonce, and must never
+  // be swept as an expired reservation -- that would delete real history.
+  assert.deepEqual(q.dropExpiredReservations(Date.now() + 1), { mints: 0, marks: 0 });
 });
 
 // AND THE CASE THAT CANNOT CONVERGE, which is legitimate rather than an error:

@@ -16,7 +16,18 @@ CREATE TABLE IF NOT EXISTS keys (
   -- rather than an impossible inversion.
   keyIdHash    TEXT
 );
-CREATE INDEX IF NOT EXISTS keys_hash ON keys (keyIdHash);
+-- The index on keyIdHash is created by migrate(), NOT here. This file is
+-- exec'd WHOLE against an existing database before any migration runs, and
+-- `CREATE TABLE IF NOT EXISTS keys` is a no-op on a database that predates the
+-- column -- so an index naming it here throws "no such column: keyIdHash" and
+-- takes the whole process down before migrate can add it. Measured in
+-- production on 2026-09-05, where it crash-looped the live Warden: every test
+-- opened a fresh in-memory database, in which CREATE TABLE had already made
+-- the column, so the ordering never came up.
+--
+-- THE RULE THIS IS AN INSTANCE OF: nothing in this file may reference a column
+-- that migrate() adds. Columns go in both places; indexes and anything else
+-- that depends on a migrated column go in migrate() alone.
 
 CREATE TABLE IF NOT EXISTS tokens (
   tokenId    INTEGER PRIMARY KEY,
