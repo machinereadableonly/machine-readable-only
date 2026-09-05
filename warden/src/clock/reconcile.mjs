@@ -50,7 +50,15 @@ export async function readEvents(pub, { contract, fromBlock, toBlock, span = MAX
     // which loses whatever it held.
     const end = start + span - 1n > BigInt(toBlock) ? BigInt(toBlock) : start + span - 1n;
     const logs = await pub.getLogs({ address: contract, fromBlock: start, toBlock: end });
-    events.push(...parseEventLogs({ abi: MRO_ABI, logs }));
+    // 15.11. The `address` above is a NODE-SIDE filter, and viem's
+    // parseEventLogs does not re-apply it -- read at source in viem 2.56.0, it
+    // matches on topic0, event name and args only, and the string "address"
+    // does not appear in it. So one RPC's filtering was the only thing between
+    // a foreign `Transfer` and `q.setOwner` rewriting a token's owner. Any
+    // ERC-721 emits a topic-compatible Transfer, so this is not a hypothetical
+    // shape; it is the most common event on the chain.
+    const ours = logs.filter((l) => l.address?.toLowerCase() === contract.toLowerCase());
+    events.push(...parseEventLogs({ abi: MRO_ABI, logs: ours }));
     pages += 1;
     onPage({ from: start, to: end, found: logs.length, pages });
   }

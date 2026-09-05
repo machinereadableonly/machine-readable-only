@@ -17,7 +17,15 @@ const SCHEMA = fileURLToPath(new URL("./schema.sql", import.meta.url));
  * lock. It has no effect on an in-memory database, so tests are unaffected.
  */
 export function openDb(path) {
-  const db = new DatabaseSync(path);
+  // A BUSY TIMEOUT, because two processes write this file: the Warden on every
+  // check-in and the Clock at 00:05. node:sqlite's default is 0 -- measured on
+  // the installed Node 24.14.1, a second writer threw `database is locked`
+  // after 1 ms, while `{ timeout: 5000 }` waited 5,025 ms and then succeeded.
+  // WAL lets readers through during a write but does not make two WRITERS
+  // wait; only this does. Five seconds is far longer than any statement here
+  // takes and still bounded, so a genuinely stuck writer still fails rather
+  // than hanging the process.
+  const db = new DatabaseSync(path, { timeout: 5000 });
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(readFileSync(SCHEMA, "utf8"));

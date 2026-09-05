@@ -9,7 +9,7 @@
 // clock or a counter; every write is chosen by reading rows the previous run
 // left `queued`, and marked `written` only against a receipt. Re-running after
 // a crash re-reads the world rather than replaying a plan.
-import { chunk, writeCheckInChunk, packIds } from "./batch.mjs";
+import { chunk, writeCheckInChunk, packIds, packableId } from "./batch.mjs";
 import { readEvents, applyEvents, DEPLOY_BLOCK, MAX_LOG_SPAN } from "./reconcile.mjs";
 import { MRO_ABI } from "./abi.mjs";
 import { keyIdToBytes32 } from "../mcp/keyId.mjs";
@@ -20,6 +20,11 @@ import { keyIdToBytes32 } from "../mcp/keyId.mjs";
 /// taken. Task 8 measures the real per-entry cost. Until then the writer's own
 /// `gas-estimate-too-large` refusal is the backstop, not this number.
 export const CHECKIN_CHUNK = 1_500;
+
+/// How far behind the chain head reconcile reads. Base's blocks are two
+/// seconds, so this is under a minute of lag against a nightly job -- and the
+/// reads it guards (resting, transfers, rebinds) are one-way in the mirror.
+export const CONFIRMATIONS = 12;
 
 /// How many runs a row may survive before a human is told. A row that fails
 /// three nights running is not going to fix itself.
@@ -211,7 +216,22 @@ export async function runClock({
   };
 
   const pending = q.pendingCredits(today - 1);
-  for (const entries of chunk(pending, chunkSize)) {
+
+  // 15.8. ONE BAD ROW IS ONE ROW'S PROBLEM. packIds throws on an id that will
+  // not fit in four bytes, it is called with no `try`, and the throw
+  // propagates out of the whole run -- so a single malformed credit stopped
+  // that night's check-ins, its Marks and its reconcile, for every token.
+  // Filtered here, by name, with an alert: the row is reported and the night
+  // continues. It stays queued rather than being marked written, because
+  // nothing about it reached the chain.
+  const sendable = [];
+  for (const entry of pending) {
+    if (packableId(entry.tokenId)) { sendable.push(entry); continue; }
+    summary.dropped.push({ entry, reason: "unpackable-id" });
+    alert(`clock: credit for token ${entry.tokenId} has an id the contract cannot decode; skipped, and it stays queued`);
+  }
+
+  for (const entries of chunk(sendable, chunkSize)) {
     const result = await writeCheckInChunk(writer, entries, { log, lastDayOf });
     for (const entry of result.written) {
       q.markCreditWritten(entry.tokenId, entry.day);
@@ -372,7 +392,17 @@ function isRunLevel(result) {
  * rather than the whole history, which matters after an outage.
  */
 export async function reconcile({ q, publicClient, contract, chainId, lastReconciledBlock, log = () => {} }) {
-  const head = await publicClient.getBlockNumber();
+  // 15.6. CONFIRMATION DEPTH. This used to read to the bare head and apply
+  // one-way state from it -- `setResting` has no clearing statement and
+  // `markMintWritten` removes the row from pendingMints permanently, so a log
+  // read from a block that is later reorged out cannot be undone. The trigger
+  // is not an exotic sequencer reorg either: batch.mjs's own comment records
+  // that this RPC is load-balanced and NOT read-after-write consistent, so the
+  // head can move backwards between two calls in the ordinary case.
+  //
+  // Trailing the head costs one night of latency on a state change and buys
+  // back the only irreversible reads in the Clock.
+  const head = await publicClient.getBlockNumber() - BigInt(CONFIRMATIONS);
   const floor = DEPLOY_BLOCK[chainId];
   if (floor === undefined) {
     throw new Error(`no deploy block recorded for chain ${chainId}: reconcile would guess at its own history`);

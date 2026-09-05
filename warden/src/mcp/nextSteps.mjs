@@ -103,6 +103,7 @@ export const NO_NEXT = new Set([
   // no agent is ever handed one.
   "gas-estimate-failed", "gas-estimate-too-large", "reverted-on-chain",
   "reverted-on-simulate", "send-failed", "receipt-unknown", "attempts-exhausted",
+  "unpackable-id",
 ]);
 
 /**
