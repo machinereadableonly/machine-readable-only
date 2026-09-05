@@ -21,6 +21,7 @@ import { makeChallengeTool } from "./tools/challenge.mjs";
 import { makeMintTool } from "./tools/mint.mjs";
 import { makeUpgradeTool } from "./tools/upgrade.mjs";
 import { registerResources } from "./resources.mjs";
+import { withNext } from "./nextSteps.mjs";
 
 /**
  * Is this already an MCP tool result, rather than a plain value to wrap?
@@ -140,7 +141,13 @@ export function makeMcpHandler(deps) {
           // speaks MCP is passed through, so this cannot come apart the next
           // time a wrapped tool is added.
           if (isToolResult(result)) return result;
-          return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
+
+          // C3.7. Every refusal gains its next step HERE rather than at the
+          // thirty-odd sites that build one. A convention that has to be
+          // remembered at each of them is one that will be missed at one, and
+          // the one missed is the one an agent hits.
+          const answered = withNext(result);
+          return { content: [{ type: "text", text: JSON.stringify(answered) }], structuredContent: answered };
         });
       }
 

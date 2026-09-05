@@ -47,11 +47,20 @@ test("a second check-in on the same day is refused, not credited twice", async (
   assert.equal(second.reason, "already-credited-today");
 });
 
-test("an unknown token is refused", async () => {
+test("a token neither the mirror nor the chain has is unknown-token", async () => {
   const { q } = withToken();
-  const tool = makeCheckinTool({ q, chain: noChainRead, today: () => 101 });
+  const chain = openChain({ lifecycleOf: async () => ({ exists: false, resting: false, sunset: false, level: 0, lastDay: 0 }) });
+  const tool = makeCheckinTool({ q, chain, today: () => 101 });
   const r = await tool.handler({ tokenId: 99 }, { keyId: "k1" });
   assert.equal(r.reason, "unknown-token");
+});
+
+// C3.7. The chain is the authority on existence; this mirror can be behind it.
+test("a token the CHAIN has but the mirror does not is not-yet-mirrored", async () => {
+  const { q } = withToken();
+  const tool = makeCheckinTool({ q, chain: openChain(), today: () => 101 });
+  const r = await tool.handler({ tokenId: 99 }, { keyId: "k1" });
+  assert.equal(r.reason, "not-yet-mirrored");
 });
 
 // Two things hold this now and BOTH are load-bearing: the day guard refuses

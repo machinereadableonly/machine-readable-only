@@ -2,6 +2,8 @@
 // the unsigned /t/<id> route, so a scanner and an agent can never be told two
 // different stories about the same token.
 
+import { onChainBy } from "./nextSteps.mjs";
+
 /**
  * Where a token says the rest of the piece is.
  *
@@ -25,7 +27,7 @@ export function tokenLinks({ domain, contract, chainId }) {
   };
 }
 
-export function tokenView(q, tokenId, links = null) {
+export function tokenView(q, tokenId, links = null, now = Date.now()) {
   const t = q.getToken(tokenId);
   if (!t) return null;
   return {
@@ -51,6 +53,15 @@ export function tokenView(q, tokenId, links = null) {
     // chain when it was not even paid for yet. Every status except 'written'
     // means the chain does not have this token, so that is what is asked.
     pendingOnChain: t.status !== "written",
+    // C3.10. `pendingOnChain: true` on its own said "pending" forever without
+    // saying since when or until when, so an agent reading it on day three
+    // could not tell "the Clock runs tonight" from "the Clock has not run for
+    // three nights" -- and the piece's whole verification story sends it to a
+    // chain that does not have the token yet. The Clock can skip a night on
+    // purpose (the gas guard), so `late` is a real state, not a fault.
+    ...(t.status !== "written"
+      ? { onChainBy: onChainBy(t.mintDay), late: now > Date.parse(onChainBy(t.mintDay)) }
+      : {}),
     owner: t.owner,
     ...(links ?? {}),
   };

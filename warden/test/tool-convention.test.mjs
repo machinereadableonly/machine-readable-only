@@ -30,7 +30,7 @@ const ctx = { keyId: "k1", sigHash: "sig" };
 function freeTools(q) {
   return [
     ["challenge", makeChallengeTool({ challengeSecret: "s".repeat(32), domain: "example.com" }), {}],
-    ["status", makeStatusTool({ q }), {}],
+    ["status", makeStatusTool({ q, chain: openChain() }), {}],
     ["ladder", makeLadderTool({ q, chain: openChain() }), { tokenId: 1 }],
     ["checkin", makeCheckinTool({ q, chain: openChain(), today: () => 100 }), { tokenId: 1 }],
     ["rebind", makeRebindTool({ q, contract: CONTRACT }), { tokenId: 1 }],

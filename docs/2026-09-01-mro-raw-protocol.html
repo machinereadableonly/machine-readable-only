@@ -470,7 +470,40 @@ else&#39;s holdings.</p>
 wallet must sign, and we never submit it:</p>
 <pre><code>{ &quot;ok&quot;: true, &quot;contract&quot;: &quot;0x...&quot;, &quot;function&quot;: &quot;rest&quot;, &quot;args&quot;: [1], &quot;irreversible&quot;: true }
 </code></pre>
-<h3>The Mark ladder</h3>
+<h4>What a check-in answers with</h4>
+<pre><code>checkin { &quot;tokenId&quot;: 1 }
+-&gt; { &quot;ok&quot;: true, &quot;accepted&quot;: true, &quot;creditedDay&quot;: 20699,
+     &quot;level&quot;: 7, &quot;streak&quot;: 7, &quot;heart&quot;: &quot;7/365&quot;,
+     &quot;nextWindowOpensAt&quot;: &quot;...T00:00:00.000Z&quot;,
+     &quot;onChainBy&quot;:         &quot;...T00:05:00.000Z&quot;,
+     &quot;streakDeadline&quot;:    &quot;...T00:00:00.000Z&quot;,
+     &quot;nextRung&quot;: { &quot;at&quot;: 30, &quot;daysAway&quot;: 23 },
+     &quot;note&quot;: &quot;Day 7 credited; it is written on chain at 00:05 UTC. Your
+              run is 7. Check in again before &lt;streakDeadline&gt; to keep it.&quot; }
+</code></pre>
+<p><code>onChainBy</code> is when the day is written on chain; <code>streakDeadline</code> is the end of
+tomorrow, which is the last moment a check-in still continues this run.
+<code>nextRung</code> is the next run at which the colour changes (3, 7, 30, 100), or
+<code>null</code> past the last one.</p>
+<p><strong>When a run has just ended, the reply says so</strong>, rather than reporting
+<code>streak: 1</code> and leaving you to notice:</p>
+<pre><code>&quot;runBroke&quot;: { &quot;was&quot;: 99, &quot;lastCreditedDay&quot;: 20694 }
+</code></pre>
+<p>and the note gains &quot;Your run of 99 ended: the 99 days are kept, the colour
+restarts.&quot; The days are never lost; only the colour restarts.</p>
+<p>A second check-in on the same day is refused with <code>already-credited-today</code>,
+<code>nextWindowOpensAt</code>, and the <code>onChainBy</code> of the credit you already have. It is
+not a penalty and nothing is at risk.</p>
+<p><strong>A token this service does not know yet is not a token that does not exist.</strong>
+On a mirror miss the chain is asked before answering, so <code>unknown-token</code> means
+the CHAIN does not have it either. When the chain does have it and this service
+has not caught up, the reason is <code>not-yet-mirrored</code>, the nightly reconcile will
+pick it up, and <code>viewOf(id)</code> on the contract is the authority meanwhile.</p>
+<p>While a token is queued, <code>status</code> and <code>/t/{id}</code> carry <code>onChainBy</code> and <code>late</code>.
+<code>late: true</code> means that moment has passed and the nightly write has not
+happened -- which the Clock may do on purpose when gas is high. It is a state,
+not a fault.</p>
+<h2>The Mark ladder</h2>
 <p>Marks are optional and come in five pairs. <strong>Taking either side of a pair
 closes the other permanently.</strong> No pair can close anything in another. You may
 take neither, and nothing about a Mark shortens the 365 days.</p>
@@ -570,11 +603,23 @@ is true every side reads <code>closed</code> and no price on the page can be pai
 <p><strong>Every gate is checked before any payment is requested</strong>, and the refusal says
 which one. The two worth showing, both captured from the token above:</p>
 <pre><code>upgrade { &quot;tokenId&quot;: 1, &quot;upgradeId&quot;: 1 }
--&gt; { &quot;ok&quot;: false, &quot;reason&quot;: &quot;mark-excluded&quot;, &quot;detail&quot;: &quot;ache&quot; }
+-&gt; { &quot;ok&quot;: false, &quot;reason&quot;: &quot;mark-excluded&quot;, &quot;detail&quot;: &quot;ache&quot;,
+     &quot;next&quot;: &quot;Closed permanently by the Mark named in `detail`, which is
+              the other side of this pair. Nothing can reopen it. Ask
+              `ladder` before choosing a side.&quot; }
 
 upgrade { &quot;tokenId&quot;: 1, &quot;upgradeId&quot;: 9, &quot;variant&quot;: 1 }
--&gt; { &quot;ok&quot;: false, &quot;reason&quot;: &quot;mark-needs-iris&quot; }
+-&gt; { &quot;ok&quot;: false, &quot;reason&quot;: &quot;mark-needs-iris&quot;,
+     &quot;next&quot;: &quot;Pair five waits on an Iris, bought (id 5) or earned (id 6),
+              already written on chain.&quot; }
 </code></pre>
+<p><strong>Every refusal carries <code>next</code></strong>, a sentence saying what to do about it. The
+<code>reason</code> is the field to branch on -- it is stable and machine-readable -- and
+<code>next</code> is there because a diagnosis is not a prescription, and an agent that is
+told only <code>resting</code> has no way to know whether to retry, wait, or stop.
+Nothing is ever charged for a refusal. A handful of reasons carry no <code>next</code>:
+the door&#39;s own vocabulary (<code>signature</code>, <code>expired</code>, <code>challenge</code> and the rest),
+where the word IS the instruction and the table above explains it.</p>
 <p><code>mark-excluded</code> is the permanent one, and it NAMES the Mark that closed the
 door -- lower case, the same token <code>ladder</code> returns, so you do not have to
 case-fold to match them. It can only ever name the other side of the same pair.</p>

@@ -241,6 +241,25 @@ test("a payment demand survives the tool wrapper intact for the official x402 cl
   assert.equal(found.accepts[0].payTo, "0x000000000000000000000000000000000000dEaD");
 });
 
+// C3.7, THE WIRING rather than the table. Every other test of the next-step
+// table calls the helper directly, so removing withNext from the tool wrapper
+// left all of them green: the table was proven and its one call site was not.
+// This is the test that goes red when the central hook is gone.
+test("a refusal that came through the real handler carries its next step", async () => {
+  const { handler } = makeMcpHandler({
+    q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract", chainId: 84532,
+  });
+  const body = await call(handler, {
+    method: "tools/call",
+    params: { name: "checkin", arguments: { tokenId: 99 } },
+  }, { token: "n/a", clientId: "k1", scopes: [], extra: { keyId: "k1" } });
+
+  const refusal = JSON.parse(body.result.content[0].text);
+  assert.equal(refusal.ok, false);
+  assert.equal(typeof refusal.next, "string", "the wrapper must add the next step");
+  assert.match(refusal.next, /00:05 UTC/);
+});
+
 // -- the 2026-07-28 leg, asserted rather than assumed -----------------------
 //
 // Every request this project made used to take the SDK's LEGACY leg: no
