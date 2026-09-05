@@ -21,9 +21,17 @@ if (!Array.isArray(abi) || abi.length === 0) {
   throw new Error(`no abi in ${ARTIFACT} -- run \`forge build\` in contracts/ first`);
 }
 
-// The functions the Clock actually sends, checked here so a renamed or
+// The functions the Clock's ABI must carry, checked here so a renamed or
 // re-signatured contract function fails LOUDLY at generation time rather than
 // as a confusing revert at 00:05 UTC.
+//
+// `seed` is on this list but the Clock does NOT send it: runClock has three
+// passes -- mint, batchCheckIn, applyMark -- and nothing in src/clock/ mentions
+// seed. It is checked anyway because the ABI is what a fourth pass will be
+// written against, and a signature that drifted in the meantime should fail
+// here rather than on the day someone builds it. The comment used to say
+// "the functions the Clock actually sends", which is how a tool that writes
+// nothing on chain read as finished.
 const REQUIRED_FUNCTIONS = ["mint", "batchCheckIn", "applyMark", "seed"];
 const REQUIRED_EVENTS = ["Minted", "BatchCheckedIn", "MarkApplied", "Rebound", "Transfer", "Rested"];
 

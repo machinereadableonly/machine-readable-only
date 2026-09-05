@@ -83,7 +83,7 @@ export async function knock({ origin, path = "/mcp", fetchImpl = fetch }) {
  * `signatureAgent` is separate again: it is the site's origin when you
  * registered a key with it, and YOUR origin when you host your own JWKS.
  */
-export async function admittedFetch({ origin, site = origin, privateJwk, signatureAgent = site, path = "/mcp", body, fetchImpl = fetch }) {
+export async function admittedFetch({ origin, site = origin, privateJwk, signatureAgent = site, path = "/mcp", body, headers: extraHeaders = {}, fetchImpl = fetch }) {
   const { challenge } = await knock({ origin, path, fetchImpl });
   // The body is signed, not just sent: the door binds the signature to it with
   // content-digest. `body` is passed through to fetch UNCHANGED below, so what
@@ -95,6 +95,13 @@ export async function admittedFetch({ origin, site = origin, privateJwk, signatu
     method: "POST",
     headers: {
       ...headers,
+      // The transport's own metadata headers, supplied by the caller because
+      // only it knows the JSON-RPC method and name. They are NOT among the
+      // signed components, and do not need to be: they mirror values in the
+      // body, and the body is bound to the signature by content-digest, so a
+      // header that disagreed with it would be caught by the server's own
+      // header-body validation rather than smuggled past the signature.
+      ...extraHeaders,
       challenge,
       "challenge-response": answerChallenge(challenge, keyId),
       "content-type": "application/json",

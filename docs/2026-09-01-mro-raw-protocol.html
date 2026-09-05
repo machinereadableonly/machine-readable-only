@@ -136,10 +136,21 @@ challenges already answered, swept every 10 seconds, holding nothing older than
 twice the five second window. It is bounded by that window rather than by
 traffic -- roughly ten seconds&#39; worth of challenges at any moment, never a
 growing list.</p>
-<p>The distinction matters if you are reasoning about what a restart loses. A
-restart forgets which challenges were spent, so a challenge captured in the
-preceding five seconds could in principle be replayed across it. The signature
-is what authenticates; this is the freshness check on top.</p>
+<p><strong>Your signature is spent too, and that is the part that matters.</strong> The door
+records every signature it admits -- the SHA-256 of the <code>Signature</code> header --
+and refuses a second presentation of the same one with <code>reason: &quot;replay&quot;</code>. Each
+entry is remembered until that signature&#39;s own <code>expires</code>, then swept.</p>
+<p>Why it has to work this way: the challenge is not a second factor. Your key id
+travels in plaintext in <code>Signature-Input</code>, a fresh challenge is free and
+unauthenticated, and the answer is a pure function of the two. So anyone holding
+one captured request could pair it with a challenge of their own and be admitted
+again. Sign each request once and send it once; if you need to retry, re-sign.</p>
+<p>If you are hand-rolling the signer, carry the RFC 9421 <code>nonce</code> in
+<code>@signature-params</code>. Ed25519 is deterministic, so without one, signing the same
+request twice inside the same second produces byte-identical signatures and the
+second is refused as a replay. Every conforming library generates one for you.</p>
+<p>A restart forgets both sets. That costs at most one extra use of a signature
+already in flight, and nothing else.</p>
 <p>A 401 may also carry a <code>reason</code> field. It is a diagnostic, not a rebuke:</p>
 <table>
 <thead>
@@ -175,6 +186,10 @@ is what authenticates; this is the freshness check on top.</p>
 <tr>
 <td><code>challenge</code></td>
 <td>missing, wrong, or already spent</td>
+</tr>
+<tr>
+<td><code>replay</code></td>
+<td>that exact signature has been admitted once already</td>
 </tr>
 </tbody></table>
 <h2>2. Have a key we can find</h2>
@@ -240,7 +255,19 @@ other way round once: the budget was spent before any field was checked, so 21
 junk bodies exhausted the minute&#39;s allowance and closed the only entrance an
 agent without a domain has. Charging only verified requests fixes that, and the
 cost is that unverified <code>POST /keys</code> traffic is unmetered here, paying one
-Ed25519 verify each. Rate limiting that is nginx&#39;s job, not this handler&#39;s.</p>
+Ed25519 verify each. Rate limiting is nginx&#39;s job, not this handler&#39;s:
+<code>POST /keys</code> and <code>GET /keys/nonce</code> are held to 10 a minute with a burst of 5,
+answering <code>429</code>.</p>
+<p><strong>A registered key you never use is forgotten after 30 days.</strong> Registering is
+free and proves only that you hold the key, so a key that registers and never
+signs a request is indistinguishable from one made to fill the table -- and the
+table has a ceiling. Anything you actually do with the key resets nothing and
+needs nothing: the first admitted request marks it in use, and from then on it
+is kept for good, whatever the gap between visits. This matters to exactly one
+audience: an agent that registers ahead of time and comes back weeks later
+without having used the key in between. If that is you, register when you are
+ready to arrive, or simply register again -- it is two requests and costs
+nothing. A key bound to a token is never forgotten.</p>
 <p>Registered keys are then served in our own directory, which anyone can read:</p>
 <pre><code>GET /.well-known/http-message-signatures-directory HTTP/1.1
 
@@ -304,14 +331,57 @@ meant to prove anything else, and it is not a defence against anything.</p>
 <h2>5. Talk MCP</h2>
 <p><code>POST /mcp</code> with the headers above and a JSON-RPC body. Model Context Protocol,
 revision 2026-07-28: no <code>initialize</code> handshake, no sessions, a fresh server per
-request. Send <code>Accept: application/json, text/event-stream</code>; replies may come
-back as a single SSE <code>data:</code> line.</p>
+request. Send <code>Accept: application/json, text/event-stream</code>; a single request
+is answered with <code>application/json</code>, and a reply may also arrive as an SSE
+<code>data:</code> line, so handle both.</p>
+<p><strong>This server is modern-only.</strong> Because there is no handshake, every request
+carries its own protocol version and capabilities, in TWO places that must
+agree: <code>_meta</code> in the body, and headers mirroring it. A request without them is
+refused rather than served by a 2025-era compatibility path.</p>
+<ul>
+<li><code>MCP-Protocol-Version: 2026-07-28</code> on every request, matching
+<code>io.modelcontextprotocol/protocolVersion</code> in <code>params._meta</code>.</li>
+<li><code>Mcp-Method</code>, on every request, equal to the body&#39;s <code>method</code>.</li>
+<li><code>Mcp-Name</code>, on <code>tools/call</code>, <code>resources/read</code> and <code>prompts/get</code> only, equal
+to <code>params.name</code> or <code>params.uri</code>. If that value is not plain printable ASCII,
+encode it <code>=?base64?&lt;base64 of the UTF-8 bytes&gt;?=</code>.</li>
+</ul>
+<p>A header that disagrees with the body is a <code>400</code> with JSON-RPC error <code>-32020</code>
+(<code>HeaderMismatch</code>), and so is a missing one. The headers are NOT among the
+signed components and do not need to be: they mirror the body, and the body is
+bound to your signature by <code>content-digest</code>.</p>
 <pre><code>POST /mcp HTTP/1.1
 Content-Type: application/json
 Accept: application/json, text/event-stream
+MCP-Protocol-Version: 2026-07-28
+Mcp-Method: tools/list
 
-{ &quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;id&quot;: 1, &quot;method&quot;: &quot;tools/list&quot;, &quot;params&quot;: {} }
+{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 1,
+  &quot;method&quot;: &quot;tools/list&quot;,
+  &quot;params&quot;: {
+    &quot;_meta&quot;: {
+      &quot;io.modelcontextprotocol/protocolVersion&quot;: &quot;2026-07-28&quot;,
+      &quot;io.modelcontextprotocol/clientCapabilities&quot;: {}
+    }
+  }
+}
 </code></pre>
+<p><code>server/discover</code> is implemented and takes the same envelope; it answers with
+the versions and capabilities this server supports. List and read results carry
+<code>ttlMs</code> and <code>cacheScope</code>, so you can cache them rather than poll.</p>
+<p>A <code>tools/call</code> adds the name in both places:</p>
+<pre><code>Mcp-Method: tools/call
+Mcp-Name: status
+
+{ &quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;id&quot;: 1, &quot;method&quot;: &quot;tools/call&quot;,
+  &quot;params&quot;: { &quot;name&quot;: &quot;status&quot;, &quot;arguments&quot;: { &quot;tokenId&quot;: 1 },
+              &quot;_meta&quot;: { &quot;io.modelcontextprotocol/protocolVersion&quot;: &quot;2026-07-28&quot;,
+                         &quot;io.modelcontextprotocol/clientCapabilities&quot;: {} } } }
+</code></pre>
+<p>A payment authorisation travels in that same <code>_meta</code>, alongside these keys
+rather than instead of them.</p>
 <p>Nine tools. None of them takes your key id -- it comes from the signature.</p>
 <table>
 <thead>
@@ -354,7 +424,7 @@ Accept: application/json, text/event-stream
 <tr>
 <td><code>seed</code></td>
 <td><code>parentId</code>, <code>to</code></td>
-<td>free</td>
+<td>free -- NOT BUILT: answers <code>seed-not-available</code></td>
 </tr>
 <tr>
 <td><code>rebind</code></td>

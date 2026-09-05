@@ -53,21 +53,33 @@ export function makeSeedTool({ q, chain, today, supplyCap }) {
       const years = Math.floor((today() - q.firstMintDay(ctx.keyId)) / 365);
       if (q.seedsSpent(ctx.keyId) >= years) return { ok: false, reason: "no-seed-available" };
 
-      // ONE FACT, the same way `mint` writes its two rows. A child token whose
-      // lineage never landed is a token with no parent and generation 0 -- an
-      // ordinary mint, indistinguishable from one, and it would still have
-      // consumed the key's seed for the year.
-      // The chain decides which ids are free, not this mirror. See
-      // mint.mjs for why -- a seed writes a token the same way and would
-      // collide the same way.
-      const tokenId = await chain.freeIdFrom(q.nextTokenId());
-      if (tokenId === null) return { ok: false, reason: "chain-unavailable" };
-      const generation = parent.generation + 1;
-      q.transact(() => {
-        q.insertToken({ tokenId, keyId: ctx.keyId, owner: to, lastDay: today(), mintDay: today() });
-        q.setLineage(tokenId, generation, parentId);
-      });
-      return { ok: true, tokenId, parentId, generation, to, level: 1, txStatus: "queued" };
+      // EVERY GATE ABOVE PASSES AND THERE IS STILL NOTHING TO GIVE.
+      //
+      // This tool used to insert a `tokens` row plus lineage here and answer
+      // `{ ok: true, tokenId, txStatus: "queued" }`. That was a false promise,
+      // and an expensive one. It wrote NO `mints` row, so no bitmap was ever
+      // solved for the child and `pendingMints` -- which joins `mints` --
+      // could never return it. `runClock` sends exactly three functions
+      // (`mint`, `batchCheckIn`, `applyMark`); nothing in `src/clock/` mentions
+      // seed at all. The contract's `seed(uint256,uint256,address,bytes)` is
+      // called by nothing in this repository.
+      //
+      // So the child existed in the mirror, was served by `/t/<id>` and
+      // `status` forever, and the chain had never heard of it -- while
+      // `seedsSpent` counted the orphan and burned the key's one seed for that
+      // agent-year. It was silent too: the row was in neither `stuckMints` nor
+      // `dropped`, because both read `mints`.
+      //
+      // Refusing is not a workaround, it is the honest answer to "can I seed a
+      // child today". Building the write path means a fourth pass in runClock
+      // between mints and check-ins, sending
+      // `seed(childId, parentId, to, "0x"+qr)` and marking the row on the
+      // receipt, plus a queued solve for the child's bitmap. That is a feature,
+      // not a fix, and nothing can reach this line for a long time yet: a
+      // parent must be WHOLE (level 365) and a key needs a full year since its
+      // first mint. The gates above still run and still answer precisely,
+      // because "why can I not seed" deserves a real reason.
+      return { ok: false, reason: "seed-not-available" };
     },
   };
 }

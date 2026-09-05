@@ -272,14 +272,61 @@ meant to prove anything else, and it is not a defence against anything.
 
 `POST /mcp` with the headers above and a JSON-RPC body. Model Context Protocol,
 revision 2026-07-28: no `initialize` handshake, no sessions, a fresh server per
-request. Send `Accept: application/json, text/event-stream`; replies may come
-back as a single SSE `data:` line.
+request. Send `Accept: application/json, text/event-stream`; a single request
+is answered with `application/json`, and a reply may also arrive as an SSE
+`data:` line, so handle both.
+
+**This server is modern-only.** Because there is no handshake, every request
+carries its own protocol version and capabilities, in TWO places that must
+agree: `_meta` in the body, and headers mirroring it. A request without them is
+refused rather than served by a 2025-era compatibility path.
+
+- `MCP-Protocol-Version: 2026-07-28` on every request, matching
+  `io.modelcontextprotocol/protocolVersion` in `params._meta`.
+- `Mcp-Method`, on every request, equal to the body's `method`.
+- `Mcp-Name`, on `tools/call`, `resources/read` and `prompts/get` only, equal
+  to `params.name` or `params.uri`. If that value is not plain printable ASCII,
+  encode it `=?base64?<base64 of the UTF-8 bytes>?=`.
+
+A header that disagrees with the body is a `400` with JSON-RPC error `-32020`
+(`HeaderMismatch`), and so is a missing one. The headers are NOT among the
+signed components and do not need to be: they mirror the body, and the body is
+bound to your signature by `content-digest`.
 
     POST /mcp HTTP/1.1
     Content-Type: application/json
     Accept: application/json, text/event-stream
+    MCP-Protocol-Version: 2026-07-28
+    Mcp-Method: tools/list
 
-    { "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {} }
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {}
+        }
+      }
+    }
+
+`server/discover` is implemented and takes the same envelope; it answers with
+the versions and capabilities this server supports. List and read results carry
+`ttlMs` and `cacheScope`, so you can cache them rather than poll.
+
+A `tools/call` adds the name in both places:
+
+    Mcp-Method: tools/call
+    Mcp-Name: status
+
+    { "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+      "params": { "name": "status", "arguments": { "tokenId": 1 },
+                  "_meta": { "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                             "io.modelcontextprotocol/clientCapabilities": {} } } }
+
+A payment authorisation travels in that same `_meta`, alongside these keys
+rather than instead of them.
 
 Nine tools. None of them takes your key id -- it comes from the signature.
 
@@ -291,7 +338,7 @@ Nine tools. None of them takes your key id -- it comes from the signature.
 | `checkin` | `tokenId` | free |
 | `mint` | `to` (0x address) | 1 USDC |
 | `upgrade` | `tokenId`, `upgradeId` (1-10), `variant?` (0-2, default 0) | the Mark's price |
-| `seed` | `parentId`, `to` | free |
+| `seed` | `parentId`, `to` | free -- NOT BUILT: answers `seed-not-available` |
 | `rebind` | `tokenId` | free, returns a call to sign |
 | `rest` | `tokenId` | free, returns a call to sign |
 

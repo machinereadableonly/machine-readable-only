@@ -38,7 +38,28 @@ function isToolResult(value) {
 export function makeMcpHandler(deps) {
   const handler = createMcpHandler(
     (ctx) => {
-      const server = new McpServer({ name: "machine-readable-only", version: "1.0.0" });
+      const server = new McpServer(
+        { name: "machine-readable-only", version: "1.0.0" },
+        {
+          // SEP-2549 makes ttlMs and cacheScope REQUIRED on list and read
+          // results, and the SDK fills them from here for any result that does
+          // not carry its own. Without a hint they went out as ttlMs 0, which
+          // is a valid answer meaning "do not cache" -- and wrong for this
+          // service, where the tool list changes only when the piece is
+          // redeployed and the documents change only when they are edited.
+          //
+          // `public` on the documents because llms.txt and the contract address
+          // are the same for every caller and a shared cache may hold them.
+          // The tool list is `private`: it is identical today, but a per-caller
+          // difference later (a tool an agent cannot use being hidden) would
+          // turn a shared cache into one agent seeing another's surface.
+          cacheHints: {
+            "tools/list": { ttlMs: 300_000, cacheScope: "private" },
+            "resources/list": { ttlMs: 300_000, cacheScope: "public" },
+            "resources/read": { ttlMs: 300_000, cacheScope: "public" },
+          },
+        }
+      );
 
       // THE CALLER'S IDENTITY. `authInfo` is documented as strictly
       // pass-through: the handler never populates it from request headers, so
@@ -109,7 +130,22 @@ export function makeMcpHandler(deps) {
       registerResources(server, deps);
       return server;
     },
-    { onerror: (err) => console.error("mcp handler error:", err.message) }
+    {
+      onerror: (err) => console.error("mcp handler error:", err.message),
+      // MODERN ONLY. Left at its default, the SDK serves 2025-era traffic --
+      // requests with no protocol claim in `_meta` -- from a compatibility leg
+      // it describes as a fallback. Every request this project's own client and
+      // published protocol made took that leg, so `server/discover` answered
+      // "method not found" and no list result carried ttlMs or cacheScope,
+      // while three of this project's documents said otherwise. It also made
+      // the whole surface depend on a fallback a future SDK release removes in
+      // one line, on a piece meant to run for years.
+      //
+      // Safe to flip HERE and NOW rather than later: the piece is a testnet
+      // preview, nothing has been invited, and the published protocol document
+      // is updated in the same change. It gets harder every day it is deferred.
+      legacy: "reject",
+    }
   );
 
   const node = toNodeHandler(handler, { onerror: (err) => console.error("mcp adapter error:", err.message) });
