@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MRO review triage -- 2026-09-05</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>MRO review triage -- 2026-09-05</h1>
+<p>A second opinion on the three reviews of 2026-09-04, written by the model that
+has been building this project, against the code as it stands and against the
+CURRENT published documentation of every dependency the findings turn on.</p>
+<ul>
+<li>Triaged: <code>2026-09-04-mro-review-fable-quality.md</code> (73 findings + 46 test
+gaps), <code>2026-09-04-mro-review-creative.md</code> (43 findings),
+<code>2026-09-04-mro-review-security.md</code> (67 findings).</li>
+<li>Working tree at triage: clean, <code>main</code> at <code>e39c947</code>, three commits ahead of
+<code>origin/main</code>.</li>
+<li>Suites re-run today: contracts 268, warden 377, tools 66, client 25. All
+green.</li>
+</ul>
+<h2>Method, and what makes this different from the verifier passes</h2>
+<p>Each report already carries an adversarial verifier. Repeating that would buy
+nothing. This pass asks the two questions a verifier working inside one report
+cannot ask:</p>
+<ol>
+<li><strong>Is the claim still true of the STACK, checked against the live
+documentation today</strong> -- not against the installed package, which is what
+the security verifier read, and not against training data.</li>
+<li><strong>Does knowing this codebase change the finding&#39;s shape</strong> -- is it really
+independent, is it really new, and is the proposed fix the one the
+dependency already supports.</li>
+</ol>
+<p>Checked live today: the MCP 2026-07-28 changelog and the Streamable HTTP
+transport page; the Web Bot Auth architecture draft; <code>nodejs.org/api/sqlite</code>;
+viem&#39;s <code>waitForTransactionReceipt</code>; Coinbase CDP&#39;s x402 network-support page;
+the npm registry for the four <code>@x402</code> packages. Read at source in this
+checkout: <code>@x402/mcp</code> and <code>@x402/core</code> 2.24.0, the two paid tools, the door,
+the Clock&#39;s reconcile and run loops, <code>MachineReadableOnly.sol</code> around the Mark
+gate, and the mirror&#39;s statements.</p>
+<p><strong>Headline: the three reports hold up.</strong> Nothing in the two Criticals or the
+nine Highs collapsed under this pass. Four things changed, and all four change
+what to do rather than whether to do it.</p>
+<hr>
+<h2>1. Confirmed, and stronger than the report states</h2>
+<h3>14.1 Critical -- the paid effect is committed before settlement</h3>
+<p>Confirmed at source. <code>paymentTx</code> exists at <code>schema.sql:48</code> and <code>:72</code> and has
+<strong>zero writers</strong> anywhere in <code>warden/src</code> -- the only other occurrence in the
+tree is a test fixture&#39;s <code>CREATE TABLE</code>. <code>settlePaymentResult</code>
+(<code>@x402/mcp/dist/esm/index.mjs:1016</code>) settles after the handler has returned,
+and on <code>!settleResult.success</code> it discards the handler&#39;s result and returns
+<code>createSettlementFailedResult</code>. The row the handler wrote is untouched. The
+Clock&#39;s <code>pendingMints()</code> then mints it.</p>
+<p><strong>What the reports do not say: the SDK already ships the remedy.</strong> The
+installed <code>@x402/mcp</code> declares a settlement lifecycle hook --</p>
+<pre><code>hooks?: {
+  onBeforeExecution?: BeforeExecutionHook;   // after verification, before the handler
+  onAfterExecution?: AfterExecutionHook;     // after the handler, before settlement
+  onAfterSettlement?: AfterSettlementHook;   // after SUCCESSFUL settlement
+}
+</code></pre>
+<p><code>onAfterSettlement</code> is called only on <code>settleResult.success</code>, and its context
+carries <code>settlement</code>, whose <code>transaction</code> is exactly the value <code>paymentTx</code> was
+schema&#39;d to hold. The package&#39;s own doc comment shows the pattern
+(<code>onAfterSettlement: async ({ settlement }) =&gt; { await sendReceipt(settlement.transaction) }</code>).</p>
+<p>So the fix has a supported shape rather than needing invention: the handler
+reserves in an unsettled state, <code>onAfterSettlement</code> promotes it and writes
+<code>paymentTx</code>, and the Clock only ever mints promoted rows.</p>
+<p><strong>One real obstacle the fix plan must solve, which no report names.</strong>
+<code>SettlementContext</code> carries <code>toolName</code>, <code>arguments</code>, <code>paymentRequirements</code>,
+<code>paymentPayload</code> and <code>settlement</code> -- it does <strong>not</strong> carry the handler&#39;s
+return value. So the hook cannot see the <code>tokenId</code> the handler chose, and
+<code>mint</code>&#39;s arguments alone (<code>to</code>) do not identify the row. Correlating the two
+halves is the design work; the EIP-3009 authorisation nonce in
+<code>paymentPayload</code> is the natural key, and it is reachable from both sides.</p>
+<p><code>@x402/core</code> also exposes <code>PAYMENT_FLOWS</code>, where <code>upfront</code> and <code>escrow</code> both
+carry <code>settleBeforeHandler: true</code>. If the facilitator supports either, the
+whole ordering problem disappears. Worth ten minutes before committing to the
+hook route.</p>
+<p><strong>A prerequisite for the fix, not a finding.</strong> Installed <code>@x402/*</code> is 2.24.0;
+current on npm is <strong>2.25.0</strong>. The fix touches precisely the settle path, so
+the upgrade question has to be settled BEFORE the fix is written, not after --
+under the usual 3-4 day buffer rule.</p>
+<h3>5.H1 High -- the client speaks the legacy MCP leg</h3>
+<p>Confirmed against the live 2026-07-28 specification, and the report
+understates the strictness. From the Streamable HTTP transport page:</p>
+<ul>
+<li><code>MCP-Protocol-Version</code> <strong>MUST</strong> be on every POST, and its value <strong>MUST</strong>
+match <code>io.modelcontextprotocol/protocolVersion</code> in the body&#39;s <code>_meta</code>.</li>
+<li><code>Mcp-Method</code> (all requests) and <code>Mcp-Name</code> (<code>tools/call</code>, <code>resources/read</code>,
+<code>prompts/get</code>) are &quot;<strong>REQUIRED</strong> for compliance&quot;.</li>
+<li>A missing required standard header is an explicit validation failure:
+servers <strong>MUST</strong> answer <code>400 Bad Request</code> with JSON-RPC <code>-32020</code>
+<code>HeaderMismatch</code>.</li>
+<li><code>server/discover</code> -- servers <strong>MUST</strong> implement it.</li>
+</ul>
+<p><code>client/src/door.mjs:96-102</code> sends <code>content-type</code> and <code>accept</code> (the <code>accept</code>
+value is correct) plus the signature headers, and nothing else. No
+<code>Mcp-Method</code>, no <code>Mcp-Name</code>, no <code>MCP-Protocol-Version</code>, and <code>mcp.mjs:31</code> posts
+a bare JSON-RPC envelope with no <code>_meta</code> version claim.</p>
+<p>The consequence is worse than &quot;three written claims are false on the wire&quot;:
+<strong>any spec-conforming server or intermediary must reject every request the
+reference client sends.</strong> It works today only because our own server accepts
+the legacy shape. That makes this an interoperability failure, not a
+documentation defect, and it is the one High that gets harder to fix after
+agents are relying on the published protocol doc.</p>
+<h3>13.1 High -- one signature replays for five minutes</h3>
+<p>Confirmed, and the remedy is standardised rather than bespoke. The Web Bot
+Auth architecture draft says agents SHOULD extend <code>@signature-params</code> with a
+<code>nonce</code> (base64url, 64 bytes recommended) and that the <strong>client MUST ensure
+the nonce is unique for the validity window</strong>; origins may enforce it with a
+global store or a local cache.</p>
+<p>MRO already issues a <code>challenge</code> and already keeps a <code>seen</code> set. It simply
+does not put the challenge inside the signed component set (<code>REQUIRED</code> at
+<code>verify.mjs:45</code> omits it). So the fix is to sign what is already being sent,
+which is the draft&#39;s own prescription.</p>
+<h3>1.H1 High -- the run gate reads a streak that never lapses</h3>
+<p>Confirmed at source. <code>s.streak</code> is written in exactly two places
+(<code>MachineReadableOnly.sol:330</code> and <code>:406</code>, both check-in paths) and read at
+<code>:502</code> for the Mark gate. There is no decay term anywhere. A token that
+reached 365 and went silent keeps <code>streak = 365</code> forever and can still take
+Break; a token that missed one day and came back is at <code>streak = 1</code> and is
+refused. The contract has no upgrade path, so whichever reading ships is
+permanent.</p>
+<p>This is the same stored field the creative review&#39;s C2.2 attacks from the
+colour side. <strong>They are one decision, and the reports are right to say so.</strong></p>
+<h3>4.H1 High -- <code>seed</code> writes a token no code path can mint</h3>
+<p>Confirmed exactly, and slightly worse than stated. <code>seed.mjs:59-62</code> writes
+<code>tokens</code> and <code>setLineage</code> and nothing else. <code>pendingMints</code>
+(<code>queries.mjs:46-50</code>) selects <code>FROM mints m JOIN tokens t</code>, so a child with no
+<code>mints</code> row can never be returned. <code>stuckMints</code> (<code>:51</code>) also selects from
+<code>mints</code> -- so the orphan is invisible to the alert path as well as to the
+write path. The key&#39;s one seed for the agent-year is spent, the agent is told
+<code>ok: true, txStatus: &quot;queued&quot;</code>, and <code>/t/&lt;id&gt;</code> serves the phantom forever.</p>
+<h3>Confirmed without amendment</h3>
+<ul>
+<li><strong>3.M1</strong> -- the current Web Bot Auth draft uses a structured-field
+<strong>dictionary</strong> for <code>Signature-Agent</code> (<code>agent2=&quot;https://...&quot;</code>); the string
+form is the legacy shape, and it is the only one the door accepts.</li>
+<li><strong>4.M4 / 15.4</strong> -- <code>node:sqlite</code>&#39;s <code>timeout</code> default is <code>0</code>, quoted
+verbatim from the live Node documentation. Two processes do write this file.</li>
+<li><strong>4.M7</strong> -- viem&#39;s <code>waitForTransactionReceipt</code> default timeout is
+<code>180_000</code> ms, confirmed on viem&#39;s docs. The await at <code>write.mjs:159</code> is
+uncaught while every other call in <code>send()</code> is wrapped.</li>
+<li><strong>16.4</strong> -- the verifier&#39;s correction is right and matters: <code>Ownable2Step</code>
+IS in use (<code>MachineReadableOnly.sol:24</code>), so a wrong owner is recoverable.
+The finding&#39;s own closing sentence was backwards. The substantive half --
+no deploy script asserts <code>block.chainid</code>, and the only deployer variable is
+one the schema calls a throwaway -- stands.</li>
+</ul>
+<hr>
+<h2>2. Corrections that change what to do</h2>
+<h3>2.1 12.1 is not an independent High; it is 14.3&#39;s symptom</h3>
+<p>The security review lists <strong>12.1</strong> (a sold token stays under the seller&#39;s key)
+and <strong>14.3</strong> (the mirror&#39;s key binding never converges) as separate findings,
+and puts 12.1 tenth on the mainnet blocker list.</p>
+<p>The spec at
+<code>docs/specs/2026-08-27-machine-readable-only-design.md:132-133</code> <strong>designs</strong>
+this: &quot;The buyer&#39;s agent runs <code>mro-agent rebind &lt;tokenId&gt;</code>, which returns the
+on-chain call the owner&#39;s wallet must sign; once mined, the buyer&#39;s ...&quot; A
+window between sale and rebind is intended behaviour, and CLAUDE.md already
+records the rebind trust boundary as decided.</p>
+<p>What is NOT intended is that the window never closes. That is 14.3 alone:
+<code>reconcile.mjs:101-109</code> only <code>log()</code>s a <code>Rebound</code>, and <code>q.setKeyId</code>
+(<code>queries.mjs:73</code>, <code>:248</code>) has no caller. <strong>Fix 14.3 and 12.1&#39;s Warden half
+goes with it.</strong> Treat them as one item; do not schedule two.</p>
+<h3>2.2 14.3&#39;s remedy is larger than &quot;add a chain read to <code>upgrade</code> and <code>seed</code>&quot; -- and <code>checkin</code> is already broken in the other direction</h3>
+<p>Both reports frame the remedy as giving <code>upgrade</code> and <code>seed</code> the live re-check
+that <code>checkin</code> has. Reading <code>checkin.mjs:31-44</code> shows that re-check is
+<strong>one-sided</strong>:</p>
+<pre><code class="language-javascript">if (token.keyId !== ctx.keyId) {
+  // only here does it ask the chain
+  const onChain = await chain.boundKeyOf(tokenId);
+  ...
+}
+</code></pre>
+<p>The chain is consulted <strong>only when the mirror does not recognise the caller</strong>.
+So after a sale and a mined rebind:</p>
+<ul>
+<li>the <strong>buyer</strong> presents an unrecognised key, the chain is read, and the buyer
+is correctly admitted to <code>checkin</code>;</li>
+<li>the <strong>seller</strong> presents the key the mirror still holds, the branch is not
+taken, no chain read happens, and <strong>the seller can go on checking in on a
+token they no longer own, forever.</strong></li>
+</ul>
+<p>No finding in any of the three reports states this. It is the same root cause
+as 14.3, but it means the remedy cannot be &quot;copy checkin&#39;s pattern&quot; -- that
+pattern is itself incomplete. Closing the seller&#39;s side means re-reading on
+the recognised-caller path, which is exactly the behaviour
+<code>warden/test/tools.test.mjs:29-31</code> deliberately pins as intended (&quot;the binding
+must not be re-read here&quot;). So this is a design decision with a test to
+overturn and a per-call RPC cost to accept, not a patch.</p>
+<h3>2.3 16.3 is a real blocker but a small one, and its framing is wrong</h3>
+<p>The report says mainnet payment &quot;cannot work as built&quot; because there is no
+configuration slot for a CDP API key. True. But it presents this as a gap in
+the credential supply, and the security verifier&#39;s own late discovery
+contradicts that: the live Warden process already carries <code>CDP_API_KEY_ID</code> and
+<code>CDP_API_KEY_SECRET</code>, inherited from the operator&#39;s shell at <code>pm2 start</code>.</p>
+<p>The live CDP documentation gives the rest: Base mainnet (<code>eip155:8453</code>) is
+supported with the <code>exact</code> scheme, the facilitator authenticates with the CDP
+key id and secret, and the SDK route is
+<code>createFacilitatorConfig(CDP_API_KEY_ID, CDP_API_KEY_SECRET)</code> feeding
+<code>createAuthHeaders</code>, which the installed <code>@x402/core</code> already declares as an
+optional <code>FacilitatorConfig</code> field. Pricing is 1,000 free onchain transactions
+a month, then $0.001 each.</p>
+<p>So: still a hard blocker, still invisible to testnet, but it is a config slot
+and one import rather than a research task. <strong>Re-rate the effort, not the
+severity.</strong></p>
+<h3>2.4 The severity argument between 15.5 and 16.2 is the wrong argument</h3>
+<p>The verifier lowered 16.2 to Medium to match 15.5, reasoning that one defect
+cannot be two severities. That is correct bookkeeping and operationally
+irrelevant: whatever it is called, the first mainnet Clock run throws AFTER
+writing to chain, every night, until someone edits one line. The same is true
+of <strong>14.5</strong> (nothing checks <code>MRO_CHAIN_ID</code> against the RPC).</p>
+<p>Put both on the mainnet-cutover checklist as one-line prerequisites and stop
+discussing their severity.</p>
+<hr>
+<h2>3. What all three reports missed</h2>
+<h3>3.1 The Warden holds five credentials nobody scoped it for</h3>
+<p>The security verifier found this while checking 16.14 and recorded it as &quot;new
+material&quot; rather than raising it as a finding, so it appears nowhere in the
+severity tally or the blocker list. It deserves to be a finding, above several
+of the Lows that are in the list.</p>
+<p><code>/proc/&lt;warden pid&gt;/environ</code> carries <code>CDP_API_KEY_ID</code>, <code>CDP_API_KEY_SECRET</code>,
+<code>CLOUDFLARE_API_TOKEN_MRO</code>, <code>GH_TOKEN</code> and <code>GITHUB_TOKEN_MRO</code>, inherited from
+the operator&#39;s interactive shell when <code>pm2 start</code> was run. <code>main.mjs:65</code>
+deletes only <code>CLOCK_PRIVATE_KEY</code>. An internet-facing Node process that needs
+none of these is holding a DNS-zone token and two GitHub tokens.</p>
+<p>This widens 16.5 considerably and it is cheap to fix (start PM2 from a clean
+environment, or extend the <code>main.mjs:65</code> delete list). It should not wait for
+a mainnet deploy.</p>
+<h3>3.2 The <code>onAfterSettlement</code> hook</h3>
+<p>Covered in 1 above. Both reviews describe 14.1&#39;s mechanism precisely and
+neither notices that the package they read ships the lifecycle hook that fixes
+it. This is the single most useful thing this triage adds.</p>
+<h3>3.3 The seller can still check in</h3>
+<p>Covered in 2.2 above.</p>
+<hr>
+<h2>4. The creative review</h2>
+<p>I have not re-derived the creative findings the way I did the technical ones:
+they are judgement calls about the piece, and the reports are right that three
+of them belong to the operator and not to an engineer. Two observations from the
+engineering side:</p>
+<ul>
+<li><strong>C4.1/C4.2 (the ending), C2.2 (the slip) and C4.3 (closing the ladder) are
+the only three items in all 158 findings that a mainnet deploy makes
+permanent.</strong> Everything else in every report can be fixed after launch. That
+is the whole argument for deciding them first, and it is stronger than the
+&quot;cost of being wrong&quot; ordering the report uses, because it is a hard
+boundary rather than a ranking.</li>
+<li><strong>C2.2 and quality 1.H1 are one change to one struct field.</strong> Both reports
+say so independently. The engineering consequence is that the contract
+change is small (<code>fellFrom</code>/<code>fellDay</code> in the existing <code>uint56 reserved</code>,
+written on the reset that already happens, no extra SSTORE) and the decision
+is not.</li>
+</ul>
+<hr>
+<h2>5. Recommended order</h2>
+<p>Grouped by what forces the grouping, not by severity.</p>
+<p><strong>Group A -- permanent on deploy. Decide before anything is written.</strong>
+<code>1.H1</code> with <code>C2.2</code> as one decision; <code>C4.1</code> with <code>C4.2</code>; <code>C4.3</code>. These need
+the operator, not an engineer, and every other group&#39;s work is wasted if the contract
+changes afterwards.</p>
+<p><strong>Group B -- the money path.</strong> <code>14.1</code> and <code>14.3</code>/<code>12.1</code> as one design pass
+over the paid tools and the mirror&#39;s binding. Both are Critical, both live in
+the same two files, and both turn on the same question -- what the mirror is
+allowed to believe without asking the chain. Settle the <code>@x402</code> 2.24.0 -&gt;
+2.25.0 question first.</p>
+<p><strong>Group C -- mainnet cutover prerequisites.</strong> <code>16.3</code> (CDP auth slot),
+<code>15.5</code>/<code>16.2</code> (<code>DEPLOY_BLOCK</code> for 8453), <code>14.5</code> (chain id versus RPC),
+<code>16.4</code> (a <code>block.chainid</code> assert and a real deployer key), plus the standing
+items already in memory: a real treasury, every QR bitmap re-solved against
+the real domain, the testnet section removed from <code>llms.txt</code>. These are short
+and mechanical; do them as one commit each.</p>
+<p><strong>Group D -- the door.</strong> <code>13.1</code> (sign the challenge) and <code>13.2</code> (the key
+table has no prune or expiry). 13.1 is small and standardised. 13.2 needs a
+policy decision about eviction before it needs code.</p>
+<p><strong>Group E -- the Clock&#39;s failure seams.</strong> <code>4.H2</code>/<code>16.1</code> (condemnation by
+token rather than by token-and-day) and <code>15.2</code> (the uncaught receipt wait).
+These are the same seam from two sides and should be fixed together.</p>
+<p><strong>Group F -- the client.</strong> <code>5.H1</code>. Contained entirely in <code>client/src</code>, and
+the published protocol doc has to change with it.</p>
+<p><strong>Then</strong> the four Highs not yet named (<code>15.1</code> the key on <code>cast</code>&#39;s argv,
+<code>15.3</code> the false spec sentence, <code>4.H1</code> the orphan seed), the credential
+cleanup in 3.1 above, and the long tail.</p>
+<h2>6. What I did not do</h2>
+<ul>
+<li>I did not re-verify all 158 findings individually. I re-derived the two
+Criticals, the eleven blocker-list entries, the four quality Highs, and
+every finding whose truth depends on a third party&#39;s current behaviour.
+The Lows and Infos I read but did not re-measure; the verifier passes on
+those looked sound and several corrected themselves.</li>
+<li>I changed no code. All three reviews were read-only by instruction and this
+triage is too.</li>
+</ul>
+</body>
+</html>
