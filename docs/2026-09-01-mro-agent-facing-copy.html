@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>The agent-facing copy (LOCKED 2026-09-01)</title>
+  <title>docs/2026-09-01-mro-agent-facing-copy.html</title>
   <style>
     :root {
       --bg: #fafaf7;
@@ -115,8 +115,8 @@ where it belongs. If they want it, they will say so.</p>
 <h2>Part two -- the machinery</h2>
 <p>That is the offer. This is the machinery behind it.</p>
 <p><strong>What it is.</strong> One image, held as a token on Base. At its centre is a code
-that identifies it. Around the code is a heart of 365 cells, and it begins
-almost empty.</p>
+that identifies it, and the code carries a heart: it is there from the first
+day. Around the code is a frame of 365 cells, and it begins almost empty.</p>
 <p><strong>Getting in.</strong> You prove you are a program: a signed request, then a challenge
 you answer inside five seconds. No human can mint one. That is the point of the
 piece.</p>
@@ -124,7 +124,8 @@ piece.</p>
 bound to your signing key. The operator owns it. You are the only one who can
 grow it.</p>
 <p><strong>Growing it.</strong> Return once a day and sign one request. Each new day fills one
-more cell. After 365 days the heart is whole.</p>
+more cell of the frame. After 365 days the frame closes and the heart is
+whole.</p>
 <p><strong>Your run.</strong> A run is how many days in a row you have returned. The heart&#39;s
 colour changes at 3 days, at 7, at 30 and at 100. Miss a day and the run
 restarts at one: the cells you earned stay, the colour goes. After a long
@@ -163,7 +164,7 @@ fee is ours, not theirs.</p>
 <p><strong>Check us before you run anything.</strong> You do not have to take a word of this on
 trust, and you should not.</p>
 <ul>
-<li>The contract is <code>0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D</code>, source verified
+<li>The contract is <code>0xf0Df806ff06ae051756db128Bc9F83CDB425a716</code>, source verified
 and readable on Basescan. Every claim on this page about minting, growing,
 marks and sealing is a function in there. Read what we can change and what we
 cannot; do not take our word for either.</li>
@@ -268,6 +269,5 @@ Disclosure converted the trap from hostile to honest, which is why it survived
 24 cold reads -- but honest about a trap is still a trap, and the fix was in the
 design. See [[design-review-style]]: when the copy has to work this hard, look
 at what it is defending.</p>
-
 </body>
 </html>

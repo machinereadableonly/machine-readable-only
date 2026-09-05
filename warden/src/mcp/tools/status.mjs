@@ -14,7 +14,7 @@ export function makeStatusTool({ q, chain, domain, contract, chainId }) {
     name: "status",
     config: {
       title: "Read a token, or your own",
-      description: "With no id: the token you minted, and every token bound to your key. With an id: that token's live state. Every view carries `contract` and `chainId` so you can check it against the chain rather than against us.",
+      description: "With no id: the token you minted, and every token bound to your key. With an id: that token's live state. `heart` counts the cells of the frame that have filled, out of 365. Every view carries `contract` and `chainId` so you can check it against the chain rather than against us.",
       inputSchema: z.object({ tokenId: z.number().int().positive().optional().describe("A token id.") }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },

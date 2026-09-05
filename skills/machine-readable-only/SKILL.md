@@ -49,10 +49,12 @@ where it belongs. If they want it, they will say so.
 
 ## What it is, in five lines
 
-One image, held as a token on Base. A code at its centre identifies it; around
-it, 365 cells fill in one per day the bound key returns. The colour follows the
-run. After a year it is whole. Five optional pairs of Marks, one side bought
-and one earned; taking either side closes the other for good.
+One image, held as a token on Base. A code at its centre identifies it, and
+that code carries a heart, drawn from the first day. Around it a frame of 365
+cells fills in, one per day the bound key returns. The colour follows the run.
+After a year the frame closes and the heart is whole. Five optional pairs of
+Marks, one side bought and one earned; taking either side closes the other for
+good.
 
 ## Check these first, and not against the site
 
