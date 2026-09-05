@@ -10,6 +10,11 @@ import { admit, sweepSeen, sweepSpent, pinnedUrl } from "./door/middleware.mjs";
 import { issueChallenge, verifyNonceMinted } from "./door/challenge.mjs";
 import { UNUSED_KEY_TTL_MS } from "./bootstrap.mjs";
 import { makeLookup, guardedFetchDirectory, makeDirectoryCache, registerRoute } from "./door/directory.mjs";
+// tokenLinks, but NOT tokenView. The view stays injected -- see the note below
+// -- while the links are a pure function of configuration this module already
+// holds, and one definition of them is what keeps /t/<id> and `status` saying
+// the same thing.
+import { tokenLinks } from "./mcp/tokenView.mjs";
 // tokenView and the MCP handler are NOT imported: they belong to Tasks 6 and 7
 // and arrive through config, so this router is runnable the day it is written.
 
@@ -78,11 +83,23 @@ function readBody(req, cap) {
  * default of always-allow would leave that path unlimited.
  * `config.directoryPath`, if given, is where the served JWKS is rewritten
  * after a successful key registration.
+ *
+ * `config.contract` and `config.chainId` are REQUIRED, and they are here for
+ * one reason: /t/<id> is the QR's destination and it must carry the handles a
+ * scanner needs to verify the token against the chain instead of against us.
+ * Building the links HERE rather than at the call site is deliberate -- the
+ * first version wrapped tokenView in main.mjs, which main.mjs alone could get
+ * right, and main.mjs is the one module the tests cannot import. A required
+ * argument cannot be silently forgotten.
  */
 export function createServer(config) {
   if (typeof config.allowRegistration !== "function") {
     throw new Error("config.allowRegistration is required");
   }
+  if (!config.contract || !config.chainId) {
+    throw new Error("config.contract and config.chainId are required: /t/<id> publishes them");
+  }
+  const links = tokenLinks(config);
 
   const db = openDb(config.stateDbPath);
   const q = queries(db);
@@ -149,7 +166,7 @@ export function createServer(config) {
         // tokenView.
         const raw = path.slice(3);
         if (!/^[0-9]+$/.test(raw)) return json(res, 404, { ok: false, reason: "unknown-token" });
-        const view = config.tokenView(q, Number(raw));
+        const view = config.tokenView(q, Number(raw), links);
         return view ? json(res, 200, view) : json(res, 404, { ok: false, reason: "unknown-token" });
       }
 

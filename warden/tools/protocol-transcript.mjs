@@ -63,6 +63,9 @@ const mcp = makeMcpHandler({
 const server = createServer({
   stateDbPath: join(dir, "mirror.db"), domain: DOMAIN, challengeSecret: SECRET,
   tokenView, mcp, allowRegistration: () => true,
+  // The same pair the handler got: /t/<id> publishes them, and a capture that
+  // used different ones would document a service nobody runs.
+  contract: CONTRACT, chainId: CHAIN_ID,
 });
 const base = await new Promise((r) =>
   server.listen(0, "127.0.0.1", () => r(`http://127.0.0.1:${server.address().port}`)));

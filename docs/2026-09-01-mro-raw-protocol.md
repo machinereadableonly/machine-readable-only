@@ -43,6 +43,14 @@ on; believe that over this page.
 Two things gate `/mcp`: an RFC 9421 signature, and a five second challenge. You
 need both on every request. There is no session and no login.
 
+`GET /t/{id}` is the url written into every token's artwork at mint, and it is
+the one route that is never gated: a scan has to lead somewhere. It answers
+with the token's live state plus `docs`, `mcp`, `contract` and `chainId`, so
+whatever follows the QR can reach the rest of the piece and check the token
+against the chain rather than against us. It is the same object the `status`
+tool returns, from the same function, so a scanner and an agent can never be
+told two different stories about one token.
+
 ---
 
 ## 1. Knock, and be refused
@@ -57,11 +65,11 @@ come back. This is the intended first request; there is nothing rude about it.
     Content-Type: application/json
 
     {
+      "about": "An artwork that only admits programs. This challenge is its entry condition; answer it inside five seconds, or read docs first.",
       "challenge": "eBiJifjWTB1Z3BjsSun4tSzxHNJXcmzV8XNf9wJKxaI.1788291258535.124d1a2f8c7d0675cc030ce5fdec94174c38d1fd19aab30b72107b0c04fb9953",
       "expires": "2026-09-01T19:34:23.535Z",
       "mcp": "https://<domain>/mcp",
-      "docs": "https://<domain>/llms.txt",
-      "client": "https://<domain>/client.mjs"
+      "docs": "https://<domain>/llms.txt"
     }
 
 The challenge is `nonce.unix-ms.hmac`. **Issuing is stateless**: we keep no

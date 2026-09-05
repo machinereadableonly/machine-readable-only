@@ -274,6 +274,10 @@ async function main() {
     domain,
     challengeSecret,
     tokenView,
+    // /t/<id> publishes these so a scanner can check the token against the
+    // chain rather than against this service. createServer requires them.
+    contract,
+    chainId,
     mcp,
     allowRegistration: makeAllowRegistration(q),
     directoryPath,

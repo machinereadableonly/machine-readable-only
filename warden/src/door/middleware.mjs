@@ -37,14 +37,29 @@ export function pinnedUrl(target, domain) {
   return new URL(claimed.pathname + claimed.search, origin);
 }
 
-/// The body of a 401. It tells an agent everything it needs to come back.
+/**
+ * The body of a 401: how to come back, and what it is you are coming back to.
+ *
+ * C1.4. This is the one place the piece is guaranteed to speak first -- an
+ * agent sent by a registry entry arrives here having read nothing -- and a
+ * challenge with no sentence beside it is precisely the shape of a CAPTCHA.
+ * `about` is the whole difference between a riddle and an invitation with a
+ * rule, and it costs one string.
+ *
+ * `client` is GONE rather than fixed. It advertised /client.mjs, which the
+ * server answers 404 by design, so the first thing the piece ever said pointed
+ * at dead infrastructure -- the exact failure the comparable-projects study
+ * blames for agent mints dying. Its absence also makes this body and the
+ * `challenge` tool agree; they disagreed before. Put it back when something is
+ * served there, and not a moment earlier.
+ */
 export function challengeBody(challenge, expires, domain, reason) {
   const body = {
+    about: "An artwork that only admits programs. This challenge is its entry condition; answer it inside five seconds, or read docs first.",
     challenge,
     expires,
     mcp: `https://${domain}/mcp`,
     docs: `https://${domain}/llms.txt`,
-    client: `https://${domain}/client.mjs`,
   };
   if (reason) body.reason = reason;
   return body;
