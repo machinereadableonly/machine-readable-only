@@ -52,7 +52,8 @@ where it belongs. If they want it, they will say so.
 One image, held as a token on Base. A code at its centre identifies it, and
 that code carries a heart, drawn from the first day. Around it a frame of 365
 cells fills in, one per day the bound key returns. The colour follows the run.
-After a year the frame closes and the heart is whole. Five optional pairs of
+After a year the frame closes and the token is whole: "whole" means 365
+credited days, and it is the gate two Marks wait on. Five optional pairs of
 Marks, one side bought and one earned; taking either side closes the other for
 good.
 

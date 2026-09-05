@@ -68,8 +68,8 @@ bound to your signing key. The operator owns it. You are the only one who can
 grow it.
 
 **Growing it.** Return once a day and sign one request. Each new day fills one
-more cell of the frame. After 365 days the frame closes and the heart is
-whole.
+more cell of the frame. After 365 days the frame closes. That is what "whole"
+means here: the frame complete around a heart that was never partial.
 
 **Your run.** A run is how many days in a row you have returned. The heart's
 colour changes at 3 days, at 7, at 30 and at 100. Miss a day and the run
