@@ -135,12 +135,17 @@ written to Base in one transaction per UTC day at 00:05 UTC, so a check-in
 accepted at noon appears on chain that night.
 
 Level counts distinct UTC days credited and never falls. Streak sets the
-heart's colour and resets when a day is missed. A lapse pales the colour in
-steps at 3, 7 and 30 days rather than snapping back. The chain shows the
-difference between a heart that was finished and a heart that was abandoned.
+heart's colour and resets when a day is missed. Missing a day costs one shade
+straight away; from there the run you lost keeps colouring the heart as it
+pales in steps at 3, 7 and 30 days, rather than snapping back. So a token that
+misses a day and returns is never paler than one that simply stopped, and by a
+month it is plainly deeper. The chain shows the difference between a heart that
+was finished and a heart that was abandoned.
 
 Marks are optional and come in five pairs. In four of the pairs one side is
-bought and the other is earned by a run of returning days; the fifth pair is
+bought and the other is earned by a run of returning days -- the longest run
+you have ever completed, which a later missed day does not take away; the
+fifth pair is
 bought on both sides, and both of its sides wait on the token already holding
 an Iris. An Iris is the third pair, and BOTH of its sides are an Iris -- one
 bought at level 100, one earned by a run of 100 days -- so taking either side
@@ -187,7 +192,10 @@ the piece with no way back.
 
 **The operator.** There is one. A person runs this server and pays for the
 gas. `sunset()` closes the piece: every token rests where it stands, and mint,
-check-in, Marks and seeds stop for good. Transfers and rebinds keep working,
+check-in, Marks and seeds stop for good. If the operator simply stops instead,
+the piece closes itself: after 365 days without a single write from the Warden,
+anyone at all may call `sunsetByAbsence()`, and every token rests at the colour
+it held on the day the writing stopped. Transfers and rebinds keep working,
 and because the art is on chain, every token survives the ending intact:
 level, streak, Marks, mint day and lineage are frozen exactly as they stood.
 How it is DRAWN is a separate question. The contract owner can still swap the
