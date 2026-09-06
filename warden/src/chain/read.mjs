@@ -101,7 +101,18 @@ export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch, now = () 
       return null;
     }
     if (!res.ok) return null;
-    const body = await res.json();
+    // 4.L6. THE PARSE IS INSIDE THE GUARD TOO. This function's contract is
+    // "null on ANY failure", and every caller here treats a throw as fatal
+    // rather than as a refusal -- but `res.json()` rejects on a body that is
+    // not JSON, which is exactly what a provider's HTML error page or a
+    // truncated response is. That throw propagated out of the gates and out of
+    // the tool, so an agent got `internal` instead of `chain-unavailable`.
+    let body;
+    try {
+      body = await res.json();
+    } catch {
+      return null;
+    }
     if (body.error || typeof body.result !== "string") return null;
     return body.result;
   }

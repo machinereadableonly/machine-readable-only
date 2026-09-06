@@ -515,3 +515,95 @@ test("a revert with no named error is not terminal", async () => {
   assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "queued");
   assert.deepEqual(summary.stuckMarks, []);
 });
+
+// 4.L9. A run-level refusal used to `return summary` from inside the mints
+// loop, which skipped reconcile with it -- so a paused or sunset contract
+// stopped the mirror LEARNING as well as writing, for as long as the pause
+// lasted. `Rested` is exactly what a token owner does while the piece is shut,
+// and reconcile makes no writes to the chain, so it cannot fail for the reason
+// that stopped the sends.
+test("a run aborted by the contract still reconciles, and still sends nothing more", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  queueMint(q, db, 2);
+  q.creditDay(1, TODAY - 1, 2, 2);              // a check-in that must NOT be sent
+  q.reserveMark(1, 1, 0);                       // and a Mark that must not either
+
+  let logsRead = 0;
+  const paused = {
+    ...noChain,
+    // Past the deploy block by enough that reconcile has a window to read:
+    // `noChain`'s head IS the deploy block, so reconcile there returns before
+    // asking for a single log. Measured, not assumed -- the first version of
+    // this test asserted on getLogs and failed for that reason.
+    async getBlockNumber() { return 46_163_891n + 100n; },
+    async getLogs() { logsRead += 1; return []; },
+  };
+  const writer = okWriter({
+    async send(functionName, args, opts) {
+      assertEncodable(functionName, args);
+      writer.sent.push({ functionName, args, label: opts?.label });
+      return { ok: false, reason: "reverted-on-simulate", errorName: "EnforcedPause" };
+    },
+  });
+
+  const summary = await runClock({ ...baseArgs(q), publicClient: paused, writer });
+
+  assert.equal(summary.aborted, "EnforcedPause", "the run still reports the abort, so it exits non-zero");
+  assert.equal(writer.sent.length, 1, "it stopped at the first refusal rather than sending the queue");
+  assert.equal(writer.sent[0].functionName, "mint");
+  assert.ok(logsRead > 0, "reconcile still ran");
+  assert.ok(summary.reconciled, "and its result is in the summary");
+  // Nothing was recorded as done, because nothing was.
+  assert.deepEqual(summary.minted, []);
+  assert.deepEqual(summary.credited, []);
+  assert.deepEqual(summary.marks, []);
+});
+
+// 4.L3. STALE_AFTER_RUNS was exported and read by nothing, and the spec's
+// three-run alert did not exist -- so a row that failed quietly every night
+// produced one ordinary log line a night and no signal at all. The window is
+// measured from what the mirror already stores, which is why this needs no
+// schema change and no run counter.
+test("a row still queued after three runs raises an alert naming what it is", async () => {
+  const { db, q } = mirror();
+  // A credit for a day three runs ago that never landed.
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0x" + "11".repeat(20), lastDay: TODAY - 9, mintDay: TODAY - 9 });
+  // `creditDay` advances the TOKEN row; the queue row is `insertCredit`. Both
+  // are needed, and asserting on the wrong one is what this test did first.
+  q.insertCredit(1, TODAY - 4, "sig");
+  // And a paid mint reserved four days ago whose artwork never solved.
+  queueMint(q, db, 2, { solveState: "failed" });
+  db.exec(`UPDATE mints SET reservedAt = ${Date.now() - 4 * 86_400_000} WHERE tokenId = 2`);
+
+  // The check-in must still be QUEUED when staleness is counted, so the writer
+  // refuses it in a way that is not terminal -- exactly the case the alert is
+  // for. `send-failed` is a bad minute on a public RPC, which is why the row is
+  // kept rather than condemned, and why it can then sit there unnoticed.
+  const alerts = [];
+  const flaky = okWriter({
+    async send(functionName, args, opts) {
+      assertEncodable(functionName, args);
+      flaky.sent.push({ functionName, args, label: opts?.label });
+      if (functionName === "batchCheckIn") return { ok: false, reason: "send-failed" };
+      return { ok: true, hash: "0x1" };
+    },
+  });
+  const summary = await runClock({ ...baseArgs(q), writer: flaky, alert: (m) => alerts.push(m) });
+
+  const stale = alerts.find((a) => a.includes("queued for 3 runs or more"));
+  assert.ok(stale, `expected a staleness alert, got ${JSON.stringify(alerts)}`);
+  assert.match(stale, /1 mint\(s\)/);
+  assert.match(stale, /1 credit\(s\)/);
+  assert.equal(summary.stale.credits.length, 1);
+  assert.equal(summary.stale.mints.length, 1);
+});
+
+test("CONTROL: a fresh queue raises no staleness alert", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  db.exec(`UPDATE mints SET reservedAt = ${Date.now()} WHERE tokenId = 1`);
+  const alerts = [];
+  await runClock({ ...baseArgs(q), writer: okWriter(), alert: (m) => alerts.push(m) });
+  assert.equal(alerts.filter((a) => a.includes("queued for")).length, 0);
+});

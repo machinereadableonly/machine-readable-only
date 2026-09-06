@@ -136,6 +136,22 @@ export function makeWriter({
       return { ok: false, reason: "gas-estimate-too-large", gas };
     }
 
+    // 4.L2. HEADROOM ON THE ESTIMATE, because the estimate is made against a
+    // state that is one block old and the transaction executes against a newer
+    // one. An under-estimate is not a retry: it runs out of gas ON CHAIN, which
+    // arrives as `reverted-on-chain`, which aborts the whole run -- so a few
+    // thousand gas of drift costs the fee, the nonce, and every remaining
+    // check-in chunk, every Mark and (until 4.L9) the reconcile for that night.
+    //
+    // Twelve and a half percent is geth's own bump unit for a replacement
+    // transaction, which is the closest thing to a convention here. The cap is
+    // applied to the PADDED figure so MAX_TX_GAS still means what it says.
+    const padded = (gas * 1125n) / 1000n;
+    if (padded > MAX_TX_GAS) {
+      return { ok: false, reason: "gas-estimate-too-large", gas: padded };
+    }
+    gas = padded;
+
     let hash;
     try {
       hash = await wallet.writeContract({

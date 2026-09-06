@@ -185,3 +185,39 @@ test("a log from another contract is discarded even if the node returns it", asy
   assert.equal(accepted.events.length, 1, "the same log from our own address must be read");
   assert.equal(accepted.events[0].eventName, "Transfer");
 });
+
+// 4.M8. Three events the chain emits reached reconcile and were dropped by the
+// `if (!(name in applied)) continue` guard, so "the mirror ignored it" and "the
+// chain never said it" looked identical from the summary. None of the three can
+// heal per-token state -- BatchCheckedIn names no tokens at all, Seeded cannot
+// arrive because nothing sends `seed`, and SunsetAt is already read live by
+// every gated call -- but all three are worth SEEING.
+test("the three events reconcile cannot apply are counted rather than dropped", () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 10, mintDay: 10 });
+
+  const logs = [];
+  const applied = applyEvents(q, [
+    { eventName: "BatchCheckedIn", args: { day: 20_700, count: 3 } },
+    { eventName: "SunsetAt", args: { day: 20_700 } },
+    { eventName: "Seeded", args: { tokenId: 9, parentId: 1 } },
+  ], { log: (m) => logs.push(m) });
+
+  assert.equal(applied.BatchCheckedIn, 1);
+  assert.equal(applied.SunsetAt, 1);
+  assert.equal(applied.Seeded, 1);
+  // And NOT counted as skipped: a skip means "an event about a token we do not
+  // hold", which is a divergence alert. These are neither.
+  assert.equal(applied.skipped, 0);
+  assert.ok(logs.some((l) => /SUNSET/.test(l)), "closing the piece must be said out loud");
+  assert.ok(logs.some((l) => /Seeded event arrived/.test(l)));
+});
+
+// The control that gives the count above its meaning: an event for a token this
+// mirror does not hold is still a skip, and still a divergence.
+test("an event for an unknown token is still counted as skipped", () => {
+  const q = queries(openDb(":memory:"));
+  const applied = applyEvents(q, [{ eventName: "Rested", args: { tokenId: 404 } }]);
+  assert.equal(applied.skipped, 1);
+  assert.equal(applied.Rested, 0);
+});

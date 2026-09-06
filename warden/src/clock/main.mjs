@@ -45,14 +45,28 @@ const maxGasGwei = process.env.MAX_GAS_GWEI ?? "0.05";
 const CURSOR = process.env.CLOCK_CURSOR_PATH ?? `${stateDbPath}.reconcile-cursor`;
 
 function readCursor() {
+  let raw;
   try {
-    const raw = readFileSync(CURSOR, "utf8").trim();
-    return raw === "" ? null : BigInt(raw);
+    raw = readFileSync(CURSOR, "utf8").trim();
+  } catch (err) {
+    // NO CURSOR YET is the ordinary first run: reconcile floors at the deploy
+    // block, which re-reads history rather than skipping it.
+    if (err.code === "ENOENT") return null;
+    // 4.L4. ANYTHING ELSE IS NOT THAT. A permissions error or a corrupt file
+    // used to land here silently and be treated as a first run -- which on
+    // mainnet means reconciling from the deploy block, every night, against a
+    // unit with TimeoutStartSec=600. The unit is killed, the cursor is never
+    // written, and it repeats identically forever with nothing in the log
+    // naming a cursor. A permanent silent stall, dressed as a fresh start.
+    throw new Error(`could not read the reconcile cursor at ${CURSOR}: ${err.message}`);
+  }
+  if (raw === "") return null;
+  // A cursor that is not a number is corruption, not a first run, for the same
+  // reason: silently re-reading the whole chain is the expensive answer.
+  try {
+    return BigInt(raw);
   } catch {
-    // No cursor yet: reconcile floors at the deploy block instead. Any OTHER
-    // read failure lands here too, and starting from the deploy block is the
-    // safe direction -- it re-reads history rather than skipping it.
-    return null;
+    throw new Error(`the reconcile cursor at ${CURSOR} is not a block number: ${JSON.stringify(raw.slice(0, 40))}`);
   }
 }
 
