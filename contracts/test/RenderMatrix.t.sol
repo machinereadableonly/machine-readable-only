@@ -5,6 +5,7 @@ import {Test, console} from "forge-std/Test.sol";
 
 import {Renderer} from "../src/render/Renderer.sol";
 import {TokenView} from "../src/render/TokenView.sol";
+import {IdentityFixture} from "./IdentityFixture.sol";
 import {RenderFixture} from "./RenderFixture.sol";
 
 /// @notice Sweep B of the state soak: the complete tokenURI diffed against the
@@ -37,7 +38,7 @@ contract RenderMatrixTest is Test {
 
     function test_everyStateInTheMatrixMatchesTheJavascriptReference() public view {
         RenderFixture.Case[] memory cases = RenderFixture.cases();
-        assertEq(cases.length, 49, "the fixture is not the size it should be");
+        assertEq(cases.length, 50, "the fixture is not the size it should be");
 
         for (uint256 i; i < cases.length; ++i) {
             RenderFixture.Case memory c = cases[i];
@@ -66,6 +67,66 @@ contract RenderMatrixTest is Test {
                 keccak256(bytes(uri)), c.hash,
                 string.concat(c.label, ": content differs from the reference")
             );
+        }
+    }
+
+    /// @notice The same state at four token identities, diffed against the JS
+    /// reference.
+    ///
+    /// @dev The matrix above varies STATE and holds identity fixed: every case
+    /// is token 1, mint day 900, on one bitmap -- necessarily, because they
+    /// share a single `_bitmap()`. So `LibString.toString(v.tokenId)` and the
+    /// JS template literal that mirrors it were compared at exactly one value,
+    /// one digit long, and the `%23` in front of it with them.
+    ///
+    /// Four identities here: one digit, two, four, and 2**32 - 1, which is the
+    /// widest id `mint` will accept. Each carries its own bitmap, because the
+    /// payload a code encodes is `https://<domain>/t/<id>#` -- token 4242's
+    /// code is not token 1's, and pretending otherwise would test nothing.
+    ///
+    /// Regenerate with: node tools/identity-fixture.mjs
+    function test_everyIdentityMatchesTheJavascriptReference() public view {
+        IdentityFixture.Case[] memory cases = IdentityFixture.cases();
+        assertEq(cases.length, 4, "the identity fixture is not the size it should be");
+
+        for (uint256 i; i < cases.length; ++i) {
+            IdentityFixture.Case memory c = cases[i];
+
+            TokenView memory v;
+            v.tokenId = c.tokenId;
+            v.mintDay = c.mintDay;
+            v.code = c.code;
+            // The state every identity shares. Mirrors STATE in the generator.
+            v.level = 365;
+            v.streak = 400;
+            v.lastDay = 1000;
+            v.today = 1000;
+
+            string memory uri = r.tokenURI(v);
+            assertEq(
+                bytes(uri).length, c.bytesLen,
+                string.concat(c.label, ": byte length differs from the reference")
+            );
+            assertEq(
+                keccak256(bytes(uri)), c.hash,
+                string.concat(c.label, ": content differs from the reference")
+            );
+        }
+    }
+
+    /// @dev The control the test above needs to mean anything: the four cases
+    /// must actually RENDER DIFFERENTLY. They share every state field, so if
+    /// the id and mint day reached the document nowhere, all four hashes would
+    /// be equal and the test above would pass on a renderer that ignored both.
+    function test_theFourIdentitiesRenderDifferently() public pure {
+        IdentityFixture.Case[] memory cases = IdentityFixture.cases();
+        for (uint256 i; i < cases.length; ++i) {
+            for (uint256 j = i + 1; j < cases.length; ++j) {
+                assertTrue(
+                    cases[i].hash != cases[j].hash,
+                    string.concat(cases[i].label, " and ", cases[j].label, " render identically")
+                );
+            }
         }
     }
 

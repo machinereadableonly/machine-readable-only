@@ -122,6 +122,18 @@ export function renderCases() {
   out.push({ label: "break alone", ...base, marks: [BREAK] });
   out.push({ label: "break with static", ...base, marks: [BREAK, STATIC] });
   out.push({ label: "break with beat", ...base, marks: [BREAK, BEAT] });
+  // STATIC WITHOUT BREAK, and BEAT without it. Break exchanges the pair
+  // (colour, staticAt), so until these existed every cross-language case
+  // wearing Static also wore Break -- "all seven marks" and "break with
+  // static" both -- and the UN-exchanged assignment was asserted only within
+  // one language on each side (Renderer.t.sol in Solidity,
+  // render-token.test.mjs in JS). Two renderers can agree with themselves and
+  // not with each other; that is the whole reason this matrix exists.
+  //
+  // Beat needs no case of its own: DRAWING_MARKS already renders it alone, as
+  // "mark beat". Static was the one missing, because it was never added to
+  // that historical-continuity set.
+  out.push({ label: "mark static", ...base, marks: [STATIC] });
   // The earned Iris frozen at the top tier while the live rung has lapsed to
   // the start tier -- reusing the same mismatch as "earned iris, lapsed to
   // the start tier" above, but with Break worn too, so this actually
