@@ -59,7 +59,12 @@ function ipv6Bytes(addr) {
 }
 
 /// The IPv4 ranges a directory fetch must never reach.
-function blockedV4(a, b) {
+///
+/// `c` is the third octet, needed by exactly one range: 192.88.99.0/24, the
+/// 6to4 relay anycast prefix (RFC 7526). It is optional so the IPv6 unwrapping
+/// below can call this with two octets where the third is not in hand -- those
+/// paths pass all three.
+function blockedV4(a, b, c) {
   if (a === 0 || a === 127) return true;                 // this host, loopback
   if (a === 10) return true;                             // private
   if (a === 172 && b >= 16 && b <= 31) return true;      // private
@@ -67,6 +72,7 @@ function blockedV4(a, b) {
   if (a === 169 && b === 254) return true;               // link-local, and the metadata address
   if (a === 100 && b >= 64 && b <= 127) return true;     // carrier-grade NAT
   if (a === 192 && b === 0) return true;                 // IETF protocol assignments, TEST-NET-1
+  if (a === 192 && b === 88 && c === 99) return true;    // 6to4 relay anycast, RFC 7526
   if (a === 198 && (b === 18 || b === 19)) return true;  // benchmarking
   if (a === 198 && b === 51) return true;                // TEST-NET-2
   if (a === 203 && b === 0) return true;                 // TEST-NET-3
@@ -98,8 +104,8 @@ export function isBlockedAddress(addr) {
   const kind = isIP(addr.split("%")[0]);
   if (kind === 0) return true;                                   // not an IP at all
   if (kind === 4) {
-    const [a, b] = addr.split(".").map(Number);
-    return blockedV4(a, b);
+    const [a, b, c] = addr.split(".").map(Number);
+    return blockedV4(a, b, c);
   }
 
   const bytes = ipv6Bytes(addr);
@@ -126,12 +132,20 @@ export function isBlockedAddress(addr) {
     if (!zeros(8)) return true;                                  // reserved, and not a global address
     if (zeros(16)) return true;                                  // ::
     if (zeros(15) && bytes[15] === 1) return true;               // ::1
-    return blockedV4(bytes[12], bytes[13]);                      // ::a.b.c.d, ::ffff:a.b.c.d
+    return blockedV4(bytes[12], bytes[13], bytes[14]);           // ::a.b.c.d, ::ffff:a.b.c.d
   }
   if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0xc0) return true; // fec0::/10, site-local
   if (bytes[0] === 0x20 && bytes[1] === 0x02) {
-    return blockedV4(bytes[2], bytes[3]);                        // 2002::/16, 6to4
+    return blockedV4(bytes[2], bytes[3], bytes[4]);              // 2002::/16, 6to4
   }
+  // 2001::/32, Teredo. Like 6to4 and the relay anycast prefix above, this is an
+  // ENCAPSULATION address: on a host with the tunnel configured it reaches a
+  // relay rather than the public internet. No such tunnel exists on this box,
+  // so this is hardening rather than a live path -- said plainly, because the
+  // rest of this guard is load-bearing and this should not read as if it were
+  // patching a hole. 2001:db8::/32 (documentation) is deliberately left alone:
+  // it routes nowhere and blocking it buys nothing.
+  if (bytes[0] === 0x20 && bytes[1] === 0x01 && bytes[2] === 0x00 && bytes[3] === 0x00) return true;
   if ((bytes[0] & 0xfe) === 0xfc) return true;                   // fc00::/7, unique local
   if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80) return true; // fe80::/10, link-local
   if (bytes[0] === 0xff) return true;                            // multicast
@@ -350,6 +364,42 @@ export function makeDirectoryCache(q, render = renderDirectory) {
 /// an unauthenticated caller chooses, so it cannot be allowed to grow forever.
 const MAX_CACHED_DIRECTORIES = 256;
 
+/// How long a fetched JWKS is trusted. This is the deliberate revocation
+/// window: a key removed from an agent's own directory keeps verifying for up
+/// to an hour, which is why identity changes are settled by the contract's
+/// `rebind` rather than here.
+const SUCCESS_TTL_MS = 3_600_000;
+
+/// How long a FAILURE is remembered, and the ceiling on backing that off.
+///
+/// AN HOUR WAS THE WRONG NUMBER FOR THIS HALF, and it was a lockout anyone
+/// could trigger. The cache key is derived from `Signature-Agent`, an
+/// unverified header, and the lookup runs before any signature is checked -- so
+/// one request naming a victim's directory during any transient of its host
+/// wrote a failure that refused THAT AGENT's own requests for the next hour,
+/// with no invalidation path and nothing it could do about it. Mid-mint, it
+/// could not mint.
+///
+/// The short TTL keeps what the hour was actually for: without remembering
+/// failures at all, every unauthenticated request naming an unreachable
+/// directory becomes one outbound fetch, which is a prober pointed wherever the
+/// caller likes. Repeated failures back off geometrically to the ceiling, so a
+/// genuinely dead host is not re-probed on a 45-second loop for ever, while a
+/// victim of a single transient is out for 45 seconds rather than an hour.
+const FAILURE_TTL_MS = 45_000;
+const FAILURE_TTL_CEILING_MS = 600_000;
+
+/// How many outbound directory fetches may be in flight at once, process-wide.
+///
+/// The destination is already well constrained -- HTTPS only, port 443, no
+/// credentials, no redirects, a fixed path, and every resolved address checked
+/// inside the socket's own lookup. What was NOT bounded is the NUMBER: an
+/// unauthenticated caller with a syntactically valid but worthless signature
+/// could open one connection per request to any host it named, each held for up
+/// to the timeout and each buffering up to MAX_BODY. That is a request
+/// reflector aimed at a third party, and a memory cost here.
+const MAX_INFLIGHT_FETCHES = 8;
+
 /// Remember one directory result, evicting the oldest entry when full.
 function rememberDirectory(cache, url, entry) {
   if (cache.size >= MAX_CACHED_DIRECTORIES && !cache.has(url)) {
@@ -358,7 +408,19 @@ function rememberDirectory(cache, url, entry) {
   cache.set(url, entry);
 }
 
-export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map()) {
+/// Raised when the directory could not be FETCHED, as opposed to fetched and
+/// found not to contain the key. verifyRequest turns a throw into
+/// `reason: "directory"` and a null into `reason: "unknown-key"`, and those two
+/// say opposite things to an honest client -- see makeLookup.
+export class DirectoryUnavailableError extends Error {
+  constructor(url, cause) {
+    super(`directory could not be fetched: ${url}`);
+    this.name = "DirectoryUnavailableError";
+    this.cause = cause;
+  }
+}
+
+export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map(), inFlight = new Map(), clock = Date.now) {
   return async function lookupKey(keyId, signatureAgent) {
     const agent = typeof signatureAgent === "string" ? signatureAgent.replace(/^"|"$/g, "") : null;
 
@@ -382,26 +444,49 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map()) {
 
     const url = new URL("/.well-known/http-message-signatures-directory", agent).toString();
     const hit = cache.get(url);
-    const now = Date.now();
+    const now = clock();
 
-    // A cached entry is trusted for an hour, so a key removed from an agent's
-    // own directory keeps verifying for up to that long. That is the deliberate
-    // revocation window, and it is the reason `rebind` exists on chain rather
-    // than here: identity changes are settled by the contract, not by this
-    // cache.
+    // A cached SUCCESS is trusted for an hour -- the deliberate revocation
+    // window, settled on chain by `rebind` rather than here. A cached FAILURE
+    // is trusted for seconds, and backs off; see the two constants above for
+    // why those are different numbers.
     let jwks;
-    if (hit && now - hit.at < 3_600_000) {
-      if (hit.failed) return null;                     // a remembered failure
+    if (hit && now - hit.at < (hit.failed ? hit.ttl : SUCCESS_TTL_MS)) {
+      // A REMEMBERED FAILURE IS "COULD NOT FETCH", NOT "NO SUCH KEY". Returning
+      // null here told an honest agent its key id was wrong during an outage --
+      // and the protocol document's own table sends it to re-derive its RFC
+      // 7638 thumbprint, which that document already warns is the trap that
+      // "produces a wrong key id silently". So it throws, and the door answers
+      // `directory`: ours, not yours, try again.
+      if (hit.failed) throw new DirectoryUnavailableError(url);
       jwks = hit.jwks;
     } else {
-      // Failures are remembered too. Without that, every unauthenticated
-      // request naming an unreachable directory becomes one outbound request,
-      // which is a timing-observable prober pointed wherever the caller likes.
+      // ONE FETCH PER URL, however many callers want it. The cache was written
+      // only when a fetch SETTLED, so N concurrent requests naming one host all
+      // missed and all went out. Sharing the promise means a burst costs one
+      // outbound connection rather than N.
+      let pending = inFlight.get(url);
+      if (!pending) {
+        // And a hard ceiling on how many DIFFERENT hosts can be in flight at
+        // once, because sharing per URL does not bound a caller that names a
+        // thousand different ones. Refusing is honest here: we could not fetch.
+        if (inFlight.size >= MAX_INFLIGHT_FETCHES) {
+          throw new DirectoryUnavailableError(url, new Error("too many directory fetches in flight"));
+        }
+        pending = fetchDirectory(url).finally(() => inFlight.delete(url));
+        inFlight.set(url, pending);
+      }
       try {
-        jwks = await fetchDirectory(url);
-      } catch {
-        rememberDirectory(cache, url, { failed: true, at: now });
-        return null;
+        jwks = await pending;
+      } catch (err) {
+        // Failures are remembered, briefly. Without that, every unauthenticated
+        // request naming an unreachable directory becomes one outbound request,
+        // which is a timing-observable prober pointed wherever the caller likes.
+        // With an hour of it, one request was a lockout.
+        const previous = hit?.failed ? hit.ttl : 0;
+        const ttl = Math.min(previous ? previous * 2 : FAILURE_TTL_MS, FAILURE_TTL_CEILING_MS);
+        rememberDirectory(cache, url, { failed: true, at: now, ttl });
+        throw new DirectoryUnavailableError(url, err);
       }
       rememberDirectory(cache, url, { jwks, at: now });
     }

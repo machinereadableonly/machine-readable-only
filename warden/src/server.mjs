@@ -8,7 +8,7 @@ import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
 import { admit, sweepSeen, sweepSpent, pinnedUrl } from "./door/middleware.mjs";
 import { issueChallenge, verifyNonceMinted } from "./door/challenge.mjs";
-import { UNUSED_KEY_TTL_MS } from "./bootstrap.mjs";
+import { UNUSED_KEY_TTL_MS, makeAllowToolCall } from "./bootstrap.mjs";
 import { makeLookup, guardedFetchDirectory, makeDirectoryCache, registerRoute } from "./door/directory.mjs";
 // tokenLinks, but NOT tokenView. The view stays injected -- see the note below
 // -- while the links are a pure function of configuration this module already
@@ -111,6 +111,12 @@ export function createServer(config) {
   const spent = new Map();
   const lookupKey = makeLookup(q, guardedFetchDirectory, config.domain);
   const allowRegistration = config.allowRegistration;
+  // DEFAULTED, unlike allowRegistration, and to a REAL limiter rather than to
+  // always-allow. The reasoning behind that required argument is that a default
+  // must not leave a path unlimited -- so the default here is a working budget,
+  // and an assembly that forgets to think about /mcp gets one anyway. main.mjs
+  // passes its own so the policy stays testable as itself.
+  const allowToolCall = config.allowToolCall ?? makeAllowToolCall();
   // Rendered once per CHANGE, not once per read. The route below is public,
   // unsigned and unmetered, and re-rendering every key on every GET was the
   // cheapest way to load this process from the outside.
@@ -310,6 +316,19 @@ export function createServer(config) {
       // This key is in use, so it is never a candidate for the prune above.
       // Throttled to one write a day inside the query itself.
       q.markKeyUsed(decision.keyId);
+
+      // AND A BUDGET ON THE VERIFIED KEY. /mcp had no limit of any kind: the
+      // only limiter in this service guarded POST /keys. It is applied here,
+      // after admission, because before this line there is no identity worth
+      // counting -- and a verified key id is the one thing a caller cannot
+      // rotate for a fresh bucket, unlike any address header.
+      if (!allowToolCall(decision.keyId)) {
+        return json(res, 429, {
+          ok: false,
+          reason: "rate-limited",
+          next: "Wait a minute and call again. This budget is per key and it refills continuously.",
+        });
+      }
 
       // `return await`, not a bare `return`. A bare return hands the promise
       // back OUTSIDE this try, so a rejecting handler becomes an unhandled

@@ -892,3 +892,49 @@ test("an admitted request marks its key used, so the prune will not forget it", 
   assert.notEqual(after.getKey(signer.keyid).lastUsedAt, null, "the door did not mark the key used");
   assert.equal(after.pruneUnusedKeys(Date.now()), 0, "a key that just got in must survive the prune");
 });
+
+// -- 14.6: /mcp had no per-caller budget at all --------------------------------
+
+// The only limiter in this service guarded POST /keys. So an agent that had
+// registered once could loop any tool for ever, and two free tools (`checkin`
+// and `seed`) each spent three eth_calls before their local refusals. When the
+// RPC provider throttles, `writesOpen` answers "unreadable" and every PAID
+// write refuses for everyone -- the mint path denied through a free tool, from
+// one key, for one dollar.
+//
+// This drives the REAL route: a request that is fully signed and answered, and
+// therefore admitted, must still be refused when the budget says so, and the
+// mcp handler must never run. The budget mechanics themselves are tested
+// against makeAllowToolCall in bootstrap.test.mjs.
+test("an admitted request over its budget is refused 429, and never reaches a tool", async () => {
+  const asked = [];
+  let mcpReached = false;
+  const { server, base } = await startServer({
+    allowToolCall: (keyId) => { asked.push(keyId); return false; },
+    mcp: { nodeHandler: (req, res) => { mcpReached = true; res.writeHead(200); res.end("mcp-reached"); } },
+  });
+  try {
+    const { privateJwk } = await registerFreshKey(base);
+    const challengeRes = await fetch(`${base}/mcp`, { method: "POST" });
+    const { challenge } = await challengeRes.json();
+    const { headers, keyId } = await signFor(privateJwk, `https://${DOMAIN}/mcp`);
+    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
+
+    const res = await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: { ...headers, challenge, "challenge-response": answer },
+    });
+
+    assert.equal(res.status, 429);
+    const body = await res.json();
+    assert.equal(body.reason, "rate-limited");
+    assert.match(body.next, /per key/);
+    assert.equal(mcpReached, false, "nothing may run once the budget is spent");
+    // Counted against the VERIFIED key id -- the one identity a caller cannot
+    // rotate for a fresh bucket, which is why this is applied after admission
+    // rather than on an address header.
+    assert.deepEqual(asked, [keyId]);
+  } finally {
+    server.close();
+  }
+});

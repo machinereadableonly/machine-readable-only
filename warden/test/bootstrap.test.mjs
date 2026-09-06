@@ -26,8 +26,7 @@ import {
   REGISTRATION_WINDOW_MS,
   SOLVE_HEAP_ARG,
   SOLVE_TIMEOUT_MS,
-  WORKER_PATH,
-} from "../src/bootstrap.mjs";
+  WORKER_PATH, makeAllowToolCall, MCP_MAX_PER_WINDOW, MCP_WINDOW_MS } from "../src/bootstrap.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeMintTool } from "../src/mcp/tools/mint.mjs";
@@ -234,4 +233,25 @@ test("the result is read from the last line of stdout", async () => {
   const { impl } = recordingExecFile((cb) =>
     cb(null, "some noise\n" + JSON.stringify({ ok: true, hex: "cd" }) + "\n", ""));
   assert.deepEqual(await makeSpawnSolve("example.com", impl)(1), { ok: true, hex: "cd" });
+});
+
+// 14.6. /mcp had no limiter of any kind. These are the mechanics; the wiring
+// -- that the route consults it, after admission, keyed on the VERIFIED key id
+// -- is asserted in door.test.mjs against a real HTTP request.
+test("the tool-call budget is per key, and refills as the window slides", () => {
+  let now = 0;
+  const allow = makeAllowToolCall(() => now);
+
+  for (let i = 0; i < MCP_MAX_PER_WINDOW; i++) {
+    assert.equal(allow("k1"), true, `call ${i + 1} must be allowed`);
+  }
+  assert.equal(allow("k1"), false, "the budget is spent");
+
+  // One caller's loop must not shut anybody else out. That is the whole reason
+  // this is keyed rather than global -- the same mistake POST /keys once made.
+  assert.equal(allow("k2"), true);
+
+  // Sliding, not fixed: the oldest call ages out and one slot returns.
+  now += MCP_WINDOW_MS + 1;
+  assert.equal(allow("k1"), true);
 });

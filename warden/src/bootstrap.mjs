@@ -35,10 +35,63 @@ export const MAX_TOTAL_KEYS = 10_000;
 /// A key that HAS been through the door is never touched, at any age.
 export const UNUSED_KEY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+/// The same dial for /mcp, which had none at all.
+///
+/// Sixty calls a minute is far more than any honest use of this piece: a token
+/// is checked in once a UTC day, minted once per key, and everything else is a
+/// read. The number is deliberately generous, because the thing being stopped
+/// is not a busy agent -- it is a loop. `checkin` and `seed` each spent three
+/// eth_calls before their local refusals (fixed in the same change), so one key
+/// could turn a free tool into four-figure RPS against the RPC provider; when
+/// that provider throttles, every PAID write refuses for everyone, because
+/// `writesOpen` answers "unreadable" and the gates refuse rather than admit.
+/// A free tool denying the paid path, from one key, for one dollar.
+export const MCP_WINDOW_MS = 60_000;
+export const MCP_MAX_PER_WINDOW = 60;
+
 /// Above this many tracked callers, prune every expired window rather than only
 /// the caller's own. A flood of distinct thumbprints would otherwise leave one
 /// Map entry behind for each, forever.
 const SWEEP_ABOVE = 1024;
+
+/**
+ * A sliding per-caller window. Both limiters below are this, with different
+ * dials and different extra rules.
+ */
+function slidingWindow({ windowMs, max, now }) {
+  const windows = new Map();
+  const prune = (at, stamps) => {
+    while (stamps.length && at - stamps[0] > windowMs) stamps.shift();
+    return stamps;
+  };
+  return function allow(id) {
+    const at = now();
+    if (windows.size > SWEEP_ABOVE) {
+      for (const [key, stamps] of windows) {
+        if (prune(at, stamps).length === 0) windows.delete(key);
+      }
+    }
+    const stamps = prune(at, windows.get(id) ?? []);
+    windows.set(id, stamps);
+    if (stamps.length >= max) return false;
+    stamps.push(at);
+    return true;
+  };
+}
+
+/**
+ * Rate limiting for POST /mcp, keyed on the VERIFIED key id.
+ *
+ * The identity is the one the door has just checked a signature for, so unlike
+ * an IP header it cannot be rotated for a fresh bucket. It is applied after
+ * admission for exactly that reason: before it, there is no identity worth
+ * counting.
+ *
+ * `now` is injected so the window can be tested without waiting a minute.
+ */
+export function makeAllowToolCall(now = Date.now) {
+  return slidingWindow({ windowMs: MCP_WINDOW_MS, max: MCP_MAX_PER_WINDOW, now });
+}
 
 /**
  * Rate limiting for POST /keys.

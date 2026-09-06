@@ -19,7 +19,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getAddress } from "viem";
 import { createServer } from "./server.mjs";
-import { makeAllowRegistration, makeSpawnSolve } from "./bootstrap.mjs";
+import { makeAllowRegistration, makeAllowToolCall, makeSpawnSolve } from "./bootstrap.mjs";
 import { makePaymentGateway, warmUp } from "./pay/x402.mjs";
 import { makeCdpAuthHeaders, isCdpFacilitator } from "./pay/cdp.mjs";
 import { makeMcpHandler } from "./mcp/server.mjs";
@@ -323,6 +323,10 @@ async function main() {
     chainId,
     mcp,
     allowRegistration: makeAllowRegistration(q),
+    // The per-key budget on /mcp. createServer defaults to a real one, so this
+    // is not load-bearing -- it is here so the policy this process runs is
+    // named in the assembly rather than acquired by default.
+    allowToolCall: makeAllowToolCall(),
     directoryPath,
     // The two public documents. Read once at startup, like llmsTxt above, so
     // serving them costs no disk read per request. nginx proxies these

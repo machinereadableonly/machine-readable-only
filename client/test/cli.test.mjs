@@ -217,14 +217,18 @@ test("a signature over the wrong origin is refused at the door, in a sentence", 
   // authority is not the domain the door is configured with.
   const { code, out } = await cli("status", "--site", endpoint, "--key", join(dir, "wrong.json"));
   assert.equal(code, 1);
-  // The reason is `unknown-key`, not `signature`: signing for the local
-  // address makes that address the signature agent, and the door has no
-  // directory there. Asserted as measured rather than as assumed.
-  assert.match(out, /refused at the door \(unknown-key\)/);
+  // The reason is `directory`, not `signature` and no longer `unknown-key`:
+  // signing for the local address makes that address the signature agent, the
+  // door goes looking for a JWKS there, and the fetch fails. Until 2026-09-06
+  // that failure was reported as `unknown-key` -- which sends an agent to
+  // re-derive its thumbprint, the one trap the protocol document warns about --
+  // because makeLookup swallowed its own fetch error and answered null. It
+  // throws now, and the door tells the two apart. Asserted as measured.
+  assert.match(out, /refused at the door \(directory\)/);
   // C3.9. The word alone is a diagnosis the agent cannot act on. This goes
   // through the real refusal path -- breaking the wiring left every direct
   // test of the table green, which is why this assertion exists here.
-  assert.match(out, /Run `mro-agent join` once to register it/);
+  assert.match(out, /could not fetch the key directory/);
 });
 
 // C3.5. The flag was documented on the served page, parsed without complaint,
@@ -241,7 +245,10 @@ test("--directory skips registration entirely, so the site stores nothing", asyn
   );
   assert.match(out, /using your own directory at: https:\/\/agent\.invalid/);
   assert.match(out, /http-message-signatures-directory/);
-  assert.doesNotMatch(out, /registered with/);
+  // The CLI's own registration line is `registered with <site>`. Matched with
+  // the site on it, because the door's `directory` sentence -- which this run
+  // now correctly gets -- contains the words "registered with them".
+  assert.doesNotMatch(out, new RegExp(`registered with https://${DOMAIN}`));
 
   const { keyId } = loadIdentity(dirKey);
   assert.equal(q.getKey(keyId), undefined, "a key the agent chose to host itself must not be stored here");
