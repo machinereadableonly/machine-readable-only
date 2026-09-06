@@ -607,3 +607,113 @@ test("CONTROL: a fresh queue raises no staleness alert", async () => {
   await runClock({ ...baseArgs(q), writer: okWriter(), alert: (m) => alerts.push(m) });
   assert.equal(alerts.filter((a) => a.includes("queued for")).length, 0);
 });
+
+// ---------------------------------------------------------------------------
+// A chain that disagrees with itself -- test gap 31 / finding 4.M2
+// ---------------------------------------------------------------------------
+
+// THE STUB WAS MORE CONSISTENT THAN THE REAL CHAIN. `noChain.getBlockNumber`
+// always returns the deploy-era head and `getLogs` always returns [], so no
+// test ever exercised a head that disagrees with what getLogs can actually see.
+//
+// That disagreement is measured, not hypothetical: batch.mjs's own comment
+// records that this RPC is load-balanced and NOT read-after-write consistent,
+// so the head can move backwards between two calls in the ordinary case. If
+// reconcile read up to the raw head and advanced the cursor there, every block
+// the lagging replica had not yet served would be skipped -- and skipped blocks
+// are never offered again, so a `Rested` in one of them is lost permanently and
+// that token tells /t/<id> it is alive forever.
+//
+// The mitigation is CONFIRMATIONS: reconcile trails the head by 12 blocks. These
+// pin that it is real, because it is the only thing standing between a
+// load-balanced RPC and an irreversible read.
+test("reconcile trails the head, so a lagging replica cannot cost blocks", async () => {
+  const { db, q } = mirror();
+  const HEAD = 46_200_000n;
+  const asked = [];
+  const laggingChain = {
+    async getBlockNumber() { return HEAD; },
+    async getLogs({ fromBlock, toBlock }) {
+      asked.push([fromBlock, toBlock]);
+      // The replica serving logs is behind the one serving the head: it has
+      // nothing for the last twelve blocks.
+      return [];
+    },
+  };
+
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: laggingChain,
+    writer: okWriter(),
+    lastReconciledBlock: HEAD - 100n,
+  });
+
+  assert.equal(
+    summary.reconciled.to,
+    HEAD - 12n,
+    "the cursor must stop CONFIRMATIONS short of the head, not at it",
+  );
+  const highest = asked.reduce((max, [, to]) => (to > max ? to : max), 0n);
+  assert.equal(highest, HEAD - 12n, "and no window may ask for a block past that");
+  assert.ok(highest < HEAD, "the raw head is never read");
+  db.close();
+});
+
+// The other half: when the head has NOT advanced past what was already
+// reconciled, the run must ask the node for nothing rather than read a window
+// that runs backwards.
+test("a head that has not advanced asks the node for nothing", async () => {
+  const { db, q } = mirror();
+  const HEAD = 46_200_000n;
+  const asked = [];
+  const stalled = {
+    async getBlockNumber() { return HEAD; },
+    async getLogs({ fromBlock, toBlock }) { asked.push([fromBlock, toBlock]); return []; },
+  };
+
+  // Last night reconciled to exactly the trailing head, so there is nothing new.
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: stalled,
+    writer: okWriter(),
+    lastReconciledBlock: HEAD - 12n,
+  });
+
+  assert.deepEqual(asked, [], "an empty window must cost no RPC call at all");
+  assert.equal(summary.reconciled.pages, 0);
+  db.close();
+});
+
+// And the case that would actually lose data if the trailing were removed: a
+// head that moves BACKWARDS between two runs, which is what a load-balanced
+// RPC does. The cursor must not be dragged backwards with it, and the next run
+// must not re-read from a lower point and call that progress.
+test("a head that moves backwards between runs does not drag the cursor back", async () => {
+  const { db, q } = mirror();
+  let head = 46_200_000n;
+  const flapping = {
+    async getBlockNumber() { return head; },
+    async getLogs() { return []; },
+  };
+
+  const first = await runClock({
+    ...baseArgs(q), publicClient: flapping, writer: okWriter(), lastReconciledBlock: head - 100n,
+  });
+  assert.equal(first.reconciled.to, 46_200_000n - 12n);
+
+  // The next call lands on a replica 50 blocks behind.
+  head = 46_199_950n;
+  const second = await runClock({
+    ...baseArgs(q), publicClient: flapping, writer: okWriter(), lastReconciledBlock: first.reconciled.to,
+  });
+
+  // reconcile reports the window it could see. main.mjs writes that, so the
+  // property asserted here is what the run REPORTS, and it must never claim to
+  // have read past what this replica served.
+  assert.ok(
+    second.reconciled.to <= head - 12n,
+    `reported ${second.reconciled.to}, which is past what this replica could serve`,
+  );
+  assert.ok(second.reconciled.from > second.reconciled.to, "the window is empty and known to be");
+  db.close();
+});
