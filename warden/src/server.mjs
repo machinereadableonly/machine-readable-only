@@ -103,7 +103,16 @@ export function createServer(config) {
 
   const db = openDb(config.stateDbPath);
   const q = queries(db);
+  // Spent DOOR challenges. Kept apart from the registration nonces below: the
+  // two are the same string format under the same HMAC key, so one Set let
+  // either be spent as the other. Nothing was gained by doing that -- the door
+  // answer is a public function of public inputs, and registration needs the
+  // private key -- but the two could never have been given different lifetimes
+  // while they shared a set, and a mechanism that cannot be tuned separately is
+  // one that will be tuned wrongly.
   const seen = new Set();
+  // Spent REGISTRATION nonces, from GET /keys/nonce.
+  const seenNonces = new Set();
   // Spent SIGNATURES, kept apart from spent challenges: a challenge is dead in
   // five seconds, a signature can live five minutes, and one set swept on the
   // shorter schedule would forget signatures while they were still replayable.
@@ -123,6 +132,7 @@ export function createServer(config) {
   const directory = makeDirectoryCache(q);
 
   setInterval(() => sweepSeen(seen), 10_000).unref();
+  setInterval(() => sweepSeen(seenNonces), 10_000).unref();
   setInterval(() => sweepSpent(spent), 30_000).unref();
 
   // Forget keys that registered and never came through the door. Without this
@@ -270,12 +280,19 @@ export function createServer(config) {
           q,
           body,
           allowRegistration,
-          // Same minting-and-spending machinery as the entry challenge, so
-          // there is one nonce mechanism in this service rather than two.
+          // The same minting and spending MACHINERY as the entry challenge --
+          // one nonce mechanism in this service rather than two -- but its own
+          // spent set. See the two declarations above.
+          //
+          // Spent BEFORE the Ed25519 proof is checked, which is the correct
+          // order for anti-replay: the nonce must be burned whether or not the
+          // proof passes, or a failed attempt leaves it live for a replayer.
+          // The cost is one Set entry per unauthenticated request, bounded by
+          // the ten-second sweep.
           (nonce) => {
             if (!verifyNonceMinted(config.challengeSecret, nonce).ok) return false;
-            if (seen.has(nonce)) return false;
-            seen.add(nonce);
+            if (seenNonces.has(nonce)) return false;
+            seenNonces.add(nonce);
             return true;
           }
         );
