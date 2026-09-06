@@ -122,7 +122,14 @@ export async function bindingBlock(chain, tokenId, keyId, toBytes32) {
 /// gates because `chain` was not passed would be indistinguishable from one
 /// that passed them -- which is exactly how these gates went missing.
 export function requireChain(chain, toolName) {
-  for (const method of ["writesOpen", "lifecycleOf", "walletRoomFor", "supplyRoom"]) {
+  // 5.L1. THE LIST HAS TO BE THE METHODS THE TOOLS ACTUALLY CALL. It named
+  // three, and `mint` crashes on `freeIdFrom` while `upgrade`, `seed` and
+  // `checkin` crash on `boundKeyOf` -- both of which a reader would reasonably
+  // assume this guard covers, since covering them is its whole purpose. That is
+  // not hypothetical: `chain.freeIdFrom is not a function` reached production
+  // in 2026-09-03 while every tool test passed, because the test double had the
+  // methods the doubles were written with rather than the ones the code calls.
+  for (const method of ["writesOpen", "lifecycleOf", "walletRoomFor", "supplyRoom", "freeIdFrom", "boundKeyOf"]) {
     if (typeof chain?.[method] !== "function") {
       throw new Error(`${toolName} requires a chain reader with ${method}()`);
     }

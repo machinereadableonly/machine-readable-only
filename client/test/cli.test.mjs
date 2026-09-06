@@ -153,18 +153,26 @@ test("join registers, lists the tools, and STOPS with what a human must do", asy
 
 // C3.4, as arithmetic rather than as a regex over a process. The three
 // properties that matter are the pin, the scatter, and the real id.
-test("the cron line pins a version, scatters the minute, and carries the token id", () => {
+test("the cron line pins a version and UTC, scatters the minute, and carries the token id", () => {
   const line = cronLine({ site: "https://example.com", tokenId: 7, version: "9.9.9", minute: 41, hour: 12 });
-  assert.equal(line, "41 12 * * * npx --yes mro-agent@9.9.9 beat --site https://example.com --token 7 >> ~/.mro/beat.log 2>&1");
+  assert.equal(line, "CRON_TZ=UTC\n41 12 * * * npx --yes mro-agent@9.9.9 beat --site https://example.com --token 7 >> ~/.mro/beat.log 2>&1");
+
+  // 5.M5. THE ZONE IS THE POINT, not decoration: crontab(5) runs a table in the
+  // daemon's LOCAL zone, while the check-in window is a UTC day on chain. On a
+  // host observing DST the UTC instant of a local time moves by an hour at the
+  // transition, so a job pinned to local noon can land twice in one UTC day and
+  // skip the next -- costing the streak this line exists to keep.
+  assert.match(line, /^CRON_TZ=UTC\n/);
 
   const hours = new Set(), minutes = new Set();
   for (let i = 0; i < 200; i += 1) {
-    const [m, h] = cronLine({ site: "https://example.com", tokenId: 1 }).split(" ");
+    const [m, h] = cronLine({ site: "https://example.com", tokenId: 1 }).split("\n")[1].split(" ");
     minutes.add(m); hours.add(h);
   }
   assert.ok(minutes.size > 20, `the minute must be drawn, not fixed: saw ${minutes.size}`);
   for (const h of hours) assert.ok(["11", "12", "13"].includes(h), `hour out of range: ${h}`);
   assert.match(cronLine({ site: "https://example.com", tokenId: 1 }), new RegExp(`mro-agent@${VERSION.replace(/\./g, "\\.")} `));
+  // And the hour still leaves room for an hour of drift inside the same UTC day.
 });
 
 // C3.2, read as an operator reads it: the numbers in the message are the ones
@@ -311,4 +319,31 @@ test("the three read-only commands still require a token id", async () => {
     assert.equal(code, 1);
     assert.match(out, new RegExp(`--token <id> is required for ${command}`));
   }
+});
+
+// 5.M6, THROUGH THE REAL BINARY. Every command printed its refusal and returned
+// normally, so the process exited 0: `beat` on an already-credited day, on a
+// token bound to another key, on a paused contract, on an unreachable RPC. This
+// client's own documented deployment is a cron job, and cron reports failure by
+// exit status -- so an agent whose streak was quietly breaking looked healthy to
+// every supervisor watching it. `beat` is the command a participant runs 365
+// times.
+test("a tool REFUSAL exits non-zero, so a cron job can see it", async () => {
+  // A token this key is not bound to: refused `unknown-token` by the mirror,
+  // which is a refusal and not a crash.
+  const { code, out } = await cli(
+    "beat", "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath, "--token", "424242"
+  );
+  assert.equal(code, 2, `a refusal must not look like success: ${out}`);
+  assert.match(out, /"ok": false/);
+  // 2 and not 1: a thrown error already exits 1, and "the site refused this" is
+  // a different thing from "the client could not run".
+  const broken = await cli("beat", "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath);
+  assert.equal(broken.code, 1, "a missing argument is still the client's own failure");
+});
+
+// The control: a successful call still exits 0, or the exit code says nothing.
+test("CONTROL: a successful call still exits 0", async () => {
+  const { code } = await cli("status", "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath);
+  assert.equal(code, 0);
 });

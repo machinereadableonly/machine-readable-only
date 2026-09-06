@@ -52,7 +52,21 @@ export async function generateIdentity() {
  * that loose.
  */
 export function saveIdentity(identity, path = defaultKeyPath()) {
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const dir = dirname(path);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  // 5.L5. `mode` ON mkdirSync APPLIES ONLY WHEN IT CREATES. An existing ~/.mro
+  // -- made by an older version, by a shell, or by a restore from a backup --
+  // keeps whatever mode it had, and the umask that made it loose is exactly the
+  // one this guard exists for. The file's own 0600 is what actually protects
+  // the key; the directory is defence in depth, and defence that only applies
+  // to first runs is not.
+  try {
+    chmodSync(dir, 0o700);
+  } catch {
+    // A directory somebody else owns cannot be chmodded, and refusing to save
+    // the key over that would be worse than saving it: the FILE mode below is
+    // the protection that matters, and it is set either way.
+  }
   writeFileSync(path, JSON.stringify(identity, null, 2), { mode: 0o600 });
   chmodSync(path, 0o600);
   return path;

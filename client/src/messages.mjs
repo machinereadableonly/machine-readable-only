@@ -53,7 +53,15 @@ export function unpayableMessage(accepted, keyPath) {
  */
 export function cronLine({ site, tokenId, version = VERSION, minute = randomInt(0, 60), hour = randomInt(11, 14) }) {
   const token = tokenId ?? "<your token id>";
-  return `${minute} ${hour} * * * npx --yes mro-agent@${version} beat --site ${site} --token ${token} >> ~/.mro/beat.log 2>&1`;
+  // 5.M5. CRON_TZ, BECAUSE THE DAY THIS SCHEDULES IS A UTC DAY. crontab(5)
+  // runs a table in the daemon's LOCAL zone unless CRON_TZ is set, while the
+  // check-in window is `lastDay < day <= today()` on chain, in UTC. On any
+  // host observing DST the UTC instant of a local time moves by an hour at the
+  // transition -- so a job pinned to local noon can land twice inside one UTC
+  // day and skip the next, which costs the streak the whole line exists to
+  // keep. The hour is drawn from 11-14 so that an hour of drift, or a slow
+  // run, still lands inside the same UTC day.
+  return `CRON_TZ=UTC\n${minute} ${hour} * * * npx --yes mro-agent@${version} beat --site ${site} --token ${token} >> ~/.mro/beat.log 2>&1`;
 }
 
 

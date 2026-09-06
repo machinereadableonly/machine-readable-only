@@ -144,6 +144,11 @@ export function queries(db) {
         "AND payNonce IS NOT NULL AND reservedAt < ?"
     ),
     reservedMarks: db.prepare("SELECT upgradeId FROM mark_orders WHERE tokenId = ?"),
+    // 5.M7. The subset of those the CHAIN refused outright. reservedMask
+    // deliberately counts a failed row -- a refusal can be undone by a human, a
+    // second sale cannot -- but nothing could SEE that, so `ladder` reported
+    // such a Mark as plain `held` and its partner as permanently `closed`.
+    failedMarks: db.prepare("SELECT upgradeId FROM mark_orders WHERE tokenId = ? AND status = 'failed'"),
     markSold: db.prepare("SELECT COUNT(*) AS n FROM mark_orders WHERE upgradeId = ?"),
     hasMinted: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE keyId = ?"),
 
@@ -533,6 +538,19 @@ export function queries(db) {
      */
     reservedMask: (tokenId) =>
       s.reservedMarks.all(tokenId).reduce((mask, r) => mask | (1 << r.upgradeId), 0),
+
+    /**
+     * The Marks this token reserved that the CHAIN then refused outright.
+     *
+     * A subset of reservedMask, and it exists so the difference is visible.
+     * Those rows still occupy their side of a pair -- which is right, because
+     * releasing one would let a second sale race a human's correction -- but
+     * reporting them as `held` told an agent it owns a Mark that does not exist
+     * and that the partner is closed forever, when what is actually true is
+     * that a human has to look.
+     */
+    failedMask: (tokenId) =>
+      s.failedMarks.all(tokenId).reduce((mask, r) => mask | (1 << r.upgradeId), 0),
 
     /// How many of a mark have actually been reserved. Read from the mirror,
     /// never from the catalogue object: a static `sold` field is never

@@ -45,6 +45,39 @@ test("every refusal the skill explains is one the service can emit", () => {
   assert.deepEqual(missing, [], "the skill promises a reason the service cannot send");
 });
 
+// 5.L2, THE OTHER DIRECTION, and it is the one that matters to an agent. The
+// test above proves the skill promises nothing the service cannot send; it says
+// nothing about a refusal the service DOES send and no page explains. Three
+// were found that way (`wallet-cap-reached`, `internal`, `payment-unavailable`)
+// and a fourth arrived later with the supply-cap gate -- so a check that only
+// runs one way is a check that finds this class once.
+//
+// The CLOCK is excluded deliberately: its reasons (`send-failed`,
+// `receipt-unknown`, `gas-estimate-too-large`, `unpackable-id` and the rest)
+// are written to the mirror and read by the operator. No agent is ever handed
+// one, and documenting them for agents would be documenting a surface they
+// cannot reach.
+test("every refusal an AGENT can be sent is one the skill explains", () => {
+  const doc = readFileSync(join(skill, "references/refusals.md"), "utf8");
+  const documented = new Set([...doc.matchAll(/^\| `([a-z-]+)` \|/gm)].map((m) => m[1]));
+
+  const agentFacing = [
+    join(root, "warden/src/mcp"),
+    join(root, "warden/src/door"),
+    join(root, "warden/src/pay"),
+  ].flatMap((dir) => sources(dir));
+  agentFacing.push(readFileSync(join(root, "warden/src/server.mjs"), "utf8"));
+
+  const emitted = new Set();
+  for (const src of agentFacing) {
+    for (const m of src.matchAll(/reason: "([a-z-]+)"/g)) emitted.add(m[1]);
+  }
+  assert.ok(emitted.size > 20, `expected the whole surface, parsed ${emitted.size}`);
+
+  const undocumented = [...emitted].filter((r) => !documented.has(r)).sort();
+  assert.deepEqual(undocumented, [], "the service sends a refusal no published page explains");
+});
+
 test("the protocol copy inside the skill is the protocol document", () => {
   const original = readFileSync(join(root, "docs/2026-09-01-mro-raw-protocol.md"), "utf8");
   const copy = readFileSync(join(skill, "references/raw-protocol.md"), "utf8");

@@ -515,10 +515,18 @@ already wears Ache:
     }
 
 (Pairs 2 and 3 are elided above; every pair is present in the real answer.)
-`state` is `open`, `held` or `closed` and is the single field that says whether
-a side can still be taken. `waitingOn` appears only on an open side that is
-gated, so its absence means the gate is met. A decided pair also carries
-`held`, `closed` and `closedBy` at the top level.
+`state` is `open`, `held`, `closed` or `refused`, and is the single field that
+says whether a side can still be taken. `waitingOn` appears only on an open side
+that is gated, so its absence means the gate is met. A decided pair also carries
+`held` (or `refused`), `closed` and `closedBy` at the top level.
+
+**`refused` is the rare one, and it is not ownership.** It means this side was
+reserved and the CHAIN then refused to write it outright. The reservation still
+holds the pair -- releasing it would let a second sale race the correction -- so
+the partner still reads `closed`, but you do not have the Mark and no run of
+this service will give it to you: a human has to look at it. It was reported as
+`held` until 2026-09-06, which told an agent it owned something that does not
+exist on chain.
 
 **A Mark you have bought counts from the moment you buy it**, not from the
 moment it reaches the chain. A purchase is reserved at this door and written on
@@ -553,6 +561,22 @@ told only `resting` has no way to know whether to retry, wait, or stop.
 Nothing is ever charged for a refusal. A handful of reasons carry no `next`:
 the door's own vocabulary (`signature`, `expired`, `challenge` and the rest),
 where the word IS the instruction and the table above explains it.
+
+**ONE ANSWER IS NOT SHAPED LIKE THAT, and it is worth branching for.** A call
+whose ARGUMENTS do not match a tool's published schema never reaches the tool:
+the MCP layer refuses it first, and its answer carries `isError: true` and a
+plain-text message naming the field, with no `ok` and no `reason` --
+
+    { "content": [ { "type": "text",
+        "text": "Input validation error: Invalid arguments for tool checkin:
+                 tokenId: Invalid input: expected number, received string" } ],
+      "isError": true }
+
+That is the protocol's shape and not this service's, which is why it is not
+translated: the schema in `tools/list` is the one actually enforced, and a
+service that answered in its own vocabulary here would be publishing a schema it
+does not use. Read `isError` first, then `structuredContent.ok`. Everything the
+TOOLS refuse carries `ok`.
 
 `mark-excluded` is the permanent one, and it NAMES the Mark that closed the
 door -- lower case, the same token `ladder` returns, so you do not have to

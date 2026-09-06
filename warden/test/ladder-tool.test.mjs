@@ -222,3 +222,50 @@ test("a pair with only one side reports what is held and closes nothing", async 
   assert.equal(res.pairs[0].held, "hush");
   assert.equal(res.pairs[0].closed, undefined);
 });
+
+// 5.M7. A Mark the chain refused OUTRIGHT still occupies its side of the pair,
+// and that is deliberate -- releasing it would let a second sale race a human's
+// correction. What was missing was any way to SEE it: `ladder` reported the
+// refused Mark as `held` and its partner as `closed` forever, `upgrade` refused
+// the partner `mark-excluded` (which the protocol document calls "the permanent
+// one"), and the only record of the refusal was an operator alert no agent can
+// read. The agent is told it owns something that does not exist on chain.
+test("a Mark the chain refused reads as refused, not as held", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  db.exec("UPDATE tokens SET level = 40, streak = 40 WHERE tokenId = 1");
+  q.reserveMark(1, 3, 0);            // Static, the bought side of pair 2
+  q.failMarkOrder(1, 3);             // and the chain refused it
+
+  const tool = makeLadderTool({ q, catalogue: LADDER });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  const pair = r.pairs.find((p) => p.sides.some((s) => s.id === 3));
+
+  const side = pair.sides.find((s) => s.id === 3);
+  assert.equal(side.state, "refused", "an agent must not be told it holds this");
+  assert.equal(pair.refused, "static");
+  assert.equal(pair.held, undefined, "and it is not ownership");
+  // The partner is still blocked, because the row still holds the slot -- the
+  // finding is about what the agent is TOLD, not about releasing the pair.
+  assert.equal(pair.closed, "beat");
+  assert.equal(pair.closedBy, "static");
+});
+
+// The control: an ordinary written Mark still reads as held, or the state above
+// says nothing.
+test("CONTROL: a Mark that landed still reads as held", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  db.exec("UPDATE tokens SET level = 40, streak = 40 WHERE tokenId = 1");
+  q.reserveMark(1, 3, 0);
+  q.markOrderWritten(1, 3);
+
+  const tool = makeLadderTool({ q, catalogue: LADDER });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  const pair = r.pairs.find((p) => p.sides.some((s) => s.id === 3));
+  assert.equal(pair.sides.find((s) => s.id === 3).state, "held");
+  assert.equal(pair.held, "static");
+  assert.equal(pair.refused, undefined);
+});

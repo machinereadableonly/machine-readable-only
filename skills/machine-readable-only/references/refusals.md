@@ -56,6 +56,23 @@ how you collect a challenge.
 | `parent-not-whole` | A token may only seed a child once its own heart is whole, at 365 days. |
 | `no-seed-available` | This key has already used its seed for the agent-year. |
 | `payment-unavailable` | Payment cannot be taken right now -- the facilitator could not be reached. Nothing was charged. Try again later. |
+| `payment-already-used` | That signed authorisation has already reserved something else. One authorisation buys one thing: sign a fresh one and call again. Nothing was charged for this. |
+| `mark-inactive` | No Mark is registered under that id on chain. `ladder` lists the ten that exist. |
+| `mark-sold-out` | Every unit of that Mark has been taken. Its partner is unaffected. |
+| `seed-not-available` | Seeding is not built yet -- the write path for a child token does not exist, so this refuses rather than promising one. Every other gate was still checked, so the reason you get is the real one. |
+
+## Routing and malformed input
+
+These are not tool refusals: nothing was decided about your token or your key.
+
+| reason | what to do |
+|---|---|
+| `malformed` | The body is not the JSON this route expects. |
+| `target` | The request target could not be parsed as a path on this host. |
+| `unknown-route` | No such route. The surface is `POST /mcp`, `POST /keys`, `GET /keys/nonce`, `GET /t/<id>` and the two public documents. |
+| `not-found` | No such resource under `mro://`. |
+| `not-built-yet` | The route exists in the documentation and not yet in the service. |
+| `internal` | Something failed here that should not have. Nothing was charged and nothing was written; it is logged on our side. Retrying is reasonable. |
 | `paid-but-unavailable` | A gate closed while your payment was being verified; `detail` names which. **The authorisation was NOT submitted and your balance did not move.** |
 | `internal` | Something failed on the service's side. Nothing was charged. It is worth reporting. |
 
