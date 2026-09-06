@@ -273,9 +273,10 @@ return visits, so the artwork is the agent's own history of coming back.
   carries the endpoint url and `err.shortMessage` never does, so the two Clock
   sinks that logged `err.message` are now redacted, the log is 600 with
   `UMask=0077`, and logrotate runs from the Clock's own `ExecStartPre` with
-  copytruncate. The Warden needed nothing and no agent was ever exposed. ONE
-  COMMAND IS LEFT FOR the operator: `bash warden/deploy/install-clock-logging.sh`
-  (DEPLOY.md section 9a). Read [[rpc-url-in-logs]].
+  copytruncate. The Warden needed nothing and no agent was ever exposed.
+  **THE INSTALLER RAN AND ALL SIX CHECKS PASSED (the operator, 2026-09-06)**, so this is
+  INSTALLED, not pending; the timer is armed for 2026-09-07 00:05 UTC, the
+  first run on the redacted code. Read [[rpc-url-in-logs]].
   **THE NGINX RATE LIMITS ARE NOT LIVE**: the template has them, the installed
   vhost was written from the old one, and applying them needs sudo. The
   application-level limiter added in Phase 3 is a different thing and IS live.
