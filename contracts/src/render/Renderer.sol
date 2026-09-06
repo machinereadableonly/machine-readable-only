@@ -123,6 +123,22 @@ contract Renderer is IRenderer {
     /// Returned as an INDEX, not a colour, because the heart ink and the noise
     /// ink must come from the same rung -- they are matched in luminance, and a
     /// mismatch stops the code decoding at large rasters. See Palette's header.
+    /// @dev How long the token has been away, in days. C4.10.
+    ///
+    /// THE BRANCHES MIRROR `_rung` DELIBERATELY. Rest seals the image at the
+    /// moment the owner chose, so a rested token's frame is final however long
+    /// the calendar runs on; a sunset ages every token only to the day the
+    /// PIECE closed, for the same reason the rung does. A gap rule that
+    /// disagreed with the rung rule about when a token stopped would draw one
+    /// token whose heart says kept and whose frame says gone.
+    function _absence(TokenView memory v) private pure returns (uint256) {
+        if (v.resting) return 0;
+        uint32 end = v.sunset ? v.sunsetDay : v.today;
+        // A clock that runs backwards is not an absence. Guard the subtraction
+        // rather than letting it wrap into a gap of four billion days.
+        return end > v.lastDay ? end - v.lastDay : 0;
+    }
+
     function _rung(TokenView memory v) private pure returns (uint256) {
         // Rest is the owner sealing the token at a chosen moment, and the
         // stored run IS that moment. Unchanged.
@@ -234,7 +250,7 @@ contract Renderer is IRenderer {
         return string(
             abi.encodePacked(
                 FrameRenderer.paths(
-                    v, MarkRenderer.frameFill(v.marks, colour), MarkRenderer.ghost(v.marks)
+                    v, MarkRenderer.frameFill(v.marks, colour), MarkRenderer.ghost(v.marks, _absence(v))
                 ),
                 CodeRenderer.paths(
                     v.code,

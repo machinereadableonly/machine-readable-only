@@ -397,3 +397,62 @@ test("a lapse walks back down the same ladder, never off it", () => {
   }
   assert.equal(TINT, TIERS.find(t => t.min === 3).colour, "ladder order changed");
 });
+
+// ---------------------------------------------------------------------------
+// C4.10 -- absence in the frame
+// ---------------------------------------------------------------------------
+
+test("a token that never returned stops looking like one minted today", () => {
+  // MEASURED BEFORE IT WAS FIXED: all four of these rendered byte-identical,
+  // because a never-returned token holds level 1 / streak 1 forever and both
+  // tierIndex(1) and lapsedIndex(1, ...) are already rung 0. The heart cannot
+  // carry absence; the frame can. tools/absence-check.mjs draws the sheet.
+  const never = { level: 1, streak: 1, years: 0, marks: [] };
+  const at = (gap, extra = {}) =>
+    render({ ...never, lastDay: 1000, today: 1000 + gap, ...extra });
+
+  // BOTH SIDES OF EACH BOUND. A step rule asserted only on the day of the step
+  // passes just as happily when the step is in the wrong place.
+  assert.equal(at(0), at(29), "a lapse under 30 days is not yet an absence");
+  assert.notEqual(at(29), at(30), "the frame must start fading at 30 days");
+  assert.equal(at(30), at(364), "the middle step must hold for the whole year");
+  assert.notEqual(at(364), at(365), "the unearned year must be gone at 365");
+  assert.equal(at(365), at(365 * 3), "past a year there is nothing left to fade");
+});
+
+test("a sealed token's frame is final, however long it has been away", () => {
+  // Mirrors rungFor: resting freezes the picture, sunset ages it only to the
+  // day the piece closed. Two rules that disagreed about when a token stopped
+  // would draw two different tokens.
+  const never = { level: 1, streak: 1, years: 0, marks: [], lastDay: 1000 };
+  assert.equal(
+    render({ ...never, today: 1000 + 365 * 3, resting: true }),
+    render({ ...never, today: 1000 }),
+    "a rested token must not fade with the calendar"
+  );
+  assert.equal(
+    render({ ...never, today: 1000 + 365 * 3, sunset: true, sunsetDay: 1010 }),
+    render({ ...never, today: 1010 }),
+    "a sunset token must age only to the day the piece closed"
+  );
+});
+
+test("the faded frame still scans at every step and every size", () => {
+  // The frame sits outside the quiet zone, so in principle none of this can
+  // reach the binarizer -- which is exactly the kind of "in principle" this
+  // project has been wrong about before. The 365 case is the one that matters:
+  // the unearned cells become the page itself, so the code block loses the
+  // pale surround it has always been decoded against.
+  const SIZES = [256, 500, 848, 1080, 1600];
+  const never = { level: 1, streak: 1, years: 0, marks: [], lastDay: 1000 };
+
+  for (const gap of [0, 30, 365, 365 * 3]) {
+    const svg = render({ ...never, today: 1000 + gap });
+    for (const px of SIZES) {
+      const got = scanResult(svg, px);
+      assert.ok(got.ok, `a gap of ${gap} days failed to decode at ${px}px: ${got.why}`);
+      assert.equal(got.destination, DESTINATION,
+        `a gap of ${gap} days decoded to the wrong url at ${px}px`);
+    }
+  }
+});

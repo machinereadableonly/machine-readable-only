@@ -23,7 +23,7 @@ library RenderFixture {
         string label;
     }
 
-    uint256 internal constant COUNT = 50;
+    uint256 internal constant COUNT = 56;
 
     function cases() internal pure returns (Case[] memory c) {
         c = new Case[](COUNT);
@@ -70,6 +70,12 @@ library RenderFixture {
         c[i++] = Case(365, 400, 1000, 1000, 272, false, false, 0, 0, 0, 9107, 0xd8bc999b54466d9ff9ecdd9530bac7dbd5fa0da99c1554b8b5b80922110166a1, "break with beat");
         c[i++] = Case(365, 400, 1000, 1000, 8, false, false, 0, 0, 0, 8889, 0x72a997c14e8c4df3d9148111a68f05d7a538380108178c8b5d1f299df89ebe7d, "mark static");
         c[i++] = Case(365, 100, 1000, 1030, 429496729920, false, false, 0, 0, 0, 9826, 0xad9960ab393cb03a7265fff2a8cd4275ada25c847d59fff3cf4d4ac51e2cb7bd, "break on earned iris, lapsed to the start tier");
+        c[i++] = Case(1, 1, 1000, 1029, 0, false, false, 0, 0, 0, 8826, 0xc9776123c933b8ea853356412691c9e8072b4b847462b0da095dcf1ba1b7df26, "never returned, 29 days");
+        c[i++] = Case(1, 1, 1000, 1030, 0, false, false, 0, 0, 0, 8826, 0x14abd2df3a5457da39986b7c556fa59b56af46ac5b2c783e0809e0481970016d, "never returned, 30 days");
+        c[i++] = Case(1, 1, 1000, 1365, 0, false, false, 0, 0, 0, 8826, 0x20f482f72ddc6ac5b68c6b716c4ab505b377eacab368dfe46ad8d3c4b1572bdd, "never returned, a year");
+        c[i++] = Case(1, 1, 1000, 2095, 0, false, false, 0, 0, 0, 8826, 0x20f482f72ddc6ac5b68c6b716c4ab505b377eacab368dfe46ad8d3c4b1572bdd, "never returned, three years");
+        c[i++] = Case(1, 1, 1000, 1365, 4, false, false, 0, 0, 0, 8832, 0xeca73f4d134b88f5f3873e212e9db42f7d75225d3b3c87e7ea7aa61172eedb07, "ache, never returned, a year");
+        c[i++] = Case(1, 1, 1000, 1365, 1024, false, false, 0, 0, 0, 8832, 0x83097e498af2407ccaa89dbdbe7aec5765df72831d52b66490e636a49f97b772, "aura, never returned, a year");
         c[i++] = Case(365, 400, 1000, 9999, 0, true, false, 0, 0, 0, 8884, 0x67490dca20f51b027abb39ef572373d371bbb20c208963433dc20e5a6ee5130b, "resting");
         c[i++] = Case(365, 400, 1000, 9999, 0, false, true, 0, 0, 0, 8884, 0xb2f0e8aaa30a906d3f945260e08f081e60f5867a82f1e65afa25d66103200ace, "sunset");
         c[i++] = Case(365, 400, 1000, 9999, 0, false, true, 1040, 0, 0, 8884, 0xa357c5ede646f396389047043c06d7d6a83f9dd07714c97a399b590da7c892fe, "sunset after this token lapsed");
