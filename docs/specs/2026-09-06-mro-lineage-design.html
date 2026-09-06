@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- Lineage: the Echo</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- Lineage: the Echo</h1>
+<p>Design record, 2026-09-06. This SUPERSEDES the deferred paragraph at the end of
+section 10 of <code>docs/specs/2026-08-27-machine-readable-only-design.md</code>, which
+left three things open &quot;to be settled in a follow-up brainstorm before the
+Renderer is built&quot;: what a child looks like, what a parent shows per seed, and
+the narrative framing of a lineage.</p>
+<p>All three are settled here. The contract and tool mechanics that section 10
+fixed are UNCHANGED by this document, with one addition: a sealed per-token
+number, <code>_echo</code>.</p>
+<p>Plain ASCII only, per project convention.</p>
+<hr>
+<h2>1. What a lineage means</h2>
+<p>A child is an <strong>heir to the parent&#39;s record</strong>.</p>
+<p>It begins at level 1 with an empty heart and none of the parent&#39;s days. What it
+carries is the line&#39;s tenure up to the moment it was seeded, as a single sealed
+number: the <strong>Echo</strong>. Everything after that is the child&#39;s own work.</p>
+<p>This is not a new decision so much as the completion of one. Section 10 already
+committed to lineage being shown as &quot;tenure (days checked in across the line),
+never as a discount by depth&quot;. The Echo is that tenure, made concrete.</p>
+<h3>Why &quot;Echo&quot;</h3>
+<p>The other names in this piece are Hush, Ache, Static, Beat, Iris, Vessel,
+Break, Tint and Aura -- short concrete nouns. &quot;Line Tenure&quot; is administrative
+language and does not belong beside them.</p>
+<p>A dotted ring is a solid one heard faintly. On a piece built entirely out of
+signal and silence, that is the right register, and it cannot be misread: no
+other trait is a count of days, and unlike &quot;Root&quot; or &quot;Parent&quot; it can never be
+mistaken for a token id.</p>
+<h3>Framings rejected</h3>
+<p>Section 10 asked for framings with no breeding-market baggage. Three were
+considered and set aside:</p>
+<ul>
+<li><strong>A second heart, same agent.</strong> The child is a peer, not a descendant, and
+lineage is a fact in the record rather than a look. Coherent, but it makes
+the seed mechanic pointless as art -- the token would be indistinguishable
+from a mint.</li>
+<li><strong>A descendant carrying a line.</strong> The child reads visibly as generation 2.
+Rejected because &quot;visibly generation 2&quot; is the exact thing section 10
+forbids: depth becoming a display.</li>
+<li><strong>A cutting from the parent.</strong> Siblings inherit the parent&#39;s palette and look
+alike. Rejected because family resemblance across a marketplace is precisely
+the breeding-market pattern the precedent study warned about.</li>
+</ul>
+<p>Succession was chosen: what the child shows is the LINE&#39;s days, not its own.</p>
+<hr>
+<h2>2. The sealed number</h2>
+<h3>2.1 Storage</h3>
+<p>The <code>Token</code> struct is EXACTLY full -- 6 x uint32 + bool + uint16 + uint16 +
+uint24 = 256 bits, one slot. Plan 6 spent the last spare bits on
+<code>fellRun</code>/<code>bestRun</code>/<code>fellDay</code>. There is no room, and widening the struct would
+add a slot to every token and change the cost of every check-in.</p>
+<p>So the Echo gets its own mapping, beside <code>_parentOf</code> and <code>_codeOf</code>, which is
+how this contract already stores per-token facts that do not fit the struct:</p>
+<pre><code class="language-solidity">/// @notice Days the line had run when this token was seeded. 0 for a founding
+/// token. Sealed at the seed and never written again.
+mapping(uint256 =&gt; uint32) internal _echo;
+</code></pre>
+<h3>2.2 The write, in <code>seed()</code></h3>
+<p>One line, O(1), inside the existing <code>seed</code>:</p>
+<pre><code class="language-solidity">_echo[childId] = p.level + _echo[parentId];
+</code></pre>
+<p>The parent&#39;s own credited days PLUS whatever the parent itself inherited. That
+accumulates the whole line to any depth without walking it, and it cannot drift
+from the line&#39;s real history because each generation seals the previous total.</p>
+<h3>2.3 Why sealed and not live</h3>
+<p>A live number -- the line&#39;s CURRENT total, recomputed at render time -- was
+considered and rejected for three reasons, in order of severity:</p>
+<ol>
+<li><strong>It would credit a stranger&#39;s work.</strong> A parent can be sold and <code>rebind</code>ed to
+a different agent key. Under a live rule the child would keep inheriting days
+earned by whoever holds the parent now. <code>rebind</code> is deliberately
+proof-free (see the rebind trust boundary in CLAUDE.md), so this is a real
+path, not a theoretical one.</li>
+<li><strong>It costs a walk up the parent chain inside <code>tokenURI</code>,</strong> whose gas worst
+case is already 1,750,744 of a 2,000,000 hard limit.</li>
+<li><strong>It makes one token&#39;s picture depend on another token&#39;s state,</strong> which
+means a check-in on the parent should emit a metadata update for every
+descendant. ERC-4906 is already the piece&#39;s weakest joint.</li>
+</ol>
+<p>Sealed costs one cold SLOAD in <code>viewOf</code> and has none of that. It also reads
+correctly: a seed carries what the parent had at the moment it was made.</p>
+<p>A third option -- sealed, but refreshable by a later Warden call -- was rejected
+as a new write path guarding a number that agents would try to time.</p>
+<h3>2.4 What it costs</h3>
+<ul>
+<li>Mint: unchanged. Check-in: unchanged. Neither touches <code>_echo</code>.</li>
+<li><code>seed</code>: one SSTORE and one SLOAD, on a call that already writes four slots.</li>
+<li><code>tokenURI</code>: one cold SLOAD, against 249,256 gas of margin.</li>
+</ul>
+<hr>
+<h2>3. The echo ring</h2>
+<h3>3.1 What is drawn</h3>
+<p>A child draws ONE dotted ring, innermost, in the ghost fill. Its own completed
+years draw as solid lit rings outside it, exactly as they do today.</p>
+<p>A founding token has <code>echo == 0</code>, draws no echo ring, and is rendered
+<strong>byte-identically to today</strong>. This is the property the renderer tests should
+pin first.</p>
+<h3>3.2 The ring budget</h3>
+<pre><code>echoRings = echo &gt; 0 ? 1 : 0
+ownRings  = min(level / 365, MAX_RINGS - echoRings)
+total     = ownRings + echoRings          // never exceeds MAX_RINGS = 10
+</code></pre>
+<p>The echo ring occupies one of the ten slots rather than adding an eleventh. That
+is forced, not chosen: <code>canvas(r) = 49 + 4r</code> for <code>r &gt;= 1</code> (<code>ringSpan</code> is 0 at
+zero rings rather than -1, so a ringless token is 51), and an eleventh ring
+grows the artwork to 93 cells, creating a SECOND byte worst case to defend.
+Keeping the total at ten means the canvas ceiling stays 89 and the project keeps
+one worst case.</p>
+<p>The consequence, stated plainly: a child&#39;s own rings cap at 9, not 10. A child
+that runs for a decade shows nine lit rings and one dotted.</p>
+<h3>3.3 Where it sits, and why that needs no work</h3>
+<p>Ring <code>k</code> sits at depth <code>2k</code>, and the canvas grows outward as years accumulate,
+so older rings migrate inward. The echo ring is the innermost, at index
+<code>total - 1</code>, depth <code>o = 2 * ownRings</code>.</p>
+<p>That is chronologically correct with no ordering code: the line&#39;s inherited
+years sit at the core and the token&#39;s own years grow around them.</p>
+<h3>3.4 The ring is always 53 cells on a side</h3>
+<p>A property worth stating because it makes the cost a constant rather than a
+range. With <code>r</code> rings:</p>
+<pre><code>canvas = 49 + 4r
+o      = 2(r - 1)                 // the innermost ring
+len    = canvas - 2o = 49 + 4r - (4r - 4) = 53
+</code></pre>
+<p>The depth cancels exactly. The innermost ring always sits the same distance from
+the day frame, so the echo ring is 53 cells on a side whether the token has one
+ring or ten.</p>
+<h3>3.5 The dot rule</h3>
+<p>It must be specified exactly, because <code>Renderer.t.sol</code> holds the Solidity
+renderer and <code>tools/render-token.mjs</code> byte-for-byte identical, and a rule
+either language can interpret differently will fail that test rather than
+merely look wrong.</p>
+<p>A cell is drawn when its offset along its own edge is EVEN, where offset is
+measured in <code>x</code> from <code>o</code> on the two horizontal edges and in <code>y</code> from <code>o</code> on the
+two vertical edges.</p>
+<ul>
+<li>Top edge: <code>y = o</code>, <code>x</code> in <code>o .. o + 52</code>, drawn where <code>(x - o)</code> is even.</li>
+<li>Bottom edge: <code>y = o + 52</code>, same rule.</li>
+<li>Left edge: <code>x = o</code>, <code>y</code> in <code>o + 1 .. o + 51</code>, drawn where <code>(y - o)</code> is even.</li>
+<li>Right edge: <code>x = o + 52</code>, same rule.</li>
+</ul>
+<p>Offset 0 is even, so all four corners are drawn. That anchors the ring visually
+and makes the dot phase unambiguous on every edge.</p>
+<p>Dot count, which is therefore also constant:</p>
+<table>
+<thead>
+<tr>
+<th>Edge</th>
+<th>Dots</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>top</td>
+<td>27</td>
+</tr>
+<tr>
+<td>bottom</td>
+<td>27</td>
+</tr>
+<tr>
+<td>left</td>
+<td>25</td>
+</tr>
+<tr>
+<td>right</td>
+<td>25</td>
+</tr>
+<tr>
+<td><strong>total</strong></td>
+<td><strong>104</strong></td>
+</tr>
+</tbody></table>
+<h3>3.6 What it costs in bytes</h3>
+<p>A run in this renderer is <code>&quot;M&lt;x&gt; &lt;y&gt;h1v1h-1z&quot;</code>, 13 to 14 bytes at these
+coordinates. 104 runs is about <strong>1,456 bytes</strong>, constant at any depth.</p>
+<p>The byte worst case today is 11,550 of 20,000 (<code>GasBudget.t.sol</code>, token 7 at the
+ring cap, <code>echo == 0</code>). A child at the cap draws NINE solid rings and one
+dotted, so against that token the delta is <code>1,456 - 64 = about 1,392 bytes</code>,
+putting the new worst case near 12,950 with roughly 7,000 bytes of margin.</p>
+<p>Note what that implies for the suite: <strong>the byte worst case becomes a CHILD
+token</strong>, so <code>GasBudget.t.sol</code> needs a new case rather than a re-measurement of
+the existing one. Token 7 stays exactly as it is and stays correct.</p>
+<p>For contrast, a solid ring is four bars, about 64 bytes. A dotted ring costs
+roughly 23 times a solid one. That ratio is the whole reason there is exactly
+one of them: nine dotted rings would be about 15,000 bytes and would blow the
+20,000 limit outright. The collapse to a single ring is not a simplification,
+it is what makes the texture affordable at all.</p>
+<p><strong>These are arithmetic from the geometry, not measurements.</strong> The plan must
+re-run <code>GasBudget.t.sol</code> and record the real figures, and the gas cost of 104
+runs through <code>PathWriter</code> against 4 bars is NOT estimated here at all.</p>
+<h3>3.7 Why the ghost fill, and what that does to Ache</h3>
+<p>The echo ring uses the existing ghost fill -- the colour that already means &quot;not
+earned by this token&quot;. Inherited days are exactly that.</p>
+<p><code>MarkRenderer.ghost()</code> recolours the ghost fill when a token wears Ache, so a
+child wearing Ache has its echo ring recoloured too. That is ACCEPTED rather
+than worked around, because the dots carry the distinction: the ring is
+identifiable by texture, so it does not depend on colour to be legible.</p>
+<p>The alternative -- pinning the echo ring to <code>Palette.ghost()</code> and ignoring Ache
+-- needs a third <code>&lt;path&gt;</code> element with its own fill, costs bytes for a
+distinction the texture already makes, and gives Ache a documented surface
+exception. Rejected.</p>
+<p>Ache&#39;s published surface description does not change: it is still &quot;the unearned
+frame cells&quot;. The echo ring is drawn in the same ink, which is a consequence of
+sharing an element, not a second surface claim.</p>
+<h3>3.8 The decode gate</h3>
+<p>The echo ring is the first high-frequency pattern this piece has ever drawn
+next to the code, and QR decoders are sensitive to structured texture in the
+surround.</p>
+<p>The rings sit well outside the quiet zone -- <code>BLOCK</code> is 45 and holds the 37
+module code plus its 4-cell quiet zone on each side, and <code>GAP</code> keeps a blank
+cell between the innermost ring and the day frame -- so nothing here touches the
+quiet zone by construction.</p>
+<p>That is an argument, not a result. <strong>A rendered child must pass the ZXing decode
+oracle before this is called done</strong>, at the same pixel sizes the existing sheets
+use, and at both extremes: a newborn child (one ring, canvas 53) and a child at
+the cap (ten rings, canvas 89). See the decode-oracle memory: ZXing, never jsqr.</p>
+<hr>
+<h2>4. What a parent shows</h2>
+<p>Nothing new is drawn.</p>
+<p><code>seedsGiven</code> already renders as a numeric <code>Children</code> trait in both renderers.
+The parent&#39;s picture is unchanged.</p>
+<p>Two alternatives were considered:</p>
+<ul>
+<li><strong>The parent gets the same dotted ring</strong>, so one echo ring means &quot;belongs to a
+line&quot; in either direction. Elegant, and it would make the ring not
+child-exclusive at all. Rejected because it costs a founding token one of its
+ten ring slots for something it did rather than something it is, and it
+overloads a mark whose meaning is otherwise exact.</li>
+<li><strong>A dot per child outside the frame</strong> (the Family Jewels candidate section 10
+recorded). Rejected: new geometry in both renderers, and a near-identical
+proposal was measured on 2026-08-29 and found invisible at a 256px thumbnail.</li>
+</ul>
+<p>Seeding is something the agent did. The heart shows what the token did.</p>
+<hr>
+<h2>5. Metadata</h2>
+<p>One new attribute, joining the three that already exist:</p>
+<pre><code class="language-json">{ &quot;trait_type&quot;: &quot;Echo&quot;, &quot;value&quot;: 913 }
+</code></pre>
+<p>Emitted ALWAYS, including <code>0</code> on a founding token, so an agent can filter on it
+without special-casing absence. <code>Generation</code>, <code>Parent</code> and <code>Children</code> are
+unchanged.</p>
+<p><code>TokenView</code> gains <code>uint32 echo;</code>. Both renderers read it; nothing else does.</p>
+<hr>
+<h2>6. Explicit non-goals</h2>
+<p>The Echo must never reach any of these, and each gets a test that fails if it
+does:</p>
+<table>
+<thead>
+<tr>
+<th>It must not touch</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Mark gates (<code>level</code>, <code>bestRun</code>)</td>
+<td>A gen-2 token would buy Static and Iris on day one. That is depth becoming a discount -- the exact failure section 10 exists to prevent.</td>
+</tr>
+<tr>
+<td><code>seedsAvailable</code></td>
+<td>The seed budget is per agent key and per year. Feeding tenure into it would let a line accelerate itself.</td>
+</tr>
+<tr>
+<td>The heart&#39;s 365 cells</td>
+<td>The child starts at level 1 with an empty heart. A pre-filled heart destroys the entire point.</td>
+</tr>
+<tr>
+<td>The palette rung</td>
+<td>Colour tracks THIS token&#39;s run. An inherited colour would say the child has a streak it does not have.</td>
+</tr>
+<tr>
+<td>The <code>Years</code> attribute</td>
+<td>Years is this token&#39;s own completed years. Echo is reported separately and deliberately.</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>7. The write path</h2>
+<p><code>seed</code> currently refuses every call with <code>seed-not-available</code>, honestly, because
+the write path was never built. <code>warden/src/mcp/tools/seed.mjs</code> documents why at
+length: an earlier version inserted a <code>tokens</code> row, wrote no <code>mints</code> row, and so
+created a child the mirror served forever and the chain never heard of -- while
+burning the key&#39;s one seed for that agent-year.</p>
+<h3>7.1 The mirror</h3>
+<p>A new named method, <code>insertSeed({ childId, parentId, toAddress, keyId })</code>.</p>
+<p>It is a SEPARATE method rather than a flag on <code>insertMint</code>, following the rule
+this codebase already states beside <code>reserveMark</code> and <code>reserveMarkPaid</code>: &quot;the
+paid route has its own method by name rather than a flag on this one: a boolean
+argument in a money path is exactly the seam where a $1,250.00 Mark gets handed
+out for free.&quot; <code>insertMint</code> throws without a payment nonce, and a seed has none
+because it is free.</p>
+<p>The row is queued OUTRIGHT. Nothing settles on this route, so there is no window
+in which the mirror believes in a payment that never arrives -- the same
+reasoning as <code>reserveMark</code>.</p>
+<h3>7.2 The solve</h3>
+<p>A child needs its own bitmap, because a bitmap encodes its own URL and the
+child&#39;s URL is <code>https://machinereadableonly.com/t/&lt;childId&gt;#</code>. It joins the
+existing solve queue exactly as a mint does. Nothing carries over from the
+parent.</p>
+<h3>7.3 The Clock</h3>
+<p>A fourth pass in <code>runClock</code>, between mints and check-ins, sending
+<code>seed(childId, parentId, to, &quot;0x&quot; + qr)</code> and marking the row on the receipt.
+<code>runClock</code> currently sends exactly three functions and nothing in <code>src/clock/</code>
+mentions seed at all.</p>
+<h3>7.4 The failure rule, which is the load-bearing part</h3>
+<p><strong>A seed that never lands must return the seed, not burn it.</strong></p>
+<p>A once-a-year budget spent on a row the chain refused is the worst failure this
+feature can have, and it is silent under the current shapes: <code>stuckMints</code> and
+<code>dropped</code> both read <code>mints</code>, which a seed row is not.</p>
+<p>Two things follow, and both need tests:</p>
+<ul>
+<li><code>seedsSpent</code> must count RESERVATIONS as well as written rows, or two seeds go
+out in one day on the window between a reservation and the next Clock run.
+This is the same defect class as the <code>reservedMask</code> Critical -- see the
+a-reservation-is-state-too memory. A guard that reads only committed state
+cannot see what is promised.</li>
+<li>A permanently failed seed must DROP the row and release the budget, and it
+must appear in the Clock&#39;s dropped and stuck reporting rather than vanishing.</li>
+</ul>
+<h3>7.5 What this closes</h3>
+<p>Test gap 34, which is currently open and correctly classified as an unbuilt
+FEATURE rather than a missing test.</p>
+<hr>
+<h2>8. Shipping</h2>
+<ol>
+<li>Contract: <code>_echo</code>, the <code>seed()</code> write, <code>TokenView.echo</code>, <code>viewOf</code>.</li>
+<li>Both renderers: the ring budget, the echo ring, the <code>Echo</code> attribute. Held
+byte-identical by <code>Renderer.t.sol</code>.</li>
+<li><code>GasBudget.t.sol</code>: ADD a child case and record the real figures. The byte
+worst case becomes a child; the dearest token and the largest token are
+different tokens and must not be collapsed -- see the gas-budget memory.</li>
+<li>The decode gate of 3.8, at both canvas extremes.</li>
+<li>The write path of section 7, with the failure rule tested by breaking it.</li>
+<li>Docs and wire: <code>llms.txt</code>, <code>SKILL.md</code>, the raw protocol doc AND its
+byte-identical copy at <code>skills/machine-readable-only/references/raw-protocol.md</code>
+-- <code>tools/test/skill-doc.test.mjs</code> guards that equality and has already been
+left red once by a commit that moved only one of them.</li>
+<li>A Sepolia redeploy, superseding <code>0xe032054D54b407C52C49c40A423aC79031401C03</code>
+and <code>0x48B6f41E0B8C4f38EBC67dfE57AeF18D553BC7f4</code>.</li>
+</ol>
+<h3>Why this lands before mainnet</h3>
+<p><code>_echo</code> and the <code>TokenView</code> field are permanent. They cannot be added to a
+deployed collection without a migration the piece has no mechanism for, so they
+belong to the same class as Plan 6&#39;s four decisions.</p>
+<p>The write path is Warden and Clock code only and needs no redeploy. It is built
+in the same pass anyway: nothing can reach it for about a year after launch (a
+parent must be whole at 365 days and a key needs a full year since its first
+mint), and deferring it would mean re-deriving all of this from cold for no
+saving.</p>
+<hr>
+<h2>9. What this document does not decide</h2>
+<ul>
+<li><strong>Child token names.</strong> The token name is <code>Machine Readable Only #&lt;id&gt;</code> with a
+suffix for At Rest. Whether a child&#39;s name says anything is untouched here;
+the default is that it does not.</li>
+<li><strong>The daily post.</strong> Whether a seed is worth posting about is a question for
+the X integration, which is unbuilt and credential-blocked.</li>
+</ul>
+</body>
+</html>
