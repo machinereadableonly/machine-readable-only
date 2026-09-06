@@ -227,18 +227,37 @@ return visits, so the artwork is the agent's own history of coming back.
   wording is corrected (C2.1, approved by the operator). Medium/Low phases 1-2: the three
   contract guards that stop being fixable at deploy, the access-control test
   gaps, and eight Clock failure modes.
-  **WHAT REMAINS: Phase 3 (door and payment: 13.3-13.8, 14.4-14.9) and Phase 4
-  (the quality report's 69 findings + 46 test gaps)**, plus the operator's five launch
-  items C4.4-C4.8. The real finding count is 184 (security 67, quality 74,
-  creative 43) -- the "158" in older notes reconciles against nothing.
+  **PHASE 3 (door and payment) IS DONE TOO, 2026-09-06, DEPLOYED AND PUSHED** --
+  all twelve findings, commits `c5dbb1f` to `a4dd8d3`. SupplyCap was the last
+  contract gate answered from the mirror and is now read from the chain; the
+  chain id is checked against the RPC at boot and the treasury must be EIP-55
+  checksummed (both in `warden/src/chain/preflight.mjs`, because main.mjs
+  cannot be imported); every paid refusal carries `isError`; the post-payment
+  gate set is the full one; a one-hour negative directory cache that let ONE
+  unauthenticated request lock an agent out for an hour is now 45 seconds; and
+  `/mcp` has a per-key budget of 60 calls a minute.
+  **THE PUBLISHED WIRE CONTRACT CHANGED AGAIN, twice**: signing for an
+  authority that hosts no directory now answers `directory` rather than
+  `unknown-key` (that reason was previously UNREACHABLE), and 429
+  `rate-limited` is new. Both are documented in the protocol doc, `llms.txt`
+  and the skill.
+  **WHAT REMAINS: Phase 4 (the quality report's 69 findings + 46 test gaps)**,
+  plus the operator's five launch items C4.4-C4.8. The real finding count is 184
+  (security 67, quality 74, creative 43) -- the "158" in older notes
+  reconciles against nothing.
   **16.10 IS UNVERIFIED and must be RE-DERIVED, not fixed as written** -- its
   cited leak chain does not exist.
   **THE NGINX RATE LIMITS ARE NOT LIVE**: the template has them, the installed
-  vhost was written from the old one, and applying them needs sudo.
-  Read [[review-medium-low-2026-09-06]], [[creative-closeout-2026-09-05]],
-  [[security-quality-closeout-2026-09-05]] and [[door-replay-and-key-argv]]
-  before touching the door, the payment path, the Clock or a deploy script.
-  **Suites: contracts 304, warden 462, tools 70, client 37** (2026-09-06).
+  vhost was written from the old one, and applying them needs sudo. The
+  application-level limiter added in Phase 3 is a different thing and IS live.
+  Read [[phase3-door-and-payment]], [[review-medium-low-2026-09-06]],
+  [[creative-closeout-2026-09-05]], [[security-quality-closeout-2026-09-05]]
+  and [[door-replay-and-key-argv]] before touching the door, the payment path,
+  the Clock or a deploy script.
+  **Rehearse every deploy** with `warden/tools/rehearse-start.sh`: it runs the
+  real `main.mjs` against a COPY of production state, which is the only thing
+  that can catch a bad boot check.
+  **Suites: contracts 304, warden 486, tools 70, client 37** (2026-09-06).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
