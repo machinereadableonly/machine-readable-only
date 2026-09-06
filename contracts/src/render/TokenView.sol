@@ -15,6 +15,10 @@ struct TokenView {
     uint32 generation;   // 0 for a founding token, 1+ for a seeded child
     uint32 seedsGiven;   // how many children this token has seeded
     uint256 parent;      // 0 for a founding token, else the id it was seeded from
+    uint32 echo;         // days the LINE had run when this token was seeded;
+                         // 0 for a founding token. Sealed at the seed and
+                         // never written again. See
+                         // docs/specs/2026-09-06-mro-lineage-design.md.
     bool resting;        // owner sealed it: the image is final and never pales
     bool sunset;         // operator closed the piece: same freeze, piece-wide
     uint32 sunsetDay;    // the day the piece closed; 0 while it is open

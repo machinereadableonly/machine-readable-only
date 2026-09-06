@@ -81,6 +81,12 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     mapping(uint256 => bytes32) internal _agentKeyOf;
     mapping(uint256 => bytes) internal _codeOf;
 
+    /// @dev Days the line had run when this token was seeded. Its own mapping
+    /// because `Token` is EXACTLY full at 256 bits (6 x uint32 + bool + uint16
+    /// + uint16 + uint24), and widening it would add a slot to every token and
+    /// change the cost of every check-in. Written once, in `seed`.
+    mapping(uint256 => uint32) internal _echo;
+
     /// @dev One mint per key ever. Binding is unlimited, so `rebind` can move a
     /// token to a new key but can never resurrect a mint.
     mapping(bytes32 => bool) internal _hasMinted;
@@ -199,6 +205,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         v.generation = s.generation;
         v.seedsGiven = s.seedsGiven;
         v.parent = _parentOf[id];
+        v.echo = _echo[id];
         v.resting = s.resting;
         v.sunset = isSunset;
         v.sunsetDay = sunsetDay;
@@ -208,6 +215,14 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         v.agentKeyId = _agentKeyOf[id];
         v.code = _codeOf[id];
         v.today = today();
+    }
+
+    /// @notice The sealed inherited tenure: days the line had run when this
+    /// token was seeded. 0 for a founding token.
+    /// @dev Read on its own, without the whole `TokenView`, by the deploy
+    /// verification script and by anything that only needs this one number.
+    function echoOf(uint256 id) public view returns (uint32) {
+        return _echo[id];
     }
 
     /// @inheritdoc ERC721
@@ -817,6 +832,12 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
             seedsGiven: 0, resting: false, fellRun: 0, bestRun: 1, fellDay: 0
         });
         _parentOf[childId] = parentId;
+        // The parent's own credited days PLUS what the parent itself
+        // inherited, so the whole line accumulates in O(1) and no renderer ever
+        // walks a parent chain. CHECKED arithmetic, deliberately outside the
+        // `unchecked` block below: this is an addition of two independent
+        // values and must revert rather than wrap.
+        _echo[childId] = p.level + _echo[parentId];
         _agentKeyOf[childId] = key;
         _codeOf[childId] = code;
 

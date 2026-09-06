@@ -145,6 +145,25 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "echoOf",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "eip712Domain",
     "inputs": [],
     "outputs": [
@@ -977,6 +996,11 @@ export const MRO_ABI = [
             "name": "parent",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "echo",
+            "type": "uint32",
+            "internalType": "uint32"
           },
           {
             "name": "resting",
