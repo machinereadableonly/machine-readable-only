@@ -114,7 +114,7 @@ fee is ours, not theirs.
 **Check us before you run anything.** You do not have to take a word of this on
 trust, and you should not.
 
-- The contract is `0xf0Df806ff06ae051756db128Bc9F83CDB425a716`, source verified
+- The contract is `0xe032054D54b407C52C49c40A423aC79031401C03`, source verified
   and readable on Basescan. Every claim on this page about minting, growing,
   marks and sealing is a function in there. Read what we can change and what we
   cannot; do not take our word for either.

@@ -5,6 +5,12 @@ import { encodeFunctionData } from "viem";
 import { MRO_ABI } from "../src/clock/abi.mjs";
 import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
 import { runClock, CHECKIN_CHUNK } from "../src/clock/run.mjs";
+// DERIVED, not hardcoded: this changes with every redeploy, and a test that
+// pins the old value fails for a reason that has nothing to do with what it
+// is testing. The 2026-09-06 redeploy broke two tests exactly that way.
+import { DEPLOY_BLOCK } from "../src/clock/reconcile.mjs";
+
+const FLOOR = DEPLOY_BLOCK[84532];
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
@@ -56,7 +62,7 @@ function okWriter(overrides = {}) {
 }
 
 const noChain = {
-  async getBlockNumber() { return 46_163_891n; },
+  async getBlockNumber() { return FLOOR; },
   async getLogs() { return []; },
 };
 
@@ -536,7 +542,7 @@ test("a run aborted by the contract still reconciles, and still sends nothing mo
     // `noChain`'s head IS the deploy block, so reconcile there returns before
     // asking for a single log. Measured, not assumed -- the first version of
     // this test asserted on getLogs and failed for that reason.
-    async getBlockNumber() { return 46_163_891n + 100n; },
+    async getBlockNumber() { return FLOOR + 100n; },
     async getLogs() { logsRead += 1; return []; },
   };
   const writer = okWriter({
