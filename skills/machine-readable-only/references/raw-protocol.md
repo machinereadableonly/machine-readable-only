@@ -493,23 +493,26 @@ already wears Ache:
         { "pair": 1,
           "sides": [
             { "id": 1, "name": "hush", "route": "bought", "state": "closed", "price": "$1.00" },
-            { "id": 2, "name": "ache", "route": "earned", "state": "held" }
+            { "id": 2, "name": "ache", "route": "earned", "state": "held", "price": "free" }
           ],
           "held": "ache", "closed": "hush", "closedBy": "ache" },
         { "pair": 4,
           "sides": [
             { "id": 7, "name": "vessel", "route": "bought", "state": "open",
-              "price": "$1250.00", "waitingOn": "a whole heart, 365 days" },
+              "price": "$1250.00", "waitingOn": "a whole heart, 365 days",
+              "closes": "break" },
             { "id": 8, "name": "break", "route": "earned", "state": "open",
-              "waitingOn": "a run of 365 days" }
+              "price": "free", "waitingOn": "a run of 365 days",
+              "closes": "vessel" }
           ] },
         { "pair": 5,
           "sides": [
             { "id": 9, "name": "tint", "route": "bought", "state": "open",
               "price": "$250.00", "variants": ["violet", "gold"],
-              "waitingOn": "an Iris, by either route" },
+              "waitingOn": "an Iris, by either route", "closes": "aura" },
             { "id": 10, "name": "aura", "route": "bought", "state": "open",
-              "price": "$25.00", "waitingOn": "an Iris, by either route" }
+              "price": "$25.00", "waitingOn": "an Iris, by either route",
+              "closes": "tint" }
           ] }
       ]
     }
@@ -519,6 +522,18 @@ already wears Ache:
 says whether a side can still be taken. `waitingOn` appears only on an open side
 that is gated, so its absence means the gate is met. A decided pair also carries
 `held` (or `refused`), `closed` and `closedBy` at the top level.
+
+**`closes` is the forfeit, before you take it** (new 2026-09-06). It appears on
+every OPEN side and names the partner that taking this side would foreclose
+permanently. It is the same string `upgrade` returns as the `mark-excluded`
+`detail` afterwards, resolved from one place so the two can never disagree, and
+it is omitted on a side that is not open because the choice no longer exists
+there. In pair three both sides are named `iris`, so both read `closes: "iris"`:
+the two Iris routes exclude each other and `route` is what tells them apart.
+
+**`price` is `"free"` on the four earned Marks** (new 2026-09-06). It used to be
+absent, which a client tabulating sides could not tell from a price this service
+declined to quote.
 
 **`refused` is the rare one, and it is not ownership.** It means this side was
 reserved and the CHAIN then refused to write it outright. The reservation still
@@ -632,9 +647,14 @@ and an agent can make one fail on purpose. If you are reading this against a
 deployment older than 2026-09-05, do not assume this guarantee.
 
 The four EARNED Marks cost nothing, so a qualifying token gets
-`{ ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock
-run" }` with no payment step at all. The six BOUGHT Marks go through the same
-x402 settlement as `mint`.
+`{ ok: true, accepted: true, upgradeId, variant, closed, appliedBy: "the next
+Clock run" }` with no payment step at all. The six BOUGHT Marks go through the
+same x402 settlement as `mint` and answer with the same shape.
+
+**`closed` names the partner this call just foreclosed** (new 2026-09-06), in
+the same lower-case form as `ladder`'s `closes` and `mark-excluded`'s `detail`.
+Before this the response that carried out the forfeit was the one response that
+never mentioned it.
 
 An `{ ok: true, accepted: true }` from `upgrade` is a RESERVATION at this door,
 not a write. The Mark is written on chain by the next Clock run, in the same
