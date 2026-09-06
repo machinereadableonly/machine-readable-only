@@ -250,18 +250,30 @@ return visits, so the artwork is the agent's own history of coming back.
   `refused` rather than `held`; the CLI exits non-zero on a refusal and its
   cron line is pinned to UTC; `status` says when the next window opens and when
   the run breaks; and `mro://contract` serves the ABI and the catalogue.
-  **THE LIVE WARDEN IS THE PHASE 3 BUILD** (`a4dd8d3`) -- Phase 4 changes
-  agent-facing answers, so restarting is a real deploy. Rehearse it first.
-  **WHAT REMAINS: the 46 TEST GAPS** (about a dozen closed as a side effect),
-  plus the operator's five launch items C4.4-C4.8. The real finding count is 184
-  (security 67, quality 74, creative 43) -- the "158" in older notes
+  **ALL 46 TEST GAPS ARE CLOSED as of 2026-09-06 (`8a4de62` to `94d10cd`),
+  PUSHED AND DEPLOYED** -- which also brought Phase 4 live. Twelve were already
+  closed and were verified one by one rather than re-fixed. Gap 39 found a REAL
+  DEFECT in the paid path: `upgrade` and `seed` refused an unrecognised caller
+  on the STALE MIRROR without ever reading the chain, so an agent whose
+  `rebind` had landed but not reconciled was refused for up to a day on the two
+  paths where it spends money. It had been PINNED AS CORRECT by an existing
+  test. `checkin` had asked the chain since 14.3; those two now do too.
+  Gap 34 is NOT a test gap and stays open: it wants tests on `seed`'s Clock
+  write path, which 4.H1 records as an unbuilt FEATURE.
+  **THE LIVE WARDEN IS THE TREE** (`94d10cd`), verified through Cloudflare by
+  serving `/t/2` with `nextWindowOpensAt`, `streakDeadline` and `children` --
+  three fields the Phase 3 build did not have.
+  **WHAT REMAINS: the operator's five launch items C4.4-C4.8**, plus the standing
+  blockers below. The reviews themselves are DONE. The real finding count was
+  184 (security 67, quality 74, creative 43) -- the "158" in older notes
   reconciles against nothing.
   **16.10 IS UNVERIFIED and must be RE-DERIVED, not fixed as written** -- its
   cited leak chain does not exist.
   **THE NGINX RATE LIMITS ARE NOT LIVE**: the template has them, the installed
   vhost was written from the old one, and applying them needs sudo. The
   application-level limiter added in Phase 3 is a different thing and IS live.
-  Read [[phase4-quality-findings]], [[check-the-finding-before-fixing-it]],
+  Read [[test-gaps-closed]], [[phase4-quality-findings]],
+  [[check-the-finding-before-fixing-it]],
   [[phase3-door-and-payment]], [[review-medium-low-2026-09-06]],
   [[creative-closeout-2026-09-05]], [[security-quality-closeout-2026-09-05]]
   and [[door-replay-and-key-argv]] before touching the door, the payment path,
@@ -269,7 +281,7 @@ return visits, so the artwork is the agent's own history of coming back.
   **Rehearse every deploy** with `warden/tools/rehearse-start.sh`: it runs the
   real `main.mjs` against a COPY of production state, which is the only thing
   that can catch a bad boot check.
-  **Suites: contracts 309, warden 500, tools 72, client 40** (2026-09-06).
+  **Suites: contracts 331, warden 547, tools 72, client 40** (2026-09-06).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
