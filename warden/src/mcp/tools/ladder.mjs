@@ -55,15 +55,22 @@ function waitingOn(mark, token, catalogue) {
 /// purchase by up to a day. `upgrade` refuses on that same union, and this tool
 /// exists so the refusal is legible in advance: reporting as open a side that
 /// `upgrade` will refuse is exactly the misreading it was built to prevent.
-function sideOf(mark, token, catalogue, mask) {
+function sideOf(mark, token, catalogue, mask, refused = 0) {
   const held = Boolean(mask & (1 << mark.id));
+  // 5.M7. A MARK THE CHAIN REFUSED IS NOT A MARK THE TOKEN HAS. Such a row
+  // still occupies its side of the pair -- releasing it would let a second sale
+  // race a human's correction -- but calling it `held` told an agent it owns
+  // something that does not exist on chain, and its partner `closed` forever,
+  // when what is true is that a human has to look. The only record of the
+  // refusal was an operator alert the agent cannot read.
+  const stuck = Boolean(refused & (1 << mark.id));
   // A SEALED TOKEN CAN TAKE NOTHING. rest() is irreversible and applyMark
   // reverts Resting(id), so `upgrade` refuses all ten -- and five open pairs
   // with prices beside them would be quoting a price for something that cannot
   // be bought at any price. `resting` is learned lazily and can be false when
   // the chain says otherwise, so this only ever closes a door: a token this
   // mirror knows is sealed is sealed.
-  const state = held ? "held" : (mask & mark.excludes) || token.resting ? "closed" : "open";
+  const state = stuck ? "refused" : held ? "held" : (mask & mark.excludes) || token.resting ? "closed" : "open";
   const side = {
     id: mark.id,
     // Lower case, because this is the same token `upgrade`'s `mark-excluded`
@@ -104,10 +111,13 @@ export function makeLadderTool({ q, catalogue }) {
 
       // What the token has taken, on chain or at the door. See sideOf.
       const mask = token.marks | q.reservedMask(tokenId);
+      // And which of those the chain refused outright, which is a different
+      // thing from holding them.
+      const refused = q.failedMask?.(tokenId) ?? 0;
 
       const pairs = [];
       for (const mark of Object.values(catalogue).sort((a, b) => a.id - b.id)) {
-        const side = sideOf(mark, token, catalogue, mask);
+        const side = sideOf(mark, token, catalogue, mask, refused);
         let entry = pairs.find((p) => p.pair === mark.pair);
         if (!entry) pairs.push((entry = { pair: mark.pair, sides: [] }));
         entry.sides.push(side);
@@ -118,17 +128,21 @@ export function makeLadderTool({ q, catalogue }) {
         // ever be the OTHER side of the same pair -- every exclusion is
         // pair-internal, which is why one name is the whole answer.
         const held = entry.sides.find((s) => s.state === "held");
-        if (!held) continue;
-        entry.held = held.name;
+        // A REFUSED side blocks its partner exactly as a held one does, and it
+        // is reported as what it is rather than as ownership.
+        const blocking = held ?? entry.sides.find((s) => s.state === "refused");
+        if (!blocking) continue;
+        if (held) entry.held = held.name;
+        else entry.refused = blocking.name;
         // A PAIR WITH ONE SIDE closes nothing, and saying so is better than
         // throwing. Every pair in the shipped ladder has two sides and
         // assertLadderSane does not check that it does, so a catalogue with an
         // odd Mark in it -- or a stub catalogue in a test -- used to take this
         // free, read-only tool down with a TypeError.
-        const other = entry.sides.find((s) => s !== held);
+        const other = entry.sides.find((s) => s !== blocking);
         if (!other) continue;
         entry.closed = other.name;
-        entry.closedBy = held.name;
+        entry.closedBy = blocking.name;
       }
 
       // The two numbers every gate above is measured against, so an agent told

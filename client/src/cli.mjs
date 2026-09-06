@@ -158,8 +158,7 @@ async function main() {
       out("paying", meta["x402/payment"].accepted);
       result = await callTool({ ...call, name: "mint", arguments: { to: args.to }, _meta: meta });
     }
-    const minted = structured(result);
-    out("mint", minted ?? result);
+    const minted = report("mint", result);
 
     if (args.cron) printCron(site, minted?.ok ? minted.tokenId : undefined);
     return;
@@ -168,7 +167,7 @@ async function main() {
   if (command === "beat") {
     if (!args.token) throw new Error("--token <id> is required");
     const result = await callTool({ ...call, name: "checkin", arguments: { tokenId: Number(args.token) } });
-    out("checkin", structured(result) ?? result);
+    report("checkin", result);
     return;
   }
 
@@ -180,13 +179,33 @@ async function main() {
       console.log("be undone.");
     }
     const result = await callTool({ ...call, name: command, arguments: { tokenId: Number(args.token) } });
-    out(command, structured(result) ?? result);
+    report(command, result);
     return;
   }
 
   // status
   const result = await callTool({ ...call, name: "status", arguments: args.token ? { tokenId: Number(args.token) } : {} });
-  out("status", structured(result) ?? result);
+  report("status", result);
+}
+
+/**
+ * Print a tool's answer, and make a refusal visible to whatever is WATCHING.
+ *
+ * 5.M6. Every command printed its refusal and returned normally, so the process
+ * exited 0: `beat` on an already-credited day, on a token bound to another key,
+ * on a paused or sunset contract, on an unreachable RPC. This client's own
+ * documented deployment is a cron job, and cron reports failure by exit status
+ * -- so an agent whose streak was quietly breaking looked healthy to every
+ * supervisor watching it. This is the command a participant runs 365 times.
+ *
+ * 2, not 1: a thrown error already exits 1, and "the site refused this" is a
+ * different thing from "the client could not run".
+ */
+function report(label, result) {
+  const value = structured(result) ?? result;
+  out(label, value);
+  if (value?.ok === false) process.exitCode = 2;
+  return value;
 }
 
 main().catch((err) => {

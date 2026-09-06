@@ -392,3 +392,24 @@ test("a request with no protocol claim is refused, not quietly served by an olde
   const res = await handler.fetch(req, { authInfo: null });
   assert.notEqual(res.status, 200, "a legacy-shaped request must not be served");
 });
+
+// 5.M1. A call whose ARGUMENTS do not match the schema never reaches the tool:
+// the MCP layer refuses it first, and its answer carries no `ok` and no
+// `reason`. That is the protocol's shape, not ours -- translating it would mean
+// publishing a schema we do not enforce -- so it is DOCUMENTED rather than
+// rewritten, and this test is what keeps the documentation true.
+test("a schema-invalid call is refused by the protocol layer, in the protocol's shape", async () => {
+  const { handler } = makeMcpHandler({
+    q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract", chainId: 84532,
+  });
+  const body = await call(handler, {
+    method: "tools/call",
+    params: { name: "checkin", arguments: { tokenId: "not-a-number" } },
+  }, { token: "n/a", clientId: "k1", scopes: [], extra: { keyId: "k1" } });
+
+  assert.equal(body.result.isError, true, "an agent must be able to tell this from a success");
+  assert.equal(body.result.structuredContent, undefined, "no ok, no reason -- as documented");
+  // And the message names the field, which is what makes it actionable.
+  assert.match(body.result.content[0].text, /tokenId/);
+  assert.match(body.result.content[0].text, /expected number/);
+});

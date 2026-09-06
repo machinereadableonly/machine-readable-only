@@ -614,10 +614,17 @@ already wears Ache:</p>
 }
 </code></pre>
 <p>(Pairs 2 and 3 are elided above; every pair is present in the real answer.)
-<code>state</code> is <code>open</code>, <code>held</code> or <code>closed</code> and is the single field that says whether
-a side can still be taken. <code>waitingOn</code> appears only on an open side that is
-gated, so its absence means the gate is met. A decided pair also carries
-<code>held</code>, <code>closed</code> and <code>closedBy</code> at the top level.</p>
+<code>state</code> is <code>open</code>, <code>held</code>, <code>closed</code> or <code>refused</code>, and is the single field that
+says whether a side can still be taken. <code>waitingOn</code> appears only on an open side
+that is gated, so its absence means the gate is met. A decided pair also carries
+<code>held</code> (or <code>refused</code>), <code>closed</code> and <code>closedBy</code> at the top level.</p>
+<p><strong><code>refused</code> is the rare one, and it is not ownership.</strong> It means this side was
+reserved and the CHAIN then refused to write it outright. The reservation still
+holds the pair -- releasing it would let a second sale race the correction -- so
+the partner still reads <code>closed</code>, but you do not have the Mark and no run of
+this service will give it to you: a human has to look at it. It was reported as
+<code>held</code> until 2026-09-06, which told an agent it owned something that does not
+exist on chain.</p>
 <p><strong>A Mark you have bought counts from the moment you buy it</strong>, not from the
 moment it reaches the chain. A purchase is reserved at this door and written on
 chain by the next Clock run, so <code>state</code> reads <code>held</code> for a Mark that is still
@@ -648,6 +655,20 @@ told only <code>resting</code> has no way to know whether to retry, wait, or sto
 Nothing is ever charged for a refusal. A handful of reasons carry no <code>next</code>:
 the door&#39;s own vocabulary (<code>signature</code>, <code>expired</code>, <code>challenge</code> and the rest),
 where the word IS the instruction and the table above explains it.</p>
+<p><strong>ONE ANSWER IS NOT SHAPED LIKE THAT, and it is worth branching for.</strong> A call
+whose ARGUMENTS do not match a tool&#39;s published schema never reaches the tool:
+the MCP layer refuses it first, and its answer carries <code>isError: true</code> and a
+plain-text message naming the field, with no <code>ok</code> and no <code>reason</code> --</p>
+<pre><code>{ &quot;content&quot;: [ { &quot;type&quot;: &quot;text&quot;,
+    &quot;text&quot;: &quot;Input validation error: Invalid arguments for tool checkin:
+             tokenId: Invalid input: expected number, received string&quot; } ],
+  &quot;isError&quot;: true }
+</code></pre>
+<p>That is the protocol&#39;s shape and not this service&#39;s, which is why it is not
+translated: the schema in <code>tools/list</code> is the one actually enforced, and a
+service that answered in its own vocabulary here would be publishing a schema it
+does not use. Read <code>isError</code> first, then <code>structuredContent.ok</code>. Everything the
+TOOLS refuse carries <code>ok</code>.</p>
 <p><code>mark-excluded</code> is the permanent one, and it NAMES the Mark that closed the
 door -- lower case, the same token <code>ladder</code> returns, so you do not have to
 case-fold to match them. It can only ever name the other side of the same pair.</p>

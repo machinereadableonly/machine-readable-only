@@ -11,7 +11,7 @@
 // built and wrapped by the real @x402/mcp code path.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, mkdirSync, chmodSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -117,6 +117,21 @@ test("a saved identity is not readable by anyone else", async () => {
   assert.equal(again.created, false);
   assert.equal(again.identity.keyId, identity.keyId);
   assert.equal(loadIdentity(path).keyId, identity.keyId);
+});
+
+// 5.L5. `mode` on mkdirSync applies only when it CREATES. A ~/.mro made by an
+// older version, by a shell, or by a restore from a backup keeps whatever mode
+// it had -- and the loose umask that produced it is exactly what this guard
+// exists for. The FILE's 0600 is the protection that matters; a directory
+// guard that only applies to first runs is not one.
+test("an EXISTING key directory is tightened, not only a new one", async () => {
+  const home = join(dir, "pre-existing");
+  mkdirSync(home, { mode: 0o755 });
+  chmodSync(home, 0o755);
+  assert.equal(statSync(home).mode & 0o777, 0o755, "the fixture must start loose, or this proves nothing");
+
+  await ensureIdentity(join(home, "identity.jwk.json"));
+  assert.equal(statSync(home).mode & 0o777, 0o700, "the directory must be tightened on save");
 });
 
 test("the signature covers exactly the four components the door requires", async () => {
