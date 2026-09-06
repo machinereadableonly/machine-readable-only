@@ -271,6 +271,22 @@ return visits, so the artwork is the agent's own history of coming back.
   blockers below. The reviews themselves are DONE. The real finding count was
   184 (security 67, quality 74, creative 43) -- the "158" in older notes
   reconciles against nothing.
+  **THE LAST FOUR CREATIVE ITEMS CLAUDE COULD DO ALONE ARE DONE (2026-09-06),
+  PUSHED AND DEPLOYED.** `594e1a2` closed the three copy findings: llms.txt says
+  why the entry rule exists, door.html drops "RFC 9421, Web Bot Auth" for a
+  human relay who reads those words as bot protection, and a new
+  "What we commit to" section serves FOUR commitments. C4.9 asked for a FIFTH,
+  "the verifier is open source" -- OMITTED by the operator's decision, because the repo is
+  private and C4.4 is undecided, so serving it would publish a false
+  commitment. Add it the day C4.4 lands, and read
+  [[check-the-finding-before-fixing-it]] before implementing any copy finding
+  verbatim. `32a861f` closed C2.7: the Mark forfeit is named BEFORE it is taken
+  (`closes` on every open side, `closed` on both accepted `upgrade` responses,
+  `price: "free"` on earned sides, and the tool retitled "Take a Mark").
+  **THE WIRE CHANGED ADDITIVELY AGAIN** and is documented in the protocol doc,
+  llms.txt and SKILL.md. **NOTHING CREATIVE IS LEFT THAT CLAUDE CAN DO ALONE:**
+  six ANYTIME items remain and all six need the operator (C2.3-C2.6 want rendered sheets
+  and his eye; C4.11 and C4.12 are credential-blocked).
   **16.10 IS RE-DERIVED AND CLOSED (2026-09-06, `c742412`), NOT DEPLOYED** --
   three of its four claims were wrong, including the only function it named and
   the only fix it proposed. Measured on viem 2.56.0: `err.message` ALWAYS
@@ -293,7 +309,7 @@ return visits, so the artwork is the agent's own history of coming back.
   **Rehearse every deploy** with `warden/tools/rehearse-start.sh`: it runs the
   real `main.mjs` against a COPY of production state, which is the only thing
   that can catch a bad boot check.
-  **Suites: contracts 335, warden 562, tools 76, client 40** (2026-09-06).
+  **Suites: contracts 335, warden 568, tools 76, client 40** (2026-09-06).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
