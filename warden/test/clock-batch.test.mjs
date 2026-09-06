@@ -189,3 +189,160 @@ test("a pathological chunk gives up by its attempt bound instead of hammering th
   assert.equal(r.dropped.length, 1);
   assert.ok(calls <= 3, `made ${calls} calls against a bound of 3`);
 });
+
+// ---------------------------------------------------------------------------
+// Two queued days for one token -- test gap 27 / finding 4.H2
+// ---------------------------------------------------------------------------
+
+// THE SCOPE OF `by: "id"` WAS PINNED NOWHERE. Every DayNotAdvanced test above
+// gives a token exactly one queued day, so "drop the offending id" and "drop
+// this one entry" are indistinguishable -- and they are very different rules
+// the night a token has two days waiting, which is the ordinary shape after a
+// night the Clock did not run.
+//
+// Getting it wrong loses a day permanently: batchCheckIn refuses `day <= lastDay`,
+// so a day dropped here can never be backfilled. The heal path exists precisely
+// to split a token's entries at what the chain already holds.
+/// A writer that behaves like the CONTRACT does about days: it reverts
+/// DayNotAdvanced, naming the first offending token, for any entry whose day is
+/// at or below what the chain already holds -- and accepts everything else.
+///
+/// The `poison` stub above cannot express this case. It refuses every chunk
+/// containing the id, so the entry the heal correctly rescues is refused again
+/// on the retry and condemned on the second pass. That is the stub being wrong,
+/// not the code: the whole point of healing is that day 99 IS writable once
+/// day 98 is recognised as already landed.
+function dayAwareWriter(chainLastDay = new Map()) {
+  const calls = [];
+  return {
+    calls,
+    async send(functionName, args, opts) {
+      const ids = [];
+      for (let i = 2; i < args[0].length; i += 8) ids.push(parseInt(args[0].slice(i, i + 8), 16));
+      const days = args[1];
+      calls.push({ ids, days, label: opts?.label });
+
+      // The contract reverts on the FIRST offending entry in array order.
+      for (let i = 0; i < ids.length; i++) {
+        const last = chainLastDay.get(ids[i]) ?? 0;
+        if (days[i] <= last) {
+          return {
+            ok: false,
+            reason: "reverted-on-simulate",
+            errorName: "DayNotAdvanced",
+            errorArgs: [String(ids[i])],
+          };
+        }
+      }
+      return { ok: true, hash: "0xbeef" };
+    },
+  };
+}
+
+test("two queued days for one token: the written one heals, the writable one lands", async () => {
+  // The chain already holds day 98 for token 1, and nothing for token 2.
+  const writer = dayAwareWriter(new Map([[1, 98]]));
+  const entries = [entry(1, 98), entry(1, 99), entry(2, 99)];
+
+  const r = await writeCheckInChunk(writer, entries, { lastDayOf: async (id) => (id === 1 ? 98 : 0) });
+
+  assert.deepEqual(
+    r.healed.map((e) => [e.tokenId, e.day]),
+    [[1, 98]],
+    "the day already on chain is HEALED, not dropped -- it landed, the mirror was behind",
+  );
+  assert.deepEqual(r.dropped, [], "nothing is condemned: every entry was accounted for");
+  assert.deepEqual(
+    r.written.map((e) => [e.tokenId, e.day]).sort(),
+    [[1, 99], [2, 99]],
+    "the still-writable day for the SAME token must land, and so must the other token's",
+  );
+  assert.equal(r.aborted, null);
+});
+
+// The fallback half of the same rule. When the chain cannot be asked, the
+// contract reverts on the FIRST offending entry in array order, so that is the
+// only one it named and the only one condemned -- the token's other days stay.
+test("when the chain cannot be asked, ONE entry is condemned and the rest survive", async () => {
+  const writer = dayAwareWriter(new Map([[1, 98]]));
+  const entries = [entry(1, 98), entry(1, 99), entry(2, 99)];
+
+  // lastDayOf returns null: could not ask. NOT "not on chain".
+  const r = await writeCheckInChunk(writer, entries, { lastDayOf: async () => null });
+
+  assert.deepEqual(
+    r.dropped.map((d) => [d.entry.tokenId, d.entry.day]),
+    [[1, 98]],
+    "exactly the first entry for that id, which is the one the contract named",
+  );
+  assert.deepEqual(
+    r.written.map((e) => [e.tokenId, e.day]).sort(),
+    [[1, 99], [2, 99]],
+    "one unreadable moment must not cost the token its other days",
+  );
+  assert.deepEqual(r.healed, [], "nothing may be marked written on a read that failed");
+});
+
+// ---------------------------------------------------------------------------
+// gas-estimate-too-large -- test gap 28 / finding 4.M5
+// ---------------------------------------------------------------------------
+
+/// A writer that cannot ESTIMATE a chunk above `limit` entries, and sends
+/// anything at or below it. Nothing is broadcast on the refusal -- that is what
+/// makes halving safe here where retrying would not be.
+function gasStubWriter(limit) {
+  const calls = [];
+  return {
+    calls,
+    async send(functionName, args, opts) {
+      const count = args[1].length;
+      calls.push({ count, label: opts?.label });
+      if (count > limit) return { ok: false, reason: "gas-estimate-too-large" };
+      return { ok: true, hash: "0xbeef" };
+    },
+  };
+}
+
+// NOTHING PINNED THIS REASON AT ALL. clock-batch covered `reverted-on-chain`
+// and `send-failed`, and the gas refusal -- the one the halve path exists for --
+// was tested by nothing, which is why 4.M5's abort went unnoticed. The chunk
+// size it guards is an explicitly UNVERIFIED number, so "too big to estimate"
+// is an ordinary outcome, and aborting on it meant nobody was credited at all.
+test("a chunk too big to estimate is HALVED, not abandoned", async () => {
+  const writer = gasStubWriter(2);
+  const entries = [entry(1, 100), entry(2, 100), entry(3, 100), entry(4, 100)];
+
+  const r = await writeCheckInChunk(writer, entries);
+
+  assert.equal(r.aborted, null, "the run must not abort on a chunk that merely will not estimate");
+  assert.deepEqual(r.written.map((e) => e.tokenId), [1, 2], "the half that fits is written");
+  assert.deepEqual(r.dropped, [], "nothing is condemned: the entries are fine, the chunk was big");
+  assert.deepEqual(
+    writer.calls.map((c) => c.count),
+    [4, 2],
+    "four refused, then two -- halved, never retried at the same size",
+  );
+});
+
+test("halving repeats until the chunk fits", async () => {
+  const writer = gasStubWriter(1);
+  const entries = [entry(1, 100), entry(2, 100), entry(3, 100), entry(4, 100)];
+
+  const r = await writeCheckInChunk(writer, entries);
+
+  assert.equal(r.aborted, null);
+  assert.deepEqual(r.written.map((e) => e.tokenId), [1]);
+  assert.deepEqual(writer.calls.map((c) => c.count), [4, 2, 1]);
+});
+
+// The floor of the halve. A SINGLE entry that will not estimate is genuinely
+// undeliverable -- there is nothing left to halve -- so it is condemned by name
+// rather than halved forever or aborting the night.
+test("a single entry that will not estimate is condemned by name", async () => {
+  const writer = gasStubWriter(0);
+  const r = await writeCheckInChunk(writer, [entry(1, 100)]);
+
+  assert.equal(r.aborted, null);
+  assert.deepEqual(r.written, []);
+  assert.deepEqual(r.dropped, [{ entry: entry(1, 100), reason: "gas-estimate-too-large" }]);
+});

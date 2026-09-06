@@ -18,6 +18,7 @@ import { queries } from "../mirror/queries.mjs";
 import { makeWriter, chainFor } from "./write.mjs";
 import { runClock } from "./run.mjs";
 import { DEPLOY_BLOCK } from "./reconcile.mjs";
+import { readCursor, writeCursor, nextCursor, exitCodeFor } from "./cursor.mjs";
 import { MRO_ABI } from "./abi.mjs";
 import { utcDay } from "../mcp/tools/checkin.mjs";
 
@@ -43,37 +44,6 @@ const maxGasGwei = process.env.MAX_GAS_GWEI ?? "0.05";
 /// run would re-read from the deploy block, which is only cheap while the
 /// contract is young.
 const CURSOR = process.env.CLOCK_CURSOR_PATH ?? `${stateDbPath}.reconcile-cursor`;
-
-function readCursor() {
-  let raw;
-  try {
-    raw = readFileSync(CURSOR, "utf8").trim();
-  } catch (err) {
-    // NO CURSOR YET is the ordinary first run: reconcile floors at the deploy
-    // block, which re-reads history rather than skipping it.
-    if (err.code === "ENOENT") return null;
-    // 4.L4. ANYTHING ELSE IS NOT THAT. A permissions error or a corrupt file
-    // used to land here silently and be treated as a first run -- which on
-    // mainnet means reconciling from the deploy block, every night, against a
-    // unit with TimeoutStartSec=600. The unit is killed, the cursor is never
-    // written, and it repeats identically forever with nothing in the log
-    // naming a cursor. A permanent silent stall, dressed as a fresh start.
-    throw new Error(`could not read the reconcile cursor at ${CURSOR}: ${err.message}`);
-  }
-  if (raw === "") return null;
-  // A cursor that is not a number is corruption, not a first run, for the same
-  // reason: silently re-reading the whole chain is the expensive answer.
-  try {
-    return BigInt(raw);
-  } catch {
-    throw new Error(`the reconcile cursor at ${CURSOR} is not a block number: ${JSON.stringify(raw.slice(0, 40))}`);
-  }
-}
-
-function writeCursor(block) {
-  mkdirSync(dirname(CURSOR), { recursive: true });
-  writeFileSync(CURSOR, String(block));
-}
 
 // THE DEPLOY BLOCK IS CHECKED BEFORE ANYTHING IS WRITTEN, not when reconcile
 // reaches for it.
@@ -181,13 +151,13 @@ async function main() {
     contract,
     chainId,
     today,
-    lastReconciledBlock: readCursor(),
+    lastReconciledBlock: readCursor(CURSOR),
   });
 
-  // The cursor moves ONLY on a reconcile that actually completed. Advancing it
-  // after a partial read would skip whatever was in the blocks it never got to,
-  // and those events are never offered again.
-  if (summary.reconciled?.to !== undefined) writeCursor(summary.reconciled.to);
+  // The cursor moves ONLY on a reconcile that actually completed -- see
+  // nextCursor, which owns that rule and is tested on its own.
+  const advanceTo = nextCursor(summary);
+  if (advanceTo !== null) writeCursor(CURSOR, advanceTo);
 
   console.log(
     `clock: run finished in ${Date.now() - started}ms -- ` +
@@ -197,22 +167,10 @@ async function main() {
   );
   db.close();
 
-  // A run that stopped on gas is NOT a failure: it did exactly what it should,
-  // and tomorrow's run writes the same rows with the same day numbers. Anything
-  // aborted, or any token stuck with a paid agent and no artwork, is.
-  //
-  // A CONDEMNED CREDIT FAILS THE RUN TOO, added 2026-09-05. It used to exit
-  // ZERO: `dropped` was logged per entry as "stays queued", which reads exactly
-  // like the ordinary poison-row path, and systemd recorded success. A token's
-  // record is the artwork, so a day that cannot be written is not a routine
-  // refusal -- and this was the one queue with no terminal state and no failure
-  // signal at all.
-  if (summary.aborted) {
-    console.error(`clock: run ABORTED (${summary.aborted})`);
-    process.exitCode = 1;
-  } else if (summary.stuck.length > 0 || summary.stuckCredits.length > 0) {
-    process.exitCode = 1;
-  }
+  // What the run reports to systemd. The rule lives in exitCodeFor, which is
+  // tested directly; this only says the aborted case out loud.
+  if (summary.aborted) console.error(`clock: run ABORTED (${summary.aborted})`);
+  process.exitCode = exitCodeFor(summary);
 }
 
 // 16.7. A SHUTDOWN HANDLER, because the unit has TimeoutStartSec=600 and no

@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { spawn } from "node:child_process";
+import { join } from "node:path";
 import { openDb, migrate } from "../src/mirror/db.mjs";
 import { queries, PaymentNonceReusedError } from "../src/mirror/queries.mjs";
+import { seedPaidMint } from "./mirror-seed.mjs";
 
 /// Every test gets its own in-memory database, so no test can see another's rows.
 function fresh() {
@@ -244,4 +249,122 @@ test("a released reservation does not free its authorisation for reuse", () => {
     () => q.transact(() => q.insertMint({ tokenId: 2, toAddress: "0xb", keyId: "k1", payNonce: "0xdead" })),
     (err) => err instanceof PaymentNonceReusedError
   );
+});
+
+// ---------------------------------------------------------------------------
+// markMintWritten is ATOMIC -- test gap 33 / finding 4.L1
+// ---------------------------------------------------------------------------
+
+// The two statements move a token from "the Clock owes this agent a token" to
+// "the artwork exists", and a mint row written while its token row is not (or
+// the reverse) is a state nothing else in this service knows how to read.
+//
+// "Together" was a COMMENT and not a fact until 4.L1: the two ran outside any
+// transaction, so a crash between them left exactly the half-applied state the
+// comment promised was impossible -- and the Clock's unit could deliver a
+// SIGKILL until 16.7 closed that.
+//
+// The code was fixed; nothing tested it. This drops the `tokens` table so the
+// SECOND statement throws, and asserts the FIRST was rolled back. Without the
+// transaction the mint row would be left at 'written' with no artwork behind
+// it: the agent has paid, the mirror says it is done, and no queue will ever
+// pick it up again.
+test("markMintWritten rolls back the mint row when the token row cannot be written", () => {
+  const { db, q } = fresh();
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  seedPaidMint(q, { tokenId: 1, toAddress: "0xabc", keyId: "k1" });
+
+  const before = db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status;
+  assert.equal(before, "queued", "the row must start where the Clock would find it");
+
+  // Make the second statement fail, the way a crash between the two would.
+  db.exec("DROP TABLE tokens");
+
+  assert.throws(() => q.markMintWritten(1));
+
+  const after = db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status;
+  assert.equal(
+    after,
+    "queued",
+    "the mint row must NOT be left written with no token row: that is a paid agent with no artwork",
+  );
+});
+
+test("CONTROL: when both statements succeed, both rows move", () => {
+  const { db, q } = fresh();
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  seedPaidMint(q, { tokenId: 1, toAddress: "0xabc", keyId: "k1" });
+
+  q.markMintWritten(1);
+
+  assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "written");
+  assert.equal(db.prepare("SELECT status FROM tokens WHERE tokenId = 1").get().status, "written");
+});
+
+// ---------------------------------------------------------------------------
+// Two writers on one file -- test gap 32 / finding 4.M4
+// ---------------------------------------------------------------------------
+
+// TWO PROCESSES WRITE THIS FILE: the Warden on every check-in, and the Clock at
+// 00:05. node:sqlite's default busy timeout is 0 -- measured on the installed
+// Node, a second writer threw `database is locked` after 1 ms -- so before
+// 4.M4 an agent checking in at the moment the Clock ran was simply refused,
+// and the refusal looked like a bug in the tool rather than contention.
+//
+// WAL lets READERS through during a write; it does nothing for two WRITERS.
+// Only the timeout does, and every other test here uses `:memory:`, where
+// contention cannot happen at all. So the one setting that makes concurrent
+// writing work was unreachable from the suite.
+test("a contended write WAITS for the other writer rather than failing", async () => {
+  // A SECOND PROCESS, not a timer. node:sqlite is synchronous: a blocking
+  // retry loop in this thread cannot be interrupted by anything in this
+  // thread, so a setTimeout that releases the lock never runs and the write
+  // always exhausts the full timeout. The first draft of this test did that
+  // and "proved" the timeout does not work.
+  //
+  // Two processes is also the actual scenario: the Warden writes on every
+  // check-in and the Clock writes at 00:05, and they are different processes.
+  const dir = mkdtempSync(join(tmpdir(), "mro-mirror-"));
+  const path = join(dir, "state.db");
+  try {
+    const setup = openDb(path);
+    migrate(setup);
+    queries(setup).insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+    setup.close();
+
+    // The holder takes the write lock, says so, and releases it 400ms later.
+    const holder = spawn(process.execPath, ["-e", `
+      const { DatabaseSync } = require("node:sqlite");
+      const db = new DatabaseSync(${JSON.stringify(path)}, { timeout: 5000 });
+      db.exec("PRAGMA journal_mode = WAL");
+      db.exec("BEGIN IMMEDIATE");
+      db.prepare("UPDATE tokens SET owner = ? WHERE tokenId = ?").run("0xdef", 1);
+      process.stdout.write("locked\\n");
+      setTimeout(() => { db.exec("COMMIT"); db.close(); }, 400);
+    `]);
+
+    try {
+      await new Promise((resolve, reject) => {
+        holder.stdout.on("data", (d) => { if (String(d).includes("locked")) resolve(); });
+        holder.on("error", reject);
+        holder.on("exit", () => reject(new Error("the lock holder exited before taking the lock")));
+      });
+
+      const db = openDb(path);
+      const q = queries(db);
+      const started = Date.now();
+      // Blocks until the holder commits, then lands. With node:sqlite's
+      // DEFAULT timeout of 0 this throws `database is locked` after about 1ms.
+      q.insertToken({ tokenId: 2, keyId: "k2", owner: "0xabc", lastDay: 100, mintDay: 100 });
+      const waited = Date.now() - started;
+
+      assert.ok(waited > 100, `the write should have waited for the lock, took ${waited}ms`);
+      assert.equal(q.getToken(2)?.tokenId, 2, "and the waiting write must actually land");
+      db.close();
+    } finally {
+      holder.kill();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
