@@ -73,7 +73,26 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       const { tokenId, upgradeId, variant = 0 } = args;
       const token = q.getToken(tokenId);
       if (!token) return { ok: false, reason: "unknown-token" };
-      if (token.keyId !== ctx.keyId) return { ok: false, reason: "not-bound-to-caller" };
+      // 5.M2. THE MIRROR IS NOT THE AUTHORITY ON WHO THIS TOKEN IS BOUND TO.
+      // `rebind` is a token-owner call the Warden never sees: it lands on chain
+      // and reaches the mirror only at the next Clock run, so between those two
+      // moments `token.keyId` is stale BY DESIGN. Refusing on it alone locked a
+      // legitimately rebound agent out of its own token for up to a day --
+      // and here that means refusing something it is about to PAY for.
+      //
+      // The chain read is the same security control `checkin` performs, for the
+      // same reason and with the same null rule: a null means the RPC could not
+      // be reached, NOT that the caller is unbound, so refusing on null is the
+      // safe direction. Admitting on it would turn an outage into an open door.
+      //
+      // The gates below read the binding again on the paid route, because
+      // settlement takes seconds and a rebind can land inside that window.
+      if (token.keyId !== ctx.keyId) {
+        const onChain = await chain.boundKeyOf(tokenId);
+        if (!onChain || onChain !== keyIdToBytes32(ctx.keyId)) {
+          return { ok: false, reason: "not-bound-to-caller" };
+        }
+      }
 
       const mark = catalogue[upgradeId];
       if (!mark) return { ok: false, reason: "mark-inactive" };
