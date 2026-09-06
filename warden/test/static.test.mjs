@@ -148,3 +148,47 @@ test("a Warden built without the documents still starts and 404s them", async ()
     server.close();
   }
 });
+
+// Test gap 24 / finding 3.M3. The 401 is the piece's opening sentence to an
+// agent that has read nothing, and it names two urls: `docs` and `mcp`. Nothing
+// asserted either one could be FETCHED.
+//
+// The two halves were pinned in two files that never meet -- e2e/join.test.mjs
+// asserts the 401 carries the fields, static.test.mjs asserts llms.txt is
+// served -- and a test on each side of a gap does not close the gap. That is
+// exactly how `client` came to advertise /client.mjs for weeks while the server
+// answered 404 to it: both halves were tested, the JOIN between them was not.
+//
+// This follows the advertised url the way an arriving agent would: reads it out
+// of the refusal, and fetches it.
+test("every url the 401 advertises can actually be fetched", async () => {
+  const { server, base } = await start();
+  try {
+    // An unsigned POST is the arrival every agent makes first.
+    const refusal = await fetch(`${base}/mcp`, { method: "POST", body: "{}" });
+    assert.equal(refusal.status, 401);
+    const body = await refusal.json();
+
+    // The body names public urls on the configured domain; this test server
+    // answers on a loopback port, so follow the PATH each one names.
+    const docs = await fetch(`${base}${new URL(body.docs).pathname}`);
+    assert.equal(docs.status, 200, `the 401 advertises ${body.docs}, which does not serve`);
+    assert.equal(await docs.text(), LLMS, "and it serves the instructions, not something else");
+
+    // `mcp` is the other advertised url. It must not 404 -- it is gated, which
+    // is a different thing, and the 401 it answers is the door working.
+    const mcp = await fetch(`${base}${new URL(body.mcp).pathname}`, { method: "POST", body: "{}" });
+    assert.notEqual(mcp.status, 404, `the 401 advertises ${body.mcp}, which does not exist`);
+
+    // And the guard that would have caught `client`: every url in the body is
+    // checked, so a field added later cannot quietly point at nothing.
+    const advertised = Object.entries(body).filter(([, v]) => typeof v === "string" && v.startsWith("http"));
+    assert.deepEqual(
+      advertised.map(([k]) => k).sort(),
+      ["docs", "mcp"],
+      "a new url appeared in the 401: add it to this test or it is unverified",
+    );
+  } finally {
+    server.close();
+  }
+});

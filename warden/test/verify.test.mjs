@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { parseDictionary } from "structured-headers";
+import { verify } from "web-bot-auth";
+import { verifierFromJWK } from "web-bot-auth/crypto";
 import { verifyRequest, MAX_WINDOW_MS, coveredComponents, contentDigest, signatureAgentUrl, signatureLabel } from "../src/door/verify.mjs";
 
 const VECTORS = JSON.parse(
@@ -384,4 +386,104 @@ test("the signature label is read off Signature-Input", () => {
 
   const bare = new Request("https://example.com/mcp", { method: "POST" });
   assert.equal(signatureLabel(bare), null);
+});
+
+// ---------------------------------------------------------------------------
+// The published vectors, verified as SIGNATURES rather than mined for keys
+// ---------------------------------------------------------------------------
+
+// Test gap 20. The vectors in test/vectors/ are the Web Bot Auth draft's own
+// Appendix values, and until now the suite used them ONLY as a source of key
+// material: every test above re-signs with signatureHeaders() and checks the
+// result. That proves our verifier agrees with our SIGNER. It cannot fail if
+// both sides share a mistake, and it never once looked at the `signature` the
+// draft recorded.
+//
+// This feeds the recorded signature back in and asserts it verifies under the
+// vector's own key -- the only test here that would notice if this project and
+// the specification disagreed about what a signature base is.
+//
+// TWO THINGS MAKE IT AWKWARD, both dealt with rather than worked around:
+//
+//   The vectors cover only @authority, so they cannot go through
+//   verifyRequest -- its REQUIRED list demands @method, @path and
+//   content-digest, and would refuse them for "components" before reaching any
+//   cryptography. web-bot-auth's verify() is the layer underneath, and that is
+//   what this drives.
+//
+//   They expired on 2025-01-01. http-message-sig checks expiry with a bare
+//   `new Date()` and takes no clock, so the clock is frozen inside the vector's
+//   own validity window for the duration of the call. Expiry is not what is
+//   under test here; the signature is.
+const RealDate = globalThis.Date;
+
+/// Run `fn` with the global clock frozen at `ms`. Restores it even on a throw.
+function atTime(ms, fn) {
+  class Frozen extends RealDate {
+    constructor(...args) {
+      if (args.length === 0) super(ms);
+      else super(...args);
+    }
+    static now() { return ms; }
+  }
+  globalThis.Date = Frozen;
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => { globalThis.Date = RealDate; });
+}
+
+/// Every Ed25519 vector in the file, not just the first: there are two, and the
+/// second is the one carrying a Signature-Agent.
+const ED_VECTORS = VECTORS.filter((v) => v.key.kty === "OKP");
+
+function requestFromVector(v) {
+  const headers = { signature: v.signature, "signature-input": v.signature_input };
+  if (v.signature_agent) headers["signature-agent"] = v.signature_agent;
+  return { method: "GET", url: v.target_url, headers };
+}
+
+const verifyWithVectorKey = (v) => async (data, signature, params) => {
+  const verifier = await verifierFromJWK(v.key);
+  await verifier(data, signature, params);
+};
+
+test("the draft's own recorded signatures verify under the draft's own keys", async () => {
+  assert.equal(ED_VECTORS.length, 2, "both Ed25519 vectors must be exercised");
+
+  for (const v of ED_VECTORS) {
+    await atTime(v.created_ms + 1000, async () => {
+      await verify(requestFromVector(v), verifyWithVectorKey(v));
+    });
+  }
+});
+
+test("CONTROL: one flipped bit in a recorded signature is refused", async () => {
+  // Without this the test above would pass against a verifier that accepted
+  // anything -- which is precisely the failure mode of using the vectors as
+  // key material and never checking what they signed.
+  for (const v of ED_VECTORS) {
+    const raw = Buffer.from(v.signature.replace(/^[^:]+:/, "").replace(/:$/, ""), "base64");
+    raw[0] ^= 1;
+    const tampered = v.signature.replace(/:[^:]+:/, `:${raw.toString("base64")}:`);
+    const request = requestFromVector(v);
+    request.headers.signature = tampered;
+
+    await atTime(v.created_ms + 1000, async () => {
+      await assert.rejects(
+        () => verify(request, verifyWithVectorKey(v)),
+        /invalid signature/,
+      );
+    });
+  }
+});
+
+test("CONTROL: the frozen clock is put back, so no later test inherits it", () => {
+  assert.equal(globalThis.Date, RealDate, "the global Date was not restored");
+  // Compared against the vectors' own expiry rather than a hardcoded date:
+  // the property that matters is that we are no longer inside their window,
+  // and that stays true however far in the future this runs.
+  assert.ok(
+    Date.now() > Math.max(...ED_VECTORS.map((v) => v.expires_ms)),
+    "the clock is still frozen inside a vector's window",
+  );
 });
