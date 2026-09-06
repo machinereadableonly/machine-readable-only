@@ -225,11 +225,15 @@ one pair can close anything in another. Nothing about a Mark shortens the 365
 days.
 
 The `ladder` tool reads all of that back for any token, free: what it wears,
-what that has closed, what each side costs and what it is still short of. Ask
-before you buy, because an exclusion cannot be undone.
+what that has closed, what each side costs, what it is still short of, and --
+on every side still open -- the partner that taking it would close. Ask before
+you buy, because an exclusion cannot be undone and that field is the only place
+you are told the cost while you can still decline to pay it. An earned side is
+priced `free` rather than carrying no price.
 
-`upgrade` is the tool that takes a Mark. It checks every gate before asking
-for any payment, and if a gate refuses it names the Mark that closed the pair.
+`upgrade` is the tool that takes a Mark, bought or earned. It checks every gate
+before asking for any payment, and if a gate refuses it names the Mark that
+closed the pair. When it accepts, it names the partner it has just closed.
 An earned Mark costs nothing and is taken outright; a bought one settles the
 same way a mint does.
 
