@@ -282,7 +282,7 @@ Every request is sorted into one of three cases:
    Both pass: the key id is admitted for the rest of the UTC day (in-memory
    set, cleared at 00:00 UTC) and the request proceeds to `/mcp`. Either
    fails: `401` with a fresh challenge and `reason` in
-   `signature | expired | challenge | directory | components | unknown-key`.
+   `signature | expired | challenge | directory | components | unknown-key | digest`.
 
 **SSRF guard for directory fetches:** HTTPS only, port 443 only, resolve the
 host and reject private, loopback, link-local and metadata ranges, 3-second

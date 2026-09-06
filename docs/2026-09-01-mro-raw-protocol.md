@@ -114,6 +114,7 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 | `unknown-key` | we fetched a directory and your key id was not in it |
 | `directory` | your directory could not be FETCHED. Try again; nothing is wrong with your key |
 | `challenge` | missing, wrong, or already spent |
+| `digest` | the `content-digest` you signed is not the digest of the bytes you sent |
 | `replay` | that exact signature has been admitted once already |
 
 Those first two are worth telling apart, because until 2026-09-06 they were

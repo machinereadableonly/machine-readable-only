@@ -469,14 +469,17 @@ async function registerFreshKey(base) {
 
 /// Sign a message the way a real client would, for an arbitrary target URL
 /// (which may name a different authority than this server).
-async function signFor(privateJwk, targetUrl, body = "") {
+async function signFor(privateJwk, targetUrl, body = "", agentHeader = null) {
   const target = new URL(targetUrl);
   const signer = await signerFromJWK(privateJwk);
   const message = {
     method: "POST",
     url: target.toString(),
     headers: {
-      "signature-agent": `"https://${DOMAIN}"`,
+      // The legacy bare string by default; `agentHeader` sends the dictionary
+      // form the current draft requires. Set BEFORE signing, because the
+      // signature covers this header's value.
+      "signature-agent": agentHeader ?? `"https://${DOMAIN}"`,
       host: target.host,
       "content-digest": contentDigest(body),
     },
@@ -969,6 +972,85 @@ test("a registration nonce and a door challenge do not spend each other", async 
       body: JSON.stringify({ jwk: publicKey.export({ format: "jwk" }), nonce, proof }),
     });
     assert.equal((await reg.json()).ok, true, "the two sets must be independent");
+  } finally {
+    server.close();
+  }
+});
+
+// 3.M1, THROUGH THE DOOR. The header this door reads became a Structured Field
+// Dictionary keyed by the signature label; only the legacy bare string was
+// accepted, so an agent following the current specification could not enter --
+// and it was refused `unknown-key`, which sends a correct implementer to debug
+// its thumbprint. Verified live 2026-09-06 against
+// draft-meunier-webbotauth-httpsig-protocol-02: signers MUST send the
+// dictionary, a verifier MAY accept the string.
+test("a request whose Signature-Agent is a dictionary is admitted", async () => {
+  const { server, base } = await startServer();
+  try {
+    const { privateJwk } = await registerFreshKey(base);
+    const challengeRes = await fetch(`${base}/mcp`, { method: "POST" });
+    const { challenge } = await challengeRes.json();
+    const { headers, keyId } = await signFor(
+      privateJwk, `https://${DOMAIN}/mcp`, "", `sig1="https://${DOMAIN}"`
+    );
+    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
+
+    const res = await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: { ...headers, challenge, "challenge-response": answer },
+    });
+    assert.equal(res.status, 200, `the dictionary form must be admitted, got ${res.status}: ${await res.text()}`);
+  } finally {
+    server.close();
+  }
+});
+
+// The control: the legacy form is still admitted, because the draft permits a
+// verifier to accept it and agents in the wild still send it.
+test("CONTROL: the legacy bare-string Signature-Agent is still admitted", async () => {
+  const { server, base } = await startServer();
+  try {
+    const { privateJwk } = await registerFreshKey(base);
+    const { challenge } = await (await fetch(`${base}/mcp`, { method: "POST" })).json();
+    const { headers, keyId } = await signFor(privateJwk, `https://${DOMAIN}/mcp`);
+    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
+    const res = await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: { ...headers, challenge, "challenge-response": answer },
+    });
+    assert.equal(res.status, 200);
+  } finally {
+    server.close();
+  }
+});
+
+// 3.L2. The digest has to be over the bytes that ARRIVED. readBody decoded to
+// a utf8 STRING first, which replaces every invalid byte sequence with U+FFFD
+// -- so a body carrying one digested to something the client never sent, and an
+// honest request was refused `digest` with nothing to debug.
+test("a body with invalid utf-8 is digested as it arrived, not as it re-encodes", async () => {
+  const { server, base } = await startServer({
+    mcp: { nodeHandler: (req, res) => { res.writeHead(200); res.end("mcp-reached"); } },
+  });
+  try {
+    const { privateJwk } = await registerFreshKey(base);
+    const { challenge } = await (await fetch(`${base}/mcp`, { method: "POST" })).json();
+    // A lone 0xFF: valid as bytes, not valid utf-8. Buffer.toString("utf8")
+    // turns it into U+FFFD, whose sha-256 is a different digest entirely.
+    const body = Buffer.from([0x7b, 0x22, 0x61, 0x22, 0x3a, 0xff, 0x7d]);
+    assert.notEqual(
+      contentDigest(body), contentDigest(body.toString("utf8")),
+      "the two digests must differ, or this test proves nothing"
+    );
+    const { headers, keyId } = await signFor(privateJwk, `https://${DOMAIN}/mcp`, body);
+    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
+
+    const res = await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: { ...headers, challenge, "challenge-response": answer },
+      body,
+    });
+    assert.equal(res.status, 200, `expected admission, got ${res.status}: ${await res.text()}`);
   } finally {
     server.close();
   }

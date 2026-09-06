@@ -59,7 +59,13 @@ function readBody(req, cap) {
     };
     const onEnd = () => {
       cleanup();
-      resolve(Buffer.concat(chunks).toString("utf8"));
+      // 3.L2. THE BYTES, NOT A STRING. The door's content-digest has to be
+      // computed over what ARRIVED: `toString("utf8")` replaces every invalid
+      // byte sequence with U+FFFD, so a body carrying one digests to something
+      // the client never sent and an honest request is refused `digest` with
+      // nothing to debug. The JSON parser takes the same buffer and decodes it
+      // itself, so nothing downstream needs the string.
+      resolve(Buffer.concat(chunks));
     };
     const onError = (err) => {
       cleanup();
@@ -263,7 +269,7 @@ export function createServer(config) {
 
         let body;
         try {
-          body = JSON.parse(raw);
+          body = JSON.parse(raw.toString("utf8"));
         } catch {
           return json(res, 400, { ok: false, reason: "malformed" });
         }

@@ -71,6 +71,79 @@ const REQUIRED = ["@authority", "@method", "@path", "signature-agent", "content-
  * this code runs -- and a test that could only reach it through upstream would
  * be proving upstream's check, not this one.
  */
+/**
+ * The URL a `Signature-Agent` header names, whichever encoding it uses.
+ *
+ * 3.M1. THIS ACCEPTED ONLY THE LEGACY FORM, and the legacy form is the one the
+ * draft now tells signers not to send. web-bot-auth 0.1.3 treats the header as
+ * opaque -- it only checks presence -- so the encoding decision is entirely
+ * ours, and an agent following the current specification could not get in at
+ * all. Worse, it was refused `unknown-key`, which points a correct implementer
+ * at its thumbprint: the one thing that was not wrong.
+ *
+ * VERIFIED LIVE 2026-09-06, and the report this came from was one draft behind:
+ * draft-meunier-web-bot-auth-architecture-05 is marked "Replaced by
+ * draft-meunier-webbotauth-httpsig-protocol", whose -02 (August 2026) says
+ *
+ *   "`Signature-Agent` is a Dictionary Structured Header ... Its member values
+ *    MUST be String Items that contain a [URI], whose scheme MUST be `https`."
+ *
+ * and, of the bare string,
+ *
+ *   "A verifier MAY accept that form ... Signers MUST send the dictionary
+ *    form."
+ *
+ * So both are read, and neither is guessed at: the dictionary is parsed with
+ * the same RFC 8941 parser the component list uses, because every bypass this
+ * door has had came from treating a structured field as text.
+ *
+ * Returns the URL string, or null when the header is absent or unusable. The
+ * caller refuses on null.
+ */
+/**
+ * The label of the first signature in `Signature-Input` -- `sig1` in
+ * `sig1=("@authority" ...)`.
+ *
+ * It is the key a dictionary `Signature-Agent` is expected to use, so it is
+ * read from the request rather than assumed to be "sig1". Null when the header
+ * is missing or will not parse, in which case a single-member dictionary is
+ * still unambiguous and anything else is refused.
+ */
+export function signatureLabel(request) {
+  const input = headerOf(request, "signature-input");
+  if (typeof input !== "string") return null;
+  try {
+    const [first] = parseDictionary(input).keys();
+    return first ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function signatureAgentUrl(value, label = null) {
+  if (typeof value !== "string" || value.trim() === "") return null;
+
+  // The dictionary form first, because it is what a current signer sends.
+  try {
+    const dict = parseDictionary(value);
+    if (dict.size > 0) {
+      // Keyed by the label of the signature it belongs to. With one member the
+      // key cannot be ambiguous; with several, only the one covering THIS
+      // signature is ours to use.
+      const entry = (label && dict.get(label)) ?? (dict.size === 1 ? [...dict.values()][0] : null);
+      if (!entry) return null;
+      const [item] = entry;
+      return typeof item === "string" ? item : null;
+    }
+  } catch {
+    // Not a dictionary. Fall through to the legacy string.
+  }
+
+  // The legacy bare sf-string: `Signature-Agent: "https://host"`.
+  const bare = value.trim().replace(/^"|"$/g, "");
+  return bare === "" ? null : bare;
+}
+
 export function coveredComponents(base) {
   const marker = '"@signature-params": ';
   const at = base.lastIndexOf(marker);
@@ -101,7 +174,10 @@ export function coveredComponents(base) {
  * inside the verifier callback rather than before the call.
  */
 export async function verifyRequest(request, lookupKey) {
-  const signatureAgent = headerOf(request, "signature-agent");
+  // The header as it arrived, and the URL it names -- which are not the same
+  // thing since the field became a dictionary. See signatureAgentUrl.
+  const signatureAgentHeader = headerOf(request, "signature-agent");
+  const signatureAgent = signatureAgentUrl(signatureAgentHeader, signatureLabel(request));
   let reason = "signature";
   let verifiedKeyId = null;
   let verifiedExpiresAt = null;
