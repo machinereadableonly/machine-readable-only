@@ -241,7 +241,18 @@ return visits, so the artwork is the agent's own history of coming back.
   `unknown-key` (that reason was previously UNREACHABLE), and 429
   `rate-limited` is new. Both are documented in the protocol doc, `llms.txt`
   and the skill.
-  **WHAT REMAINS: Phase 4 (the quality report's 69 findings + 46 test gaps)**,
+  **PHASE 4'S FINDINGS ARE DONE TOO, 2026-09-06, PUSHED AND NOT DEPLOYED** --
+  all 51 quality Mediums and Lows, commits `9e2bec4` to `f536899`. The Years
+  attribute counts past ten again (it was fed the ring cap, so an eleven-year
+  token reported ten and the differential could not see it); `Signature-Agent`
+  is read as the DICTIONARY the current draft requires as well as the legacy
+  string; an aborted Clock run still reconciles; a Mark the chain refused reads
+  `refused` rather than `held`; the CLI exits non-zero on a refusal and its
+  cron line is pinned to UTC; `status` says when the next window opens and when
+  the run breaks; and `mro://contract` serves the ABI and the catalogue.
+  **THE LIVE WARDEN IS THE PHASE 3 BUILD** (`a4dd8d3`) -- Phase 4 changes
+  agent-facing answers, so restarting is a real deploy. Rehearse it first.
+  **WHAT REMAINS: the 46 TEST GAPS** (about a dozen closed as a side effect),
   plus the operator's five launch items C4.4-C4.8. The real finding count is 184
   (security 67, quality 74, creative 43) -- the "158" in older notes
   reconciles against nothing.
@@ -250,14 +261,15 @@ return visits, so the artwork is the agent's own history of coming back.
   **THE NGINX RATE LIMITS ARE NOT LIVE**: the template has them, the installed
   vhost was written from the old one, and applying them needs sudo. The
   application-level limiter added in Phase 3 is a different thing and IS live.
-  Read [[phase3-door-and-payment]], [[review-medium-low-2026-09-06]],
+  Read [[phase4-quality-findings]], [[check-the-finding-before-fixing-it]],
+  [[phase3-door-and-payment]], [[review-medium-low-2026-09-06]],
   [[creative-closeout-2026-09-05]], [[security-quality-closeout-2026-09-05]]
   and [[door-replay-and-key-argv]] before touching the door, the payment path,
   the Clock or a deploy script.
   **Rehearse every deploy** with `warden/tools/rehearse-start.sh`: it runs the
   real `main.mjs` against a COPY of production state, which is the only thing
   that can catch a bad boot check.
-  **Suites: contracts 304, warden 486, tools 70, client 37** (2026-09-06).
+  **Suites: contracts 309, warden 500, tools 72, client 40** (2026-09-06).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
