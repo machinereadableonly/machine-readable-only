@@ -73,52 +73,54 @@ library MarkRenderer {
         return marks & bit != 0;
     }
 
-    /// @notice The page behind everything. Aura tints it.
-    function field(uint256 marks) internal pure returns (string memory) {
-        return has(marks, AURA) ? "#fbeff2" : "#ffffff";
-    }
+    /// @dev The two live pages. Named because the cooled forms below are
+    /// derived from them and a literal in four places drifts.
+    string internal constant FIELD_WHITE = "#ffffff";
+    string internal constant AURA_FIELD = "#fbeff2";
 
-    /// @dev The unearned year, half way to the page. C4.10.
+    /// @dev The page after a year away, and half way there. C4.10.
     ///
-    /// Four constants rather than one blend, because mixing two hex strings on
-    /// chain costs bytes and gas for an answer that can only ever be one of
-    /// these four. `tools/render-token.mjs` computes them with `mixHex` and
-    /// `Renderer.t.sol` diffs the two renderers, so a drifted constant fails
-    /// the suite rather than reaching a token.
-    string internal constant GHOST_HALF = "#faf7f8";
-    string internal constant GHOST_HALF_AURA = "#f8eff1";
-    string internal constant ACHE_HALF = "#f1e6e9";
-    string internal constant ACHE_HALF_AURA = "#efdee3";
+    /// Constants rather than arithmetic: the answer can only ever be one of
+    /// four, and `tools/render-token.mjs` computes them with `coolBy` so
+    /// `Renderer.t.sol`'s byte-for-byte diff catches a drift.
+    ///
+    /// COOLED BY A FIXED DELTA (25 of 255 over a full year), not toward a fixed
+    /// grey, so Aura's page keeps its colour and goes dusty rather than being
+    /// erased. A paid Mark must not be cancelled by the calendar.
+    string internal constant FIELD_HALF = "#f3f3f3";
+    string internal constant FIELD_COLD = "#e6e6e6";
+    string internal constant AURA_HALF = "#efe3e6";
+    string internal constant AURA_COLD = "#e2d6d9";
 
-    /// @notice Frame cells not yet earned, faded by how long the token has been
-    /// away. Ache deepens them, so the year ahead is visible from day one
-    /// rather than being almost invisible.
+    /// @notice The page behind everything. Aura tints it, and absence cools it.
     ///
-    /// @dev C4.10. Without the fade a token that never came back renders
-    /// BYTE-IDENTICAL to one minted this morning -- measured, not assumed
-    /// (tools/absence-check.mjs). A never-returned token holds level 1 and
-    /// streak 1 forever, and both `tierIndex(1)` and `lapsedIndex(1, ...)` are
-    /// already rung 0, so the HEART cannot carry absence: its rung is at the
-    /// floor on day one and stays there. The frame can carry it, because the
-    /// unearned year is the one part of the picture that is about time passing
-    /// rather than about the run.
+    /// @dev C4.10. A token that never returned holds level 1 and streak 1
+    /// forever, so both `tierIndex(1)` and `lapsedIndex(1, ...)` are already
+    /// rung 0 and the HEART cannot carry absence. Nor can the frame: measured,
+    /// fading the unearned year toward the page moves at most 17 of 255 on a
+    /// colour already at 1.145:1 against it, and darkening it instead collapses
+    /// the earned/unearned reading on a token that DID earn days. The page is
+    /// the only surface that reaches a token holding almost no ink -- and it
+    /// fixes the frame as a side effect, because against a cooler ground the
+    /// pale unearned year reads as a halo instead of vanishing.
     ///
-    /// Three steps toward the page:
-    ///   under 30 days   the ghost as it is -- a lapse is not yet an absence
-    ///   30 to 364       half way to the page
-    ///   365 and over    the page itself; the unearned year is gone
+    ///   under 30 days   the page as it is -- a lapse is not yet an absence
+    ///   30 to 364       half way to the cold
+    ///   365 and over    cold
     ///
     /// @param gap how long the token has been away, in days. Renderer computes
-    /// it, because the same branches that decide the RUNG decide this: a
-    /// resting token is sealed and a sunset one stops ageing on the day the
-    /// piece closed, and two rules disagreeing about when a token stopped would
-    /// draw two different tokens.
-    function ghost(uint256 marks, uint256 gap) internal pure returns (string memory) {
-        bool ache = has(marks, ACHE);
-        if (gap < 30) return ache ? ACHE_GHOST : Palette.ghost();
-        if (gap >= 365) return field(marks);
-        if (has(marks, AURA)) return ache ? ACHE_HALF_AURA : GHOST_HALF_AURA;
-        return ache ? ACHE_HALF : GHOST_HALF;
+    /// it, mirroring the branches that decide the rung.
+    function field(uint256 marks, uint256 gap) internal pure returns (string memory) {
+        bool aura = has(marks, AURA);
+        if (gap < 30) return aura ? AURA_FIELD : FIELD_WHITE;
+        if (gap >= 365) return aura ? AURA_COLD : FIELD_COLD;
+        return aura ? AURA_HALF : FIELD_HALF;
+    }
+
+    /// @notice Frame cells not yet earned. Ache deepens them, so the year ahead
+    /// is visible from day one rather than being almost invisible.
+    function ghost(uint256 marks) internal pure returns (string memory) {
+        return has(marks, ACHE) ? ACHE_GHOST : Palette.ghost();
     }
 
     /// @notice The earned day cells and the year rings. Vessel gilds them.
@@ -200,8 +202,8 @@ library MarkRenderer {
     }
 
     /// @notice The colour actually under the code block, which the eye erases to.
-    function ground(uint256 marks) internal pure returns (string memory) {
-        return has(marks, HUSH) ? HUSH_QUIET : field(marks);
+    function ground(uint256 marks, uint256 gap) internal pure returns (string memory) {
+        return has(marks, HUSH) ? HUSH_QUIET : field(marks, gap);
     }
 
     /// @notice The shape index. The EARNED Iris is always the target.

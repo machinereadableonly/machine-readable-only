@@ -183,38 +183,56 @@ export function lapsedColour(streak, lastDay, today) {
  * and the served copy says the colour goes.
  */
 /**
- * The unearned frame cells, faded by how long the token has been away.
+ * The page behind everything, cooled by how long the token has been away.
  *
- * C4.10. Without this a token that never came back renders BYTE-IDENTICAL to
- * one minted today -- measured, not assumed, by tools/absence-check.mjs: a
- * never-returned token holds level 1, streak 1 forever, and both tierIndex(1)
- * and lapsedIndex(1, ...) are already rung 0, so the heart cannot carry
- * absence. The frame can, because the unearned year is the one part of the
- * picture that is about time rather than about the run.
+ * C4.10. A token that never returned holds level 1 and streak 1 forever, so
+ * both tierIndex(1) and lapsedIndex(1, ...) are already rung 0 and the HEART
+ * cannot carry absence. Nor can the frame: MEASURED (tools/absence-delta.mjs),
+ * fading the unearned year toward the page moves at most 17 of 255 on a colour
+ * already at 1.145:1 against it -- a step between two things both
+ * indistinguishable from white. Darkening it instead is visible, but on a
+ * token that DID earn days it collapses the earned/unearned reading, which is
+ * the frame's whole job (tools/absence-candidates.mjs).
  *
- * Three steps toward the page, so the unearned year recedes as the absence
- * lengthens and a token that stopped a year ago shows only what it earned:
+ * The page is the only surface that reaches a token holding almost no ink, and
+ * it fixes the frame as a side effect: against a cooler ground the pale
+ * unearned year stops being invisible and reads as a halo. Three levels where
+ * there were two.
  *
- *   under 30 days   the ghost as it is -- a lapse is not yet an absence
- *   30 to 364       half way to the page
- *   365 and over    the page itself; the unearned year is gone
+ * Three steps, matching the rung ladder's shape:
  *
- * The gap mirrors rungFor's branches exactly, because two rules that disagree
- * about when a token stopped would draw two different tokens: a RESTING token
- * is sealed and its frame is final, and a SUNSET token stops ageing on the day
- * the piece closed.
+ *   under 30 days   the page as it is -- a lapse is not yet an absence
+ *   30 to 364       half way to the cold
+ *   365 and over    cold
+ *
+ * COOLED BY A FIXED DELTA, not toward a fixed grey, so Aura's page keeps its
+ * colour and goes dusty rather than being erased. A paid Mark must not be
+ * cancelled by the calendar.
+ *
+ * @param gap how long the token has been away, in days -- 0 for a live token,
+ * for a rested one (sealed: the image is final) and for a sunset one past the
+ * day the piece closed. Mirrors rungFor's branches, because two rules that
+ * disagreed about when a token stopped would draw two different tokens.
  */
-export function ghostFor({
-  marks, lastDay, today, resting = false, sunset = false, sunsetDay = 0,
-}) {
-  const base = hasMark(marks, ACHE) ? ACHE_GHOST : GHOST;
-  const field = hasMark(marks, AURA) ? AURA_FIELD : FIELD;
-  if (resting) return base;
-  const end = sunset ? sunsetDay : today;
-  const gap = end > lastDay ? end - lastDay : 0;   // a backwards clock is not an absence
+export function fieldFor({ marks, gap = 0 }) {
+  const base = hasMark(marks, AURA) ? AURA_FIELD : FIELD;
   if (gap < 30) return base;
-  if (gap >= 365) return field;
-  return mixHex(base, field);
+  return coolBy(base, gap >= 365 ? COLD_DELTA : COLD_DELTA / 2);
+}
+
+/// How far the page cools over a full year of absence, per channel. 25 of 255
+/// puts a bare page on #e6e6e6, chosen by the operator 2026-09-06 from a rendered sheet:
+/// unmistakable at thumbnail size, where the first month's marketplace pages
+/// are seen, without reading as a greyed-out error state.
+export const COLD_DELTA = 25;
+
+/// Every channel reduced by the same amount, floored at zero. Solidity cannot
+/// afford this at render time, so Palette holds the results as constants and
+/// the parity diff asserts they still agree.
+export function coolBy(hex, delta) {
+  const part = (i) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  const one = (i) => Math.max(0, Math.round(part(i) - delta)).toString(16).padStart(2, "0");
+  return `#${one(0)}${one(1)}${one(2)}`;
 }
 
 /// The midpoint of two #rrggbb colours. Solidity cannot afford this at render
@@ -224,6 +242,21 @@ export function mixHex(a, b) {
   const part = (hex, i) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
   const mid = (i) => Math.round((part(a, i) + part(b, i)) / 2).toString(16).padStart(2, "0");
   return `#${mid(0)}${mid(1)}${mid(2)}`;
+}
+
+/**
+ * How long the token has been away, in days.
+ *
+ * THE BRANCHES MIRROR rungFor DELIBERATELY. Rest seals the image at the moment
+ * the owner chose, so a rested token's page is final however long the calendar
+ * runs on; a sunset ages every token only to the day the PIECE closed. A gap
+ * rule that disagreed with the rung rule about when a token stopped would draw
+ * one token whose heart says kept and whose page says gone.
+ */
+export function absenceOf({ lastDay, today, resting = false, sunset = false, sunsetDay = 0 }) {
+  if (resting) return 0;
+  const end = sunset ? sunsetDay : today;
+  return end > lastDay ? end - lastDay : 0;   // a backwards clock is not an absence
 }
 
 export function rungFor({
@@ -418,10 +451,10 @@ export function renderSvg(modules, want, size, state) {
   // keeps `colour` unaffected; only the code block's two regions exchange.
   const { heartInk, noiseInk: noise } = inks(marks, rung);
   const gold = hasMark(marks, VESSEL) ? VESSEL_GOLD : null;
-  // C4.10: the ghost fades with absence, so a token that never returned stops
-  // looking like one minted this morning.
-  const ghost = ghostFor({ marks, lastDay, today, resting, sunset, sunsetDay });
-  const field = hasMark(marks, AURA) ? AURA_FIELD : FIELD;
+  const ghost = hasMark(marks, ACHE) ? ACHE_GHOST : GHOST;
+  // C4.10: the page cools with absence, so a token that never returned stops
+  // looking like one minted this morning. absenceOf mirrors rungFor's branches.
+  const field = fieldFor({ marks, gap: absenceOf({ lastDay, today, resting, sunset, sunsetDay }) });
   const hush = hasMark(marks, HUSH);
   const beat = hasMark(marks, BEAT);
 

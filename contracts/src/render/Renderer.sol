@@ -111,7 +111,7 @@ contract Renderer is IRenderer {
             _blockOff(v.level) + QUIET,
             MarkRenderer.irisShape(v.marks),
             MarkRenderer.eyeInk(v.marks, base),
-            MarkRenderer.ground(v.marks)
+            MarkRenderer.ground(v.marks, _absence(v))
         );
     }
 
@@ -230,7 +230,7 @@ contract Renderer is IRenderer {
             abi.encodePacked(
                 open,
                 MarkRenderer.defs(v.marks, heartInk),
-                '<rect width="', c, '" height="', c, '" fill="', MarkRenderer.field(v.marks), '"/>',
+                '<rect width="', c, '" height="', c, '" fill="', MarkRenderer.field(v.marks, _absence(v)), '"/>',
                 _quiet(v.marks, _blockOff(v.level))
             )
         );
@@ -250,7 +250,7 @@ contract Renderer is IRenderer {
         return string(
             abi.encodePacked(
                 FrameRenderer.paths(
-                    v, MarkRenderer.frameFill(v.marks, colour), MarkRenderer.ghost(v.marks, _absence(v))
+                    v, MarkRenderer.frameFill(v.marks, colour), MarkRenderer.ghost(v.marks)
                 ),
                 CodeRenderer.paths(
                     v.code,

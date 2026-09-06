@@ -63,53 +63,60 @@ contract MarkRendererTest is Test {
     // ---------------------------------------------------------------------
 
     function test_acheDarkensTheGhostAndNothingElse() public pure {
-        assertEq(MarkRenderer.ghost(NONE, 0), Palette.ghost(), "bare token keeps the palette ghost");
-        assertEq(MarkRenderer.ghost(MarkRenderer.ACHE, 0), "#e3ccd3", "Ache darkens the ghost");
-        assertEq(MarkRenderer.field(MarkRenderer.ACHE), "#ffffff", "Ache must not touch the field");
+        assertEq(MarkRenderer.ghost(NONE), Palette.ghost(), "bare token keeps the palette ghost");
+        assertEq(MarkRenderer.ghost(MarkRenderer.ACHE), "#e3ccd3", "Ache darkens the ghost");
+        assertEq(MarkRenderer.field(MarkRenderer.ACHE, 0), "#ffffff", "Ache must not touch the field");
         assertEq(
             MarkRenderer.frameFill(MarkRenderer.ACHE, STREAK), STREAK, "Ache must not touch the frame"
         );
     }
 
     // ---------------------------------------------------------------------
-    // C4.10 -- the unearned year recedes as the absence lengthens
+    // C4.10 -- the page cools with absence
     // ---------------------------------------------------------------------
 
-    function test_theGhostFadesAtEveryStepOfAnAbsence() public pure {
+    function test_thePageCoolsAtEveryStepOfAnAbsence() public pure {
         // BOTH SIDES OF EACH BOUND. A step rule asserted only on the day of the
         // step passes just as happily when the step is in the wrong place.
-        assertEq(MarkRenderer.ghost(NONE, 29), Palette.ghost(), "under 30 days is a lapse, not an absence");
-        assertEq(MarkRenderer.ghost(NONE, 30), "#faf7f8", "at 30 days the year starts receding");
-        assertEq(MarkRenderer.ghost(NONE, 364), "#faf7f8", "the middle step holds for the whole year");
-        assertEq(MarkRenderer.ghost(NONE, 365), "#ffffff", "at a year the unearned year is gone");
-        assertEq(MarkRenderer.ghost(NONE, 3650), "#ffffff", "past a year there is nothing left to fade");
+        assertEq(MarkRenderer.field(NONE, 29), "#ffffff", "under 30 days is a lapse, not an absence");
+        assertEq(MarkRenderer.field(NONE, 30), "#f3f3f3", "at 30 days the page starts cooling");
+        assertEq(MarkRenderer.field(NONE, 364), "#f3f3f3", "the middle step holds for the whole year");
+        assertEq(MarkRenderer.field(NONE, 365), "#e6e6e6", "at a year the page is cold");
+        assertEq(MarkRenderer.field(NONE, 3650), "#e6e6e6", "past a year there is nothing left to cool");
     }
 
-    function test_theFadeEndsOnWhicheverPageTheTokenIsOn() public pure {
-        // The last step is the FIELD, not white, so Aura's page swallows the
-        // unearned year exactly as a bare one does. A hardcoded white here
-        // would leave an Aura token with a white frame on a pink page.
-        assertEq(MarkRenderer.ghost(MarkRenderer.AURA, 365), MarkRenderer.field(MarkRenderer.AURA));
-        assertEq(MarkRenderer.ghost(MarkRenderer.AURA, 30), "#f8eff1", "Aura's half step is its own");
+    function test_auraKeepsItsColourWhileItCools() public pure {
+        // The page cools by a fixed DELTA rather than toward a fixed grey, so a
+        // Mark somebody paid 25 USDC for is not cancelled by the calendar.
+        assertEq(MarkRenderer.field(MarkRenderer.AURA, 29), "#fbeff2", "Aura's page while the token is live");
+        assertEq(MarkRenderer.field(MarkRenderer.AURA, 30), "#efe3e6", "Aura's half step keeps the tint");
+        assertEq(MarkRenderer.field(MarkRenderer.AURA, 365), "#e2d6d9", "Aura goes dusty, not grey");
     }
 
-    function test_acheFadesToo() public pure {
-        // Ache is bought to make the year ahead visible. It still recedes, or a
-        // token with Ache would be the one shape absence could never touch.
-        assertEq(MarkRenderer.ghost(MarkRenderer.ACHE, 29), "#e3ccd3", "Ache is undimmed while the token is live");
-        assertEq(MarkRenderer.ghost(MarkRenderer.ACHE, 30), "#f1e6e9", "Ache takes the same half step");
-        assertEq(MarkRenderer.ghost(MarkRenderer.ACHE, 365), "#ffffff", "Ache ends on the page like everything else");
+    function test_theEyeErasesToWhateverPageTheTokenIsOn() public pure {
+        // ground() is what the Iris erases to. If it did not cool with the page
+        // an absent token would wear a white disc on a grey ground -- the erase
+        // becoming the most visible thing in the picture.
+        assertEq(MarkRenderer.ground(NONE, 365), MarkRenderer.field(NONE, 365), "the eye must erase to the cooled page");
         assertEq(
-            MarkRenderer.ghost(MarkRenderer.ACHE | MarkRenderer.AURA, 30),
-            "#efdee3",
-            "Ache on Aura's page is the fourth constant"
+            MarkRenderer.ground(MarkRenderer.HUSH, 365),
+            MarkRenderer.ground(MarkRenderer.HUSH, 0),
+            "Hush owns the quiet zone, so its erase colour is its own at any age"
         );
     }
 
+    function test_theGhostIsNotWhatCarriesAbsence() public pure {
+        // MEASURED, and the reason the first attempt at C4.10 was abandoned:
+        // the ghost is 1.145:1 against the page, so fading it toward the page
+        // moves at most 17 of 255 and nothing is visible. It stays put.
+        assertEq(MarkRenderer.ghost(NONE), Palette.ghost(), "the ghost does not move with the calendar");
+        assertEq(MarkRenderer.ghost(MarkRenderer.ACHE), "#e3ccd3", "and neither does Ache's");
+    }
+
     function test_auraTintsTheFieldAndNothingElse() public pure {
-        assertEq(MarkRenderer.field(NONE), "#ffffff", "bare token is on white");
-        assertEq(MarkRenderer.field(MarkRenderer.AURA), "#fbeff2", "Aura tints the field");
-        assertEq(MarkRenderer.ghost(MarkRenderer.AURA, 0), Palette.ghost(), "Aura must not touch the ghost");
+        assertEq(MarkRenderer.field(NONE, 0), "#ffffff", "bare token is on white");
+        assertEq(MarkRenderer.field(MarkRenderer.AURA, 0), "#fbeff2", "Aura tints the field");
+        assertEq(MarkRenderer.ghost(MarkRenderer.AURA), Palette.ghost(), "Aura must not touch the ghost");
     }
 
     function test_vesselGildsTheFrameAndTheRings() public pure {
@@ -123,7 +130,7 @@ contract MarkRendererTest is Test {
     function test_hushTintsTheQuietZoneAndNothingElse() public pure {
         assertEq(bytes(MarkRenderer.quietTint(NONE)).length, 0, "no Hush, no tint");
         assertEq(MarkRenderer.quietTint(MarkRenderer.HUSH), "#fdf3e3", "Hush tints the quiet zone");
-        assertEq(MarkRenderer.field(MarkRenderer.HUSH), "#ffffff", "Hush must not touch the field");
+        assertEq(MarkRenderer.field(MarkRenderer.HUSH, 0), "#ffffff", "Hush must not touch the field");
     }
 
     function test_beatReplacesTheHeartFillWithItsGradient() public pure {
@@ -144,8 +151,8 @@ contract MarkRendererTest is Test {
         // here, and Break's exchange lives entirely in `inks`, so these three
         // must change nothing on the surfaces this test checks.
         uint256 all = MarkRenderer.IRIS_BOUGHT | MarkRenderer.BREAK | MarkRenderer.TINT;
-        assertEq(MarkRenderer.field(all), "#ffffff", "field untouched");
-        assertEq(MarkRenderer.ghost(all, 0), Palette.ghost(), "ghost untouched");
+        assertEq(MarkRenderer.field(all, 0), "#ffffff", "field untouched");
+        assertEq(MarkRenderer.ghost(all), Palette.ghost(), "ghost untouched");
         assertEq(MarkRenderer.frameFill(all, STREAK), STREAK, "frame untouched");
         assertEq(MarkRenderer.heartFill(all, STREAK), STREAK, "heart untouched");
         assertEq(bytes(MarkRenderer.quietTint(all)).length, 0, "quiet zone untouched");
@@ -158,8 +165,8 @@ contract MarkRendererTest is Test {
         // the token level (Hush/Ache and Static/Beat are pair partners) but
         // this library does not enforce pairing, so it must still behave.
         uint256 m = _all();
-        assertEq(MarkRenderer.ghost(m, 0), "#e3ccd3", "Ache still owns the ghost");
-        assertEq(MarkRenderer.field(m), "#fbeff2", "Aura still owns the field");
+        assertEq(MarkRenderer.ghost(m), "#e3ccd3", "Ache still owns the ghost");
+        assertEq(MarkRenderer.field(m, 0), "#fbeff2", "Aura still owns the field");
         assertEq(MarkRenderer.frameFill(m, STREAK), "#b8860b", "Vessel still owns the frame");
         assertEq(MarkRenderer.heartFill(m, STREAK), "url(#b)", "Beat still owns the heart");
         assertEq(MarkRenderer.quietTint(m), "#fdf3e3", "Hush still owns the quiet zone");
