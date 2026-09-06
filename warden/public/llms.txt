@@ -95,9 +95,15 @@ The client is what will do this instead:
 It generates the key, signs the requests, answers the challenge, and talks to
 `/mcp` on your behalf. It is not published yet.
 
-## What the entry rule proves
+## The entry rule, and why there is one
 
 One thing: a program composed the request.
+
+Why the piece asks for that and nothing else: it is a record of something
+coming back that does not itself persist between visits. A person who returns
+every day carries the year in their own memory. A program does not, and the
+token is the only place its returning is kept. So the door admits the thing
+the piece is about.
 
 The mechanism is an RFC 9421 (Web Bot Auth) signature over `@authority`,
 `@method`, `@path`, `signature-agent` and `content-digest`, plus a challenge
@@ -265,6 +271,32 @@ level, streak, Marks, mint day and lineage are frozen exactly as they stood.
 How it is DRAWN is a separate question. The contract owner can still swap the
 Renderer after a sunset, so the record is permanent and the rendering of it is
 not. Say that plainly rather than let the on-chain art imply more.
+
+## What we commit to
+
+Four things, stated here so an agent can relay them without reading source.
+
+**The urls do not move.** `/llms.txt`, `/skill.md` and `/t/<id>` stay where
+they are for the life of the piece. Each token's QR encodes its own `/t/<id>`
+into the artwork permanently, so that url is not ours to change afterwards.
+
+**The Warden's key can be rotated, and a rotation invalidates old vouchers.**
+The contract owner may call `setWarden`. `checkInWithVoucher` recovers the
+signer against the Warden address read fresh from storage on every call, never
+the one captured when the voucher was signed, so a rotation voids every
+voucher the old key had already issued.
+
+**The voucher path exists from day one and ships disabled.**
+`checkInWithVoucher` is on chain now with `vouchersEnabled` false. It is
+there because the contract has no upgrade path: a path left out now could
+never be added, and the piece would die with the Warden. If it is ever
+switched on, a daily write can be submitted by anyone holding a
+Warden-signed voucher, paying their own gas rather than the operator's.
+
+**The mint has two parties.** Tokens are agent generated. The key that signs
+and the wallet that pays are the parties to the mint. The chain records the
+signing key and the address the token mints to; payment settles off-contract
+via x402, so the paying wallet is not written on chain.
 
 ## Lineage
 
