@@ -184,11 +184,11 @@ already in flight, and nothing else.</p>
 </tr>
 <tr>
 <td><code>unknown-key</code></td>
-<td>we could not find that key id</td>
+<td>we fetched a directory and your key id was not in it</td>
 </tr>
 <tr>
 <td><code>directory</code></td>
-<td>your directory could not be fetched. Ours, not yours: try again</td>
+<td>your directory could not be FETCHED. Try again; nothing is wrong with your key</td>
 </tr>
 <tr>
 <td><code>challenge</code></td>
@@ -199,6 +199,16 @@ already in flight, and nothing else.</p>
 <td>that exact signature has been admitted once already</td>
 </tr>
 </tbody></table>
+<p>Those first two are worth telling apart, because until 2026-09-06 they were
+not: a directory we could not reach was reported as <code>unknown-key</code>, which sends
+you to re-derive the thumbprint -- the one trap named below -- for a key that
+was never wrong. <code>unknown-key</code> now means we read a directory and your key was
+absent from it. <code>directory</code> means we never got to read one. If you sign for an
+authority that hosts no directory, <code>directory</code> is what you will get.</p>
+<p>A signed request can also be refused <strong>429 <code>rate-limited</code></strong>, which is a budget
+and not a rejection: 60 tool calls a minute, counted against your verified key
+id. Wait and call again; it refills continuously. Nothing an honest agent does
+comes close to it -- a token is checked in once a UTC day.</p>
 <h2>2. Have a key we can find</h2>
 <p>The key is an <strong>Ed25519</strong> keypair. Your key id is the <strong>RFC 7638 JWK
 thumbprint</strong> of the public key, base64url.</p>
@@ -286,19 +296,29 @@ Content-Type: application/http-message-signatures-directory+json
 <p>Registering here means sending <code>Signature-Agent: &quot;https://&lt;domain&gt;&quot;</code> -- ours,
 because we are the ones holding your key.</p>
 <h2>3. Sign the request</h2>
-<p>RFC 9421 HTTP Message Signatures, Web Bot Auth profile. Four headers go on
-every <code>/mcp</code> request. Here is a real set:</p>
+<p>RFC 9421 HTTP Message Signatures, Web Bot Auth profile. Six headers go on
+every <code>/mcp</code> request. Here is a real set, captured off the wire:</p>
 <pre><code>signature-agent: &quot;https://&lt;domain&gt;&quot;
-Signature: sig1=:5C3hhnZglRjetkvKUx2MUBYuIcrenPZhGE3rf69FJCxNem2SSeghqfhinMaaJeW26jRboQO40bynu4/SE+MQBg==:
-Signature-Input: sig1=(&quot;@authority&quot; &quot;@method&quot; &quot;@path&quot; &quot;signature-agent&quot;);created=1788291258;keyid=&quot;gkKHv4HPNo5hOT9kFD8Ig5ZVhPQdT-2A42ULHj00TBA&quot;;alg=&quot;ed25519&quot;;expires=1788291318;nonce=&quot;JFYPvAppn...&quot;;tag=&quot;web-bot-auth&quot;
-challenge: i8mp0lOoiyw9yF_n9_XykWlxSbZqFYZoQ--qCcr3W-g.1788291258605.5c60802915cc77653a64208251c9068c3851d748797e0b9b8b990412bfc839ee
-challenge-response: 05daa76ef95a2e6d4fcd3334f23cbb07fd5196f27976af423f73160e0a76eb3f
+host: &lt;domain&gt;
+content-digest: sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:
+Signature: sig1=:dlaEbjSJiVOJknv5jiJaTKvqbIyfBkJoQzkrcwUVUnm2ozDmcoUZzRFfDHOrHku+XZzSYyJnQPRWC6NNSM9+Aw==:
+Signature-Input: sig1=(&quot;@authority&quot; &quot;@method&quot; &quot;@path&quot; &quot;signature-agent&quot; &quot;content-digest&quot;);created=1788678057;keyid=&quot;xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo&quot;;alg=&quot;ed25519&quot;;expires=1788678117;nonce=&quot;EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==&quot;;tag=&quot;web-bot-auth&quot;
+challenge: Py2tTQdqkPZR45S7kHJ1jQLxehSErNpCZfWZslvhXhg.1788678057537.5f273353bb89e3742e619b85513e4e0f4571e221a2c01461c9bcd26a8d02810b
+challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd68ff1
 </code></pre>
+<p>That digest is of the EMPTY string, because this capture signs a GET-shaped
+knock with no body. Yours is of the exact bytes you send.</p>
 <p>Four rules, all enforced, all refused with <code>components</code> or <code>expired</code> if broken:</p>
 <ul>
-<li><p><strong>The signature must cover exactly these components:</strong> <code>@authority</code>,
+<li><p><strong>The signature must cover at least these components:</strong> <code>@authority</code>,
 <code>@method</code>, <code>@path</code>, <code>signature-agent</code>, <code>content-digest</code>. The standard
 mandates only <code>@authority</code>; the other four are this service&#39;s own rule.</p>
+<p>At least, not exactly: the door checks that each of the five is covered, so
+a signature covering more is admitted. That is not a hole -- the library
+builds the signature base from the request itself rather than from anything
+you send, so extra components only ever bind MORE of your request -- and the
+rule is written this way because &quot;exactly&quot; would have you build a client
+more brittle than it needs to be.</p>
 <p><strong><code>content-digest</code> is what binds the signature to the BODY, and it is not
 optional.</strong> Send RFC 9530&#39;s <code>sha-256=:&lt;base64 of SHA-256 of the exact bytes you send&gt;:</code> and cover it in the signature. Serialise your JSON ONCE and sign
 the same string you send -- re-serialising an equivalent object produces a

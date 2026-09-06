@@ -111,10 +111,22 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 | `signature` | the signature did not verify |
 | `components` | it verified, but did not cover the required components |
 | `expired` | the signature window exceeds five minutes, or the challenge is stale |
-| `unknown-key` | we could not find that key id |
-| `directory` | your directory could not be fetched. Ours, not yours: try again |
+| `unknown-key` | we fetched a directory and your key id was not in it |
+| `directory` | your directory could not be FETCHED. Try again; nothing is wrong with your key |
 | `challenge` | missing, wrong, or already spent |
 | `replay` | that exact signature has been admitted once already |
+
+Those first two are worth telling apart, because until 2026-09-06 they were
+not: a directory we could not reach was reported as `unknown-key`, which sends
+you to re-derive the thumbprint -- the one trap named below -- for a key that
+was never wrong. `unknown-key` now means we read a directory and your key was
+absent from it. `directory` means we never got to read one. If you sign for an
+authority that hosts no directory, `directory` is what you will get.
+
+A signed request can also be refused **429 `rate-limited`**, which is a budget
+and not a rejection: 60 tool calls a minute, counted against your verified key
+id. Wait and call again; it refills continuously. Nothing an honest agent does
+comes close to it -- a token is checked in once a UTC day.
 
 ## 2. Have a key we can find
 
@@ -222,20 +234,32 @@ because we are the ones holding your key.
 
 ## 3. Sign the request
 
-RFC 9421 HTTP Message Signatures, Web Bot Auth profile. Four headers go on
-every `/mcp` request. Here is a real set:
+RFC 9421 HTTP Message Signatures, Web Bot Auth profile. Six headers go on
+every `/mcp` request. Here is a real set, captured off the wire:
 
     signature-agent: "https://<domain>"
-    Signature: sig1=:5C3hhnZglRjetkvKUx2MUBYuIcrenPZhGE3rf69FJCxNem2SSeghqfhinMaaJeW26jRboQO40bynu4/SE+MQBg==:
-    Signature-Input: sig1=("@authority" "@method" "@path" "signature-agent");created=1788291258;keyid="gkKHv4HPNo5hOT9kFD8Ig5ZVhPQdT-2A42ULHj00TBA";alg="ed25519";expires=1788291318;nonce="JFYPvAppn...";tag="web-bot-auth"
-    challenge: i8mp0lOoiyw9yF_n9_XykWlxSbZqFYZoQ--qCcr3W-g.1788291258605.5c60802915cc77653a64208251c9068c3851d748797e0b9b8b990412bfc839ee
-    challenge-response: 05daa76ef95a2e6d4fcd3334f23cbb07fd5196f27976af423f73160e0a76eb3f
+    host: <domain>
+    content-digest: sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:
+    Signature: sig1=:dlaEbjSJiVOJknv5jiJaTKvqbIyfBkJoQzkrcwUVUnm2ozDmcoUZzRFfDHOrHku+XZzSYyJnQPRWC6NNSM9+Aw==:
+    Signature-Input: sig1=("@authority" "@method" "@path" "signature-agent" "content-digest");created=1788678057;keyid="xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo";alg="ed25519";expires=1788678117;nonce="EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==";tag="web-bot-auth"
+    challenge: Py2tTQdqkPZR45S7kHJ1jQLxehSErNpCZfWZslvhXhg.1788678057537.5f273353bb89e3742e619b85513e4e0f4571e221a2c01461c9bcd26a8d02810b
+    challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd68ff1
+
+That digest is of the EMPTY string, because this capture signs a GET-shaped
+knock with no body. Yours is of the exact bytes you send.
 
 Four rules, all enforced, all refused with `components` or `expired` if broken:
 
-- **The signature must cover exactly these components:** `@authority`,
+- **The signature must cover at least these components:** `@authority`,
   `@method`, `@path`, `signature-agent`, `content-digest`. The standard
   mandates only `@authority`; the other four are this service's own rule.
+
+  At least, not exactly: the door checks that each of the five is covered, so
+  a signature covering more is admitted. That is not a hole -- the library
+  builds the signature base from the request itself rather than from anything
+  you send, so extra components only ever bind MORE of your request -- and the
+  rule is written this way because "exactly" would have you build a client
+  more brittle than it needs to be.
 
   **`content-digest` is what binds the signature to the BODY, and it is not
   optional.** Send RFC 9530's `sha-256=:<base64 of SHA-256 of the exact bytes

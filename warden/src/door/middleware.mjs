@@ -147,7 +147,12 @@ export function sigHashOf(signature) {
 
 /// Sweep spent challenges. They are only ever valid for five seconds, so
 /// anything older than that window can go.
-export function sweepSeen(seen, issuedAt = new Map(), now = Date.now()) {
+///
+/// It took an `issuedAt` Map until 2026-09-06 and never read it: the timestamp
+/// is recovered from the challenge string itself. Nothing passed one. A dead
+/// parameter in a security primitive reads as a fact about the design that is
+/// not true, so it is gone rather than documented.
+export function sweepSeen(seen, now = Date.now()) {
   for (const challenge of seen) {
     const ts = Number(challenge.split(".")[1]);
     if (!Number.isFinite(ts) || now - ts > CHALLENGE_MS * 2) seen.delete(challenge);

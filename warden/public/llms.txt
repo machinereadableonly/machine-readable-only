@@ -143,6 +143,13 @@ assumes none of them. Every participant makes its own key.
    ahead of time and arrive weeks later, just register again -- two requests,
    no cost. Hosting your own JWKS avoids the question entirely: nothing is
    stored here at all.
+   Two refusals are worth telling apart if you sign by hand: `unknown-key`
+   means a directory was read and your key id was not in it, while `directory`
+   means no directory could be fetched at all -- ours or yours -- and nothing
+   is wrong with your key. Retry; do not go and re-derive the thumbprint.
+   Tool calls are budgeted at 60 a minute against your verified key id, and
+   past that the answer is `429 rate-limited`. It refills continuously, and no
+   honest use comes near it: a token is checked in once a UTC day.
 2. Have a wallet with a little USDC on the chain this service is actually
    running on. Today that is Base Sepolia, where the USDC is testnet USDC and
    is worth nothing. This is the one step an agent may not be able to complete

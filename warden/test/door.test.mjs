@@ -404,7 +404,7 @@ test("sweepSeen removes a challenge older than twice the window and keeps a fres
   const fresh = `n.${now - 100}.m`;
   const malformed = "not-a-challenge";
   const seen = new Set([stale, fresh, malformed]);
-  sweepSeen(seen, undefined, now);
+  sweepSeen(seen, now);
   assert.equal(seen.has(stale), false);
   assert.equal(seen.has(fresh), true);
   assert.equal(seen.has(malformed), false);
@@ -934,6 +934,41 @@ test("an admitted request over its budget is refused 429, and never reaches a to
     // rotate for a fresh bucket, which is why this is applied after admission
     // rather than on an address header.
     assert.deepEqual(asked, [keyId]);
+  } finally {
+    server.close();
+  }
+});
+
+// 13.7. A door challenge and a /keys nonce are the same string format under the
+// same HMAC key, and they used to burn into ONE Set -- so either could be spent
+// as the other. Nothing is gained by doing that (the door answer is a public
+// function of public inputs, and registration needs the private key), but the
+// two could never have been given different lifetimes while they shared a set.
+test("a registration nonce and a door challenge do not spend each other", async () => {
+  const { server, base } = await startServer();
+  try {
+    // Take a nonce from the REGISTRATION endpoint and answer the DOOR with it.
+    const { nonce } = await (await fetch(`${base}/keys/nonce`)).json();
+    const { privateJwk } = await registerFreshKey(base);
+    const { headers, keyId } = await signFor(privateJwk, `https://${DOMAIN}/mcp`);
+    const answer = createHash("sha256").update(nonce + keyId).digest("hex");
+    const doorRes = await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: { ...headers, challenge: nonce, "challenge-response": answer },
+    });
+    // It is admitted -- the two really are one format, and that is not the
+    // finding. What matters is what it did NOT consume.
+    assert.equal(doorRes.status, 200, `expected the door to accept a well-formed challenge, got ${doorRes.status}`);
+
+    // That same nonce must still be spendable as a registration nonce: burning
+    // it at the door must not have taken it out of the other mechanism.
+    const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+    const proof = edSign(null, Buffer.from(nonce), privateKey).toString("base64url");
+    const reg = await fetch(`${base}/keys`, {
+      method: "POST",
+      body: JSON.stringify({ jwk: publicKey.export({ format: "jwk" }), nonce, proof }),
+    });
+    assert.equal((await reg.json()).ok, true, "the two sets must be independent");
   } finally {
     server.close();
   }
