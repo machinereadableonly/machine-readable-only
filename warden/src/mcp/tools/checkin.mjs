@@ -75,21 +75,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
         }
       }
 
-      // batchCheckIn carries whenNotPaused and notSunset (:282) and reverts
-      // Resting(id) at :308. A credit written here that the Clock cannot land
-      // leaves the mirror permanently ahead of the chain -- the same class of
-      // bug as the mint-day credit, which is why both gates are read rather
-      // than assumed. This tool is FREE, so there is no settlement window and
-      // no second check.
-      const blocked = (await chainBlock(chain)) ?? (await tokenBlock(chain, tokenId, q));
-      if (blocked) return { ok: false, accepted: false, reason: blocked };
-
       const day = today();
-      // Level counts distinct credited days and never falls. A streak
-      // CONTINUES only when this day is the one immediately after the last
-      // credited day; any gap starts again at 1.
-      const level = token.level + 1;
-      const streak = day === token.lastDay + 1 ? token.streak + 1 : 1;
 
       // THE CHAIN REFUSES THIS DAY, SO THE MIRROR MUST TOO.
       //
@@ -115,6 +101,30 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
           onChainBy: onChainBy(token.lastDay),
         };
       }
+
+      // ONLY NOW THE CHAIN. Three eth_calls used to run ABOVE the guard above,
+      // on a tool that is FREE and has no per-caller budget -- so an agent
+      // looping check-in on its own token paid nothing and cost this service
+      // three RPC round trips per call, for ever. When the provider throttles,
+      // writesOpen answers "unreadable" and every PAID write refuses for
+      // everyone: the mint path denied through a free tool, from one key, for
+      // one dollar. Deciding what this process already knows first costs
+      // nothing and changes no answer.
+      //
+      // batchCheckIn carries whenNotPaused and notSunset (:282) and reverts
+      // Resting(id) at :308. A credit written here that the Clock cannot land
+      // leaves the mirror permanently ahead of the chain -- the same class of
+      // bug as the mint-day credit, which is why both gates are read rather
+      // than assumed. This tool is FREE, so there is no settlement window and
+      // no second check.
+      const blocked = (await chainBlock(chain)) ?? (await tokenBlock(chain, tokenId, q));
+      if (blocked) return { ok: false, accepted: false, reason: blocked };
+
+      // Level counts distinct credited days and never falls. A streak
+      // CONTINUES only when this day is the one immediately after the last
+      // credited day; any gap starts again at 1.
+      const level = token.level + 1;
+      const streak = day === token.lastDay + 1 ? token.streak + 1 : 1;
 
       // ONE FACT, NOT TWO. The credit row and the token row it advances are
       // written inside a single transaction, so nothing can ever observe a

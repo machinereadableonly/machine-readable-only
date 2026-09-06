@@ -320,3 +320,27 @@ test("a component name that is not a string is refused, whatever it stringifies 
     ["@authority", "@method", "@path", "signature-agent"]
   );
 });
+
+// 13.5, THROUGH THE DOOR. `reason: "directory"` existed in verifyRequest from
+// the start and was UNREACHABLE through the real lookup: makeLookup caught its
+// own fetch failure and returned null, which this function reads as "no key for
+// that key id". So an agent whose JWKS host had a transient outage -- or one
+// that was the target of 13.3 -- was told `unknown-key`, and the protocol
+// document's table sends it to re-derive its RFC 7638 thumbprint: precisely the
+// trap that document warns "produces a wrong key id silently". It re-registers,
+// or gives up. Neither fixes anything, and the failure was cached for an hour.
+//
+// makeLookup now throws DirectoryUnavailableError for "could not fetch" and
+// keeps null for "fetched, and the key is not in it". This asserts the door
+// tells the two apart -- the branch, not the lookup that feeds it.
+test("an outage is reported as `directory`, and an absent key as `unknown-key`", async () => {
+  const req = await signedRequest();
+
+  const outage = await verifyRequest(req, async () => { throw new Error("directory could not be fetched"); });
+  assert.equal(outage.ok, false);
+  assert.equal(outage.reason, "directory", "an outage must never be reported as a bad key id");
+
+  const absent = await verifyRequest(req, async () => null);
+  assert.equal(absent.ok, false);
+  assert.equal(absent.reason, "unknown-key");
+});

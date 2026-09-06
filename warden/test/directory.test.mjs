@@ -282,13 +282,136 @@ test("the directory cache is bounded and remembers failures", async () => {
 
   // A failing directory is fetched once, not once per request: otherwise every
   // unauthenticated call becomes an outbound request the caller aims.
-  await lookup("k", '"https://dead.example.com/"');
-  await lookup("k", '"https://dead.example.com/"');
+  // It THROWS rather than answering null -- see the next test for why.
+  await assert.rejects(() => lookup("k", '"https://dead.example.com/"'), /could not be fetched/);
+  await assert.rejects(() => lookup("k", '"https://dead.example.com/"'), /could not be fetched/);
   assert.equal(fetches, 1, "a remembered failure must not be refetched");
 
   // The cache key is caller-chosen, so it must not grow without bound.
-  for (let i = 0; i < 400; i++) await lookup("k", `"https://host${i}.example.com/"`);
+  for (let i = 0; i < 400; i++) {
+    await lookup("k", `"https://host${i}.example.com/"`).catch(() => {});
+  }
   assert.ok(cache.size <= 256, `cache grew to ${cache.size}`);
+});
+
+// 13.5. `reason: "directory"` was unreachable through the real lookup, because
+// makeLookup caught its own fetch failure and returned null -- which
+// verifyRequest reads as "no key for that key id". So an agent whose own JWKS
+// host had a transient outage was told `unknown-key`, and the protocol
+// document's table sends it to re-derive its RFC 7638 thumbprint: the one trap
+// that document already warns "produces a wrong key id silently". It
+// re-registers, or gives up. Neither fixes anything.
+test("a directory that cannot be FETCHED is told apart from one that lacks the key", async () => {
+  const q = queries(openDb(":memory:"));
+  const empty = makeLookup(q, async () => ({ keys: [] }), "warden.example.com", new Map());
+  // Fetched, and the key is genuinely not in it: null, which the door reports
+  // as `unknown-key`. That is the honest answer here.
+  assert.equal(await empty("no-such-key", '"https://agent.example.com/"'), null);
+
+  const down = makeLookup(q, async () => { throw new Error("ETIMEDOUT"); }, "warden.example.com", new Map());
+  await assert.rejects(() => down("k", '"https://agent.example.com/"'), /could not be fetched/);
+});
+
+// 13.3. The cache key comes from `Signature-Agent`, an unverified header read
+// before any signature is checked, so remembering a failure for an HOUR meant
+// one unauthenticated request locked a victim agent out of its own key for an
+// hour -- with no invalidation path and nothing it could do. Mid-mint, it could
+// not mint. The fetch cache is still needed (without it every such request is
+// an outbound probe the caller aims), so the fix is the TTL, not the cache.
+test("a remembered failure expires in SECONDS, and a success still lasts an hour", async () => {
+  const q = queries(openDb(":memory:"));
+  let fetches = 0;
+  let alive = false;
+  let now = 1_000_000;
+  const lookup = makeLookup(q,
+    async () => { fetches += 1; if (!alive) throw new Error("down"); return { keys: [] }; },
+    "warden.example.com", new Map(), new Map(), () => now);
+
+  await assert.rejects(() => lookup("k", '"https://victim.example.com/"'));
+  assert.equal(fetches, 1);
+
+  // Still remembered a few seconds later: the probe amplification the cache
+  // exists for is bounded.
+  now += 10_000;
+  await assert.rejects(() => lookup("k", '"https://victim.example.com/"'));
+  assert.equal(fetches, 1, "a fresh failure is not re-probed");
+
+  // Past the failure TTL, the victim gets another chance -- an hour later would
+  // have been the lockout.
+  now += 40_000;
+  alive = true;
+  assert.equal(await lookup("k", '"https://victim.example.com/"'), null);
+  assert.equal(fetches, 2, "an expired failure is retried");
+
+  // And the SUCCESS now cached is trusted far longer than a failure ever is.
+  now += 60_000;
+  await lookup("k", '"https://victim.example.com/"');
+  assert.equal(fetches, 2, "a success lasts the full hour");
+});
+
+test("repeated failures back off, so a genuinely dead host is not probed on a loop", async () => {
+  const q = queries(openDb(":memory:"));
+  let fetches = 0;
+  let now = 0;
+  const lookup = makeLookup(q, async () => { fetches += 1; throw new Error("down"); },
+    "warden.example.com", new Map(), new Map(), () => now);
+
+  // Each failure doubles the wait before the next probe: 45s, then 90s.
+  await assert.rejects(() => lookup("k", '"https://dead.example.com/"'));
+  now += 46_000;
+  await assert.rejects(() => lookup("k", '"https://dead.example.com/"'));
+  assert.equal(fetches, 2);
+  now += 46_000;
+  await assert.rejects(() => lookup("k", '"https://dead.example.com/"'));
+  assert.equal(fetches, 2, "the second failure must wait longer than the first");
+  now += 46_000;
+  await assert.rejects(() => lookup("k", '"https://dead.example.com/"'));
+  assert.equal(fetches, 3);
+});
+
+// 13.4. The cache was written only when a fetch SETTLED, so N concurrent
+// requests naming one host all missed and all went out: an unauthenticated
+// caller with a worthless signature got one outbound connection per request,
+// aimed wherever it liked, each held for the timeout and buffering up to 64 KB.
+test("concurrent lookups of one directory share ONE outbound fetch", async () => {
+  const q = queries(openDb(":memory:"));
+  let fetches = 0;
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const lookup = makeLookup(q, async () => { fetches += 1; await gate; return { keys: [] }; },
+    "warden.example.com", new Map());
+
+  const all = Promise.all(Array.from({ length: 25 }, () => lookup("k", '"https://agent.example.com/"')));
+  release();
+  await all;
+  assert.equal(fetches, 1, "twenty-five callers, one connection");
+});
+
+test("outbound directory fetches are capped process-wide, and the refusal is honest", async () => {
+  const q = queries(openDb(":memory:"));
+  let fetches = 0;
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const lookup = makeLookup(q, async () => { fetches += 1; await gate; return { keys: [] }; },
+    "warden.example.com", new Map());
+
+  // Eight different hosts saturate the ceiling; sharing per URL cannot bound a
+  // caller that names a thousand of them.
+  const held = Array.from({ length: 8 }, (_, i) => lookup("k", `"https://h${i}.example.com/"`));
+  await assert.rejects(
+    () => lookup("k", '"https://ninth.example.com/"'),
+    /could not be fetched/,
+    "over the ceiling it refuses as an outage -- which is what it is -- rather than as a bad key"
+  );
+  assert.equal(fetches, 8, "the ninth host was never dialled");
+  release();
+  await Promise.all(held);
+
+  // And the ceiling is not sticky: once the first eight settle, the next call
+  // goes out normally. It answers null because this stub's JWKS holds no key
+  // "k" -- fetched and absent, which is the honest null.
+  assert.equal(await lookup("k", '"https://ninth.example.com/"'), null);
+  assert.equal(fetches, 9);
 });
 
 test("a registration with a valid proof of possession is accepted", async () => {
