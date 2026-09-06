@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { parseDictionary } from "structured-headers";
-import { verifyRequest, MAX_WINDOW_MS, coveredComponents, contentDigest } from "../src/door/verify.mjs";
+import { verifyRequest, MAX_WINDOW_MS, coveredComponents, contentDigest, signatureAgentUrl, signatureLabel } from "../src/door/verify.mjs";
 
 const VECTORS = JSON.parse(
   readFileSync(new URL("./vectors/web_bot_auth_architecture_v1.json", import.meta.url), "utf8")
@@ -343,4 +343,45 @@ test("an outage is reported as `directory`, and an absent key as `unknown-key`",
   const absent = await verifyRequest(req, async () => null);
   assert.equal(absent.ok, false);
   assert.equal(absent.reason, "unknown-key");
+});
+
+// 3.M1. Signature-Agent became a Structured Field Dictionary keyed by the
+// signature label, and this door accepted only the legacy bare string -- so an
+// agent following the current specification could not enter at all, and was
+// refused `unknown-key`, which points a correct implementer at its thumbprint:
+// the one thing that was not wrong. web-bot-auth treats the header as opaque,
+// so the encoding decision is entirely ours.
+//
+// Verified live 2026-09-06 against draft-meunier-webbotauth-httpsig-protocol-02
+// (which REPLACES the architecture draft the finding cited): signers MUST send
+// the dictionary form, and a verifier MAY accept the bare string. Both are read.
+test("Signature-Agent is read as a dictionary, and the legacy string still works", () => {
+  const url = "https://signer.example.com";
+
+  // The form a current signer sends.
+  assert.equal(signatureAgentUrl(`sig1="${url}"`, "sig1"), url);
+  // With one member the key cannot be ambiguous, so no label is needed.
+  assert.equal(signatureAgentUrl(`whatever="${url}"`), url);
+  // With several, only the member for THIS signature is ours to use.
+  assert.equal(signatureAgentUrl(`sig1="${url}", sig2="https://other.example"`, "sig1"), url);
+  assert.equal(signatureAgentUrl(`sig1="${url}", sig2="https://other.example"`, "sig2"), "https://other.example");
+  assert.equal(signatureAgentUrl(`sig1="${url}", sig2="https://other.example"`), null, "ambiguous is refused, not guessed");
+
+  // The legacy bare string, which the draft still permits a verifier to accept.
+  assert.equal(signatureAgentUrl(`"${url}"`), url);
+
+  // And nothing usable is null rather than a guess.
+  assert.equal(signatureAgentUrl(""), null);
+  assert.equal(signatureAgentUrl(undefined), null);
+  assert.equal(signatureAgentUrl(`sig1=42`, "sig1"), null, "a member that is not a string is not a URL");
+});
+
+// The label comes from the request, not from a hardcoded "sig1".
+test("the signature label is read off Signature-Input", () => {
+  const req = new Request("https://example.com/mcp", { method: "POST" });
+  req.headers.set("signature-input", 'mylabel=("@authority");created=1;expires=2;keyid="k"');
+  assert.equal(signatureLabel(req), "mylabel");
+
+  const bare = new Request("https://example.com/mcp", { method: "POST" });
+  assert.equal(signatureLabel(bare), null);
 });

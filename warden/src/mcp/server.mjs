@@ -188,7 +188,10 @@ export function makeMcpHandler(deps) {
         req.auth = auth;
         return node(req, res);
       }
-      const replay = Readable.from([Buffer.from(raw, "utf8")]);
+      // A Buffer since 3.L2 -- the door keeps the bytes it received rather
+      // than a re-encoded string -- and `Buffer.from(buffer, "utf8")` would
+      // copy it needlessly. A string is still accepted so a test may pass one.
+      const replay = Readable.from([Buffer.isBuffer(raw) ? raw : Buffer.from(raw, "utf8")]);
       // The IncomingMessage surface the adapter reads, and nothing more.
       Object.assign(replay, {
         headers: req.headers, rawHeaders: req.rawHeaders, method: req.method,
