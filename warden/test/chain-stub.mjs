@@ -37,6 +37,10 @@ export function openChain({ boundTo = "k1", ...overrides } = {}) {
     // would silently renumber every token these suites assert on.
     freeIdFrom: async (from) => from,
     walletRoomFor: async () => 20,
+    // Room left in the COLLECTION. Read from the chain since 2026-09-06; it
+    // used to be the constant 10_000 compared against the mirror's row count,
+    // which is a fact about the database rather than about the contract.
+    supplyRoom: async () => 9_998,
     ...overrides,
   };
 }
@@ -49,6 +53,7 @@ export const unreadableChain = () =>
     lifecycleOf: async () => null,
     freeIdFrom: async () => null,
     walletRoomFor: async () => null,
+    supplyRoom: async () => null,
     boundKeyOf: async () => null,
   });
 export const restingChain = () =>
@@ -60,6 +65,8 @@ export const unknownTokenChain = () =>
     lifecycleOf: async () => ({ exists: false, resting: false, sunset: false, level: 0, lastDay: 0 }),
   });
 export const walletFullChain = () => openChain({ walletRoomFor: async () => 0 });
+/// The collection is full: the contract would revert SupplyCap().
+export const supplyFullChain = () => openChain({ supplyRoom: async () => 0 });
 
 /// A chain whose ids are already taken, so freeIdFrom must skip past them.
 export const takenIdsChain = (taken = [1]) =>

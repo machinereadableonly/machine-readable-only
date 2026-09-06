@@ -14,6 +14,7 @@
 import { createPaymentWrapper, extractPaymentFromMeta } from "@x402/mcp";
 import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
+import { withNext } from "../mcp/nextSteps.mjs";
 
 /// What a mint costs. One place, because the tool's own description quotes it.
 export const MINT_PRICE = "$1.00";
@@ -149,11 +150,35 @@ function cancelSettlementOnRefusal(handler) {
   return async (...callArgs) => {
     const result = await handler(...callArgs);
     if (!result || result.ok !== false) return result;
-    return {
-      content: [{ type: "text", text: JSON.stringify(result) }],
-      structuredContent: result,
-      isError: true,
-    };
+    return payRefusal(result);
+  };
+}
+
+/**
+ * One refusal shape for everything a PAID call can answer with.
+ *
+ * `isError` is what the payment layer reads, and it is not optional anywhere
+ * inside a paid tool -- including the gateway's OWN refusals, which are
+ * produced outside the payment wrapper. Those two (`no-price`, and a
+ * facilitator that will not build) used to return plain values, so
+ * mcp/server.mjs wrapped them without `isError` and x402MCPClient's extractor
+ * -- which opens `if (!result.isError) return null` -- handed the agent
+ * `paymentMade: false` beside a result shaped like a success. No money is at
+ * risk in either (nothing has been verified yet), but it is the same
+ * wire-format family as eaac15a, and the reachable one fires whenever the
+ * facilitator has a transient outage. The reference client reads `ok`, which is
+ * exactly how eaac15a survived a live check.
+ *
+ * `withNext` is applied HERE because a complete tool result is passed through
+ * mcp/server.mjs untouched, so it never reaches the withNext call there. Every
+ * refusal carries its next step (C3.7); a paid one is no exception.
+ */
+function payRefusal(value) {
+  const answered = withNext(value);
+  return {
+    content: [{ type: "text", text: JSON.stringify(answered) }],
+    structuredContent: answered,
+    isError: true,
   };
 }
 
@@ -319,14 +344,14 @@ export function makePaymentGateway({
       // wrong amount gets charged silently. Refuse, and say so in the log.
       if (typeof price !== "string" || !/^\$\d/.test(price)) {
         alert(`paid tool called with an unusable price: ${JSON.stringify(price)}`);
-        return { ok: false, reason: "payment-unavailable", detail: "no-price" };
+        return payRefusal({ ok: false, reason: "payment-unavailable", detail: "no-price" });
       }
       let wrap;
       try {
         wrap = await wrapperFor(price, tool, description);
       } catch (err) {
         alert(`payment unavailable (${facilitatorUrl}, ${network}): ${err.message}`);
-        return { ok: false, reason: "payment-unavailable" };
+        return payRefusal({ ok: false, reason: "payment-unavailable" });
       }
 
       // THE HANDLER IS TOLD WHAT WILL SETTLE IT. Every row a paid handler

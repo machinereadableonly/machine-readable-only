@@ -39,6 +39,8 @@ const VIEW_OF = "0x0fa4edbd";
 const FIELD = { level: 1, lastDay: 3, resting: 8, sunset: 9, agentKeyId: 11 };
 const MINTED_TO = "0x118033bc"; // mintedTo(address) -> uint32
 const WALLET_CAP = "0x58950c22"; // walletCap() -> uint32
+const TOTAL_MINTED = "0xa2309ff8"; // totalMinted() -> uint32
+const SUPPLY_CAP = "0x8f770ad0"; // supplyCap() -> uint32
 const IS_SUNSET = "0x90b8b0c8"; // isSunset() -> bool
 const IS_PAUSED = "0x5c975abb"; // paused() -> bool
 const WORD_HEX_CHARS = 64; // 32 bytes, as hex
@@ -222,6 +224,35 @@ export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch, now = () 
       const [mintedHex, capHex] = await Promise.all([
         ethCall(MINTED_TO + addressArg(address)),
         ethCall(WALLET_CAP),
+      ]);
+      if (mintedHex === null || capHex === null) return null;
+      const minted = asNumber(singleWord(mintedHex));
+      const cap = asNumber(singleWord(capHex));
+      if (minted === null || cap === null) return null;
+      return Math.max(0, cap - minted);
+    },
+
+    /**
+     * How many more tokens the COLLECTION will accept.
+     *
+     * Returns the remaining slots (0 when full), or null when either read
+     * failed. Mirrors `revert SupplyCap()`, which guards `mint`
+     * (MachineReadableOnly.sol:354) and `seed` (:782).
+     *
+     * WHY IT IS READ RATHER THAN COUNTED. The Warden used to answer this from
+     * the constant 10_000 compared against its own row count, and both halves
+     * can be wrong. `supplyCap` is an owner dial (`setSupplyCap`, :231), so a
+     * cap lowered to close the collection early left the constant stale and the
+     * Warden went on selling mints the chain would refuse -- with no refusal,
+     * so the settlement was never cancelled and the money genuinely moved. And
+     * the row count is a fact about this database, not about the chain;
+     * `freeIdFrom` exists precisely because those two differ. Same reasoning as
+     * `walletRoomFor` above, which reads its cap for the same reason.
+     */
+    async supplyRoom() {
+      const [mintedHex, capHex] = await Promise.all([
+        ethCall(TOTAL_MINTED),
+        ethCall(SUPPLY_CAP),
       ]);
       if (mintedHex === null || capHex === null) return null;
       const minted = asNumber(singleWord(mintedHex));

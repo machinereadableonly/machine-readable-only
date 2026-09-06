@@ -17,6 +17,7 @@
 // load and throws on the first missing one.)
 import { mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { getAddress } from "viem";
 import { createServer } from "./server.mjs";
 import { makeAllowRegistration, makeSpawnSolve } from "./bootstrap.mjs";
 import { makePaymentGateway, warmUp } from "./pay/x402.mjs";
@@ -27,6 +28,7 @@ import { tokenView } from "./mcp/tokenView.mjs";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
 import { makeChainReader } from "./chain/read.mjs";
+import { verifyChainId, treasuryBalance } from "./chain/preflight.mjs";
 import { requeueOrphans, runSolver } from "./solve/queue.mjs";
 import { utcDay } from "./mcp/tools/checkin.mjs";
 
@@ -82,6 +84,27 @@ const contract = requireEnv("MRO_CONTRACT_ADDRESS");
 const treasuryAddress = requireEnv("TREASURY_ADDRESS");
 if (!/^0x[0-9a-fA-F]{40}$/.test(treasuryAddress)) {
   throw new Error("TREASURY_ADDRESS must be a 20-byte hex address");
+}
+// AND IT MUST CARRY ITS CHECKSUM. The shape check above accepts any 40 hex
+// characters, so a single mistyped digit in the real treasury produces a
+// well-formed address that passes everything -- and x402 settles to whatever
+// `payTo` says without asking, so every dollar the piece ever earns would go
+// somewhere nobody controls, reported as a success each time. EIP-55 mixed case
+// is a checksum over the address, so the canonical form catches exactly that
+// typo.
+//
+// THE TEST IS EQUALITY WITH THE CANONICAL FORM, and that shape was measured
+// rather than assumed. viem's `getAddress` does NOT throw on a bad checksum --
+// it RE-checksums -- so `try { getAddress(a) } catch` would never once fire.
+// And `isAddress(a, { strict: true })` returns true for an all-lowercase
+// address, which carries no checksum at all and so cannot catch a typo either.
+// Only "the string set here is the string EIP-55 produces" rejects both. If
+// this throws, paste the mixed-case form the error names.
+if (getAddress(treasuryAddress) !== treasuryAddress) {
+  throw new Error(
+    `TREASURY_ADDRESS ${treasuryAddress} is not in EIP-55 checksummed form: set it to ` +
+      `${getAddress(treasuryAddress)}, so that a single mistyped character cannot be a valid address`
+  );
 }
 const stateDbPath = requireEnv("STATE_DB_PATH");
 
@@ -168,6 +191,25 @@ const paymentNetwork = `eip155:${chainId}`;
 // directly.
 
 async function main() {
+  // BEFORE ANYTHING ELSE: is MRO_CHAIN_ID the chain BASE_RPC_URL actually
+  // serves? That id decides the network agents are quoted prices on and whether
+  // a placeholder treasury may run, and nothing checked it against reality --
+  // so a promotion that moved the RPC and the contract to mainnet and left the
+  // id behind would boot cleanly, quote testnet USDC, and write real tokens.
+  // Throws on a mismatch, and after three tries on an RPC that will not answer.
+  // See chain/preflight.mjs for why an outage refuses rather than proceeds.
+  await verifyChainId({ rpcUrl, chainId });
+
+  // NOT A GATE. The treasury is validated for shape and checksum and nothing
+  // else, so a valid-but-wrong address is invisible: settlements to it succeed.
+  // Printing its balance every boot is what makes the first one attributable.
+  const balance = await treasuryBalance({ network: paymentNetwork, treasury: treasuryAddress, rpcUrl });
+  console.error(
+    balance
+      ? `warden: treasury ${treasuryAddress} holds ${balance.amount} ${balance.symbol} on chain ${chainId}`
+      : `warden: treasury ${treasuryAddress} balance could not be read (chain ${chainId})`
+  );
+
   const db = openDb(stateDbPath);
   const q = queries(db);
 
@@ -262,11 +304,12 @@ async function main() {
     // priced differently from the chain, is a wiring error and not something
     // to discover after money has moved.
     catalogue: assertLadderSane(LADDER),
-    // Mirrors the contract's default supplyCap (MachineReadableOnly.sol:
-    // `supplyCap = 10_000`). This is only a soft pre-payment check -- the
-    // contract enforces the real cap on chain regardless -- and it does not
-    // track a later on-chain change via setUpgrade.
-    supplyCap: 10_000,
+    // THE SUPPLY CAP IS NOT PASSED IN. It used to be the constant 10_000,
+    // mirroring the contract's default, compared against this database's own
+    // row count -- and both halves could disagree with the chain, because the
+    // cap is an owner dial and the count is a fact about the mirror. `mint` and
+    // `seed` read `supplyCap()` and `totalMinted()` from the chain instead, in
+    // gates.mjs supplyBlock, like every other contract gate.
   });
 
   const server = createServer({

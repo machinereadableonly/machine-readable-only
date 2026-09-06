@@ -8,7 +8,7 @@
 // to revert.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chainBlock, tokenBlock, walletCapBlock, paidWriteBlock, requireChain } from "../src/mcp/gates.mjs";
+import { chainBlock, tokenBlock, walletCapBlock, supplyBlock, paidWriteBlock, requireChain } from "../src/mcp/gates.mjs";
 import { makeChainReader, SUNSET_CACHE_MS } from "../src/chain/read.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
@@ -18,7 +18,7 @@ import { makeCheckinTool } from "../src/mcp/tools/checkin.mjs";
 import { makeSeedTool } from "../src/mcp/tools/seed.mjs";
 import {
   openChain, sunsetChain, pausedChain, unreadableChain,
-  restingChain, unknownTokenChain, walletFullChain,
+  restingChain, unknownTokenChain, walletFullChain, supplyFullChain,
 } from "./chain-stub.mjs";
 
 const TO = "0x" + "11".repeat(20);
@@ -76,6 +76,27 @@ test("paidWriteBlock checks only what it is given, in a stable order", async () 
   assert.equal(await paidWriteBlock(closedAndResting, { tokenId: 1, to: TO }), "sunset");
 });
 
+test("supplyBlock reads the collection's room from the chain, and refuses on an unreadable one", async () => {
+  assert.equal(await supplyBlock(openChain()), null);
+  assert.equal(await supplyBlock(supplyFullChain()), "supply-cap-reached");
+  // One slot left is still a slot: the boundary is provoked from both sides,
+  // because a gate that is merely PRESENT proves nothing about where it sits.
+  assert.equal(await supplyBlock(openChain({ supplyRoom: async () => 1 })), null);
+  assert.equal(await supplyBlock(unreadableChain()), "chain-unavailable");
+});
+
+// `upgrade` adds a Mark, not a token, and the contract has no SupplyCap on
+// applyMark. A gate applied where the chain does not apply it would refuse
+// paid work for no reason.
+test("paidWriteBlock asks the supply cap only for a call that MINTS", async () => {
+  let asked = 0;
+  const counting = () => openChain({ supplyRoom: async () => { asked += 1; return 0; } });
+  assert.equal(await paidWriteBlock(counting(), { tokenId: 1 }), null);
+  assert.equal(asked, 0, "upgrade must not pay for a read the contract never makes");
+  assert.equal(await paidWriteBlock(counting(), { to: TO, mints: true }), "supply-cap-reached");
+  assert.equal(asked, 1);
+});
+
 test("a tool factory refuses to build without a chain reader", () => {
   for (const make of [makeMintTool, makeUpgradeTool, makeCheckinTool, makeSeedTool]) {
     assert.throws(() => make({ q: {}, paid: settleNow, supplyCap: 10, today: () => 1, catalogue: {} }),
@@ -83,8 +104,24 @@ test("a tool factory refuses to build without a chain reader", () => {
   }
   // A partial stub is not a chain reader either: this is the shape a test
   // written before the gates existed would have passed.
-  assert.throws(() => makeMintTool({ q: {}, chain: { boundKeyOf: async () => null }, paid: settleNow, supplyCap: 10, today: () => 1 }),
+  assert.throws(() => makeMintTool({ q: {}, chain: { boundKeyOf: async () => null }, paid: settleNow, today: () => 1 }),
     /requires a chain reader/);
+  // A reader that is complete EXCEPT for the newest method is the real drift:
+  // this is exactly the shape that shipped `chain.freeIdFrom is not a function`
+  // to production while every tool test passed.
+  const { supplyRoom, ...missingSupply } = openChain();
+  assert.throws(() => makeMintTool({ q: {}, chain: missingSupply, paid: settleNow, today: () => 1 }),
+    /requires a chain reader with supplyRoom\(\)/);
+});
+
+// THE DOUBLE MUST CARRY THE REAL THING'S SURFACE. A stub that implements only
+// the methods that existed when it was written agrees with every mistake made
+// after that -- measured twice on this project, the second time costing a paid
+// mint. Whenever a method is added to the reader, this test is what makes the
+// stub follow it.
+test("the test chain stub answers everything the real reader does", () => {
+  const real = makeChainReader({ rpcUrl: "https://example.invalid", contract: "0x" + "11".repeat(20) });
+  assert.deepEqual(Object.keys(openChain()).sort(), Object.keys(real).sort());
 });
 
 // --- mint: every refusal must come BEFORE the money ------------------------
@@ -93,6 +130,12 @@ for (const [label, chain, reason] of [
   ["a sunset piece", sunsetChain, "sunset"],
   ["a paused contract", pausedChain, "paused"],
   ["a full wallet", walletFullChain, "wallet-cap-reached"],
+  // SupplyCap was the one contract gate still answered from the mirror: a
+  // constant 10_000 against this database's row count. An owner who lowers the
+  // cap to close the collection early left both halves stale, and the mint sold
+  // anyway -- with no refusal, so nothing cancelled the settlement and the
+  // money genuinely moved.
+  ["a full collection", supplyFullChain, "supply-cap-reached"],
   ["an unreachable chain", unreadableChain, "chain-unavailable"],
 ]) {
   test(`mint refuses ${label} without ever requesting payment`, async () => {

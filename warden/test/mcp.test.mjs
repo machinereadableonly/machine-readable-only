@@ -242,6 +242,42 @@ test("a payment demand survives the tool wrapper intact for the official x402 cl
   assert.equal(found.accepts[0].payTo, "0x000000000000000000000000000000000000dEaD");
 });
 
+// 14.7, THROUGH THE WHOLE PATH. The gateway's own refusals are produced
+// OUTSIDE the payment wrapper -- a facilitator that will not build is the
+// reachable one, and it is a normal transient -- and they used to come back as
+// plain `{ ok: false }` values. mcp/server.mjs then wrapped them without
+// `isError`, so a client branching on `isError` alone (which is what
+// x402MCPClient does) saw something shaped like a success.
+//
+// The real gateway is used here, not a stub: a `build` that throws is the only
+// thing standing in, because the seam being tested is everything downstream of
+// it. Asserted on what an agent actually receives over the wire.
+test("a facilitator outage reaches the agent as an ERROR result, not as a success shape", async () => {
+  const { makePaymentGateway } = await import("../src/pay/x402.mjs");
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://facilitator.invalid.example/",
+    network: "eip155:84532",
+    payTo: "0x000000000000000000000000000000000000dEaD",
+    alert: () => {},
+    build: async () => { throw new Error("facilitator down"); },
+  });
+  const { handler } = makeMcpHandler({
+    q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract", chainId: 84532, paid,
+  });
+
+  const body = await call(handler, {
+    method: "tools/call",
+    params: { name: "mint", arguments: { to: "0x" + "a1".repeat(20) } },
+  }, { token: "n/a", clientId: "k1", scopes: [], extra: { keyId: "k1" } });
+
+  assert.equal(body.result.isError, true, "an agent must be able to tell this apart from a success");
+  const refusal = JSON.parse(body.result.content[0].text);
+  assert.equal(refusal.reason, "payment-unavailable");
+  // And the next step survives: a complete tool result skips the wrapper's own
+  // withNext, so the gateway has to apply it.
+  assert.equal(typeof refusal.next, "string");
+});
+
 // C3.7, THE WIRING rather than the table. Every other test of the next-step
 // table calls the helper directly, so removing withNext from the tool wrapper
 // left all of them green: the table was proven and its one call site was not.

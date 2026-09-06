@@ -1,9 +1,9 @@
 // Lineage. One seed per agent-year, free, and the child is bound to the caller.
 import * as z from "zod";
-import { chainBlock, tokenBlock, walletCapBlock, requireChain, bindingBlock } from "../gates.mjs";
+import { chainBlock, tokenBlock, walletCapBlock, requireChain, bindingBlock, supplyBlock } from "../gates.mjs";
 import { keyIdToBytes32 } from "../keyId.mjs";
 
-export function makeSeedTool({ q, chain, today, supplyCap }) {
+export function makeSeedTool({ q, chain, today }) {
   requireChain(chain, "seed");
   return {
     name: "seed",
@@ -17,18 +17,25 @@ export function makeSeedTool({ q, chain, today, supplyCap }) {
       annotations: { readOnlyHint: false, openWorldHint: false },
     },
     async handler({ parentId, to }, ctx) {
-      // A seeded child is a token in the SAME collection, so it counts against
-      // the same supply cap `mint` checks. This tool inserted tokens without
-      // ever looking at it, so seeds could carry the collection past a cap the
-      // contract would then refuse to write -- a queued token nothing could
-      // ever mine. Required, never defaulted: a missing cap would compare
-      // against undefined and silently never fire.
-      if (!Number.isFinite(supplyCap)) throw new Error("seed requires a numeric supplyCap");
-      if (q.tokenCount() >= supplyCap) return { ok: false, reason: "supply-cap-reached" };
-
+      // EVERY LOCAL REFUSAL COMES FIRST, and that order is a rate-limiting
+      // decision rather than a style one. The chain reads below are four
+      // outbound RPC calls on a tool that is FREE and has no per-caller budget,
+      // so an agent looping `seed` on its own level-1 token used to spend them
+      // on every call before being refused on a fact this process already knew.
+      // When the provider throttles, `writesOpen` answers "unreadable" and
+      // `mint` and `upgrade` stop selling for everyone -- the paid path denied
+      // through a free tool. Nothing about the answers changes; only what an
+      // already-doomed call costs.
       const parent = q.getToken(parentId);
       if (!parent) return { ok: false, reason: "unknown-token" };
       if (parent.keyId !== ctx.keyId) return { ok: false, reason: "not-bound-to-caller" };
+      if (parent.level < 365) return { ok: false, reason: "parent-not-whole" };
+
+      // One seed per completed agent-year. seedsSpent is counted from the rows
+      // this key has already seeded, so it cannot drift from what was granted.
+      const years = Math.floor((today() - q.firstMintDay(ctx.keyId)) / 365);
+      if (q.seedsSpent(ctx.keyId) >= years) return { ok: false, reason: "no-seed-available" };
+
       // WAS `parent.status === "resting"`, WHICH COULD NEVER BE TRUE.
       // tokens.status holds only 'queued' | 'written' -- the write-pipeline
       // state -- so this read like a working gate and was dead code. seed
@@ -40,18 +47,21 @@ export function makeSeedTool({ q, chain, today, supplyCap }) {
       // seller of a token who has already been rebound away from must not be
       // able to spend the buyer's. The mirror alone cannot answer that: it
       // learns of a rebind at the next Clock pass at the earliest.
+      //
+      // A seeded child is a token in the SAME collection, so it counts against
+      // the SupplyCap the contract enforces on `seed` at :782, exactly as it
+      // does on `mint`. This tool used to answer that from the mirror -- a
+      // constant 10_000 against its own row count -- and both halves could
+      // disagree with the chain: the cap is an owner dial, and the row count is
+      // a fact about this database. It is read from the chain now, like every
+      // other gate here.
       const blocked =
         (await chainBlock(chain)) ??
         (await tokenBlock(chain, parentId, q)) ??
         (await bindingBlock(chain, parentId, ctx.keyId, keyIdToBytes32)) ??
-        (await walletCapBlock(chain, to));
+        (await walletCapBlock(chain, to)) ??
+        (await supplyBlock(chain));
       if (blocked) return { ok: false, reason: blocked };
-      if (parent.level < 365) return { ok: false, reason: "parent-not-whole" };
-
-      // One seed per completed agent-year. seedsSpent is counted from the rows
-      // this key has already seeded, so it cannot drift from what was granted.
-      const years = Math.floor((today() - q.firstMintDay(ctx.keyId)) / 365);
-      if (q.seedsSpent(ctx.keyId) >= years) return { ok: false, reason: "no-seed-available" };
 
       // EVERY GATE ABOVE PASSES AND THERE IS STILL NOTHING TO GIVE.
       //
