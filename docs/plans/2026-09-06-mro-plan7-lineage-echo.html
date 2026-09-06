@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan 7 -- Lineage: the Echo. Implementation Plan</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan 7 -- Lineage: the Echo. Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Make <code>seed</code> actually create children, and give a child one sealed
+number (the Echo) drawn as one dotted innermost ring, so a lineage is legible
+as inherited tenure rather than as rank.</p>
+<p><strong>Architecture:</strong> A new <code>_echo</code> mapping on the token contract, sealed once
+inside the existing <code>seed()</code>. Both renderers gain a ring budget that reserves
+the innermost slot for a dotted ring drawn in the ghost fill. The Warden gains
+a free <code>insertSeed</code> reservation and the Clock a fourth pass that sends
+<code>seed(...)</code> and returns the budget when a write permanently fails.</p>
+<p><strong>Tech Stack:</strong> Solidity 0.8.30 / Foundry 1.7.1, Node 24.14.1, <code>node:sqlite</code>,
+<code>node --test</code>, viem.</p>
+<p><strong>Spec:</strong> <code>docs/specs/2026-09-06-mro-lineage-design.md</code>. Read it before Task 1.
+It SUPERSEDES the deferred paragraph at the end of section 10 of
+<code>docs/specs/2026-08-27-machine-readable-only-design.md</code>.</p>
+<hr>
+<h2>Two corrections to the spec, found by reading the code</h2>
+<p>Both were discovered while writing this plan, both make the work smaller, and
+both are recorded here rather than silently implemented. Apply them; do not
+implement the spec&#39;s wording where it conflicts.</p>
+<p><strong>1. <code>seedsSpent</code> already counts reservations.</strong> Section 7.4 of the spec says
+it &quot;must count RESERVATIONS as well as written rows&quot;. It already does, by
+construction:</p>
+<pre><code class="language-sql">-- warden/src/mirror/queries.mjs:79
+SELECT COUNT(*) AS n FROM tokens WHERE keyId = ? AND parentId IS NOT NULL
+</code></pre>
+<p>It counts <code>tokens</code> rows, and <code>insertSeed</code> writes that row at reservation time.
+So the budget is spent the instant the child is reserved, which is the correct
+direction. <strong>The work is therefore the OTHER half only:</strong> a permanently failed
+seed must DELETE the row so the count falls back. Task 5 pins the existing
+behaviour with a test rather than changing it -- see
+[[check-the-finding-before-fixing-it]]; a third of the last review&#39;s findings
+were already closed and &quot;fixing&quot; them costs a wrong commit message.</p>
+<p><strong>2. No schema change is needed anywhere.</strong> The spec implies a new column to
+distinguish a seed from a mint. <code>tokens.parentId</code> and <code>tokens.generation</code>
+already exist (<code>warden/src/mirror/schema.sql:38</code>), and <code>pendingMints</code> already
+JOINs <code>tokens</code>. So the split is a WHERE clause, not a migration.</p>
+<p>That matters beyond convenience: it means this plan touches <strong>no <code>schema.sql</code>
+and no <code>migrate()</code></strong>, and therefore cannot repeat the ordering defect that
+crash-looped production on 2026-09-05 (<code>1cc4699</code>). If you find yourself adding
+a column, stop and re-read [[payment-criticals-closed]] first: nothing in
+<code>schema.sql</code> may reference a column <code>migrate()</code> adds.</p>
+<hr>
+<h2>Global Constraints</h2>
+<p>Every task&#39;s requirements implicitly include all of these.</p>
+<ul>
+<li><strong>Plain ASCII only</strong> in all docs and code comments. No em dashes, smart
+quotes, arrows or emoji.</li>
+<li><strong>All FOUR suites green before any commit, and READ, not assumed:</strong>
+<code>cd contracts &amp;&amp; forge test</code>, <code>cd tools &amp;&amp; npm test</code>, <code>cd warden &amp;&amp; npm test</code>,
+<code>cd client &amp;&amp; npm test</code>. <strong>A suite count in a commit message must come from
+the run you just did.</strong> See [[a-red-guard-that-was-overridden]]: a commit
+landed with tools red while quoting a count it had carried forward.</li>
+<li><strong>Builds and any long-running compute go through <code>~/scripts/safe-build.sh</code>.</strong>
+Rendering or rasterising in bulk is exactly the shape that has taken this box
+down. <code>~/scripts/safe-build.sh node ./sweep.mjs</code> takes any command.</li>
+<li><strong><code>/bin/grep</code>, never bare <code>grep</code>.</strong></li>
+<li><strong>PATH:</strong> Foundry needs <code>export PATH=$HOME/.foundry/bin:$PATH</code>; Node needs
+<code>source ~/.nvm/nvm.sh</code>. Non-interactive shells have neither.</li>
+<li><strong>Never spend real funds.</strong> Base Sepolia only in this plan. A mainnet deploy
+is a separate operator-approval gate, every time.</li>
+<li><strong>Propose specifics, never adjectives.</strong> Name the exact mechanism.</li>
+<li><strong>The two renderers are held equal by a generated fixture.</strong>
+<code>contracts/test/RenderFixture.sol</code> carries <code>keccak256</code> of the tokenURI
+<code>tools/render-token.mjs</code> produces, and is GENERATED -- regenerate with
+<code>node tools/render-fixture.mjs 1 example.com</code>, never hand-edit.</li>
+<li><strong>Every contract must be proven deployable:</strong> <code>forge build --sizes</code> with
+positive runtime margin, plus a strict-limit anvil deploy with non-empty
+<code>cast code</code>. <code>test/ContractSize.t.sol</code> fails the suite otherwise.</li>
+<li><strong>The Bash working directory persists between calls.</strong> After a <code>cd</code> into a
+subdirectory, <code>cd</code> back to the repo root before editing root files.</li>
+</ul>
+<h3>Numbers this plan asserts</h3>
+<p>Copied from the spec so no task has to re-derive them:</p>
+<table>
+<thead>
+<tr>
+<th>Fact</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>MAX_RINGS</code></td>
+<td>10</td>
+</tr>
+<tr>
+<td><code>canvas(r)</code>, for <code>r &gt;= 1</code></td>
+<td><code>49 + 4r</code></td>
+</tr>
+<tr>
+<td>Echo ring side length, any depth</td>
+<td><strong>53 cells, constant</strong></td>
+</tr>
+<tr>
+<td>Echo ring dot count</td>
+<td><strong>104</strong> (27 top, 27 bottom, 25 left, 25 right)</td>
+</tr>
+<tr>
+<td>Echo ring cost</td>
+<td>~1,456 bytes (104 runs at 13-14 bytes)</td>
+</tr>
+<tr>
+<td>Byte worst case today</td>
+<td>11,550 of 20,000 (<code>GasBudget.t.sol</code>, token 7)</td>
+</tr>
+<tr>
+<td>Expected new byte worst case</td>
+<td>~12,950 (delta <code>1,456 - 64</code>)</td>
+</tr>
+<tr>
+<td>Gas worst case today</td>
+<td>1,750,744 of 2,000,000 (token 9)</td>
+</tr>
+</tbody></table>
+<p>The byte and dot figures are <strong>arithmetic from the geometry, not
+measurements.</strong> Task 4 measures them. If a measurement disagrees with this
+table, the measurement wins and the spec gets corrected.</p>
+<hr>
+<h2>File Structure</h2>
+<p><strong>Contract</strong></p>
+<ul>
+<li><code>contracts/src/MachineReadableOnly.sol</code> -- <code>_echo</code> mapping, the <code>seed()</code>
+write, <code>viewOf</code> assembly.</li>
+<li><code>contracts/src/render/TokenView.sol</code> -- one new field.</li>
+</ul>
+<p><strong>Renderers</strong> (must stay byte-identical)</p>
+<ul>
+<li><code>contracts/src/render/FrameRenderer.sol</code> -- ring budget and the dotted ring.</li>
+<li><code>contracts/src/render/Renderer.sol</code> -- the <code>Echo</code> attribute.</li>
+<li><code>tools/render-token.mjs</code> -- the same two changes in JavaScript.</li>
+</ul>
+<p><strong>Warden</strong></p>
+<ul>
+<li><code>warden/src/mirror/queries.mjs</code> -- <code>insertSeed</code>, <code>pendingSeeds</code>,
+<code>dropSeed</code>, and the narrowing of <code>pendingMints</code> / <code>stuckMints</code>.</li>
+<li><code>warden/src/clock/run.mjs</code> -- the fourth pass.</li>
+<li><code>warden/src/clock/abi.mjs</code> -- the <code>seed</code> entry.</li>
+<li><code>warden/src/mcp/tools/seed.mjs</code> -- stop refusing.</li>
+</ul>
+<p><strong>Docs and wire</strong></p>
+<ul>
+<li><code>llms.txt</code>, <code>SKILL.md</code>, <code>docs/2026-09-01-mro-raw-protocol.md</code> and its
+byte-identical copy
+<code>skills/machine-readable-only/references/raw-protocol.md</code>.</li>
+</ul>
+<p><strong>Deploy</strong></p>
+<ul>
+<li><code>contracts/script/DeployPlan7.s.sol</code>, <code>contracts/script/deploy-plan7.sh</code>,
+<code>contracts/script/verify-plan7.sh</code>, <code>warden/src/clock/reconcile.mjs</code>
+(<code>DEPLOY_BLOCK</code>).</li>
+</ul>
+<hr>
+<h2>Task 1: The contract carries the Echo</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/render/TokenView.sol</code></li>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code> (the <code>_echo</code> mapping near
+<code>_parentOf</code> at :80; <code>viewOf</code> at :191-210; <code>seed</code> at :794-832)</li>
+<li>Test: <code>contracts/test/Lineage.t.sol</code> (create)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: nothing.</p>
+</li>
+<li><p>Produces: <code>TokenView.echo</code> (<code>uint32</code>), read by Tasks 2 and 3.
+<code>MachineReadableOnly.echoOf(uint256) returns (uint32)</code>, read by Task 9&#39;s
+verification script.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<p>Create <code>contracts/test/Lineage.t.sol</code>. Follow the existing fixtures: extend
+<code>MroTestBase</code> and use its <code>_warpToDay(day)</code> and <code>_makeWhole</code> helpers -- 14
+committed tests once credited days the chain had not reached, and
+<code>_makeWhole</code> advances the clock exactly 364 days, which some arithmetic
+depends on. See [[foundry-test-traps]].</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {MroTestBase} from &quot;./MroTestBase.sol&quot;;
+
+contract LineageTest is MroTestBase {
+    /// A founding token inherits nothing.
+    function test_aFoundingTokenHasNoEcho() public {
+        uint256 id = _mintOne();
+        assertEq(mro.echoOf(id), 0, &quot;a minted token starts its own line&quot;);
+        assertEq(mro.viewOf(id).echo, 0, &quot;and the renderer is told so&quot;);
+    }
+
+    /// The child is sealed with the parent&#39;s credited days.
+    function test_aChildIsSealedWithTheParentsLevel() public {
+        uint256 parent = _makeWhole();              // level 365
+        uint256 child = _seedFrom(parent);
+        assertEq(mro.echoOf(child), 365, &quot;the line had run 365 days&quot;);
+        assertEq(mro.viewOf(child).echo, 365);
+    }
+
+    /// The seal accumulates down the line, and does so in O(1).
+    function test_theEchoAccumulatesAcrossGenerations() public {
+        uint256 g0 = _makeWhole();                  // level 365
+        uint256 g1 = _seedFrom(g0);
+        _growTo(g1, 365);                           // g1 earns its own year
+        uint256 g2 = _seedFrom(g1);
+        assertEq(mro.echoOf(g2), 730, &quot;365 inherited plus 365 g1 earned&quot;);
+    }
+
+    /// It is SEALED: nothing after the seed moves it.
+    function test_theEchoNeverMovesAfterTheSeed() public {
+        uint256 parent = _makeWhole();
+        uint256 child = _seedFrom(parent);
+        uint32 atBirth = mro.echoOf(child);
+        _growTo(parent, 500);                       // the parent keeps going
+        _growTo(child, 30);                         // so does the child
+        assertEq(mro.echoOf(child), atBirth, &quot;a sealed number does not move&quot;);
+    }
+
+    /// The non-goal that matters most: it must not reach a Mark gate.
+    function test_theEchoDoesNotUnlockAMark() public {
+        uint256 parent = _makeWhole();
+        uint256 child = _seedFrom(parent);
+        // Static needs level &gt;= 30. The child is level 1 with echo 365.
+        vm.prank(warden);
+        vm.expectRevert();                          // MarkGate
+        mro.applyMark(child, 3, 0);
+    }
+
+    /// The remaining non-goals from section 6 of the spec. Each of these would
+    /// be a way for depth to become a discount, which is the exact failure the
+    /// design exists to prevent.
+    function test_theEchoDoesNotGrantASeed() public {
+        uint256 parent = _makeWhole();
+        uint256 child = _seedFrom(parent);
+        assertEq(mro.seedsAvailable(child), 0,
+            &quot;the budget is per KEY per year, not per inherited day&quot;);
+    }
+
+    function test_theEchoDoesNotFillTheHeartOrColourIt() public {
+        uint256 parent = _makeWhole();
+        uint256 child = _seedFrom(parent);
+        assertEq(mro.viewOf(child).level, 1, &quot;an heir starts with an empty heart&quot;);
+        assertEq(mro.viewOf(child).streak, 1, &quot;and no run it did not run&quot;);
+    }
+
+    function test_theEchoIsNotCountedInYears() public {
+        uint256 parent = _makeWhole();
+        uint256 child = _seedFrom(parent);
+        // Years is this token&#39;s OWN completed years. Echo is reported
+        // separately and deliberately.
+        assertEq(_attr(mro.tokenURI(child), &quot;Years&quot;), &quot;0&quot;);
+        assertEq(_attr(mro.tokenURI(child), &quot;Echo&quot;), &quot;365&quot;);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and confirm it fails for the right reason</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH
+cd contracts &amp;&amp; forge test --match-contract LineageTest -vv
+</code></pre>
+<p>Expected: FAIL. <code>echoOf</code> is undeclared and <code>TokenView</code> has no <code>echo</code> member.
+If it fails for any OTHER reason, fix the harness before continuing -- a test
+that fails for the wrong reason proves nothing.</p>
+<p>If <code>_seedFrom</code> or <code>_growTo</code> do not exist on <code>MroTestBase</code>, add them there as
+part of this step, next to <code>_makeWhole</code>. <code>_seedFrom(parent)</code> must call
+<code>seed(...)</code> as the warden with a fresh id, a distinct recipient, and
+<code>CODE_BYTES</code> of filler; <code>_growTo(id, level)</code> warps and credits days.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Add the field to TokenView</strong></li>
+</ul>
+<p>In <code>contracts/src/render/TokenView.sol</code>, after <code>uint256 parent;</code>:</p>
+<pre><code class="language-solidity">    uint32 echo;         // days the LINE had run when this token was seeded;
+                         // 0 for a founding token. Sealed at the seed and
+                         // never written again. See
+                         // docs/specs/2026-09-06-mro-lineage-design.md.
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Add the mapping and the accessor</strong></li>
+</ul>
+<p>In <code>contracts/src/MachineReadableOnly.sol</code>, beside <code>_parentOf</code> at :80:</p>
+<pre><code class="language-solidity">    /// @notice Days the line had run when this token was seeded.
+    /// @dev Its own mapping because `Token` is EXACTLY full at 256 bits, and
+    /// widening it would add a slot to every token and change the cost of
+    /// every check-in. Written once, in `seed`.
+    mapping(uint256 =&gt; uint32) internal _echo;
+
+    /// @notice The sealed inherited tenure. 0 for a founding token.
+    function echoOf(uint256 id) public view returns (uint32) {
+        return _echo[id];
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Seal it in <code>seed()</code> and expose it in <code>viewOf</code></strong></li>
+</ul>
+<p>In <code>seed</code>, in the same <code>unchecked</code> region that already increments
+<code>_seedsSpent</code> and <code>p.seedsGiven</code> -- but OUTSIDE <code>unchecked</code>, because this one
+is an addition of two values that must not wrap:</p>
+<pre><code class="language-solidity">        // The parent&#39;s own credited days PLUS what the parent itself
+        // inherited, so the whole line accumulates in O(1) and no renderer
+        // ever walks a parent chain.
+        _echo[childId] = p.level + _echo[parentId];
+</code></pre>
+<p>Place it beside <code>_parentOf[childId] = parentId;</code>.</p>
+<p>In <code>viewOf</code>, beside <code>v.parent</code>:</p>
+<pre><code class="language-solidity">        v.echo = _echo[id];
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Run the tests and the whole contract suite</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH
+cd contracts &amp;&amp; forge test --match-contract LineageTest -vv &amp;&amp; forge test
+</code></pre>
+<p>Expected: LineageTest PASSES, and the full suite still passes at its current
+count. The renderer tests may fail on the new struct member if any fixture
+constructs a <code>TokenView</code> positionally -- fix those by naming the field, not by
+reordering the struct.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Prove the contract is still deployable</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH
+cd contracts &amp;&amp; forge build --sizes
+</code></pre>
+<p>Expected: every deployed contract has POSITIVE runtime margin under 24,576
+bytes. <code>test/ContractSize.t.sol</code> asserts this too, but read the table -- a
+factory that <code>new</code>s its children inline is the classic way this goes wrong.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 8: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/src/MachineReadableOnly.sol contracts/src/render/TokenView.sol contracts/test/
+git commit -m &quot;contract: a child is sealed with the days its line had run&quot;
+</code></pre>
+<hr>
+<h2>Task 2: The Solidity renderer draws the echo ring</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/render/FrameRenderer.sol</code> (<code>rings</code> at :57-60,
+<code>paths</code> at :73-87, <code>_emit</code> at :152-178, <code>_ringBars</code> at :192-215)</li>
+<li>Modify: <code>contracts/src/render/Renderer.sol</code> (the attribute list at :329-331)</li>
+<li>Test: <code>contracts/test/EchoRing.t.sol</code> (create)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>TokenView.echo</code> from Task 1.</p>
+</li>
+<li><p>Produces:</p>
+<ul>
+<li><code>FrameRenderer.ringBudget(uint32 level, uint32 echo) returns (uint256 ownRings, uint256 echoRings)</code></li>
+<li><code>FrameRenderer.rings(uint32 level, uint32 echo) returns (uint256)</code> -- the
+TOTAL, replacing the one-argument form.
+Task 3 mirrors both names exactly in JavaScript.</li>
+</ul>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {MroTestBase} from &quot;./MroTestBase.sol&quot;;
+import {FrameRenderer} from &quot;../src/render/FrameRenderer.sol&quot;;
+
+contract EchoRingTest is MroTestBase {
+    /// The property that protects every existing token.
+    function test_aFoundingTokenIsDrawnExactlyAsBefore() public {
+        (uint256 own, uint256 echo) = FrameRenderer.ringBudget(3650, 0);
+        assertEq(own, 10, &quot;ten own rings, unchanged&quot;);
+        assertEq(echo, 0, &quot;and no echo ring&quot;);
+        assertEq(FrameRenderer.rings(3650, 0), 10);
+    }
+
+    /// A child gives up one slot, permanently.
+    function test_aChildsOwnRingsCapAtNine() public {
+        (uint256 own, uint256 echo) = FrameRenderer.ringBudget(3650, 365);
+        assertEq(own, 9, &quot;nine of its own&quot;);
+        assertEq(echo, 1, &quot;plus the echo ring&quot;);
+        assertEq(FrameRenderer.rings(3650, 365), 10, &quot;never more than ten&quot;);
+    }
+
+    /// A newborn child is one ring, not zero.
+    function test_aNewbornChildHasOnlyTheEchoRing() public {
+        (uint256 own, uint256 echo) = FrameRenderer.ringBudget(1, 365);
+        assertEq(own, 0);
+        assertEq(echo, 1);
+        assertEq(FrameRenderer.canvas(1), 53, &quot;canvas 53 at one ring&quot;);
+    }
+
+    /// The constant that makes the cost predictable.
+    function test_theEchoRingIsAlways53CellsOnASide() public {
+        for (uint32 y = 1; y &lt;= 10; y++) {
+            uint256 total = FrameRenderer.rings(y * 365, 365);
+            uint256 size = FrameRenderer.canvas(total);
+            uint256 o = 2 * (total - 1);
+            assertEq(size - 2 * o, 53, &quot;the depth cancels at every ring count&quot;);
+        }
+    }
+
+    /// The drawn output: dotted, in the ghost element, 104 dots.
+    function test_theEchoRingDrawsAsOneHundredAndFourDots() public {
+        bytes memory d = FrameRenderer.echoRingBars(0, 53);
+        assertEq(_countRuns(d), 104, &quot;27 + 27 + 25 + 25&quot;);
+    }
+}
+</code></pre>
+<p><code>_countRuns</code> counts occurrences of <code>&quot;M&quot;</code> in the path string; add it to
+<code>MroTestBase</code> if it is not already there.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and confirm it fails</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH
+cd contracts &amp;&amp; forge test --match-contract EchoRingTest -vv
+</code></pre>
+<p>Expected: FAIL -- <code>ringBudget</code> and <code>echoRingBars</code> are undeclared and <code>rings</code>
+takes one argument.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Replace the ring budget</strong></li>
+</ul>
+<p>In <code>FrameRenderer.sol</code>, replace <code>rings(uint32 level)</code>:</p>
+<pre><code class="language-solidity">    /// @notice How the ten ring slots are shared between inherited and earned
+    /// years.
+    /// @dev The echo ring takes one of the TEN rather than adding an
+    /// eleventh. That is forced: canvas(r) = 49 + 4r, so an eleventh ring
+    /// grows the artwork to 93 cells and creates a second byte worst case to
+    /// measure and defend. A child&#39;s own rings therefore cap at nine.
+    function ringBudget(uint32 level, uint32 echo)
+        internal
+        pure
+        returns (uint256 own, uint256 echoRings)
+    {
+        echoRings = echo &gt; 0 ? 1 : 0;
+        own = level / FrameGeometry.DAY_CELLS;
+        uint256 room = MAX_RINGS - echoRings;
+        if (own &gt; room) own = room;
+    }
+
+    /// @notice Completed years plus the echo ring: the total rings drawn.
+    function rings(uint32 level, uint32 echo) internal pure returns (uint256) {
+        (uint256 own, uint256 echoRings) = ringBudget(level, echo);
+        return own + echoRings;
+    }
+</code></pre>
+<p>Update every call site. <code>Renderer.sol:175</code> and <code>Renderer.sol:222</code> both call
+<code>FrameRenderer.rings(v.level)</code>; they become <code>FrameRenderer.rings(v.level, v.echo)</code>.
+<strong>Grep for every one rather than trusting this list</strong> -- see
+[[plan-code-is-a-draft]]: a plan&#39;s file list is a draft.</p>
+<pre><code class="language-bash">/bin/grep -rn &quot;FrameRenderer.rings\|rings(v.level\|rings(level&quot; contracts/src contracts/test
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Draw the dotted ring</strong></li>
+</ul>
+<p>Add to <code>FrameRenderer.sol</code>, beside <code>_ringBars</code>:</p>
+<pre><code class="language-solidity">    /// @dev The echo ring: the innermost ring, drawn one cell on and one cell
+    /// off, in the GHOST fill.
+    ///
+    /// A cell is drawn when its offset along its own edge is EVEN, measured in
+    /// x from `o` on the horizontal edges and in y from `o` on the vertical
+    /// ones. Offset 0 is even, so all four corners are drawn, which anchors
+    /// the ring and makes the phase unambiguous on every edge.
+    ///
+    /// The side length is ALWAYS 53: with r rings the innermost sits at
+    /// o = 2(r-1) and canvas is 49 + 4r, so the depth cancels. That is why
+    /// there is exactly one of these -- at ~1,456 bytes a dotted ring costs
+    /// about 23 times a solid one, and nine would blow the 20,000 byte limit.
+    function echoRingBars(uint256 o, uint256 len) internal pure returns (bytes memory d) {
+        uint256 last = o + len - 1;
+        // The two horizontal edges, corners included.
+        for (uint256 i; i &lt; len; i += 2) {
+            uint256 x = o + i;
+            d = abi.encodePacked(
+                d,
+                &quot;M&quot;, LibString.toString(x), &quot; &quot;, LibString.toString(o), &quot;h1v1h-1z&quot;,
+                &quot;M&quot;, LibString.toString(x), &quot; &quot;, LibString.toString(last), &quot;h1v1h-1z&quot;
+            );
+        }
+        // The two vertical edges, corners already drawn above.
+        for (uint256 i = 2; i &lt; len - 1; i += 2) {
+            uint256 y = o + i;
+            d = abi.encodePacked(
+                d,
+                &quot;M&quot;, LibString.toString(o), &quot; &quot;, LibString.toString(y), &quot;h1v1h-1z&quot;,
+                &quot;M&quot;, LibString.toString(last), &quot; &quot;, LibString.toString(y), &quot;h1v1h-1z&quot;
+            );
+        }
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Wire it into the ghost path</strong></li>
+</ul>
+<p><code>paths</code> currently computes <code>ringCount = rings(v.level)</code> and hands one count to
+<code>_emit</code>. Thread both counts through, and in <code>_emit</code> append the echo ring&#39;s
+bars to <code>ghostD</code> while the solid rings keep going to <code>litD</code>:</p>
+<pre><code class="language-solidity">        bytes memory ghostD = PathWriter.seal(ghostBuf);
+        if (echoRings != 0) {
+            // The echo ring is the innermost, at depth 2 * ownRings, and is
+            // always 53 cells on a side.
+            ghostD = abi.encodePacked(ghostD, echoRingBars(2 * ownRings, 53));
+        }
+        bytes memory litD = abi.encodePacked(PathWriter.seal(litBuf), _ringBars(ownRings, size));
+</code></pre>
+<p>Note <code>_ringBars</code> now takes <code>ownRings</code>, not the total. The ghost <code>&lt;path&gt;</code>
+element is already emitted only when non-empty, and a child with an echo ring
+always has a non-empty ghost path, so no new element appears in the output for
+a founding token.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Add the metadata attribute</strong></li>
+</ul>
+<p>In <code>Renderer.sol</code>, in the attribute list beside <code>_num(&quot;Parent&quot;, v.parent)</code>:</p>
+<pre><code class="language-solidity">                _num(&quot;Echo&quot;, v.echo),
+</code></pre>
+<p>Emitted ALWAYS, including <code>0</code> on a founding token, so an agent can filter on
+it without special-casing absence.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Run the tests</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH
+cd contracts &amp;&amp; forge test --match-contract EchoRingTest -vv &amp;&amp; forge test
+</code></pre>
+<p>Expected: EchoRingTest passes. <code>RenderFixture</code> WILL now fail, because the
+tokenURI gained an <code>Echo</code> attribute -- that is correct and Task 3 regenerates
+it. Do not hand-edit the fixture.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 8: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/src/render/ contracts/test/
+git commit -m &quot;render: the line&#39;s years draw as one dotted ring at the core&quot;
+</code></pre>
+<hr>
+<h2>Task 3: The JavaScript renderer draws the same thing</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>tools/render-token.mjs</code> (<code>ringsFor</code> :292, <code>canvasFor</code> :299,
+<code>ringBars</code> :333-347, the render entry at :418-436 and :491, the attribute
+list at :681)</li>
+<li>Modify (regenerate, never by hand): <code>contracts/test/RenderFixture.sol</code></li>
+<li>Test: <code>tools/test/echo-ring.test.mjs</code> (create)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: the Solidity names from Task 2 -- <code>ringBudget</code>, <code>rings</code>,
+<code>echoRingBars</code>. The JavaScript MUST use the same names and the same
+arithmetic.</p>
+</li>
+<li><p>Produces: <code>echo</code> accepted in the render state object, defaulting to 0.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<pre><code class="language-javascript">import { test } from &quot;node:test&quot;;
+import assert from &quot;node:assert/strict&quot;;
+import { ringBudget, ringsFor, canvasFor, echoRingBars } from &quot;../render-token.mjs&quot;;
+
+test(&quot;a founding token keeps all ten of its own rings&quot;, () =&gt; {
+  assert.deepEqual(ringBudget(10, 0), { own: 10, echoRings: 0 });
+});
+
+test(&quot;a child gives up one slot&quot;, () =&gt; {
+  assert.deepEqual(ringBudget(10, 365), { own: 9, echoRings: 1 });
+  assert.equal(ringsFor(10, 365), 10);
+});
+
+test(&quot;the echo ring is always 53 cells on a side&quot;, () =&gt; {
+  for (let y = 1; y &lt;= 10; y++) {
+    const total = ringsFor(y, 365);
+    const size = canvasFor(y, 365);
+    const o = 2 * (total - 1);
+    assert.equal(size - 2 * o, 53, `at ${y} years`);
+  }
+});
+
+test(&quot;the echo ring is 104 dots&quot;, () =&gt; {
+  const d = echoRingBars(0, 53);
+  assert.equal(d.split(&quot;M&quot;).length - 1, 104);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and confirm it fails</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd tools &amp;&amp; node --test test/echo-ring.test.mjs
+</code></pre>
+<p>Expected: FAIL -- <code>ringBudget</code> and <code>echoRingBars</code> are not exported.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Mirror the budget</strong></li>
+</ul>
+<pre><code class="language-javascript">// MUST stay identical to FrameRenderer.ringBudget in Solidity.
+// The echo ring takes one of the TEN rather than adding an eleventh, because
+// canvas(r) = 49 + 4r and an eleventh ring creates a second byte worst case.
+export const ringBudget = (years, echoDays) =&gt; {
+  const echoRings = echoDays &gt; 0 ? 1 : 0;
+  return { own: Math.min(years, MAX_RINGS - echoRings), echoRings };
+};
+
+// MUST stay identical to FrameRenderer.rings in Solidity.
+export const ringsFor = (years, echoDays = 0) =&gt; {
+  const { own, echoRings } = ringBudget(years, echoDays);
+  return own + echoRings;
+};
+
+export const canvasFor = (years, echo = 0) =&gt;
+  BLOCK + 2 * (THICK + GAP + ringSpan(ringsFor(years, echo)));
+</code></pre>
+<p><code>ringsFor</code> keeps working for existing one-argument callers because <code>echo</code>
+defaults to 0. <strong>Grep for every caller anyway</strong> and confirm each one either
+passes <code>echo</code> or genuinely means &quot;no echo&quot;:</p>
+<pre><code class="language-bash">/bin/grep -rn &quot;ringsFor\|canvasFor&quot; tools/ warden/ client/
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Mirror the dotted ring</strong></li>
+</ul>
+<pre><code class="language-javascript">// MUST stay identical to FrameRenderer.echoRingBars in Solidity.
+// Drawn when the offset along the edge is EVEN -- in x from o on the
+// horizontal edges, in y from o on the vertical ones. Offset 0 is even, so
+// all four corners are drawn.
+export function echoRingBars(o, len) {
+  const last = o + len - 1;
+  let d = &quot;&quot;;
+  for (let i = 0; i &lt; len; i += 2) {
+    const x = o + i;
+    d += `M${x} ${o}h1v1h-1z`;
+    d += `M${x} ${last}h1v1h-1z`;
+  }
+  for (let i = 2; i &lt; len - 1; i += 2) {
+    const y = o + i;
+    d += `M${o} ${y}h1v1h-1z`;
+    d += `M${last} ${y}h1v1h-1z`;
+  }
+  return d;
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Thread <code>echo</code> through the renderer</strong></li>
+</ul>
+<p>At the render entry (:418), accept <code>echo = 0</code> alongside <code>years: rawYears = 0</code>.
+Replace the ring maths at :434-436:</p>
+<pre><code class="language-javascript">  const { own: years, echoRings } = ringBudget(rawYears, echo);
+  const total = years + echoRings;
+  const canvas = canvasFor(rawYears, echo);
+  const frameOff = ringSpan(total) + GAP;   // where the 49-grid frame starts
+</code></pre>
+<p>At :491 the solid rings stay on the frame path and take <code>years</code>, unchanged --
+<code>ringBars(years, canvas)</code>, NOT <code>total</code>, or the echo slot would be drawn twice.</p>
+<p>The ghost group is the problem to solve carefully. Read :480-495 first: each
+entry in <code>groups</code> is a <code>[colour, cellSet]</code> pair turned into a path by
+<code>pathFor</code>, whereas the echo ring is a path STRING, like <code>ringBars</code>. So it
+cannot be added to the ghost cell set. Mirror what the frame group already
+does with its rings -- build the ghost path, then concatenate:</p>
+<pre><code class="language-javascript">  // The ghost group carries the echo ring the way the frame group carries the
+  // year rings: as a path string appended after the cell walk. Matches
+  // FrameRenderer._emit, which appends echoRingBars to ghostD.
+  const ghostPath = pathFor(dim, canvas)
+    + (echoRings ? echoRingBars(2 * years, 53) : &quot;&quot;);
+  if (ghostPath) groups.push([ghost, ghostPath]);
+</code></pre>
+<p>If <code>groups</code> entries are <code>[colour, cellSet]</code> rather than <code>[colour, pathString]</code>
+at that point in the file, the frame group must already solve this -- it
+concatenates <code>ringBars</code>. Follow whatever shape the frame group uses; do not
+introduce a second convention.</p>
+<p>Add the attribute beside <code>num(&quot;Parent&quot;, parent)</code>:</p>
+<pre><code class="language-javascript">        num(&quot;Echo&quot;, echo),
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Run the JS tests</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd tools &amp;&amp; node --test test/echo-ring.test.mjs &amp;&amp; ~/scripts/safe-build.sh npm test
+</code></pre>
+<p>Expected: the new test passes and the tools suite is green.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Regenerate the cross-language fixture and prove both agree</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd ~/projects/machine-readable-only
+node tools/render-fixture.mjs 1 example.com
+export PATH=$HOME/.foundry/bin:$PATH
+cd contracts &amp;&amp; forge test
+</code></pre>
+<p>Expected: <code>RenderFixture</code> passes again. If it does not, the two renderers
+disagree -- <strong>do not touch the fixture</strong>, find the difference. The fixture is
+<code>// GENERATED by tools/render-fixture.mjs -- do not edit by hand.</code></p>
+<p>A regenerated fixture proves Solidity matches JS. It does NOT prove the JS is
+right; that is what Task 4&#39;s decode gate is for.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 8: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add tools/render-token.mjs tools/test/echo-ring.test.mjs contracts/test/RenderFixture.sol
+git commit -m &quot;render: the JavaScript renderer draws the echo ring too&quot;
+</code></pre>
+<hr>
+<h2>Task 4: Measure the budget, and prove a child still scans</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/test/GasBudget.t.sol</code> (the case list at :138-148)</li>
+<li>Create: <code>tools/echo-decode-check.mjs</code></li>
+<li>Modify: <code>docs/specs/2026-09-06-mro-lineage-design.md</code> (section 3.6, with the
+real figures)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: everything from Tasks 1-3.</p>
+</li>
+<li><p>Produces: measured <code>worstGas</code> and <code>maxBytes</code>, and a decode result.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Add a child to the byte worst case</strong></p>
+</li>
+</ul>
+<p>The byte worst case becomes a CHILD. Add a case beside the existing ones; do
+NOT change token 7, which stays correct as the founding-token worst case.</p>
+<pre><code class="language-solidity">        (, b) = _measure(&quot;ten years, a child at the cap&quot;, 11);
+        maxBytes = _max(maxBytes, b);
+</code></pre>
+<p>Token 11 is a seeded child at level 3,650 with <code>echo</code> set and the maximal
+LEGAL Mark set. <strong>The maximal legal set is five Marks, not seven</strong> -- the
+exclusive pairs cap it at Hush + Beat + the bought Iris in leaf + Vessel +
+Tint. Do not construct a seven-Mark token; that state is unreachable.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and read the printed headroom</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH
+cd contracts &amp;&amp; forge test --match-test theWholeLadderStaysInsideTheHardLimit -vv
+</code></pre>
+<p>Expected: PASS, with the printed byte headroom near <code>20,000 - 12,950 = 7,050</code>.</p>
+<p><strong>If it fails on <code>BYTE_BAND</code>, do not move the band to make it pass.</strong> Read the
+comment above <code>BYTE_BAND</code> first and report the real number.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Record the real figures in the spec</strong></li>
+</ul>
+<p>Replace the arithmetic in section 3.6 of
+<code>docs/specs/2026-09-06-mro-lineage-design.md</code> with what Step 2 printed, and
+delete the sentence that says the figures are arithmetic rather than
+measurements.</p>
+<p>Keep the three-worst-case discipline: the dearest token and the largest token
+are DIFFERENT tokens and must not be collapsed. See [[gas-budget]].</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Write the decode gate</strong></li>
+</ul>
+<p>The echo ring is the first high-frequency pattern this piece has drawn next to
+the code. Create <code>tools/echo-decode-check.mjs</code> which renders a child at BOTH
+extremes and decodes each:</p>
+<ul>
+<li>a newborn child: <code>level 1, echo 365</code> -- one ring, canvas 53</li>
+<li>a child at the cap: <code>level 3650, echo 3650</code> -- ten rings, canvas 89</li>
+</ul>
+<p>Use the existing decode oracle helper in <code>tools/test/helpers</code>. <strong>ZXing, never
+jsqr</strong> -- see [[decode-oracle]]. Rasterise at the same pixel sizes the
+existing sheets use, and assert zero rejections.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the decode gate under the memory cap</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd ~/projects/machine-readable-only
+~/scripts/safe-build.sh node tools/echo-decode-check.mjs
+</code></pre>
+<p>Expected: every render decodes to its own URL. <strong>This is a rendering sweep --
+it MUST go through the wrapper.</strong> An uncapped sweep of exactly this shape
+reached 6.28 GB and destroyed a session on 2026-08-28. Batch it if it grows.</p>
+<p>If a child fails to decode, STOP. That is a design problem, not a tuning
+problem, and it goes back to the spec.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/test/GasBudget.t.sol tools/echo-decode-check.mjs docs/specs/
+git commit -m &quot;measure: the child worst case, and a child still scans&quot;
+</code></pre>
+<hr>
+<h2>Task 5: The mirror reserves a seed</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/mirror/queries.mjs</code> (<code>pendingMints</code> :160-164,
+<code>stuckMints</code> :165-167, <code>insertMint</code> :378-389, <code>insertToken</code> :226-228)</li>
+<li>Test: <code>warden/test/seed-mirror.test.mjs</code> (create)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: nothing from earlier tasks.</li>
+<li>Produces, all read by Tasks 6 and 7:<ul>
+<li><code>insertSeed({ childId, parentId, toAddress, keyId, lastDay, mintDay })</code></li>
+<li><code>pendingSeeds()</code> returning <code>{ tokenId, parentId, toAddress, agentKeyId, qr }</code></li>
+<li><code>dropSeed(childId)</code></li>
+<li><code>markSeedWritten(childId)</code></li>
+</ul>
+</li>
+</ul>
+<p><strong>No schema change and no <code>migrate()</code> change.</strong> <code>tokens.parentId</code> already
+exists and <code>pendingMints</code> already JOINs <code>tokens</code>, so the mint/seed split is a
+WHERE clause. If you reach for <code>ALTER TABLE</code>, stop and re-read the ordering
+rule in [[payment-criticals-closed]].</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<pre><code class="language-javascript">import { test } from &quot;node:test&quot;;
+import assert from &quot;node:assert/strict&quot;;
+import { openTestDb } from &quot;./helpers/db.mjs&quot;;   // match the existing helper
+
+test(&quot;a reserved seed spends the budget immediately&quot;, () =&gt; {
+  const q = openTestDb();
+  q.insertToken({ tokenId: 1, keyId: &quot;k&quot;, owner: &quot;0xA&quot;, lastDay: 10, mintDay: 10 });
+  assert.equal(q.seedsSpent(&quot;k&quot;), 0);
+  q.insertSeed({ childId: 2, parentId: 1, toAddress: &quot;0xB&quot;, keyId: &quot;k&quot;, lastDay: 10, mintDay: 10 });
+  assert.equal(q.seedsSpent(&quot;k&quot;), 1, &quot;the row IS the reservation&quot;);
+});
+
+test(&quot;a dropped seed returns the budget&quot;, () =&gt; {
+  const q = openTestDb();
+  q.insertToken({ tokenId: 1, keyId: &quot;k&quot;, owner: &quot;0xA&quot;, lastDay: 10, mintDay: 10 });
+  q.insertSeed({ childId: 2, parentId: 1, toAddress: &quot;0xB&quot;, keyId: &quot;k&quot;, lastDay: 10, mintDay: 10 });
+  q.dropSeed(2);
+  assert.equal(q.seedsSpent(&quot;k&quot;), 0, &quot;a seed that cannot land is not spent&quot;);
+  assert.equal(q.getToken(2), undefined, &quot;and the child is gone from the mirror&quot;);
+});
+
+test(&quot;a seed never appears in the MINT queue&quot;, () =&gt; {
+  const q = openTestDb();
+  q.insertToken({ tokenId: 1, keyId: &quot;k&quot;, owner: &quot;0xA&quot;, lastDay: 10, mintDay: 10 });
+  q.insertSeed({ childId: 2, parentId: 1, toAddress: &quot;0xB&quot;, keyId: &quot;k&quot;, lastDay: 10, mintDay: 10 });
+  q.completeSolve(2, &quot;ab&quot;.repeat(172));
+  assert.deepEqual(q.pendingMints().map((m) =&gt; m.tokenId), [],
+    &quot;a child sent through mint() would revert, and the agent would never know why&quot;);
+  assert.deepEqual(q.pendingSeeds().map((s) =&gt; s.tokenId), [2]);
+});
+
+test(&quot;a seed is never swept as an expired reservation&quot;, () =&gt; {
+  const q = openTestDb();
+  q.insertToken({ tokenId: 1, keyId: &quot;k&quot;, owner: &quot;0xA&quot;, lastDay: 10, mintDay: 10 });
+  q.insertSeed({ childId: 2, parentId: 1, toAddress: &quot;0xB&quot;, keyId: &quot;k&quot;, lastDay: 10, mintDay: 10 });
+  // Call the real sweep. Find its name first rather than guessing:
+  //   /bin/grep -n &quot;expiredMints&quot; warden/src/mirror/queries.mjs
+  // and use the public method that runs it (around :510).
+  q.sweepExpiredReservations(Date.now() + 86_400_000);
+  assert.ok(q.getToken(2), &quot;a free row has no payNonce and must not be swept&quot;);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and confirm it fails</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd warden &amp;&amp; node --test test/seed-mirror.test.mjs
+</code></pre>
+<p>Expected: FAIL -- <code>insertSeed</code> is not a function.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Add the free reservation</strong></li>
+</ul>
+<pre><code class="language-javascript">    /**
+     * Reserve a SEEDED CHILD, which costs nothing.
+     *
+     * Queued outright, because nothing settles on this route and there is
+     * therefore no window in which the mirror could be believing in a payment
+     * that never arrives -- the same reasoning as reserveMark.
+     *
+     * A SEPARATE METHOD rather than a flag on insertMint, which throws
+     * without a payment nonce. The rule is the one already written beside
+     * reserveMark and reserveMarkPaid: a boolean argument in a money path is
+     * exactly the seam where something expensive gets handed out for free.
+     *
+     * Both rows land in one transaction. The tokens row IS the reservation --
+     * seedsSpent counts `parentId IS NOT NULL` -- so a half-written pair
+     * would either spend a seed with nothing to write, or write with no seed
+     * spent.
+     */
+    insertSeed({ childId, parentId, toAddress, keyId, lastDay, mintDay }) {
+      return this.transact(() =&gt; {
+        s.insertSeedToken.run(childId, keyId, toAddress, lastDay, mintDay, parentId);
+        // payNonce and reservedAt stay NULL. That is what keeps this row out
+        // of expiredMints and out of the dropped sweep, both of which require
+        // reservedAt IS NOT NULL -- the same treatment the four EARNED Marks
+        // already get.
+        s.insertSeedMint.run(childId, toAddress, keyId);
+      });
+    },
+
+    /// A seed the chain will never accept. Deleting BOTH rows returns the
+    /// key&#39;s seed for this agent-year, because seedsSpent counts the tokens
+    /// row. A once-a-year budget burned on an orphan is the worst failure
+    /// this feature has.
+    dropSeed(childId) {
+      return this.transact(() =&gt; {
+        s.deleteSeedMint.run(childId);
+        s.deleteSeedToken.run(childId);
+      });
+    },
+</code></pre>
+<p>The four prepared statements this needs, added beside the existing ones:</p>
+<pre><code class="language-javascript">    insertSeedToken: db.prepare(
+      &quot;INSERT INTO tokens (tokenId, keyId, owner, lastDay, mintDay, parentId, generation) &quot; +
+        // The child&#39;s generation is the parent&#39;s plus one, read in the same
+        // statement so it cannot drift from the chain&#39;s p.generation + 1.
+        &quot;VALUES (?, ?, ?, ?, ?, ?, (SELECT generation + 1 FROM tokens WHERE tokenId = ?))&quot;
+    ),
+    insertSeedMint: db.prepare(
+      // payNonce and reservedAt are deliberately absent: a free row must not
+      // be reachable by expiredMints or by the dropped sweep, both of which
+      // require reservedAt IS NOT NULL.
+      &quot;INSERT INTO mints (tokenId, toAddress, keyId, status) VALUES (?, ?, ?, &#39;queued&#39;)&quot;
+    ),
+    deleteSeedMint: db.prepare(&quot;DELETE FROM mints WHERE tokenId = ?&quot;),
+    deleteSeedToken: db.prepare(&quot;DELETE FROM tokens WHERE tokenId = ? AND parentId IS NOT NULL&quot;),
+    markSeedWritten: db.prepare(
+      &quot;UPDATE mints SET status = &#39;written&#39; WHERE tokenId = ?&quot;
+    ),
+</code></pre>
+<p><code>deleteSeedToken</code> carries <code>AND parentId IS NOT NULL</code> so a bug in the Clock can
+never delete a FOUNDING token: the one row this method must never touch is the
+one nobody can recreate.</p>
+<p><code>markSeedWritten</code> also sets the <code>tokens</code> row&#39;s status, exactly as
+<code>markMintWritten</code> does at :633 -- read that method and mirror it rather than
+writing only the <code>mints</code> half.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Split the two queues</strong></li>
+</ul>
+<pre><code class="language-javascript">    pendingMints: db.prepare(
+      &quot;SELECT m.tokenId, m.toAddress, m.keyId, m.qr, t.keyId AS agentKeyId FROM mints m &quot; +
+        &quot;JOIN tokens t ON t.tokenId = m.tokenId &quot; +
+        // A CHILD IS NOT A MINT. seed() and mint() are different functions
+        // with different arguments, and a child sent through the mint pass
+        // reverts with no reason an agent could act on.
+        &quot;WHERE m.status = &#39;queued&#39; AND m.solveState = &#39;done&#39; AND t.parentId IS NULL &quot; +
+        &quot;ORDER BY m.tokenId ASC&quot;
+    ),
+    pendingSeeds: db.prepare(
+      &quot;SELECT m.tokenId, m.toAddress, m.qr, t.parentId, t.keyId AS agentKeyId FROM mints m &quot; +
+        &quot;JOIN tokens t ON t.tokenId = m.tokenId &quot; +
+        &quot;WHERE m.status = &#39;queued&#39; AND m.solveState = &#39;done&#39; AND t.parentId IS NOT NULL &quot; +
+        &quot;ORDER BY m.tokenId ASC&quot;
+    ),
+</code></pre>
+<p><code>stuckMints</code> must also stop calling a seed &quot;paid for&quot;. Split it the same way
+and give the seed variant its own message; Task 6 uses it.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the tests, then the whole warden suite</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd warden &amp;&amp; node --test test/seed-mirror.test.mjs &amp;&amp; ~/scripts/safe-build.sh npm test
+</code></pre>
+<p>Expected: all green. If narrowing <code>pendingMints</code> turns other tests red, READ
+them before changing anything -- a wave of failures is evidence about what
+those tests were assuming. See [[a-test-that-cannot-see-the-failure]].</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Prove the guard by breaking it</strong></li>
+</ul>
+<p>Remove <code>AND t.parentId IS NULL</code> from <code>pendingMints</code> and confirm the third test
+goes red. Put it back. A control that does not go red means the test measures
+nothing -- this was done four times on 2026-09-05 and was the only thing
+showing those tests were load-bearing.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add warden/src/mirror/queries.mjs warden/test/seed-mirror.test.mjs
+git commit -m &quot;mirror: a seed is a free reservation, and never a mint&quot;
+</code></pre>
+<hr>
+<h2>Task 6: The Clock&#39;s fourth pass</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/clock/abi.mjs</code> (add <code>seed</code>)</li>
+<li>Modify: <code>warden/src/clock/run.mjs</code> (a new pass after the mint pass at
+:156-200, before credits)</li>
+<li>Test: <code>warden/test/clock-seed.test.mjs</code> (create)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>pendingSeeds</code>, <code>dropSeed</code>, <code>markSeedWritten</code> from Task 5.</p>
+</li>
+<li><p>Produces: <code>summary.seeded</code> (array of child ids) and <code>summary.droppedSeeds</code>,
+read by the Clock&#39;s log line and Task 7&#39;s status copy.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<pre><code class="language-javascript">test(&quot;a queued seed is sent as seed(), not mint()&quot;, async () =&gt; {
+  const { q, writer, calls } = seedRig();
+  await runClock({ q, writer, /* ...the rig&#39;s usual args */ });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].fn, &quot;seed&quot;);
+  assert.deepEqual(calls[0].args.slice(0, 3), [2n, 1n, &quot;0xB&quot;]);
+  assert.equal(q.getToken(2).status, &quot;written&quot;);
+});
+
+test(&quot;a permanently refused seed returns the budget&quot;, async () =&gt; {
+  const { q, writer } = seedRig({ fail: &quot;ParentNotWhole&quot; });
+  await runClock({ q, writer, /* ... */ });
+  assert.equal(q.getToken(2), undefined, &quot;the child is gone&quot;);
+  assert.equal(q.seedsSpent(&quot;k&quot;), 0, &quot;and the seed is spendable again&quot;);
+});
+
+test(&quot;a transient failure keeps the row for the next run&quot;, async () =&gt; {
+  const { q, writer } = seedRig({ fail: &quot;network&quot; });
+  await runClock({ q, writer, /* ... */ });
+  assert.ok(q.getToken(2), &quot;an RPC outage must not burn a year&#39;s seed&quot;);
+  assert.equal(q.seedsSpent(&quot;k&quot;), 1);
+});
+</code></pre>
+<p>The third test is the one that matters most. Dropping on a transient failure
+would burn a once-a-year budget because a provider was briefly unreachable.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and confirm it fails</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd warden &amp;&amp; node --test test/clock-seed.test.mjs
+</code></pre>
+<p>Expected: FAIL -- nothing in <code>src/clock/</code> mentions seed.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Add <code>seed</code> to the Clock&#39;s ABI</strong></li>
+</ul>
+<p><code>warden/src/clock/abi.mjs</code> currently carries <code>mint</code>, <code>batchCheckIn</code> and
+<code>applyMark</code>. Add <code>seed(uint256 childId, uint256 parentId, address to, bytes code)</code>.</p>
+<p>There is an existing guard, <code>warden/test/abi.test.mjs</code>, which re-runs the
+generator&#39;s own comparison. Make sure it still passes; a hand-edited ABI that
+drifts from the contract is how the three-argument <code>applyMark</code> mismatch made
+every Mark unwritable.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Write the pass</strong></li>
+</ul>
+<p>Insert after the mint pass and before credits:</p>
+<pre><code class="language-javascript">  // 3b. SEEDS. A child is created by seed(), not mint(): different function,
+  // different arguments, and it is FREE, so the failure rule is the opposite
+  // of a mint&#39;s. A mint that cannot land is left for a human because the
+  // agent has PAID. A seed that cannot land must be DROPPED, because the row
+  // is what spends the key&#39;s one seed for this agent-year -- seedsSpent
+  // counts `parentId IS NOT NULL` -- and leaving it would silently cost a
+  // year that cannot be earned again.
+  for (const s of q.pendingSeeds()) {
+    const result = await writer.send(
+      &quot;seed&quot;,
+      [BigInt(s.tokenId), BigInt(s.parentId), s.toAddress, `0x${s.qr}`],
+      { label: `seed ${s.tokenId} from ${s.parentId}` }
+    );
+    if (result.ok) {
+      q.markSeedWritten(s.tokenId);
+      summary.seeded.push(s.tokenId);
+      summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
+      continue;
+    }
+    // ONLY a named revert is permanent. An unnamed failure is a provider
+    // problem, and dropping on one would burn a year&#39;s seed because an RPC
+    // was briefly unreachable. Same allowlist discipline as applyMark&#39;s.
+    if (PERMANENT_SEED_ERRORS.has(result.errorName)) {
+      q.dropSeed(s.tokenId);
+      summary.droppedSeeds.push(s.tokenId);
+      alert(`clock: seed ${s.tokenId} from ${s.parentId} was refused as ${result.errorName}; the row is dropped and the agent&#39;s seed is available again`);
+      continue;
+    }
+    alert(`clock: seed ${s.tokenId} from ${s.parentId} did not land (${result.errorName ?? result.reason}); it stays queued for the next run`);
+  }
+</code></pre>
+<p>Define the allowlist next to the existing <code>applyMark</code> one, and say why each
+member can never succeed on a later run:</p>
+<pre><code class="language-javascript">// Named reverts that no later run can clear. ParentNotWhole and
+// NoSeedAvailable are facts about the parent and the key that only go the
+// wrong way with time; TokenExists means the id is taken for good; WalletCap
+// and SupplyCap are owner dials that the agent cannot wait out. Anything
+// unnamed -- including a provider timeout -- is NOT here on purpose.
+const PERMANENT_SEED_ERRORS = new Set([
+  &quot;ParentNotWhole&quot;, &quot;NoSeedAvailable&quot;, &quot;TokenExists&quot;,
+  &quot;WalletCap&quot;, &quot;SupplyCap&quot;, &quot;IdTooLarge&quot;, &quot;BadCodeLength&quot;,
+]);
+</code></pre>
+<p>Add <code>seeded: []</code> and <code>droppedSeeds: []</code> to the summary object where <code>minted</code>
+is initialised, and add both to the run&#39;s final log line so a seed is visible
+in <code>tail ~/logs/mro-clock.log</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the tests</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd warden &amp;&amp; node --test test/clock-seed.test.mjs &amp;&amp; ~/scripts/safe-build.sh npm test
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Prove the drop rule by breaking it</strong></li>
+</ul>
+<p>Add <code>&quot;network&quot;</code> to <code>PERMANENT_SEED_ERRORS</code> and confirm the third test goes
+red. Take it out again. That test is the whole point of the pass.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add warden/src/clock/ warden/test/clock-seed.test.mjs
+git commit -m &quot;clock: a fourth pass writes seeds, and returns the ones it cannot&quot;
+</code></pre>
+<hr>
+<h2>Task 7: The seed tool stops refusing</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/mcp/tools/seed.mjs</code> (the refusal at the end of the
+handler, and its long comment)</li>
+<li>Test: <code>warden/test/seed-tool.test.mjs</code> (create, or extend the existing seed
+tool tests -- grep first)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>insertSeed</code>, <code>nextTokenId</code> from Task 5.</p>
+</li>
+<li><p>Produces: <code>{ ok: true, tokenId, txStatus: &quot;queued&quot;, closes: [...], next: ... }</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<pre><code class="language-javascript">test(&quot;a whole parent with an unspent seed gets a child&quot;, async () =&gt; {
+  const { tool, q } = seedToolRig({ parentLevel: 365, yearsSinceFirstMint: 1 });
+  const out = await tool.handler({ parentId: 1, to: &quot;0xB...&quot; }, { keyId: &quot;k&quot; });
+  assert.equal(out.ok, true);
+  assert.equal(out.txStatus, &quot;queued&quot;);
+  assert.equal(q.getToken(out.tokenId).parentId, 1);
+  assert.equal(q.seedsSpent(&quot;k&quot;), 1);
+});
+
+test(&quot;the second seed in one agent-year is refused&quot;, async () =&gt; {
+  const { tool } = seedToolRig({ parentLevel: 365, yearsSinceFirstMint: 1 });
+  await tool.handler({ parentId: 1, to: &quot;0xB...&quot; }, { keyId: &quot;k&quot; });
+  const second = await tool.handler({ parentId: 1, to: &quot;0xB...&quot; }, { keyId: &quot;k&quot; });
+  assert.deepEqual(second, { ok: false, reason: &quot;no-seed-available&quot;, next: second.next });
+});
+</code></pre>
+<p>The second test is the reservation-counting property from
+[[a-reservation-is-state-too]], at the tool boundary rather than the query
+boundary.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and confirm it fails</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd warden &amp;&amp; node --test test/seed-tool.test.mjs
+</code></pre>
+<p>Expected: FAIL -- the handler returns <code>{ ok: false, reason: &quot;seed-not-available&quot; }</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Replace the refusal</strong></li>
+</ul>
+<p>Keep every gate above it exactly as it is, including the chain re-read of the
+binding, which is a security control and must read the chain rather than the
+mirror. Replace only the final <code>return</code>:</p>
+<pre><code class="language-javascript">      // EVERY GATE PASSES. Reserve the child and let the Clock write it.
+      //
+      // The tokens row IS the reservation: seedsSpent counts
+      // `parentId IS NOT NULL`, so the key&#39;s seed for this agent-year is
+      // spent the instant this returns, and a seed the chain later refuses is
+      // returned by the Clock dropping the row.
+      const tokenId = q.nextTokenId();
+      q.insertSeed({
+        childId: tokenId,
+        parentId,
+        toAddress: to,
+        keyId: ctx.keyId,
+        lastDay: today(),
+        mintDay: today(),
+      });
+      return {
+        ok: true,
+        tokenId,
+        txStatus: &quot;queued&quot;,
+        next: `The child is queued. It is written at the next 00:05 UTC run; read it at /t/${tokenId} after that.`,
+      };
+</code></pre>
+<p>Rewrite the long comment above it: it currently explains why the tool refuses,
+and that explanation is now history. Replace it with what the write path does
+and what happens when it fails. <strong>Do not leave a comment that contradicts the
+code</strong> -- that is a finding in this project&#39;s own review standard.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the tests</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd warden &amp;&amp; node --test test/seed-tool.test.mjs &amp;&amp; ~/scripts/safe-build.sh npm test
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run ALL FOUR suites, and read them</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; source ~/.nvm/nvm.sh
+cd ~/projects/machine-readable-only
+(cd contracts &amp;&amp; ~/scripts/safe-build.sh forge test 2&gt;&amp;1 | tail -2)
+(cd warden   &amp;&amp; ~/scripts/safe-build.sh npm test 2&gt;&amp;1 | /bin/grep -E &quot;^. (tests|pass|fail)&quot;)
+(cd tools    &amp;&amp; ~/scripts/safe-build.sh npm test 2&gt;&amp;1 | /bin/grep -E &quot;^. (tests|pass|fail)&quot;)
+(cd client   &amp;&amp; ~/scripts/safe-build.sh npm test 2&gt;&amp;1 | /bin/grep -E &quot;^. (tests|pass|fail)&quot;)
+</code></pre>
+<p>The client suite runs against a real Warden built from <code>warden/src</code>, so a tool
+change can break it. This is the step that has been skipped before.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add warden/src/mcp/tools/seed.mjs warden/test/
+git commit -m &quot;seed: the tool creates a child instead of explaining why it cannot&quot;
+</code></pre>
+<hr>
+<h2>Task 8: Docs and the wire</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Modify: <code>llms.txt</code>, <code>SKILL.md</code></p>
+</li>
+<li><p>Modify: <code>docs/2026-09-01-mro-raw-protocol.md</code></p>
+</li>
+<li><p>Modify: <code>skills/machine-readable-only/references/raw-protocol.md</code> (BY COPY)</p>
+</li>
+<li><p>Modify: <code>docs/specs/2026-08-27-machine-readable-only-design.md</code> (section 10
+pointer)</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Document the wire change</strong></p>
+</li>
+</ul>
+<p><code>seed</code> now returns <code>{ ok: true, tokenId, txStatus: &quot;queued&quot; }</code> where it
+previously always returned <code>{ ok: false, reason: &quot;seed-not-available&quot; }</code>. The
+<code>Echo</code> attribute is new in every tokenURI. Both are ADDITIVE; nothing is
+removed. Say so plainly in the protocol doc, beside the other recorded wire
+changes.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Point section 10 at the design</strong></li>
+</ul>
+<p>The deferred paragraph at the end of section 10 of the master spec is now
+answered. Replace it with one sentence naming
+<code>docs/specs/2026-09-06-mro-lineage-design.md</code> as the record. Do not delete the
+history -- the reasoning about per-token seeding compounding stays.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Re-copy the protocol doc into the skill BY COPY</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+cp docs/2026-09-01-mro-raw-protocol.md skills/machine-readable-only/references/raw-protocol.md
+</code></pre>
+<p><strong>Never hand-patch the copy.</strong> <code>tools/test/skill-doc.test.mjs:81</code> asserts byte
+equality, and patching by eye satisfies a reader but not the guard. This
+exact drift left the tools suite red for hours on 2026-09-06 --
+[[a-red-guard-that-was-overridden]].</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the tools suite, which owns that guard</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd tools &amp;&amp; ~/scripts/safe-build.sh npm test 2&gt;&amp;1 | /bin/grep -E &quot;^. (tests|pass|fail)&quot;
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add llms.txt SKILL.md docs/ skills/
+git commit -m &quot;docs: the wire says a seed now lands, and what a child carries&quot;
+</code></pre>
+<hr>
+<h2>Task 9: Redeploy to Base Sepolia</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>contracts/script/DeployPlan7.s.sol</code>,
+<code>contracts/script/deploy-plan7.sh</code>, <code>contracts/script/verify-plan7.sh</code></li>
+<li>Modify: <code>warden/src/clock/reconcile.mjs</code> (<code>DEPLOY_BLOCK</code>)</li>
+<li>Modify: <code>CLAUDE.md</code>, <code>llms.txt</code>, <code>SKILL.md</code> (the addresses)</li>
+</ul>
+<p><strong>This task ends in an outward-facing action. Stop before Step 4 and get the operator&#39;s
+approval.</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the deploy script from the working one</strong></li>
+</ul>
+<p>Copy <code>DeployPlan5.s.sol</code> / <code>deploy-plan6.sh</code>, not from memory.
+<code>DeployPlan5.s.sol</code> could not run at all because it called a bare
+<code>vm.startBroadcast()</code> with no sender -- and it failed AFTER the simulation
+passed, so it read like a wallet problem. Pass the key explicitly, as the two
+working scripts do. See [[plan-code-is-a-draft]].</p>
+<p>Every deploy script must STATE its chain.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Prove deployability under a strict limit</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH
+cd contracts &amp;&amp; forge build --sizes &amp;&amp; bash script/anvil-size-check.sh
+</code></pre>
+<p>Expected: positive runtime margin, and a real deploy to plain <code>anvil</code> (NOT
+<code>--disable-code-size-limit</code>) with non-empty <code>cast code</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Rehearse</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+bash warden/tools/rehearse-start.sh
+</code></pre>
+<p>This runs the real <code>main.mjs</code> against a COPY of production state and is the
+only thing that catches a bad boot check. 394 green tests once crash-looped
+production because every suite opened a fresh database --
+[[rehearse-the-deploy-not-the-tests]].</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: STOP. Get the operator&#39;s approval before broadcasting.</strong></li>
+</ul>
+<p>Report: the measured sizes, the rehearsal result, all four suite counts from
+runs you just did, and that this supersedes
+<code>0xe032054D54b407C52C49c40A423aC79031401C03</code> /
+<code>0x48B6f41E0B8C4f38EBC67dfE57AeF18D553BC7f4</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Deploy, verify, and check the ABI against the chain</strong></li>
+</ul>
+<p>After approval: deploy, Basescan-verify, then match SELECTORS against the
+deployed runtime bytecode. The deployed ABI drifting from the code is how
+every Mark became unwritable, and only reading the bytecode found it.
+<code>warden/tools/read-ladder.mjs</code> exits non-zero on a mismatch rather than being
+eyeballed; do the same here for <code>seed</code> and <code>echoOf</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Update <code>DEPLOY_BLOCK</code> and the addresses</strong></li>
+</ul>
+<p>Set the new deploy block in <code>warden/src/clock/reconcile.mjs</code>. The Clock checks
+it at STARTUP and refuses without it. Update the addresses in <code>CLAUDE.md</code>,
+<code>llms.txt</code> and <code>SKILL.md</code>, restart with <code>pm2 restart mro-warden</code> after backing
+up <code>state.db</code> to <code>~/backups/state.db.&lt;UTC timestamp&gt;</code>, and verify the new
+copy THROUGH CLOUDFLARE rather than assuming it.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add contracts/script/ warden/src/clock/reconcile.mjs CLAUDE.md llms.txt SKILL.md
+git commit -m &quot;deploy: the chain carries the Echo&quot;
+</code></pre>
+<hr>
+<h2>What this plan does NOT do</h2>
+<ul>
+<li><strong>No mainnet.</strong> Base Sepolia only. Mainnet is a separate the operator gate.</li>
+<li><strong>No child-specific narrative in the token name.</strong> Section 9 of the spec
+leaves it deliberately.</li>
+<li><strong>No daily-post integration.</strong> Unbuilt and credential-blocked.</li>
+<li><strong>No re-solve of existing bitmaps.</strong> Every QR must be re-solved against the
+real domain before any MAINNET mint, which is a launch task and not this
+one. Sepolia tokens stay as they are because they are testnet.</li>
+</ul>
+</body>
+</html>
