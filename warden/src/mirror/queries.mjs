@@ -77,6 +77,9 @@ export function queries(db) {
     pruneUnusedKeys: db.prepare("DELETE FROM keys WHERE lastUsedAt IS NULL AND registeredAt < ?"),
     firstMintDay: db.prepare("SELECT MIN(mintDay) AS d FROM tokens WHERE keyId = ?"),
     seedsSpent: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE keyId = ? AND parentId IS NOT NULL"),
+    // 5.M3. How many children a token has seeded. Counted rather than stored,
+    // so it cannot drift from the rows it describes.
+    childCount: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE parentId = ?"),
     setLineage: db.prepare("UPDATE tokens SET generation = ?, parentId = ? WHERE tokenId = ?"),
     // `bestRun` only ever rises, in SQL rather than in the caller, so a caller
     // that forgets to pass the larger of the two cannot lower it. Mirrors the
@@ -305,6 +308,7 @@ export function queries(db) {
 
     firstMintDay: (keyId) => s.firstMintDay.get(keyId).d ?? 0,
     seedsSpent: (keyId) => s.seedsSpent.get(keyId).n,
+    childCount: (tokenId) => s.childCount.get(tokenId).n,
     setLineage: (tokenId, generation, parentId) => s.setLineage.run(generation, parentId, tokenId),
 
     /**

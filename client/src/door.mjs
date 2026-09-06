@@ -85,6 +85,19 @@ export async function knock({ origin, path = "/mcp", fetchImpl = fetch }) {
  */
 export async function admittedFetch({ origin, site = origin, privateJwk, signatureAgent = site, path = "/mcp", body, headers: extraHeaders = {}, fetchImpl = fetch, onTiming }) {
   const started = Date.now();
+  // 5.L6, AND WHY THE `challenge` TOOL IS NOT USED HERE. The tool exists to
+  // save this unsigned knock, and for a client shaped like this one it saves
+  // nothing: a challenge lives five seconds and is spent once, and the tool
+  // that mints the next one is itself a signed call needing a challenge of its
+  // own. So N operations cost N challenges either way -- one knock plus N-1
+  // tool calls instead of N knocks -- and the tool call is the more expensive
+  // of the two, because it is signed.
+  //
+  // It IS a saving for a client that keeps a session open and calls repeatedly
+  // inside a five-second window, which this one does not: every command here is
+  // one operation and exits. Measured as reasoning, not implemented as code:
+  // the alternative was one more piece of state on the hot path for no fewer
+  // round trips.
   const { challenge } = await knock({ origin, path, fetchImpl });
   // The body is signed, not just sent: the door binds the signature to it with
   // content-digest. `body` is passed through to fetch UNCHANGED below, so what

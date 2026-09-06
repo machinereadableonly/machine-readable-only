@@ -62,6 +62,23 @@ export function tokenView(q, tokenId, links = null, now = Date.now()) {
     ...(t.status !== "written"
       ? { onChainBy: onChainBy(t.mintDay), late: now > Date.parse(onChainBy(t.mintDay)) }
       : {}),
+    // 5.M3. WHEN TO COME BACK, which is the one question this piece is about
+    // and the answer nothing carried. `pendingOnChain` said where the token
+    // was, `heart` said how far along it is, and neither said when the next day
+    // opens or when the run breaks -- so an agent scheduling its return had to
+    // re-derive both from `lastDay` and a constant it was never given.
+    //
+    // The window opens at the start of the day after the last credited one; the
+    // run survives only if the next credit lands INSIDE that day, which is why
+    // the deadline is its end. Both from `lastDay`, which is the same field the
+    // contract's `lastDay < day <= today()` reads.
+    nextWindowOpensAt: new Date((t.lastDay + 1) * 86_400_000).toISOString(),
+    streakDeadline: new Date((t.lastDay + 2) * 86_400_000).toISOString(),
+    // Counted, not stored. `seedsAvailable` is deliberately NOT here: `seed`
+    // refuses every call today (`seed-not-available`, the write path does not
+    // exist), and publishing an entitlement the service will refuse to honour
+    // is a promise, not a fact. It belongs here the day seeding does.
+    children: q.childCount?.(t.tokenId) ?? 0,
     owner: t.owner,
     ...(links ?? {}),
   };
