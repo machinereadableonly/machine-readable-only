@@ -578,6 +578,10 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// alias the shape bits exactly and silently corrupt every token's variant.
     /// Refused where the record is written, so the bad record cannot exist.
     error MarkIdOutOfRange(uint8 upgradeId);
+    /// A Mark whose own bit is in its own excludes or requiresAny mask can
+    /// never be applied. See setUpgrade.
+    error MarkExcludesItself(uint8 upgradeId);
+    error MarkRequiresItself(uint8 upgradeId);
     error BadVariant(uint8 got);
 
     /// @dev The variant is part of what was bought, so it belongs in the event
@@ -616,6 +620,26 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// re-opened a sold-out Mark. Scarcity is a stated property of the ladder.
     function setUpgrade(uint8 upgradeId, Upgrade calldata u) external onlyOwner {
         if (upgradeId == 0 || upgradeId > MAX_MARK_ID) revert MarkIdOutOfRange(upgradeId);
+        // 1.L3. THE TWO INVARIANTS A SINGLE ENTRY CAN BREAK ON ITS OWN.
+        //
+        // A Mark that excludes itself can never be applied: applyMark reads the
+        // held mask, and the moment this Mark lands its own bit satisfies its
+        // own exclusion, so the second half of the pair is unreachable and the
+        // first is unrepeatable. A Mark that requires itself can never be
+        // applied at all -- `requiresAny` is read against marks already held,
+        // and this one cannot be held before it is applied. Both are dead ends
+        // that only a deploy would reveal, and by then the entry is on chain.
+        //
+        // WHAT IS DELIBERATELY NOT CHECKED HERE: the spec's symmetry rule (a
+        // pair excludes both ways, and no mask names a Mark from another pair).
+        // That is a statement about TWO entries, and entries are written one at
+        // a time -- so any on-chain check would refuse the first half of every
+        // correct pair. It is enforced where it can be: Ladder.sol and
+        // ladder.mjs mirror each other by hash, and the suite asserts each
+        // mask names exactly its partner.
+        uint16 self = uint16(1) << upgradeId;
+        if (u.excludes & self != 0) revert MarkExcludesItself(upgradeId);
+        if (u.requiresAny & self != 0) revert MarkRequiresItself(upgradeId);
         uint32 sold = _upgrades[upgradeId].sold;
         _upgrades[upgradeId] = u;
         _upgrades[upgradeId].sold = sold;

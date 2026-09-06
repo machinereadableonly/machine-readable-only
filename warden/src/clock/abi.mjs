@@ -1746,6 +1746,17 @@ export const MRO_ABI = [
   },
   {
     "type": "error",
+    "name": "MarkExcludesItself",
+    "inputs": [
+      {
+        "name": "upgradeId",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "MarkGate",
     "inputs": []
   },
@@ -1769,6 +1780,17 @@ export const MRO_ABI = [
     "type": "error",
     "name": "MarkRequires",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "MarkRequiresItself",
+    "inputs": [
+      {
+        "name": "upgradeId",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
   },
   {
     "type": "error",

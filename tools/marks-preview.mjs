@@ -21,7 +21,7 @@ const id = Number(process.argv[2]) || 1;
 
 // lastDay === today, so nothing has lapsed and the tier colour is the one the
 // streak earns. A lapsed token pales, which would confuse a colour comparison.
-const BASE = { level: 200, streak: 45, years: 1, lastDay: 20700, today: 20700 };
+const BASE = { level: 200, streak: 45, years: 0, lastDay: 20700, today: 20700 };
 
 mkdirSync(OUT, { recursive: true });
 

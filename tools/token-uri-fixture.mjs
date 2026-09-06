@@ -31,7 +31,7 @@ export const STAGES = [
   // MachineReadableOnly.applyMark excludes pair partners. Hush over Ache and
   // Beat over Static draw the larger amount of image (Hush adds a rect, Beat
   // adds a gradient defs block), which makes this also the byte-worst-case
-  // fixture. Iris Bought is included even though it draws nothing yet, so the
+  // fixture. Iris Bought is included, and it draws, so the
   // fixture reflects a token that took every pair rather than four of five.
   ["every drawn mark", { level: 365 * 10, streak: 400, lastDay: 1000, today: 1000,
                          marks: [HUSH, BEAT, IRIS_BOUGHT, VESSEL, AURA] }],

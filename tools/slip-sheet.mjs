@@ -135,7 +135,7 @@ function drawAtRung(rung) {
   const streak = TIERS[TIERS.length - 1 - rung].min;
   if (rungOf(streak) !== rung) throw new Error(`rung ${rung} is not reachable from streak ${streak}`);
   return renderSvg(CODE.modules, TARGET.want, CODE.size, {
-    level: 200, streak, years: 1, marks: [], lastDay: D, today: D,
+    level: 200, streak, years: 0, marks: [], lastDay: D, today: D,
   });
 }
 

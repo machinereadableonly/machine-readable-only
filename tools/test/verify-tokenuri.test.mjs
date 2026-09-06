@@ -86,3 +86,23 @@ test("a raw hash in the JSON would break the parse, which is why none is emitted
   const ours = decodeTokenUri(uriFor(WORST));
   assert.ok(!ours.json.name.includes("#"), "a raw hash reached the name");
 });
+
+// 2.M1. The Years ATTRIBUTE keeps counting; only the RING stops at ten. Both
+// renderers capped the attribute, while three comments beside them and the
+// Warden's own tokenView described the uncapped reading -- and because both
+// renderers agreed, the JS/Solidity differential could not see it. Past ten
+// years `Level` was the only surviving record of a token's age.
+test("the Years attribute counts past the ten-ring cap", () => {
+  const eleven = attributesOf(decodeTokenUri(uriFor({
+    level: 4_015, streak: 5, lastDay: 20_700, today: 20_700,
+  })).json);
+  assert.equal(eleven.Years, 11, "a token in its eleventh year must say so");
+  assert.equal(eleven.Level, 4_015);
+
+  // The control, at the cap itself: ten is still ten, so this is not an
+  // off-by-one dressed as a fix.
+  const ten = attributesOf(decodeTokenUri(uriFor({
+    level: 3_650, streak: 5, lastDay: 20_700, today: 20_700,
+  })).json);
+  assert.equal(ten.Years, 10);
+});

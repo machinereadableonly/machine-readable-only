@@ -57,7 +57,7 @@ const toward = ([r, g, b], t) => {
 };
 
 const stateFor = (streak, marks) => ({
-  level: 200, streak, years: 1, marks, lastDay: 20700, today: 20700,
+  level: 200, streak, years: 0, marks, lastDay: 20700, today: 20700,
 });
 const draw = (streak, marks) => renderSvg(CODE.modules, TARGET.want, CODE.size, stateFor(streak, marks));
 

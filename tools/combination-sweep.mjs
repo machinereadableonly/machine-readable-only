@@ -121,7 +121,14 @@ const BATCH_SIZE = 30;
 // resting or sunset so Break's rung-colour exchange has a rung to read. Note
 // Ache draws NOTHING here -- a whole heart has no unearned cells left -- which
 // is a property of the ladder, not a fault in the sweep.
-const STATE = { level: 365, streak: 400, lastDay: 20700, today: 20700 };
+// 2.M2. `years` IS NOT OPTIONAL HERE. renderSvg defaults it to 0, so this
+// state rendered a 51-cell canvas -- while SIZES below defaults to 848, which
+// is 16 x 53 and the exact multiple this sweep's whole decode gate rests on.
+// Against 51 cells 848 is 16.63 px per module: a resample, which is precisely
+// the non-integer scaling this project measured as destroying the artwork's
+// three grey levels. The chain produces `rings(365) == 1`, so one ring is what
+// a whole heart actually has.
+const STATE = { level: 365, streak: 400, years: 1, lastDay: 20700, today: 20700 };
 
 // ---------------------------------------------------------------------------
 // Generate the reachable Mark sets from Ladder.sol's own exclusion and

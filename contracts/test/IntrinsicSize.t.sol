@@ -50,7 +50,9 @@ contract RendererSizedTest is Test {
         return vm.indexOf(haystack, needle) != type(uint256).max;
     }
 
-    /// A year-zero canvas is 53 cells, so sixteen pixels a cell is 848. This is
+    /// A ONE-RING canvas is 53 cells, so sixteen pixels a cell is 848 -- which is
+    /// what the assertions below render, at level 365. Year zero is 51 cells and
+    /// 816 px. This is
     /// the number a third-party rasteriser reads instead of falling back to the
     /// viewBox units, which is the whole point of declaring it.
     function test_theShippedRendererDeclaresCanvasTimesSixteen() public view {
