@@ -113,4 +113,50 @@ abstract contract MroTestBase is Test {
         t.batchCheckIn(packed, ds);
         assertEq(t.viewOf(id).level, 365);
     }
+
+    /// @dev Credit days until `id` sits at exactly `target` level, in ONE
+    /// batchCheckIn. Same shape as `_makeWhole` and same reason: a day cannot
+    /// be credited before the chain reaches it, so the clock is warped to the
+    /// last day of the run BEFORE the call. A no-op if the token is already at
+    /// or past `target`.
+    function _growTo(uint256 id, uint32 target) internal {
+        uint32 have = t.viewOf(id).level;
+        if (have >= target) return;
+        uint32 n = target - have;
+        uint32 d = t.today();
+        uint32[] memory ids = new uint32[](n);
+        uint32[] memory ds = new uint32[](n);
+        for (uint32 i = 0; i < n; i++) {
+            ids[i] = uint32(id);
+            ds[i] = d + 1 + i;
+        }
+        _warpToDay(d + n);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_packed(ids), ds);
+        assertEq(t.viewOf(id).level, target, "_growTo did not reach its target");
+    }
+
+    /// @dev Ids and recipients for `_seedFrom`. Well above the small literal
+    /// ids the other fixtures mint by hand, so a seeded child can never
+    /// collide with one, and one address per child so `walletCap` (20) can
+    /// never be what fails a lineage test.
+    uint256 internal _nextSeedId = 900;
+
+    /// @dev Seed a child from `parentId` as the Warden and return its id.
+    ///
+    /// It moves the clock first. The seed budget is per agent KEY and per
+    /// completed YEAR of that key's tenure ("tenure, not depth"), so a parent
+    /// that has just been made whole has earned nothing yet -- 364 days is not
+    /// a year. Warping in whole years here keeps the arithmetic in one place
+    /// instead of every caller remembering it.
+    ///
+    /// The clock is read back off the contract each time rather than computed
+    /// from `block.timestamp` inline, which sidesteps the via_ir
+    /// common-subexpression trap documented on `_warpOneYear`.
+    function _seedFrom(uint256 parentId) internal returns (uint256 childId) {
+        while (t.seedsAvailable(parentId) == 0) _warpToDay(t.today() + 365);
+        childId = ++_nextSeedId;
+        vm.prank(WARDEN);
+        t.seed(childId, parentId, address(uint160(0x5EED0000 + childId)), _code());
+    }
 }

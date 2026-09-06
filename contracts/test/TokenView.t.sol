@@ -20,6 +20,7 @@ contract TokenViewTest is Test {
             generation: 0,
             seedsGiven: 0,
             parent: 88,
+            echo: 913,
             resting: false,
             sunset: false,
             sunsetDay: 0,
@@ -42,6 +43,7 @@ contract TokenViewTest is Test {
         assertEq(v.generation, 0);
         assertEq(v.seedsGiven, 0);
         assertEq(v.parent, 88);
+        assertEq(v.echo, 913);
         assertFalse(v.resting);
         assertFalse(v.sunset);
         assertEq(v.sunsetDay, 0);
