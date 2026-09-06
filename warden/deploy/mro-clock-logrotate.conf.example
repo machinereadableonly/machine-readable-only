@@ -1,0 +1,38 @@
+# Rotation for the Clock's log. 16.10.
+#
+# The unit appends to one file forever (StandardOutput=append:), so without
+# this the log is unbounded -- and the Warden's own logs ARE rotated, by
+# pm2-logrotate, so the Clock was the only thing on this box writing without
+# a ceiling.
+#
+# INSTALL: this is a TEMPLATE. `deploy/install-clock-logging.sh` substitutes
+# __LOG_DIR__ and writes the real config to ~/logs/mro-clock-logrotate.conf.
+# The template carries no absolute home path, because a home path in a tracked
+# file names the account -- `tools/prepublish-check.mjs` fails on one.
+#
+# It runs from the Clock unit's own ExecStartPre rather than from a timer of
+# its own: the log only grows when the Clock runs, so the Clock is exactly the
+# right cadence, and it needs no second unit to enable and no root.
+
+__LOG_DIR__/mro-clock.log {
+    # A run writes about 300 bytes, so this is months of history either way.
+    # Size is the real ceiling; weekly just bounds how old the newest rotation
+    # can be when the Clock has been quiet.
+    weekly
+    size 1M
+    rotate 8
+    compress
+    delaycompress
+
+    # COPYTRUNCATE IS LOAD-BEARING, not a preference. systemd holds an open
+    # append fd to this file for the whole run; a rename-and-create rotation
+    # would leave it writing to the rotated file, and the new one would stay
+    # empty forever. copytruncate keeps the inode, so the fd stays valid.
+    #
+    # It also means the mode is never re-created, so the file keeps the 0600
+    # it was given -- which is why there is no `create` line here.
+    copytruncate
+
+    missingok
+    notifempty
+}

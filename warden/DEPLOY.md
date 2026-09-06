@@ -272,6 +272,31 @@ project's admission logic for a problem that is actually upstream of it.
 - From outside the VPS, `nc -zv <vps-ip> 3006` (or equivalent) should fail to
   connect -- confirming the UFW rule and loopback binding both hold.
 
+## 9a. The Clock's log -- [the operator runs one command]
+
+Run once per machine, after the Clock's timer is installed:
+
+    bash ~/projects/machine-readable-only/warden/deploy/install-clock-logging.sh
+
+It writes the rotation config (which cannot be tracked -- logrotate expands
+neither `~` nor `%h`, and a home path in a tracked file names the account),
+reloads the systemd user manager so the unit's `UMask=0077` and rotation step
+take effect, and PROVES both by probe rather than assuming them. It does not
+run the Clock, so it touches no chain and spends nothing.
+
+Why it exists. The unit appends to one file forever, and that file was mode
+664 in a 755 directory under a 755 home -- world-readable, on a box shared with
+other projects, and unrotated while the Warden's own logs are rotated by
+pm2-logrotate. `BASE_RPC_URL` is free-form configuration and every managed
+provider keeps its api key IN the url, so one RPC outage would have appended
+that key to a file any local account could read. The text is now redacted at
+source (`src/clock/redact.mjs`, measured against real viem errors) AND the file
+is private; either alone is a single point of failure for a credential.
+
+If it prints FAIL, tell Claude what it said before the next 00:05 -- the unit
+tolerates a broken rotation (the `-` prefix) but then nothing rotates, and a
+`UMask` that did not apply means a recreated log is world-readable again.
+
 ## 9b. If the Clock's key leaks
 
 **Read this before you need it. The response window is minutes, and every
