@@ -267,12 +267,19 @@ return visits, so the artwork is the agent's own history of coming back.
   blockers below. The reviews themselves are DONE. The real finding count was
   184 (security 67, quality 74, creative 43) -- the "158" in older notes
   reconciles against nothing.
-  **16.10 IS UNVERIFIED and must be RE-DERIVED, not fixed as written** -- its
-  cited leak chain does not exist.
+  **16.10 IS RE-DERIVED AND CLOSED (2026-09-06, `c742412`), NOT DEPLOYED** --
+  three of its four claims were wrong, including the only function it named and
+  the only fix it proposed. Measured on viem 2.56.0: `err.message` ALWAYS
+  carries the endpoint url and `err.shortMessage` never does, so the two Clock
+  sinks that logged `err.message` are now redacted, the log is 600 with
+  `UMask=0077`, and logrotate runs from the Clock's own `ExecStartPre` with
+  copytruncate. The Warden needed nothing and no agent was ever exposed. ONE
+  COMMAND IS LEFT FOR the operator: `bash warden/deploy/install-clock-logging.sh`
+  (DEPLOY.md section 9a). Read [[rpc-url-in-logs]].
   **THE NGINX RATE LIMITS ARE NOT LIVE**: the template has them, the installed
   vhost was written from the old one, and applying them needs sudo. The
   application-level limiter added in Phase 3 is a different thing and IS live.
-  Read [[test-gaps-closed]], [[phase4-quality-findings]],
+  Read [[rpc-url-in-logs]], [[test-gaps-closed]], [[phase4-quality-findings]],
   [[check-the-finding-before-fixing-it]],
   [[phase3-door-and-payment]], [[review-medium-low-2026-09-06]],
   [[creative-closeout-2026-09-05]], [[security-quality-closeout-2026-09-05]]
@@ -281,7 +288,7 @@ return visits, so the artwork is the agent's own history of coming back.
   **Rehearse every deploy** with `warden/tools/rehearse-start.sh`: it runs the
   real `main.mjs` against a COPY of production state, which is the only thing
   that can catch a bad boot check.
-  **Suites: contracts 331, warden 547, tools 72, client 40** (2026-09-06).
+  **Suites: contracts 331, warden 562, tools 72, client 40** (2026-09-06).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
