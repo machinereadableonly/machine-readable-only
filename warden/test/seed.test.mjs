@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeSeedTool } from "../src/mcp/tools/seed.mjs";
-import { openChain, restingChain } from "./chain-stub.mjs";
+import { openChain, restingChain, supplyFullChain } from "./chain-stub.mjs";
 
 /// Every test gets its own in-memory database, so no test can see another's rows.
 function fresh() {
@@ -44,9 +44,14 @@ test("seeding from a parent bound to a different key is refused", async () => {
 // specification. Resting is set by the OWNER on chain, so the chain is the only
 // thing that can say so, and that is what is asserted now.
 test("seeding from a resting parent is refused, on the chain's word", async () => {
-  const { q } = fresh();
+  const { db, q } = fresh();
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
-  const tool = makeSeedTool({ q, chain: restingChain(), today: () => 1000, supplyCap: 10_000 });
+  // The parent has to be WHOLE to reach the chain reads at all: since
+  // 2026-09-06 every local refusal is decided first, so that a doomed call on a
+  // free tool costs no RPC. A level-1 parent is refused `parent-not-whole`
+  // before the chain is ever asked, which is the point of that order.
+  setLevelAndStatus(db, 1, 365, "queued");
+  const tool = makeSeedTool({ q, chain: restingChain(), today: () => 1000 });
   const r = await tool.handler({ parentId: 1, to: "0x1111111111111111111111111111111111111111" }, { keyId: "k1" });
   assert.equal(r.ok, false);
   assert.equal(r.reason, "resting");
@@ -130,9 +135,11 @@ test("seeding is refused once the supply cap is reached", async () => {
   const { db, q } = fresh();
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
   setLevelAndStatus(db, 1, 365, "queued");
-  // One token exists and the cap is one, so there is no room for a child --
-  // even though every OTHER gate this tool has would pass.
-  const tool = makeSeedTool({ q, chain: openChain(), today: () => 365, supplyCap: 1 });
+  // THE CHAIN says the collection is full, so there is no room for a child --
+  // even though every OTHER gate this tool has would pass. The cap used to be
+  // answered from the mirror (a constant against this database's row count),
+  // and both halves could disagree with the contract.
+  const tool = makeSeedTool({ q, chain: supplyFullChain(), today: () => 365 });
   const r = await tool.handler({ parentId: 1, to: "0x4444444444444444444444444444444444444444" }, { keyId: "k1" });
   assert.equal(r.ok, false);
   assert.equal(r.reason, "supply-cap-reached");

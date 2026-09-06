@@ -12,6 +12,35 @@ import { VARIANT_NAMES, effectiveRun, ladderSentence } from "../ladder.mjs";
 // checks is not a constraint, it is a second place for the truth to live and
 // drift; the reasons below are the only list. Deleted 2026-08-30.
 
+/**
+ * Every gate a Mark has that is decided from the TOKEN's own state, in one
+ * place, so the two call sites cannot drift apart.
+ *
+ * WHY IT IS SHARED. The post-payment block used to re-read a SUBSET: the chain
+ * gates, the binding, already-applied, excluded and sold-out -- but not
+ * `minLevel`, `needsWhole`, `minStreak`, `requiresAny` or the variant bound,
+ * while the protocol document promises every agent that "every gate is read a
+ * SECOND time". Nothing was exploitable when that was found (level only rises,
+ * marks are never cleared, no bought Mark carries a minStreak), which is
+ * exactly what makes it dangerous: the exemption is invisible, and the first
+ * Mark given a minStreak, or any change that lets a level fall, would be
+ * unguarded on the path where the money has already moved.
+ *
+ * `held` is the union of what the token wears and what it has reserved -- see
+ * the call sites. `requiresAny` deliberately takes `token.marks` alone: an
+ * unwritten Iris does not satisfy the contract either.
+ */
+function markGateBlock({ token, held, mark, variant }) {
+  if (token.level < mark.minLevel) return "mark-level-too-low";
+  if (mark.needsWhole && token.level < 365) return "mark-needs-whole";
+  if (mark.minStreak && effectiveRun(token) < mark.minStreak) return "mark-needs-streak";
+  if (held & (1 << mark.id)) return "mark-already-applied";
+  if (held & mark.excludes) return "mark-excluded";
+  if (mark.requiresAny && !(token.marks & mark.requiresAny)) return "mark-needs-iris";
+  if (variant >= mark.variants) return "mark-bad-variant";
+  return null;
+}
+
 export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.error }) {
   requireChain(chain, "upgrade");
   return {
@@ -48,9 +77,6 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
 
       const mark = catalogue[upgradeId];
       if (!mark) return { ok: false, reason: "mark-inactive" };
-      if (token.level < mark.minLevel) return { ok: false, reason: "mark-level-too-low" };
-      if (mark.needsWhole && token.level < 365) return { ok: false, reason: "mark-needs-whole" };
-      if (mark.minStreak && effectiveRun(token) < mark.minStreak) return { ok: false, reason: "mark-needs-streak" };
       if (q.markSold(upgradeId) >= mark.supply) return { ok: false, reason: "mark-sold-out" };
 
       // WHAT THIS TOKEN HAS TAKEN, which is not the same thing as what the
@@ -74,37 +100,33 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       // node:sqlite is synchronous and there is no `await` between reading the
       // mask and inserting the row, so no other request can interleave.
       const held = token.marks | q.reservedMask(tokenId);
-      if (held & (1 << upgradeId)) return { ok: false, reason: "mark-already-applied" };
+
+      // Every gate this Mark has, decided here and decided again after payment
+      // from the same function. Two of them are worth naming individually:
+      //
+      // `requiresAny` reads `token.marks` alone and not `held` -- both sides of
+      // pair five wait on an Iris, and a reservation that has not reached the
+      // chain does not satisfy the CONTRACT either: applyMark would revert
+      // MarkGate on a Tint whose Iris is still queued. Under-satisfying a
+      // requirement only refuses, which is safe; over-satisfying an exclusion
+      // sells a forfeit, which is not.
+      //
+      // The variant bound belongs to the contract (applyMark reverts
+      // BadVariant), so refusing here means an agent is never charged for a
+      // shape the chain will not write.
+      const gate = markGateBlock({ token, held, mark, variant });
 
       // THE EXCLUSION, before any payment. An agent told only "no" cannot tell a
       // permanent exclusion from a temporary gate, and the whole ladder rests on
       // exclusions being legible -- so the refusal NAMES what closed the door.
       // It can only ever name the same pair's other side, which is why a name is
       // enough: every exclusion is pair-internal.
-      const blocking = held & mark.excludes;
-      if (blocking) {
+      if (gate === "mark-excluded") {
+        const blocking = held & mark.excludes;
         const by = Object.values(catalogue).find((m) => blocking & (1 << m.id));
         return { ok: false, reason: "mark-excluded", detail: by?.name.toLowerCase() };
       }
-
-      // Both sides of pair five wait on an Iris, by either route. Aura was
-      // ungated once, and being buyable on day one silently forfeited Tint --
-      // which needs an Iris, and therefore 100 days.
-      //
-      // THIS ONE READS `token.marks` AND NOT `held`, deliberately. A reservation
-      // that has not reached the chain does not satisfy the contract either:
-      // applyMark would revert MarkGate on a Tint whose Iris is still queued.
-      // Counting an unwritten Iris here would sell the Tint that refusal is
-      // about. Under-satisfying a requirement only refuses, which is the safe
-      // direction; over-satisfying an exclusion sells a forfeit, which is not.
-      if (mark.requiresAny && !(token.marks & mark.requiresAny)) {
-        return { ok: false, reason: "mark-needs-iris" };
-      }
-
-      // The variant bound is per Mark and the CONTRACT is its authority
-      // (applyMark reverts BadVariant). Refusing here means an agent is never
-      // charged for a shape the chain will not write.
-      if (variant >= mark.variants) return { ok: false, reason: "mark-bad-variant" };
+      if (gate) return { ok: false, reason: gate };
 
       // THE FREE ROUTE. Four of the ten Marks are earned by a run of days and
       // take no payment wrapper at all. This sits ABOVE the price guard on
@@ -209,13 +231,13 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         // moved, so it is the one that must not be blind.
         const fresh = q.getToken(tokenId);
         const heldNow = fresh ? fresh.marks | q.reservedMask(tokenId) : 0;
+        // EVERY gate, not a subset -- the same function the pre-payment block
+        // runs, so the two cannot come apart when a Mark or a gate is added.
         const blocked =
           !fresh ? "unknown-token"
           : fresh.keyId !== ctx.keyId ? "not-bound-to-caller"
-          : heldNow & (1 << upgradeId) ? "mark-already-applied"
-          : heldNow & mark.excludes ? "mark-excluded"
           : q.markSold(upgradeId) >= mark.supply ? "mark-sold-out"
-          : null;
+          : markGateBlock({ token: fresh, held: heldNow, mark, variant });
 
         // reserveMarkPaid returns false when this token already holds the mark,
         // so two settlements racing for the same token cannot both reserve.

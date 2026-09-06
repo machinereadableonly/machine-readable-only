@@ -54,19 +54,41 @@ export async function walletCapBlock(chain, to) {
 }
 
 /**
+ * Refuse when the collection is full.
+ *
+ * Mirrors SupplyCap, which guards `mint` and `seed` and nothing else -- a Mark
+ * adds no token, so `upgrade` never asks this.
+ *
+ * READ FROM THE CHAIN, NOT COUNTED HERE. This was the one contract gate still
+ * answered from the mirror: the constant 10_000 against `q.tokenCount()`. The
+ * cap is an owner dial and the row count is a fact about this database, so both
+ * halves could disagree with the chain at once. See read.mjs supplyRoom().
+ */
+export async function supplyBlock(chain) {
+  const room = await chain.supplyRoom();
+  if (room === null) return "chain-unavailable";
+  return room > 0 ? null : "supply-cap-reached";
+}
+
+/**
  * Every gate a PAID write needs, in one call.
  *
  * `to` is optional: `upgrade` does not mint anything, so it has no wallet cap
- * to check. The reads run concurrently because they are independent, and the
- * first reason in gate order wins so the answer is stable rather than a race.
+ * to check. `mints` is the same distinction for the supply cap, and it is
+ * declared rather than inferred from `to` so that a caller adding an address
+ * for some other reason cannot silently acquire a gate it does not want.
+ *
+ * The reads run concurrently because they are independent, and the first reason
+ * in gate order wins so the answer is stable rather than a race.
  */
-export async function paidWriteBlock(chain, { tokenId, to, q } = {}) {
-  const [contractState, token, wallet] = await Promise.all([
+export async function paidWriteBlock(chain, { tokenId, to, q, mints = false } = {}) {
+  const [contractState, token, wallet, supply] = await Promise.all([
     chainBlock(chain),
     tokenId === undefined ? null : tokenBlock(chain, tokenId, q),
     to === undefined ? null : walletCapBlock(chain, to),
+    mints ? supplyBlock(chain) : null,
   ]);
-  return contractState ?? token ?? wallet ?? null;
+  return contractState ?? token ?? wallet ?? supply ?? null;
 }
 
 /**
@@ -100,7 +122,7 @@ export async function bindingBlock(chain, tokenId, keyId, toBytes32) {
 /// gates because `chain` was not passed would be indistinguishable from one
 /// that passed them -- which is exactly how these gates went missing.
 export function requireChain(chain, toolName) {
-  for (const method of ["writesOpen", "lifecycleOf", "walletRoomFor"]) {
+  for (const method of ["writesOpen", "lifecycleOf", "walletRoomFor", "supplyRoom"]) {
     if (typeof chain?.[method] !== "function") {
       throw new Error(`${toolName} requires a chain reader with ${method}()`);
     }

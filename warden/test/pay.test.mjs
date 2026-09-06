@@ -192,18 +192,21 @@ test("a mint whose supply cap is taken during settlement is paid-but-unavailable
   const q = queries(db);
   const alerts = [];
 
-  // The last slot is taken WHILE the payment settles -- exactly the window the
-  // pre-payment check cannot see.
+  // The last slot is taken ON CHAIN while the payment settles -- exactly the
+  // window the pre-payment read cannot see. The room is read from the contract
+  // (supplyCap() and totalMinted()), so this is what the second read returns,
+  // not what this database happens to hold.
+  let room = 1;
+  const chain = openChain({ supplyRoom: async () => room });
   const takeLastSlotMidSettlement = (fn) => async (...args) => {
-    q.insertToken({ tokenId: 99, keyId: "someone-else", owner: "0xdef", lastDay: 100, mintDay: 100 });
+    room = 0;
     return fn(...args);
   };
 
   const tool = makeMintTool({
     q,
-    chain: openChain(),
+    chain,
     paid: takeLastSlotMidSettlement,
-    supplyCap: 1,
     today: () => 100,
     alert: (msg) => alerts.push(msg),
   });
@@ -215,7 +218,7 @@ test("a mint whose supply cap is taken during settlement is paid-but-unavailable
   // Money changed hands and the agent got nothing: somebody has to see that.
   assert.equal(alerts.length, 1);
   // The over-cap token was never written.
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM tokens").get().n, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM tokens").get().n, 0);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM mints").get().n, 0);
 });
 
@@ -316,8 +319,18 @@ test("an unreachable facilitator refuses the call, never throws, and never runs 
   });
 
   const r = await paid(async () => { handlerRan = true; return { ok: true }; }, "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
-  assert.equal(r.ok, false);
-  assert.equal(r.reason, "payment-unavailable");
+  // A COMPLETE TOOL RESULT, carrying isError, and the reason one level down.
+  // This refusal is produced OUTSIDE the payment wrapper, and it used to come
+  // back as a plain value: mcp/server.mjs then wrapped it without `isError`, so
+  // x402MCPClient's extractor -- `if (!result.isError) return null` -- reported
+  // `paymentMade: false` next to something shaped like a success. This is the
+  // reachable one: it fires on any facilitator outage.
+  assert.equal(r.isError, true);
+  assert.equal(r.structuredContent.ok, false);
+  assert.equal(r.structuredContent.reason, "payment-unavailable");
+  // And it still carries its next step, which a passed-through tool result
+  // never gets from mcp/server.mjs.
+  assert.match(r.structuredContent.next, /\S/);
   // The free mint this prevents: the handler is what writes the token row.
   assert.equal(handlerRan, false);
   assert.equal(alerts.length, 1);
@@ -340,7 +353,8 @@ test("a failed build is retried on the next call rather than disabling payment f
   });
 
   const first = await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
-  assert.equal(first.reason, "payment-unavailable");
+  assert.equal(first.structuredContent.reason, "payment-unavailable");
+  assert.equal(first.isError, true);
 
   // A facilitator down for a minute must not need a process restart.
   const second = await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
@@ -400,7 +414,8 @@ test("an empty accepts list refuses rather than reaching createPaymentWrapper, w
   });
 
   const r = await paid(async () => { handlerRan = true; }, "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
-  assert.equal(r.reason, "payment-unavailable");
+  assert.equal(r.structuredContent.reason, "payment-unavailable");
+  assert.equal(r.isError, true);
   assert.equal(handlerRan, false);
   assert.match(alerts[0], /no payment requirements for \$0\.10 on eip155:8453/);
 });
@@ -421,8 +436,9 @@ test("a missing or malformed price refuses without contacting the facilitator", 
 
   for (const price of [undefined, null, "", "free", "0.10", 0.1, "$"]) {
     const r = await paid(async () => ({ ok: true }), price)({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
-    assert.equal(r.reason, "payment-unavailable", `price ${JSON.stringify(price)} must refuse`);
-    assert.equal(r.detail, "no-price");
+    assert.equal(r.isError, true, `price ${JSON.stringify(price)} must refuse legibly`);
+    assert.equal(r.structuredContent.reason, "payment-unavailable", `price ${JSON.stringify(price)} must refuse`);
+    assert.equal(r.structuredContent.detail, "no-price");
   }
   assert.equal(builds, 0, "a wiring error must not be sent to a third party");
   assert.equal(alerts.length, 7);
@@ -660,7 +676,8 @@ test("a non-https facilitator is refused rather than used", async () => {
       alert: (m) => alerts.push(m),
     });
     const r = await paid(async () => ({ ok: true }), "$0.10", MINT_RESOURCE)({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
-    assert.equal(r.reason, "payment-unavailable");
+    assert.equal(r.structuredContent.reason, "payment-unavailable");
+    assert.equal(r.isError, true);
   }
   assert.equal(alerts.length, 3);
   for (const a of alerts) assert.match(a, /must be https/);
@@ -787,6 +804,45 @@ test("a bought Mark still goes through the payment wrapper, at its own price", a
   assert.equal(r.ok, true);
   assert.equal(charged.price, "$5.00");
   assert.equal(charged.meta.description, "Apply the Static Mark to token 1");
+});
+
+// 14.9. The post-payment block used to re-read a SUBSET of the gates: the chain
+// ones, the binding, already-applied, excluded and sold-out -- but not the
+// level, whole, streak, Iris or variant gates, while the protocol document
+// promises every agent that "every gate is read a SECOND time". None of the
+// five was exploitable when that was found, which is exactly what made it
+// dangerous: the exemption was invisible, and the first Mark given a minStreak
+// would have been unguarded on the path where the money has already moved.
+//
+// Both sites now run the same function, so this drives the real tool and moves
+// the state inside the settlement window.
+test("a gate that closes DURING settlement is refused after payment, not sold", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 100, 40, 40);                       // level 40: Static's gate is 30
+
+  const alerts = [];
+  // The level falls while the payment settles. The code says that cannot happen
+  // today (creditDay only ever raises it); the guard is what keeps that true of
+  // the paid path if it ever stops being true of the mirror.
+  const dropTheLevelMidSettlement = (fn) => async (...args) => {
+    db.prepare("UPDATE tokens SET level = 5 WHERE tokenId = 1").run();
+    return fn(...args);
+  };
+
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: assertLadderSane(LADDER),
+    paid: dropTheLevelMidSettlement, alert: (m) => alerts.push(m),
+  });
+
+  const r = await tool.handler({ tokenId: 1, upgradeId: 3 }, { keyId: "k1" });   // Static
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "paid-but-unavailable");
+  assert.equal(r.detail, "mark-level-too-low");
+  assert.equal(alerts.length, 1);
+  // Nothing was reserved, so the Clock has nothing to apply.
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM mark_orders").get().n, 0);
 });
 
 // --- the three pre-payment refusals, and the variant -------------------------

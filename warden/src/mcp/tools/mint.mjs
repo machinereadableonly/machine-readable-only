@@ -5,7 +5,7 @@ import { MINT_PRICE, MINT_RESOURCE } from "../../pay/x402.mjs";
 import { paidWriteBlock, requireChain } from "../gates.mjs";
 import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
 
-export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console.error }) {
+export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
   requireChain(chain, "mint");
   return {
     name: "mint",
@@ -25,13 +25,13 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
       // Both gates come before payment. Charging for a mint that cannot happen
       // is the worst failure this tool has.
       if (q.hasMinted(ctx.keyId)) return { ok: false, reason: "already-minted" };
-      if (q.tokenCount() >= supplyCap) return { ok: false, reason: "supply-cap-reached" };
 
-      // THE CONTRACT'S OWN GATES, read from the chain. Sunset, pause and the
-      // per-address WalletCap are all invisible to this mirror, and every one
-      // of them reverts a mint. Checked BEFORE payment: charging for a mint the
-      // chain will refuse is the worst failure this tool has.
-      const blocked = await paidWriteBlock(chain, { to: args.to });
+      // THE CONTRACT'S OWN GATES, read from the chain. Sunset, pause, the
+      // per-address WalletCap and the collection's SupplyCap are all invisible
+      // to this mirror, and every one of them reverts a mint. Checked BEFORE
+      // payment: charging for a mint the chain will refuse is the worst failure
+      // this tool has.
+      const blocked = await paidWriteBlock(chain, { to: args.to, mints: true });
       if (blocked) return { ok: false, reason: blocked };
 
       // Expire reservations nobody paid for BEFORE deciding anything. The
@@ -60,21 +60,17 @@ export function makeMintTool({ q, chain, paid, supplyCap, today, alert = console
         // already-written row collides on mints.keyId. Both were observed on
         // 2026-09-03, and the refusal is identical either way.
         //
-        // The supply cap has no index behind it -- it is a count, not a
-        // constraint -- so it has to be re-READ here, and this read is the only
-        // thing between a paid-for mint and a token over the cap that the
+        // THE CHAIN GATES ARE ALL RE-READ, because the piece can be paused or
+        // sunset, the wallet cap filled by another mint, or the collection's
+        // last slot taken, while this payment was settling. A pre-payment check
+        // is stale by the time the row is written.
+        //
+        // The supply cap is one of them now. It has no index behind it -- it is
+        // a count on the CHAIN, not a constraint in this database -- so the
+        // re-read is the only thing between a paid-for mint and a token the
         // contract would refuse to write. `seed` takes slots from the same
         // count, so this is not only a race between two mints.
-        if (q.tokenCount() >= supplyCap) {
-          alert(`mint refused for key ${ctx.keyId} after payment was verified: the supply cap was reached`);
-          return { ok: false, reason: "paid-but-unavailable", detail: "supply-cap-reached" };
-        }
-
-        // THE CHAIN GATES ARE RE-READ TOO, for the same reason the cap is: the
-        // piece can be paused or sunset, or the wallet cap filled by another
-        // mint, while this payment was settling. A pre-payment check is stale
-        // by the time the row is written.
-        const stillBlocked = await paidWriteBlock(chain, { to: args.to });
+        const stillBlocked = await paidWriteBlock(chain, { to: args.to, mints: true });
         if (stillBlocked) {
           alert(`mint refused for key ${ctx.keyId} after payment was verified: the chain now refuses it: ${stillBlocked}`);
           return { ok: false, reason: "paid-but-unavailable", detail: stillBlocked };

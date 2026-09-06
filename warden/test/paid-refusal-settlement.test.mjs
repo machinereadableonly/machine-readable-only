@@ -160,10 +160,15 @@ test("a post-gate refusal is NOT settled: the agent keeps its money", async () =
   assert.equal(verified, 1, "the payment is still verified -- the agent proved it could pay");
   assert.equal(settled, 0, "nothing was submitted, so nothing was taken");
   // The refusal survives the conversion intact, and reaches the agent as a
-  // complete MCP tool result rather than a plain value.
+  // complete MCP tool result rather than a plain value. It also gains its next
+  // step: a complete tool result is passed through mcp/server.mjs untouched, so
+  // it never meets the withNext call there and the gateway applies it instead.
   assert.equal(result.isError, true);
-  assert.deepEqual(result.structuredContent, REFUSAL);
-  assert.deepEqual(JSON.parse(result.content[0].text), REFUSAL);
+  const expected = { ...REFUSAL, next: result.structuredContent.next };
+  assert.equal(typeof result.structuredContent.next, "string");
+  assert.match(result.structuredContent.next, /balance did not move/);
+  assert.deepEqual(result.structuredContent, expected);
+  assert.deepEqual(JSON.parse(result.content[0].text), expected);
 });
 
 // WHY THE CONVERSION EXISTS AT ALL, pinned against the library rather than
