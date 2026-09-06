@@ -212,18 +212,33 @@ return visits, so the artwork is the agent's own history of coming back.
   legacy leg is REJECTED).
   **THE LIVE WARDEN IS THE TREE** -- verified after restart by serving the new
   llms.txt paragraphs, not assumed.
-  **THE PUBLISHED WIRE CONTRACT CHANGED**: `legacy: 'reject'` means an agent
-  following the pre-2026-09-05 protocol document is refused. Safe because
-  nothing is invited yet.
-  **WHAT REMAINS: the 15 creative BEFORE-MAINNET items**, plus the Medium and
-  Low tiers. The real finding count is 184 (security 67, quality 74, creative
-  43) -- the "158" in older notes reconciles against nothing.
+  **THE PUBLISHED WIRE CONTRACT CHANGED, TWICE.** `legacy: 'reject'` refuses an
+  agent following the pre-2026-09-05 protocol document. Then 2026-09-06: the
+  401 dropped `client` and gained `about`, every refusal carries `next`, and
+  `/t/<id>` plus `status` carry `docs`/`mcp`/`contract`/`chainId`. Additive
+  except the dropped `client`. Safe because nothing is invited yet.
+  **THE CREATIVE TIER IS CLOSED TOO (2026-09-06), and so are the FIRST TWO
+  PHASES of the Medium/Low tier. ALL PUSHED AND DEPLOYED.** Ten commits,
+  `2542daa` to `903e1bf`. The creative work: the client's printed commands now
+  run (C3.1-C3.5), the locked offer is SERVED, SKILL.md exists as the
+  out-of-band channel for the treasury (C3.11), the Mark sheets are judged on
+  the real-domain heart (C2.8), the door/arrival surfaces say what the piece is
+  (C1.4-C1.6), every refusal carries a `next` (C3.7), and the heart/frame
+  wording is corrected (C2.1, approved by the operator). Medium/Low phases 1-2: the three
+  contract guards that stop being fixable at deploy, the access-control test
+  gaps, and eight Clock failure modes.
+  **WHAT REMAINS: Phase 3 (door and payment: 13.3-13.8, 14.4-14.9) and Phase 4
+  (the quality report's 69 findings + 46 test gaps)**, plus the operator's five launch
+  items C4.4-C4.8. The real finding count is 184 (security 67, quality 74,
+  creative 43) -- the "158" in older notes reconciles against nothing.
+  **16.10 IS UNVERIFIED and must be RE-DERIVED, not fixed as written** -- its
+  cited leak chain does not exist.
   **THE NGINX RATE LIMITS ARE NOT LIVE**: the template has them, the installed
   vhost was written from the old one, and applying them needs sudo.
-  Read [[security-quality-closeout-2026-09-05]] and
-  [[door-replay-and-key-argv]] before touching the door, the payment path or a
-  deploy script.
-  **Suites: contracts 289, warden 438, tools 66, client 25** (2026-09-05).
+  Read [[review-medium-low-2026-09-06]], [[creative-closeout-2026-09-05]],
+  [[security-quality-closeout-2026-09-05]] and [[door-replay-and-key-argv]]
+  before touching the door, the payment path, the Clock or a deploy script.
+  **Suites: contracts 304, warden 462, tools 70, client 37** (2026-09-06).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
