@@ -132,12 +132,13 @@ return visits, so the artwork is the agent's own history of coming back.
   NINTH tool, `ladder`, reads a token's pairs back for free so a forfeit is
   legible before it is taken. THE FOUR EARNED MARKS ARE FREE AND RESERVE AT THE
   DOOR. The six bought Marks carry the settlement caveat as well.
-  **THE LADDER IS DEPLOYED AND VERIFIED ON BASE SEPOLIA, 2026-09-03, with the operator's
-  approval: MachineReadableOnly 0xf0Df806ff06ae051756db128Bc9F83CDB425a716,
-  Renderer 0xb95D32292a5517415B9e4A61e4A30d97F4136539.** All ten Mark records
-  read back correct off the chain, and the three-argument `applyMark`
-  (0xf542b20e) is present, so the mismatch that made every Mark unwritable is
-  gone. the operator repointed the Warden's configured contract address to match.
+  **THE LADDER WAS FIRST DEPLOYED AND VERIFIED ON BASE SEPOLIA 2026-09-03**, on
+  the pair that is now superseded. All ten Mark records read back correct off the
+  chain and the three-argument `applyMark` (0xf542b20e) was present, so the
+  mismatch that made every Mark unwritable was gone. **Both facts were
+  re-established on the 2026-09-06 pair** -- ten records checked by value against
+  the design document with `warden/tools/read-ladder.mjs`, which exits non-zero
+  on a mismatch instead of being eyeballed.
   **A MARK HAS LANDED ON CHAIN, 2026-09-03** -- the first ever. Token 1 was
   minted (tx 0xef42b84a) and Hush applied (tx 0x307b6ac3, 62,332 gas); the
   chain reports marks 0x2 and the metadata reads `"Marks": ["hush"]`. Proven by
@@ -145,11 +146,10 @@ return visits, so the artwork is the agent's own history of coming back.
   mirror -- never the Warden's own, because it seeds rows no agent paid for.
   WHAT THAT PROVES IS THE WRITE, NOT THE SALE. (Settlement was PROVEN later the
   same week -- see [[settlement-proven]] -- so that clause is historical.)
-  The agent-facing copy names 0xf0Df806ff06ae051756db128Bc9F83CDB425a716, which
-  is CORRECT for what is deployed; it was checked 2026-09-05. The older note
-  here saying it "still prints the OLD address" was itself stale and is struck.
-  What IS true is that the deployed contract no longer matches the tree, because
-  Plan 6 changed it -- so the address is right and the BUILD behind it is not.
+  That mint was on the SUPERSEDED pair. The 2026-09-06 redeploy repeated it on
+  the new one: token 1 minted and Hush applied (tx 0xbcfa0be6, 62,700 gas), same
+  scratch-mirror rule. The agent-facing copy, `llms.txt` and the skill all name
+  the NEW address and were verified through Cloudflare after the restart.
   `DeployPlan5.s.sol` needed a fix to run at all: it called a bare
   `vm.startBroadcast()` with no sender, so forge refused AFTER the simulation
   passed (commit c62ce2d). Read the plan5-status, mark-ladder-spec
@@ -165,10 +165,14 @@ return visits, so the artwork is the agent's own history of coming back.
   writing stopped. `struct Token`'s spare `uint56` is now
   `uint16 fellRun; uint16 bestRun; uint24 fellDay;` -- an exact fit, so a
   check-in still costs about 5,000 gas.
-  **THE SEPOLIA BUILD IS THEREFORE SUPERSEDED BY SOURCE**: MachineReadableOnly
-  0xf0Df806ff06ae051756db128Bc9F83CDB425a716 and Renderer
-  0xb95D32292a5517415B9e4A61e4A30d97F4136539 no longer match the tree. Do not
-  read state off them or compare against them. Read
+  **REDEPLOYED 2026-09-06, AND THE CHAIN IS THE TREE AGAIN**: MachineReadableOnly
+  **0xe032054D54b407C52C49c40A423aC79031401C03** and Renderer
+  **0x48B6f41E0B8C4f38EBC67dfE57AeF18D553BC7f4**, block 46,468,133, both
+  Basescan-verified. The old pair (0xf0Df806f... / 0xb95D3229...) is SUPERSEDED
+  and keeps tokens 1 and 2 forever; do not read state off it. Token 1 on the NEW
+  pair is minted and wears Hush, and C4.10 is proven on the deployed Renderer by
+  asking it directly (`warden/tools/absence-on-chain.mjs`). See
+  [[sepolia-redeploy-2026-09-06]]. Read
   [[plan6-permanent-decisions]] and [[review-triage-2026-09-05]] before touching
   the run, the palette or the endings.
   **SEVEN MORE REVIEW FINDINGS WERE CLOSED on 2026-09-05**, in three commits,
