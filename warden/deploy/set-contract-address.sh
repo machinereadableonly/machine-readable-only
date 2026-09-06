@@ -23,7 +23,14 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 FILE="./.env"
 [ -f "$FILE" ] || { echo "No environment file at $(pwd)/.env"; exit 1; }
 
-BACKUP="${FILE}.bak.$(date -u +%Y%m%dT%H%M%SZ)"
+# THE BACKUP GOES OUTSIDE THE WORKTREE, always. A copy of a secret written
+# beside the file it copies is inside the repository, and on 2026-09-03 exactly
+# that put a CHALLENGE_SECRET into git -- `git add -A` right after a script had
+# run the files is where it bites. The ignore rule is a backstop, not the fix;
+# the fix is that the file is never in the tree to be added.
+BACKUP_DIR="$HOME/backups"
+mkdir -p "$BACKUP_DIR"
+BACKUP="$BACKUP_DIR/warden-env.bak.$(date -u +%Y%m%dT%H%M%SZ)"
 cp -p "$FILE" "$BACKUP"
 chmod 600 "$BACKUP"
 
