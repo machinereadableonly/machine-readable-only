@@ -58,12 +58,37 @@ contract LifecycleTest is MroTestBase {
         t.mint(3, MALLORY, KEY, _code());
     }
 
+    /// @dev The payload is asserted in full, not just the indexed id. It was
+    /// previously `expectEmit(true, false, false, false)`, which checks the
+    /// topic and NOTHING else -- so `day`, `level` and `streak` could each have
+    /// been zero, stale or swapped and this test would still pass. The three
+    /// values are the sealed token's final record, and the Clock reads them.
     function test_restSealsTheTokenAndEmits() public {
-        vm.expectEmit(true, false, false, false);
-        emit MachineReadableOnly.Rested(1, 0, 0, 0);
+        // Read the state BEFORE the expectation: `viewOf` and `today` are
+        // calls, and expectEmit applies to the next one.
+        uint32 day = t.today();
+        uint32 level = t.viewOf(1).level;
+        uint32 streak = t.viewOf(1).streak;
+
+        vm.expectEmit(true, true, true, true);
+        emit MachineReadableOnly.Rested(1, day, level, streak);
         vm.prank(ALICE);
         t.rest(1);
         assertTrue(t.viewOf(1).resting);
+    }
+
+    /// @dev The CONTROL for the payload above: a token that has actually lived
+    /// seals at the values it reached, not at a fresh token's 1/1. Without
+    /// this, `Rested(1, day, 1, 1)` would pass on a contract that hard-coded
+    /// the level and streak it emits.
+    function test_theRestedPayloadCarriesTheRunItSealedAt() public {
+        _makeWhole(1);
+        uint32 day = t.today();
+
+        vm.expectEmit(true, true, true, true);
+        emit MachineReadableOnly.Rested(1, day, 365, 365);
+        vm.prank(ALICE);
+        t.rest(1);
     }
 
     function test_restRevertsForANonOwner() public {
@@ -289,5 +314,55 @@ contract LifecycleTest is MroTestBase {
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.Sunset.selector);
         t.seed(2, 1, ALICE, _code());
+    }
+
+    // -------------------------------------------------------------------
+    // seedsAvailable's early return, both halves of the `&&`
+    // -------------------------------------------------------------------
+
+    /// @dev The never-minted branch. The trust-boundary test above asserts
+    /// `seedsAvailable == 0` for a key that HAS minted today, which exercises
+    /// the ARITHMETIC (`(today - first) / 365` is zero in year one) and not the
+    /// early return at all. A key that never minted has no `firstMintDay` to
+    /// subtract, so without the early return the budget would be
+    /// `today() / 365` -- three seeds at this test's clock, out of nothing.
+    function test_aKeyThatNeverMintedHasNoBudgetAtAll() public {
+        _makeWhole(1);
+        _warpOneYear();
+        assertEq(t.seedsAvailable(1), 1, "the real key earned one");
+
+        // A key nobody has ever minted with.
+        bytes32 strangerKey = bytes32(uint256(0x5747));
+        vm.prank(ALICE);
+        t.rebind(1, strangerKey);
+
+        assertEq(t.seedsAvailable(1), 0, "a key that never minted has earned nothing");
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.NoSeedAvailable.selector);
+        t.seed(2, 1, ALICE, _code());
+    }
+
+    /// @dev The other half, and the reason the condition is `&&` and not `||`:
+    /// a key whose first mint genuinely fell on day 0 has `firstMintDay == 0`
+    /// and IS a real minter. Written as `||` it would be refused forever --
+    /// a token minted in the first 24 hours of the piece could never seed.
+    ///
+    /// Needs its own deployment: the shared fixture warps to day 1000 before
+    /// minting, so day zero is unreachable from it.
+    function test_aKeyWhoseFirstMintWasDayZeroStillEarnsItsBudget() public {
+        Renderer r2 = new Renderer();
+        MachineReadableOnly t2 = new MachineReadableOnly(address(r2), WARDEN);
+
+        // Day 0 is the first 86,400 seconds of the epoch, and setUp has
+        // already warped to day 1000, so wind the clock back to reach it.
+        vm.warp(1);
+        assertEq(t2.today(), 0, "the fixture must mint on day zero for this to test anything");
+        vm.prank(WARDEN);
+        t2.mint(1, ALICE, KEY, _code());
+        assertEq(t2.viewOf(1).mintDay, 0);
+
+        // Two years of tenure from day zero.
+        vm.warp(730 days + 1);
+        assertEq(t2.seedsAvailable(1), 2, "day zero is a real mint day, not an absent one");
     }
 }
