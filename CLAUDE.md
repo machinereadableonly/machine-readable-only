@@ -289,7 +289,7 @@ return visits, so the artwork is the agent's own history of coming back.
   **Rehearse every deploy** with `warden/tools/rehearse-start.sh`: it runs the
   real `main.mjs` against a COPY of production state, which is the only thing
   that can catch a bad boot check.
-  **Suites: contracts 331, warden 562, tools 72, client 40** (2026-09-06).
+  **Suites: contracts 334, warden 562, tools 75, client 40** (2026-09-06).
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
@@ -456,11 +456,12 @@ return visits, so the artwork is the agent's own history of coming back.
   (1) **1,633,224 gas / 8,924 bytes** is soak token 21 read over RPC, the number
   for what a real provider returns. It PREDATES Plan 5 and nothing has
   re-measured that path since the ladder was drawn.
-  (2) **1,750,425 gas / 10,651 bytes** is the GAS worst case in Foundry
+  (2) **1,750,598 gas / 10,651 bytes** is the GAS worst case in Foundry
   (`GasBudget.t.sol` token 9: level 364, run 400, maximal Mark set). This is
   `worstGas`, what the suite asserts and the one to compare across commits;
-  Plan 5 moved it from 1,585,616 / 9,223 on 2026-09-02 and Plan 6 from
-  1,749,915 on 2026-09-05. Gas margin 249,575.
+  Plan 5 moved it from 1,585,616 / 9,223 on 2026-09-02, Plan 6 from
+  1,749,915 on 2026-09-05, and C4.10's absence fade added 173 on 2026-09-06.
+  Gas margin 249,402.
   (3) **1,680,468 gas / 11,550 bytes** is the BYTE worst case in Foundry (token
   7: level 3,650, the ring cap, run 400, maximal Mark set). This is `maxBytes`,
   and the byte margin is 20,000 - 11,550 = **8,450**, not the 9,349 you get by
