@@ -63,7 +63,13 @@ test("a one-block range is still read", async () => {
 });
 
 test("the Base Sepolia deploy block is recorded, so reconcile floors instead of using a rolling window", () => {
-  assert.equal(DEPLOY_BLOCK[84532], 46_163_891n);
+  // THIS ONE IS DELIBERATELY A LITERAL. Everywhere else the floor is derived,
+  // but something has to fail when a redeploy happens and nobody updates it:
+  // left at a previous contract's block, reconcile pages tens of thousands of
+  // empty blocks and finds nothing, which reads as a quiet chain rather than as
+  // a misconfiguration. Updated 2026-09-06 for the Plan 6 + C4.10 pair, taken
+  // from the broadcast receipt.
+  assert.equal(DEPLOY_BLOCK[84532], 46_468_133n);
 });
 
 // --- applying what the chain said ------------------------------------------

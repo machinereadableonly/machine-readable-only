@@ -38,7 +38,7 @@ const TREASURY = "0x000000000000000000000000000000000000dEaD";
 // Mark records and the three-argument applyMark. Held as a constant rather
 // than read from the environment so the capture is reproducible from a
 // clean checkout, the same reason DOMAIN and SECRET are constants here.
-const CONTRACT = "0xf0Df806ff06ae051756db128Bc9F83CDB425a716";
+const CONTRACT = "0xe032054D54b407C52C49c40A423aC79031401C03";
 const RPC = process.env.BASE_RPC_URL ?? "https://sepolia.base.org";
 const COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
 

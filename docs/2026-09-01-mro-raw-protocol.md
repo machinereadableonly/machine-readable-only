@@ -762,18 +762,25 @@ database, so a legitimate rebind is never locked out.
 This is the part that makes the rest optional. One call returns everything
 about a token, and it does not involve us at all.
 
-    Contract:  0xf0Df806ff06ae051756db128Bc9F83CDB425a716
+    Contract:  0xe032054D54b407C52C49c40A423aC79031401C03
     Chain:     Base Sepolia (eip155:84532)
-    Renderer:  0xb95D32292a5517415B9e4A61e4A30d97F4136539
+    Renderer:  0x48B6f41E0B8C4f38EBC67dfE57AeF18D553BC7f4
 
-    cast call 0xf0Df806ff06ae051756db128Bc9F83CDB425a716 \
-      'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,bool,bool,uint256,bytes32,bytes,uint32))' \
+    cast call 0xe032054D54b407C52C49c40A423aC79031401C03 \
+      'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))' \
       1 --rpc-url https://sepolia.base.org
 
-A live answer, token 1, read 2026-09-03. It was minted that day and carries one
-Mark, Hush:
+A live answer, token 1, read 2026-09-06 against the pair above, which was
+deployed that day. Nothing has been minted on it yet, so this is what an
+UNMINTED id looks like -- zeros throughout, with the contract's own day in the
+last field. It is not an error: ids are not reserved, and `viewOf` answers for
+any id you ask about.
 
-    (1, 1, 1, 20699, 20699, 0, 0, 0, false, false, 2, 0x00...0001, 0xfe00810b..., 20699)
+    (1, 0, 0, 0, 0, 0, 0, 0, false, false, 0, 0, 0, 0, 0x00...00, 0x, 20702)
+
+Reading left to right: tokenId, level, streak, lastDay, mintDay, generation,
+seedsGiven, parent, resting, sunset, sunsetDay, fellRun, fellDay, marks,
+agentKeyId, code, today.
 
 `marks` is 2 there, which is bit 1 set, which is Hush. The Mark set lives in bits
 1 to 10; bits 16 and up carry the Iris shape, the Tint ink and the earned run, so

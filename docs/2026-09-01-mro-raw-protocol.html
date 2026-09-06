@@ -823,18 +823,24 @@ database, so a legitimate rebind is never locked out.</p>
 <h2>8. Read the chain instead of asking us</h2>
 <p>This is the part that makes the rest optional. One call returns everything
 about a token, and it does not involve us at all.</p>
-<pre><code>Contract:  0xf0Df806ff06ae051756db128Bc9F83CDB425a716
+<pre><code>Contract:  0xe032054D54b407C52C49c40A423aC79031401C03
 Chain:     Base Sepolia (eip155:84532)
-Renderer:  0xb95D32292a5517415B9e4A61e4A30d97F4136539
+Renderer:  0x48B6f41E0B8C4f38EBC67dfE57AeF18D553BC7f4
 
-cast call 0xf0Df806ff06ae051756db128Bc9F83CDB425a716 \
-  &#39;viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,bool,bool,uint256,bytes32,bytes,uint32))&#39; \
+cast call 0xe032054D54b407C52C49c40A423aC79031401C03 \
+  &#39;viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))&#39; \
   1 --rpc-url https://sepolia.base.org
 </code></pre>
-<p>A live answer, token 1, read 2026-09-03. It was minted that day and carries one
-Mark, Hush:</p>
-<pre><code>(1, 1, 1, 20699, 20699, 0, 0, 0, false, false, 2, 0x00...0001, 0xfe00810b..., 20699)
+<p>A live answer, token 1, read 2026-09-06 against the pair above, which was
+deployed that day. Nothing has been minted on it yet, so this is what an
+UNMINTED id looks like -- zeros throughout, with the contract&#39;s own day in the
+last field. It is not an error: ids are not reserved, and <code>viewOf</code> answers for
+any id you ask about.</p>
+<pre><code>(1, 0, 0, 0, 0, 0, 0, 0, false, false, 0, 0, 0, 0, 0x00...00, 0x, 20702)
 </code></pre>
+<p>Reading left to right: tokenId, level, streak, lastDay, mintDay, generation,
+seedsGiven, parent, resting, sunset, sunsetDay, fellRun, fellDay, marks,
+agentKeyId, code, today.</p>
 <p><code>marks</code> is 2 there, which is bit 1 set, which is Hush. The Mark set lives in bits
 1 to 10; bits 16 and up carry the Iris shape, the Tint ink and the earned run, so
 test <code>marks &amp; 0xFFFE</code> for &quot;wears any Mark&quot; and never <code>marks != 0</code>.</p>

@@ -25,12 +25,19 @@ import { MRO_ABI } from "./abi.mjs";
 /// The measured cap. Not a tunable guess: larger is refused outright.
 export const MAX_LOG_SPAN = 10_000n;
 
-/// The block MachineReadableOnly was deployed in on Base Sepolia, found by
-/// bisecting on code presence 2026-08-31. Reconcile floors here rather than
-/// using a rolling window, because a rolling window silently forgets anything
-/// older than itself -- and the contract went 9,000 blocks with no logs at all,
-/// so "nothing recent" is a normal state rather than a signal.
-export const DEPLOY_BLOCK = { 84532: 46_163_891n };
+/// The block MachineReadableOnly was deployed in on Base Sepolia. Reconcile
+/// floors here rather than using a rolling window, because a rolling window
+/// silently forgets anything older than itself -- and the contract went 9,000
+/// blocks with no logs at all, so "nothing recent" is a normal state rather
+/// than a signal.
+///
+/// UPDATED 2026-09-06 for the Plan 6 + C4.10 redeploy, from the broadcast
+/// receipt rather than by bisecting: all twelve deploy transactions landed in
+/// block 46,468,133. THIS MUST CHANGE WITH EVERY REDEPLOY. Left at a previous
+/// contract's block it does not fail -- it pages tens of thousands of empty
+/// blocks and finds nothing, which reads as a quiet chain rather than as a
+/// misconfiguration. The previous value was 46_163_891 (the Plan 5 pair).
+export const DEPLOY_BLOCK = { 84532: 46_468_133n };
 
 /// The highest Mark id the CONTRACT will accept, from MachineReadableOnly.sol's
 /// own `MAX_MARK_ID`. Ids 11-15 are unwritten today (Plan 6 reserved them), so
