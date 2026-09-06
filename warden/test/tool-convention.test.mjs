@@ -62,3 +62,41 @@ test("a check-in answers with `ok` on the refusal AND on the success", async () 
   assert.equal(again.accepted, false);
   assert.equal(again.reason, "already-credited-today");
 });
+
+// 5.L4. The spec requires a prompt-injection warning on "any field that echoes
+// agent-supplied text". It sat on `rebind`, whose echoes are a positive integer
+// and a hex string derived from a VERIFIED key id -- the one tool that could not
+// carry prose -- and an annotation pointing at the safest surface reads as if it
+// were the risky one. The requirement is met by the SCHEMAS: no tool accepts
+// free-form text. This is what keeps that true.
+test("no tool accepts free-form text, which is what makes the warning unnecessary", async () => {
+  const { makeMcpHandler } = await import("../src/mcp/server.mjs");
+  const { openDb } = await import("../src/mirror/db.mjs");
+  const { queries } = await import("../src/mirror/queries.mjs");
+  const { openChain } = await import("./chain-stub.mjs");
+  const { envelope } = await import("./mcp-envelope.mjs");
+
+  const { handler } = makeMcpHandler({
+    q: queries(openDb(":memory:")), chain: openChain(), contract: "0xc", chainId: 84532,
+  });
+  const built = envelope({ method: "tools/list", params: {} });
+  const req = new Request("https://example.com/mcp", { method: "POST", headers: built.headers, body: built.raw });
+  const res = await handler.fetch(req, { authInfo: { token: "n/a", clientId: "k1", scopes: [], extra: { keyId: "k1" } } });
+  const text = await res.text();
+  const line = text.split("\n").find((l) => l.startsWith("data: "));
+  const tools = JSON.parse(line ? line.slice("data: ".length) : text).result.tools;
+
+  assert.ok(tools.length >= 9, `expected the whole surface, saw ${tools.length}`);
+  for (const tool of tools) {
+    for (const [field, schema] of Object.entries(tool.inputSchema?.properties ?? {})) {
+      if (schema.type !== "string") continue;
+      // A string field is allowed ONLY if it is pattern-bounded -- the `to`
+      // address is the one that exists. An unbounded string is where prose gets
+      // in, and it is the day the warning has to be written.
+      assert.ok(
+        typeof schema.pattern === "string" && schema.pattern.length > 0,
+        `${tool.name}.${field} is an unbounded string: it can carry prose, so it needs the injection warning`
+      );
+    }
+  }
+});

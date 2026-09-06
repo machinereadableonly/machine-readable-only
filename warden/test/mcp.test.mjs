@@ -166,8 +166,22 @@ test("mro://contract publishes the configured chain id, not a hardcoded mainnet 
   );
 
   const published = JSON.parse(body.result.contents[0].text);
-  assert.deepEqual(published, { address: "0xsepolia-contract", chainId: 84532 });
+  assert.equal(published.address, "0xsepolia-contract");
+  assert.equal(published.chainId, 84532);
   assert.notEqual(published.chainId, 8453, "the mainnet id must not survive a testnet configuration");
+
+  // 5.L3. The two fields that make "read the chain instead of asking us"
+  // possible from ONE source: the same generated ABI the Clock encodes with,
+  // and the Mark catalogue, which is otherwise only reachable through `ladder`
+  // and therefore only with a token id.
+  assert.ok(Array.isArray(published.abi) && published.abi.length > 50, "the ABI must be served");
+  assert.ok(published.abi.some((e) => e.name === "viewOf"), "and it must be the real one");
+  assert.equal(published.catalogue[1].name, "Hush");
+  assert.equal(published.catalogue[7].price, "$1250.00");
+  // The renderer address is deliberately absent: it is an owner dial, so a
+  // cached copy is a staleness trap. The answer says where to read it instead.
+  assert.equal(published.renderer, undefined);
+  assert.match(published.rendererIsReadOnChain, /renderer\(\)/);
 });
 
 // THE MONEY BUG THIS PINS, and why it needs the official client to catch it.
