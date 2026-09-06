@@ -100,3 +100,80 @@ test("no tool accepts free-form text, which is what makes the warning unnecessar
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// The convention, over the REAL registry -- test gap 38
+// ---------------------------------------------------------------------------
+
+// `freeTools` above hand-lists six tools. That was fine when there were six,
+// and it silently stopped covering the surface the moment a ninth was added:
+// a new tool, or a rename, is covered by nothing and the convention it breaks
+// is the one every client branches on.
+//
+// This iterates TOOL_FACTORIES -- the same array server.mjs registers from --
+// so a tenth tool is covered on the day it exists rather than the day somebody
+// remembers to add it here.
+test("the registry is the nine tools this piece publishes, and the hand-list covers the free ones", async () => {
+  const { TOOL_FACTORIES, PAID_TOOLS } = await import("../src/mcp/server.mjs");
+  const q = queries(openDb(":memory:"));
+
+  const names = TOOL_FACTORIES.map((make) => make({ q, chain: openChain(), contract: CONTRACT, challengeSecret: "s".repeat(32), domain: "example.com" }).name);
+  assert.equal(names.length, 9, "nine tools; if this changed, the protocol document changed too");
+  assert.deepEqual(
+    [...names].sort(),
+    ["challenge", "checkin", "ladder", "mint", "rebind", "rest", "seed", "status", "upgrade"],
+    "a tool was added, removed or renamed: llms.txt and the protocol document name these",
+  );
+
+  // The hand-written list above must be exactly the registry minus the paid
+  // ones. This is what makes the older tests keep meaning what they say.
+  const free = names.filter((n) => !PAID_TOOLS.includes(n));
+  assert.deepEqual(
+    freeTools(q).map(([name]) => name).sort(),
+    free.sort(),
+    "freeTools has drifted from the registry: a tool is now covered by nothing",
+  );
+});
+
+// THE COMMENT'S CLAIM, ASSERTED. `freeTools`'s own comment says "the paid ones
+// (mint, upgrade, seed) already return `ok` on every path" -- and nothing
+// checked it. A paid tool that refused with a bare `{ reason }` would break the
+// same client branch the free ones are protected from, and it would do it on
+// the path where the agent has just been asked for money.
+//
+// Driven through `settleNow`, the shared stand-in that calls the handler the
+// way the real gateway does: `handler(args, { payNonce })`.
+test("every PAID tool answers with `ok` too, on the refusal path", async () => {
+  const { PAID_TOOLS } = await import("../src/mcp/server.mjs");
+  const { makeMintTool } = await import("../src/mcp/tools/mint.mjs");
+  const { makeUpgradeTool } = await import("../src/mcp/tools/upgrade.mjs");
+  const { makeSeedTool } = await import("../src/mcp/tools/seed.mjs");
+  const { settleNow } = await import("./paid-stub.mjs");
+  const { LADDER } = await import("../src/mcp/ladder.mjs");
+
+  const q = queries(openDb(":memory:"));
+  // The REAL catalogue, because upgrade reads it before anything else it can
+  // refuse on -- a `{}` here would answer `mark-inactive` for every Mark and
+  // the test would pass without ever reaching the gates it means to exercise.
+  const deps = {
+    q, chain: openChain(), contract: CONTRACT, paid: settleNow,
+    supplyCap: 10_000, today: () => 100, catalogue: LADDER,
+  };
+
+  const paid = [
+    [makeMintTool(deps), { to: "0x" + "a1".repeat(20) }],
+    [makeUpgradeTool(deps), { tokenId: 1, upgradeId: 1, variant: 0 }],
+    [makeSeedTool(deps), { parentId: 1, to: "0x" + "a1".repeat(20) }],
+  ];
+
+  assert.deepEqual(paid.map(([t]) => t.name).sort(), [...PAID_TOOLS].sort(),
+    "the paid tools driven here must be the paid tools the server registers");
+
+  for (const [tool, args] of paid) {
+    const r = await tool.handler(args, ctx);
+    assert.equal(
+      typeof r.ok, "boolean",
+      `${tool.name} must answer with a boolean ok, got ${JSON.stringify(r)}`,
+    );
+  }
+});

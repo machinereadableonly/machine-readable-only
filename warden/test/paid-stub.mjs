@@ -68,3 +68,41 @@ export const metaWithPayment = (nonce = nextNonce()) => ({
     payload: { authorization: { nonce }, signature: "0x00" },
   },
 });
+
+/**
+ * A REAL x402 resource server whose FACILITATOR is fake.
+ *
+ * The difference from a hand-written fake server matters and was measured:
+ * `createPaymentWrapper` calls `resourceServer.getRegisteredScheme`, so an
+ * object carrying only `buildPaymentRequirements` fails with
+ * "getRegisteredScheme is not a function" and the gateway reports
+ * `payment-unavailable` -- which looks exactly like a facilitator outage. A
+ * test using that fake would be exercising the outage path while believing it
+ * exercised the demand path.
+ *
+ * So the SERVER is the genuine one, with every method the wrapper reaches for,
+ * and only the network call underneath it is stubbed. `getSupported` is the one
+ * method `initialize()` needs; verify and settle are here so a test that goes
+ * on to pay has something to reach.
+ *
+ * Use it as the gateway's `build`, leaving `wrapFactory` alone so the real
+ * @x402/mcp wrapper produces the refusal:
+ *
+ *   makePaymentGateway({ ..., build: realServerWithFakeFacilitator("eip155:84532") })
+ */
+export function realServerWithFakeFacilitator(network, { settlement = {} } = {}) {
+  return async () => {
+    const { x402ResourceServer } = await import("@x402/core/server");
+    const { registerExactEvmScheme } = await import("@x402/evm/exact/server");
+    const facilitator = {
+      async getSupported() {
+        return { kinds: [{ x402Version: 2, scheme: "exact", network }] };
+      },
+      async verify() { return { isValid: true }; },
+      async settle() { return { success: true, transaction: "0xtx", ...settlement }; },
+    };
+    const server = registerExactEvmScheme(new x402ResourceServer(facilitator), { networks: [network] });
+    await server.initialize();
+    return server;
+  };
+}

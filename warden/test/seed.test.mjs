@@ -26,11 +26,16 @@ test("seeding from an unknown parent is refused", async () => {
   assert.equal(r.reason, "unknown-token");
 });
 
+// The CHAIN names the other key too, which is what makes this a real refusal.
+// It used to pass with the default stub (`boundTo: "k1"`, the caller) because
+// seed refused on the stale mirror alone and never asked. Now that it asks, a
+// chain saying "this IS your token" would admit the caller -- correctly -- and
+// this test would be asserting the opposite of what it claims. 5.M2.
 test("seeding from a parent bound to a different key is refused", async () => {
   const { db, q } = fresh();
   q.insertToken({ tokenId: 1, keyId: "other-key", owner: "0xabc", lastDay: 0, mintDay: 0 });
   setLevelAndStatus(db, 1, 365, "queued");
-  const tool = makeSeedTool({ q, chain: openChain(), today: () => 1000, supplyCap: 10_000 });
+  const tool = makeSeedTool({ q, chain: openChain({ boundTo: "other-key" }), today: () => 1000, supplyCap: 10_000 });
   const r = await tool.handler({ parentId: 1, to: "0x1111111111111111111111111111111111111111" }, { keyId: "k1" });
   assert.equal(r.ok, false);
   assert.equal(r.reason, "not-bound-to-caller");

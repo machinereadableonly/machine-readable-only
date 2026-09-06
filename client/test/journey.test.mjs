@@ -16,6 +16,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createServer } from "../../warden/src/server.mjs";
+import { makePaymentGateway } from "../../warden/src/pay/x402.mjs";
+import { realServerWithFakeFacilitator } from "../../warden/test/paid-stub.mjs";
 import { makeMcpHandler } from "../../warden/src/mcp/server.mjs";
 import { tokenView } from "../../warden/src/mcp/tokenView.mjs";
 import { openDb } from "../../warden/src/mirror/db.mjs";
@@ -72,11 +74,26 @@ before(async () => {
     contract: "0xcontract", chainId: 84532,
     challengeSecret: SECRET, domain: DOMAIN, llmsTxt: "",
     catalogue: {}, supplyCap: 10_000,
-    // The paid tools refuse with a real demand, exactly as the wrapper does.
-    paid: () => async () => ({
-      structuredContent: DEMAND,
-      content: [{ type: "text", text: JSON.stringify(DEMAND) }],
-      isError: true,
+    // THE REAL GATEWAY AND THE REAL WRAPPER, with only the network stubbed
+    // (5.I2).
+    //
+    // This used to be a hand-rolled stub returning the DEMAND constant below,
+    // while this file's own header claimed the demand was "built and wrapped
+    // by the real @x402/mcp code path". It was not: the client was reading a
+    // shape written by the same test that asserted it. That is the blindness
+    // that let the double-wrapped demand ship -- nothing could be minted for a
+    // day and this suite was green throughout (eaac15a).
+    //
+    // The resource server is genuine and so is createPaymentWrapper; only the
+    // HTTP call to the facilitator is faked. A thinner fake is not enough: the
+    // wrapper calls getRegisteredScheme, and a server without it fails in a way
+    // that looks exactly like a facilitator outage.
+    paid: makePaymentGateway({
+      facilitatorUrl: "https://facilitator.invalid.example/",
+      network: "eip155:84532",
+      payTo: TREASURY,
+      alert: () => {},
+      build: realServerWithFakeFacilitator("eip155:84532"),
     }),
   });
 

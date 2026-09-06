@@ -4,6 +4,8 @@
 // display price against the integer the chain publishes).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { parseMoney } from "@x402/core/utils";
 import { LADDER, VARIANT_NAMES, assertLadderSane } from "../src/mcp/ladder.mjs";
 
@@ -135,3 +137,56 @@ test("every Mark with a choice names exactly as many options as it offers", () =
     else assert.equal(VARIANT_NAMES[m.id], undefined, `mark ${m.id} names variants it does not offer`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// The catalogue still hashes to what the CONTRACT pins -- test gap 46 / 5.I1
+// ---------------------------------------------------------------------------
+
+// THE GUARD EXISTED AND THE WARDEN SUITE COULD NOT REACH IT.
+// tools/test/ladder-fixture.test.mjs runs this comparison, but it lives in the
+// `tools` package -- so a warden-only checkout, or anyone running just
+// `cd warden && npm test`, could move the catalogue and see four green suites.
+//
+// The direction matters. Ladder.t.sol asserts keccak256(abi.encode(Ladder.all()))
+// against a literal pasted in from the generator, so changing the SOLIDITY
+// ladder fails correctly. Changing the JAVASCRIPT catalogue fails NOTHING:
+// Ladder.all() still hashes to the pasted constant and nothing re-runs the
+// generator. Proven 2026-09-02 -- setting LADDER[3].minLevel from 30 to 10 left
+// all four suites green while the Warden would sell Static to a level-10 token,
+// take $5.00, queue the order, and watch the chain revert MarkGate at 00:05.
+//
+// Skips rather than fails when the Solidity file is absent, so a partial
+// checkout produces a skip and not a red suite: a guard that fails for the
+// wrong reason gets deleted, and then it guards nothing.
+const LADDER_TEST = fileURLToPath(new URL("../../contracts/test/Ladder.t.sol", import.meta.url));
+
+let ladderSource = null;
+try {
+  ladderSource = readFileSync(LADDER_TEST, "utf8");
+} catch {
+  ladderSource = null;
+}
+
+test(
+  "the Warden catalogue still hashes to what Ladder.t.sol pins",
+  { skip: ladderSource ? false : "contracts/test/Ladder.t.sol is not in this checkout" },
+  async () => {
+    const { ladderHash } = await import("../../tools/ladder-fixture.mjs");
+
+    // The only 64-digit hex literal in that file, asserted to be the only one:
+    // a second would make this pick whichever came first and pass for the
+    // wrong reason.
+    const pinned = ladderSource.match(/0x[0-9a-fA-F]{64}/g);
+    assert.equal(
+      pinned?.length,
+      1,
+      "expected exactly one 32-byte literal in Ladder.t.sol -- this test can no longer tell which is the ladder hash",
+    );
+    assert.equal(
+      ladderHash(),
+      pinned[0].toLowerCase(),
+      "the Warden's catalogue moved -- re-run `node tools/ladder-fixture.mjs`, paste the result into "
+        + "contracts/test/Ladder.t.sol, and check the two ladders really do agree",
+    );
+  },
+);

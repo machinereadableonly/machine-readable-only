@@ -201,20 +201,23 @@ test("CONTROL: the buyer the chain names IS admitted, though the mirror still sa
     alert: () => {},
   });
   const r = await tool.handler({ tokenId: 7, upgradeId: 8 }, { keyId: BUYER });
-  // The mirror's own first check still refuses an unrecognised caller before
-  // any chain read happens, so this is what the buyer actually gets today.
-  // Recorded rather than asserted as ok:true, because closing THAT is the
-  // separate half of 14.3: it is the mirror converging (above) that lets the
-  // buyer in, not this guard.
-  assert.equal(r.ok, false);
-  assert.equal(r.reason, "not-bound-to-caller");
 
-  // Once the Clock has applied the Rebound, the same call succeeds -- which is
-  // why both halves are needed and neither is sufficient alone.
+  // THE OTHER HALF OF 14.3 IS NOW CLOSED (5.M2, 2026-09-06). This used to
+  // record `ok: false` as "what the buyer actually gets today": the mirror's
+  // own first check refused an unrecognised caller BEFORE any chain read, so
+  // only the mirror converging let the buyer in, and until the next Clock run
+  // it was refused something it was about to pay for. upgrade and seed now ask
+  // the chain before refusing, exactly as checkin already did.
+  assert.equal(r.ok, true, "the chain names this caller, so the stale mirror must not refuse it");
+
+  // And it still works once the Clock has applied the Rebound and the mirror
+  // agrees -- the two halves must not disagree with each other.
   q.insertKey({ keyId: BUYER, jwk: jwk(BUYER), directory: null, registeredAt: 2 });
   applyEvents(q, [ev("Rebound", { tokenId: 7n, newKeyId: keyIdToBytes32(BUYER) })], { log: () => {} });
   const after = await tool.handler({ tokenId: 7, upgradeId: 8 }, { keyId: BUYER });
-  assert.equal(after.ok, true, "the buyer can act once the mirror has caught up");
+  // Break is already reserved by the call above, so the second one is refused
+  // for that reason and NOT for the binding -- which is the thing under test.
+  assert.notEqual(after.reason, "not-bound-to-caller", "the buyer stays admitted once the mirror agrees");
 });
 
 test("a seller cannot spend the seed of a token the chain has already rebound away", async () => {

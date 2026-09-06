@@ -36,6 +36,26 @@ function isToolResult(value) {
   return typeof value === "object" && value !== null && Array.isArray(value.content);
 }
 
+/**
+ * Every tool this server registers, in the order it registers them.
+ *
+ * AT MODULE SCOPE AND EXPORTED so a test can iterate the real registry instead
+ * of hand-listing it. tool-convention.test.mjs used to carry its own list of
+ * six, which meant a tenth tool -- or a rename -- was covered by nothing, and
+ * the convention it enforces (every tool answers with a boolean `ok`) is the
+ * one an agent's client branches on.
+ *
+ * PAID is which tools go through the payment gateway. Named here rather than
+ * inferred, because "does this tool take money" is a fact about the piece and
+ * not a property a test should guess from a handler's shape.
+ */
+export const TOOL_FACTORIES = [
+  makeChallengeTool, makeStatusTool, makeLadderTool, makeCheckinTool,
+  makeRebindTool, makeRestTool, makeSeedTool, makeMintTool, makeUpgradeTool,
+];
+
+export const PAID_TOOLS = ["mint", "upgrade", "seed"];
+
 export function makeMcpHandler(deps) {
   const handler = createMcpHandler(
     (ctx) => {
@@ -101,10 +121,7 @@ export function makeMcpHandler(deps) {
       // live tool surface rather than calling a tool factory directly.
       // Both paid tools need `deps.paid` from makePaid(); without it they are
       // registered but every call refuses.
-      for (const make of [
-        makeChallengeTool, makeStatusTool, makeLadderTool, makeCheckinTool,
-        makeRebindTool, makeRestTool, makeSeedTool, makeMintTool, makeUpgradeTool,
-      ]) {
+      for (const make of TOOL_FACTORIES) {
         const tool = make(deps);
         server.registerTool(tool.name, tool.config, async (args, mcpCtx) => {
           deps.onToolCall?.(tool.name, keyId);
