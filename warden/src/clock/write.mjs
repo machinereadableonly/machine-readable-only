@@ -28,6 +28,7 @@ import { createPublicClient, createWalletClient, http, parseGwei, formatGwei } f
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia, base } from "viem/chains";
 import { MRO_ABI } from "./abi.mjs";
+import { safeErrorText } from "./redact.mjs";
 
 /// Base's per-transaction gas cap is 16,777,216 (EIP-7825). The spec asserts
 /// below 15M, leaving room for the estimate to be optimistic.
@@ -257,6 +258,11 @@ export function errorNameOf(err) {
   return decodeContractError(err)?.name ?? null;
 }
 
+// 16.10. `detail` is not logged anywhere today -- run.mjs prints `reason` and
+// `errorName` only -- so this was never the leak the finding said it was. It is
+// routed through safeErrorText anyway, because the thing that made the leak
+// possible is a url reaching a string that something later prints, and the next
+// caller to log a `detail` should not have to know that.
 function shortMessage(err) {
-  return String(err?.shortMessage ?? err?.message ?? err).slice(0, 300);
+  return safeErrorText(err);
 }

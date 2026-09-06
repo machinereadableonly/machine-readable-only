@@ -21,6 +21,7 @@ import { DEPLOY_BLOCK } from "./reconcile.mjs";
 import { readCursor, writeCursor, nextCursor, exitCodeFor } from "./cursor.mjs";
 import { MRO_ABI } from "./abi.mjs";
 import { utcDay } from "../mcp/tools/checkin.mjs";
+import { safeErrorText } from "./redact.mjs";
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -135,7 +136,12 @@ async function main() {
   try {
     today = Number(await publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "today" }));
   } catch (err) {
-    throw new Error(`could not read today() from the contract, so the run has no day it can trust: ${err.message}`);
+    // 16.10. safeErrorText, NOT err.message: viem puts the request url in
+    // `message` and the url is where a managed provider keeps its api key.
+    // This log is appended to by systemd and read the morning after.
+    throw new Error(
+      `could not read today() from the contract, so the run has no day it can trust: ${safeErrorText(err)}`
+    );
   }
   const boxDay = utcDay();
   if (today !== boxDay) {
@@ -196,7 +202,10 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
 
 main()
   .catch((err) => {
-    console.error("clock: run failed:", err.message);
+    // 16.10. Anything uncaught lands here, and reconcile's getBlockNumber and
+    // getLogs are uncaught by design (run.mjs:367), so a viem error reaches
+    // this line with the endpoint url inside it.
+    console.error("clock: run failed:", safeErrorText(err));
     process.exitCode = 1;
   })
   // ALWAYS, on every path. A lock the happy path releases and the error path
