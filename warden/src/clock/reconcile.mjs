@@ -32,6 +32,11 @@ export const MAX_LOG_SPAN = 10_000n;
 /// so "nothing recent" is a normal state rather than a signal.
 export const DEPLOY_BLOCK = { 84532: 46_163_891n };
 
+/// The highest Mark id the CONTRACT will accept, from MachineReadableOnly.sol's
+/// own `MAX_MARK_ID`. Ids 11-15 are unwritten today (Plan 6 reserved them), so
+/// this is deliberately the chain's bound and not the catalogue's ten.
+const MAX_MARK_ID = 15;
+
 /**
  * Read every log this contract emitted in a block range, one page at a time.
  *
@@ -75,11 +80,43 @@ export async function readEvents(pub, { contract, fromBlock, toBlock, span = MAX
  * questions about.
  */
 export function applyEvents(q, events, { log = () => {} } = {}) {
-  const applied = { Rested: 0, Transfer: 0, Rebound: 0, Minted: 0, MarkApplied: 0, skipped: 0 };
+  const applied = {
+    Rested: 0, Transfer: 0, Rebound: 0, Minted: 0, MarkApplied: 0, skipped: 0,
+    // 4.M8. THE THREE EVENTS THAT ARE SEEN AND NOT APPLIED, counted rather than
+    // discarded, because "the mirror ignored it" and "the chain never said it"
+    // used to look identical from here.
+    //
+    // BatchCheckedIn carries NO TOKEN IDS -- the contract emits one event for a
+    // whole day's chunk -- so no reconcile can ever heal a check-in from it.
+    // The chain's STATE is the only source, which is what `lastDayOf` and
+    // healDayNotAdvanced in batch.mjs read. Counting it here is still worth
+    // doing: it says a day landed, which is the fact an operator is looking for
+    // when a night is in doubt.
+    //
+    // Seeded cannot arrive at all today: `seed` is onlyWarden, the Clock sends
+    // three functions and seed is not one of them, and the tool refuses with
+    // `seed-not-available`. If one ever appears here, something outside this
+    // service is minting children -- which is worth an alert rather than a
+    // silent skip.
+    //
+    // SunsetAt is the operator closing the piece. The tools already read it
+    // live from the chain on every gated call, so nothing is admitted after it;
+    // what was missing was anyone being TOLD.
+    BatchCheckedIn: 0, Seeded: 0, SunsetAt: 0,
+  };
 
   for (const event of events) {
     const name = event.eventName;
     if (!(name in applied)) continue;
+
+    // The three above name no token this mirror has to find, and two of them
+    // name no token at all.
+    if (name === "BatchCheckedIn" || name === "Seeded" || name === "SunsetAt") {
+      applied[name] += 1;
+      if (name === "SunsetAt") log("clock: the chain says the piece has been SUNSET -- no further write will be accepted");
+      if (name === "Seeded") log(`clock: a Seeded event arrived, which nothing in this service sends: token ${String(event.args?.tokenId ?? event.args?.id ?? "?")}`);
+      continue;
+    }
 
     // Every event this reconcile cares about names a token. Transfer's is
     // `tokenId`; the rest use `id` or `tokenId` depending on the event.
@@ -141,10 +178,24 @@ export function applyEvents(q, events, { log = () => {} } = {}) {
         q.markMintWritten(tokenId);
         applied.Minted += 1;
         break;
-      case "MarkApplied":
-        q.markOrderWritten(tokenId, Number(event.args?.upgradeId ?? 0));
+      case "MarkApplied": {
+        // 4.L8. `?? 0` WOULD HAVE SET BIT 0, WHICH IS NOT A MARK. Ids run
+        // 1..15 on chain (MachineReadableOnly.sol MAX_MARK_ID), so a decode
+        // that lost the argument wrote a bit no Mark owns into `tokens.marks`
+        // and marked an order 'written' for upgrade 0 -- silently, and
+        // permanently, because nothing ever clears a bit. A missing id is a
+        // decode failure and not a Mark: it is counted as skipped and reported,
+        // and the order stays queued for a run that can read it.
+        const upgradeId = Number(event.args?.upgradeId);
+        if (!Number.isInteger(upgradeId) || upgradeId < 1 || upgradeId > MAX_MARK_ID) {
+          applied.skipped += 1;
+          log(`clock: a MarkApplied on token ${tokenId} carried no usable upgradeId (${String(event.args?.upgradeId)}); nothing written`);
+          break;
+        }
+        q.markOrderWritten(tokenId, upgradeId);
         applied.MarkApplied += 1;
         break;
+      }
     }
   }
   return applied;

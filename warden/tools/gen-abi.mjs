@@ -33,7 +33,11 @@ if (!Array.isArray(abi) || abi.length === 0) {
 // "the functions the Clock actually sends", which is how a tool that writes
 // nothing on chain read as finished.
 const REQUIRED_FUNCTIONS = ["mint", "batchCheckIn", "applyMark", "seed"];
-const REQUIRED_EVENTS = ["Minted", "BatchCheckedIn", "MarkApplied", "Rebound", "Transfer", "Rested"];
+// 4.M8: Seeded and SunsetAt are here because reconcile now COUNTS them. They
+// apply nothing -- see applyEvents for why neither can -- but an event the ABI
+// omits cannot even be seen, and "the mirror ignored it" and "the chain never
+// said it" then look identical.
+const REQUIRED_EVENTS = ["Minted", "BatchCheckedIn", "MarkApplied", "Rebound", "Transfer", "Rested", "Seeded", "SunsetAt"];
 
 for (const name of REQUIRED_FUNCTIONS) {
   if (!abi.some((e) => e.type === "function" && e.name === name)) {

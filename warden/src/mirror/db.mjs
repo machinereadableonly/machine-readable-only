@@ -27,6 +27,13 @@ export function openDb(path) {
   // than hanging the process.
   const db = new DatabaseSync(path, { timeout: 5000 });
   db.exec("PRAGMA journal_mode = WAL");
+  // 4.L7. THIS GUARDS NOTHING TODAY, and that is deliberate rather than an
+  // oversight: schema.sql declares no REFERENCES clauses at all, so there is no
+  // constraint for SQLite to enforce. It stays because the setting is per
+  // CONNECTION and off by default -- so the day a foreign key IS declared, the
+  // choice would otherwise be silently unenforced in exactly the way a
+  // constraint must never be. Nothing here depends on it; it is the cheap half
+  // of a decision whose expensive half is a migration.
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(readFileSync(SCHEMA, "utf8"));
   migrate(db);

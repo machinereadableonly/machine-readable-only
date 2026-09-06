@@ -163,6 +163,19 @@ export function queries(db) {
     pendingMarkOrders: db.prepare(
       "SELECT tokenId, upgradeId, variant FROM mark_orders WHERE status = 'queued' ORDER BY tokenId ASC"
     ),
+    // 4.L3. Rows that have survived N runs without landing, counted from data
+    // the mirror already holds rather than from a new column: a credit carries
+    // the DAY it is for, and a queued mint or order carries when it was
+    // reserved. No migration, and nothing to keep in step with the runs.
+    staleCredits: db.prepare(
+      "SELECT tokenId, day FROM credits WHERE status = 'queued' AND day <= ? ORDER BY day ASC, tokenId ASC"
+    ),
+    staleMints: db.prepare(
+      "SELECT tokenId FROM mints WHERE status = 'queued' AND reservedAt IS NOT NULL AND reservedAt <= ? ORDER BY tokenId ASC"
+    ),
+    staleMarkOrders: db.prepare(
+      "SELECT tokenId, upgradeId FROM mark_orders WHERE status = 'queued' AND reservedAt IS NOT NULL AND reservedAt <= ? ORDER BY tokenId ASC"
+    ),
     stuckMarkOrders: db.prepare(
       "SELECT tokenId, upgradeId, variant FROM mark_orders WHERE status = 'failed' ORDER BY tokenId ASC, upgradeId ASC"
     ),
@@ -547,6 +560,28 @@ export function queries(db) {
     pendingMarkOrders: () => s.pendingMarkOrders.all(),
 
     /**
+     * Everything still queued after `runs` nightly runs, for the alert the spec
+     * asks for and nothing implemented.
+     *
+     * MEASURED FROM WHAT IS ALREADY STORED. A credit is for a day, so a queued
+     * credit whose day is `runs` days behind today has been offered that many
+     * times; a mint or an order carries `reservedAt`. Neither needs a run
+     * counter, and adding a column to three tables to count something two
+     * existing columns already imply is how a schema drifts.
+     *
+     * `reservedAt IS NOT NULL` skips the four EARNED Marks, which are queued
+     * with no reservation at all. They are not stale, they are free.
+     */
+    staleRows(today, now = Date.now(), runs = 3) {
+      const before = now - runs * 86_400_000;
+      return {
+        credits: s.staleCredits.all(today - runs),
+        mints: s.staleMints.all(before),
+        markOrders: s.staleMarkOrders.all(before),
+      };
+    },
+
+    /**
      * Mark orders the chain refused outright. The `mints` pattern, applied to
      * the one queue that lacked it.
      *
@@ -567,9 +602,17 @@ export function queries(db) {
     /// A mint landed: both rows move together, because a written token with a
     /// queued mint (or the reverse) is a state nothing else in this service
     /// knows how to read.
+    ///
+    /// 4.L1: "together" was a comment and not a fact -- the two statements ran
+    /// outside any transaction, so a crash between them (or a SIGKILL, which
+    /// the Clock's unit could deliver until 16.7) left exactly the half-applied
+    /// state the comment promised was impossible. `transact` is what makes the
+    /// sentence true.
     markMintWritten(tokenId) {
-      s.markMintWritten.run(tokenId);
-      s.markTokenWritten.run(tokenId);
+      this.transact(() => {
+        s.markMintWritten.run(tokenId);
+        s.markTokenWritten.run(tokenId);
+      });
     },
     markCreditWritten: (tokenId, day) => s.markCreditWritten.run(tokenId, day),
 
@@ -590,9 +633,17 @@ export function queries(db) {
 
     /// A Mark landed. The bit is set here rather than by the Warden, because
     /// until the chain has it the token does not really carry the Mark.
+    ///
+    /// 4.L1, and this half is the one that costs money: a crash between the two
+    /// statements leaves a 'written' order whose bit is not in `tokens.marks`,
+    /// and the exclusion check reads that mask -- so the token could then be
+    /// sold the other side of a pair the chain has already closed. One
+    /// transaction, so the row and the mask are one fact.
     markOrderWritten(tokenId, upgradeId) {
-      s.markOrderWritten.run(tokenId, upgradeId);
-      s.setMarkBit.run(1 << upgradeId, tokenId);
+      this.transact(() => {
+        s.markOrderWritten.run(tokenId, upgradeId);
+        s.setMarkBit.run(1 << upgradeId, tokenId);
+      });
     },
 
     /// Facts only the chain knows: a transfer or a rebind the Warden never saw.

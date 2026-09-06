@@ -95,6 +95,8 @@ export async function runClock({
   chunkSize = CHECKIN_CHUNK,
   log = console.log,
   alert = console.error,
+  // Injected so the staleness window can be tested without waiting three days.
+  now = () => Date.now(),
 }) {
   const summary = {
     gasStopped: false,
@@ -198,8 +200,15 @@ export async function runClock({
     }
     alert(`clock: mint ${mint.tokenId} failed (${result.reason}${result.errorName ? ` ${result.errorName}` : ""})`);
     if (isRunLevel(result)) {
+      // ABORT THE WRITES, NOT THE RUN. 4.L9: this used to `return summary`,
+      // which skipped reconcile -- so a paused or sunset contract stopped the
+      // mirror LEARNING as well as writing, for as long as the pause lasted.
+      // Reconcile makes no writes to the chain and cannot fail for the reason
+      // that stopped these, and `Rested` is exactly what a token owner does
+      // while the piece is shut. The run still exits non-zero: `summary.aborted`
+      // is what main.mjs reads.
       summary.aborted = result.errorName ?? result.reason;
-      return summary;
+      break;
     }
   }
 
@@ -215,7 +224,9 @@ export async function runClock({
     return life;
   };
 
-  const pending = q.pendingCredits(today - 1);
+  // Nothing is sent once a write phase has aborted -- see the mints loop for
+  // why the run continues to reconcile anyway.
+  const pending = summary.aborted ? [] : q.pendingCredits(today - 1);
 
   // 15.8. ONE BAD ROW IS ONE ROW'S PROBLEM. packIds throws on an id that will
   // not fit in four bytes, it is called with no `try`, and the throw
@@ -272,11 +283,13 @@ export async function runClock({
             "It may yet land; tomorrow's run resolves it against the chain rather than resending."
           : `clock: check-ins aborted (${result.aborted})`
       );
-      return summary;
+      break;
     }
   }
 
-  // 5. MARKS.
+  // 5. MARKS. Skipped entirely once a write phase has aborted: the reason that
+  //    stopped the mints or the check-ins (NotWarden, Sunset, EnforcedPause)
+  //    refuses these too, and one refusal should not become a hundred.
   //
   // Orders already known to be refused are reported once per run at log level
   // and NOT re-sent. They are not alerted again: the alert fired at the moment
@@ -292,7 +305,7 @@ export async function runClock({
       summary.stuckMarks.map((o) => `${o.upgradeId} on ${o.tokenId}`).join(", "));
   }
 
-  for (const order of q.pendingMarkOrders()) {
+  for (const order of summary.aborted ? [] : q.pendingMarkOrders()) {
     // THREE arguments. The variant is the shape or ink the agent chose and paid
     // for, and it exists nowhere else -- the contract writes it into the token's
     // own word, permanently. Dropping it would silently hand out the default.
@@ -318,7 +331,7 @@ export async function runClock({
     alert(`clock: applyMark ${order.upgradeId} on ${order.tokenId} failed (${result.errorName ?? result.reason})`);
     if (isRunLevel(result)) {
       summary.aborted = result.errorName ?? result.reason;
-      return summary;
+      break;
     }
     // ONLY A NAMED, PERMANENT REFUSAL IS FINAL FOR THIS ROW -- see isFinalMark.
     //
@@ -333,9 +346,39 @@ export async function runClock({
     }
   }
 
-  // 6. RECONCILE. Last, so it sees this run's own writes as well as whatever
+  // 6. WHAT HAS NOT MOVED IN THREE RUNS. 4.L3: STALE_AFTER_RUNS was exported
+  //    and read by nothing, and the spec's three-run alert did not exist -- so
+  //    a row that quietly failed every night produced one ordinary log line a
+  //    night and no signal at all. Counted from what the mirror already stores
+  //    (a credit's day, a reservation's timestamp), so there is no run counter
+  //    to keep in step and no migration.
+  const stale = q.staleRows(today, now(), STALE_AFTER_RUNS);
+  summary.stale = stale;
+  const staleTotal = stale.credits.length + stale.mints.length + stale.markOrders.length;
+  if (staleTotal > 0) {
+    alert(
+      `clock: ${staleTotal} row(s) have been queued for ${STALE_AFTER_RUNS} runs or more and are not fixing themselves -- ` +
+        `${stale.mints.length} mint(s), ${stale.credits.length} credit(s), ${stale.markOrders.length} mark order(s)`
+    );
+  }
+
+  // 7. RECONCILE. Last, so it sees this run's own writes as well as whatever
   //    the token owners did during the day.
   summary.reconciled = await reconcile({ q, publicClient, contract, chainId, lastReconciledBlock, log });
+
+  // 4.L10. `skipped` IS A DIVERGENCE SIGNAL, not a statistic. Every skip is an
+  // event the CHAIN emitted about a token this mirror has never heard of -- a
+  // token minted by another warden, a mirror restored from an old backup, or a
+  // reconcile that has quietly lost rows. It was only ever logged inside a JSON
+  // blob, which nothing reads at three in the morning. It is alerted now, and
+  // it is the one reconcile number that means something is wrong rather than
+  // something happened.
+  if (summary.reconciled?.applied?.skipped > 0) {
+    alert(
+      `clock: reconcile saw ${summary.reconciled.applied.skipped} event(s) for tokens this mirror does not hold ` +
+        `(blocks ${summary.reconciled.from}..${summary.reconciled.to}) -- the mirror and the chain disagree about what exists`
+    );
+  }
 
   return summary;
 }
