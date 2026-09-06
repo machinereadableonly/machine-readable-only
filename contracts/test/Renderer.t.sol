@@ -98,7 +98,7 @@ contract RendererTest is Test {
         // divergence: the JS renderer had a lapse function it never called, so
         // the image never paled while this renderer's did.
         _diff("whole and lapsed", _view(365, 140, 1000, 1040), 8881,
-            0xc92fc8193735bdd35f30efdadab7d7010e42945cfc0f71b2503ddddc04b22ca3);
+            0xdd998459c2ed3929a3eb70b1bec56c992fb01c9a742179b73e887a691493db58);
     }
 
     function test_theRingCapMatchesTheJavascriptReference() public view {

@@ -5,6 +5,7 @@ import { heartTarget } from "../heart-target.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
          rungOf, colourAt, noiseAt, staticAt, inks, BEAT_TO, MAX_RINGS, ringsFor, ringSpan,
          HUSH_QUIET, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
+         fieldFor, absenceOf,
        } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
@@ -399,14 +400,18 @@ test("a lapse walks back down the same ladder, never off it", () => {
 });
 
 // ---------------------------------------------------------------------------
-// C4.10 -- absence in the frame
+// C4.10 -- absence cools the page
 // ---------------------------------------------------------------------------
 
 test("a token that never returned stops looking like one minted today", () => {
   // MEASURED BEFORE IT WAS FIXED: all four of these rendered byte-identical,
   // because a never-returned token holds level 1 / streak 1 forever and both
-  // tierIndex(1) and lapsedIndex(1, ...) are already rung 0. The heart cannot
-  // carry absence; the frame can. tools/absence-check.mjs draws the sheet.
+  // tierIndex(1) and lapsedIndex(1, ...) are already rung 0.
+  //
+  // The FRAME was the first attempt and could not work: the ghost is 1.145:1
+  // against the page, so fading it toward the page moves at most 17 of 255
+  // (tools/absence-delta.mjs). The page is the only surface that reaches a
+  // token holding one lit cell out of 365.
   const never = { level: 1, streak: 1, years: 0, marks: [] };
   const at = (gap, extra = {}) =>
     render({ ...never, lastDay: 1000, today: 1000 + gap, ...extra });
@@ -414,45 +419,54 @@ test("a token that never returned stops looking like one minted today", () => {
   // BOTH SIDES OF EACH BOUND. A step rule asserted only on the day of the step
   // passes just as happily when the step is in the wrong place.
   assert.equal(at(0), at(29), "a lapse under 30 days is not yet an absence");
-  assert.notEqual(at(29), at(30), "the frame must start fading at 30 days");
+  assert.notEqual(at(29), at(30), "the page must start cooling at 30 days");
   assert.equal(at(30), at(364), "the middle step must hold for the whole year");
-  assert.notEqual(at(364), at(365), "the unearned year must be gone at 365");
-  assert.equal(at(365), at(365 * 3), "past a year there is nothing left to fade");
+  assert.notEqual(at(364), at(365), "the page must be cold at a year");
+  assert.equal(at(365), at(365 * 3), "past a year there is nothing left to cool");
 });
 
-test("a sealed token's frame is final, however long it has been away", () => {
+test("the page cools by a fixed delta, so Aura is not cancelled by the calendar", () => {
+  assert.equal(fieldFor({ marks: [], gap: 29 }), "#ffffff");
+  assert.equal(fieldFor({ marks: [], gap: 30 }), "#f3f3f3");
+  assert.equal(fieldFor({ marks: [], gap: 365 }), "#e6e6e6");
+  // Aura keeps its hue and goes dusty rather than being erased to grey.
+  assert.equal(fieldFor({ marks: [AURA], gap: 29 }), "#fbeff2");
+  assert.equal(fieldFor({ marks: [AURA], gap: 30 }), "#efe3e6");
+  assert.equal(fieldFor({ marks: [AURA], gap: 365 }), "#e2d6d9");
+});
+
+test("a sealed token's page is final, however long it has been away", () => {
   // Mirrors rungFor: resting freezes the picture, sunset ages it only to the
   // day the piece closed. Two rules that disagreed about when a token stopped
-  // would draw two different tokens.
+  // would draw one token whose heart says kept and whose page says gone.
+  assert.equal(absenceOf({ lastDay: 1000, today: 1000 + 365 * 3, resting: true }), 0);
+  assert.equal(absenceOf({ lastDay: 1000, today: 9999, sunset: true, sunsetDay: 1010 }), 10);
+  assert.equal(absenceOf({ lastDay: 1000, today: 900 }), 0, "a backwards clock is not an absence");
+
   const never = { level: 1, streak: 1, years: 0, marks: [], lastDay: 1000 };
   assert.equal(
     render({ ...never, today: 1000 + 365 * 3, resting: true }),
     render({ ...never, today: 1000 }),
-    "a rested token must not fade with the calendar"
-  );
-  assert.equal(
-    render({ ...never, today: 1000 + 365 * 3, sunset: true, sunsetDay: 1010 }),
-    render({ ...never, today: 1010 }),
-    "a sunset token must age only to the day the piece closed"
+    "a rested token must not cool with the calendar"
   );
 });
 
-test("the faded frame still scans at every step and every size", () => {
-  // The frame sits outside the quiet zone, so in principle none of this can
-  // reach the binarizer -- which is exactly the kind of "in principle" this
-  // project has been wrong about before. The 365 case is the one that matters:
-  // the unearned cells become the page itself, so the code block loses the
-  // pale surround it has always been decoded against.
+test("the cooled page still scans at every step and every size", () => {
+  // THE PAGE IS THE LIGHT SIDE OF THE CODE AND THE QUIET ZONE, so unlike the
+  // frame this genuinely can break scanning. It is the one candidate that had
+  // to be gated rather than reasoned about.
   const SIZES = [256, 500, 848, 1080, 1600];
   const never = { level: 1, streak: 1, years: 0, marks: [], lastDay: 1000 };
 
   for (const gap of [0, 30, 365, 365 * 3]) {
-    const svg = render({ ...never, today: 1000 + gap });
-    for (const px of SIZES) {
-      const got = scanResult(svg, px);
-      assert.ok(got.ok, `a gap of ${gap} days failed to decode at ${px}px: ${got.why}`);
-      assert.equal(got.destination, DESTINATION,
-        `a gap of ${gap} days decoded to the wrong url at ${px}px`);
+    for (const marks of [[], [AURA]]) {
+      const svg = render({ ...never, marks, today: 1000 + gap });
+      for (const px of SIZES) {
+        const got = scanResult(svg, px);
+        assert.ok(got.ok, `gap ${gap} marks ${marks.length} failed to decode at ${px}px: ${got.why}`);
+        assert.equal(got.destination, DESTINATION,
+          `gap ${gap} decoded to the wrong url at ${px}px`);
+      }
     }
   }
 });
