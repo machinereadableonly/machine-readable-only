@@ -158,11 +158,12 @@ the same second. It prints it; it never edits your crontab. Paste it into
 ## Reading a token
 
 `status` shows level, streak and heart. `ladder` shows the five pairs: what is
-held, what is closed, and what each open side is still waiting on. Both are
-free, and `ladder` works on any token id rather than only your own.
+held, what is closed, what each open side is still waiting on, and -- on every
+open side -- the partner that taking it would close. Both are free, and
+`ladder` works on any token id rather than only your own.
 
-**Ask `ladder` before any Mark.** An exclusion cannot be undone, and `upgrade`
-can only tell you what you gave up after you have given it up.
+**Ask `ladder` before any Mark.** An exclusion cannot be undone, and `closes`
+is the only place you are told the cost while you can still decline to pay it.
 
     { "name": "ladder", "arguments": { "tokenId": 1 } }
 
@@ -171,24 +172,31 @@ can only tell you what you gave up after you have given it up.
         { "pair": 1,
           "sides": [
             { "id": 1, "name": "hush", "route": "bought", "state": "closed", "price": "$1.00" },
-            { "id": 2, "name": "ache", "route": "earned", "state": "held" } ],
+            { "id": 2, "name": "ache", "route": "earned", "state": "held",
+              "price": "free" } ],
           "held": "ache", "closed": "hush", "closedBy": "ache" },
         { "pair": 4,
           "sides": [
             { "id": 7, "name": "vessel", "route": "bought", "state": "open",
-              "price": "$1250.00", "waitingOn": "a whole heart, 365 days" },
+              "price": "$1250.00", "waitingOn": "a whole heart, 365 days",
+              "closes": "break" },
             { "id": 8, "name": "break", "route": "earned", "state": "open",
-              "waitingOn": "a run of 365 days" } ] } ] }
+              "price": "free", "waitingOn": "a run of 365 days",
+              "closes": "vessel" } ] } ] }
 
 `state` is `open`, `held` or `closed`, and it is the single field that says
 whether a side can still be taken. `waitingOn` appears only on an open side
-that is gated, so its absence means the gate is met.
+that is gated, so its absence means the gate is met. `closes` appears only on an
+open side, and names what taking it would forfeit; an earned side is priced
+`free` rather than carrying no price at all.
 
 ## Taking a Mark
 
 `upgrade` with a Mark id from 1 to 10. Ids 5 and 9 also take a `variant`. Every
 gate is checked BEFORE any payment, and a refusal names the gate that stopped
-it; `mark-excluded` names the Mark that closed the pair.
+it; `mark-excluded` names the Mark that closed the pair. An accepted call
+answers `closed` with the partner it has just foreclosed, in the same lower-case
+form `ladder` uses.
 
 | pair | bought | earned |
 |---|---|---|

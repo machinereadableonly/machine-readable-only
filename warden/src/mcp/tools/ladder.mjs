@@ -9,7 +9,7 @@
 // Free, unsigned-in-effect and ownerless on purpose. It reads nothing but the
 // mirror row and the catalogue: no payment wrapper, no chain read, no write.
 import * as z from "zod";
-import { VARIANT_NAMES, effectiveRun } from "../ladder.mjs";
+import { VARIANT_NAMES, effectiveRun, markNameIn } from "../ladder.mjs";
 
 /**
  * What a side is still short of, or undefined when nothing stands in its way.
@@ -78,7 +78,12 @@ function sideOf(mark, token, catalogue, mask, refused = 0) {
     name: mark.name.toLowerCase(),
     route: mark.route,
     state,
-    price: mark.price,
+    // "free" rather than an absent key. The catalogue carries `price:
+    // undefined` for the four earned Marks, which JSON drops, so a client
+    // tabulating sides printed an empty cell against exactly the Marks that
+    // cost nothing -- indistinguishable from a price we declined to quote.
+    // `route` already carries the fact; the price column has to agree with it.
+    price: mark.route === "earned" ? "free" : mark.price,
   };
   // The two Marks with a choice cost $25.00 and $250.00, and the shape or the
   // ink IS what is being bought -- so the options are named, not counted.
@@ -88,6 +93,15 @@ function sideOf(mark, token, catalogue, mask, refused = 0) {
   if (state === "open") {
     const gate = waitingOn(mark, token, catalogue);
     if (gate !== undefined) side.waitingOn = gate;
+    // THE FORFEIT, WHILE IT IS STILL AVOIDABLE. `closed` and `closedBy` below
+    // are written only once a pair is decided, which is the forfeit read
+    // backwards: they tell an agent what it has already lost. This is the same
+    // fact at the only moment it can still act on it, and it is resolved
+    // through the same helper as `upgrade`'s refusal so the two strings cannot
+    // drift apart. Omitted on a decided side, where the choice no longer
+    // exists and quoting a cost would read as a door still ajar.
+    const closes = markNameIn(mark.excludes, catalogue);
+    if (closes !== undefined) side.closes = closes;
   }
   return side;
 }

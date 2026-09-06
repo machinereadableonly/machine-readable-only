@@ -122,6 +122,30 @@ export function assertLadderSane(ladder = LADDER) {
 }
 
 /**
+ * The lower-case name of the first Mark a mask names, or undefined for an empty
+ * mask.
+ *
+ * ONE PLACE, because the same fact is told at three moments and an agent has to
+ * match the three strings up: `ladder` promises what a side would close BEFORE
+ * the choice, `upgrade`'s accepted response reports what it just closed, and
+ * `upgrade`'s `mark-excluded` detail names what closed the door AFTER. Three
+ * hand-rolled `Object.values(catalogue).find(...)` calls were three chances for
+ * one of them to case-fold differently or resolve a two-bit mask in another
+ * order, and the ladder's whole fairness claim is that those strings agree.
+ *
+ * Lower case for the same reason `sideOf` lower-cases: an agent should never
+ * have to case-fold to compare a promise with a refusal.
+ *
+ * An empty mask answers undefined rather than throwing, and every caller drops
+ * the key instead of serving a null: a Mark with no partner closes nothing, and
+ * saying nothing is the honest form of that.
+ */
+export function markNameIn(mask, catalogue) {
+  if (!mask) return undefined;
+  return Object.values(catalogue).find((m) => mask & (1 << m.id))?.name.toLowerCase();
+}
+
+/**
  * The ladder as one line, for a tool schema's `description`.
  *
  * GENERATED from LADDER rather than typed, for the same reason mint's price is

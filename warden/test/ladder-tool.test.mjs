@@ -10,6 +10,11 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { LADDER } from "../src/mcp/ladder.mjs";
 import { makeLadderTool } from "../src/mcp/tools/ladder.mjs";
+// C2.7 asserts that the forfeit `ladder` PROMISES and the one `upgrade` reports
+// are the same string, so this suite drives both tools rather than one.
+import { makeUpgradeTool } from "../src/mcp/tools/upgrade.mjs";
+import { openChain } from "./chain-stub.mjs";
+import { settleNow } from "./paid-stub.mjs";
 
 // Token 1 wears Beat (id 4, the earned side of pair 2) and has since lapsed:
 // level 40 credited days, a live run of nothing. That state is what makes every
@@ -146,11 +151,18 @@ test("the tool is declared read-only and needs no payment or chain reader", () =
   assert.equal(tool.config.annotations.openWorldHint, false);
 });
 
-test("an earned side never carries a price and a bought side always does", async () => {
+// REVERSED BY C2.7, deliberately. This asserted that an earned side carries NO
+// price key, which is what the catalogue's `price: undefined` produced and what
+// JSON then dropped. That is indistinguishable, to a client tabulating sides,
+// from a price the server declined to quote -- so the four Marks that cost
+// nothing were the four with an empty cell. They now say "free". The half that
+// still matters is unchanged and is the reason this test survives rather than
+// being deleted: a BOUGHT side must never lose its money string.
+test("an earned side is priced `free` and a bought side always carries money", async () => {
   const res = await ladder.handler({ tokenId: 1 }, ctx);
   for (const pair of res.pairs) {
     for (const side of pair.sides) {
-      if (side.route === "earned") assert.equal(side.price, undefined, `${side.name} is earned and priced`);
+      if (side.route === "earned") assert.equal(side.price, "free", `${side.name} is earned and does not say so`);
       else assert.match(side.price, /^\$\d/, `${side.name} is bought and unpriced`);
     }
   }
@@ -268,4 +280,123 @@ test("CONTROL: a Mark that landed still reads as held", async () => {
   assert.equal(pair.sides.find((s) => s.id === 3).state, "held");
   assert.equal(pair.held, "static");
   assert.equal(pair.refused, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// C2.7. THE FORFEIT, BEFORE IT IS TAKEN.
+//
+// Everything above tests a pair that is already DECIDED: `closed` and
+// `closedBy` are written only once a side is held or refused. That is the
+// forfeit read backwards. An agent choosing between two open sides -- the only
+// moment the choice still exists -- was told what each side costs and what it
+// waits on, and never what taking it would destroy. The pairing was implied by
+// the array grouping and the reader's memory of llms.txt.
+// ---------------------------------------------------------------------------
+
+test("an OPEN side names what taking it would close, on both sides of an undecided pair", async () => {
+  const tool = ladderFor({ level: 40, streak: 40 });
+  const r = await tool.handler({ tokenId: 1 }, ctx);
+  const pair1 = r.pairs.find((p) => p.pair === 1);
+
+  // Nothing is held, so the pair is genuinely open on both sides: this is the
+  // state in which the forfeit is still avoidable and therefore worth stating.
+  assert.equal(pair1.held, undefined);
+  assert.equal(pair1.closed, undefined);
+
+  const hush = pair1.sides.find((s) => s.id === 1);
+  const ache = pair1.sides.find((s) => s.id === 2);
+  assert.equal(hush.state, "open");
+  assert.equal(ache.state, "open");
+  assert.equal(hush.closes, "ache", "buying Hush forecloses Ache");
+  assert.equal(ache.closes, "hush", "earning Ache forecloses Hush");
+});
+
+test("a side that is not open carries no `closes`, because the pair is already decided", async () => {
+  // Token 1 wears Beat, so pair 2 is settled: Static reads `closed` and Beat
+  // reads `held`. Quoting a forfeit on either would describe a choice that no
+  // longer exists.
+  const r = await ladder.handler({ tokenId: 1 }, ctx);
+  const pair2 = r.pairs.find((p) => p.pair === 2);
+  for (const side of pair2.sides) {
+    assert.notEqual(side.state, "open");
+    assert.equal(side.closes, undefined);
+  }
+});
+
+test("an earned side prices itself `free` rather than dropping the key", async () => {
+  // The catalogue carries `price: undefined` for the four earned Marks, which
+  // JSON drops entirely -- so a client tabulating sides printed an empty cell
+  // against the free ones and could not tell "costs nothing" from "we did not
+  // say". Route already carries the fact; the price column has to agree.
+  const tool = ladderFor({ level: 40, streak: 40 });
+  const r = await tool.handler({ tokenId: 1 }, ctx);
+  const sides = r.pairs.flatMap((p) => p.sides);
+
+  for (const side of sides.filter((s) => s.route === "earned")) {
+    assert.equal(side.price, "free", `${side.name} is earned and must say so in the price`);
+  }
+  // CONTROL: the bought sides still quote money, so the change did not flatten
+  // the one field the ladder is read for.
+  assert.equal(sides.find((s) => s.id === 7).price, "$1250.00");
+});
+
+test("`ladder`'s forfeit and `upgrade`'s refusal name the pair partner with the SAME string", async () => {
+  // THE ANTI-DRIFT ASSERTION, and the reason both call sites resolve the name
+  // through one helper. These two strings are the same fact told at two
+  // moments: `closes` before the choice, `mark-excluded` after it. If they ever
+  // disagree, the tool that promised the forfeit named something the refusal
+  // does not, and the agent cannot match them up.
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  db.exec("UPDATE tokens SET level = 400, streak = 400, bestRun = 400 WHERE tokenId = 1");
+
+  // What the ladder PROMISES taking Ache would close, while both sides are open.
+  const before = await makeLadderTool({ q, catalogue: LADDER }).handler({ tokenId: 1 }, ctx);
+  const promised = before.pairs.find((p) => p.pair === 1).sides.find((s) => s.id === 2).closes;
+  assert.equal(promised, "hush");
+
+  // Now take Ache, and ask upgrade for the side it just foreclosed.
+  const upgrade = makeUpgradeTool({ q, chain: openChain(), catalogue: LADDER, paid: settleNow });
+  const taken = await upgrade.handler({ tokenId: 1, upgradeId: 2 }, { keyId: "k1" });
+  assert.equal(taken.accepted, true);
+
+  const refused = await upgrade.handler({ tokenId: 1, upgradeId: 1 }, { keyId: "k1" });
+  assert.equal(refused.reason, "mark-excluded");
+  // The promise and the refusal are the same word, derived from one place.
+  assert.equal(refused.detail, "ache");
+  assert.equal(before.pairs.find((p) => p.pair === 1).sides.find((s) => s.id === 1).closes, refused.detail);
+});
+
+test("an accepted upgrade says what it just closed, on the earned route and the bought one", async () => {
+  // The moment the forfeit actually happens, and the response never mentioned
+  // it. An agent that took a side learned what it had given up only by asking
+  // `ladder` again afterwards.
+  const earnedDb = openDb(":memory:");
+  const earnedQ = queries(earnedDb);
+  earnedQ.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  earnedDb.exec("UPDATE tokens SET level = 400, streak = 400, bestRun = 400 WHERE tokenId = 1");
+  const earnedTool = makeUpgradeTool({ q: earnedQ, chain: openChain(), catalogue: LADDER, paid: settleNow });
+  const earned = await earnedTool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: "k1" });
+  assert.equal(earned.accepted, true);
+  assert.equal(earned.closed, "hush", "taking Ache closed Hush");
+
+  const boughtDb = openDb(":memory:");
+  const boughtQ = queries(boughtDb);
+  boughtQ.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  boughtDb.exec("UPDATE tokens SET level = 400, streak = 400, bestRun = 400 WHERE tokenId = 1");
+  const boughtTool = makeUpgradeTool({ q: boughtQ, chain: openChain(), catalogue: LADDER, paid: settleNow });
+  const bought = await boughtTool.handler({ tokenId: 1, upgradeId: 1 }, { keyId: "k1" });
+  assert.equal(bought.accepted, true);
+  assert.equal(bought.closed, "ache", "buying Hush closed Ache");
+});
+
+test("the tool that takes earned Marks does not describe itself as a shop", async () => {
+  // Four of the ten Marks are earned and take no payment wrapper at all, and
+  // the tool an agent reads before calling was titled "Buy a Mark". An agent
+  // looking for the free route had no reason to open this one.
+  const tool = makeUpgradeTool({ q: queries(openDb(":memory:")), chain: openChain(), catalogue: LADDER, paid: settleNow });
+  assert.equal(tool.config.title, "Take a Mark");
+  assert.match(tool.config.description, /bought or earned/);
+  assert.match(tool.config.description, /closes the other permanently/);
 });

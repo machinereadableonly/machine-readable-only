@@ -3,7 +3,7 @@ import * as z from "zod";
 import { paidWriteBlock, bindingBlock, requireChain } from "../gates.mjs";
 import { keyIdToBytes32 } from "../keyId.mjs";
 import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
-import { VARIANT_NAMES, effectiveRun, ladderSentence } from "../ladder.mjs";
+import { VARIANT_NAMES, effectiveRun, ladderSentence, markNameIn } from "../ladder.mjs";
 
 // There was an exported UPGRADE_REASONS array here, listing the eight
 // pre-payment refusals. Nothing imported it, nothing validated against it, and
@@ -46,8 +46,14 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
   return {
     name: "upgrade",
     config: {
-      title: "Buy a Mark",
-      description: "Apply a paid Mark to a token bound to your key. Gates are checked before any payment is requested.",
+      // NOT "Buy a Mark". Four of the ten Marks are earned by a run of days and
+      // take no payment wrapper at all, so the shop framing hid the free route
+      // from the agent reading the tool list to decide what to call. The
+      // exclusion belongs here too: it is the one consequence of this call that
+      // cannot be undone, and a title is read by agents that never open
+      // `ladder`.
+      title: "Take a Mark",
+      description: "Take a Mark, bought or earned, for a token bound to your key. Taking either side of a pair closes the other permanently; every gate is checked before any payment is requested.",
       inputSchema: z.object({
         tokenId: z.number().int().positive().describe("A token bound to your key."),
         // BOUNDED, because the bitmask below is a 32-bit shift. An unbounded id
@@ -141,9 +147,7 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
       // It can only ever name the same pair's other side, which is why a name is
       // enough: every exclusion is pair-internal.
       if (gate === "mark-excluded") {
-        const blocking = held & mark.excludes;
-        const by = Object.values(catalogue).find((m) => blocking & (1 << m.id));
-        return { ok: false, reason: "mark-excluded", detail: by?.name.toLowerCase() };
+        return { ok: false, reason: "mark-excluded", detail: markNameIn(held & mark.excludes, catalogue) };
       }
       if (gate) return { ok: false, reason: gate };
 
@@ -180,13 +184,12 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         const nowHeld = (q.getToken(tokenId)?.marks ?? 0) | q.reservedMask(tokenId);
         const nowBlocking = nowHeld & mark.excludes;
         if (nowBlocking) {
-          const by = Object.values(catalogue).find((m) => nowBlocking & (1 << m.id));
-          return { ok: false, reason: "mark-excluded", detail: by?.name.toLowerCase() };
+          return { ok: false, reason: "mark-excluded", detail: markNameIn(nowBlocking, catalogue) };
         }
         if (nowHeld & (1 << upgradeId) || !q.reserveMark(tokenId, upgradeId, variant)) {
           return { ok: false, reason: "mark-already-applied" };
         }
-        return { ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock run" };
+        return { ok: true, accepted: true, upgradeId, variant, closed: markNameIn(mark.excludes, catalogue), appliedBy: "the next Clock run" };
       }
 
       // THE PRICE COMES FROM THE MARK, and a catalogue entry without one is
@@ -285,7 +288,7 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
           // a failure. `accepted` stays alongside it: it is what the design
           // names this state, and dropping it would break anything already
           // reading it.
-          return { ok: true, accepted: true, upgradeId, variant, appliedBy: "the next Clock run" };
+          return { ok: true, accepted: true, upgradeId, variant, closed: markNameIn(mark.excludes, catalogue), appliedBy: "the next Clock run" };
         }
 
         // MONEY HAS ALREADY CHANGED HANDS. This must never be a quiet refusal:
