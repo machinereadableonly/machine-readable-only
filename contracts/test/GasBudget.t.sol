@@ -27,6 +27,20 @@ contract GasBudgetTest is Test {
     uint256 constant GAS_TARGET = 1_000_000;
     uint256 constant BYTE_TARGET = 5_000;
 
+    /// @dev THE REGRESSION BAND, which is a different instrument from the hard
+    /// limit above. The hard limit is what the piece cannot exceed and still
+    /// work; it sits 250,000 gas above where the renderer actually is, so a 14%
+    /// regression would land silently inside it and nothing would go red until
+    /// the next one. These two are set just above the MEASURED worst cases
+    /// (1,750,367 gas and 11,550 bytes on 2026-09-06), so any real growth in
+    /// the renderer has to be looked at.
+    ///
+    /// A failure here is NOT necessarily a bug -- it is a change asking to be
+    /// noticed. Move these deliberately, in the same commit as the change that
+    /// costs the gas, and say in the message what bought the increase.
+    uint256 constant GAS_BAND = 1_800_000;
+    uint256 constant BYTE_BAND = 12_000;
+
     /// @dev The maximal LEGAL token under the ten-Mark ladder: at most one Mark
     /// per pair -- (1,2) (3,4) (5,6) (7,8) (9,10) -- so "every Mark" is no
     /// longer a state any token can reach. This is the pair-by-pair selection
@@ -146,6 +160,15 @@ contract GasBudgetTest is Test {
             assertGt(worstGas, GAS_TARGET, "the gas target now passes: update the results table");
         }
         assertGt(maxBytes, BYTE_TARGET, "the byte target now passes: update the results table");
+
+        // The regression band. Each worst case is checked against its OWN
+        // band: the dearest token and the largest token are different tokens,
+        // and pairing one's gas with the other's bytes is the mistake this
+        // file's own comments warn about.
+        if (_gasIsMeaningful()) {
+            assertLt(worstGas, GAS_BAND, "gas grew past the band: see GAS_BAND before moving it");
+        }
+        assertLt(maxBytes, BYTE_BAND, "bytes grew past the band: see BYTE_BAND before moving it");
 
         console.log("headroom against the hard limit");
         // Guarded, not just skipped: on the coverage profile worstGas exceeds

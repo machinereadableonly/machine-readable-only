@@ -91,6 +91,7 @@ import {
   renderSvg, MARKS, IRIS_SHAPE_NAMES,
   HUSH, STATIC, BEAT, IRIS_BOUGHT, IRIS_EARNED, VESSEL, BREAK, TINT,
 } from "./render-token.mjs";
+import { generateCombinations, labelFor } from "./mark-combinations.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
 const SELF = fileURLToPath(import.meta.url);
@@ -135,83 +136,10 @@ const STATE = { level: 365, streak: 400, years: 1, lastDay: 20700, today: 20700 
 // requirement masks, rather than listing 189 sets by hand.
 // ---------------------------------------------------------------------------
 
-// Mirror of contracts/src/Ladder.sol: for each Mark id, the bit of its excluded
-// partner, and (pair 5 only) the bits of what it requires ANY of. Bit n here
-// means Mark id n, matching Ladder.sol's own `uint16(1 << id)` encoding.
-const EXCLUDES = {
-  1: 1 << 2, 2: 1 << 1,   // Hush / Ache
-  3: 1 << 4, 4: 1 << 3,   // Static / Beat
-  5: 1 << 6, 6: 1 << 5,   // Iris bought / Iris earned
-  7: 1 << 8, 8: 1 << 7,   // Vessel / Break
-  9: 1 << 10, 10: 1 << 9, // Tint / Aura
-};
-const AN_IRIS = (1 << 5) | (1 << 6);
-const REQUIRES_ANY = { 9: AN_IRIS, 10: AN_IRIS };
-
-/** Is this bitmask (bit n = Mark id n held) a set Ladder.sol's masks allow? */
-function isLegalSet(mask) {
-  for (let id = 1; id <= 10; id++) {
-    if (!(mask & (1 << id))) continue;
-    if (EXCLUDES[id] && (mask & EXCLUDES[id])) return false;
-    const req = REQUIRES_ANY[id] ?? 0;
-    if (req && !(mask & req)) return false;
-  }
-  return true;
-}
-
-function idsOf(mask) {
-  const ids = [];
-  for (let id = 1; id <= 10; id++) if (mask & (1 << id)) ids.push(id);
-  return ids;
-}
-
-function labelFor(ids, irisVariant, tintVariant) {
-  if (!ids.length) return "none";
-  return ids.map(id => {
-    if (id === IRIS_BOUGHT) return `iris-bought(${IRIS_SHAPE_NAMES[irisVariant]})`;
-    if (id === IRIS_EARNED) return "iris-earned";
-    if (id === TINT) return `tint(${tintVariant === 1 ? "gold" : "violet"})`;
-    return MARKS[id - 1];
-  }).join("+");
-}
-
-/**
- * Every reachable Mark set, expanded into every renderable variant: the three
- * Iris shapes when the BOUGHT Iris is held (the earned route is always shape 0,
- * "target" -- MarkRenderer.irisShape), and the two Tint inks when Tint is held.
- */
-function generateCombinations() {
-  const legalSets = [];
-  for (let mask = 0; mask < (1 << 11); mask++) {
-    if (mask & 1) continue;          // bit 0 is never a Mark
-    if (isLegalSet(mask)) legalSets.push(mask);
-  }
-  if (legalSets.length !== 189) {
-    throw new Error(
-      `generated ${legalSets.length} reachable Mark sets from the masks, expected `
-      + `189 -- the mask table above has drifted from contracts/src/Ladder.sol`
-    );
-  }
-
-  const combos = [];
-  for (const mask of legalSets) {
-    const ids = idsOf(mask);
-    const irisVariants = ids.includes(IRIS_BOUGHT) ? [0, 1, 2] : [0];
-    const tintVariants = ids.includes(TINT) ? [0, 1] : [0];
-    for (const irisVariant of irisVariants) {
-      for (const tintVariant of tintVariants) {
-        combos.push({ ids, irisVariant, tintVariant, label: labelFor(ids, irisVariant, tintVariant) });
-      }
-    }
-  }
-  if (combos.length !== 459) {
-    throw new Error(
-      `generated ${combos.length} renderable combinations, expected 459 -- `
-      + `the variant expansion above has drifted`
-    );
-  }
-  return { legalSets, combos };
-}
+// The masks, the legality rule and the variant expansion now live in
+// tools/mark-combinations.mjs, so the cross-language fixture generator can
+// reach the same 459 without importing this file -- importing THIS file runs a
+// sweep. One definition; see that module's header.
 
 // Generated -- and its two counts asserted -- on EVERY invocation, worker or
 // not, slice or not: it is pure combinatorics, costs nothing to render, and

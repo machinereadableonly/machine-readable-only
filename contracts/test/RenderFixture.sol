@@ -23,7 +23,7 @@ library RenderFixture {
         string label;
     }
 
-    uint256 internal constant COUNT = 49;
+    uint256 internal constant COUNT = 50;
 
     function cases() internal pure returns (Case[] memory c) {
         c = new Case[](COUNT);
@@ -68,6 +68,7 @@ library RenderFixture {
         c[i++] = Case(365, 400, 1000, 1000, 256, false, false, 0, 0, 0, 8888, 0x9a9718911c77e4ad0def659b67ff769da6fb1651da4a6b5eea76fa1cce8f8cb8, "break alone");
         c[i++] = Case(365, 400, 1000, 1000, 264, false, false, 0, 0, 0, 8897, 0x85e155a6361963ec2e25ff7faa29d36be06462c83087f9660fcd91fdfb87c311, "break with static");
         c[i++] = Case(365, 400, 1000, 1000, 272, false, false, 0, 0, 0, 9107, 0xd8bc999b54466d9ff9ecdd9530bac7dbd5fa0da99c1554b8b5b80922110166a1, "break with beat");
+        c[i++] = Case(365, 400, 1000, 1000, 8, false, false, 0, 0, 0, 8889, 0x72a997c14e8c4df3d9148111a68f05d7a538380108178c8b5d1f299df89ebe7d, "mark static");
         c[i++] = Case(365, 100, 1000, 1030, 429496729920, false, false, 0, 0, 0, 9826, 0xad9960ab393cb03a7265fff2a8cd4275ada25c847d59fff3cf4d4ac51e2cb7bd, "break on earned iris, lapsed to the start tier");
         c[i++] = Case(365, 400, 1000, 9999, 0, true, false, 0, 0, 0, 8884, 0x67490dca20f51b027abb39ef572373d371bbb20c208963433dc20e5a6ee5130b, "resting");
         c[i++] = Case(365, 400, 1000, 9999, 0, false, true, 0, 0, 0, 8884, 0xb2f0e8aaa30a906d3f945260e08f081e60f5867a82f1e65afa25d66103200ace, "sunset");
