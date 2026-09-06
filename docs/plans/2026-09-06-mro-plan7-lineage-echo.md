@@ -39,7 +39,7 @@ SELECT COUNT(*) AS n FROM tokens WHERE keyId = ? AND parentId IS NOT NULL
 It counts `tokens` rows, and `insertSeed` writes that row at reservation time.
 So the budget is spent the instant the child is reserved, which is the correct
 direction. **The work is therefore the OTHER half only:** a permanently failed
-seed must DELETE the row so the count falls back. Task 5 pins the existing
+seed must DELETE the row so the count falls back. Task 4 pins the existing
 behaviour with a test rather than changing it -- see
 [[check-the-finding-before-fixing-it]]; a third of the last review's findings
 were already closed and "fixing" them costs a wrong commit message.
@@ -103,7 +103,7 @@ Copied from the spec so no task has to re-derive them:
 | Gas worst case today | 1,750,744 of 2,000,000 (token 9) |
 
 The byte and dot figures are **arithmetic from the geometry, not
-measurements.** Task 4 measures them. If a measurement disagrees with this
+measurements.** Task 3 measures them. If a measurement disagrees with this
 table, the measurement wins and the spec gets corrected.
 
 ---
@@ -149,8 +149,8 @@ table, the measurement wins and the spec gets corrected.
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `TokenView.echo` (`uint32`), read by Tasks 2 and 3.
-  `MachineReadableOnly.echoOf(uint256) returns (uint32)`, read by Task 9's
+- Produces: `TokenView.echo` (`uint32`), read by Task 2.
+  `MachineReadableOnly.echoOf(uint256) returns (uint32)`, read by Task 8's
   verification script.
 
 - [ ] **Step 1: Write the failing test**
@@ -338,7 +338,15 @@ git commit -m "contract: a child is sealed with the days its line had run"
 
 ---
 
-## Task 2: The Solidity renderer draws the echo ring
+## Task 2: Both renderers draw the echo ring
+
+**The two renderers are ONE task and cannot be split.**
+`contracts/test/RenderFixture.sol` holds `keccak256` of the tokenURI the
+JavaScript renderer produces, and the Solidity suite asserts against it. So
+changing either side alone leaves the contracts suite RED until the other
+catches up, and the Global Constraints forbid committing that. Do the
+Solidity half, then the JavaScript half, then regenerate the fixture, then
+commit ONCE with all four suites green.
 
 **Files:**
 - Modify: `contracts/src/render/FrameRenderer.sol` (`rings` at :57-60,
@@ -352,9 +360,24 @@ git commit -m "contract: a child is sealed with the days its line had run"
   - `FrameRenderer.ringBudget(uint32 level, uint32 echo) returns (uint256 ownRings, uint256 echoRings)`
   - `FrameRenderer.rings(uint32 level, uint32 echo) returns (uint256)` -- the
     TOTAL, replacing the one-argument form.
-  Task 3 mirrors both names exactly in JavaScript.
+  The JavaScript half of this same task mirrors both names exactly.
 
-- [ ] **Step 1: Write the failing test**
+**Also in this task (the JavaScript half):**
+
+**Files:**
+- Modify: `tools/render-token.mjs` (`ringsFor` :292, `canvasFor` :299,
+  `ringBars` :333-347, the render entry at :418-436 and :491, the attribute
+  list at :681)
+- Modify (regenerate, never by hand): `contracts/test/RenderFixture.sol`
+- Test: `tools/test/echo-ring.test.mjs` (create)
+
+**Interfaces:**
+- Consumes: the Solidity names from the first half of this task -- `ringBudget`, `rings`,
+  `echoRingBars`. The JavaScript MUST use the same names and the same
+  arithmetic.
+- Produces: `echo` accepted in the render state object, defaulting to 0.
+
+- [ ] **Step 1: Write the failing SOLIDITY test**
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -409,7 +432,7 @@ contract EchoRingTest is MroTestBase {
 `_countRuns` counts occurrences of `"M"` in the path string; add it to
 `MroTestBase` if it is not already there.
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [ ] **Step 2: Run the Solidity test and confirm it fails**
 
 ```bash
 export PATH=$HOME/.foundry/bin:$PATH
@@ -529,43 +552,7 @@ In `Renderer.sol`, in the attribute list beside `_num("Parent", v.parent)`:
 Emitted ALWAYS, including `0` on a founding token, so an agent can filter on
 it without special-casing absence.
 
-- [ ] **Step 7: Run the tests**
-
-```bash
-export PATH=$HOME/.foundry/bin:$PATH
-cd contracts && forge test --match-contract EchoRingTest -vv && forge test
-```
-
-Expected: EchoRingTest passes. `RenderFixture` WILL now fail, because the
-tokenURI gained an `Echo` attribute -- that is correct and Task 3 regenerates
-it. Do not hand-edit the fixture.
-
-- [ ] **Step 8: Commit**
-
-```bash
-cd ~/projects/machine-readable-only
-git add contracts/src/render/ contracts/test/
-git commit -m "render: the line's years draw as one dotted ring at the core"
-```
-
----
-
-## Task 3: The JavaScript renderer draws the same thing
-
-**Files:**
-- Modify: `tools/render-token.mjs` (`ringsFor` :292, `canvasFor` :299,
-  `ringBars` :333-347, the render entry at :418-436 and :491, the attribute
-  list at :681)
-- Modify (regenerate, never by hand): `contracts/test/RenderFixture.sol`
-- Test: `tools/test/echo-ring.test.mjs` (create)
-
-**Interfaces:**
-- Consumes: the Solidity names from Task 2 -- `ringBudget`, `rings`,
-  `echoRingBars`. The JavaScript MUST use the same names and the same
-  arithmetic.
-- Produces: `echo` accepted in the render state object, defaulting to 0.
-
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 7: Write the failing JAVASCRIPT test**
 
 ```javascript
 import { test } from "node:test";
@@ -596,7 +583,7 @@ test("the echo ring is 104 dots", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [ ] **Step 8: Run the JavaScript test and confirm it fails**
 
 ```bash
 source ~/.nvm/nvm.sh
@@ -605,7 +592,7 @@ cd tools && node --test test/echo-ring.test.mjs
 
 Expected: FAIL -- `ringBudget` and `echoRingBars` are not exported.
 
-- [ ] **Step 3: Mirror the budget**
+- [ ] **Step 9: Mirror the budget**
 
 ```javascript
 // MUST stay identical to FrameRenderer.ringBudget in Solidity.
@@ -634,7 +621,7 @@ passes `echo` or genuinely means "no echo":
 /bin/grep -rn "ringsFor\|canvasFor" tools/ warden/ client/
 ```
 
-- [ ] **Step 4: Mirror the dotted ring**
+- [ ] **Step 10: Mirror the dotted ring**
 
 ```javascript
 // MUST stay identical to FrameRenderer.echoRingBars in Solidity.
@@ -658,7 +645,7 @@ export function echoRingBars(o, len) {
 }
 ```
 
-- [ ] **Step 5: Thread `echo` through the renderer**
+- [ ] **Step 11: Thread `echo` through the renderer**
 
 At the render entry (:418), accept `echo = 0` alongside `years: rawYears = 0`.
 Replace the ring maths at :434-436:
@@ -699,7 +686,7 @@ Add the attribute beside `num("Parent", parent)`:
         num("Echo", echo),
 ```
 
-- [ ] **Step 6: Run the JS tests**
+- [ ] **Step 12: Run the JS tests**
 
 ```bash
 source ~/.nvm/nvm.sh
@@ -708,7 +695,7 @@ cd tools && node --test test/echo-ring.test.mjs && ~/scripts/safe-build.sh npm t
 
 Expected: the new test passes and the tools suite is green.
 
-- [ ] **Step 7: Regenerate the cross-language fixture and prove both agree**
+- [ ] **Step 13: Regenerate the cross-language fixture and prove both agree**
 
 ```bash
 source ~/.nvm/nvm.sh
@@ -723,19 +710,36 @@ disagree -- **do not touch the fixture**, find the difference. The fixture is
 `// GENERATED by tools/render-fixture.mjs -- do not edit by hand.`
 
 A regenerated fixture proves Solidity matches JS. It does NOT prove the JS is
-right; that is what Task 4's decode gate is for.
+right; that is what Task 3's decode gate is for.
 
-- [ ] **Step 8: Commit**
+
+- [ ] **Step 14: Run ALL FOUR suites, and read them**
+
+```bash
+export PATH=$HOME/.foundry/bin:$PATH && source ~/.nvm/nvm.sh
+cd ~/projects/machine-readable-only
+(cd contracts && ~/scripts/safe-build.sh forge test 2>&1 | tail -1)
+(cd warden   && ~/scripts/safe-build.sh npm test 2>&1 | /bin/grep -E "^. (pass|fail)")
+(cd tools    && ~/scripts/safe-build.sh npm test 2>&1 | /bin/grep -E "^. (pass|fail)")
+(cd client   && ~/scripts/safe-build.sh npm test 2>&1 | /bin/grep -E "^. (pass|fail)")
+```
+
+All four MUST be green before the commit. The fixture regeneration in the
+previous step is what makes contracts green again; if it is not, the two
+renderers disagree and that is the bug to find.
+
+- [ ] **Step 15: Commit**
 
 ```bash
 cd ~/projects/machine-readable-only
-git add tools/render-token.mjs tools/test/echo-ring.test.mjs contracts/test/RenderFixture.sol
-git commit -m "render: the JavaScript renderer draws the echo ring too"
+git add contracts/src/render/ contracts/test/ tools/render-token.mjs tools/test/echo-ring.test.mjs
+git commit -m "render: the line's years draw as one dotted ring at the core"
 ```
 
----
+Quote the four counts you just measured in the commit message. A count you
+did not run is not evidence.
 
-## Task 4: Measure the budget, and prove a child still scans
+## Task 3: Measure the budget, and prove a child still scans
 
 **Files:**
 - Modify: `contracts/test/GasBudget.t.sol` (the case list at :138-148)
@@ -822,7 +826,7 @@ git commit -m "measure: the child worst case, and a child still scans"
 
 ---
 
-## Task 5: The mirror reserves a seed
+## Task 4: The mirror reserves a seed
 
 **Files:**
 - Modify: `warden/src/mirror/queries.mjs` (`pendingMints` :160-164,
@@ -991,7 +995,7 @@ writing only the `mints` half.
 ```
 
 `stuckMints` must also stop calling a seed "paid for". Split it the same way
-and give the seed variant its own message; Task 6 uses it.
+and give the seed variant its own message; Task 5 uses it.
 
 - [ ] **Step 5: Run the tests, then the whole warden suite**
 
@@ -1021,7 +1025,7 @@ git commit -m "mirror: a seed is a free reservation, and never a mint"
 
 ---
 
-## Task 6: The Clock's fourth pass
+## Task 5: The Clock's fourth pass
 
 **Files:**
 - Modify: `warden/src/clock/abi.mjs` (add `seed`)
@@ -1030,9 +1034,9 @@ git commit -m "mirror: a seed is a free reservation, and never a mint"
 - Test: `warden/test/clock-seed.test.mjs` (create)
 
 **Interfaces:**
-- Consumes: `pendingSeeds`, `dropSeed`, `markSeedWritten` from Task 5.
+- Consumes: `pendingSeeds`, `dropSeed`, `markSeedWritten` from Task 4.
 - Produces: `summary.seeded` (array of child ids) and `summary.droppedSeeds`,
-  read by the Clock's log line and Task 7's status copy.
+  read by the Clock's log line and Task 6's status copy.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1161,7 +1165,7 @@ git commit -m "clock: a fourth pass writes seeds, and returns the ones it cannot
 
 ---
 
-## Task 7: The seed tool stops refusing
+## Task 6: The seed tool stops refusing
 
 **Files:**
 - Modify: `warden/src/mcp/tools/seed.mjs` (the refusal at the end of the
@@ -1170,7 +1174,7 @@ git commit -m "clock: a fourth pass writes seeds, and returns the ones it cannot
   tool tests -- grep first)
 
 **Interfaces:**
-- Consumes: `insertSeed`, `nextTokenId` from Task 5.
+- Consumes: `insertSeed`, `nextTokenId` from Task 4.
 - Produces: `{ ok: true, tokenId, txStatus: "queued", closes: [...], next: ... }`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1272,7 +1276,7 @@ git commit -m "seed: the tool creates a child instead of explaining why it canno
 
 ---
 
-## Task 8: Docs and the wire
+## Task 7: Docs and the wire
 
 **Files:**
 - Modify: `llms.txt`, `SKILL.md`
@@ -1325,7 +1329,7 @@ git commit -m "docs: the wire says a seed now lands, and what a child carries"
 
 ---
 
-## Task 9: Redeploy to Base Sepolia
+## Task 8: Redeploy to Base Sepolia
 
 **Files:**
 - Create: `contracts/script/DeployPlan7.s.sol`,
