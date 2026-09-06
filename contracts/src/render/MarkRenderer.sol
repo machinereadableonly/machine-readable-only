@@ -78,10 +78,47 @@ library MarkRenderer {
         return has(marks, AURA) ? "#fbeff2" : "#ffffff";
     }
 
-    /// @notice Frame cells not yet earned. Ache deepens them, so the year ahead
-    /// is visible from day one rather than being almost invisible.
-    function ghost(uint256 marks) internal pure returns (string memory) {
-        return has(marks, ACHE) ? ACHE_GHOST : Palette.ghost();
+    /// @dev The unearned year, half way to the page. C4.10.
+    ///
+    /// Four constants rather than one blend, because mixing two hex strings on
+    /// chain costs bytes and gas for an answer that can only ever be one of
+    /// these four. `tools/render-token.mjs` computes them with `mixHex` and
+    /// `Renderer.t.sol` diffs the two renderers, so a drifted constant fails
+    /// the suite rather than reaching a token.
+    string internal constant GHOST_HALF = "#faf7f8";
+    string internal constant GHOST_HALF_AURA = "#f8eff1";
+    string internal constant ACHE_HALF = "#f1e6e9";
+    string internal constant ACHE_HALF_AURA = "#efdee3";
+
+    /// @notice Frame cells not yet earned, faded by how long the token has been
+    /// away. Ache deepens them, so the year ahead is visible from day one
+    /// rather than being almost invisible.
+    ///
+    /// @dev C4.10. Without the fade a token that never came back renders
+    /// BYTE-IDENTICAL to one minted this morning -- measured, not assumed
+    /// (tools/absence-check.mjs). A never-returned token holds level 1 and
+    /// streak 1 forever, and both `tierIndex(1)` and `lapsedIndex(1, ...)` are
+    /// already rung 0, so the HEART cannot carry absence: its rung is at the
+    /// floor on day one and stays there. The frame can carry it, because the
+    /// unearned year is the one part of the picture that is about time passing
+    /// rather than about the run.
+    ///
+    /// Three steps toward the page:
+    ///   under 30 days   the ghost as it is -- a lapse is not yet an absence
+    ///   30 to 364       half way to the page
+    ///   365 and over    the page itself; the unearned year is gone
+    ///
+    /// @param gap how long the token has been away, in days. Renderer computes
+    /// it, because the same branches that decide the RUNG decide this: a
+    /// resting token is sealed and a sunset one stops ageing on the day the
+    /// piece closed, and two rules disagreeing about when a token stopped would
+    /// draw two different tokens.
+    function ghost(uint256 marks, uint256 gap) internal pure returns (string memory) {
+        bool ache = has(marks, ACHE);
+        if (gap < 30) return ache ? ACHE_GHOST : Palette.ghost();
+        if (gap >= 365) return field(marks);
+        if (has(marks, AURA)) return ache ? ACHE_HALF_AURA : GHOST_HALF_AURA;
+        return ache ? ACHE_HALF : GHOST_HALF;
     }
 
     /// @notice The earned day cells and the year rings. Vessel gilds them.

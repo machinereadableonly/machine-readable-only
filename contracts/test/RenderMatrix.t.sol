@@ -38,7 +38,11 @@ contract RenderMatrixTest is Test {
 
     function test_everyStateInTheMatrixMatchesTheJavascriptReference() public view {
         RenderFixture.Case[] memory cases = RenderFixture.cases();
-        assertEq(cases.length, 50, "the fixture is not the size it should be");
+        // 50 until C4.10 added the six absence states (the three fade steps,
+        // plus Ache and Aura against the last one). The count is asserted so a
+        // fixture that silently regenerates SMALLER -- a matrix case dropped by
+        // an edit -- fails here rather than passing with less coverage.
+        assertEq(cases.length, 56, "the fixture is not the size it should be");
 
         for (uint256 i; i < cases.length; ++i) {
             RenderFixture.Case memory c = cases[i];

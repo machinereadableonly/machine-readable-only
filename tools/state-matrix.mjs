@@ -145,6 +145,20 @@ export function renderCases() {
     ...base, streak: 100, today: 1030, marks: [BREAK, IRIS_EARNED], irisRun: 100,
   });
 
+  // C4.10, the absence steps. The heart is at rung 0 in all three, so these
+  // three states differ ONLY in the frame -- which makes them the case that
+  // catches a ghost rule the two renderers disagree about. A token that never
+  // returned is the shape the piece is most likely to hold in quantity.
+  const never = { level: 1, streak: 1, lastDay: 1000 };
+  out.push({ label: "never returned, 29 days", ...base, ...never, today: 1029 });
+  out.push({ label: "never returned, 30 days", ...base, ...never, today: 1030 });
+  out.push({ label: "never returned, a year", ...base, ...never, today: 1365 });
+  out.push({ label: "never returned, three years", ...base, ...never, today: 2095 });
+  // The unearned year gone AND Ache deepening it: the two rules meet on the
+  // same cells, and Ache's own three steps are the ones nothing else covers.
+  out.push({ label: "ache, never returned, a year", ...base, ...never, today: 1365, marks: [ACHE] });
+  out.push({ label: "aura, never returned, a year", ...base, ...never, today: 1365, marks: [AURA] });
+
   // Frozen lifecycles. Both must hold their colour against a far-future clock.
   out.push({ label: "resting", ...base, today: 9999, resting: true });
   out.push({ label: "sunset", ...base, today: 9999, sunset: true });

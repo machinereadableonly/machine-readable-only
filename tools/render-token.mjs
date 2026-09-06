@@ -182,6 +182,50 @@ export function lapsedColour(streak, lastDay, today) {
  * rung below what fell, because a slip must still cost something on the day,
  * and the served copy says the colour goes.
  */
+/**
+ * The unearned frame cells, faded by how long the token has been away.
+ *
+ * C4.10. Without this a token that never came back renders BYTE-IDENTICAL to
+ * one minted today -- measured, not assumed, by tools/absence-check.mjs: a
+ * never-returned token holds level 1, streak 1 forever, and both tierIndex(1)
+ * and lapsedIndex(1, ...) are already rung 0, so the heart cannot carry
+ * absence. The frame can, because the unearned year is the one part of the
+ * picture that is about time rather than about the run.
+ *
+ * Three steps toward the page, so the unearned year recedes as the absence
+ * lengthens and a token that stopped a year ago shows only what it earned:
+ *
+ *   under 30 days   the ghost as it is -- a lapse is not yet an absence
+ *   30 to 364       half way to the page
+ *   365 and over    the page itself; the unearned year is gone
+ *
+ * The gap mirrors rungFor's branches exactly, because two rules that disagree
+ * about when a token stopped would draw two different tokens: a RESTING token
+ * is sealed and its frame is final, and a SUNSET token stops ageing on the day
+ * the piece closed.
+ */
+export function ghostFor({
+  marks, lastDay, today, resting = false, sunset = false, sunsetDay = 0,
+}) {
+  const base = hasMark(marks, ACHE) ? ACHE_GHOST : GHOST;
+  const field = hasMark(marks, AURA) ? AURA_FIELD : FIELD;
+  if (resting) return base;
+  const end = sunset ? sunsetDay : today;
+  const gap = end > lastDay ? end - lastDay : 0;   // a backwards clock is not an absence
+  if (gap < 30) return base;
+  if (gap >= 365) return field;
+  return mixHex(base, field);
+}
+
+/// The midpoint of two #rrggbb colours. Solidity cannot afford this at render
+/// time, so Palette holds the four results as constants and a parity test
+/// asserts they still agree with this function.
+export function mixHex(a, b) {
+  const part = (hex, i) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  const mid = (i) => Math.round((part(a, i) + part(b, i)) / 2).toString(16).padStart(2, "0");
+  return `#${mid(0)}${mid(1)}${mid(2)}`;
+}
+
 export function rungFor({
   streak, lastDay, today,
   resting = false, sunset = false, sunsetDay = 0, fellRun = 0, fellDay = 0,
@@ -374,7 +418,9 @@ export function renderSvg(modules, want, size, state) {
   // keeps `colour` unaffected; only the code block's two regions exchange.
   const { heartInk, noiseInk: noise } = inks(marks, rung);
   const gold = hasMark(marks, VESSEL) ? VESSEL_GOLD : null;
-  const ghost = hasMark(marks, ACHE) ? ACHE_GHOST : GHOST;
+  // C4.10: the ghost fades with absence, so a token that never returned stops
+  // looking like one minted this morning.
+  const ghost = ghostFor({ marks, lastDay, today, resting, sunset, sunsetDay });
   const field = hasMark(marks, AURA) ? AURA_FIELD : FIELD;
   const hush = hasMark(marks, HUSH);
   const beat = hasMark(marks, BEAT);
