@@ -79,7 +79,22 @@ const q = queries(db);
 // A paid, solved mint waiting to be written. The agent key is unique per token
 // because the contract allows ONE MINT PER KEY (AlreadyMinted).
 q.insertToken({ tokenId: TOKEN, keyId: "k-mark-rehearsal", owner: TO, lastDay: utcDay(), mintDay: utcDay() });
-q.insertMint({ tokenId: TOKEN, toAddress: TO, keyId: "k-mark-rehearsal" });
+// A MINT IS A RESERVATION UNTIL THE MONEY MOVES (14.1, commit 85a4784): the row
+// lands as `awaiting-payment` carrying the EIP-3009 nonce, and only
+// settleByNonce promotes it to the `queued` the Clock reads. This rehearsal is
+// not a sale, so it stands in for the settlement explicitly rather than
+// side-stepping it -- writing a queued row directly would rehearse a path
+// production no longer has.
+//
+// Found broken on 2026-09-06, the first run of this tool since 14.1 landed:
+// insertMint threw because payNonce is required. A tool nothing runs is a tool
+// nobody notices has rotted.
+const REHEARSAL_NONCE = `0xREHEARSAL${Date.now().toString(16)}`.padEnd(66, "0");
+q.insertMint({ tokenId: TOKEN, toAddress: TO, keyId: "k-mark-rehearsal", payNonce: REHEARSAL_NONCE });
+const settled = q.settleByNonce(REHEARSAL_NONCE, "0xrehearsal-no-payment-was-taken");
+if (!settled || settled.kind !== "mint") {
+  throw new Error(`the stand-in settlement did not promote the mint: ${JSON.stringify(settled)}`);
+}
 db.exec(`UPDATE mints SET qr = '${BITMAP}', solveState = 'done' WHERE tokenId = ${TOKEN}`);
 const agentKey = `0x${TOKEN.toString(16).padStart(64, "0")}`;
 db.exec(`UPDATE tokens SET keyId = '${agentKey}' WHERE tokenId = ${TOKEN}`);
