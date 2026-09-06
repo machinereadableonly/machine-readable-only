@@ -4,6 +4,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { registerKey, guardedFetchDirectory, renderDirectory, isBlockedAddress, makeLookup, makeDirectoryCache } from "../src/door/directory.mjs";
 import { issueChallenge, verifyNonceMinted, CHALLENGE_MS } from "../src/door/challenge.mjs";
+import { jwkToKeyID } from "web-bot-auth";
 
 const JWK = { kty: "OKP", crv: "Ed25519", x: "JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs" };
 
@@ -577,4 +578,65 @@ test("the ETag is a strong validator over the body itself", () => {
   assert.match(doc.etag, /^"[0-9a-f]{64}"$/);
   const same = makeDirectoryCache(q).current();
   assert.equal(same.etag, doc.etag);
+});
+
+// Test gap 22. THE STANDARDS-PURE PATH HAD NO GREEN CASE. Every third-party
+// directory test above is a refusal: a blocked address, an unreachable host, a
+// remembered failure, a hostname that only looks like ours. The one success
+// case hands back `{ keys: [] }` and asserts only WHICH url was fetched -- so
+// nothing anywhere showed a remote JWK being matched by its RFC 7638 thumbprint
+// and RETURNED.
+//
+// That matters more than a missing happy path usually does. This is the route
+// the spec calls standards-pure -- an agent that already publishes a Web Bot
+// Auth directory walks in without registering anything -- and it is the half of
+// the door that MRO does not control. A guard that refused every third party
+// would have passed the entire existing suite.
+test("a third party's own directory admits its key, matched by thumbprint", async () => {
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+
+  // The key id an agent derives for itself: the RFC 7638 thumbprint. Computed
+  // here the way the client does, NOT read back from our own lookup -- a test
+  // that asked the code under test for the answer would agree with it always.
+  const thumbprint = await jwkToKeyID(
+    jwk,
+    async (b) => crypto.subtle.digest("SHA-256", b),
+    (u) => Buffer.from(u).toString("base64url"),
+  );
+
+  let fetched = null;
+  const lookup = makeLookup(
+    q,
+    async (url) => { fetched = url; return { keys: [jwk] }; },
+    "warden.example.com",
+    new Map(),
+  );
+
+  const found = await lookup(thumbprint, '"https://agent.example.com/"');
+  assert.ok(found, "a third party's own key must be admitted without registering");
+  assert.equal(found.x, jwk.x, "and it must be THAT key, not some other one");
+  assert.equal(
+    fetched,
+    "https://agent.example.com/.well-known/http-message-signatures-directory",
+    "the well-known path RFC 9421 specifies",
+  );
+
+  // Nothing was stored: the whole point of this route is that the piece keeps
+  // no record of an agent that brought its own directory.
+  assert.equal(q.allKeys().length, 0, "the standards-pure path must store nothing");
+});
+
+test("CONTROL: a key that is not in the third party's directory is not admitted", async () => {
+  // Without this, the test above would pass on a lookup that returned the first
+  // key it found regardless of the id asked for -- which is the same bug as no
+  // thumbprint check at all.
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+
+  const lookup = makeLookup(q, async () => ({ keys: [jwk] }), "warden.example.com", new Map());
+  const found = await lookup("a-thumbprint-of-some-other-key", '"https://agent.example.com/"');
+  assert.equal(found, null, "a directory holding one key must not answer for another");
 });
