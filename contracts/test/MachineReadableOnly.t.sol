@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
+import {Vm} from "forge-std/Vm.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 import {MroTestBase} from "./MroTestBase.sol";
@@ -168,10 +169,27 @@ contract MachineReadableOnlyTest is MroTestBase {
         assertEq(t.mintedTo(ALICE), 1);
     }
 
-    function test_mintEmitsMintedAndMetadataUpdate() public {
+    /// 1.L4: this was `test_mintEmitsMintedAndMetadataUpdate`, and it asserted
+    /// only the first half. `mint` emits NO MetadataUpdate and should not --
+    /// ERC-4906 announces a change to metadata a consumer may already hold, and
+    /// there is nothing to have held for a token being created. The name is now
+    /// what the test does; the absence is asserted below rather than implied.
+    function test_mintEmitsMinted() public {
         vm.expectEmit(true, true, false, true);
         emit MachineReadableOnly.Minted(1, KEY);
         _mint(1, ALICE, KEY);
+    }
+
+    /// The other half, said out loud: a mint announces no metadata UPDATE,
+    /// because nothing could have read this token's metadata before it existed.
+    function test_mintEmitsNoMetadataUpdate() public {
+        vm.recordLogs();
+        _mint(1, ALICE, KEY);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 topic = keccak256("MetadataUpdate(uint256)");
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(logs[i].topics[0] != topic, "mint must not emit MetadataUpdate");
+        }
     }
 
     function test_mintRevertsForANonWarden() public {

@@ -50,7 +50,7 @@ const inEye = (i, j) => EYES.some(([x, y]) => i >= x && i < x + 7 && j >= y && j
 function withEyes(eyeInk) {
   const rung = rungOf(STREAK);
   const base = renderSvg(CODE.modules, TARGET.want, CODE.size,
-    { level: 200, streak: STREAK, years: 1, marks: [], lastDay: 20700, today: 20700 });
+    { level: 200, streak: STREAK, years: 0, marks: [], lastDay: 20700, today: 20700 });
   if (!eyeInk) return base;
 
   const canvas = canvasFor(1);

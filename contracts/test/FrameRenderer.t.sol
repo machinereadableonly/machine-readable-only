@@ -161,6 +161,7 @@ contract FrameRendererTest is Test {
         assertEq(FrameRenderer.canvas(FrameRenderer.MAX_RINGS), 89, "the widest canvas");
     }
 
+
     // ---------------------------------------------------------------------
     // What lights, and when
     // ---------------------------------------------------------------------

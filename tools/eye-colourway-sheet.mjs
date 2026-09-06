@@ -52,7 +52,7 @@ const shape = (kind, x, y, w, fill) => {
 
 function withEyes(kind, ink) {
   const base = renderSvg(CODE.modules, TARGET.want, CODE.size,
-    { level: 200, streak: 150, years: 1, marks: [], lastDay: 20700, today: 20700 });
+    { level: 200, streak: 150, years: 0, marks: [], lastDay: 20700, today: 20700 });
   let add = "";
   for (const [ex, ey] of EYES) {
     const x = codeOff + ex, y = codeOff + ey;

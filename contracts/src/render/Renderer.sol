@@ -32,7 +32,7 @@ import {TokenView} from "./TokenView.sol";
 /// **No raw `#` may reach the output.** The whole tokenURI is itself a URI, so a
 /// raw hash opens a fragment and truncates the JSON -- measured, `JSON.parse`
 /// fails at position 31. Base64 hides every `#` inside the SVG, including the
-/// colours and Bloom's `url(#b)`. The only one left is in the name, written
+/// colours and Beat's `url(#b)`. The only one left is in the name, written
 /// `%23`.
 contract Renderer is IRenderer {
     /// @dev The quiet zone the code sits in, in cells, on each side.
@@ -171,7 +171,7 @@ contract Renderer is IRenderer {
     ///   sized     2 of 56 failed (3.6%),                    pngUrl at 848px
     ///
     /// The mechanism: with no intrinsic size their CDN rasterises the token at
-    /// its viewBox units -- 53 pixels for a year-zero canvas, one pixel per
+    /// its viewBox units -- 53 pixels for a ONE-RING canvas, one pixel per
     /// cell -- and then interpolates THAT bitmap up to whatever width was asked
     /// for, arriving at 170 to 208 grey levels where the artwork has 3. A
     /// declared size moves their single rasterisation up to `canvas * 16` first,
@@ -180,7 +180,7 @@ contract Renderer is IRenderer {
     ///
     /// Sixteen because it is the multiple this project already uses as its
     /// "exact multiple" control everywhere else, and because it puts a
-    /// year-zero token at 848px and a ten-ring token at 1,424px -- above the
+    /// one-ring token at 848px and a ten-ring token at 1,424px -- above the
     /// sizes third parties ask for, so their scaling is a downscale.
     ///
     /// Full write-up: docs/2026-08-29-mro-third-party-raster-finding.md
@@ -193,7 +193,7 @@ contract Renderer is IRenderer {
         return 16;
     }
 
-    /// @dev The open tag, Bloom's gradient definition, the field and Voice's tint.
+    /// @dev The open tag, Beat's gradient definition, the field and Hush's tint.
     ///
     /// Emitted in two steps rather than one `abi.encodePacked`. Adding the
     /// intrinsic-size call to a single eleven-argument expression blew the IR
@@ -298,7 +298,7 @@ contract Renderer is IRenderer {
                 _num("Level", v.level),
                 _num("Streak", v.streak),
                 _str("Heart", _heart(v.level)),
-                _num("Years", FrameRenderer.rings(v.level)),
+                _num("Years", v.level / FrameGeometry.DAY_CELLS),
                 _str("Whole", v.level >= FrameGeometry.DAY_CELLS ? "yes" : "no"),
                 _num("Mint Day", v.mintDay),
                 _num("Last Day", v.lastDay)

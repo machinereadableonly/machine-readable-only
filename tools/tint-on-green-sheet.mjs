@@ -114,7 +114,7 @@ const keep = [...STATIC_BY_TIER];
 function tile(streak, rung, style, tintHex) {
   for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = inks[i];
   const base = renderSvg(CODE.modules, TARGET.want, CODE.size,
-    { level: 200, streak, years: 1, marks: [STATIC], lastDay: 20700, today: 20700 });
+    { level: 200, streak, years: 0, marks: [STATIC], lastDay: 20700, today: 20700 });
   for (let i = 0; i < STATIC_BY_TIER.length; i++) STATIC_BY_TIER[i] = keep[i];
   return withEyes(base, style, tintHex ?? colourAt(rung));
 }

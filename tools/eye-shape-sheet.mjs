@@ -67,7 +67,7 @@ const shape = (kind, x, y, w, fill, rx) => {
 /// Erase the 7x7 to the field colour, then draw the style on top.
 function withEyeStyle(style, ink) {
   const base = renderSvg(CODE.modules, TARGET.want, CODE.size,
-    { level: 200, streak: STREAK, years: 1, marks: [], lastDay: 20700, today: 20700 });
+    { level: 200, streak: STREAK, years: 0, marks: [], lastDay: 20700, today: 20700 });
   let add = "";
   for (const [ex, ey] of EYES) {
     const x = codeOff + ex, y = codeOff + ey;
@@ -100,7 +100,7 @@ const decodesAt = svg => SIZES.filter(px => {
 
 const ink = colourAt(rungOf(STREAK));
 const basePx = pixels(renderSvg(CODE.modules, TARGET.want, CODE.size,
-  { level: 200, streak: STREAK, years: 1, marks: [], lastDay: 20700, today: 20700 }), 560);
+  { level: 200, streak: STREAK, years: 0, marks: [], lastDay: 20700, today: 20700 }), 560);
 
 console.log(`eye styles, ink ${ink}, code ${S}x${S}, ECC level L`);
 console.log(`decode sizes: ${SIZES.join(", ")}\n`);

@@ -296,4 +296,49 @@ contract BoundsTest is MroTestBase {
         assertEq(t.renderer(), address(next));
         assertGt(bytes(t.tokenURI(1)).length, 0, "the collection still renders");
     }
+
+    // --- 1.L3: the two ladder invariants a single entry can break alone ------
+
+    /// @dev A minimal active Upgrade, so each test below changes exactly one
+    /// field and the failure names the field rather than the fixture.
+    function _plainUpgrade() internal pure returns (MachineReadableOnly.Upgrade memory u) {
+        u = MachineReadableOnly.Upgrade({
+            priceUsdc6: 1_000_000, maxSupply: 0, sold: 0, minLevel: 0, minStreak: 0,
+            requiresWhole: false, active: true, excludes: 0, requiresAny: 0
+        });
+    }
+
+    /// @dev A Mark whose own bit is in its own `excludes` mask can never be
+    /// applied twice and closes nothing but itself -- the first application
+    /// satisfies its own exclusion. setUpgrade accepted it, and the entry is on
+    /// chain by the time anyone finds out.
+    function test_setUpgradeRejectsAMarkThatExcludesItself() public {
+        MachineReadableOnly.Upgrade memory u = _plainUpgrade();
+        u.excludes = uint16(1) << 3;
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkExcludesItself.selector, uint8(3)));
+        t.setUpgrade(3, u);
+    }
+
+    /// @dev A Mark that requires itself can never be applied at all:
+    /// `requiresAny` is read against the marks already held, and this one
+    /// cannot be held before it is applied.
+    function test_setUpgradeRejectsAMarkThatRequiresItself() public {
+        MachineReadableOnly.Upgrade memory u = _plainUpgrade();
+        u.requiresAny = uint16(1) << 4;
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkRequiresItself.selector, uint8(4)));
+        t.setUpgrade(4, u);
+    }
+
+    /// @dev CONTROL, and it is the assertion that matters: a mask naming the
+    /// OTHER side of the pair is exactly what the ladder is made of, and it
+    /// still installs. A guard that refused this would refuse every real Mark.
+    function test_setUpgradeStillAcceptsAMaskNamingAnotherMark() public {
+        MachineReadableOnly.Upgrade memory u = _plainUpgrade();
+        u.excludes = uint16(1) << 4;
+        u.requiresAny = uint16(1) << 5;
+        t.setUpgrade(3, u);
+        MachineReadableOnly.Upgrade memory back = t.upgradeOf(3);
+        assertEq(back.excludes, uint16(1) << 4);
+        assertEq(back.requiresAny, uint16(1) << 5);
+    }
 }

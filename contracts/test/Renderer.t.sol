@@ -28,8 +28,12 @@ contract RendererTest is Test {
     /// `MachineReadableOnly.applyMark` excludes pair partners. Hush over Ache
     /// and Beat over Static were picked because they draw the larger amount of
     /// image (Hush adds a rect, Beat adds a gradient defs block), which makes
-    /// this also the byte-worst-case fixture. Iris Bought is included even
-    /// though it draws nothing yet, so the fixture reflects a token that took
+    /// this also the byte-worst-case fixture -- WHICH IT IS NOT, and that is
+    /// worth saying: this set uses the default Iris shape and Aura, while the
+    /// byte worst case is GasBudget.t.sol's MAX_MARKS (leaf shape, Tint),
+    /// measured at 11,550 bytes against this fixture's 10,976. Iris Bought is
+    /// included and it DRAWS -- test_theEyesAreDrawnLastOverTheNoise depends on
+    /// exactly that -- so the fixture reflects a token that took
     /// every pair rather than four of five.
     uint256 constant ALL_MARKS = MarkRenderer.HUSH | MarkRenderer.BEAT
         | MarkRenderer.IRIS_BOUGHT | MarkRenderer.VESSEL | MarkRenderer.AURA;
@@ -311,6 +315,26 @@ contract RendererTest is Test {
     /// build measures the coverage profile, not the contract, so the ceiling is
     /// skipped there. The numbers are still logged, and byte lengths, which the
     /// optimiser does not touch, are still asserted.
+    /// @dev 2.M1. The Years ATTRIBUTE keeps counting; only the RING stops at
+    /// ten. It was fed `FrameRenderer.rings()`, so a token in its eleventh year
+    /// reported ten -- while three comments beside the code (including
+    /// FrameRenderer's own "the Years attribute keeps counting regardless") and
+    /// the Warden's tokenView all described the uncapped reading. Both
+    /// renderers agreed with each other, so the JS/Solidity differential could
+    /// not see it, and past ten years `Level` was the only record of a token's
+    /// age. Asserted on the rendered TEXT, not on a recomputed number.
+    function test_theYearsAttributeCountsPastTheRingCap() public view {
+        string memory eleven = r.tokenURI(_view(365 * 11, 5, 1000, 1000));
+        assertTrue(vm.contains(eleven, '{"trait_type":"Years","value":11}'), "eleven years must say eleven");
+        assertTrue(vm.contains(eleven, '{"trait_type":"Level","value":4015}'));
+
+        // The control at the cap itself, so this is not an off-by-one dressed
+        // as a fix -- and the ring count still stops where it always did.
+        string memory ten = r.tokenURI(_view(365 * 10, 5, 1000, 1000));
+        assertTrue(vm.contains(ten, '{"trait_type":"Years","value":10}'));
+        assertEq(FrameRenderer.rings(365 * 11), 10, "the drawn ring still stops at ten");
+    }
+
     function _gasIsMeaningful() internal view returns (bool) {
         return keccak256(bytes(vm.envOr("FOUNDRY_PROFILE", string("default"))))
             != keccak256(bytes("coverage"));

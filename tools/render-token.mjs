@@ -38,7 +38,7 @@ export const NOISE_BY_TIER = [
   "#686868",   // matches #8e5566, luma 104
   "#5f5f5f",   // matches #70575f, luma 95
 ];
-// Static, the rung-1 Mark (Task 4 rename from Blue Blood): the noise takes a
+// Static, bought at level 30 (Task 4 rename from Blue Blood): the noise takes a
 // green tint. Same weights as NOISE_BY_TIER above -- the luminance pairing does
 // not bend for a Mark, because the binarizer does not care why an ink is
 // lighter. Only the hue moves.
@@ -568,7 +568,15 @@ export function tokenUri(modules, want, size, state) {
   const anyIris = hasMark(marks, IRIS_BOUGHT) || earnedIris;
   const irisAttrs = anyIris
     ? [
-        str("Iris Shape", IRIS_SHAPE_NAMES[earnedIris ? 0 : irisVariant]),
+        // 2.L1. THE FALLBACK MATTERS BECAUSE THE INPUT COMES OFF CHAIN.
+        // `irisVariant` is two bits unpacked from the token's own word, so a
+        // value outside 0..2 is reachable from a malformed or future write --
+        // and Solidity's _irisShapeName falls through to "target" while this
+        // indexed an array and produced `"Iris Shape":"undefined"`. Two
+        // renderers that disagree on the same input is the one thing the
+        // differential exists to prevent, and a fixture only covers the values
+        // it was generated with.
+        str("Iris Shape", IRIS_SHAPE_NAMES[earnedIris ? 0 : irisVariant] ?? IRIS_SHAPE_NAMES[0]),
         ...(earnedIris ? [num("Iris Run", irisRun)] : []),
       ]
     : [];
@@ -582,7 +590,16 @@ export function tokenUri(modules, want, size, state) {
         num("Level", level),
         num("Streak", streak),
         str("Heart", `${shown}/${DAY_CELLS}`),
-        num("Years", ringsFor(years)),
+        // 2.M1. THE ATTRIBUTE IS UNCAPPED; the RING is what stops at ten.
+        // This read `ringsFor(years)`, so a token at level 4,015 reported
+        // "Years": 10 -- while the comment beside ringsFor, the comment in
+        // FrameRenderer.sol and the one in FrameRenderer.t.sol all said the
+        // attribute keeps counting. Three comments and a Warden (tokenView
+        // divides by 365 with no cap) described the uncapped reading; only the
+        // two renderers did otherwise, so they agreed with each other and the
+        // differential could not see it. Past ten years `Level` was the only
+        // surviving record of a token's age.
+        num("Years", years),
         str("Whole", level >= DAY_CELLS ? "yes" : "no"),
         num("Mint Day", mintDay),
         num("Last Day", lastDay),
