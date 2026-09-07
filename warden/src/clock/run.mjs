@@ -84,6 +84,32 @@ export async function mintIsOnChain({ publicClient, contract, mint }) {
   }
 }
 
+/**
+ * Is the child already on chain the same child as this queued seed?
+ *
+ * true  - same owner AND same parent: a previous run landed it.
+ * false - a different token holds that id.
+ * null  - the chain could not be read, which is NEITHER and must never be
+ *         treated as either.
+ *
+ * The parent is the discriminator rather than the agent key, because `seed`
+ * copies the parent's key into the child -- so every child of every parent
+ * under one key shares a key id, and only the parent tells two of them apart.
+ */
+export async function seedIsOnChain({ publicClient, contract, seed }) {
+  try {
+    const [owner, view] = await Promise.all([
+      publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "ownerOf", args: [BigInt(seed.tokenId)] }),
+      publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "viewOf", args: [BigInt(seed.tokenId)] }),
+    ]);
+    const sameOwner = String(owner).toLowerCase() === String(seed.toAddress).toLowerCase();
+    const sameParent = BigInt(view.parent) === BigInt(seed.parentId);
+    return sameOwner && sameParent;
+  } catch {
+    return null;
+  }
+}
+
 export async function runClock({
   q,
   writer,
@@ -105,6 +131,18 @@ export async function runClock({
     dropped: [],
     marks: [],
     stuck: [],
+    /// Children this run created on chain, by child id.
+    seeded: [],
+    /// Children the chain refused for good, and whose rows this run DELETED.
+    /// A drop is not a loss: it is what hands the key its agent-year back, so
+    /// these are reported as a completed outcome rather than as a failure.
+    droppedSeeds: [],
+    /// Children whose artwork never solved. Nobody paid, so the money is not
+    /// the problem -- but the reservation holds a seed the key earns once a
+    /// year, and only a human decides whether to give that year back. Kept
+    /// apart from `stuck` because saying "paid for" about a seed would send
+    /// somebody looking for a refund that does not exist.
+    stuckSeeds: [],
     /// Mark orders in their terminal state: paid for, refused by the chain, and
     /// waiting for a human. Separate from `stuck`, which is mints whose artwork
     /// never solved -- the two need different answers from whoever reads them.
@@ -210,6 +248,114 @@ export async function runClock({
       summary.aborted = result.errorName ?? result.reason;
       break;
     }
+  }
+
+  // 3b. SEEDS, THE FREE CREATION ROUTE.
+  //
+  //     A child is made by `seed`, not by `mint`: a different function with
+  //     different arguments, and nobody paid for it. That makes the failure
+  //     rule the OPPOSITE of a mint's, deliberately. A mint that cannot land is
+  //     left alone for a human BECAUSE the agent's money is in it. A seed that
+  //     can never land must be DROPPED, because the mirror row IS the
+  //     reservation -- seedsSpent counts `parentId IS NOT NULL` -- so leaving it
+  //     holds a once-a-year budget that the chain never agreed was spent, and
+  //     the agent cannot earn that year again.
+  //
+  //     A child whose bitmap never solved is the one case only a human can
+  //     judge. Same shape as the stuck mints above, and deliberately a
+  //     different sentence: the word "paid" about a seed sends somebody looking
+  //     for a refund that does not exist. It is reported, never dropped --
+  //     handing a year back is a decision, not a nightly sweep.
+  for (const stuck of q.stuckSeeds()) {
+    summary.stuckSeeds.push(stuck.tokenId);
+    alert(
+      `clock: the seed of child ${stuck.tokenId} from parent ${stuck.parentId} cannot be written -- ` +
+        `its artwork failed to solve after ${stuck.solveTries} tries. Nothing was charged, but the row still ` +
+        "holds the key's seed for this agent-year, and giving that year back needs a human"
+    );
+  }
+
+  // Nothing is sent once a write phase has aborted: NotWarden, Sunset and
+  // EnforcedPause refuse `seed` for exactly the reasons they refuse `mint`.
+  for (const s of summary.aborted ? [] : q.pendingSeeds()) {
+    // FOUR arguments, and NO key id among them. The child inherits the parent's
+    // agent key on chain (`_agentKeyOf[childId] = key`), so unlike `mint` there
+    // is no bytes32 here for keyIdToBytes32 to get wrong -- but the address and
+    // the `bytes` still have to encode, which is what the suite's writer double
+    // checks against the real ABI.
+    const result = await writer.send(
+      "seed",
+      [BigInt(s.tokenId), BigInt(s.parentId), s.toAddress, `0x${s.qr}`],
+      { label: `seed ${s.tokenId} from ${s.parentId}` }
+    );
+    if (result.ok) {
+      q.markSeedWritten(s.tokenId);
+      summary.seeded.push(s.tokenId);
+      summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
+      continue;
+    }
+
+    // TokenExists is read exactly as the mint pass reads it, and one branch
+    // reaches the opposite conclusion.
+    //
+    // If the token at that id IS this child, a previous run landed it: the
+    // CHAIN has already spent the key's seed, so the row moves to written.
+    // Dropping here would be the worst outcome this feature has -- reconcile
+    // only LOGS `Seeded`, so the mirror could never learn the child back and
+    // `/t/<childId>` would 404 for the life of the piece.
+    //
+    // If a stranger's token holds that id, this child can never exist under it.
+    // The row is dropped, which hands the agent-year back so the agent can seed
+    // again under a fresh id.
+    //
+    // If the chain cannot be read, that is NEITHER answer, and the row waits.
+    if (result.errorName === "TokenExists") {
+      const mine = await seedIsOnChain({ publicClient, contract, seed: s });
+      if (mine === true) {
+        q.markSeedWritten(s.tokenId);
+        alert(`clock: child ${s.tokenId} was already on chain as this seed; the mirror was behind and is now caught up`);
+        continue;
+      }
+      if (mine === false) {
+        q.dropSeed(s.tokenId);
+        summary.droppedSeeds.push(s.tokenId);
+        alert(
+          `clock: child ${s.tokenId} cannot be seeded from ${s.parentId} because TokenExists and a DIFFERENT token ` +
+            "holds that id; the row is dropped and the agent's seed is available again"
+        );
+        continue;
+      }
+      alert(`clock: child ${s.tokenId} exists on chain but could not be identified, so the row is left queued rather than dropped on a guess`);
+      continue;
+    }
+
+    if (isRunLevel(result)) {
+      // ABORT THE WRITES, NOT THE RUN -- the same rule as the mints loop, and
+      // the same reason: reconcile makes no writes and cannot fail for what
+      // stopped these. Dropping a whole queue of reservations because the
+      // operator paused the piece would destroy real budgets for a state that
+      // says nothing about any individual row.
+      alert(`clock: seed ${s.tokenId} from ${s.parentId} failed (${result.errorName})`);
+      summary.aborted = result.errorName ?? result.reason;
+      break;
+    }
+
+    if (isFinalSeed(result)) {
+      q.dropSeed(s.tokenId);
+      summary.droppedSeeds.push(s.tokenId);
+      alert(
+        `clock: seed ${s.tokenId} from ${s.parentId} was refused as ${result.errorName}, which no later run can clear; ` +
+          "the row is dropped and the agent's seed is available again"
+      );
+      continue;
+    }
+
+    // EVERYTHING ELSE STAYS QUEUED. See isFinalSeed for why that is the safe
+    // direction and not merely the lazy one.
+    alert(
+      `clock: seed ${s.tokenId} from ${s.parentId} did not land ` +
+        `(${result.errorName ?? result.reason}); it stays queued for the next run`
+    );
   }
 
   // 4. CHECK-INS, in chunks, each shrinking around whatever the chain refuses.
@@ -417,6 +563,85 @@ function isFinalMark(result) {
     "Resting", // the owner sealed the token; irreversible
     "BadVariant", // the shape paid for is not one this Mark offers
     "MarkSoldOut", // cannot fire while nothing is limited, and never un-sells
+  ].includes(result.errorName);
+}
+
+/**
+ * Is this refusal one that DELETES the reservation and hands the year back?
+ *
+ * THE TWO WAYS TO BE WRONG ARE NOT SYMMETRICAL, so read the cheap one first.
+ *
+ * Keeping a doomed row costs the agent a seed it earns once a year, and does so
+ * quietly: a seed row carries no `reservedAt`, deliberately, so neither the
+ * expiry sweep nor staleRows can ever mention it. Only this pass's own alert
+ * will.
+ *
+ * Dropping a row that DID land is worse, and it is reachable in exactly one
+ * way. `receipt-unknown` means the transaction was BROADCAST and its receipt
+ * never came back; it may be on chain right now. Deleting the mirror's only
+ * record of that child would leave the chain holding a token this service can
+ * never learn about again -- reconcile only LOGS `Seeded` -- while the chain's
+ * `_seedsSpent` stays incremented, so the mirror hands out a year the chain has
+ * already taken.
+ *
+ * THAT IS WHY ONLY A NAMED REVERT CAN BE PERMANENT. `reverted-on-simulate` is
+ * the only shape write.mjs decodes a name from, and it is raised BEFORE
+ * anything is sent, so it proves no transaction exists. Every other failure --
+ * send-failed, gas-estimate-failed, gas-estimate-too-large, receipt-unknown,
+ * reverted-on-chain, and a simulate revert whose error had no name -- leaves the
+ * row exactly where it was.
+ *
+ * These are every named error `seed(uint256,uint256,address,bytes)` can raise,
+ * read off MachineReadableOnly.sol:809-826 plus its three modifiers, and each is
+ * here or below the line for a stated reason.
+ *
+ * PERMANENT, because no later run can clear it:
+ *   Resting               `rest` sets `s.resting = true` at :780 and NOTHING in
+ *                         the contract ever clears it. The parent can never
+ *                         seed again, so the year belongs somewhere else.
+ *   NoSeedAvailable       the CHAIN says this key has no unspent seed, and the
+ *                         mirror row is precisely what claims otherwise.
+ *                         Keeping it preserves a disagreement in which the
+ *                         mirror holds a budget that was never granted; the drop
+ *                         is what makes the two agree. It could technically
+ *                         clear at the next anniversary, a year away -- but a
+ *                         year of nightly retries is not a retry, and after the
+ *                         drop the agent simply asks again when the year turns.
+ *   IdTooLarge            the child id is a stored value and 2**32 is a
+ *                         constant; there is no later state in which they pass.
+ *   BadCodeLength         the stored bitmap's length against CODE_BYTES, both
+ *                         fixed. A re-solve writes a new row, not this one.
+ *   ERC721InvalidReceiver `to` is stored, and the child can be delivered
+ *                         nowhere else. Dropping returns the year so the agent
+ *                         can seed to an address that accepts ERC-721; keeping
+ *                         delivers it nowhere, forever.
+ *
+ * NOT permanent, and each for a reason:
+ *   ParentNotWhole   THE BRIEF CALLED THIS PERMANENT AND THE CONTRACT SAYS
+ *                    OTHERWISE. `seed` refuses `p.level < 365`, and `level` is
+ *                    only ever `+= 1` (:417) with no path anywhere that lowers
+ *                    it. A parent one day short tonight is whole tomorrow.
+ *   SupplyCap        `totalMinted >= supplyCap`, and supplyCap is an owner dial
+ *   WalletCap        `mintedTo[to] >= walletCap`, likewise. The test is not
+ *                    whether the AGENT can act on it, it is whether any later
+ *                    run could succeed -- and raising a cap makes one succeed.
+ *   TokenExists      has three answers and only the chain knows which; handled
+ *                    above, where one of them is a drop and one is a write.
+ *   NotWarden        run-level, and cleared by setWarden
+ *   EnforcedPause    run-level, and cleared by unpause
+ *   Sunset           run-level. Irreversible, but it stops the whole piece:
+ *                    emptying every agent's reservation on the night the
+ *                    operator closes the door would be a mass deletion driven
+ *                    by one call, and the budgets are worth nothing then anyway.
+ */
+function isFinalSeed(result) {
+  if (result.reason !== "reverted-on-simulate") return false;
+  return [
+    "Resting",
+    "NoSeedAvailable",
+    "IdTooLarge",
+    "BadCodeLength",
+    "ERC721InvalidReceiver",
   ].includes(result.errorName);
 }
 
