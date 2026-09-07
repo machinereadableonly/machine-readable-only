@@ -165,13 +165,16 @@ return visits, so the artwork is the agent's own history of coming back.
   writing stopped. `struct Token`'s spare `uint56` is now
   `uint16 fellRun; uint16 bestRun; uint24 fellDay;` -- an exact fit, so a
   check-in still costs about 5,000 gas.
-  **REDEPLOYED 2026-09-06, AND THE CHAIN IS THE TREE AGAIN**: MachineReadableOnly
-  **0xe032054D54b407C52C49c40A423aC79031401C03** and Renderer
-  **0x48B6f41E0B8C4f38EBC67dfE57AeF18D553BC7f4**, block 46,468,133, both
-  Basescan-verified. The old pair (0xf0Df806f... / 0xb95D3229...) is SUPERSEDED
-  and keeps tokens 1 and 2 forever; do not read state off it. Token 1 on the NEW
-  pair is minted and wears Hush, and C4.10 is proven on the deployed Renderer by
-  asking it directly (`warden/tools/absence-on-chain.mjs`). See
+  **REDEPLOYED 2026-09-06**: MachineReadableOnly
+  0xe032054D54b407C52C49c40A423aC79031401C03 and Renderer
+  0x48B6f41E0B8C4f38EBC67dfE57AeF18D553BC7f4, block 46,468,133, both
+  Basescan-verified. That pair is ITSELF SUPERSEDED by the Plan 7 deploy of
+  2026-09-07 (see below) and is kept here as the record of that day, not as an
+  address to use. The pair before it (0xf0Df806f... / 0xb95D3229...) is
+  SUPERSEDED too and keeps tokens 1 and 2 forever; do not read state off
+  either. Token 1 on the 2026-09-06 pair was minted and wears Hush, and C4.10
+  was proven on that deployed Renderer by asking it directly
+  (`warden/tools/absence-on-chain.mjs`). See
   [[sepolia-redeploy-2026-09-06]]. Read
   [[plan6-permanent-decisions]] and [[review-triage-2026-09-05]] before touching
   the run, the palette or the endings.
@@ -317,14 +320,29 @@ return visits, so the artwork is the agent's own history of coming back.
   a full year seeds a child, free; the child starts at level 1 and carries the
   line's tenure as a sealed number, the Echo, drawn as ONE DASHED innermost ring.
   Suites: **contracts 362, warden 652, tools 86, client 40.**
-  **NOTHING IS DEPLOYED, AND YOU MUST NOT `pm2 restart mro-warden`.** A boot
-  probe in `warden/src/chain/preflight.mjs` decodes one real `viewOf` and REFUSES
-  TO START on a mismatch, and this tree cannot decode the deployed
-  `0xe032054D...`. The restart and the redeploy are ONE operation. Until then the
-  live site still tells agents `seed` is "Not built yet", which is false.
-  The deploy is prepared and rehearsed, not broadcast: `deploy-plan7.sh`, then
-  `adopt-deployment.sh`, then `check-deployed-abi.mjs`. Read the
-  plan7-lineage-echo and the-index-that-blocked-lineage memories first.
+  **DEPLOYED, ADOPTED AND LIVE as of 2026-09-07**: MachineReadableOnly
+  **0x3E8A9D50C69c206df741A8d5BB78E66070A53020** and Renderer
+  **0x95F5153787BbF6Df007719d9f1972382353122Cb**, block **46,517,330**, all
+  twelve transactions in that one block, both Basescan-verified. The
+  2026-09-06 pair (0xe032054D... / 0x48B6f41E...) is SUPERSEDED and keeps its
+  token 1 forever; do not read state off it. The Warden was restarted onto the
+  new pair and VERIFIED THROUGH CLOUDFLARE, not assumed: llms.txt serves the new
+  address, the old one is gone, and the false "Not built yet" for `seed` is gone
+  with it -- the live site now documents lineage and the Echo.
+  Proven before the restart, in this order: `check-deployed-abi.mjs` (55 of 55
+  selectors, `seed` and `echoOf` present, `viewOf` decoding 18 fields),
+  `read-ladder.mjs` (all ten Marks correct by value), then a rehearsal against a
+  COPY of production state. The rehearsal was run TWICE: once with
+  `REHEARSE_OVERRIDE` to prove the new pair boots, and once WITHOUT it, which is
+  what proved the environment file had actually been changed -- a value-free way
+  to check a file Claude must not read.
+  `adopt-deployment.sh` REWROTE A HISTORICAL PARAGRAPH in this file (the
+  2026-09-06 record, which it left naming the 2026-09-07 pair at the old block).
+  Its own comments say historical records must not be rewritten, but CLAUDE.md
+  holds live statements and history in one file and a blanket `sed` cannot tell
+  them apart. Restored by hand. **Check this file's history paragraphs after
+  every future adoption.**
+  Read the plan7-lineage-echo and the-index-that-blocked-lineage memories first.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS

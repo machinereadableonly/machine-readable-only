@@ -41,7 +41,7 @@ const TREASURY = process.argv[4] ?? "0x000000000000000000000000000000000000dEaD"
 const NETWORK = `eip155:${CHAIN_ID}`;
 const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
-const CONTRACT = "0xe032054D54b407C52C49c40A423aC79031401C03";
+const CONTRACT = "0x3E8A9D50C69c206df741A8d5BB78E66070A53020";
 const RPC = process.env.BASE_RPC_URL ?? "https://sepolia.base.org";
 
 const dir = mkdtempSync(join(tmpdir(), "mro-live-"));
