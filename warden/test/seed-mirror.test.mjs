@@ -221,15 +221,79 @@ test("a child of a parent that does not exist is refused outright", () => {
   assert.equal(q.getMint(2), undefined, "and leaves no orphan behind");
 });
 
-test("a seed is never swept as an expired reservation", () => {
+// THIS TEST COULD NOT FAIL UNTIL 2026-09-07, and it guarded the only property
+// nothing else in the repository guards. `dropExpiredReservations` selects
+// `status = 'awaiting-payment' AND payNonce IS NOT NULL`, and the fixture had
+// nothing in that state at all -- so the sweep was a no-op and the assertion
+// was true by construction. PROVEN BY MUTATION: deleting `AND payNonce IS NOT
+// NULL`, the exact guard this test's comment names, left all 23 tests in this
+// file green, plus settlement-commit.test.mjs and binding.test.mjs.
+//
+// THE POSITIVE CONTROL IS THE FIX. A genuinely reserved, genuinely stale mint
+// sits beside the child, and the SAME call must delete that one and keep this
+// one. A sweep that deletes nothing now fails on the first assertion; a sweep
+// that deletes everything fails on the second. Neither was reachable before.
+test("a stale reservation is swept and a free seed beside it is not", () => {
   const { q } = fresh();
   parentToken(q);
   q.insertSeed({ childId: 2, parentId: 1, toAddress: "0xB", keyId: "k", lastDay: 10, mintDay: 10 });
-  // The REAL sweep, by its real name. A free row has no payNonce and no
-  // reservedAt, which is what keeps it out of expiredMints.
-  q.dropExpiredReservations(Date.now() + 86_400_000);
+
+  // The control: a paid-mint reservation that was never settled. It carries a
+  // payNonce and a reservedAt, which is what puts it inside the sweep.
+  q.insertToken({ tokenId: 3, keyId: "unpaid", owner: "0xC", lastDay: 10, mintDay: 10 });
+  q.insertMint({ tokenId: 3, toAddress: "0xC", keyId: "unpaid", payNonce: "0xnever" });
+  assert.equal(q.getMint(3).status, "awaiting-payment", "the control has to actually be reservable");
+
+  const swept = q.dropExpiredReservations(Date.now() + 86_400_000);
+
+  assert.equal(swept.mints, 1, "the unpaid reservation is exactly what this sweep is for");
+  assert.equal(q.getMint(3), undefined, "and it is gone");
+  assert.equal(q.getToken(3), undefined, "with its token row, which holds a supply slot");
+
+  // The child, which nobody paid for and which spends a once-a-year budget.
   assert.ok(q.getToken(2), "a free row has no payNonce and must not be swept");
+  assert.ok(q.getMint(2), "and neither half of the pair may go");
   assert.equal(q.seedsSpent("k"), 1, "and the seed it spent is still spent");
+});
+
+// AND THE `payNonce IS NOT NULL` CLAUSE ON ITS OWN, which the test above
+// cannot defend and nor could anything else in the repository. Measured
+// 2026-09-07: a free seed's `mints` row is kept out of that sweep THREE times
+// over -- its status is 'queued' and not 'awaiting-payment', its payNonce is
+// NULL, and its reservedAt is NULL -- so removing any ONE of the three clauses
+// leaves every suite green and the second removal ships unnoticed.
+//
+// The only state in which this clause is the deciding one is a row that awaits
+// payment, carries a timestamp, and has no nonce. Nothing writes that today:
+// `insertMint` demands a nonce and `insertSeedMint` sets none of the three. It
+// is written here with SQL BECAUSE it is unreachable, which is the point rather
+// than a shortcut -- the clause exists for rows this schema did not write, and
+// the moment anything reserves without an EIP-3009 nonce it is the only thing
+// deciding whether that row survives.
+test("a row awaiting payment with no nonce, or no timestamp, is not swept", () => {
+  const { db, q } = fresh();
+  parentToken(q);
+  q.insertToken({ tokenId: 3, keyId: "nonceless", owner: "0xC", lastDay: 10, mintDay: 10 });
+  q.insertMint({ tokenId: 3, toAddress: "0xC", keyId: "nonceless", payNonce: "0xtemp" });
+  db.exec("UPDATE mints SET payNonce = NULL, reservedAt = 1 WHERE tokenId = 3");
+  const row = q.getMint(3);
+  assert.equal(row.status, "awaiting-payment");
+  assert.equal(row.payNonce, null, "the one shape in which this clause decides");
+
+  // The mirror image, for the `reservedAt` half: a row that awaits payment and
+  // carries a nonce but has NO timestamp. That is the legacy shape the query's
+  // own comment names -- rows written before these columns existed -- and it is
+  // the only state in which the age test is the deciding clause.
+  q.insertToken({ tokenId: 4, keyId: "timeless", owner: "0xD", lastDay: 10, mintDay: 10 });
+  q.insertMint({ tokenId: 4, toAddress: "0xD", keyId: "timeless", payNonce: "0xlegacy" });
+  db.exec("UPDATE mints SET reservedAt = NULL WHERE tokenId = 4");
+  assert.equal(q.getMint(4).reservedAt, null);
+
+  q.dropExpiredReservations(Date.now());
+  assert.ok(q.getMint(3), "no nonce means no payment was ever authorised, whatever the timestamp says");
+  assert.ok(q.getToken(3), "and its token row holds a supply slot that must not vanish with it");
+  assert.ok(q.getMint(4), "and a row with no reservedAt has no age to be older than");
+  assert.ok(q.getToken(4));
 });
 
 test("a seed is invisible to the stale-row alert, which measures reservations", () => {
