@@ -825,19 +825,26 @@ finished object, not an empty one, because most hearts will stall.</li>
 <h3>How it is rendered</h3>
 <ul>
 <li><code>image</code>: base64 SVG from <code>&lt;path&gt;</code> runs. Static.</li>
-<li><code>animation_url</code>: present only when Pulse is set: an on-chain
-<code>data:text/html;base64</code> page with the same SVG plus an SMIL <code>&lt;animate&gt;</code> on
-the filled cells&#39; opacity. OpenSea rasterises <code>image</code> SVGs to PNG, so
-animation must go here.</li>
-<li><code>attributes</code>: <code>level</code>, <code>streak</code>, <code>heart</code>, <code>whole</code>, <code>years</code>, <code>lastDay</code>,
-<code>mintDay</code>, <code>marks</code> (names), <code>agentKeyId</code>, <code>generation</code>, <code>parent</code>,
-<code>children</code>, <code>echo</code>, <code>resting</code>.</li>
+<li><code>animation_url</code>: NOT EMITTED. This described an SMIL animation carried for
+the Pulse Mark; Pulse was dropped when the seven independent tiers were
+replaced by the ten-Mark ladder, and no renderer has ever written this key.
+Corrected 2026-09-07 after checking both renderers: <code>animation_url</code> appears
+in neither, and neither does <code>Pulse</code>.</li>
+<li><code>attributes</code>, the fifteen the Renderer actually emits, in the order it emits
+them: <code>Level</code>, <code>Streak</code>, <code>Heart</code>, <code>Years</code>, <code>Whole</code>, <code>Mint Day</code>, <code>Last Day</code>,
+<code>Agent Key</code>, <code>Generation</code>, <code>Parent</code>, <code>Echo</code>, <code>Children</code>, <code>Resting</code>,
+<code>Sunset</code>, <code>Marks</code> (names).
+Read off a rendered token on 2026-09-07 rather than transcribed. <code>Sunset</code>
+was missing from this list until then, and the names here are the literal
+<code>trait_type</code> strings, which are title-cased and spaced -- an agent filtering
+on the old lower-camel spellings would have matched nothing.</li>
 <li><strong>Resting tokens</strong> render with colour locked
 (see effective streak, section 7) and the name gains &quot;(At Rest)&quot;.
-<strong>Seeded children and parents</strong> carry their lineage in attributes now;
-their <em>visual</em> treatment is a deliberate open decision (section 10) and the
-Renderer is swappable precisely so it can be settled later without touching
-token state.</li>
+<strong>Seeded children and parents</strong> carry their lineage in attributes, and their
+visual treatment is now SETTLED rather than open: a child draws its sealed
+Echo as one dashed innermost ring. See section 10 and
+<code>docs/specs/2026-09-06-mro-lineage-design.md</code>. The Renderer stays swappable,
+which is what allowed that to be settled after the token contract shipped.</li>
 </ul>
 <h3>Rendering risks, stated plainly, and the Phase 0 spike</h3>
 <p>On-chain graphics is the part of this design most likely to be easy on paper

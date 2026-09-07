@@ -601,19 +601,26 @@ asked for, so it exists exactly as long as Base does.
 ### How it is rendered
 
 - `image`: base64 SVG from `<path>` runs. Static.
-- `animation_url`: present only when Pulse is set: an on-chain
-  `data:text/html;base64` page with the same SVG plus an SMIL `<animate>` on
-  the filled cells' opacity. OpenSea rasterises `image` SVGs to PNG, so
-  animation must go here.
-- `attributes`: `level`, `streak`, `heart`, `whole`, `years`, `lastDay`,
-  `mintDay`, `marks` (names), `agentKeyId`, `generation`, `parent`,
-  `children`, `echo`, `resting`.
+- `animation_url`: NOT EMITTED. This described an SMIL animation carried for
+  the Pulse Mark; Pulse was dropped when the seven independent tiers were
+  replaced by the ten-Mark ladder, and no renderer has ever written this key.
+  Corrected 2026-09-07 after checking both renderers: `animation_url` appears
+  in neither, and neither does `Pulse`.
+- `attributes`, the fifteen the Renderer actually emits, in the order it emits
+  them: `Level`, `Streak`, `Heart`, `Years`, `Whole`, `Mint Day`, `Last Day`,
+  `Agent Key`, `Generation`, `Parent`, `Echo`, `Children`, `Resting`,
+  `Sunset`, `Marks` (names).
+  Read off a rendered token on 2026-09-07 rather than transcribed. `Sunset`
+  was missing from this list until then, and the names here are the literal
+  `trait_type` strings, which are title-cased and spaced -- an agent filtering
+  on the old lower-camel spellings would have matched nothing.
 - **Resting tokens** render with colour locked
   (see effective streak, section 7) and the name gains "(At Rest)".
-  **Seeded children and parents** carry their lineage in attributes now;
-  their *visual* treatment is a deliberate open decision (section 10) and the
-  Renderer is swappable precisely so it can be settled later without touching
-  token state.
+  **Seeded children and parents** carry their lineage in attributes, and their
+  visual treatment is now SETTLED rather than open: a child draws its sealed
+  Echo as one dashed innermost ring. See section 10 and
+  `docs/specs/2026-09-06-mro-lineage-design.md`. The Renderer stays swappable,
+  which is what allowed that to be settled after the token contract shipped.
 
 ### Rendering risks, stated plainly, and the Phase 0 spike
 

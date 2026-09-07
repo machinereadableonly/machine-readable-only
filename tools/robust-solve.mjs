@@ -50,10 +50,52 @@ export function gateStates() {
     { label: "day 364 worst",   ...base, level: 364,  streak: 100, marks },
     { label: "whole, 1 year",   ...base, level: 365,  streak: 400, marks: [] },
     { label: "whole, 10 years", ...base, level: 3650, streak: 30,  marks },
+
+    // SEEDED CHILDREN, added 2026-09-07. Until then every gate state was a
+    // FOUNDING token, so the mask shipped for a child had been judged against
+    // pictures that child will never be.
+    //
+    // What is new is not the canvas: `ringBudget` spends one of the ten slots
+    // on the echo rather than adding an eleventh, so a child's canvas never
+    // exceeds a founding token's. It is the INK. The echo ring is dashed --
+    // two cells on, two off -- where every other ring is solid, and this
+    // file's own reason for having states at all is that "the drawn frame,
+    // ghost cells and rings surround the code and change what the binarizer's
+    // blocks resolve against". A run of alternating ink beside the frame is
+    // exactly that, and nothing else in the gate produces one.
+    //
+    // These three are the extremes of it: the ring alone on the smallest
+    // canvas the piece draws, the ring against one solid year, and the ring at
+    // the cap where nine solid rings sit outside it.
+    //
+    // MEASURED BEFORE THEY WERE ADDED, because a stricter gate can change
+    // which mask a token ships and every committed fixture is generated from
+    // those bitmaps. Sixteen solves -- ids 1, 2, 3, 5, 8, 12, 13, 21, 34, 55,
+    // 89, 144, 4242 and 2**32-1 on example.com, and 1, 12, 55 on
+    // machinereadableonly.com -- all passed 30 of 30 against these states, so
+    // no shipped mask moved and no fixture changed. Adding states can only
+    // remove survivors, never add one, so an incumbent that still survives is
+    // still the first survivor in match order.
+    { label: "child, newborn",     ...base, level: 1,    streak: 0,   marks: [], echo: 365 },
+    { label: "child, whole 1y",    ...base, level: 365,  streak: 400, marks: [], echo: 3650 },
+    { label: "child, at ring cap", ...base, level: 3650, streak: 30,  marks: [], echo: 3650 },
   ];
 }
 
 const want = () => unpackModules(heartMaskBytes(), 37);
+
+/// One gate state, rendered exactly as the gate renders it.
+///
+/// EXTRACTED SO A TEST CAN EXERCISE THIS PATH RATHER THAN A COPY OF IT. The
+/// state fields reach `renderSvg` through a spread, and a field that silently
+/// stopped travelling -- `echo` is the one that nearly did -- would make every
+/// child state render as a founding token: a gate that reads as stricter while
+/// testing nothing. A test that re-implemented this spread would agree with the
+/// bug. This is the call site the gate actually uses.
+export function renderGateState(solve, target, state) {
+  const years = Math.floor(state.level / 365);
+  return renderSvg(solve.modules, target, solve.size, { ...state, years });
+}
 
 /// Does this solve decode to `expected` in every gate state at every gate size?
 /// Returns { ok, checked, failures } rather than a bare boolean, so a caller can
@@ -64,11 +106,16 @@ export function gateSolve(solve, expected, target = want()) {
 
   for (const state of gateStates()) {
     const years = Math.floor(state.level / 365);
-    const svg = renderSvg(solve.modules, target, solve.size, { ...state, years });
+    const svg = renderGateState(solve, target, state);
     // The exact multiple is a control: a candidate that fails even there is a
     // broken code, not a sampling artefact, and that distinction is worth
     // keeping in the failure list.
-    const sizes = [...GATE_SIZES, canvasFor(years) * 16];
+    //
+    // `echo` is passed HERE as well as to the render. A child spends a ring
+    // slot on its echo, so `canvasFor(years)` alone would compute the canvas
+    // of a token with no echo -- and the control would then be rendered at
+    // some other token's exact multiple, which is not a control at all.
+    const sizes = [...GATE_SIZES, canvasFor(years, state.echo ?? 0) * 16];
 
     for (const px of sizes) {
       checked++;
