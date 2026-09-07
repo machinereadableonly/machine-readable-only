@@ -87,6 +87,49 @@ export function migrate(db) {
     db.exec("ALTER TABLE mints ADD COLUMN reservedAt INTEGER");
   }
 
+  // ONE PAID MINT PER KEY, which is narrower than what this guard used to say
+  // and is what it always meant.
+  //
+  // schema.sql declares `mints_key` over `keyId` alone. Its purpose is stated
+  // there: two settlements from the same key can both pass the pre-payment
+  // hasMinted check, so the index is what actually stops a second token being
+  // recorded. A FREE SEED WAS NEVER WHAT IT DEFENDED AGAINST -- a seeded child
+  // is bound to its parent's key by design, so it carries a key that has
+  // already minted, and the full index refused every seed any real agent could
+  // ever ask for. Restricting it to rows that carry a payment authorisation
+  // keeps the money-path guard exactly as strong and lets the free route
+  // through.
+  //
+  // THE NARROWING, STATED RATHER THAN BURIED: `mints` rows written before the
+  // payment columns existed have a NULL payNonce, so they fall OUT of this
+  // index's coverage and a second mint under such a key would no longer be
+  // refused here. Accepted -- those keys have demonstrably already minted and
+  // the CHAIN is the authority on that (`mint` reverts TokenExists), and the
+  // rows predate 2026-09-05 on testnet only.
+  //
+  // IT MUST STAY HERE AND NEVER MOVE TO schema.sql. This index names
+  // `payNonce`, a column the block DIRECTLY ABOVE adds, and schema.sql is
+  // exec'd WHOLE before migrate() runs -- so on any existing database
+  // `CREATE TABLE IF NOT EXISTS mints` is a no-op, the column is not there yet,
+  // and the index throws "no such column: payNonce" before migrate can help.
+  // That exact ordering crash-looped the live Warden on 2026-09-05. The order
+  // of these two statements is load-bearing for the same reason.
+  //
+  // A NEW NAME rather than replacing `mints_key` in place, so the old index is
+  // dropped exactly ONCE and never comes back. Both statements are then no-ops
+  // on every later boot, which matters because openDb() runs at every process
+  // start and two processes write this file -- the Warden on every check-in and
+  // the Clock at 00:05.
+  //
+  // SCHEMA.SQL NO LONGER DECLARES ANY INDEX ON `mints`, and that half is not
+  // optional. It is exec'd whole on every start, so the full index it used to
+  // carry was recreated after every drop: startup took the write lock each time
+  // (measured at 413ms behind a held lock), and the moment one seed existed the
+  // NEXT restart died outright on `UNIQUE constraint failed: mints.keyId`. Read
+  // the note that replaced it there before moving anything back.
+  db.exec("DROP INDEX IF EXISTS mints_key");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS mints_paid_key ON mints (keyId) WHERE payNonce IS NOT NULL");
+
   // The on-chain form of every registered key id. Unlike the columns above this
   // one CAN be backfilled, because the conversion is a plain forward hash of a
   // value the row already holds -- so an existing mirror gets the same lookup a

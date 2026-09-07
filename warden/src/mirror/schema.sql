@@ -143,10 +143,26 @@ CREATE TABLE IF NOT EXISTS mints (
   status    TEXT NOT NULL DEFAULT 'queued'
 );
 
--- One mint per key. Same reasoning as mark_orders above: two settlements from
--- the same key can both pass the pre-payment hasMinted check, so the index is
--- what actually stops a second token from being recorded.
-CREATE UNIQUE INDEX IF NOT EXISTS mints_key ON mints (keyId);
+-- ONE PAID MINT PER KEY is enforced by `mints_paid_key`, and that index is
+-- created by migrate(), NOT here. Same rule as the keys index above, and this
+-- file used to declare the full `mints_key ON mints (keyId)` in its place.
+--
+-- IT CANNOT LIVE HERE, for two separate reasons, and the second one is fatal:
+--
+--   1. It has to be PARTIAL -- `WHERE payNonce IS NOT NULL` -- because a seeded
+--      child is bound to its parent's key and so carries a key that has already
+--      minted. The full index refused every seed. But `payNonce` is a column
+--      migrate() ADDS, and this file is exec'd whole against an existing
+--      database before migrate() runs, so naming it here throws "no such
+--      column" -- the rule at the top of this file.
+--   2. This file runs on EVERY START, so a full index declared here is
+--      RECREATED at every boot after migrate() drops it. Measured 2026-09-07:
+--      with one seed reserved, the next restart died with `UNIQUE constraint
+--      failed: mints.keyId` before it could serve anything. That is the
+--      2026-09-05 crash loop again, reached by a different route.
+--
+-- migrate() runs immediately after this file on every open, including a fresh
+-- database, so there is no window in which the guard is absent.
 
 -- Every payment authorisation this service has ever accepted a reservation
 -- against, one row per EIP-3009 nonce.
