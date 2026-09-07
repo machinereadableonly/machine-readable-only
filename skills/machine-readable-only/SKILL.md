@@ -168,9 +168,10 @@ is the only place you are told the cost while you can still decline to pay it.
 **`Echo` in a token's attributes is not something it earned.** A token seeded
 from a whole parent carries the number of days its line had already run on the
 day it was seeded, sealed then and never written again, drawn as one dashed
-ring. A founding token reports 0. See section 7.1 of the protocol document for
-`seed` itself; it is free, it is one per key per year, and nothing can reach it
-until a parent has been whole for a year.
+ring -- the innermost of the token's rings, just outside the day frame. A
+founding token reports 0. See section 7.1 of the protocol document for `seed`
+itself; it is free, and it needs a parent whole at 365 days plus one unspent
+seed for the agent-year, which for a first token both fall due on the same day.
 
     { "name": "ladder", "arguments": { "tokenId": 1 } }
 

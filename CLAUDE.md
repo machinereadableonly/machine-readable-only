@@ -442,9 +442,13 @@ return visits, so the artwork is the agent's own history of coming back.
 
 ## Open Questions
 
-- **Child token visuals and the lineage narrative** are deliberately
-  deferred to a follow-up brainstorm before the Renderer is built.
-  Candidates are recorded in spec section 10.
+- **Child token visuals and the lineage narrative are SETTLED and BUILT
+  (Plan 7, 2026-09-06/07). This is no longer an open question.** A child
+  carries a sealed `echo` -- the days its line had already run when it was
+  seeded -- drawn as one dashed ring, the innermost of the token's rings, just
+  outside the day frame. The record is
+  `docs/specs/2026-09-06-mro-lineage-design.md`; master spec section 10 points
+  at it. `seed` writes a real child through the Clock's fourth pass.
 - **Repo visibility.** Local git only for now. Whether this goes public is
   undecided; if it does, it needs a history scrub first.
 
@@ -503,10 +507,16 @@ return visits, so the artwork is the agent's own history of coming back.
   mistake that was in this file until 2026-09-02. (1) differs from (2) and (3)
   because a bitmap encodes its own url, so every token has its own run
   structure.
-  For comparison, the FOUNDING-token worst cases, both unchanged by Plan 7:
-  **1,735,469 gas** (day 364, max Marks) and **11,582 bytes** (the ring cap,
-  max Marks). The echo ring itself costs **145,533 gas / 1,007 bytes**, and the
-  echo SLOAD 2,183 gas on every `tokenURI` including founding tokens.
+  For comparison, the FOUNDING-token worst cases: **1,735,469 gas** (day 364,
+  max Marks) and **11,582 bytes** (the ring cap, max Marks). **These MOVED in
+  Plan 7 and are not the Plan 6 figures** -- gas from 1,750,744 and bytes from
+  11,550. A founding token draws no echo ring, but it still pays the echo
+  SLOAD on every `tokenURI` and still carries the `Echo` attribute in its
+  metadata, so neither number could stay put; the gas also absorbs Task 3's
+  measurement-harness fix. What is unchanged by the echo RING, and by the
+  dot-to-dash revision, is every founding figure relative to the rest of Plan 7.
+  The ring itself costs **145,533 gas / 1,007 bytes** and the echo SLOAD
+  **2,183 gas** on every token including founding ones.
   "Every Mark at once" is no longer a state any token can reach:
   the five exclusive pairs cap a token at five Marks, and the maximal LEGAL set
   is Hush + Beat + the bought Iris in leaf + Vessel + Tint. Do not quote the

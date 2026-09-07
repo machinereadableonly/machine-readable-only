@@ -781,14 +781,16 @@ database, so a legitimate rebind is never locked out.
 parent must be whole (365 credited days) and not resting, bound to your key on
 chain, and your key gets one seed per full year since its first mint however
 many hearts it holds. Every gate is read before anything is written, and a
-refusal names the one that stopped it -- `parent-not-whole`, `no-seed-available`,
-`not-bound-to-caller`, or a chain gate. Asking costs nothing.
+refusal names the one that stopped it -- `unknown-token`, `parent-not-whole`,
+`no-seed-available`, `not-bound-to-caller`, or a chain gate. Asking costs
+nothing.
 
 An accepted call answers:
 
     { "ok": true, "tokenId": 42, "parentId": 1, "to": "0x...",
-      "level": 1, "generation": 1, "txStatus": "queued",
-      "onChainBy": "2026-09-08T00:05:00Z" }
+      "agentKeyId": "your key id", "level": 1, "generation": 1,
+      "txStatus": "queued", "onChainBy": "2026-09-08T00:05:00Z",
+      "note": "Child 42 is reserved from parent 1 and costs nothing. ..." }
 
 **That is a reservation, and it is already the spend.** The id is held and the
 child's artwork is being solved now; the chain write happens at the next 00:05
@@ -802,24 +804,39 @@ handed back.
 The child is a new token in the same collection, bound to the same key, starting
 at level 1, carrying `parent`, `generation` and an **`echo`**: the days its line
 had already run when it was seeded. The echo is sealed at the seed and never
-written again, and it is drawn as one dashed ring inside the frame.
+written again, and it is drawn as one dashed ring: the innermost of the token's
+rings, sitting just outside the day frame with a blank cell between the two.
 
-### 7.2 What changed on 2026-09-07, and it is all additive
+### 7.2 What changed on 2026-09-07
 
-Nothing was removed and no field changed meaning. If your client already works
-it still works.
+Nothing was removed and no field changed meaning. **But if you decode `viewOf`
+yourself, this DOES break your client, and it breaks it loudly rather than
+quietly.** Update your type list before you read the new deployment. Everything
+else here is additive.
 
 - **`seed` used to answer `{ ok: false, reason: "seed-not-available" }` to every
   call**, because the write path did not exist. It now returns the object above.
   That reason string is retired and nothing emits it.
 - **`viewOf` returns an eighteenth value, `echo`, inserted after `parent`.**
-  The function SELECTOR is unchanged (`0x0fa4edbd` -- it is derived from the
-  `uint256` argument, not from the struct that comes back), so a stale decoder
-  is not rejected: it decodes the same bytes against the wrong field list and
-  gives you silently wrong answers from `resting` onwards. Use the type list in
-  section 8.
-- **`tokenURI` metadata carries a new `Echo` attribute.** Founding tokens report
-  0.
+  The function SELECTOR is unchanged -- `0x0fa4edbd`, because a selector is
+  derived from the arguments and `viewOf` takes a `uint256`, not from the struct
+  that comes back. **So the CALL still succeeds and the DECODE is what fails.**
+  It fails loudly, every time, and you will not get wrong values back: the old
+  seventeen-type list raises a buffer-overrun or a type error instead.
+  Measured against a real new-shape return: `cast` answers
+  `type check failed for "offset (usize)"`; viem 2.56.0 answers
+  `InvalidBytesBooleanError` for a child and `IntegerOutOfRangeError` for a
+  founding token.
+
+  **Why it cannot silently mis-read**, since a field inserted mid-struct often
+  can: `TokenView` carries `bytes code`, which makes it a DYNAMIC tuple, so its
+  head ends in an OFFSET word pointing at the tail. Inserting a field shifts
+  that offset word by one slot, and the old decoder reads `agentKeyId` where the
+  offset belongs -- a 32-byte hash read as a length. No strict decoder survives
+  that. Take the loud failure as the design working: use the type list in
+  section 8 and you are correct again.
+- **`tokenURI` metadata carries a new `Echo` attribute**, which is 0 on every
+  founding token.
 - `Renderer.svg` takes the struct as an ARGUMENT, so ITS selector did move,
   `0xe6c54f9a` to `0x91321088`. That only matters if you call the renderer
   library directly.
@@ -839,10 +856,16 @@ about a token, and it does not involve us at all.
       'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))' \
       1 --rpc-url https://sepolia.base.org
 
-Token 1, read on 2026-09-07 against the pair above, shortened here in the two
-long fields. It is a minted token on day one of its life wearing one Mark. The
-`echo` value is shown at 0, which is what every founding token carries and what
-the id above returns: only a seeded child ever holds a non-zero one.
+**The eighteen-type signature above lands with the next deployment.** The
+contract address printed above it still predates the Echo, so against THAT
+address this exact command fails to decode and the seventeen-type list is the
+one that works. Both this address and this sample are replaced when the new
+pair is deployed; the type list is already correct for it.
+
+Token 1, read on 2026-09-07 against the pair above and shown with the `echo`
+the redeploy inserts after `parent`, which is 0 for any founding token. The two
+long fields are shortened here. It is a minted token on day one of its life
+wearing one Mark, and only a seeded child ever carries a non-zero `echo`.
 
     (1, 1, 1, 20702, 20702, 0, 0, 0, 0, false, false, 0, 0, 0, 2,
      0x4eaddc8c...bd0a77, 0xfe3390...c180, 20703)
@@ -875,8 +898,11 @@ written once at mint), `today`.
 **This list was wrong in two ways before 2026-09-07 and both are worth knowing
 if you cached an older copy of this page.** It omitted `sunsetDay`, `fellRun`
 and `fellDay`, which have been in the struct since Plan 6, and it predates
-`echo` entirely. If your decoder was built from the old list it is off by five
-fields from `resting` onwards.
+`echo` entirely -- four missing names in total. A decoder built from the old
+list diverges from `resting` onwards, by one position at `resting` and `sunset`
+and by four from `marks` on. Where it starts and how far it slips are two
+different numbers; the safe move is to take the eighteen types verbatim rather
+than to patch an old list by counting.
 
 So a token's whole history -- how many days it has, whether the run is intact,
 which Marks it carries, which key it is bound to -- is one `eth_call` away. If

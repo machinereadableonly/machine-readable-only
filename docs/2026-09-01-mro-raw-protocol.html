@@ -841,12 +841,14 @@ database, so a legitimate rebind is never locked out.</p>
 parent must be whole (365 credited days) and not resting, bound to your key on
 chain, and your key gets one seed per full year since its first mint however
 many hearts it holds. Every gate is read before anything is written, and a
-refusal names the one that stopped it -- <code>parent-not-whole</code>, <code>no-seed-available</code>,
-<code>not-bound-to-caller</code>, or a chain gate. Asking costs nothing.</p>
+refusal names the one that stopped it -- <code>unknown-token</code>, <code>parent-not-whole</code>,
+<code>no-seed-available</code>, <code>not-bound-to-caller</code>, or a chain gate. Asking costs
+nothing.</p>
 <p>An accepted call answers:</p>
 <pre><code>{ &quot;ok&quot;: true, &quot;tokenId&quot;: 42, &quot;parentId&quot;: 1, &quot;to&quot;: &quot;0x...&quot;,
-  &quot;level&quot;: 1, &quot;generation&quot;: 1, &quot;txStatus&quot;: &quot;queued&quot;,
-  &quot;onChainBy&quot;: &quot;2026-09-08T00:05:00Z&quot; }
+  &quot;agentKeyId&quot;: &quot;your key id&quot;, &quot;level&quot;: 1, &quot;generation&quot;: 1,
+  &quot;txStatus&quot;: &quot;queued&quot;, &quot;onChainBy&quot;: &quot;2026-09-08T00:05:00Z&quot;,
+  &quot;note&quot;: &quot;Child 42 is reserved from parent 1 and costs nothing. ...&quot; }
 </code></pre>
 <p><strong>That is a reservation, and it is already the spend.</strong> The id is held and the
 child&#39;s artwork is being solved now; the chain write happens at the next 00:05
@@ -859,27 +861,43 @@ handed back.</p>
 <p>The child is a new token in the same collection, bound to the same key, starting
 at level 1, carrying <code>parent</code>, <code>generation</code> and an <strong><code>echo</code></strong>: the days its line
 had already run when it was seeded. The echo is sealed at the seed and never
-written again, and it is drawn as one dashed ring inside the frame.</p>
-<h3>7.2 What changed on 2026-09-07, and it is all additive</h3>
-<p>Nothing was removed and no field changed meaning. If your client already works
-it still works.</p>
+written again, and it is drawn as one dashed ring: the innermost of the token&#39;s
+rings, sitting just outside the day frame with a blank cell between the two.</p>
+<h3>7.2 What changed on 2026-09-07</h3>
+<p>Nothing was removed and no field changed meaning. <strong>But if you decode <code>viewOf</code>
+yourself, this DOES break your client, and it breaks it loudly rather than
+quietly.</strong> Update your type list before you read the new deployment. Everything
+else here is additive.</p>
 <ul>
-<li><strong><code>seed</code> used to answer <code>{ ok: false, reason: &quot;seed-not-available&quot; }</code> to every
+<li><p><strong><code>seed</code> used to answer <code>{ ok: false, reason: &quot;seed-not-available&quot; }</code> to every
 call</strong>, because the write path did not exist. It now returns the object above.
-That reason string is retired and nothing emits it.</li>
-<li><strong><code>viewOf</code> returns an eighteenth value, <code>echo</code>, inserted after <code>parent</code>.</strong>
-The function SELECTOR is unchanged (<code>0x0fa4edbd</code> -- it is derived from the
-<code>uint256</code> argument, not from the struct that comes back), so a stale decoder
-is not rejected: it decodes the same bytes against the wrong field list and
-gives you silently wrong answers from <code>resting</code> onwards. Use the type list in
-section 8.</li>
-<li><strong><code>tokenURI</code> metadata carries a new <code>Echo</code> attribute.</strong> Founding tokens report<ol start="0">
-<li></li>
-</ol>
+That reason string is retired and nothing emits it.</p>
 </li>
-<li><code>Renderer.svg</code> takes the struct as an ARGUMENT, so ITS selector did move,
+<li><p><strong><code>viewOf</code> returns an eighteenth value, <code>echo</code>, inserted after <code>parent</code>.</strong>
+The function SELECTOR is unchanged -- <code>0x0fa4edbd</code>, because a selector is
+derived from the arguments and <code>viewOf</code> takes a <code>uint256</code>, not from the struct
+that comes back. <strong>So the CALL still succeeds and the DECODE is what fails.</strong>
+It fails loudly, every time, and you will not get wrong values back: the old
+seventeen-type list raises a buffer-overrun or a type error instead.
+Measured against a real new-shape return: <code>cast</code> answers
+<code>type check failed for &quot;offset (usize)&quot;</code>; viem 2.56.0 answers
+<code>InvalidBytesBooleanError</code> for a child and <code>IntegerOutOfRangeError</code> for a
+founding token.</p>
+<p><strong>Why it cannot silently mis-read</strong>, since a field inserted mid-struct often
+can: <code>TokenView</code> carries <code>bytes code</code>, which makes it a DYNAMIC tuple, so its
+head ends in an OFFSET word pointing at the tail. Inserting a field shifts
+that offset word by one slot, and the old decoder reads <code>agentKeyId</code> where the
+offset belongs -- a 32-byte hash read as a length. No strict decoder survives
+that. Take the loud failure as the design working: use the type list in
+section 8 and you are correct again.</p>
+</li>
+<li><p><strong><code>tokenURI</code> metadata carries a new <code>Echo</code> attribute</strong>, which is 0 on every
+founding token.</p>
+</li>
+<li><p><code>Renderer.svg</code> takes the struct as an ARGUMENT, so ITS selector did move,
 <code>0xe6c54f9a</code> to <code>0x91321088</code>. That only matters if you call the renderer
-library directly.</li>
+library directly.</p>
+</li>
 </ul>
 <hr>
 <h2>8. Read the chain instead of asking us</h2>
@@ -893,10 +911,15 @@ cast call 0xe032054D54b407C52C49c40A423aC79031401C03 \
   &#39;viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))&#39; \
   1 --rpc-url https://sepolia.base.org
 </code></pre>
-<p>Token 1, read on 2026-09-07 against the pair above, shortened here in the two
-long fields. It is a minted token on day one of its life wearing one Mark. The
-<code>echo</code> value is shown at 0, which is what every founding token carries and what
-the id above returns: only a seeded child ever holds a non-zero one.</p>
+<p><strong>The eighteen-type signature above lands with the next deployment.</strong> The
+contract address printed above it still predates the Echo, so against THAT
+address this exact command fails to decode and the seventeen-type list is the
+one that works. Both this address and this sample are replaced when the new
+pair is deployed; the type list is already correct for it.</p>
+<p>Token 1, read on 2026-09-07 against the pair above and shown with the <code>echo</code>
+the redeploy inserts after <code>parent</code>, which is 0 for any founding token. The two
+long fields are shortened here. It is a minted token on day one of its life
+wearing one Mark, and only a seeded child ever carries a non-zero <code>echo</code>.</p>
 <pre><code>(1, 1, 1, 20702, 20702, 0, 0, 0, 0, false, false, 0, 0, 0, 2,
  0x4eaddc8c...bd0a77, 0xfe3390...c180, 20703)
 </code></pre>
@@ -924,8 +947,11 @@ written once at mint), <code>today</code>.</p>
 <p><strong>This list was wrong in two ways before 2026-09-07 and both are worth knowing
 if you cached an older copy of this page.</strong> It omitted <code>sunsetDay</code>, <code>fellRun</code>
 and <code>fellDay</code>, which have been in the struct since Plan 6, and it predates
-<code>echo</code> entirely. If your decoder was built from the old list it is off by five
-fields from <code>resting</code> onwards.</p>
+<code>echo</code> entirely -- four missing names in total. A decoder built from the old
+list diverges from <code>resting</code> onwards, by one position at <code>resting</code> and <code>sunset</code>
+and by four from <code>marks</code> on. Where it starts and how far it slips are two
+different numbers; the safe move is to take the eighteen types verbatim rather
+than to patch an old list by counting.</p>
 <p>So a token&#39;s whole history -- how many days it has, whether the run is intact,
 which Marks it carries, which key it is bound to -- is one <code>eth_call</code> away. If
 this service disappears, that call still works.</p>
