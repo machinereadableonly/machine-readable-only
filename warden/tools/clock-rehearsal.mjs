@@ -114,6 +114,13 @@ console.log("\n--- results ---");
 console.log("minted   :", summary.minted);
 console.log("credited :", summary.credited.map((e) => `${e.tokenId}@${e.day}`));
 console.log("dropped  :", summary.dropped.map((d) => `${d.entry.tokenId} (${d.reason})`));
+// THE SEED COUNTERS MATTER MOST HERE, because this is where the seed pass first
+// meets a real chain. A returned seed is an agent-year handed back and a stuck
+// one is an agent-year still held; a rehearsal that printed neither would show
+// a clean run while either had happened.
+console.log("seeded   :", summary.seeded);
+console.log("returned :", summary.droppedSeeds, "(seeds dropped, agent-year given back)");
+console.log("seedstuck:", summary.stuckSeeds, "(seeds held, needs a human)");
 console.log("aborted  :", summary.aborted);
 console.log("reconcile:", summary.reconciled && `${summary.reconciled.from}..${summary.reconciled.to} in ${summary.reconciled.pages} pages`, JSON.stringify(summary.reconciled?.applied));
 

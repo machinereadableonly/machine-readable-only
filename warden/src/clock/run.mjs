@@ -609,8 +609,12 @@ function isFinalMark(result) {
  *                         drop the agent simply asks again when the year turns.
  *   IdTooLarge            the child id is a stored value and 2**32 is a
  *                         constant; there is no later state in which they pass.
- *   BadCodeLength         the stored bitmap's length against CODE_BYTES, both
- *                         fixed. A re-solve writes a new row, not this one.
+ *   BadCodeLength         the stored bitmap's length against CODE_BYTES, and
+ *                         nothing can change either. This row's `qr` is frozen:
+ *                         pendingSeeds returns only `solveState = 'done'`, and
+ *                         no done row is ever re-solved -- nextPendingMint
+ *                         selects `'pending'` and requeueSolving only requeues
+ *                         `'solving'`.
  *   ERC721InvalidReceiver `to` is stored, and the child can be delivered
  *                         nowhere else. Dropping returns the year so the agent
  *                         can seed to an address that accepts ERC-721; keeping
@@ -621,10 +625,16 @@ function isFinalMark(result) {
  *                    OTHERWISE. `seed` refuses `p.level < 365`, and `level` is
  *                    only ever `+= 1` (:417) with no path anywhere that lowers
  *                    it. A parent one day short tonight is whole tomorrow.
+ *                    The one parent whose level IS frozen forever is a sealed
+ *                    one -- and `:816` checks `p.resting` BEFORE `:817` checks
+ *                    the level, so that parent answers Resting and is dropped
+ *                    above. There is no state in which waiting is futile.
  *   SupplyCap        `totalMinted >= supplyCap`, and supplyCap is an owner dial
  *   WalletCap        `mintedTo[to] >= walletCap`, likewise. The test is not
  *                    whether the AGENT can act on it, it is whether any later
  *                    run could succeed -- and raising a cap makes one succeed.
+ *                    There is always somebody who can: renounceOwnership()
+ *                    reverts at :266, so this contract can never be ownerless.
  *   TokenExists      has three answers and only the chain knows which; handled
  *                    above, where one of them is a drop and one is a write.
  *   NotWarden        run-level, and cleared by setWarden
