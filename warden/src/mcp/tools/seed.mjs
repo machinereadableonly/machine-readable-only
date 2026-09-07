@@ -34,15 +34,19 @@ export function makeSeedTool({ q, chain, today, alert = console.error }) {
       // and reaches the mirror only at the next Clock run, so between those two
       // moments `token.keyId` is stale BY DESIGN. Refusing on it alone locked a
       // legitimately rebound agent out of its own token for up to a day --
-      // and here that means refusing something it is about to PAY for.
+      // and here that means refusing the one thing this key earns all year.
+      // `seed` COSTS NOTHING, so the harm is not a wasted payment: it is a
+      // budget that cannot be re-earned until the next agent-year.
       //
       // The chain read is the same security control `checkin` performs, for the
       // same reason and with the same null rule: a null means the RPC could not
       // be reached, NOT that the caller is unbound, so refusing on null is the
       // safe direction. Admitting on it would turn an outage into an open door.
       //
-      // The gates below read the binding again on the paid route, because
-      // settlement takes seconds and a rebind can land inside that window.
+      // The gates below read the binding again through `bindingBlock`, and that
+      // is deliberate rather than duplicated work: this check can be skipped
+      // entirely when the mirror already agrees, and the gate set must hold
+      // whether it ran or not.
       if (parent.keyId !== ctx.keyId) {
         const onChain = await chain.boundKeyOf(parentId);
         if (!onChain || onChain !== keyIdToBytes32(ctx.keyId)) {

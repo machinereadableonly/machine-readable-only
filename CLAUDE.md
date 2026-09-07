@@ -262,8 +262,10 @@ return visits, so the artwork is the agent's own history of coming back.
   `rebind` had landed but not reconciled was refused for up to a day on the two
   paths where it spends money. It had been PINNED AS CORRECT by an existing
   test. `checkin` had asked the chain since 14.3; those two now do too.
-  Gap 34 is NOT a test gap and stays open: it wants tests on `seed`'s Clock
-  write path, which 4.H1 records as an unbuilt FEATURE.
+  Gap 34 was NOT a test gap and stayed open: it wanted tests on `seed`'s Clock
+  write path, which 4.H1 recorded as an unbuilt FEATURE. **It is CLOSED as of
+  2026-09-07** -- Plan 7 built that write path and `warden/test/clock-seed.test.mjs`
+  covers it.
   **THE LIVE WARDEN IS THE TREE** (`94d10cd`), verified through Cloudflare by
   serving `/t/2` with `nextWindowOpensAt`, `streakDeadline` and `children` --
   three fields the Phase 3 build did not have.
@@ -471,27 +473,41 @@ return visits, so the artwork is the agent's own history of coming back.
   worst case is the day BEFORE the heart seals (level 364), not the oldest
   token -- see docs/phase0-results.md. Do not quote the older 1,590,476 /
   10,066 pair; it predates the intrinsic size.
+  **RE-MEASURED 2026-09-07 FOR THE ECHO RING (Plan 7). BOTH WORST CASES ARE NOW
+  CHILDREN, which is new** -- a seeded child draws one dashed ring a founding
+  token never has, so it is dearer and larger than any founding token can be.
+  A reader who assumes a founding token is the worst case will mis-predict
+  every future measurement. Do not quote the Plan 6 pairs (1,750,744 / 10,651
+  and 1,680,468 / 11,550); they are superseded.
   THREE worst-case figures exist and ALL THREE are correct -- do not treat any
   of them as a stale version of another. They measure DIFFERENT TOKENS.
   (1) **1,633,224 gas / 8,924 bytes** is soak token 21 read over RPC, the number
-  for what a real provider returns. It PREDATES Plan 5 and nothing has
-  re-measured that path since the ladder was drawn.
-  (2) **1,750,744 gas / 10,651 bytes** is the GAS worst case in Foundry
-  (`GasBudget.t.sol` token 9: level 364, run 400, maximal Mark set). This is
-  `worstGas`, what the suite asserts and the one to compare across commits;
-  Plan 5 moved it from 1,585,616 / 9,223 on 2026-09-02, Plan 6 from
-  1,749,915 on 2026-09-05, and C4.10's absence rule added 319 on 2026-09-06.
-  Gas margin 249,256.
-  (3) **1,680,468 gas / 11,550 bytes** is the BYTE worst case in Foundry (token
-  7: level 3,650, the ring cap, run 400, maximal Mark set). This is `maxBytes`,
-  and the byte margin is 20,000 - 11,550 = **8,450**, not the 9,349 you get by
-  subtracting the gas worst case's byte count.
+  for what a real provider returns. It PREDATES Plan 5 AND Plan 7, and nothing
+  has re-measured that path since the ladder was drawn.
+  (2) **1,889,279 gas, and 11,682 bytes on that same token** is the GAS worst
+  case in Foundry: **a CHILD at day 364 wearing FOUR Marks** (four, not five --
+  pair 4 is shut below a whole heart, so five is not legal at day 364).
+  **Gas margin 110,721** of 2,000,000. That is
+  `test_theDearestTokenAloneInAFreshCall`, measured COLD and the headline
+  figure. `GAS_BAND` instead guards `worstGas`, the same token measured WARM
+  through the ladder at **1,884,779** -- about 4,500 lower because the shared
+  renderer's account and SLOAD are already warm. Both are correct; say which
+  one you mean.
+  (3) **12,546 bytes, and 1,811,979 gas on that same token** is the BYTE worst
+  case in Foundry: **a CHILD at the ring cap wearing FIVE Marks**. This is
+  `maxBytes`, and the byte margin is 20,000 - 12,546 = **7,454**, not the 8,318
+  you get by subtracting the gas worst case's byte count.
   THE DEAREST TOKEN AND THE LARGEST TOKEN ARE NOT THE SAME TOKEN --
-  `GasBudget.t.sol:119-120` says so and the test prints each headroom against
+  `GasBudget.t.sol` says so and the test prints each headroom against
   its own worst case. Pairing one token's gas with another's bytes is the exact
   mistake that was in this file until 2026-09-02. (1) differs from (2) and (3)
   because a bitmap encodes its own url, so every token has its own run
-  structure. "Every Mark at once" is no longer a state any token can reach:
+  structure.
+  For comparison, the FOUNDING-token worst cases, both unchanged by Plan 7:
+  **1,735,469 gas** (day 364, max Marks) and **11,582 bytes** (the ring cap,
+  max Marks). The echo ring itself costs **145,533 gas / 1,007 bytes**, and the
+  echo SLOAD 2,183 gas on every `tokenURI` including founding tokens.
+  "Every Mark at once" is no longer a state any token can reach:
   the five exclusive pairs cap a token at five Marks, and the maximal LEGAL set
   is Hush + Beat + the bought Iris in leaf + Vessel + Tint. Do not quote the
   retired seven-Mark figures.

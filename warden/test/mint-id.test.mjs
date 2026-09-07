@@ -65,9 +65,12 @@ test("a seed skips a taken id the same way a mint does", async () => {
   const tool = makeSeedTool({ q, chain: takenIdsChain([2, 3]), today: () => 100, supplyCap: 10 });
   const r = await tool.handler({ parentId: 1, to: "0x" + "2".repeat(40) }, { keyId: "k1" });
 
-  // Whether the seed is granted depends on the parent's state; what this pins
-  // is that IF an id is issued, it is not one the chain already holds.
-  if (r.ok) assert.equal(r.tokenId, 4, "1 is the parent, 2 and 3 are taken on chain");
+  // UNCONDITIONAL, and that is the point. This assertion sat behind `if (r.ok)`
+  // while `seed` refused every call, so it asserted NOTHING for as long as the
+  // tool was unbuilt and said nothing when the tool came back. A guard that
+  // goes quiet exactly when its subject stops working is not a guard.
+  assert.equal(r.ok, true, r.reason);
+  assert.equal(r.tokenId, 4, "1 is the parent, 2 and 3 are taken on chain");
 });
 
 // The stub is only useful while it has the same shape as the thing it stands

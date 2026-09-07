@@ -236,7 +236,11 @@ test("seeding is refused once the supply cap is reached", async () => {
 // "this gate does not".
 test("a refused seed writes no mirror row, whichever gate refused it", async () => {
   // A double whose only write method is a trap. If the tool reaches it, the
-  // test fails BY NAME rather than by a count that could be read as noise.
+  // throw is CAUGHT by seed's own try/catch around `insertSeed` and turned into
+  // `{ ok: false, reason: "internal" }`, so the failure surfaces on the reason
+  // assertion below rather than on the trap's own message. That is still a
+  // clean signal -- no gate in this table can legitimately answer `internal` --
+  // but do not read the message here expecting to see it in the output.
   const trap = (q) => ({
     ...q,
     insertSeed: () => { throw new Error("a refused seed must not reserve a child"); },

@@ -446,11 +446,15 @@ does:
 
 ## 7. The write path
 
-`seed` currently refuses every call with `seed-not-available`, honestly, because
-the write path was never built. `warden/src/mcp/tools/seed.mjs` documents why at
-length: an earlier version inserted a `tokens` row, wrote no `mints` row, and so
-created a child the mirror served forever and the chain never heard of -- while
-burning the key's one seed for that agent-year.
+**BUILT as of 2026-09-07. This section is the specification the build followed,
+kept in the present tense as the design record; what follows is now a
+description of code that exists, not of code to write.** `seed` used to refuse
+every call with `seed-not-available` -- honestly, because the write path was
+never built. An even earlier version inserted a `tokens` row, wrote no `mints`
+row, and so created a child the mirror served forever and the chain never heard
+of, while burning the key's one seed for that agent-year. That is the failure
+every rule below is shaped against. `seed-not-available` is retired and nothing
+emits it.
 
 ### 7.1 The mirror
 
@@ -501,8 +505,9 @@ Two things follow, and both need tests:
 
 ### 7.5 What this closes
 
-Test gap 34, which is currently open and correctly classified as an unbuilt
-FEATURE rather than a missing test.
+Test gap 34, which was open and correctly classified as an unbuilt FEATURE
+rather than a missing test. **It is CLOSED as of 2026-09-07**: the write path
+exists and `warden/test/clock-seed.test.mjs` covers it.
 
 ---
 
