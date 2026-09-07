@@ -65,11 +65,20 @@ export const TOOL_FACTORIES = [
 
 export const PAID_TOOLS = ["mint", "upgrade"];
 
+/// What this server calls itself in `initialize`, and the ONE definition of it.
+///
+/// It was a literal inside the handler until 2026-09-07, when the MCP discovery
+/// card started publishing the same two values to directories. A card that
+/// names a version the server does not report is a promise to a reader who
+/// cannot check it, so the card is pinned against THIS -- see
+/// warden/test/server-card.test.mjs -- rather than against a copy of it.
+export const SERVER_INFO = { name: "machine-readable-only", version: "1.0.0" };
+
 export function makeMcpHandler(deps) {
   const handler = createMcpHandler(
     (ctx) => {
       const server = new McpServer(
-        { name: "machine-readable-only", version: "1.0.0" },
+        SERVER_INFO,
         {
           // C1.6. An agent that has passed the door and listed tools has, by
           // construction, run a client without necessarily reading a word of

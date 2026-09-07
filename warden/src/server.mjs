@@ -212,6 +212,45 @@ export function createServer(config) {
         return res.end(body);
       }
 
+      // Case 1b-ii: the MCP discovery card. PUBLIC, for exactly the reason
+      // stated above: an agent that has not been admitted yet is who needs it.
+      //
+      // WHY THIS EXISTS. A sibling project measured 23 requests in 14 days for
+      // these paths and answered every one with a bare 404, so agents could not
+      // find its MCP server without a human naming the url first. Ours already
+      // answered better than that -- every 401 here carries the challenge, the
+      // mcp url and a docs url -- but a 401 is only useful to a client that
+      // reads the body of one, and a directory or crawler that indexes cards
+      // is exactly the reader that does not.
+      //
+      // FOUR PATHS, on purpose. SEP-2127 (MCP Server Cards) was still an OPEN
+      // pull request when this was written and the filename is still moving:
+      // the spec text says `.well-known/mcp/server-cards.json`, plural, while
+      // implementations in the same discussion use the singular. So serve the
+      // three paths agents were MEASURED asking for, plus the spec's plural,
+      // rather than betting on one and being right only by luck.
+      //
+      // This advertises a capability we HAVE. The rule it must not break is
+      // the inverse: /.well-known/x402 stays unanswered while the treasury is
+      // a placeholder, because a payment manifest would tell an agent it can
+      // pay us when it cannot.
+      if (
+        req.method === "GET" &&
+        (path === "/.well-known/mcp.json" ||
+          path === "/.well-known/mcp" ||
+          path === "/.well-known/mcp/server-card.json" ||
+          path === "/.well-known/mcp/server-cards.json")
+      ) {
+        if (typeof config.serverCard !== "string") {
+          return json(res, 404, { ok: false, reason: "not-found" });
+        }
+        res.writeHead(200, {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": Buffer.byteLength(config.serverCard),
+        });
+        return res.end(config.serverCard);
+      }
+
       // Case 1c: the two documents llms.txt names and tells agents are not
       // built yet. It says both "404", so they must actually 404 -- while
       // nginx served the static routes with try_files that was true for free,

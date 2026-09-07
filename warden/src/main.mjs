@@ -298,6 +298,14 @@ async function main() {
   );
   const llmsTxt = readFileSync(fileURLToPath(new URL("../public/llms.txt", import.meta.url)), "utf8");
   const doorHtml = readFileSync(fileURLToPath(new URL("../public/door.html", import.meta.url)), "utf8");
+  // The MCP discovery card, read from the REPOSITORY ROOT rather than copied
+  // into public/. It is the same document that would be published to the
+  // official MCP registry, and a second copy on disk is a second thing to keep
+  // in step -- the drift class this repository has already shipped once.
+  // Parsed here, at boot, so malformed JSON stops the Warden starting instead
+  // of reaching an agent as a broken card.
+  const serverCard = readFileSync(fileURLToPath(new URL("../../server.json", import.meta.url)), "utf8");
+  JSON.parse(serverCard);
 
   const mcp = makeMcpHandler({
     q,
@@ -344,6 +352,7 @@ async function main() {
     // through rather than serving them itself -- see the note in server.mjs.
     doorHtml,
     llmsTxt,
+    serverCard,
   });
 
   // Drain whatever is pending (including what requeueOrphans just restored)
