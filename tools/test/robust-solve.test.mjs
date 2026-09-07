@@ -12,7 +12,7 @@ import { heartMaskBytes } from "../heart-mask.mjs";
 import { renderSvg, ACHE, HUSH, BEAT, AURA, VESSEL } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 import { tokenBitmap, SIZE } from "../token-bitmap.mjs";
-import { gateSolve, GATE_SIZES, gateStates } from "../robust-solve.mjs";
+import { gateSolve, GATE_SIZES, gateStates, robustSolveFor, renderGateState } from "../robust-solve.mjs";
 
 const DOMAIN = "example.com";
 const want = () => unpackModules(heartMaskBytes(), SIZE);
@@ -70,5 +70,39 @@ test("the gate covers the sizes and states the failures were found at", () => {
   const labels = gateStates().map(s => s.label);
   for (const l of ["whole, 1 year", "whole, 10 years"]) {
     assert.ok(labels.includes(l), `gateStates lost "${l}", where a real failure lived`);
+  }
+  // The child states, protected the same way. No failure has been found at one
+  // yet -- they were added because the gate had never LOOKED at a child, which
+  // is a different reason from the two above and worth saying plainly.
+  for (const l of ["child, newborn", "child, whole 1y", "child, at ring cap"]) {
+    assert.ok(labels.includes(l), `gateStates lost "${l}", the only child in the gate`);
+  }
+});
+
+test("the child gate states actually draw an echo ring", () => {
+  // A GATE STATE THAT DOES NOT REACH THE CODE IT NAMES IS INERT, and an inert
+  // state passes exactly like a working one: every candidate would clear it,
+  // and the gate would read as stricter while testing nothing. `echo` has to
+  // travel from the state object through gateSolve's spread into renderSvg,
+  // and nothing else here would notice if it stopped.
+  //
+  // So render each child state twice -- once as it is, once with the echo
+  // removed -- and require the two to differ. That is the ring, and nothing
+  // else in these states can account for a difference.
+  const target = unpackModules(heartMaskBytes(), 37);
+  const solve = robustSolveFor(DOMAIN, 1);
+  const children = gateStates().filter(s => s.echo);
+  assert.equal(children.length, 3, "expected three child states in the gate");
+
+  for (const state of children) {
+    // THROUGH renderGateState, which is the function the gate itself calls.
+    // Re-implementing the spread here would test a copy, and a copy agrees
+    // with the bug.
+    const withEcho = renderGateState(solve, target, state);
+    const without = renderGateState(solve, target, { ...state, echo: 0 });
+    assert.notEqual(
+      withEcho, without,
+      `"${state.label}" renders identically with and without its echo -- the state is inert`
+    );
   }
 });
