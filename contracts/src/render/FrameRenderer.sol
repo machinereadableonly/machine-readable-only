@@ -267,6 +267,12 @@ library FrameRenderer {
     /// @param o   the ring's depth from the canvas edge, in cells
     /// @param len its full width, corners included
     function echoRingBars(uint256 o, uint256 len) internal pure returns (bytes memory d) {
+        // `len - 1` below is unsigned, so a zero length would underflow to
+        // 2**256-1 and loop forever. Unreachable today -- the only call site
+        // passes the literal 53 -- but a ring of under two cells has no edges
+        // to dot anyway, so refusing it makes this provably safe rather than
+        // safe by accident.
+        if (len < 2) return d;
         uint256 last = o + len - 1;
         // The two horizontal edges, corners included.
         for (uint256 i; i < len; i += 2) {

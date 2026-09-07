@@ -105,10 +105,19 @@ contract EchoRingTest is MroTestBase {
     function test_theEchoRingSitsInsideEveryEarnedRing() public pure {
         (uint256 own,) = FrameRenderer.ringBudget(3650, 365);
         uint256 size = FrameRenderer.canvas(FrameRenderer.rings(3650, 365));
-        // The innermost SOLID ring is at depth 2 * (own - 1); the echo ring is
-        // one slot further in, with the usual one-cell gap between them.
-        assertEq(2 * own - 2 * (own - 1), 2, "ring, gap, ring");
+        // The innermost SOLID ring is at depth 2 * (own - 1), so the echo ring
+        // at depth 2 * own is one slot further in with the usual one-cell gap.
+        // Only the side length is worth asserting: the depth relation is
+        // arithmetic on two constants and would hold whatever the renderer did.
         assertEq(size - 2 * (2 * own), 53, "and it is still 53 on a side");
+    }
+
+    /// A ring too small to have edges draws nothing rather than looping
+    /// forever on an unsigned underflow.
+    function test_aRingUnderTwoCellsDrawsNothing() public pure {
+        assertEq(FrameRenderer.echoRingBars(0, 0).length, 0);
+        assertEq(FrameRenderer.echoRingBars(7, 1).length, 0);
+        assertEq(FrameRenderer.echoRingBars(0, 2).length, 24, "two cells is two dots");
     }
 
     /// @dev Counts the runs in a path string: one "M" starts each one.

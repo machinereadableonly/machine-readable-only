@@ -16,7 +16,7 @@ import { keccak256, toBytes } from "viem";
 import { tokenBitmap, SIZE } from "./token-bitmap.mjs";
 import { heartMaskBytes } from "./heart-mask.mjs";
 import { unpackModules } from "./qart.mjs";
-import { tokenUri, HUSH, BEAT, IRIS_BOUGHT, VESSEL, AURA } from "./render-token.mjs";
+import { tokenUri, HUSH, BEAT, IRIS_BOUGHT, VESSEL, AURA, TINT } from "./render-token.mjs";
 
 /// The six life stages the differential test covers, plus the Marks case.
 export const STAGES = [
@@ -48,6 +48,30 @@ export const STAGES = [
                          generation: 1, parent: 7, echo: 365 }],
   ["a child at the cap", { level: 365 * 10, streak: 400, lastDay: 1000, today: 1000,
                          generation: 2, parent: 7, echo: 3650 }],
+  // A child wearing the maximal LEGAL Mark set. Fix round 1: without this,
+  // TWO of the six _blockOff call sites were never reached with a non-zero
+  // echo, because both are Mark-gated -- _eyes returns early with no Iris and
+  // _quiet returns "" with no Hush -- and every echo-bearing case above is
+  // Mark-free. A regression at either would have shipped green, and a
+  // misplaced Hush rect paints a 45-cell cream square over the code and kills
+  // the decode.
+  //
+  // FIVE Marks, which is the legal maximum: the exclusive pairs make six
+  // unreachable. Hush over Ache, Beat over Static, the BOUGHT Iris in leaf
+  // (shape 2), Vessel, and Tint in gold (ink 1) over Aura. The two non-default
+  // variants are deliberate -- they put the shape and ink bits at 16-23 and
+  // 24-31 to work rather than reading 0 by default.
+  //
+  // Level 365 * 5, not the cap, because the cap CANNOT discriminate: with ten
+  // or more own years ringBudget caps `own` at nine and rings(3650, 3650)
+  // equals rings(3650, 0), so passing 0 for echo yields the same offset. Five
+  // years gives 6 rings against 5. Its heart is also WHOLE, so its dim set is
+  // empty and the ghost element exists ONLY to carry the echo ring -- which
+  // pins the `if (ghostPath)` guard that replaced `if (dim.size)`.
+  ["a child with every drawn mark", { level: 365 * 5, streak: 400, lastDay: 1000,
+                         today: 1000, generation: 2, parent: 7, echo: 1825,
+                         marks: [HUSH, BEAT, IRIS_BOUGHT, VESSEL, TINT],
+                         irisVariant: 2, tintVariant: 1 }],
 ];
 
 export function uriFixtures(domain, tokenId) {

@@ -38,6 +38,11 @@ contract RendererTest is Test {
     uint256 constant ALL_MARKS = MarkRenderer.HUSH | MarkRenderer.BEAT
         | MarkRenderer.IRIS_BOUGHT | MarkRenderer.VESSEL | MarkRenderer.AURA;
 
+    /// The same five surfaces with Tint taken instead of Aura -- the other side
+    /// of pair five, and the side that carries an ink choice.
+    uint256 constant ALL_MARKS_TINTED = MarkRenderer.HUSH | MarkRenderer.BEAT
+        | MarkRenderer.IRIS_BOUGHT | MarkRenderer.VESSEL | MarkRenderer.TINT;
+
     function setUp() public {
         r = new Renderer();
     }
@@ -147,6 +152,34 @@ contract RendererTest is Test {
         v.echo = 3650;
         _diff("a child at the cap", v, 11682,
             0x72229cad844cf98b237b4b81257b2c6b8aa6352962d4949a3db76a039720431e);
+    }
+
+    /// A child wearing the maximal LEGAL Mark set.
+    ///
+    /// Fix round 1. The other two child cases are Mark-free, and TWO of the six
+    /// `_blockOff` call sites are Mark-gated: `_eyes` returns early when no
+    /// Iris is worn, and `_quiet` returns "" when Hush is not. So neither was
+    /// ever reached with a non-zero echo, and a regression at either would have
+    /// shipped green. A misplaced Hush rect paints a 45-cell cream square over
+    /// the code and kills the decode.
+    ///
+    /// Five Marks is the legal maximum -- the exclusive pairs make six
+    /// unreachable. Level 365 * 5 rather than the cap, because the cap cannot
+    /// discriminate: `rings(3650, 3650)` equals `rings(3650, 0)`, so a broken
+    /// site would compute the same offset either way. At five years it is 6
+    /// rings against 5. The heart is also whole, so the ghost element exists
+    /// ONLY to carry the echo ring.
+    function test_aChildWithEveryDrawnMarkMatchesTheJavascriptReference() public view {
+        TokenView memory v = _view(365 * 5, 400, 1000, 1000);
+        v.generation = 2;
+        v.parent = 7;
+        v.echo = 365 * 5;
+        // The bought Iris in leaf (shape 2) and Tint in gold (ink 1). Both
+        // non-default on purpose, so the shape and ink bits are read rather
+        // than defaulting to 0. Mirrors the packing applyMark writes.
+        v.marks = ALL_MARKS_TINTED | (uint256(2) << 16) | (uint256(1) << 24);
+        _diff("a child with every drawn mark", v, 13148,
+            0xe4e19c2272219717fd06af6a57dddf9c5184788cdba7cfb8e36c5b182ad09ddd);
     }
 
     function test_theEyesAreDrawnLastOverTheNoise() public view {
