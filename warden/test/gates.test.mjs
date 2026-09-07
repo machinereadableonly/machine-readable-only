@@ -112,6 +112,13 @@ test("a tool factory refuses to build without a chain reader", () => {
   const { supplyRoom, ...missingSupply } = openChain();
   assert.throws(() => makeMintTool({ q: {}, chain: missingSupply, paid: settleNow, today: () => 1 }),
     /requires a chain reader with supplyRoom\(\)/);
+  // And the same for the newest one again, `seedsAvailable`. `seed` reads its
+  // agent-year budget from the chain since 2026-09-07, and a reader without it
+  // would throw at the first seed rather than at build time -- on the one call
+  // an agent gets once a year.
+  const { seedsAvailable, ...missingSeeds } = openChain();
+  assert.throws(() => makeSeedTool({ q: {}, chain: missingSeeds, today: () => 1 }),
+    /requires a chain reader with seedsAvailable\(\)/);
 });
 
 // THE DOUBLE MUST CARRY THE REAL THING'S SURFACE. A stub that implements only

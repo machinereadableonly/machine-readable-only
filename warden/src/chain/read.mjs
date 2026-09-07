@@ -53,6 +53,7 @@ const MINTED_TO = "0x118033bc"; // mintedTo(address) -> uint32
 const WALLET_CAP = "0x58950c22"; // walletCap() -> uint32
 const TOTAL_MINTED = "0xa2309ff8"; // totalMinted() -> uint32
 const SUPPLY_CAP = "0x8f770ad0"; // supplyCap() -> uint32
+const SEEDS_AVAILABLE = "0xb3451815"; // seedsAvailable(uint256) -> uint32
 const IS_SUNSET = "0x90b8b0c8"; // isSunset() -> bool
 const IS_PAUSED = "0x5c975abb"; // paused() -> bool
 const WORD_HEX_CHARS = 64; // 32 bytes, as hex
@@ -343,6 +344,41 @@ export function makeChainReader({
       const cap = asNumber(singleWord(capHex));
       if (minted === null || cap === null) return null;
       return Math.max(0, cap - minted);
+    },
+
+    /**
+     * How many seeds the parent's KEY still has, straight from the contract.
+     *
+     * Returns the count (0 when none), or null when the chain could not be
+     * read. Null is "could not ask" and the caller refuses on it, like every
+     * other read here.
+     *
+     * WHY THIS IS NOT COUNTABLE FROM THE MIRROR, which is what it used to be.
+     * The budget was computed as `floor((today - firstMintDay(keyId)) / 365)`
+     * minus `seedsSpent(keyId)`, and both of those derive from `tokens.keyId`
+     * -- a column `reconcile` REWRITES on every `Rebound` event. The contract
+     * keeps tenure in per-key mappings (`_firstMintDay`, `_seedsSpent`) that
+     * `rebind` deliberately never touches, so the two disagree in three
+     * measured ways:
+     *
+     *   1. A child rebound AWAY stopped being counted, so the mirror handed out
+     *      a second seed for the year. The chain reverts NoSeedAvailable, the
+     *      row is dropped a day later, and the agent has spent an id, a bitmap
+     *      solve and a success message that said the seed was used.
+     *   2. A child rebound IN charged a key that had never seeded, refusing it
+     *      a seed the chain WOULD grant -- with no recovery path at all.
+     *   3. `firstMintDay` answers 0 for a key with no rows, which is about 56
+     *      years of budget where the contract gives none.
+     *
+     * The one thing the chain cannot know is a seed this Warden has RESERVED
+     * and not yet written; that subtraction is the mirror's job, and it is done
+     * in gates.mjs seedBudgetBlock() rather than here, because this file only
+     * ever reports what the chain says.
+     */
+    async seedsAvailable(parentId) {
+      const hex = await ethCall(SEEDS_AVAILABLE + BigInt(parentId).toString(16).padStart(64, "0"));
+      if (hex === null) return null;
+      return asNumber(singleWord(hex));
     },
   };
 }

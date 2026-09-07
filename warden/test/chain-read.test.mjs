@@ -249,3 +249,28 @@ test("an HTTP error and a JSON-RPC error are transport failures, not skew", asyn
     assert.match(lines[0], /transport/);
   }
 });
+
+// --- the selectors, pinned against the generated ABI ------------------------
+
+// EVERY SELECTOR IN read.mjs IS A HAND-WRITTEN CONSTANT, and a wrong one does
+// not throw: `eth_call` to a selector the contract does not have returns empty
+// data, which decodes to null, which every gate here reads as "could not ask"
+// and refuses on. So a typo looks exactly like a permanent RPC outage -- the
+// same shape of silence the index decoder had. `seedsAvailable` was added on
+// 2026-09-07 and is the gate that answers once a year, so it is the worst one
+// to get wrong and the least likely to be noticed.
+//
+// The source is parsed rather than the constants imported, because they are
+// module-private and exporting them for a test would be a second copy.
+test("every selector in read.mjs is the one its own comment names", async () => {
+  const { toFunctionSelector } = await import("viem");
+  const source = readFileSync(fileURLToPath(new URL("../src/chain/read.mjs", import.meta.url)), "utf8");
+  const found = [...source.matchAll(/^const [A-Z_]+ = "(0x[0-9a-f]{8})"; \/\/ (\w+\([^)]*\))/gm)];
+  assert.equal(found.length, 8, "a selector was added or the comment shape changed");
+
+  const abiFns = new Set(MRO_ABI.filter((e) => e.type === "function").map((e) => e.name));
+  for (const [, selector, signature] of found) {
+    assert.equal(selector, toFunctionSelector(signature), `${signature} has the wrong selector`);
+    assert.ok(abiFns.has(signature.slice(0, signature.indexOf("("))), `${signature} is not in the contract's ABI`);
+  }
+});

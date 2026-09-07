@@ -1,9 +1,14 @@
 // One Clock run. Everything the piece owes the chain for a closed day.
 //
-// ORDER MATTERS AND IS NOT ARBITRARY: mints, then check-ins, then Marks. A
-// check-in for a token that has not been minted reverts NoSuchToken, and a Mark
-// on it reverts the same way. Writing them in this order means a token minted
-// this morning can be credited in the same run.
+// ORDER MATTERS AND IS NOT ARBITRARY: mints, then SEEDS, then check-ins, then
+// Marks. A check-in for a token that has not been minted reverts NoSuchToken,
+// and a Mark on it reverts the same way, so both creation routes go first and a
+// token created this morning can be credited in the same run. Seeds sit beside
+// mints rather than after the check-ins because they are the other way a token
+// comes into existence, not a thing done to one that already exists.
+//
+// FOUR WRITE PASSES, not the three this header claimed until 2026-09-07: the
+// seed pass (`3b`) was added with lineage and nothing here said so.
 //
 // A RUN MUST BE SAFE TO EXECUTE TWICE. Nothing here decides what to do from a
 // clock or a counter; every write is chosen by reading rows the previous run
@@ -257,9 +262,11 @@ export async function runClock({
   //     rule the OPPOSITE of a mint's, deliberately. A mint that cannot land is
   //     left alone for a human BECAUSE the agent's money is in it. A seed that
   //     can never land must be DROPPED, because the mirror row IS the
-  //     reservation -- seedsSpent counts `parentId IS NOT NULL` -- so leaving it
-  //     holds a once-a-year budget that the chain never agreed was spent, and
-  //     the agent cannot earn that year again.
+  //     reservation -- `unwrittenSeeds` counts `parentId IS NOT NULL AND
+  //     status != 'written'` and `seed` subtracts that from the chain's own
+  //     `seedsAvailable` -- so leaving it holds a once-a-year budget that the
+  //     chain never agreed was spent, and the agent cannot earn that year
+  //     again.
   //
   //     A child whose bitmap never solved is the one case only a human can
   //     judge. Same shape as the stuck mints above, and deliberately a
@@ -580,9 +587,11 @@ function isFinalMark(result) {
  * way. `receipt-unknown` means the transaction was BROADCAST and its receipt
  * never came back; it may be on chain right now. Deleting the mirror's only
  * record of that child would leave the chain holding a token this service can
- * never learn about again -- reconcile only LOGS `Seeded` -- while the chain's
- * `_seedsSpent` stays incremented, so the mirror hands out a year the chain has
- * already taken.
+ * never learn about again -- reconcile only LOGS `Seeded` -- so /t/<id> would go
+ * on 404ing for a token that exists. It no longer over-issues the year as well:
+ * since 2026-09-07 `seed` reads its budget from the chain's `seedsAvailable`,
+ * which counts the `_seedsSpent` that landed, so the chain refuses a second
+ * seed whatever this database has forgotten. The lost token is harm enough.
  *
  * THAT IS WHY ONLY A NAMED REVERT CAN BE PERMANENT. `reverted-on-simulate` is
  * the only shape write.mjs decodes a name from, and it is raised BEFORE
