@@ -90,8 +90,10 @@ export function migrate(db) {
   // ONE PAID MINT PER KEY, which is narrower than what this guard used to say
   // and is what it always meant.
   //
-  // schema.sql declares `mints_key` over `keyId` alone. Its purpose is stated
-  // there: two settlements from the same key can both pass the pre-payment
+  // schema.sql USED TO declare `mints_key` over `keyId` alone -- past tense,
+  // and it matters, because the paragraph forty lines below says it declares no
+  // index on `mints` at all now and both cannot be true. Its purpose was:
+  // two settlements from the same key can both pass the pre-payment
   // hasMinted check, so the index is what actually stops a second token being
   // recorded. A FREE SEED WAS NEVER WHAT IT DEFENDED AGAINST -- a seeded child
   // is bound to its parent's key by design, so it carries a key that has

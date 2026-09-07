@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Machine Readable Only -- design</title>
+  <title>Machine Readable Only -- Design Spec</title>
   <style>
     :root {
       --bg: #fafaf7;
@@ -831,14 +831,13 @@ the filled cells&#39; opacity. OpenSea rasterises <code>image</code> SVGs to PNG
 animation must go here.</li>
 <li><code>attributes</code>: <code>level</code>, <code>streak</code>, <code>heart</code>, <code>whole</code>, <code>years</code>, <code>lastDay</code>,
 <code>mintDay</code>, <code>marks</code> (names), <code>agentKeyId</code>, <code>generation</code>, <code>parent</code>,
-<code>children</code>, <code>resting</code>.</li>
-<li><strong>Resting tokens</strong> render with colour locked (see effective streak, section<ol start="7">
-<li>and the name gains &quot;(At Rest)&quot;. <strong>Seeded children and parents</strong> carry
-their lineage in attributes now; their <em>visual</em> treatment is a deliberate
-open decision (section 10) and the Renderer is swappable precisely so it
-can be settled later without touching token state.</li>
-</ol>
-</li>
+<code>children</code>, <code>echo</code>, <code>resting</code>.</li>
+<li><strong>Resting tokens</strong> render with colour locked
+(see effective streak, section 7) and the name gains &quot;(At Rest)&quot;.
+<strong>Seeded children and parents</strong> carry their lineage in attributes now;
+their <em>visual</em> treatment is a deliberate open decision (section 10) and the
+Renderer is swappable precisely so it can be settled later without touching
+token state.</li>
 </ul>
 <h3>Rendering risks, stated plainly, and the Phase 0 spike</h3>
 <p>On-chain graphics is the part of this design most likely to be easy on paper

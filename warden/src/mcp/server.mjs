@@ -48,13 +48,22 @@ function isToolResult(value) {
  * PAID is which tools go through the payment gateway. Named here rather than
  * inferred, because "does this tool take money" is a fact about the piece and
  * not a property a test should guess from a handler's shape.
+ *
+ * `seed` WAS IN THAT LIST AND IS NOT PAID. It never took `deps.paid`, never
+ * wrapped a handler in the gateway and never asked for a cent: a seed is the
+ * free thing a key earns by coming back for a year, which is the whole point of
+ * it. The entry was wrong from the day the tool was written and it made the
+ * one constant that states this fact state the opposite. Removing it moves
+ * `seed` into the free half of tool-convention.test.mjs, where the convention
+ * it must keep -- answering with a boolean `ok` on every path -- is checked the
+ * same way it is for every other free tool.
  */
 export const TOOL_FACTORIES = [
   makeChallengeTool, makeStatusTool, makeLadderTool, makeCheckinTool,
   makeRebindTool, makeRestTool, makeSeedTool, makeMintTool, makeUpgradeTool,
 ];
 
-export const PAID_TOOLS = ["mint", "upgrade", "seed"];
+export const PAID_TOOLS = ["mint", "upgrade"];
 
 export function makeMcpHandler(deps) {
   const handler = createMcpHandler(

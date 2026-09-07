@@ -822,7 +822,10 @@ else here is additive.
   derived from the arguments and `viewOf` takes a `uint256`, not from the struct
   that comes back. **So the CALL still succeeds and the DECODE is what fails.**
   It fails loudly, every time, and you will not get wrong values back: the old
-  seventeen-type list raises a buffer-overrun or a type error instead.
+  seventeen-type list raises a TYPE ERROR instead. Not a buffer overrun -- the
+  return is a byte longer than the old list expects, never shorter, so nothing
+  reads past the end; what fails is the value it finds where it expected
+  something else.
   Measured against a real new-shape return: `cast` answers
   `type check failed for "offset (usize)"`; viem 2.56.0 answers
   `InvalidBytesBooleanError` for a child and `IntegerOutOfRangeError` for a
@@ -832,7 +835,8 @@ else here is additive.
   can: `TokenView` carries `bytes code`, which makes it a DYNAMIC tuple, so its
   head ends in an OFFSET word pointing at the tail. Inserting a field shifts
   that offset word by one slot, and the old decoder reads `agentKeyId` where the
-  offset belongs -- a 32-byte hash read as a length. No strict decoder survives
+  offset belongs -- a 32-byte hash read as an OFFSET, which is what `cast`'s own
+  `type check failed for "offset (usize)"` is saying. No strict decoder survives
   that. Take the loud failure as the design working: use the type list in
   section 8 and you are correct again.
 - **`tokenURI` metadata carries a new `Echo` attribute**, which is 0 on every
