@@ -312,6 +312,19 @@ return visits, so the artwork is the agent's own history of coming back.
   real `main.mjs` against a COPY of production state, which is the only thing
   that can catch a bad boot check.
   **Suites: contracts 335, warden 568, tools 76, client 40** (2026-09-06).
+  **PLAN 7 (lineage / the Echo) IS BUILT, REVIEWED AND PUSHED as of 2026-09-07**
+  -- `5707b17..147ec26`, 30 commits, main level with origin. A token that has run
+  a full year seeds a child, free; the child starts at level 1 and carries the
+  line's tenure as a sealed number, the Echo, drawn as ONE DASHED innermost ring.
+  Suites: **contracts 362, warden 652, tools 86, client 40.**
+  **NOTHING IS DEPLOYED, AND YOU MUST NOT `pm2 restart mro-warden`.** A boot
+  probe in `warden/src/chain/preflight.mjs` decodes one real `viewOf` and REFUSES
+  TO START on a mismatch, and this tree cannot decode the deployed
+  `0xe032054D...`. The restart and the redeploy are ONE operation. Until then the
+  live site still tells agents `seed` is "Not built yet", which is false.
+  The deploy is prepared and rehearsed, not broadcast: `deploy-plan7.sh`, then
+  `adopt-deployment.sh`, then `check-deployed-abi.mjs`. Read the
+  plan7-lineage-echo and the-index-that-blocked-lineage memories first.
 - **Secrets:** `contracts/.env` only, chmod 600, never committed -- the operator edits
   it via WinSCP. Claude never reads it. `.env.example` holds the schema.
 - **Environment:** VPS
