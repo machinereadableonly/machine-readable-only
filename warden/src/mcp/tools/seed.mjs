@@ -1,6 +1,8 @@
 // Lineage. One seed per agent-year, free, and the child is bound to the caller.
 import * as z from "zod";
-import { chainBlock, tokenBlock, walletCapBlock, requireChain, bindingBlock, supplyBlock } from "../gates.mjs";
+import {
+  chainBlock, tokenBlock, walletCapBlock, requireChain, bindingBlock, supplyBlock, seedBudgetBlock,
+} from "../gates.mjs";
 import { keyIdToBytes32 } from "../keyId.mjs";
 import { onChainBy } from "../nextSteps.mjs";
 
@@ -55,11 +57,22 @@ export function makeSeedTool({ q, chain, today, alert = console.error }) {
       }
       if (parent.level < 365) return { ok: false, reason: "parent-not-whole" };
 
-      // One seed per completed agent-year. seedsSpent is counted from the rows
-      // this key has already seeded, so it cannot drift from what was granted.
-      const years = Math.floor((today() - q.firstMintDay(ctx.keyId)) / 365);
-      if (q.seedsSpent(ctx.keyId) >= years) return { ok: false, reason: "no-seed-available" };
-
+      // THE BUDGET WAS THE LAST GATE HERE ANSWERED FROM THE MIRROR, and it was
+      // answered off the one column a rebind rewrites. It used to read
+      // `floor((today() - q.firstMintDay(keyId)) / 365)` against
+      // `q.seedsSpent(keyId)`; both derive from `tokens.keyId`, which
+      // reconcile.mjs overwrites on every `Rebound`, while the contract keeps
+      // tenure in per-key mappings `rebind` deliberately never touches. It is
+      // read from the chain now, like every other gate here -- see
+      // gates.mjs seedBudgetBlock() and chain/read.mjs seedsAvailable() for the
+      // three measured divergences and what the mirror still contributes.
+      //
+      // IT MOVED INTO THE CHAIN BLOCK BELOW rather than staying up here with
+      // the local refusals, because it is now an RPC call. The ordering rule
+      // this file states above is "every LOCAL refusal first"; a chain read
+      // that stayed in front of the free ones would spend a round trip on a
+      // call `unknown-token` or `parent-not-whole` was always going to refuse.
+      //
       // WAS `parent.status === "resting"`, WHICH COULD NEVER BE TRUE.
       // tokens.status holds only 'queued' | 'written' -- the write-pipeline
       // state -- so this read like a working gate and was dead code. seed
@@ -79,10 +92,18 @@ export function makeSeedTool({ q, chain, today, alert = console.error }) {
       // disagree with the chain: the cap is an owner dial, and the row count is
       // a fact about this database. It is read from the chain now, like every
       // other gate here.
+      //
+      // THE BUDGET GATE SITS AFTER THE BINDING ONE, and the order is load
+      // bearing rather than tidy. `seedsAvailable(parentId)` is keyed on the
+      // chain's key for the parent, and the reservations subtracted from it are
+      // keyed on the CALLER's key; those are the same key only once
+      // bindingBlock has said so. Ahead of it the two halves could describe
+      // different agents.
       const blocked =
         (await chainBlock(chain)) ??
         (await tokenBlock(chain, parentId, q)) ??
         (await bindingBlock(chain, parentId, ctx.keyId, keyIdToBytes32)) ??
+        (await seedBudgetBlock(chain, q, parentId, ctx.keyId)) ??
         (await walletCapBlock(chain, to)) ??
         (await supplyBlock(chain));
       if (blocked) return { ok: false, reason: blocked };
@@ -99,13 +120,13 @@ export function makeSeedTool({ q, chain, today, alert = console.error }) {
       const tokenId = await chain.freeIdFrom(q.nextTokenId());
       if (tokenId === null) return { ok: false, reason: "chain-unavailable" };
 
-      // THE `tokens` ROW IS THE RESERVATION. `seedsSpent` counts
-      // `parentId IS NOT NULL`, so the key's seed for this agent-year is spent
-      // the instant this returns -- there is no second counter to increment,
-      // and the gate above therefore sees a promise a Clock run has not yet
-      // made good. That is the whole point: the window between reserving and
-      // writing is up to a day wide, and a guard reading only committed state
-      // would let two seeds out inside it.
+      // THE `tokens` ROW IS THE RESERVATION. `unwrittenSeeds` counts
+      // `parentId IS NOT NULL AND status != 'written'`, so the key's seed for
+      // this agent-year is spent the instant this returns -- there is no second
+      // counter to increment, and the gate above therefore subtracts a promise
+      // a Clock run has not yet made good. That is the whole point: the window
+      // between reserving and writing is up to a day wide, and a guard reading
+      // only the chain's committed state would let two seeds out inside it.
       //
       // `insertSeed` OWNS ITS TRANSACTION and writes both rows in it. Do not
       // wrap this in `q.transact`: node:sqlite has no nested transactions and

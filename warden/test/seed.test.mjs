@@ -4,7 +4,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeSeedTool } from "../src/mcp/tools/seed.mjs";
 import { onChainBy } from "../src/mcp/nextSteps.mjs";
-import { openChain, restingChain, supplyFullChain, takenIdsChain } from "./chain-stub.mjs";
+import { openChain, restingChain, supplyFullChain, takenIdsChain, noSeedChain } from "./chain-stub.mjs";
 
 /// Every test gets its own in-memory database, so no test can see another's rows.
 function fresh() {
@@ -15,6 +15,11 @@ function fresh() {
 /// insertToken has no level/status columns in its argument list -- both are
 /// set directly on the row, the same way a reconcile from the Clock would
 /// leave a token in an arbitrary state.
+/// A solved bitmap, in the shape completeSolve stores: 172 bytes as hex. Only
+/// its length matters here -- a child with no solved artwork is never offered
+/// to the Clock, so it could never reach `written`.
+const QR = "ab".repeat(172);
+
 function setLevelAndStatus(db, tokenId, level, status) {
   db.exec(`UPDATE tokens SET level = ${level}, status = '${status}' WHERE tokenId = ${tokenId}`);
 }
@@ -76,16 +81,151 @@ test("seeding from a parent below level 365 is refused", async () => {
   assert.equal(r.reason, "parent-not-whole");
 });
 
+// THE CHAIN SAYS SO, not this database. The budget used to be computed here
+// from `firstMintDay` and `seedsSpent`, both of which read `tokens.keyId` -- the
+// column reconcile.mjs REWRITES on every `Rebound` -- while the contract keeps
+// tenure in per-key mappings `rebind` never touches. The three ways those two
+// diverged are each pinned below.
 test("seeding with no unspent seed for this agent-year is refused", async () => {
   const { db, q } = fresh();
-  // mintDay equals today: zero elapsed time, so zero completed agent-years
-  // and zero seeds granted, even though the parent itself is whole.
-  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 1000 });
+  // The mirror would say this key has a seed: it minted on day 0, today is
+  // 1000, so `floor(1000/365)` is two years of budget and nothing spent. The
+  // CHAIN says zero, and the chain is what reverts.
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
   setLevelAndStatus(db, 1, 365, "queued");
-  const tool = makeSeedTool({ q, chain: openChain(), today: () => 1000, supplyCap: 10_000 });
+  assert.ok(Math.floor((1000 - q.firstMintDay("k1")) / 365) > q.seedsSpent("k1"),
+    "the mirror alone would have admitted this call");
+  const tool = makeSeedTool({ q, chain: noSeedChain(), today: () => 1000, supplyCap: 10_000 });
   const r = await tool.handler({ parentId: 1, to: "0x1111111111111111111111111111111111111111" }, { keyId: "k1" });
   assert.equal(r.ok, false);
   assert.equal(r.reason, "no-seed-available");
+  assert.equal(q.tokenCount(), 1, "and nothing was reserved");
+});
+
+// DIVERGENCE 1. A child rebound AWAY from this key stops being counted by
+// `seedsSpent`, because reconcile rewrites `tokens.keyId` and the count is
+// `keyId = ? AND parentId IS NOT NULL`. The contract's `_seedsSpent` never
+// decrements, so the mirror handed out a SECOND seed for the year: the chain
+// then reverts NoSeedAvailable, the Clock drops the row a day later, and the
+// agent has spent an id and a bitmap solve on a success message that told it
+// the seed was used.
+test("a child rebound away does not hand its key a second seed", async () => {
+  const { db, q } = fresh();
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
+  setLevelAndStatus(db, 1, 365, "queued");
+  // The seed was spent and the child written; then its owner rebound it to
+  // another key and the Clock reconciled that, exactly as reconcile.mjs does.
+  q.insertSeed({ childId: 2, parentId: 1, toAddress: "0xB", keyId: "k1", lastDay: 365, mintDay: 365 });
+  q.completeSolve(2, QR);
+  q.markSeedWritten(2);
+  db.exec("UPDATE tokens SET keyId = 'k2' WHERE tokenId = 2");
+  assert.equal(q.seedsSpent("k1"), 0, "the mirror has forgotten the spend -- this is the defect");
+
+  const tool = makeSeedTool({ q, chain: noSeedChain(), today: () => 400 });
+  const r = await tool.handler({ parentId: 1, to: "0x2222222222222222222222222222222222222222" }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "no-seed-available", "the chain still counts the spend, and it is the authority");
+  assert.equal(q.tokenCount(), 2, "the parent and the rebound child; no third row");
+});
+
+// DIVERGENCE 2. A child rebound IN charges a key that never seeded anything.
+// The mirror counts the inherited row against the new key and refuses a seed
+// the chain WOULD grant -- and a seed is earned once a year, so there is no
+// recovery path at all.
+test("a child rebound in does not charge a key that never seeded", async () => {
+  const { db, q } = fresh();
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
+  setLevelAndStatus(db, 1, 365, "queued");
+  // A child of somebody else's line, written on chain and then rebound to k1.
+  q.insertToken({ tokenId: 9, keyId: "other", owner: "0xC", lastDay: 0, mintDay: 0 });
+  q.insertSeed({ childId: 10, parentId: 9, toAddress: "0xC", keyId: "other", lastDay: 0, mintDay: 0 });
+  q.completeSolve(10, QR);
+  q.markSeedWritten(10);
+  db.exec("UPDATE tokens SET keyId = 'k1' WHERE tokenId = 10");
+  assert.equal(q.seedsSpent("k1"), 1, "the mirror charges k1 for a seed it never spent -- this is the defect");
+
+  const tool = makeSeedTool({ q, chain: openChain(), today: () => 400 });
+  const r = await tool.handler({ parentId: 1, to: "0x2222222222222222222222222222222222222222" }, { keyId: "k1" });
+  assert.equal(r.ok, true, r.reason);
+  assert.equal(q.getToken(r.tokenId).parentId, 1);
+});
+
+// DIVERGENCE 3. `firstMintDay` answers 0 for a key with no rows at all, so the
+// old arithmetic read `floor(today / 365)` -- about 56 years of budget by the
+// time `today` is a real day number -- where the contract grants none, because
+// `seedsAvailable` returns 0 outright for a key that has never minted.
+test("a key with no rows in this mirror is granted nothing", async () => {
+  const { db, q } = fresh();
+  // The parent is bound to k1 ON CHAIN and this mirror has never seen k1 --
+  // a fresh database beside a contract that already holds tokens, which is
+  // exactly the state `freeIdFrom` exists for.
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
+  setLevelAndStatus(db, 1, 365, "queued");
+  db.exec("UPDATE tokens SET keyId = 'stale' WHERE tokenId = 1");
+  assert.equal(q.firstMintDay("k1"), 0, "no rows, so the old arithmetic saw day zero -- this is the defect");
+
+  const tool = makeSeedTool({ q, chain: noSeedChain(), today: () => 20_000 });
+  const r = await tool.handler({ parentId: 1, to: "0x2222222222222222222222222222222222222222" }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "no-seed-available");
+});
+
+// THE NULL RULE, ON THIS GATE. A chain that cannot answer must refuse: the seed
+// is the one budget an agent earns once a year, so admitting on an outage would
+// spend it on a call the contract was never asked about.
+test("a chain that cannot say how many seeds are left refuses rather than admits", async () => {
+  const { db, q } = fresh();
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
+  setLevelAndStatus(db, 1, 365, "queued");
+  const tool = makeSeedTool({
+    q, chain: openChain({ seedsAvailable: async () => null }), today: () => 400,
+  });
+  const r = await tool.handler({ parentId: 1, to: "0x2222222222222222222222222222222222222222" }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "chain-unavailable");
+  assert.equal(q.tokenCount(), 1, "and a refusal on an outage burns no agent-year");
+});
+
+// THE MIRROR'S ONE REMAINING TERM. The chain cannot see a seed reserved here
+// and not yet written, so it goes on answering "one left" for the whole day a
+// reservation waits for the Clock. Subtracting the reservation is what stops
+// two seeds leaving in that window.
+test("a reservation the chain cannot see yet is still subtracted", async () => {
+  const { db, q } = fresh();
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
+  setLevelAndStatus(db, 1, 365, "queued");
+  const to = "0x2222222222222222222222222222222222222222";
+  // The chain says one seed is left, on EVERY call: it has not been told about
+  // the first child, and will not be until 00:05 UTC.
+  const tool = makeSeedTool({ q, chain: openChain(), today: () => 400 });
+
+  const first = await tool.handler({ parentId: 1, to }, { keyId: "k1" });
+  assert.equal(first.ok, true, first.reason);
+  const second = await tool.handler({ parentId: 1, to }, { keyId: "k1" });
+  assert.equal(second.ok, false);
+  assert.equal(second.reason, "no-seed-available");
+  assert.equal(q.unwrittenSeeds("k1"), 1, "one reservation, and it is what refused the second call");
+  assert.equal(q.tokenCount(), 2, "the parent and ONE child");
+});
+
+// AND IT STOPS BEING SUBTRACTED once the chain knows. A written child is
+// already inside `seedsAvailable`, so counting it here too would refuse the
+// NEXT year's seed for a full year.
+test("a written child is counted by the chain alone, never twice", async () => {
+  const { db, q } = fresh();
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
+  setLevelAndStatus(db, 1, 365, "queued");
+  q.insertSeed({ childId: 2, parentId: 1, toAddress: "0xB", keyId: "k1", lastDay: 365, mintDay: 365 });
+  q.completeSolve(2, QR);
+  q.markSeedWritten(2);
+  assert.equal(q.seedsSpent("k1"), 1, "the row is still there");
+  assert.equal(q.unwrittenSeeds("k1"), 0, "but the chain has been told, so it is not subtracted again");
+
+  // A second year of tenure: the chain grants one, and nothing here takes it
+  // away.
+  const tool = makeSeedTool({ q, chain: openChain(), today: () => 730 });
+  const r = await tool.handler({ parentId: 1, to: "0x3333333333333333333333333333333333333333" }, { keyId: "k1" });
+  assert.equal(r.ok, true, r.reason);
 });
 
 test("a whole parent with an unspent seed gets a child", async () => {
@@ -183,23 +323,26 @@ test("a chain that cannot name a free id refuses rather than guesses", async () 
   assert.equal(q.seedsSpent("k1"), 0, "a refusal must not burn the agent-year's seed");
 });
 
-test("the per-year boundary is still enforced, and still answers precisely", async () => {
-  // Both sides of the bound are provoked, because a gate tested on one side
-  // only is a gate that can be off by one and still pass. Below the boundary
-  // the seed gate fires; AT it, a child is created -- which is the observation
-  // this test could not make while the tool refused everything.
+// THE PER-YEAR ARITHMETIC IS THE CONTRACT'S, NOT THIS SERVICE'S, since
+// 2026-09-07. `seedsAvailable` does the division and the subtraction on chain,
+// and Lifecycle.t.sol:test_theBudgetIsOnePerYearOfKeyTenure provokes both sides
+// of that boundary where it is actually enforced. What is left to pin HERE is
+// that the tool takes that answer in both directions: a zero refuses and does
+// not write, a one admits. Both sides, because a gate tested on one side only
+// is a gate that can be inverted and still pass.
+test("the tool takes the chain's budget answer in both directions", async () => {
   const { db, q } = fresh();
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
   setLevelAndStatus(db, 1, 365, "queued");
   const to = "0x3333333333333333333333333333333333333333";
 
-  // One day short of a completed agent-year: no seed has been granted yet.
-  const before = makeSeedTool({ q, chain: openChain(), today: () => 364 });
+  // The key's tenure is one day short of a year: the contract grants nothing.
+  const before = makeSeedTool({ q, chain: noSeedChain(), today: () => 364 });
   const early = await before.handler({ parentId: 1, to }, { keyId: "k1" });
   assert.equal(early.reason, "no-seed-available");
   assert.equal(q.tokenCount(), 1, "and the refused call wrote nothing");
 
-  // Exactly one completed agent-year: the seed is due.
+  // A completed agent-year: the seed is due.
   const at = makeSeedTool({ q, chain: openChain(), today: () => 365 });
   const due = await at.handler({ parentId: 1, to }, { keyId: "k1" });
   assert.equal(due.ok, true);
@@ -249,7 +392,7 @@ test("a refused seed writes no mirror row, whichever gate refused it", async () 
 
   const cases = [
     ["parent-not-whole", { level: 1, today: 365, chain: openChain() }],
-    ["no-seed-available", { level: 365, today: 364, chain: openChain() }],
+    ["no-seed-available", { level: 365, today: 365, chain: noSeedChain() }],
     ["resting", { level: 365, today: 365, chain: restingChain() }],
     ["supply-cap-reached", { level: 365, today: 365, chain: supplyFullChain() }],
     ["chain-unavailable", { level: 365, today: 365, chain: openChain({ freeIdFrom: async () => null }) }],

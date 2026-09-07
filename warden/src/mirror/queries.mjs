@@ -75,8 +75,24 @@ export function queries(db) {
     /// its row for good: it may be bound to a token on chain, and that binding
     /// is permanent.
     pruneUnusedKeys: db.prepare("DELETE FROM keys WHERE lastUsedAt IS NULL AND registeredAt < ?"),
+    // NEITHER OF THESE TWO DECIDES ANYTHING ANY MORE, and that is deliberate.
+    // Both count off `tokens.keyId`, which reconcile.mjs REWRITES on every
+    // `Rebound`, while the contract keeps tenure in per-key mappings `rebind`
+    // never touches. `seed` computed its agent-year budget from them until
+    // 2026-09-07 and diverged from the chain in three measured ways -- see
+    // chain/read.mjs seedsAvailable(). They remain because the tests that pin
+    // that divergence need to be able to state what the mirror alone would have
+    // said. Do not put either back in front of a write.
     firstMintDay: db.prepare("SELECT MIN(mintDay) AS d FROM tokens WHERE keyId = ?"),
     seedsSpent: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE keyId = ? AND parentId IS NOT NULL"),
+    // The seeds this Warden has PROMISED and the chain has not yet been told
+    // about. `seed` reads its budget from the contract (seedsAvailable), which
+    // by definition cannot see a reservation waiting for the next 00:05 UTC
+    // run, so this is the one term the mirror contributes to that sum.
+    unwrittenSeeds: db.prepare(
+      "SELECT COUNT(*) AS n FROM tokens " +
+        "WHERE keyId = ? AND parentId IS NOT NULL AND status != 'written'"
+    ),
     // 5.M3. How many children a token has seeded. Counted rather than stored,
     // so it cannot drift from the rows it describes.
     childCount: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE parentId = ?"),
@@ -371,6 +387,7 @@ export function queries(db) {
 
     firstMintDay: (keyId) => s.firstMintDay.get(keyId).d ?? 0,
     seedsSpent: (keyId) => s.seedsSpent.get(keyId).n,
+    unwrittenSeeds: (keyId) => s.unwrittenSeeds.get(keyId).n,
     childCount: (tokenId) => s.childCount.get(tokenId).n,
     setLineage: (tokenId, generation, parentId) => s.setLineage.run(generation, parentId, tokenId),
 
@@ -490,8 +507,13 @@ export function queries(db) {
      * and it is a SILENT one: a free row has no reservedAt, so neither the
      * expiry sweep nor staleRows would ever mention it.
      *
+     * TWO GUARDS, NOT ONE, and the JSDoc named only the first until 2026-09-07.
      * Both statements refuse a token with no parent, so this can never be the
-     * thing that deletes a founding token.
+     * thing that deletes a founding token -- AND both refuse `status =
+     * 'written'`, so a child the chain has already accepted cannot be deleted
+     * either. That second guard is the one that matters most: a written child
+     * is a real token, served by /t/<id>, and the seed it spent is a fact on
+     * chain that deleting the row would not undo.
      */
     dropSeed(childId) {
       return this.transact(() => {

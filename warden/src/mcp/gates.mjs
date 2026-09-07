@@ -71,6 +71,36 @@ export async function supplyBlock(chain) {
 }
 
 /**
+ * Refuse when the parent's KEY has no seed left for this agent-year.
+ *
+ * Mirrors `revert NoSeedAvailable()`, which guards `seed` alone.
+ *
+ * READ FROM THE CHAIN, NOT COUNTED HERE. This was the last gate in `seed`
+ * answered from the mirror, and it was answered off `tokens.keyId` -- the one
+ * column `reconcile` REWRITES whenever it sees a `Rebound`. The contract keeps
+ * tenure in per-key mappings `rebind` never touches, so a rebind moved the
+ * Warden's answer and not the chain's: it granted a second seed the chain then
+ * refused, and refused a first seed the chain would have granted. See
+ * chain/read.mjs seedsAvailable() for the three measured divergences.
+ *
+ * THE ONE THING ONLY THE MIRROR KNOWS is a seed already RESERVED here and not
+ * yet written, so that is subtracted from the chain's answer. The window is up
+ * to a day wide -- a reservation waits for the next 00:05 UTC run -- and a
+ * guard reading committed state alone would let two seeds out inside it. An
+ * unwritten reservation cannot itself have been rebound, because `rebind` is a
+ * call on a token the chain already holds.
+ *
+ * `q` is required rather than optional: a caller that forgot it would get the
+ * chain's figure with nothing subtracted, which is the over-issue this exists
+ * to prevent.
+ */
+export async function seedBudgetBlock(chain, q, parentId, keyId) {
+  const onChain = await chain.seedsAvailable(parentId);
+  if (onChain === null) return "chain-unavailable";
+  return onChain - q.unwrittenSeeds(keyId) > 0 ? null : "no-seed-available";
+}
+
+/**
  * Every gate a PAID write needs, in one call.
  *
  * `to` is optional: `upgrade` does not mint anything, so it has no wallet cap
@@ -129,7 +159,7 @@ export function requireChain(chain, toolName) {
   // not hypothetical: `chain.freeIdFrom is not a function` reached production
   // in 2026-09-03 while every tool test passed, because the test double had the
   // methods the doubles were written with rather than the ones the code calls.
-  for (const method of ["writesOpen", "lifecycleOf", "walletRoomFor", "supplyRoom", "freeIdFrom", "boundKeyOf"]) {
+  for (const method of ["writesOpen", "lifecycleOf", "walletRoomFor", "supplyRoom", "freeIdFrom", "boundKeyOf", "seedsAvailable"]) {
     if (typeof chain?.[method] !== "function") {
       throw new Error(`${toolName} requires a chain reader with ${method}()`);
     }

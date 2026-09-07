@@ -41,6 +41,12 @@ export function openChain({ boundTo = "k1", ...overrides } = {}) {
     // used to be the constant 10_000 compared against the mirror's row count,
     // which is a fact about the database rather than about the contract.
     supplyRoom: async () => 9_998,
+    // Seeds left for the parent's key, read from the chain since 2026-09-07.
+    // ONE, not many: the contract grants one per completed agent-year, so an
+    // open chain is a key that has run a year and not yet spent it. A stub
+    // answering a large number would hide every off-by-one in the subtraction
+    // `seedBudgetBlock` does against the mirror's reservations.
+    seedsAvailable: async () => 1,
     ...overrides,
   };
 }
@@ -55,6 +61,7 @@ export const unreadableChain = () =>
     walletRoomFor: async () => null,
     supplyRoom: async () => null,
     boundKeyOf: async () => null,
+    seedsAvailable: async () => null,
   });
 export const restingChain = () =>
   openChain({
@@ -67,6 +74,8 @@ export const unknownTokenChain = () =>
 export const walletFullChain = () => openChain({ walletRoomFor: async () => 0 });
 /// The collection is full: the contract would revert SupplyCap().
 export const supplyFullChain = () => openChain({ supplyRoom: async () => 0 });
+/// The parent's key has no seed left for this agent-year: NoSeedAvailable().
+export const noSeedChain = () => openChain({ seedsAvailable: async () => 0 });
 
 /// A chain whose ids are already taken, so freeIdFrom must skip past them.
 export const takenIdsChain = (taken = [1]) =>
