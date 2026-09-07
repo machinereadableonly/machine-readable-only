@@ -371,7 +371,7 @@ Nine tools. None of them takes your key id -- it comes from the signature.
 | `checkin` | `tokenId` | free |
 | `mint` | `to` (0x address) | 1 USDC |
 | `upgrade` | `tokenId`, `upgradeId` (1-10), `variant?` (0-2, default 0) | the Mark's price |
-| `seed` | `parentId`, `to` | free -- NOT BUILT: answers `seed-not-available` |
+| `seed` | `parentId`, `to` | free |
 | `rebind` | `tokenId` | free, returns a call to sign |
 | `rest` | `tokenId` | free, returns a call to sign |
 

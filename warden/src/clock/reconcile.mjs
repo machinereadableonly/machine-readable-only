@@ -100,11 +100,13 @@ export function applyEvents(q, events, { log = () => {} } = {}) {
     // doing: it says a day landed, which is the fact an operator is looking for
     // when a night is in doubt.
     //
-    // Seeded cannot arrive at all today: `seed` is onlyWarden, the Clock sends
-    // three functions and seed is not one of them, and the tool refuses with
-    // `seed-not-available`. If one ever appears here, something outside this
-    // service is minting children -- which is worth an alert rather than a
-    // silent skip.
+    // Seeded is OURS since 2026-09-07: the tool reserves a child and the
+    // Clock's fourth pass sends `seed`. Counting it says a child landed, which
+    // is the fact an operator is looking for when a night is in doubt. It
+    // cannot heal a seed on its own -- `markSeedWritten` is driven by the
+    // receipt in that pass, not by this log -- and `seed` is onlyWarden, so an
+    // event this service did not send would mean another signer holds the
+    // role.
     //
     // SunsetAt is the operator closing the piece. The tools already read it
     // live from the chain on every gated call, so nothing is admitted after it;
@@ -121,7 +123,17 @@ export function applyEvents(q, events, { log = () => {} } = {}) {
     if (name === "BatchCheckedIn" || name === "Seeded" || name === "SunsetAt") {
       applied[name] += 1;
       if (name === "SunsetAt") log("clock: the chain says the piece has been SUNSET -- no further write will be accepted");
-      if (name === "Seeded") log(`clock: a Seeded event arrived, which nothing in this service sends: token ${String(event.args?.tokenId ?? event.args?.id ?? "?")}`);
+      // `Seeded(parentId, childId, generation)` -- NEITHER `tokenId` NOR `id`,
+      // which is what this read until 2026-09-07, so it printed "?" every
+      // time. It went unnoticed because nothing sent the event and the test
+      // double was written with the names the code read rather than the ones
+      // the ABI emits.
+      if (name === "Seeded") {
+        log(
+          `clock: the chain confirms child ${String(event.args?.childId ?? "?")} ` +
+            `was seeded from parent ${String(event.args?.parentId ?? "?")}`
+        );
+      }
       continue;
     }
 

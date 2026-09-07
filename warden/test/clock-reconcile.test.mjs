@@ -195,9 +195,9 @@ test("a log from another contract is discarded even if the node returns it", asy
 // 4.M8. Three events the chain emits reached reconcile and were dropped by the
 // `if (!(name in applied)) continue` guard, so "the mirror ignored it" and "the
 // chain never said it" looked identical from the summary. None of the three can
-// heal per-token state -- BatchCheckedIn names no tokens at all, Seeded cannot
-// arrive because nothing sends `seed`, and SunsetAt is already read live by
-// every gated call -- but all three are worth SEEING.
+// heal per-token state -- BatchCheckedIn names no tokens at all, Seeded is
+// healed from the Clock's own receipt rather than from this log, and SunsetAt
+// is already read live by every gated call -- but all three are worth SEEING.
 test("the three events reconcile cannot apply are counted rather than dropped", () => {
   const q = queries(openDb(":memory:"));
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 10, mintDay: 10 });
@@ -206,7 +206,11 @@ test("the three events reconcile cannot apply are counted rather than dropped", 
   const applied = applyEvents(q, [
     { eventName: "BatchCheckedIn", args: { day: 20_700, count: 3 } },
     { eventName: "SunsetAt", args: { day: 20_700 } },
-    { eventName: "Seeded", args: { tokenId: 9, parentId: 1 } },
+    // THE ABI'S OWN NAMES: `Seeded(parentId, childId, generation)`. This stub
+    // said `tokenId` until 2026-09-07 -- a name the event does not carry --
+    // and the reader read the same wrong name, so the pair agreed with each
+    // other and with nothing on chain. Exactly the drift a double hides.
+    { eventName: "Seeded", args: { parentId: 1, childId: 9, generation: 1 } },
   ], { log: (m) => logs.push(m) });
 
   assert.equal(applied.BatchCheckedIn, 1);
@@ -216,7 +220,10 @@ test("the three events reconcile cannot apply are counted rather than dropped", 
   // hold", which is a divergence alert. These are neither.
   assert.equal(applied.skipped, 0);
   assert.ok(logs.some((l) => /SUNSET/.test(l)), "closing the piece must be said out loud");
-  assert.ok(logs.some((l) => /Seeded event arrived/.test(l)));
+  // Named by BOTH ids, so an operator reading the night's log can tell which
+  // child landed from which parent -- and so a "?" from a misread arg name
+  // fails here instead of shipping.
+  assert.ok(logs.some((l) => /child 9 was seeded from parent 1/.test(l)));
 });
 
 // The control that gives the count above its meaning: an event for a token this

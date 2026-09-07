@@ -2,8 +2,9 @@
 import * as z from "zod";
 import { chainBlock, tokenBlock, walletCapBlock, requireChain, bindingBlock, supplyBlock } from "../gates.mjs";
 import { keyIdToBytes32 } from "../keyId.mjs";
+import { onChainBy } from "../nextSteps.mjs";
 
-export function makeSeedTool({ q, chain, today }) {
+export function makeSeedTool({ q, chain, today, alert = console.error }) {
   requireChain(chain, "seed");
   return {
     name: "seed",
@@ -82,33 +83,75 @@ export function makeSeedTool({ q, chain, today }) {
         (await supplyBlock(chain));
       if (blocked) return { ok: false, reason: blocked };
 
-      // EVERY GATE ABOVE PASSES AND THERE IS STILL NOTHING TO GIVE.
+      // EVERY GATE PASSES. RESERVE THE CHILD AND LET THE CLOCK WRITE IT.
       //
-      // This tool used to insert a `tokens` row plus lineage here and answer
-      // `{ ok: true, tokenId, txStatus: "queued" }`. That was a false promise,
-      // and an expensive one. It wrote NO `mints` row, so no bitmap was ever
-      // solved for the child and `pendingMints` -- which joins `mints` --
-      // could never return it. `runClock` sends exactly three functions
-      // (`mint`, `batchCheckIn`, `applyMark`); nothing in `src/clock/` mentions
-      // seed at all. The contract's `seed(uint256,uint256,address,bytes)` is
-      // called by nothing in this repository.
+      // THE ID IS ASSIGNED HERE and sent to the contract, exactly as `mint`
+      // assigns one, so it has to be an id THE CHAIN will accept. The mirror's
+      // own max id is not that: an empty mirror beside a contract that already
+      // holds tokens proposes an id `seed` reverts TokenExists on. Null from
+      // `freeIdFrom` means "could not establish one", never "use it anyway" --
+      // and reserving on a guess is worse here than on a mint, because what it
+      // spends is a budget the agent earns once a year and cannot re-earn.
+      const tokenId = await chain.freeIdFrom(q.nextTokenId());
+      if (tokenId === null) return { ok: false, reason: "chain-unavailable" };
+
+      // THE `tokens` ROW IS THE RESERVATION. `seedsSpent` counts
+      // `parentId IS NOT NULL`, so the key's seed for this agent-year is spent
+      // the instant this returns -- there is no second counter to increment,
+      // and the gate above therefore sees a promise a Clock run has not yet
+      // made good. That is the whole point: the window between reserving and
+      // writing is up to a day wide, and a guard reading only committed state
+      // would let two seeds out inside it.
       //
-      // So the child existed in the mirror, was served by `/t/<id>` and
-      // `status` forever, and the chain had never heard of it -- while
-      // `seedsSpent` counted the orphan and burned the key's one seed for that
-      // agent-year. It was silent too: the row was in neither `stuckMints` nor
-      // `dropped`, because both read `mints`.
+      // `insertSeed` OWNS ITS TRANSACTION and writes both rows in it. Do not
+      // wrap this in `q.transact`: node:sqlite has no nested transactions and
+      // throws "cannot start a transaction within a transaction". Both rows
+      // are one fact -- a `tokens` row with no `mints` row is a child no
+      // bitmap is ever solved for, which is the orphan this tool used to make.
       //
-      // Refusing is not a workaround, it is the honest answer to "can I seed a
-      // child today". Building the write path means a fourth pass in runClock
-      // between mints and check-ins, sending
-      // `seed(childId, parentId, to, "0x"+qr)` and marking the row on the
-      // receipt, plus a queued solve for the child's bitmap. That is a feature,
-      // not a fix, and nothing can reach this line for a long time yet: a
-      // parent must be WHOLE (level 365) and a key needs a full year since its
-      // first mint. The gates above still run and still answer precisely,
-      // because "why can I not seed" deserves a real reason.
-      return { ok: false, reason: "seed-not-available" };
+      // WHEN THE WRITE LATER FAILS: the Clock's fourth pass drops the pair on
+      // a permanent named revert, which deletes both rows and hands the
+      // agent-year back. A child whose bitmap never solves is reported and
+      // never dropped, because returning a year is a decision, not a sweep.
+      const day = today();
+      try {
+        q.insertSeed({
+          childId: tokenId,
+          parentId,
+          toAddress: to,
+          keyId: ctx.keyId,
+          lastDay: day,
+          mintDay: day,
+        });
+      } catch (err) {
+        // The id was free on chain a moment ago and is taken in this database
+        // now, which means a concurrent call won the race for it. The whole
+        // transaction rolled back, so no seed was spent and calling again gets
+        // the next id. Never silent: nothing else can produce this.
+        alert(`seed refused for key ${ctx.keyId} from parent ${parentId}: could not be recorded: ${err.message}`);
+        return { ok: false, reason: "internal" };
+      }
+
+      return {
+        ok: true,
+        tokenId,
+        parentId,
+        to,
+        agentKeyId: ctx.keyId,
+        // The contract writes the child at `level: 1, streak: 1`, and its
+        // generation as the parent's plus one. Read back rather than assumed:
+        // the depth is computed in the insert's own SQL, so this is the one
+        // field the caller could not work out from what it sent.
+        level: 1,
+        generation: q.getToken(tokenId).generation,
+        txStatus: "queued",
+        // The same 00:05 UTC promise `mint` makes, from the same formula.
+        onChainBy: onChainBy(day),
+        note:
+          `Child ${tokenId} is reserved from parent ${parentId} and costs nothing. Its artwork is being solved now ` +
+          `and it is written on chain at the next 00:05 UTC run; read it at /t/${tokenId} after that. ` +
+          "This was your seed for this agent-year; the next one opens a year after your first mint.",
+      };
     },
   };
 }
