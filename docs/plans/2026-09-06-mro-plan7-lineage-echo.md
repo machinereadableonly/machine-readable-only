@@ -338,6 +338,121 @@ git commit -m "contract: a child is sealed with the days its line had run"
 
 ---
 
+## Task 1b: The Warden reads `viewOf` by name, not by index
+
+**This is a LIVE CRITICAL, found while implementing Task 1 and confirmed
+against the deployed contract.** It is not caused by Task 1; Task 1 makes it
+worse, because adding `echo` shifts every later field's index again.
+
+`warden/src/chain/read.mjs:36-39` decodes `viewOf` by hard-coded tuple index.
+Its comment describes a FOURTEEN-field `TokenView`, but Plan 6 added
+`sunsetDay`, `fellRun` and `fellDay`, making seventeen. So `FIELD.agentKeyId`
+of 11 reads `fellRun`.
+
+Confirmed by raw `eth_call` against `0xe032054D54b407C52C49c40A423aC79031401C03`
+for token 1: field 13 is `marks` (`0x2`, its Hush), field **14** is the agent
+key (`4eaddc8c...`), field 15 is the `code` offset. Field 11 is zero.
+
+The consequence: `boundKeyOf` returns `0x000...0`, `bindingBlock` compares that
+to the caller's real key, and refuses. **Every `upgrade` and every `seed` on
+the live site is refused with `not-bound-to-caller`.** No Mark can be bought.
+
+Two facts that bound it, both verified and both worth keeping in the fix:
+
+- **No money is at risk.** The gate runs before payment -- `upgrade.mjs:206`
+  says "Before payment, always." This is a denial of service, not a loss.
+- **The Clock is unaffected.** It decodes by NAME through viem
+  (`view.agentKeyId` in `run.mjs:80`), not by index. That contrast IS the fix:
+  do what the Clock does.
+
+Why no test caught it: every test stubs `boundKeyOf`. Nothing in the suite has
+ever decoded a real `viewOf` return. See [[stubs-hide-interface-drift]] --
+third occurrence -- and [[a-test-that-cannot-see-the-failure]].
+
+**Files:**
+- Modify: `warden/src/chain/read.mjs` (the `FIELD` map at :36-39 and every
+  reader of it)
+- Test: `warden/test/chain-read.test.mjs` (create)
+
+**Interfaces:**
+- Consumes: `TokenView` as Task 1 leaves it (17 static fields plus `code` and
+  `today`).
+- Produces: no signature change. `boundKeyOf`, `lifecycleOf` and their callers
+  keep their current contracts exactly.
+
+- [ ] **Step 1: Write the failing test against a REAL captured return**
+
+A real `viewOf` return for token 1, captured from the deployed contract, is at
+`.superpowers/sdd/2026-09-06-mro-plan7-lineage-echo/viewof-token1-deployed.hex`.
+Copy it into a test fixture. It is the pre-Task-1 (17-field) shape, and token 1
+wears Hush, so `marks` is `0x2` and the agent key is a real non-zero hash.
+
+The test must assert that `boundKeyOf` returns THAT key -- not zero, and not a
+value the test derived by indexing the same way the code does. Hard-code the
+expected key as a literal.
+
+Add a second fixture for the POST-Task-1 shape by encoding one yourself from
+the current `TokenView`, so the test covers the struct as this branch leaves
+it. Both must pass.
+
+- [ ] **Step 2: Run it and confirm it fails**
+
+```bash
+source ~/.nvm/nvm.sh
+cd warden && node --test test/chain-read.test.mjs
+```
+
+Expected: FAIL, with `boundKeyOf` returning `0x000...0` -- the live bug,
+reproduced in a test for the first time.
+
+- [ ] **Step 3: Decode by name**
+
+Keep the existing raw `fetch` transport and its `CALL_TIMEOUT_MS`; only the
+DECODING changes. Use viem's `decodeFunctionResult` (viem is already a warden
+dependency -- the Clock uses it) with the `viewOf` entry from the ABI the
+Clock already generates, and read fields by name.
+
+Delete the `FIELD` map and its stale comment entirely. Do not replace it with
+corrected numbers: a corrected number is the same defect with a later
+expiry date. If a hand-rolled decoder must stay for some reason the
+implementation reveals, derive the offsets FROM the ABI at module load rather
+than writing them out.
+
+- [ ] **Step 4: Run the tests**
+
+```bash
+source ~/.nvm/nvm.sh
+cd warden && node --test test/chain-read.test.mjs && ~/scripts/safe-build.sh npm test
+```
+
+- [ ] **Step 5: Prove the guard by breaking it**
+
+Change the ABI's `viewOf` field order (or drop a field) and confirm the new
+test goes red rather than silently misreading. Put it back. A decoder that
+cannot notice a struct change is what put this defect in production.
+
+- [ ] **Step 6: Check for the same pattern elsewhere**
+
+```bash
+/bin/grep -rn "tupleField\|slice(.*64\|FIELD\." warden/src/ | /bin/grep -v test
+```
+
+Any other hand-indexed ABI decoding is the same latent defect. Report what you
+find; fix it in this task only if it decodes a struct this branch changes.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd ~/projects/machine-readable-only
+git add warden/src/chain/read.mjs warden/test/chain-read.test.mjs
+git commit -m "chain: read viewOf by name, so a struct change cannot silently misread it"
+```
+
+Quote the four suite counts you measured. Say in the message that this fixes a
+live defect that refused every upgrade and seed since the 2026-09-06 redeploy.
+
+---
+
 ## Task 2: Both renderers draw the echo ring
 
 **The two renderers are ONE task and cannot be split.**
@@ -765,6 +880,22 @@ Token 11 is a seeded child at level 3,650 with `echo` set and the maximal
 LEGAL Mark set. **The maximal legal set is five Marks, not seven** -- the
 exclusive pairs cap it at Hush + Beat + the bought Iris in leaf + Vessel +
 Tint. Do not construct a seven-Mark token; that state is unreachable.
+
+- [ ] **Step 1b: Give the spike token an Echo, or the measurement lies**
+
+`GasBudget.t.sol` runs against `MROSpikeToken`, which has no `_echo` mapping
+and whose `viewOf` never sets `v.echo`. So without this step the budget
+measures the `Echo` attribute at its SHORTEST possible value (`"Echo":0`) and
+misses the real contract's additional cold SLOAD entirely.
+
+Add an `_echo` mapping and the `v.echo` assignment to `MROSpikeToken` so the
+child case measures a realistic four-digit Echo and pays the SLOAD.
+
+Related, and do NOT repeat it: Task 1 reported the Echo costing 148 gas. That
+number came from this same spike token and is memory handling only. **Do not
+copy "148 gas" into CLAUDE.md as the contract's cost.** The real cost includes
+a cold SLOAD of about 2,100 gas on every `tokenURI`, which nothing has yet
+measured. Measure it here and report the real figure.
 
 - [ ] **Step 2: Run it and read the printed headroom**
 
@@ -1284,8 +1415,49 @@ git commit -m "seed: the tool creates a child instead of explaining why it canno
 - Modify: `skills/machine-readable-only/references/raw-protocol.md` (BY COPY)
 - Modify: `docs/specs/2026-08-27-machine-readable-only-design.md` (section 10
   pointer)
+- Modify: `warden/tools/absence-on-chain.mjs` (the hand-built `TokenView`
+  tuple at :23-37 and the stub view literal at :42-48)
+- Modify: the shipped `cast call` signature and the positional field prose --
+  `skills/machine-readable-only/SKILL.md:84`,
+  `docs/2026-09-01-mro-raw-protocol.md:790` (and its `:799` sample tuple and
+  `:801-803`, `:814-817` field lists),
+  `skills/machine-readable-only/references/raw-protocol.md:790` (BY COPY),
+  `docs/2026-09-01-mro-raw-protocol.html:831`
 
-- [ ] **Step 1: Document the wire change**
+- [ ] **Step 1: Fix every consumer of the `TokenView` SHAPE**
+
+Adding a field to `TokenView` changes the `viewOf` and `svg` selectors, so
+every hand-written copy of that struct's type list is now wrong. Insertion
+versus appending makes no difference here -- both selectors are derived from
+the FULL component list -- which is why this step exists rather than a
+struct reshuffle.
+
+1. `warden/tools/absence-on-chain.mjs`: add `{ name: "echo", type: "uint32" }`
+   after `parent` in `VIEW.components`, and `echo: 0` to the stub view. This is
+   the tool CLAUDE.md names as the proof of C4.10 on the deployed Renderer; if
+   it is not updated it will fail against the Task 8 redeploy with a selector
+   that no longer exists.
+2. The shipped `cast call` signature, in all four places listed above: add
+   `uint32` after the `uint256` that is `parent`. This is the "read the
+   contract yourself" command the protocol doc offers agents as its trust
+   anchor, so a signature that cannot decode is high-visibility.
+3. The positional field prose at `raw-protocol.md:799` and `:801-803`,
+   `:814-817`. **Note `:814-817` is ALREADY stale independently of this
+   plan** -- it omits `sunsetDay`, `fellRun` and `fellDay`, which Plan 6
+   added. Fix that too while you are in there, and say so in the commit.
+
+Verify the signature by running it, not by reading it:
+
+```bash
+cast call 0xe032054D54b407C52C49c40A423aC79031401C03 \
+  '<the corrected signature>' 1 --rpc-url https://sepolia.base.org
+```
+
+Against the CURRENT deployed contract the corrected 18-type signature will
+FAIL to decode, because that contract predates the Echo -- that is expected
+and is the proof it changed. Re-run it after Task 8 and confirm it decodes.
+
+- [ ] **Step 2: Document the wire change**
 
 `seed` now returns `{ ok: true, tokenId, txStatus: "queued" }` where it
 previously always returned `{ ok: false, reason: "seed-not-available" }`. The
@@ -1293,14 +1465,14 @@ previously always returned `{ ok: false, reason: "seed-not-available" }`. The
 removed. Say so plainly in the protocol doc, beside the other recorded wire
 changes.
 
-- [ ] **Step 2: Point section 10 at the design**
+- [ ] **Step 3: Point section 10 at the design**
 
 The deferred paragraph at the end of section 10 of the master spec is now
 answered. Replace it with one sentence naming
 `docs/specs/2026-09-06-mro-lineage-design.md` as the record. Do not delete the
 history -- the reasoning about per-token seeding compounding stays.
 
-- [ ] **Step 3: Re-copy the protocol doc into the skill BY COPY**
+- [ ] **Step 4: Re-copy the protocol doc into the skill BY COPY**
 
 ```bash
 cd ~/projects/machine-readable-only
@@ -1312,14 +1484,14 @@ equality, and patching by eye satisfies a reader but not the guard. This
 exact drift left the tools suite red for hours on 2026-09-06 --
 [[a-red-guard-that-was-overridden]].
 
-- [ ] **Step 4: Run the tools suite, which owns that guard**
+- [ ] **Step 5: Run the tools suite, which owns that guard**
 
 ```bash
 source ~/.nvm/nvm.sh
 cd tools && ~/scripts/safe-build.sh npm test 2>&1 | /bin/grep -E "^. (tests|pass|fail)"
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 cd ~/projects/machine-readable-only
