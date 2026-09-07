@@ -92,11 +92,21 @@ export function nextCursor(summary) {
  * the ordinary poison-row path, and systemd recorded success. A token's record
  * IS the artwork, so a day that cannot be written is not a routine refusal, and
  * this was the one queue with no terminal state and no failure signal at all.
+ *
+ * A STUCK SEED IS one too, for the same reason as a stuck mint: the row cannot
+ * proceed on its own and a human has to decide. Nobody paid for it, but it
+ * holds a seed the key earns once a year, and a seed row carries no
+ * `reservedAt`, so staleRows and the expiry sweep are both blind to it. This is
+ * the only place it can be signalled.
+ *
+ * A DROPPED seed is deliberately NOT a failure. The drop is the remedy: the
+ * year is already back and the agent can ask again.
  */
 export function exitCodeFor(summary) {
   if (!summary) return 1;
   if (summary.aborted) return 1;
   if ((summary.stuck?.length ?? 0) > 0) return 1;
   if ((summary.stuckCredits?.length ?? 0) > 0) return 1;
+  if ((summary.stuckSeeds?.length ?? 0) > 0) return 1;
   return 0;
 }

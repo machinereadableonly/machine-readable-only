@@ -167,9 +167,14 @@ async function main() {
 
   console.log(
     `clock: run finished in ${Date.now() - started}ms -- ` +
-      `${summary.minted.length} minted, ${summary.credited.length} credited, ` +
+      `${summary.minted.length} minted, ${summary.seeded.length} seeded, ` +
+      `${summary.credited.length} credited, ` +
       `${summary.healed.length} healed, ${summary.marks.length} marks, ` +
-      `${summary.dropped.length} dropped, ${summary.stuck.length} stuck`
+      `${summary.dropped.length} dropped, ${summary.stuck.length} stuck, ` +
+      // Both seed counts are named in full, because a bare number next to
+      // "dropped" would read as the credit kind. A returned seed is a year
+      // handed back; a stuck one is a year still held.
+      `${summary.droppedSeeds.length} seeds returned, ${summary.stuckSeeds.length} seeds stuck`
   );
   db.close();
 
