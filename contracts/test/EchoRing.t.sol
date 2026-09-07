@@ -5,12 +5,12 @@ import {MroTestBase} from "./MroTestBase.sol";
 import {FrameRenderer} from "../src/render/FrameRenderer.sol";
 
 /// @notice The echo ring: the days a token's line had already run when it was
-/// seeded, drawn as one dotted ring at the core of the ghost fill.
+/// seeded, drawn as one dashed ring at the core of the ghost fill.
 ///
 /// @dev The arithmetic pins here are the cheap half. The expensive half is the
 /// cross-language one: `test_theEchoRingMatchesTheJavaScriptByteForByte` holds
 /// the exact bytes `tools/render-token.mjs`'s `echoRingBars` produces, so the
-/// two renderers cannot drift on the dotted ring even though the render matrix
+/// two renderers cannot drift on the dashed ring even though the render matrix
 /// has no echo-bearing case in it. Regenerate both pins together with
 /// `node tools/echo-ring-fixture.mjs` if the path format ever changes.
 contract EchoRingTest is MroTestBase {
@@ -57,11 +57,12 @@ contract EchoRingTest is MroTestBase {
     }
 
     /// The drawn output: dashed, in the ghost element, 54 runs.
-    /// @dev The INK is unchanged at 104 cells -- the dash covers exactly what
-    /// the dot rule covered. What halved is the number of RUNS those cells are
-    /// written as, which is the whole point of the revision. The cell count is
-    /// asserted on the JavaScript side, where parsing a run is cheap; see
-    /// tools/test/echo-ring.test.mjs.
+    /// @dev The ink is the same NUMBER of cells the dot rule drew, 104, but not
+    /// the same cells: the two rules agree only on offsets divisible by 4, so
+    /// 52 are shared and the other half moved. What halved is the number of
+    /// RUNS those cells are written as, which is the whole point of the
+    /// revision. The cell count is asserted on the JavaScript side, where
+    /// parsing a run is cheap; see tools/test/echo-ring.test.mjs.
     function test_theEchoRingDrawsAsFiftyFourRuns() public pure {
         bytes memory d = FrameRenderer.echoRingBars(0, 53);
         assertEq(_countRuns(d), 54, "14 + 14 + 13 + 13");
@@ -123,6 +124,21 @@ contract EchoRingTest is MroTestBase {
         assertEq(FrameRenderer.echoRingBars(0, 0).length, 0);
         assertEq(FrameRenderer.echoRingBars(7, 1).length, 0);
         assertEq(FrameRenderer.echoRingBars(0, 2).length, 24, "two cells is one run per edge");
+
+        // len 6 IS THE ONLY SHORT RING THAT EXERCISES THE VERTICAL CLIP. That
+        // branch -- `run = (len - 1) - i >= 2 ? 2 : 1` -- is DEAD at the shipped
+        // len of 53, and fires only when len is 2 mod 4. An untested branch in
+        // a function that must stay byte-identical across two languages is
+        // exactly where a future edit diverges with every suite green, so it is
+        // pinned here and in tools/test/echo-ring.test.mjs with the same string.
+        // At len 6 the vertical group starting at offset 4 has only offset 4 in
+        // range, since offset 5 is the corner the horizontal edge already drew.
+        assertEq(
+            string(FrameRenderer.echoRingBars(0, 6)),
+            "M0 0h2v1h-2zM0 5h2v1h-2zM4 0h2v1h-2zM4 5h2v1h-2z"
+            "M0 1h1v1h-1zM5 1h1v1h-1zM0 4h1v1h-1zM5 4h1v1h-1z",
+            "the vertical clip, at the only length that reaches it"
+        );
     }
 
     /// @dev Counts the runs in a path string: one "M" starts each one.

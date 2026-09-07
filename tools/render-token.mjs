@@ -386,7 +386,9 @@ export function ringBars(rings, canvas) {
 //
 // REVISED 2026-09-07, from one cell on and one off. The dot rule cost 240,196
 // gas and left the piece over its own ceiling by about one percent. The ink is
-// the same 104 cells either way; what changed is that consecutive ink is
+// the same NUMBER of cells either way, 104, but NOT THE SAME CELLS: only the
+// offsets divisible by 4 are ink under both rules, so 52 of the 104 are shared
+// and the other half moved. What buys the saving is that consecutive ink is
 // emitted as ONE run, which halves the run count. Emitting a dash as two
 // adjacent single-cell runs would cost MORE than the dots did.
 //
