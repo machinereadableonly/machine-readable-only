@@ -404,3 +404,94 @@ correct today and wrong the moment the chain changes.
 4. **Restart and verify.** `pm2 restart mro-warden`, then section 9's checks,
    then confirm the boot log says `payment ready` -- on a non-Sepolia chain the
    Warden now EXITS rather than running on with payment unavailable.
+
+---
+
+## 11. Redeploying the contract pair -- [the operator APPROVAL REQUIRED]
+
+A contract change means a new address, and a new address means the Warden, the
+Clock, the served copy and the skill are all pointing at a contract that no
+longer exists. This is the order that gets all of them across together.
+
+**The Warden now REFUSES TO START against a contract it cannot decode.**
+`chain/preflight.mjs` decodes one real `viewOf` at boot and throws on failure.
+That is deliberate, and it has a consequence worth stating plainly: from the
+moment a contract change is merged until the new address is adopted, **do not
+restart the live Warden.** `rehearse-start.sh` will tell you so before PM2 does.
+
+Before the probe existed the same skew was silent: `chain/read.mjs` returns
+`null` on a decode failure and `null` on an unreachable RPC, so `mint`,
+`status`, `/t/<id>`, `boundKeyOf` and `freeIdFrom` would all have answered
+`chain-unavailable` indefinitely, with nothing in any log to say which of the
+two it was.
+
+### The order
+
+1. **Build, and pin the ABI against what you just built.**
+
+   ```
+   cd ~/projects/machine-readable-only/contracts
+   forge build --sizes
+   bash script/anvil-size-check.sh
+   ```
+
+   `forge build` is not optional housekeeping here. `warden/test/abi.test.mjs`
+   compares `src/clock/abi.mjs` against `contracts/out`, and **SKIPS when
+   `contracts/out` is missing** -- which it is on any clean checkout, because
+   that directory is gitignored. A guard that skips is not a guard, and the
+   Warden's decoder now depends on that file being fresh. `deploy-plan7.sh`
+   therefore builds and then runs the pin itself, before it will deploy
+   anything. If the pin fails: `cd warden && node tools/gen-abi.mjs`.
+
+2. **Simulate, then deploy.**
+
+   ```
+   bash script/deploy-plan7.sh              # simulation only
+   bash script/deploy-plan7.sh --broadcast  # after the operator approves
+   ```
+
+3. **Verify the source, then verify the interface.** They are different claims.
+
+   ```
+   bash script/verify-plan7.sh <renderer> <token> <warden>
+   cd ../warden
+   node tools/check-deployed-abi.mjs <token>   # exits non-zero on any mismatch
+   node tools/read-ladder.mjs <token>          # the ten Mark records, by value
+   ```
+
+   Basescan verification proves the SOURCE compiles to that bytecode. It says
+   nothing about whether the ABI in this repository describes it. On 2026-09-02
+   every Mark was unwritable against a fully verified contract, and only reading
+   the runtime bytecode found it.
+
+4. **Adopt the address everywhere, in one command.**
+
+   ```
+   bash contracts/script/adopt-deployment.sh <renderer> <token> <deploy-block>
+   ```
+
+   It rewrites `llms.txt`, the protocol document and its rendered HTML, the
+   skill's byte-identical copy, the two operator tools that hardcode the
+   address, `CLAUDE.md`, and `DEPLOY_BLOCK` in `src/clock/reconcile.mjs`. It
+   refuses an address that is not EIP-55 checksummed.
+
+5. **Rehearse against the NEW address before PM2 sees it.**
+
+   ```
+   REHEARSE_OVERRIDE="MRO_CONTRACT_ADDRESS=<token>" bash warden/tools/rehearse-start.sh
+   ```
+
+   A pass prints `warden: decoder verified against <token>`. Only then set
+   `MRO_CONTRACT_ADDRESS` in the configuration file, back up `state.db`, and
+   restart.
+
+6. **Verify through Cloudflare, not against localhost**, exactly as section 9
+   says. Then check all four suites and commit.
+
+### What a redeploy does NOT carry over
+
+- **Tokens.** The old pair keeps its tokens forever. Nothing migrates, and the
+  mirror's rows for them now describe a contract nobody is reading.
+- **Bitmaps.** A QR encodes its own url, not its contract, so Sepolia bitmaps
+  survive a Sepolia redeploy. A MAINNET move is the case where every one must be
+  re-solved -- see section 10.

@@ -301,6 +301,69 @@ should return the served key directory.</li>
 <li>From outside the VPS, <code>nc -zv &lt;vps-ip&gt; 3006</code> (or equivalent) should fail to
 connect -- confirming the UFW rule and loopback binding both hold.</li>
 </ul>
+<h2>9a. The Clock&#39;s log -- [the operator runs one command]</h2>
+<p>Run once per machine, after the Clock&#39;s timer is installed:</p>
+<pre><code>bash ~/projects/machine-readable-only/warden/deploy/install-clock-logging.sh
+</code></pre>
+<p>It writes the rotation config (which cannot be tracked -- logrotate expands
+neither <code>~</code> nor <code>%h</code>, and a home path in a tracked file names the account),
+reloads the systemd user manager so the unit&#39;s <code>UMask=0077</code> and rotation step
+take effect, and PROVES both by probe rather than assuming them. It does not
+run the Clock, so it touches no chain and spends nothing.</p>
+<p>Why it exists. The unit appends to one file forever, and that file was mode
+664 in a 755 directory under a 755 home -- world-readable, on a box shared with
+other projects, and unrotated while the Warden&#39;s own logs are rotated by
+pm2-logrotate. <code>BASE_RPC_URL</code> is free-form configuration and every managed
+provider keeps its api key IN the url, so one RPC outage would have appended
+that key to a file any local account could read. The text is now redacted at
+source (<code>src/clock/redact.mjs</code>, measured against real viem errors) AND the file
+is private; either alone is a single point of failure for a credential.</p>
+<p>If it prints FAIL, tell Claude what it said before the next 00:05 -- the unit
+tolerates a broken rotation (the <code>-</code> prefix) but then nothing rotates, and a
+<code>UMask</code> that did not apply means a recreated log is world-readable again.</p>
+<h2>9b. If the Clock&#39;s key leaks</h2>
+<p><strong>Read this before you need it. The response window is minutes, and every
+consequence of not responding is permanent.</strong></p>
+<p>A stolen Clock key cannot take money or tokens -- there are four <code>onlyWarden</code>
+functions and none moves value, the Warden is not the owner, and the contract
+holds no balance. What it CAN do is end the piece: mint out the whole
+collection (the price is a Warden constant, not an on-chain one, so a stolen key
+mints for the cost of gas), burn every registered agent&#39;s one mint against the
+PUBLIC key directory, backfill every token&#39;s level and streak, and apply the
+free earned Marks to close the bought side of each pair forever. None of it can
+be undone; there is no burn, and neither level nor streak can be reduced.</p>
+<p><strong>Rotate first, investigate second.</strong> <code>setWarden</code> is one owner call and
+<code>onlyWarden</code> reads <code>warden</code> live, so the old key is revoked the moment it mines.</p>
+<pre><code># 1. Stop the Clock, so it cannot race the rotation with a run of its own.
+systemctl --user stop mro-clock.timer mro-clock.service
+
+# 2. Generate a replacement. Prints only the public address.
+#    It REFUSES to overwrite, so move the old key line out of the
+#    configuration file first (WinSCP).
+bash ~/projects/machine-readable-only/scripts/make-clock-key.sh
+
+# 3. Point the contract at the new address. Signed by the OWNER key, not
+#    the Clock&#39;s -- on mainnet that is MAINNET_DEPLOYER_KEY. The contract
+#    and the new address are ARGUMENTS, not environment variables.
+cd ~/projects/machine-readable-only/contracts
+EXPECTED_CHAIN_ID=&lt;8453 or 84532&gt; \
+  forge script script/SetClockWarden.s.sol:SetClockWarden \
+  --sig &quot;run(address,address)&quot; &lt;contract&gt; &lt;the new address&gt; \
+  --rpc-url &lt;base or base_sepolia&gt; --broadcast
+
+# 4. Confirm the chain agrees, from the chain and not from a log.
+cast call &lt;contract&gt; &quot;warden()(address)&quot; --rpc-url &lt;rpc&gt;
+
+# 5. Fund the new address with gas, then start the timer again.
+systemctl --user start mro-clock.timer
+</code></pre>
+<p><strong>Then lower <code>supplyCap</code>.</strong> It is an owner call, needs no redeploy, and it is
+the only thing that bounds the damage of the NEXT leak. A cap of 10,000 set on
+day one is 10,000 free mints sitting behind one key; set it near actual demand
+and raise it deliberately as the collection fills.</p>
+<p><strong>What not to bother with.</strong> There is no point pausing first -- <code>pause</code> blocks
+<code>applyMark</code> but the attacker&#39;s mints are the expensive part, and rotation
+revokes everything in one transaction. Do not try to out-mint the attacker.</p>
 <h2>10. The mainnet cutover -- [the operator APPROVAL REQUIRED, real funds]</h2>
 <p>Everything above is a Base Sepolia runbook. This section exists because that is
 easy to miss: sections 1 to 9 read as &quot;the deploy&quot;, and following them with a
@@ -399,5 +462,78 @@ then confirm the boot log says <code>payment ready</code> -- on a non-Sepolia ch
 Warden now EXITS rather than running on with payment unavailable.</p>
 </li>
 </ol>
+<hr>
+<h2>11. Redeploying the contract pair -- [the operator APPROVAL REQUIRED]</h2>
+<p>A contract change means a new address, and a new address means the Warden, the
+Clock, the served copy and the skill are all pointing at a contract that no
+longer exists. This is the order that gets all of them across together.</p>
+<p><strong>The Warden now REFUSES TO START against a contract it cannot decode.</strong>
+<code>chain/preflight.mjs</code> decodes one real <code>viewOf</code> at boot and throws on failure.
+That is deliberate, and it has a consequence worth stating plainly: from the
+moment a contract change is merged until the new address is adopted, <strong>do not
+restart the live Warden.</strong> <code>rehearse-start.sh</code> will tell you so before PM2 does.</p>
+<p>Before the probe existed the same skew was silent: <code>chain/read.mjs</code> returns
+<code>null</code> on a decode failure and <code>null</code> on an unreachable RPC, so <code>mint</code>,
+<code>status</code>, <code>/t/&lt;id&gt;</code>, <code>boundKeyOf</code> and <code>freeIdFrom</code> would all have answered
+<code>chain-unavailable</code> indefinitely, with nothing in any log to say which of the
+two it was.</p>
+<h3>The order</h3>
+<ol>
+<li><p><strong>Build, and pin the ABI against what you just built.</strong></p>
+<pre><code>cd ~/projects/machine-readable-only/contracts
+forge build --sizes
+bash script/anvil-size-check.sh
+</code></pre>
+<p><code>forge build</code> is not optional housekeeping here. <code>warden/test/abi.test.mjs</code>
+compares <code>src/clock/abi.mjs</code> against <code>contracts/out</code>, and <strong>SKIPS when
+<code>contracts/out</code> is missing</strong> -- which it is on any clean checkout, because
+that directory is gitignored. A guard that skips is not a guard, and the
+Warden&#39;s decoder now depends on that file being fresh. <code>deploy-plan7.sh</code>
+therefore builds and then runs the pin itself, before it will deploy
+anything. If the pin fails: <code>cd warden &amp;&amp; node tools/gen-abi.mjs</code>.</p>
+</li>
+<li><p><strong>Simulate, then deploy.</strong></p>
+<pre><code>bash script/deploy-plan7.sh              # simulation only
+bash script/deploy-plan7.sh --broadcast  # after the operator approves
+</code></pre>
+</li>
+<li><p><strong>Verify the source, then verify the interface.</strong> They are different claims.</p>
+<pre><code>bash script/verify-plan7.sh &lt;renderer&gt; &lt;token&gt; &lt;warden&gt;
+cd ../warden
+node tools/check-deployed-abi.mjs &lt;token&gt;   # exits non-zero on any mismatch
+node tools/read-ladder.mjs &lt;token&gt;          # the ten Mark records, by value
+</code></pre>
+<p>Basescan verification proves the SOURCE compiles to that bytecode. It says
+nothing about whether the ABI in this repository describes it. On 2026-09-02
+every Mark was unwritable against a fully verified contract, and only reading
+the runtime bytecode found it.</p>
+</li>
+<li><p><strong>Adopt the address everywhere, in one command.</strong></p>
+<pre><code>bash contracts/script/adopt-deployment.sh &lt;renderer&gt; &lt;token&gt; &lt;deploy-block&gt;
+</code></pre>
+<p>It rewrites <code>llms.txt</code>, the protocol document and its rendered HTML, the
+skill&#39;s byte-identical copy, the two operator tools that hardcode the
+address, <code>CLAUDE.md</code>, and <code>DEPLOY_BLOCK</code> in <code>src/clock/reconcile.mjs</code>. It
+refuses an address that is not EIP-55 checksummed.</p>
+</li>
+<li><p><strong>Rehearse against the NEW address before PM2 sees it.</strong></p>
+<pre><code>REHEARSE_OVERRIDE=&quot;MRO_CONTRACT_ADDRESS=&lt;token&gt;&quot; bash warden/tools/rehearse-start.sh
+</code></pre>
+<p>A pass prints <code>warden: decoder verified against &lt;token&gt;</code>. Only then set
+<code>MRO_CONTRACT_ADDRESS</code> in the configuration file, back up <code>state.db</code>, and
+restart.</p>
+</li>
+<li><p><strong>Verify through Cloudflare, not against localhost</strong>, exactly as section 9
+says. Then check all four suites and commit.</p>
+</li>
+</ol>
+<h3>What a redeploy does NOT carry over</h3>
+<ul>
+<li><strong>Tokens.</strong> The old pair keeps its tokens forever. Nothing migrates, and the
+mirror&#39;s rows for them now describe a contract nobody is reading.</li>
+<li><strong>Bitmaps.</strong> A QR encodes its own url, not its contract, so Sepolia bitmaps
+survive a Sepolia redeploy. A MAINNET move is the case where every one must be
+re-solved -- see section 10.</li>
+</ul>
 </body>
 </html>
