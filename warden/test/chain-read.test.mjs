@@ -62,6 +62,7 @@ function readerFor(hex, abi) {
     rpcUrl: "http://rpc.invalid",
     contract: "0x" + "11".repeat(20),
     fetchImpl,
+    log: () => {},
     ...(abi ? { abi } : {}),
   });
 }
@@ -142,6 +143,7 @@ test("an RPC that cannot be reached is null, not an answer", async () => {
     fetchImpl: async () => {
       throw new Error("ECONNREFUSED");
     },
+    log: () => {},
   });
   assert.equal(await chain.boundKeyOf(1), null);
   assert.equal(await chain.lifecycleOf(1), null);
@@ -155,7 +157,95 @@ test("a JSON-RPC error object on a 200 is null, not an answer", async () => {
       ok: true,
       json: async () => ({ jsonrpc: "2.0", id: 1, error: { code: -32000, message: "reverted" } }),
     }),
+    log: () => {},
   });
   assert.equal(await chain.boundKeyOf(1), null);
   assert.equal(await chain.lifecycleOf(1), null);
+});
+
+// --- telling the two failures apart ----------------------------------------
+
+// WHY THIS MATTERS MORE THAN IT LOOKS. Both failures above return the same
+// null and neither used to write a line, so ABI skew was indistinguishable
+// from a provider outage from outside the process: every tool answering
+// `chain-unavailable`, indefinitely, with nothing anywhere saying which. The
+// two have opposite responses -- wait out an outage, correct a deploy -- so
+// the log line IS the difference.
+
+/// The endpoint, with an API key in the path, exactly as a managed provider
+/// hands it out. Nothing logged may contain it. See clock/redact.mjs.
+const SECRET_RPC = "https://base-sepolia.g.alchemy.com/v2/notarealkey0000";
+
+function capturing(fetchImpl, extra = {}) {
+  const lines = [];
+  const chain = makeChainReader({
+    rpcUrl: SECRET_RPC,
+    contract: "0x" + "11".repeat(20),
+    fetchImpl,
+    log: (line) => lines.push(String(line)),
+    ...extra,
+  });
+  return { chain, lines };
+}
+
+test("a decode failure says it is NOT an outage, and names the ABI file", async () => {
+  // 17 fields of data against the 18-field ABI: real skew, real bytes.
+  const { chain, lines } = capturing(async () => ({
+    ok: true,
+    json: async () => ({ jsonrpc: "2.0", id: 1, result: DEPLOYED }),
+  }));
+  assert.equal(await chain.boundKeyOf(1), null);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /NOT AN RPC OUTAGE/);
+  assert.match(lines[0], /warden\/src\/clock\/abi\.mjs/);
+});
+
+test("the decode line is written once, not once per request", async () => {
+  const { chain, lines } = capturing(async () => ({
+    ok: true,
+    json: async () => ({ jsonrpc: "2.0", id: 1, result: DEPLOYED }),
+  }));
+  for (let i = 0; i < 5; i += 1) await chain.lifecycleOf(1);
+  assert.equal(lines.length, 1, "skew cannot heal inside a process, so one line is the whole story");
+});
+
+test("a transport failure logs a DIFFERENT line, and never the endpoint", async () => {
+  const { chain, lines } = capturing(async () => {
+    throw new Error(`fetch failed: ${SECRET_RPC}`);
+  });
+  assert.equal(await chain.boundKeyOf(1), null);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /transport/);
+  assert.doesNotMatch(lines[0], /NOT AN RPC OUTAGE/);
+  assert.ok(!lines[0].includes("notarealkey0000"), "the API key must never reach a log");
+  assert.ok(!/https?:\/\//.test(lines[0]), "no url at all in the transport line");
+});
+
+test("the transport line is rate limited, because an outage recurs", async () => {
+  let clock = 1_000_000;
+  const { chain, lines } = capturing(
+    async () => {
+      throw new Error("ECONNREFUSED");
+    },
+    { now: () => clock }
+  );
+  await chain.boundKeyOf(1);
+  await chain.boundKeyOf(1);
+  assert.equal(lines.length, 1, "a second failure in the same minute is silent");
+  clock += 61_000;
+  await chain.boundKeyOf(1);
+  assert.equal(lines.length, 2, "and it speaks again once the window has passed");
+});
+
+test("an HTTP error and a JSON-RPC error are transport failures, not skew", async () => {
+  for (const fetchImpl of [
+    async () => ({ ok: false, json: async () => ({}) }),
+    async () => ({ ok: true, json: async () => ({ error: { code: -32000, message: "limited" } }) }),
+    async () => ({ ok: true, json: async () => { throw new Error("not JSON"); } }),
+  ]) {
+    const { chain, lines } = capturing(fetchImpl);
+    assert.equal(await chain.boundKeyOf(1), null);
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /transport/);
+  }
 });

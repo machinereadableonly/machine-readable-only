@@ -28,7 +28,7 @@ import { tokenView } from "./mcp/tokenView.mjs";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
 import { makeChainReader } from "./chain/read.mjs";
-import { verifyChainId, treasuryBalance } from "./chain/preflight.mjs";
+import { verifyChainId, verifyDecoder, treasuryBalance } from "./chain/preflight.mjs";
 import { requeueOrphans, runSolver } from "./solve/queue.mjs";
 import { utcDay } from "./mcp/tools/checkin.mjs";
 
@@ -199,6 +199,17 @@ async function main() {
   // Throws on a mismatch, and after three tries on an RPC that will not answer.
   // See chain/preflight.mjs for why an outage refuses rather than proceeds.
   await verifyChainId({ rpcUrl, chainId });
+
+  // AND SECOND: can this build decode what that contract returns? read.mjs
+  // decodes `viewOf` through the generated ABI and returns null when the decode
+  // throws -- the same null an unreachable RPC produces -- so a contract whose
+  // TokenView has moved makes `mint`, `status`, `/t/<id>`, `boundKeyOf` and
+  // `freeIdFrom` all answer `chain-unavailable` permanently, with nothing in
+  // the log saying why. The skew is knowable here, once, before the socket is
+  // bound. Throws on a decode failure immediately, and after three tries on an
+  // RPC that will not answer. See chain/preflight.mjs.
+  const probe = await verifyDecoder({ rpcUrl, contract });
+  console.error(`warden: decoder verified against ${contract} (viewOf returned ${Object.keys(probe).length} fields)`);
 
   // NOT A GATE. The treasury is validated for shape and checksum and nothing
   // else, so a valid-but-wrong address is invisible: settlements to it succeed.

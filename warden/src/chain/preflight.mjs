@@ -8,6 +8,9 @@
 //
 // Nothing here holds a signer. Both are eth_call / eth_chainId reads.
 import { getDefaultAsset } from "@x402/evm";
+import { decodeFunctionResult } from "viem";
+import { MRO_ABI } from "../clock/abi.mjs";
+import { safeErrorText } from "../clock/redact.mjs";
 
 const TIMEOUT_MS = 5000;
 /// balanceOf(address) -> uint256
@@ -142,4 +145,101 @@ export async function treasuryBalance({ network, treasury, rpcUrl, fetchImpl = f
   const whole = raw / unit;
   const frac = (raw % unit).toString().padStart(asset.decimals, "0").slice(0, 2);
   return { amount: `${whole}.${frac}`, symbol: asset.symbol, asset: asset.asset };
+}
+
+// ---------------------------------------------------------------------------
+// The third boot-time check: can this build decode what the chain returns?
+// ---------------------------------------------------------------------------
+
+/// viewOf(uint256) -> TokenView. The same selector chain/read.mjs calls.
+const VIEW_OF = "0x0fa4edbd";
+
+/**
+ * Refuse to start unless one real `viewOf` return decodes under the ABI this
+ * build carries.
+ *
+ * WHY THIS EXISTS. `chain/read.mjs` decodes `viewOf` by NAME through the
+ * generated ABI, and its decode `catch` returns null -- the same null a dead
+ * RPC produces. So an ABI that disagrees with the deployed contract is
+ * INDISTINGUISHABLE FROM AN OUTAGE at every call site: `boundKeyOf`,
+ * `lifecycleOf`, `freeIdFrom` and therefore `mint`, `status` and `/t/<id>` all
+ * answer `chain-unavailable`, forever, with nothing in any log saying why. That
+ * is worse than the index-decoder defect it replaced, which broke only
+ * `upgrade` and `seed`.
+ *
+ * Skew is a property of the pair (this build, that address), so it is knowable
+ * at boot and cannot heal. Asking once at startup turns a permanent silent
+ * refusal into a loud one, before the socket is bound.
+ *
+ * NO TOKEN NEEDS TO EXIST. `viewOf` does not revert on an unminted id -- it
+ * reads storage that is zero and returns a fully-formed TokenView
+ * (MachineReadableOnly.sol:198) -- so the probe exercises the ENCODING on a
+ * freshly deployed contract with nothing minted, which is exactly the state a
+ * redeploy boots into. An address with no code at all answers "0x", and viem
+ * throws AbiDecodingZeroDataError on that, which is the answer we want anyway:
+ * a contract address pointing at nothing is not a chain this service may serve.
+ *
+ * TWO FAILURES, TREATED DIFFERENTLY, the same way verifyChainId treats its two.
+ * A decode failure is a FACT about two files and cannot become true by asking
+ * again, so it throws on the first answer. An unreadable RPC is a transient and
+ * is retried, then refused -- by the time this runs verifyChainId has already
+ * had an answer out of the same endpoint, so silence here is new.
+ *
+ * NOTHING LOGGED HERE CARRIES THE RPC URL. Measured on the installed viem
+ * 2.56.0 against all three decode failures this can produce
+ * (AbiDecodingZeroDataError, PositionOutOfBoundsError, IntegerOutOfRangeError):
+ * none carries a url and `metaMessages` is undefined on all three, because the
+ * call is made by hand with fetch and viem never sees the endpoint. The text is
+ * put through `safeErrorText` regardless -- the guarantee should hold for the
+ * error viem adds next, not only for the three that exist today. See
+ * clock/redact.mjs.
+ */
+export async function verifyDecoder({
+  rpcUrl,
+  contract,
+  tokenId = 1,
+  abi = MRO_ABI,
+  attempts = 3,
+  delayMs = 1000,
+  fetchImpl = fetch,
+  sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+  log = console.error,
+}) {
+  const data = VIEW_OF + BigInt(tokenId).toString(16).padStart(64, "0");
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const result = await rpc(rpcUrl, "eth_call", [{ to: contract, data }, "latest"], fetchImpl);
+    if (result !== null) {
+      let view;
+      try {
+        view = decodeFunctionResult({ abi, functionName: "viewOf", data: result });
+      } catch (err) {
+        throw new Error(
+          `the ABI in warden/src/clock/abi.mjs cannot decode viewOf(${tokenId}) from the contract at ` +
+            `${contract}: ${safeErrorText(err)} -- this build and that deployment are different ` +
+            "contracts. Run `cd contracts && forge build` then `cd warden && node tools/gen-abi.mjs`, " +
+            "or point MRO_CONTRACT_ADDRESS at the deployment this build was compiled from"
+        );
+      }
+      // A SECOND, CHEAPER CHECK, because a decode that succeeds is not proof
+      // the shapes agree: a different struct can in principle decode under this
+      // ABI and hand back plausible nonsense, which is the failure mode the
+      // index decoder had. `viewOf` echoes the id it was asked for
+      // (MachineReadableOnly.sol:200), so one equality catches a return whose
+      // fields have slid without costing another round trip.
+      if (Number(view.tokenId) !== tokenId) {
+        throw new Error(
+          `viewOf(${tokenId}) at ${contract} decoded, but reported tokenId ${view.tokenId}: the ABI ` +
+            "in warden/src/clock/abi.mjs does not describe that deployment"
+        );
+      }
+      return view;
+    }
+    log(`warden: could not read viewOf from the contract (attempt ${attempt} of ${attempts})`);
+    if (attempt < attempts) await sleep(delayMs);
+  }
+  throw new Error(
+    `the contract at ${contract} did not answer viewOf(${tokenId}) in ${attempts} attempts: refusing ` +
+      "to start rather than serve with an unverified decoder, because a decode failure and an RPC " +
+      "outage are the same null at every call site"
+  );
 }

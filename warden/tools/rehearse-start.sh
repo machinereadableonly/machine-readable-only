@@ -18,6 +18,18 @@
 # swept in. Nothing here prints a value: the only output is the service's own
 # log lines.
 #
+# REHEARSING A DEPLOYMENT THAT IS NOT ADOPTED YET. The boot now decodes one real
+# `viewOf` and refuses to start when this build and the deployed contract
+# disagree (chain/preflight.mjs), so on the day of a redeploy the environment
+# file still names the OLD address and a plain rehearsal correctly fails. Point
+# it at the new pair before touching the live configuration:
+#
+#   REHEARSE_OVERRIDE="MRO_CONTRACT_ADDRESS=0xNEW" bash warden/tools/rehearse-start.sh
+#
+# Space-separated KEY=VALUE pairs. Each named key is REMOVED from the copy and
+# re-appended, the same way STATE_DB_PATH and PORT are, so a duplicate in the
+# file cannot decide the outcome. Nothing is written back to the real file.
+#
 # Usage:  bash warden/tools/rehearse-start.sh [seconds]
 set -uo pipefail
 
@@ -64,12 +76,31 @@ fi
 #    precedence is a detail of the runtime, and a rehearsal that silently ran
 #    against the live database or the live port would be worse than none.
 REHEARSAL_ENV="$WORK/env"
-grep -v -E '^[[:space:]]*(STATE_DB_PATH|PORT)=' "$ENV_FILE" > "$REHEARSAL_ENV"
+STRIP='STATE_DB_PATH|PORT'
+for pair in ${REHEARSE_OVERRIDE:-}; do
+  key="${pair%%=*}"
+  case "$key" in
+    [A-Za-z_]*) ;;
+    *) echo "rehearse: '$pair' is not KEY=VALUE -- refusing to run" >&2; exit 2 ;;
+  esac
+  [ "$key" = "$pair" ] && { echo "rehearse: '$pair' has no value -- refusing to run" >&2; exit 2; }
+  STRIP="$STRIP|$key"
+done
+
+grep -v -E "^[[:space:]]*($STRIP)=" "$ENV_FILE" > "$REHEARSAL_ENV"
 chmod 600 "$REHEARSAL_ENV"
 {
   echo "STATE_DB_PATH=$COPY_DB"
   echo "PORT=3916"
+  for pair in ${REHEARSE_OVERRIDE:-}; do echo "$pair"; done
 } >> "$REHEARSAL_ENV"
+
+# Say WHICH settings were overridden, never their values -- an override is the
+# kind of thing that has to appear in the record of the run, and the environment
+# file is the kind of thing that must not.
+for pair in ${REHEARSE_OVERRIDE:-}; do
+  echo "rehearse: overriding ${pair%%=*} for this run only"
+done
 
 # Prove the substitution took, without printing anything from the file.
 if ! grep -q "^STATE_DB_PATH=$COPY_DB$" "$REHEARSAL_ENV"; then

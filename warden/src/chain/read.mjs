@@ -46,6 +46,7 @@
 // always done -- clock/run.mjs reads `view.agentKeyId` by name through viem.
 import { decodeFunctionResult } from "viem";
 import { MRO_ABI } from "../clock/abi.mjs";
+import { safeErrorText } from "../clock/redact.mjs";
 
 const VIEW_OF = "0x0fa4edbd"; // viewOf(uint256) -> TokenView
 const MINTED_TO = "0x118033bc"; // mintedTo(address) -> uint32
@@ -71,6 +72,11 @@ const asNumber = (word) => (word === null ? null : Number(BigInt("0x" + word)));
 const asBool = (word) => (word === null ? null : BigInt("0x" + word) !== 0n);
 const addressArg = (address) => address.replace(/^0x/, "").toLowerCase().padStart(64, "0");
 
+/// A transport failure recurs for as long as the provider is down, so its line
+/// is rate limited; a decode failure cannot heal within a process, so its line
+/// is written once.
+const TRANSPORT_LOG_EVERY_MS = 60_000;
+
 export function makeChainReader({
   rpcUrl,
   contract,
@@ -79,7 +85,39 @@ export function makeChainReader({
   // Injectable only so a test can decode a return captured from an OLDER
   // deployment against that deployment's shape. Production never passes it.
   abi = MRO_ABI,
+  log = console.error,
 }) {
+  // WHY THESE TWO FAILURES ARE NAMED SEPARATELY. Both used to return the same
+  // null and neither wrote a line, so an ABI that disagrees with the deployed
+  // contract looked exactly like a provider outage from outside: every tool
+  // answering `chain-unavailable`, indefinitely, with nothing to read. The
+  // difference matters because the two have opposite responses -- an outage is
+  // waited out, skew is a deploy that has to be corrected -- and only the log
+  // can tell an operator which one is happening. preflight.mjs now refuses to
+  // start on skew, so this is the second line of defence: it covers a contract
+  // that changed under a running process, and the paths a test drives directly.
+  let decodeSkewLogged = false;
+  let transportLoggedAt = 0;
+
+  function noteTransportFailure() {
+    const at = now();
+    if (at - transportLoggedAt < TRANSPORT_LOG_EVERY_MS) return;
+    transportLoggedAt = at;
+    // No url, ever. BASE_RPC_URL carries the provider API key as a path
+    // segment for every managed provider -- see clock/redact.mjs -- and this
+    // line names no error text at all, only the fact.
+    log("warden: the chain could not be reached (transport); reads are refusing until it answers");
+  }
+
+  function noteDecodeFailure(err) {
+    if (decodeSkewLogged) return;
+    decodeSkewLogged = true;
+    log(
+      `warden: viewOf did not decode under warden/src/clock/abi.mjs at contract ${contract} -- ` +
+        `THIS IS NOT AN RPC OUTAGE, this build and that deployment disagree: ${safeErrorText(err)}`
+    );
+  }
+
   /**
    * One eth_call. Returns the result hex, or null on ANY failure.
    *
@@ -103,9 +141,13 @@ export function makeChainReader({
         signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
       });
     } catch {
+      noteTransportFailure();
       return null;
     }
-    if (!res.ok) return null;
+    if (!res.ok) {
+      noteTransportFailure();
+      return null;
+    }
     // 4.L6. THE PARSE IS INSIDE THE GUARD TOO. This function's contract is
     // "null on ANY failure", and every caller here treats a throw as fatal
     // rather than as a refusal -- but `res.json()` rejects on a body that is
@@ -116,9 +158,13 @@ export function makeChainReader({
     try {
       body = await res.json();
     } catch {
+      noteTransportFailure();
       return null;
     }
-    if (body.error || typeof body.result !== "string") return null;
+    if (body.error || typeof body.result !== "string") {
+      noteTransportFailure();
+      return null;
+    }
     return body.result;
   }
 
@@ -139,7 +185,8 @@ export function makeChainReader({
     if (result === null) return null;
     try {
       return decodeFunctionResult({ abi, functionName: "viewOf", data: result });
-    } catch {
+    } catch (err) {
+      noteDecodeFailure(err);
       return null;
     }
   }
