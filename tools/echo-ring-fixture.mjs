@@ -15,11 +15,11 @@
 import { keccak256, toBytes } from "viem";
 import { echoRingBars, ringBudget, MAX_RINGS } from "./render-token.mjs";
 
-const dots = d => d.split("M").length - 1;
+const runs = d => d.split("M").length - 1;
 
 const show = (label, o, len) => {
   const d = echoRingBars(o, len);
-  console.log(`${label}: o=${o} len=${len} -> ${dots(d)} dots, ${d.length} bytes`);
+  console.log(`${label}: o=${o} len=${len} -> ${runs(d)} runs, ${d.length} bytes`);
   console.log(`  ${keccak256(toBytes(d))}`);
 };
 
@@ -27,6 +27,8 @@ const show = (label, o, len) => {
 show("newborn child   ", 0, 53);
 // A child at the cap: nine of its own rings, so the echo ring sits at depth 18
 // and every coordinate is two digits. This is the byte worst case for the ring.
+// The ring is a DASH since 2026-09-07 -- two cells on, two off, consecutive ink
+// emitted as ONE run -- so the run count is 54 where the dotted rule gave 104.
 const { own } = ringBudget(MAX_RINGS, 365);
 show("child at the cap", 2 * own, 53);
 

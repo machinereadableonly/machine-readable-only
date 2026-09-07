@@ -241,9 +241,53 @@ call site that via-IR was inlining; a second call site made it a real internal
 call for the frame's hundreds of runs too, costing a token with no echo ring
 34,089 gas.
 
-THE POST-DASH FIGURES GO HERE when the dash is measured. Until then this
-section records the dotted measurement and the fact that it was the reason for
-the change.
+#### The dash, measured 2026-09-07
+
+| quantity | dotted | dashed | change |
+| --- | ---: | ---: | ---: |
+| runs in the ring | 104 | **54** | -48% |
+| ink cells | 104 | **104** | unchanged |
+| ring bytes, depth 0 | 1,386 | **717** | -48% |
+| ring bytes, depth 18 | 1,456 | **756** | -48% |
+| ring through `tokenURI`, gas | 240,196 | **145,533** | **-94,663** |
+| ring through `tokenURI`, bytes | 1,899 | **1,007** | -892 |
+
+The ink is deliberately unchanged: a dash covers exactly the cells the dot rule
+covered, 27 on each horizontal edge and 25 on each vertical one. The saving is
+entirely in how many RUNS those cells are written as, which is why merging
+consecutive ink was the whole revision. Every child `tokenURI` in the fixtures
+came down by exactly 892 bytes.
+
+#### The worst cases after the dash
+
+Measured through `contracts/test/GasBudget.t.sol` on the spike token with cold
+storage, which is the call a marketplace actually makes. **The dearest token and
+the largest token are different tokens and are reported separately; pairing
+one's gas with the other's byte count is a mistake this project has made
+before.**
+
+| worst case | which token | measured | limit | margin |
+| --- | --- | ---: | ---: | ---: |
+| **gas** | a CHILD at day 364, four Marks, echo ring | **1,889,279** | 2,000,000 | **110,721** |
+| **bytes** | a CHILD at the ring cap, five Marks, echo ring | **12,546** | 20,000 | **7,454** |
+
+**The dash bought back the headroom.** Gas margin went from 16,058 to 110,721,
+a factor of about seven, and the piece is no longer passing its own ceiling by
+one percent. `GAS_BAND` and `BYTE_BAND` are genuine regression bands again --
+1,940,000 and 12,900, about 2.8% above each measured worst case, the same margin
+they carried before lineage -- rather than numbers pinned just under the hard
+limit because there was nowhere else to put them.
+
+The founding-token worst cases are unchanged by any of this and are still
+measured: 1,735,469 gas (token 9) and 11,582 bytes (token 7). A founding token
+has no echo ring, so the dot-to-dash revision moved nothing for it, which the
+suite confirms figure by figure.
+
+The gas worst case is `test_theDearestTokenAloneInAFreshCall`, not the ladder's
+print of the same token. The ladder reads 1,884,779 because its eleven calls
+warm the Renderer's account and its `renderer` slot for each other; the
+standalone test arrives cold the way an `eth_call` does and is 4,500 gas dearer.
+That is a real cost, so the dearer figure is the reported one.
 
 **Both worst cases are now CHILDREN**, which is new and easy to mis-predict:
 the dearest is a child at day 364 wearing four Marks (pair 4 is shut below a
@@ -283,7 +327,10 @@ quiet zone by construction.
 
 That is an argument, not a result.
 
-**RESULT, 2026-09-07: a child scans, with zero rejections.**
+**RESULT, 2026-09-07: a child scans, with zero rejections. Run TWICE -- once on
+the dotted ring and again after the change to a dash -- because a dash is a
+different spatial frequency from a dot and the gate is the only thing that could
+have said so. Both runs: 54 of 54.**
 `tools/echo-decode-check.mjs` is the gate. It renders six states and decodes
 each at nine pixel sizes -- 256, 350, 500, 700, 848, 900, 1080, 1424, 1600 --
 through the project's ZXing oracle (`tools/test/helpers/decode.mjs`; never
@@ -295,11 +342,11 @@ could actually be wearing, plus a control for each:
 
 | state | canvas | svg bytes | decodes |
 | --- | ---: | ---: | --- |
-| newborn child, bare (level 1, echo 365) | 53 | 7,059 | every size |
-| newborn child, Hush | 53 | 7,116 | every size |
+| newborn child, bare (level 1, echo 365) | 53 | 6,390 | every size |
+| newborn child, Hush | 53 | 6,447 | every size |
 | founding token, 1 solid ring (control) | 53 | 5,674 | every size |
-| child at the cap, bare (level 3,650, echo 3,650) | 89 | 7,743 | every size |
-| child at the cap, every legal Mark | 89 | 9,032 | every size |
+| child at the cap, bare (level 3,650, echo 3,650) | 89 | 7,043 | every size |
+| child at the cap, every legal Mark | 89 | 8,332 | every size |
 | founding token, 10 solid rings (control) | 89 | 6,322 | every size |
 
 **The controls are what make the result attributable.** A child's canvas is not

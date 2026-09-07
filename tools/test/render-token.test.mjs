@@ -320,8 +320,8 @@ test("the worst case a token can reach still scans", () => {
 test("a seeded child still scans at both extremes of the echo ring", () => {
   // THE ECHO RING IS THE FIRST HIGH-FREQUENCY PATTERN THIS PIECE DRAWS NEXT TO
   // THE CODE. Every other ring is a solid line, which a binarizer ignores; this
-  // one is 104 dots, one cell on and one cell off, and at a small raster the
-  // dots are about the size of a module. tools/echo-decode-check.mjs is the
+  // one is 104 cells of ink drawn as a dash, two on and two off, and at a small
+  // raster those marks are about the size of a module. tools/echo-decode-check.mjs is the
   // full gate (nine sizes, with founding-token controls on the identical
   // canvas). This is the regression half of it, so a change to the ring cannot
   // land with every suite green.

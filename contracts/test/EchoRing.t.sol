@@ -56,46 +56,51 @@ contract EchoRingTest is MroTestBase {
         }
     }
 
-    /// The drawn output: dotted, in the ghost element, 104 dots.
-    function test_theEchoRingDrawsAsOneHundredAndFourDots() public pure {
+    /// The drawn output: dashed, in the ghost element, 54 runs.
+    /// @dev The INK is unchanged at 104 cells -- the dash covers exactly what
+    /// the dot rule covered. What halved is the number of RUNS those cells are
+    /// written as, which is the whole point of the revision. The cell count is
+    /// asserted on the JavaScript side, where parsing a run is cheap; see
+    /// tools/test/echo-ring.test.mjs.
+    function test_theEchoRingDrawsAsFiftyFourRuns() public pure {
         bytes memory d = FrameRenderer.echoRingBars(0, 53);
-        assertEq(_countRuns(d), 104, "27 + 27 + 25 + 25");
+        assertEq(_countRuns(d), 54, "14 + 14 + 13 + 13");
     }
 
-    /// A dot per side is (len + 1) / 2 on the horizontals and (len - 1) / 2 on
-    /// the verticals, whose corners are already drawn. Held on a short ring so
-    /// the whole string is readable, and mirrored verbatim in
-    /// tools/test/echo-ring.test.mjs.
+    /// The dash rule on a short ring, where the whole string is readable, and
+    /// mirrored verbatim in tools/test/echo-ring.test.mjs. At len 9 the ink
+    /// offsets are 0, 1, 4, 5 and 8: two full groups and the clipped one that
+    /// anchors the far end. The vertical edges then draw offset 1 alone -- its
+    /// partner at offset 0 is the corner, already drawn -- and the 4-5 group.
     function test_theEchoRingMatchesTheJavaScriptByteForByte() public pure {
         assertEq(
             string(FrameRenderer.echoRingBars(0, 9)),
-            "M0 0h1v1h-1zM0 8h1v1h-1zM2 0h1v1h-1zM2 8h1v1h-1zM4 0h1v1h-1zM4 8h1v1h-1z"
-            "M6 0h1v1h-1zM6 8h1v1h-1zM8 0h1v1h-1zM8 8h1v1h-1zM0 2h1v1h-1zM8 2h1v1h-1z"
-            "M0 4h1v1h-1zM8 4h1v1h-1zM0 6h1v1h-1zM8 6h1v1h-1z",
+            "M0 0h2v1h-2zM0 8h2v1h-2zM4 0h2v1h-2zM4 8h2v1h-2zM8 0h1v1h-1zM8 8h1v1h-1z"
+            "M0 1h1v1h-1zM8 1h1v1h-1zM0 4h1v2h-1zM8 4h1v2h-1z",
             "the short ring, in full"
         );
 
-        // The real ones are 1,386 and 1,456 bytes, too long to read, so
+        // The real ones are 717 and 756 bytes, too long to read, so
         // they are held by hash. The same hashes are asserted in
         // tools/test/echo-ring.test.mjs against the JavaScript's own output,
         // which is what makes this a differential rather than a
         // self-consistency check.
         bytes memory d = FrameRenderer.echoRingBars(0, 53);
-        assertEq(d.length, 1386, "a newborn child's echo ring");
+        assertEq(d.length, 717, "a newborn child's echo ring");
         assertEq(
             keccak256(d),
-            0x1e94a853465cdc221019c2f535613bb2b5382b538e57ed7f758bab68f76961aa,
+            0x72ad6bd54c11077cd08247296099dfa08ba0cd6c2ebc366e0895d97c6dcf1fe4,
             "byte for byte with the JavaScript"
         );
 
-        // And at the other extreme: a child at the cap draws the same 104 dots
+        // And at the other extreme: a child at the cap draws the same 54 runs
         // one slot deeper, where every coordinate is two digits.
         bytes memory deep = FrameRenderer.echoRingBars(2 * 9, 53);
-        assertEq(_countRuns(deep), 104);
-        assertEq(deep.length, 1456, "the deepest echo ring, all two-digit");
+        assertEq(_countRuns(deep), 54);
+        assertEq(deep.length, 756, "the deepest echo ring, all two-digit");
         assertEq(
             keccak256(deep),
-            0x42c520135d88294bc8feb6c15db972f1d48e84efdd3fd7df11f1d720ac64a046,
+            0xf9c9a5d28305a0e04d3c25f29d1d273e31c5cb27997535d8b0ef4d2e50f2c85b,
             "byte for byte at the cap too"
         );
     }
@@ -117,7 +122,7 @@ contract EchoRingTest is MroTestBase {
     function test_aRingUnderTwoCellsDrawsNothing() public pure {
         assertEq(FrameRenderer.echoRingBars(0, 0).length, 0);
         assertEq(FrameRenderer.echoRingBars(7, 1).length, 0);
-        assertEq(FrameRenderer.echoRingBars(0, 2).length, 24, "two cells is two dots");
+        assertEq(FrameRenderer.echoRingBars(0, 2).length, 24, "two cells is one run per edge");
     }
 
     /// @dev Counts the runs in a path string: one "M" starts each one.

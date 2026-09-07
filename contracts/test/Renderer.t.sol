@@ -127,7 +127,7 @@ contract RendererTest is Test {
 
     /// A seeded child, at both extremes of the echo ring.
     ///
-    /// These two are the ONLY cross-language check on the dotted ring at the
+    /// These two are the ONLY cross-language check on the dashed ring at the
     /// whole-tokenURI level. The render matrix carries no `echo` field, so
     /// RenderFixture and CombinationFixture are both blind to it: every case in
     /// them renders a founding token. Without these, the JS and Solidity
@@ -139,19 +139,20 @@ contract RendererTest is Test {
         v.generation = 1;
         v.parent = 7;
         v.echo = 365;
-        _diff("a newborn child", v, 10748,
-            0xdefc722753cd05fc550ddbb1afd4ea6ada6ed07a9f8bdafeac5835c331a28a30);
+        _diff("a newborn child", v, 9856,
+            0xc0f5d7eb579e94a58a357464c9fd691a69b157bf00044b2c8e81594936cea9bf);
     }
 
     function test_aChildAtTheRingCapMatchesTheJavascriptReference() public view {
         // Ten years of its own, but only NINE rings are drawn: the tenth slot
-        // is the echo ring, at depth 18, where every coordinate is two digits.
+        // is the echo ring, at depth 18, where every coordinate is two digits
+        // and the dash costs 756 bytes against 717 at depth 0.
         TokenView memory v = _view(365 * 10, 400, 1000, 1000);
         v.generation = 2;
         v.parent = 7;
         v.echo = 3650;
-        _diff("a child at the cap", v, 11682,
-            0x72229cad844cf98b237b4b81257b2c6b8aa6352962d4949a3db76a039720431e);
+        _diff("a child at the cap", v, 10750,
+            0xec945f315540befd3e153e1da487142938e96a682ca96a52620215db4b4a265b);
     }
 
     /// A child wearing the maximal LEGAL Mark set.
@@ -178,8 +179,8 @@ contract RendererTest is Test {
         // non-default on purpose, so the shape and ink bits are read rather
         // than defaulting to 0. Mirrors the packing applyMark writes.
         v.marks = ALL_MARKS_TINTED | (uint256(2) << 16) | (uint256(1) << 24);
-        _diff("a child with every drawn mark", v, 13148,
-            0xe4e19c2272219717fd06af6a57dddf9c5184788cdba7cfb8e36c5b182ad09ddd);
+        _diff("a child with every drawn mark", v, 12216,
+            0x6c5c2d9177d36af6bbc9d8f5f48e3deec8434de7d7d07c7732bb582cff144bd0);
     }
 
     function test_theEyesAreDrawnLastOverTheNoise() public view {

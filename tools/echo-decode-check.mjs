@@ -1,10 +1,17 @@
 // Does a SEEDED CHILD still scan?
 //
 // The echo ring is the first high-frequency pattern this piece has ever drawn
-// next to the code: 104 dots, one cell on and one cell off, on the innermost
-// ring slot. Every other ring the piece draws is a solid line, and a solid line
-// is the kind of thing a binarizer ignores. A dotted one is, at small pixel
-// sizes, a row of things about the size of a module.
+// next to the code: 104 cells of ink on the innermost ring slot, drawn as a
+// DASH -- two cells on, two off, in 54 runs. Every other ring the piece draws is
+// a solid line, and a solid line is the kind of thing a binarizer ignores. A
+// broken one is, at small pixel sizes, a row of things about the size of a
+// module.
+//
+// RUN THIS AGAIN WHENEVER THE PATTERN CHANGES, not only when the ring is added.
+// The dot rule and the dash cover the identical cells and differ only in how
+// they are grouped, which is exactly the kind of change that looks free and is
+// a different spatial frequency to a binarizer. Both have been through this
+// gate; both passed 54 of 54.
 //
 // So this is a gate, not a sheet. It renders a child at BOTH extremes of the
 // ring's depth and decodes each render at nine pixel sizes, and it exits

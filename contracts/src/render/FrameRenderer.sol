@@ -247,21 +247,29 @@ library FrameRenderer {
         }
     }
 
-    /// @dev The echo ring: the innermost ring, drawn one cell on and one cell
-    /// off, in the GHOST fill rather than the token's own colour. It is the
-    /// years the token inherited, so it must not read as years it has kept.
+    /// @dev The echo ring: the innermost ring, drawn as a DASH -- two cells on,
+    /// two off -- in the GHOST fill rather than the token's own colour. It is
+    /// the years the token inherited, so it must not read as years it has kept.
     ///
-    /// A cell is drawn when its offset along its own edge is EVEN, measured in
-    /// x from `o` on the horizontal edges and in y from `o` on the vertical
-    /// ones. Offset 0 is even, so all four corners are drawn, which anchors the
-    /// ring and makes the phase unambiguous on every edge.
+    /// A cell is INK when its offset along its own edge is 0 or 1 mod 4,
+    /// measured in x from `o` on the horizontal edges and in y from `o` on the
+    /// vertical ones. Offsets 0 and 1 are both ink, so all four corners are
+    /// drawn and the phase is unambiguous on every edge; 53 = 13 * 4 + 1, so
+    /// offset 52 is ink too and every edge is anchored at both ends.
+    ///
+    /// REVISED 2026-09-07, from one cell on and one off. The dot rule cost
+    /// 240,196 gas and left the piece over its own 2,000,000 ceiling by about
+    /// one percent. The INK IS THE SAME 104 CELLS either way; what changed is
+    /// that consecutive ink is emitted as ONE run, halving the run count from
+    /// 104 to 54. Writing a dash as two adjacent single-cell runs would cost
+    /// MORE than the dots did, so the merging is the revision, not the pattern.
     ///
     /// The side length is ALWAYS 53: with r rings the innermost sits at
     /// o = 2(r-1) and canvas is 49 + 4r, so the depth cancels. That is why
-    /// there is exactly one of these -- at 1,386 bytes at depth 0 and 1,456 at
+    /// there is exactly one of these -- at 717 bytes at depth 0 and 756 at
     /// depth 18 (the only difference is one-digit against two-digit
-    /// coordinates), a dotted ring costs about 23 times a solid one, and nine
-    /// would blow the 20,000 byte limit.
+    /// coordinates), even a dashed ring costs about twelve times a solid one,
+    /// and nine would not fit the 20,000 byte limit.
     ///
     /// MUST stay identical to echoRingBars in tools/render-token.mjs.
     /// @param o   the ring's depth from the canvas edge, in cells
@@ -274,23 +282,45 @@ library FrameRenderer {
         // safe by accident.
         if (len < 2) return d;
         uint256 last = o + len - 1;
-        // The two horizontal edges, corners included.
-        for (uint256 i; i < len; i += 2) {
+        // The two horizontal edges, corners included. A group starts every
+        // fourth offset and is two cells long, EMITTED AS ONE RUN -- two
+        // adjacent single-cell runs would cost more than the dots this replaced.
+        for (uint256 i; i < len; i += 4) {
+            // The group starting at the final offset has no room for a second
+            // cell. Clipped, not skipped: 53 = 13 * 4 + 1, so that offset is ink
+            // and it is what anchors the far end of the edge.
+            uint256 run = len - i >= 2 ? 2 : 1;
             uint256 x = o + i;
             d = abi.encodePacked(
                 d,
-                "M", LibString.toString(x), " ", LibString.toString(o), "h1v1h-1z",
-                "M", LibString.toString(x), " ", LibString.toString(last), "h1v1h-1z"
+                "M", LibString.toString(x), " ", LibString.toString(o),
+                "h", LibString.toString(run), "v1h-", LibString.toString(run), "z",
+                "M", LibString.toString(x), " ", LibString.toString(last),
+                "h", LibString.toString(run), "v1h-", LibString.toString(run), "z"
             );
         }
-        // The two vertical edges, corners already drawn above.
-        for (uint256 i = 2; i < len - 1; i += 2) {
-            uint256 y = o + i;
+        // The two vertical edges. Offsets run from 1 to len - 2, because both
+        // corners belong to the horizontal edges that already drew them.
+        if (len > 2) {
+            // Offset 1 is ink and stands alone: offset 0 is its group's other
+            // half and was drawn above. Clipped to one cell, for that reason
+            // rather than for want of room.
             d = abi.encodePacked(
                 d,
-                "M", LibString.toString(o), " ", LibString.toString(y), "h1v1h-1z",
-                "M", LibString.toString(last), " ", LibString.toString(y), "h1v1h-1z"
+                "M", LibString.toString(o), " ", LibString.toString(o + 1), "h1v1h-1z",
+                "M", LibString.toString(last), " ", LibString.toString(o + 1), "h1v1h-1z"
             );
+            for (uint256 i = 4; i < len - 1; i += 4) {
+                uint256 run = (len - 1) - i >= 2 ? 2 : 1;
+                uint256 y = o + i;
+                d = abi.encodePacked(
+                    d,
+                    "M", LibString.toString(o), " ", LibString.toString(y),
+                    "h1v", LibString.toString(run), "h-1z",
+                    "M", LibString.toString(last), " ", LibString.toString(y),
+                    "h1v", LibString.toString(run), "h-1z"
+                );
+            }
         }
     }
 
