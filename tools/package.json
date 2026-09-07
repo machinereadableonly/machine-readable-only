@@ -17,5 +17,8 @@
     "pngjs": "7.0.0",
     "qrcode": "1.5.4",
     "viem": "2.55.19"
+  },
+  "devDependencies": {
+    "marked": "18.0.11"
   }
 }

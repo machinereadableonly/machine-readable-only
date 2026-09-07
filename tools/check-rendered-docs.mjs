@@ -32,14 +32,23 @@
 // A MISSING RENDERER IS A FAILURE, NOT A SKIP. If the renderer cannot run, this
 // exits non-zero and says so. A guard that quietly passes when it could not
 // look is the shape of defect this repository has already shipped once.
+//
+// THE MARKDOWN ENGINE IS PINNED, and it has to be, because this guard gates
+// every commit in the repository. The shared renderer calls `npx --yes marked`
+// with no version, so without a pin an ordinary upstream release that moves the
+// output by one character turns all of these pairs red at once and blocks
+// committing until every file is re-rendered. tools/render-doc.mjs applies the
+// pin and explains how; this file goes through it rather than spawning the
+// renderer itself, so the command that DETECTS drift and the command a human
+// runs to FIX it are the same code path.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, copyFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { render, assertPinned, RENDERER } from "./render-doc.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
-const RENDERER = join(process.env.HOME ?? "", "scripts", "render-md-to-html.js");
 
 /// The two exclusions, and nothing else.
 ///
@@ -48,6 +57,10 @@ const RENDERER = join(process.env.HOME ?? "", "scripts", "render-md-to-html.js")
 /// `</p>\n\n`. That is one blank line before `</body>` and it is not a word of
 /// the document, so it is normalised on BOTH sides rather than re-rendering
 /// twenty-four files to chase it.
+///
+/// KEEP THIS EVEN THOUGH THE ENGINE IS NOW PINNED. It absorbs the files already
+/// committed under the older engine, and it is the evidence for why the pin
+/// exists: this is what one ordinary `marked` release did to these documents.
 function normalise(html) {
   return html
     .replace(/^\s*<title>[\s\S]*?<\/title>\s*$/m, "<title>IGNORED</title>")
@@ -75,6 +88,15 @@ function main() {
     console.error(`FAIL: the renderer is not at ${RENDERER}, so nothing could be checked.`);
     return 2;
   }
+  // An unpinned or uninstalled engine is a failure for the same reason a missing
+  // renderer is: the comparison would be against an output nobody can reproduce.
+  let pin;
+  try {
+    pin = assertPinned();
+  } catch (err) {
+    console.error(`FAIL: ${err.message}`);
+    return 2;
+  }
   if (list.length === 0) {
     console.error("FAIL: no .md/.html pairs found -- this guard is looking at nothing.");
     return 2;
@@ -98,16 +120,13 @@ function main() {
       // both sides of the comparison below, so it cannot hide drift.
       //
       // WHAT IS STILL A HARD FAILURE: no output file at all. That is the
-      // renderer genuinely not running -- no `marked`, no network on a cold npx
-      // cache -- and it must never read as "these documents are fine".
+      // renderer genuinely not running, and it must never read as "these
+      // documents are fine". render() raises for that case and only that case.
       try {
-        execFileSync("node", [RENDERER, scratch], { stdio: "pipe" });
+        if (render(scratch).incomplete) incomplete.push(md);
       } catch (err) {
-        if (!existsSync(out)) {
-          console.error(`FAIL: ${md} could not be rendered at all: ${err.message}`);
-          return 2;
-        }
-        incomplete.push(md);
+        console.error(`FAIL: ${md} could not be rendered at all: ${err.message}`);
+        return 2;
       }
       const fresh = normalise(readFileSync(out, "utf8"));
       const committed = normalise(readFileSync(join(REPO, md.replace(/\.md$/, ".html")), "utf8"));
@@ -122,12 +141,15 @@ function main() {
     console.log(`note: the renderer's heading count disagreed on ${incomplete.join(", ")} (fenced headings); compared anyway`);
   }
   if (drifted.length === 0) {
-    console.log(`ok: ${list.length} rendered documents match their markdown`);
+    console.log(`ok: ${list.length} rendered documents match their markdown (marked ${pin.want})`);
     return 0;
   }
   console.error(`FAIL: ${drifted.length} of ${list.length} rendered documents are stale:`);
   for (const md of drifted) {
-    console.error(`  ${md.replace(/\.md$/, ".html")}  -- re-render it: node ~/scripts/render-md-to-html.js ${md}`);
+    // Name the PINNED re-render command, not the bare shared script. Rendering
+    // by hand through `npx marked` would one day produce a file this guard still
+    // rejects, and the fix instruction must not be able to lead there.
+    console.error(`  ${md.replace(/\.md$/, ".html")}  -- re-render it: node tools/render-doc.mjs ${md}`);
   }
   return 1;
 }
