@@ -96,11 +96,11 @@ Copied from the spec so no task has to re-derive them:
 | `MAX_RINGS` | 10 |
 | `canvas(r)`, for `r >= 1` | `49 + 4r` |
 | Echo ring side length, any depth | **53 cells, constant** |
-| Echo ring dot count | **104** (27 top, 27 bottom, 25 left, 25 right) |
-| Echo ring cost | 1,386 bytes at depth 0, 1,456 at depth 18 (MEASURED; the dot count is constant, the digit width is not) |
-| Byte worst case today | 11,550 of 20,000 (`GasBudget.t.sol`, token 7) |
-| Expected new byte worst case | ~12,950 (delta `1,456 - 64`) |
-| Gas worst case today | 1,750,744 of 2,000,000 (token 9) |
+| Echo ring pattern | a DASH: two cells on, two off, ink where offset mod 4 is 0 or 1 (revised 2026-09-07 from a dot, to halve the cost) |
+| Echo ring cost | MEASURE IT. The dotted version was 240,196 gas / 1,899 bytes; the dash must be re-measured, never estimated. |
+| Worst cases | BOTH ARE CHILDREN. Dotted: gas 1,983,942/2,000,000 on a child at day 364 with FOUR Marks; bytes 13,482/20,000 on a child at the ring cap with five. Different tokens -- never pair them. |
+
+
 
 The byte and dot figures are **arithmetic from the geometry, not
 measurements.** Task 3 measures them. If a measurement disagrees with this
@@ -1470,6 +1470,23 @@ cast call 0xe032054D54b407C52C49c40A423aC79031401C03 \
 Against the CURRENT deployed contract the corrected 18-type signature will
 FAIL to decode, because that contract predates the Echo -- that is expected
 and is the proof it changed. Re-run it after Task 8 and confirm it decodes.
+
+- [ ] **Step 1b: Correct CLAUDE.md's gas-budget gotcha**
+
+Task 3 re-measured every figure in that section and it is now wrong. The
+replacement numbers are in section 9 of
+`.superpowers/sdd/2026-09-06-mro-plan7-lineage-echo/task-3-report.md`; take them
+from there rather than re-deriving.
+
+Two things must survive the edit, because both have been got wrong in this file
+before:
+
+- **The dearest token and the largest token are DIFFERENT TOKENS.** Report each
+  figure with the token it belongs to and never pair one's gas with the other's
+  bytes.
+- **Both worst cases are now CHILDREN**, which is new. Say so, because a reader
+  who assumes a founding token is the worst case will mis-predict every future
+  measurement.
 
 - [ ] **Step 2: Document the wire change**
 
