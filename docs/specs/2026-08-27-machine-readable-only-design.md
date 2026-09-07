@@ -607,12 +607,13 @@ asked for, so it exists exactly as long as Base does.
   animation must go here.
 - `attributes`: `level`, `streak`, `heart`, `whole`, `years`, `lastDay`,
   `mintDay`, `marks` (names), `agentKeyId`, `generation`, `parent`,
-  `children`, `resting`.
-- **Resting tokens** render with colour locked (see effective streak, section
-  7) and the name gains "(At Rest)". **Seeded children and parents** carry
-  their lineage in attributes now; their *visual* treatment is a deliberate
-  open decision (section 10) and the Renderer is swappable precisely so it
-  can be settled later without touching token state.
+  `children`, `echo`, `resting`.
+- **Resting tokens** render with colour locked
+  (see effective streak, section 7) and the name gains "(At Rest)".
+  **Seeded children and parents** carry their lineage in attributes now;
+  their *visual* treatment is a deliberate open decision (section 10) and the
+  Renderer is swappable precisely so it can be settled later without touching
+  token state.
 
 ### Rendering risks, stated plainly, and the Phase 0 spike
 

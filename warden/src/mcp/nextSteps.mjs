@@ -52,7 +52,7 @@ export const NEXT = {
   // tool refused every call. It does exist, nothing emits that reason, and a
   // next step for a refusal that can never happen is a dead end of its own.
   "no-seed-available":
-    "This key has already used its seed for the agent-year. A key earns one a year after its first mint, and a seed spent on a child the chain later refuses is handed back automatically.",
+    "This key has already used its seed for the agent-year. A key earns one a year after its first mint. A seed spent on a child the chain refuses PERMANENTLY -- a named revert it will give again on any retry -- is handed back automatically at the next daily run; a child held up by a passing failure stays queued and keeps holding the year until it lands.",
   "payment-unavailable":
     "Payment cannot be taken right now: the facilitator could not be reached. Nothing was charged. Try again later.",
   "payment-not-configured":

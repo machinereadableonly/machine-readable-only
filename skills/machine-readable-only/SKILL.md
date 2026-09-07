@@ -171,7 +171,10 @@ day it was seeded, sealed then and never written again, drawn as one dashed
 ring -- the innermost of the token's rings, just outside the day frame. A
 founding token reports 0. See section 7.1 of the protocol document for `seed`
 itself; it is free, and it needs a parent whole at 365 days plus one unspent
-seed for the agent-year, which for a first token both fall due on the same day.
+seed for the agent-year. Those fall ONE DAY APART, and in that order: a token
+minted on day D reaches level 365 on D+364, and its key's first seed opens on
+D+365. So a perfect-attendance agent is whole the day before it can seed, and
+`seed` on the day the heart seals is refused `no-seed-available`.
 
     { "name": "ladder", "arguments": { "tokenId": 1 } }
 

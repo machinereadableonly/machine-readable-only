@@ -20,13 +20,20 @@ import { makeLadderTool } from "../src/mcp/tools/ladder.mjs";
 import { makeCheckinTool } from "../src/mcp/tools/checkin.mjs";
 import { makeRebindTool } from "../src/mcp/tools/rebind.mjs";
 import { makeRestTool } from "../src/mcp/tools/rest.mjs";
+import { makeSeedTool } from "../src/mcp/tools/seed.mjs";
 
 const CONTRACT = "0x" + "a".repeat(40);
 const ctx = { keyId: "k1", sigHash: "sig" };
 
-/// The tools that need no payment and no chain write to answer. The paid ones
-/// (mint, upgrade, seed) already return `ok` on every path; these are the ones
-/// a client meets first and the ones the convention was broken in.
+/// The tools that cost nothing. The paid two (mint, upgrade) already return
+/// `ok` on every path; these are the ones a client meets first and the ones the
+/// convention was broken in.
+///
+/// `seed` IS ONE OF THESE, since 2026-09-07. It costs nothing and never touched
+/// the payment gateway, but it was listed in PAID_TOOLS, so it was driven below
+/// as a paid tool and was absent from this list -- the one that also covers the
+/// empty-mirror path. It does write to the chain, which is why it needs a
+/// `today`; that is not the same thing as taking money.
 function freeTools(q) {
   return [
     ["challenge", makeChallengeTool({ challengeSecret: "s".repeat(32), domain: "example.com" }), {}],
@@ -35,6 +42,7 @@ function freeTools(q) {
     ["checkin", makeCheckinTool({ q, chain: openChain(), today: () => 100 }), { tokenId: 1 }],
     ["rebind", makeRebindTool({ q, contract: CONTRACT }), { tokenId: 1 }],
     ["rest", makeRestTool({ q, contract: CONTRACT }), { tokenId: 1 }],
+    ["seed", makeSeedTool({ q, chain: openChain(), today: () => 100 }), { tokenId: 1, parentId: 1, to: "0x" + "a1".repeat(20) }],
   ];
 }
 
@@ -135,8 +143,8 @@ test("the registry is the nine tools this piece publishes, and the hand-list cov
   );
 });
 
-// THE COMMENT'S CLAIM, ASSERTED. `freeTools`'s own comment says "the paid ones
-// (mint, upgrade, seed) already return `ok` on every path" -- and nothing
+// THE COMMENT'S CLAIM, ASSERTED. `freeTools`'s own comment says "the paid two
+// (mint, upgrade) already return `ok` on every path" -- and nothing
 // checked it. A paid tool that refused with a bare `{ reason }` would break the
 // same client branch the free ones are protected from, and it would do it on
 // the path where the agent has just been asked for money.
@@ -147,7 +155,6 @@ test("every PAID tool answers with `ok` too, on the refusal path", async () => {
   const { PAID_TOOLS } = await import("../src/mcp/server.mjs");
   const { makeMintTool } = await import("../src/mcp/tools/mint.mjs");
   const { makeUpgradeTool } = await import("../src/mcp/tools/upgrade.mjs");
-  const { makeSeedTool } = await import("../src/mcp/tools/seed.mjs");
   const { settleNow } = await import("./paid-stub.mjs");
   const { LADDER } = await import("../src/mcp/ladder.mjs");
 
@@ -163,7 +170,6 @@ test("every PAID tool answers with `ok` too, on the refusal path", async () => {
   const paid = [
     [makeMintTool(deps), { to: "0x" + "a1".repeat(20) }],
     [makeUpgradeTool(deps), { tokenId: 1, upgradeId: 1, variant: 0 }],
-    [makeSeedTool(deps), { parentId: 1, to: "0x" + "a1".repeat(20) }],
   ];
 
   assert.deepEqual(paid.map(([t]) => t.name).sort(), [...PAID_TOOLS].sort(),

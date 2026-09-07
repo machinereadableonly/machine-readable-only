@@ -105,7 +105,7 @@ SELECT COUNT(*) AS n FROM tokens WHERE keyId = ? AND parentId IS NOT NULL
 <p>It counts <code>tokens</code> rows, and <code>insertSeed</code> writes that row at reservation time.
 So the budget is spent the instant the child is reserved, which is the correct
 direction. <strong>The work is therefore the OTHER half only:</strong> a permanently failed
-seed must DELETE the row so the count falls back. Task 5 pins the existing
+seed must DELETE the row so the count falls back. Task 4 pins the existing
 behaviour with a test rather than changing it -- see
 [[check-the-finding-before-fixing-it]]; a third of the last review&#39;s findings
 were already closed and &quot;fixing&quot; them costs a wrong commit message.</p>
@@ -170,28 +170,20 @@ subdirectory, <code>cd</code> back to the repo root before editing root files.</
 <td><strong>53 cells, constant</strong></td>
 </tr>
 <tr>
-<td>Echo ring dot count</td>
-<td><strong>104</strong> (27 top, 27 bottom, 25 left, 25 right)</td>
+<td>Echo ring pattern</td>
+<td>a DASH: two cells on, two off, ink where offset mod 4 is 0 or 1 (revised 2026-09-07 from a dot, to halve the cost)</td>
 </tr>
 <tr>
 <td>Echo ring cost</td>
-<td>~1,456 bytes (104 runs at 13-14 bytes)</td>
+<td>MEASURE IT. The dotted version was 240,196 gas / 1,899 bytes; the dash must be re-measured, never estimated.</td>
 </tr>
 <tr>
-<td>Byte worst case today</td>
-<td>11,550 of 20,000 (<code>GasBudget.t.sol</code>, token 7)</td>
-</tr>
-<tr>
-<td>Expected new byte worst case</td>
-<td>~12,950 (delta <code>1,456 - 64</code>)</td>
-</tr>
-<tr>
-<td>Gas worst case today</td>
-<td>1,750,744 of 2,000,000 (token 9)</td>
+<td>Worst cases</td>
+<td>BOTH ARE CHILDREN. Dotted: gas 1,983,942/2,000,000 on a child at day 364 with FOUR Marks; bytes 13,482/20,000 on a child at the ring cap with five. Different tokens -- never pair them.</td>
 </tr>
 </tbody></table>
 <p>The byte and dot figures are <strong>arithmetic from the geometry, not
-measurements.</strong> Task 4 measures them. If a measurement disagrees with this
+measurements.</strong> Task 3 measures them. If a measurement disagrees with this
 table, the measurement wins and the spec gets corrected.</p>
 <hr>
 <h2>File Structure</h2>
@@ -240,8 +232,8 @@ byte-identical copy
 <ul>
 <li><p>Consumes: nothing.</p>
 </li>
-<li><p>Produces: <code>TokenView.echo</code> (<code>uint32</code>), read by Tasks 2 and 3.
-<code>MachineReadableOnly.echoOf(uint256) returns (uint32)</code>, read by Task 9&#39;s
+<li><p>Produces: <code>TokenView.echo</code> (<code>uint32</code>), read by Task 2.
+<code>MachineReadableOnly.echoOf(uint256) returns (uint32)</code>, read by Task 8&#39;s
 verification script.</p>
 </li>
 <li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
@@ -408,7 +400,115 @@ git add contracts/src/MachineReadableOnly.sol contracts/src/render/TokenView.sol
 git commit -m &quot;contract: a child is sealed with the days its line had run&quot;
 </code></pre>
 <hr>
-<h2>Task 2: The Solidity renderer draws the echo ring</h2>
+<h2>Task 1b: The Warden reads <code>viewOf</code> by name, not by index</h2>
+<p><strong>This is a LIVE CRITICAL, found while implementing Task 1 and confirmed
+against the deployed contract.</strong> It is not caused by Task 1; Task 1 makes it
+worse, because adding <code>echo</code> shifts every later field&#39;s index again.</p>
+<p><code>warden/src/chain/read.mjs:36-39</code> decodes <code>viewOf</code> by hard-coded tuple index.
+Its comment describes a FOURTEEN-field <code>TokenView</code>, but Plan 6 added
+<code>sunsetDay</code>, <code>fellRun</code> and <code>fellDay</code>, making seventeen. So <code>FIELD.agentKeyId</code>
+of 11 reads <code>fellRun</code>.</p>
+<p>Confirmed by raw <code>eth_call</code> against <code>0xe032054D54b407C52C49c40A423aC79031401C03</code>
+for token 1: field 13 is <code>marks</code> (<code>0x2</code>, its Hush), field <strong>14</strong> is the agent
+key (<code>4eaddc8c...</code>), field 15 is the <code>code</code> offset. Field 11 is zero.</p>
+<p>The consequence: <code>boundKeyOf</code> returns <code>0x000...0</code>, <code>bindingBlock</code> compares that
+to the caller&#39;s real key, and refuses. <strong>Every <code>upgrade</code> and every <code>seed</code> on
+the live site is refused with <code>not-bound-to-caller</code>.</strong> No Mark can be bought.</p>
+<p>Two facts that bound it, both verified and both worth keeping in the fix:</p>
+<ul>
+<li><strong>No money is at risk.</strong> The gate runs before payment -- <code>upgrade.mjs:206</code>
+says &quot;Before payment, always.&quot; This is a denial of service, not a loss.</li>
+<li><strong>The Clock is unaffected.</strong> It decodes by NAME through viem
+(<code>view.agentKeyId</code> in <code>run.mjs:80</code>), not by index. That contrast IS the fix:
+do what the Clock does.</li>
+</ul>
+<p>Why no test caught it: every test stubs <code>boundKeyOf</code>. Nothing in the suite has
+ever decoded a real <code>viewOf</code> return. See [[stubs-hide-interface-drift]] --
+third occurrence -- and [[a-test-that-cannot-see-the-failure]].</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/chain/read.mjs</code> (the <code>FIELD</code> map at :36-39 and every
+reader of it)</li>
+<li>Test: <code>warden/test/chain-read.test.mjs</code> (create)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>TokenView</code> as Task 1 leaves it (17 static fields plus <code>code</code> and
+<code>today</code>).</p>
+</li>
+<li><p>Produces: no signature change. <code>boundKeyOf</code>, <code>lifecycleOf</code> and their callers
+keep their current contracts exactly.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test against a REAL captured return</strong></p>
+</li>
+</ul>
+<p>A real <code>viewOf</code> return for token 1, captured from the deployed contract, is at
+<code>.superpowers/sdd/2026-09-06-mro-plan7-lineage-echo/viewof-token1-deployed.hex</code>.
+Copy it into a test fixture. It is the pre-Task-1 (17-field) shape, and token 1
+wears Hush, so <code>marks</code> is <code>0x2</code> and the agent key is a real non-zero hash.</p>
+<p>The test must assert that <code>boundKeyOf</code> returns THAT key -- not zero, and not a
+value the test derived by indexing the same way the code does. Hard-code the
+expected key as a literal.</p>
+<p>Add a second fixture for the POST-Task-1 shape by encoding one yourself from
+the current <code>TokenView</code>, so the test covers the struct as this branch leaves
+it. Both must pass.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and confirm it fails</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd warden &amp;&amp; node --test test/chain-read.test.mjs
+</code></pre>
+<p>Expected: FAIL, with <code>boundKeyOf</code> returning <code>0x000...0</code> -- the live bug,
+reproduced in a test for the first time.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Decode by name</strong></li>
+</ul>
+<p>Keep the existing raw <code>fetch</code> transport and its <code>CALL_TIMEOUT_MS</code>; only the
+DECODING changes. Use viem&#39;s <code>decodeFunctionResult</code> (viem is already a warden
+dependency -- the Clock uses it) with the <code>viewOf</code> entry from the ABI the
+Clock already generates, and read fields by name.</p>
+<p>Delete the <code>FIELD</code> map and its stale comment entirely. Do not replace it with
+corrected numbers: a corrected number is the same defect with a later
+expiry date. If a hand-rolled decoder must stay for some reason the
+implementation reveals, derive the offsets FROM the ABI at module load rather
+than writing them out.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the tests</strong></li>
+</ul>
+<pre><code class="language-bash">source ~/.nvm/nvm.sh
+cd warden &amp;&amp; node --test test/chain-read.test.mjs &amp;&amp; ~/scripts/safe-build.sh npm test
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Prove the guard by breaking it</strong></li>
+</ul>
+<p>Change the ABI&#39;s <code>viewOf</code> field order (or drop a field) and confirm the new
+test goes red rather than silently misreading. Put it back. A decoder that
+cannot notice a struct change is what put this defect in production.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Check for the same pattern elsewhere</strong></li>
+</ul>
+<pre><code class="language-bash">/bin/grep -rn &quot;tupleField\|slice(.*64\|FIELD\.&quot; warden/src/ | /bin/grep -v test
+</code></pre>
+<p>Any other hand-indexed ABI decoding is the same latent defect. Report what you
+find; fix it in this task only if it decodes a struct this branch changes.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd ~/projects/machine-readable-only
+git add warden/src/chain/read.mjs warden/test/chain-read.test.mjs
+git commit -m &quot;chain: read viewOf by name, so a struct change cannot silently misread it&quot;
+</code></pre>
+<p>Quote the four suite counts you measured. Say in the message that this fixes a
+live defect that refused every upgrade and seed since the 2026-09-06 redeploy.</p>
+<hr>
+<h2>Task 2: Both renderers draw the echo ring</h2>
+<p><strong>The two renderers are ONE task and cannot be split.</strong>
+<code>contracts/test/RenderFixture.sol</code> holds <code>keccak256</code> of the tokenURI the
+JavaScript renderer produces, and the Solidity suite asserts against it. So
+changing either side alone leaves the contracts suite RED until the other
+catches up, and the Global Constraints forbid committing that. Do the
+Solidity half, then the JavaScript half, then regenerate the fixture, then
+commit ONCE with all four suites green.</p>
 <p><strong>Files:</strong></p>
 <ul>
 <li>Modify: <code>contracts/src/render/FrameRenderer.sol</code> (<code>rings</code> at :57-60,
@@ -418,17 +518,33 @@ git commit -m &quot;contract: a child is sealed with the days its line had run&q
 </ul>
 <p><strong>Interfaces:</strong></p>
 <ul>
-<li><p>Consumes: <code>TokenView.echo</code> from Task 1.</p>
-</li>
-<li><p>Produces:</p>
-<ul>
+<li>Consumes: <code>TokenView.echo</code> from Task 1.</li>
+<li>Produces:<ul>
 <li><code>FrameRenderer.ringBudget(uint32 level, uint32 echo) returns (uint256 ownRings, uint256 echoRings)</code></li>
 <li><code>FrameRenderer.rings(uint32 level, uint32 echo) returns (uint256)</code> -- the
 TOTAL, replacing the one-argument form.
-Task 3 mirrors both names exactly in JavaScript.</li>
+The JavaScript half of this same task mirrors both names exactly.</li>
 </ul>
 </li>
-<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</ul>
+<p><strong>Also in this task (the JavaScript half):</strong></p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>tools/render-token.mjs</code> (<code>ringsFor</code> :292, <code>canvasFor</code> :299,
+<code>ringBars</code> :333-347, the render entry at :418-436 and :491, the attribute
+list at :681)</li>
+<li>Modify (regenerate, never by hand): <code>contracts/test/RenderFixture.sol</code></li>
+<li>Test: <code>tools/test/echo-ring.test.mjs</code> (create)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: the Solidity names from the first half of this task -- <code>ringBudget</code>, <code>rings</code>,
+<code>echoRingBars</code>. The JavaScript MUST use the same names and the same
+arithmetic.</p>
+</li>
+<li><p>Produces: <code>echo</code> accepted in the render state object, defaulting to 0.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing SOLIDITY test</strong></p>
 </li>
 </ul>
 <pre><code class="language-solidity">// SPDX-License-Identifier: MIT
@@ -482,7 +598,7 @@ contract EchoRingTest is MroTestBase {
 <p><code>_countRuns</code> counts occurrences of <code>&quot;M&quot;</code> in the path string; add it to
 <code>MroTestBase</code> if it is not already there.</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and confirm it fails</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run the Solidity test and confirm it fails</strong></li>
 </ul>
 <pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH
 cd contracts &amp;&amp; forge test --match-contract EchoRingTest -vv
@@ -587,41 +703,7 @@ a founding token.</p>
 <p>Emitted ALWAYS, including <code>0</code> on a founding token, so an agent can filter on
 it without special-casing absence.</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 7: Run the tests</strong></li>
-</ul>
-<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH
-cd contracts &amp;&amp; forge test --match-contract EchoRingTest -vv &amp;&amp; forge test
-</code></pre>
-<p>Expected: EchoRingTest passes. <code>RenderFixture</code> WILL now fail, because the
-tokenURI gained an <code>Echo</code> attribute -- that is correct and Task 3 regenerates
-it. Do not hand-edit the fixture.</p>
-<ul>
-<li><input disabled="" type="checkbox"> <strong>Step 8: Commit</strong></li>
-</ul>
-<pre><code class="language-bash">cd ~/projects/machine-readable-only
-git add contracts/src/render/ contracts/test/
-git commit -m &quot;render: the line&#39;s years draw as one dotted ring at the core&quot;
-</code></pre>
-<hr>
-<h2>Task 3: The JavaScript renderer draws the same thing</h2>
-<p><strong>Files:</strong></p>
-<ul>
-<li>Modify: <code>tools/render-token.mjs</code> (<code>ringsFor</code> :292, <code>canvasFor</code> :299,
-<code>ringBars</code> :333-347, the render entry at :418-436 and :491, the attribute
-list at :681)</li>
-<li>Modify (regenerate, never by hand): <code>contracts/test/RenderFixture.sol</code></li>
-<li>Test: <code>tools/test/echo-ring.test.mjs</code> (create)</li>
-</ul>
-<p><strong>Interfaces:</strong></p>
-<ul>
-<li><p>Consumes: the Solidity names from Task 2 -- <code>ringBudget</code>, <code>rings</code>,
-<code>echoRingBars</code>. The JavaScript MUST use the same names and the same
-arithmetic.</p>
-</li>
-<li><p>Produces: <code>echo</code> accepted in the render state object, defaulting to 0.</p>
-</li>
-<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
-</li>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Write the failing JAVASCRIPT test</strong></li>
 </ul>
 <pre><code class="language-javascript">import { test } from &quot;node:test&quot;;
 import assert from &quot;node:assert/strict&quot;;
@@ -651,14 +733,14 @@ test(&quot;the echo ring is 104 dots&quot;, () =&gt; {
 });
 </code></pre>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and confirm it fails</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 8: Run the JavaScript test and confirm it fails</strong></li>
 </ul>
 <pre><code class="language-bash">source ~/.nvm/nvm.sh
 cd tools &amp;&amp; node --test test/echo-ring.test.mjs
 </code></pre>
 <p>Expected: FAIL -- <code>ringBudget</code> and <code>echoRingBars</code> are not exported.</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 3: Mirror the budget</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 9: Mirror the budget</strong></li>
 </ul>
 <pre><code class="language-javascript">// MUST stay identical to FrameRenderer.ringBudget in Solidity.
 // The echo ring takes one of the TEN rather than adding an eleventh, because
@@ -683,7 +765,7 @@ passes <code>echo</code> or genuinely means &quot;no echo&quot;:</p>
 <pre><code class="language-bash">/bin/grep -rn &quot;ringsFor\|canvasFor&quot; tools/ warden/ client/
 </code></pre>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 4: Mirror the dotted ring</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 10: Mirror the dotted ring</strong></li>
 </ul>
 <pre><code class="language-javascript">// MUST stay identical to FrameRenderer.echoRingBars in Solidity.
 // Drawn when the offset along the edge is EVEN -- in x from o on the
@@ -706,7 +788,7 @@ export function echoRingBars(o, len) {
 }
 </code></pre>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 5: Thread <code>echo</code> through the renderer</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 11: Thread <code>echo</code> through the renderer</strong></li>
 </ul>
 <p>At the render entry (:418), accept <code>echo = 0</code> alongside <code>years: rawYears = 0</code>.
 Replace the ring maths at :434-436:</p>
@@ -737,14 +819,14 @@ introduce a second convention.</p>
 <pre><code class="language-javascript">        num(&quot;Echo&quot;, echo),
 </code></pre>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 6: Run the JS tests</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 12: Run the JS tests</strong></li>
 </ul>
 <pre><code class="language-bash">source ~/.nvm/nvm.sh
 cd tools &amp;&amp; node --test test/echo-ring.test.mjs &amp;&amp; ~/scripts/safe-build.sh npm test
 </code></pre>
 <p>Expected: the new test passes and the tools suite is green.</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 7: Regenerate the cross-language fixture and prove both agree</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 13: Regenerate the cross-language fixture and prove both agree</strong></li>
 </ul>
 <pre><code class="language-bash">source ~/.nvm/nvm.sh
 cd ~/projects/machine-readable-only
@@ -756,16 +838,30 @@ cd contracts &amp;&amp; forge test
 disagree -- <strong>do not touch the fixture</strong>, find the difference. The fixture is
 <code>// GENERATED by tools/render-fixture.mjs -- do not edit by hand.</code></p>
 <p>A regenerated fixture proves Solidity matches JS. It does NOT prove the JS is
-right; that is what Task 4&#39;s decode gate is for.</p>
+right; that is what Task 3&#39;s decode gate is for.</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 8: Commit</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 14: Run ALL FOUR suites, and read them</strong></li>
+</ul>
+<pre><code class="language-bash">export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; source ~/.nvm/nvm.sh
+cd ~/projects/machine-readable-only
+(cd contracts &amp;&amp; ~/scripts/safe-build.sh forge test 2&gt;&amp;1 | tail -1)
+(cd warden   &amp;&amp; ~/scripts/safe-build.sh npm test 2&gt;&amp;1 | /bin/grep -E &quot;^. (pass|fail)&quot;)
+(cd tools    &amp;&amp; ~/scripts/safe-build.sh npm test 2&gt;&amp;1 | /bin/grep -E &quot;^. (pass|fail)&quot;)
+(cd client   &amp;&amp; ~/scripts/safe-build.sh npm test 2&gt;&amp;1 | /bin/grep -E &quot;^. (pass|fail)&quot;)
+</code></pre>
+<p>All four MUST be green before the commit. The fixture regeneration in the
+previous step is what makes contracts green again; if it is not, the two
+renderers disagree and that is the bug to find.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 15: Commit</strong></li>
 </ul>
 <pre><code class="language-bash">cd ~/projects/machine-readable-only
-git add tools/render-token.mjs tools/test/echo-ring.test.mjs contracts/test/RenderFixture.sol
-git commit -m &quot;render: the JavaScript renderer draws the echo ring too&quot;
+git add contracts/src/render/ contracts/test/ tools/render-token.mjs tools/test/echo-ring.test.mjs
+git commit -m &quot;render: the line&#39;s years draw as one dotted ring at the core&quot;
 </code></pre>
-<hr>
-<h2>Task 4: Measure the budget, and prove a child still scans</h2>
+<p>Quote the four counts you just measured in the commit message. A count you
+did not run is not evidence.</p>
+<h2>Task 3: Measure the budget, and prove a child still scans</h2>
 <p><strong>Files:</strong></p>
 <ul>
 <li>Modify: <code>contracts/test/GasBudget.t.sol</code> (the case list at :138-148)</li>
@@ -791,6 +887,33 @@ NOT change token 7, which stays correct as the founding-token worst case.</p>
 LEGAL Mark set. <strong>The maximal legal set is five Marks, not seven</strong> -- the
 exclusive pairs cap it at Hush + Beat + the bought Iris in leaf + Vessel +
 Tint. Do not construct a seven-Mark token; that state is unreachable.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1a: Know what the fixtures do NOT cover before you trust them</strong></li>
+</ul>
+<p>Task 2 found and reported this, and Task 3 inherits it: the pre-existing render
+matrix carries no <code>echo</code> field, so <code>RenderFixture</code> and <code>CombinationFixture</code> are
+BLIND to <code>echoRingBars</code>. Regenerating them proves only that the two renderers
+agree about <code>&quot;Echo&quot;:0</code>.</p>
+<p>Task 2 closed that with two echo-bearing stages in <code>token-uri-fixture.mjs</code> (a
+newborn child and a child at the cap) plus keccak pins on <code>echoRingBars</code>
+asserted in both languages. <strong>Read those pins before you add a measurement
+case</strong>, and make sure your new gas/byte case actually exercises a token with a
+non-zero echo -- Task 2&#39;s report warns that this task measures the ring in
+SOLIDITY ONLY and can inherit the same blind spot without noticing.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1b: Give the spike token an Echo, or the measurement lies</strong></li>
+</ul>
+<p><code>GasBudget.t.sol</code> runs against <code>MROSpikeToken</code>, which has no <code>_echo</code> mapping
+and whose <code>viewOf</code> never sets <code>v.echo</code>. So without this step the budget
+measures the <code>Echo</code> attribute at its SHORTEST possible value (<code>&quot;Echo&quot;:0</code>) and
+misses the real contract&#39;s additional cold SLOAD entirely.</p>
+<p>Add an <code>_echo</code> mapping and the <code>v.echo</code> assignment to <code>MROSpikeToken</code> so the
+child case measures a realistic four-digit Echo and pays the SLOAD.</p>
+<p>Related, and do NOT repeat it: Task 1 reported the Echo costing 148 gas. That
+number came from this same spike token and is memory handling only. <strong>Do not
+copy &quot;148 gas&quot; into CLAUDE.md as the contract&#39;s cost.</strong> The real cost includes
+a cold SLOAD of about 2,100 gas on every <code>tokenURI</code>, which nothing has yet
+measured. Measure it here and report the real figure.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 2: Run it and read the printed headroom</strong></li>
 </ul>
@@ -842,7 +965,7 @@ git add contracts/test/GasBudget.t.sol tools/echo-decode-check.mjs docs/specs/
 git commit -m &quot;measure: the child worst case, and a child still scans&quot;
 </code></pre>
 <hr>
-<h2>Task 5: The mirror reserves a seed</h2>
+<h2>Task 4: The mirror reserves a seed</h2>
 <p><strong>Files:</strong></p>
 <ul>
 <li>Modify: <code>warden/src/mirror/queries.mjs</code> (<code>pendingMints</code> :160-164,
@@ -1003,7 +1126,7 @@ writing only the <code>mints</code> half.</p>
     ),
 </code></pre>
 <p><code>stuckMints</code> must also stop calling a seed &quot;paid for&quot;. Split it the same way
-and give the seed variant its own message; Task 6 uses it.</p>
+and give the seed variant its own message; Task 5 uses it.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 5: Run the tests, then the whole warden suite</strong></li>
 </ul>
@@ -1028,7 +1151,7 @@ git add warden/src/mirror/queries.mjs warden/test/seed-mirror.test.mjs
 git commit -m &quot;mirror: a seed is a free reservation, and never a mint&quot;
 </code></pre>
 <hr>
-<h2>Task 6: The Clock&#39;s fourth pass</h2>
+<h2>Task 5: The Clock&#39;s fourth pass</h2>
 <p><strong>Files:</strong></p>
 <ul>
 <li>Modify: <code>warden/src/clock/abi.mjs</code> (add <code>seed</code>)</li>
@@ -1038,10 +1161,10 @@ git commit -m &quot;mirror: a seed is a free reservation, and never a mint&quot;
 </ul>
 <p><strong>Interfaces:</strong></p>
 <ul>
-<li><p>Consumes: <code>pendingSeeds</code>, <code>dropSeed</code>, <code>markSeedWritten</code> from Task 5.</p>
+<li><p>Consumes: <code>pendingSeeds</code>, <code>dropSeed</code>, <code>markSeedWritten</code> from Task 4.</p>
 </li>
 <li><p>Produces: <code>summary.seeded</code> (array of child ids) and <code>summary.droppedSeeds</code>,
-read by the Clock&#39;s log line and Task 7&#39;s status copy.</p>
+read by the Clock&#39;s log line and Task 6&#39;s status copy.</p>
 </li>
 <li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
 </li>
@@ -1156,7 +1279,7 @@ git add warden/src/clock/ warden/test/clock-seed.test.mjs
 git commit -m &quot;clock: a fourth pass writes seeds, and returns the ones it cannot&quot;
 </code></pre>
 <hr>
-<h2>Task 7: The seed tool stops refusing</h2>
+<h2>Task 6: The seed tool stops refusing</h2>
 <p><strong>Files:</strong></p>
 <ul>
 <li>Modify: <code>warden/src/mcp/tools/seed.mjs</code> (the refusal at the end of the
@@ -1166,7 +1289,7 @@ tool tests -- grep first)</li>
 </ul>
 <p><strong>Interfaces:</strong></p>
 <ul>
-<li><p>Consumes: <code>insertSeed</code>, <code>nextTokenId</code> from Task 5.</p>
+<li><p>Consumes: <code>insertSeed</code>, <code>nextTokenId</code> from Task 4.</p>
 </li>
 <li><p>Produces: <code>{ ok: true, tokenId, txStatus: &quot;queued&quot;, closes: [...], next: ... }</code>.</p>
 </li>
@@ -1257,7 +1380,7 @@ git add warden/src/mcp/tools/seed.mjs warden/test/
 git commit -m &quot;seed: the tool creates a child instead of explaining why it cannot&quot;
 </code></pre>
 <hr>
-<h2>Task 8: Docs and the wire</h2>
+<h2>Task 7: Docs and the wire</h2>
 <p><strong>Files:</strong></p>
 <ul>
 <li><p>Modify: <code>llms.txt</code>, <code>SKILL.md</code></p>
@@ -1269,7 +1392,65 @@ git commit -m &quot;seed: the tool creates a child instead of explaining why it 
 <li><p>Modify: <code>docs/specs/2026-08-27-machine-readable-only-design.md</code> (section 10
 pointer)</p>
 </li>
-<li><p><input disabled="" type="checkbox"> <strong>Step 1: Document the wire change</strong></p>
+<li><p>Modify: <code>warden/tools/absence-on-chain.mjs</code> (the hand-built <code>TokenView</code>
+tuple at :23-37 and the stub view literal at :42-48)</p>
+</li>
+<li><p>Modify: the shipped <code>cast call</code> signature and the positional field prose --
+<code>skills/machine-readable-only/SKILL.md:84</code>,
+<code>docs/2026-09-01-mro-raw-protocol.md:790</code> (and its <code>:799</code> sample tuple and
+<code>:801-803</code>, <code>:814-817</code> field lists),
+<code>skills/machine-readable-only/references/raw-protocol.md:790</code> (BY COPY),
+<code>docs/2026-09-01-mro-raw-protocol.html:831</code></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Fix every consumer of the <code>TokenView</code> SHAPE</strong></p>
+</li>
+</ul>
+<p>Adding a field to <code>TokenView</code> changes the <code>viewOf</code> and <code>svg</code> selectors, so
+every hand-written copy of that struct&#39;s type list is now wrong. Insertion
+versus appending makes no difference here -- both selectors are derived from
+the FULL component list -- which is why this step exists rather than a
+struct reshuffle.</p>
+<ol>
+<li><code>warden/tools/absence-on-chain.mjs</code>: add <code>{ name: &quot;echo&quot;, type: &quot;uint32&quot; }</code>
+after <code>parent</code> in <code>VIEW.components</code>, and <code>echo: 0</code> to the stub view. This is
+the tool CLAUDE.md names as the proof of C4.10 on the deployed Renderer; if
+it is not updated it will fail against the Task 8 redeploy with a selector
+that no longer exists.</li>
+<li>The shipped <code>cast call</code> signature, in all four places listed above: add
+<code>uint32</code> after the <code>uint256</code> that is <code>parent</code>. This is the &quot;read the
+contract yourself&quot; command the protocol doc offers agents as its trust
+anchor, so a signature that cannot decode is high-visibility.</li>
+<li>The positional field prose at <code>raw-protocol.md:799</code> and <code>:801-803</code>,
+<code>:814-817</code>. <strong>Note <code>:814-817</code> is ALREADY stale independently of this
+plan</strong> -- it omits <code>sunsetDay</code>, <code>fellRun</code> and <code>fellDay</code>, which Plan 6
+added. Fix that too while you are in there, and say so in the commit.</li>
+</ol>
+<p>Verify the signature by running it, not by reading it:</p>
+<pre><code class="language-bash">cast call 0xe032054D54b407C52C49c40A423aC79031401C03 \
+  &#39;&lt;the corrected signature&gt;&#39; 1 --rpc-url https://sepolia.base.org
+</code></pre>
+<p>Against the CURRENT deployed contract the corrected 18-type signature will
+FAIL to decode, because that contract predates the Echo -- that is expected
+and is the proof it changed. Re-run it after Task 8 and confirm it decodes.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1b: Correct CLAUDE.md&#39;s gas-budget gotcha</strong></li>
+</ul>
+<p>Task 3 re-measured every figure in that section and it is now wrong. The
+replacement numbers are in section 9 of
+<code>.superpowers/sdd/2026-09-06-mro-plan7-lineage-echo/task-3-report.md</code>; take them
+from there rather than re-deriving.</p>
+<p>Two things must survive the edit, because both have been got wrong in this file
+before:</p>
+<ul>
+<li><p><strong>The dearest token and the largest token are DIFFERENT TOKENS.</strong> Report each
+figure with the token it belongs to and never pair one&#39;s gas with the other&#39;s
+bytes.</p>
+</li>
+<li><p><strong>Both worst cases are now CHILDREN</strong>, which is new. Say so, because a reader
+who assumes a founding token is the worst case will mis-predict every future
+measurement.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Document the wire change</strong></p>
 </li>
 </ul>
 <p><code>seed</code> now returns <code>{ ok: true, tokenId, txStatus: &quot;queued&quot; }</code> where it
@@ -1278,14 +1459,14 @@ previously always returned <code>{ ok: false, reason: &quot;seed-not-available&q
 removed. Say so plainly in the protocol doc, beside the other recorded wire
 changes.</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 2: Point section 10 at the design</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Point section 10 at the design</strong></li>
 </ul>
 <p>The deferred paragraph at the end of section 10 of the master spec is now
 answered. Replace it with one sentence naming
 <code>docs/specs/2026-09-06-mro-lineage-design.md</code> as the record. Do not delete the
 history -- the reasoning about per-token seeding compounding stays.</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 3: Re-copy the protocol doc into the skill BY COPY</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Re-copy the protocol doc into the skill BY COPY</strong></li>
 </ul>
 <pre><code class="language-bash">cd ~/projects/machine-readable-only
 cp docs/2026-09-01-mro-raw-protocol.md skills/machine-readable-only/references/raw-protocol.md
@@ -1295,20 +1476,20 @@ equality, and patching by eye satisfies a reader but not the guard. This
 exact drift left the tools suite red for hours on 2026-09-06 --
 [[a-red-guard-that-was-overridden]].</p>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 4: Run the tools suite, which owns that guard</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the tools suite, which owns that guard</strong></li>
 </ul>
 <pre><code class="language-bash">source ~/.nvm/nvm.sh
 cd tools &amp;&amp; ~/scripts/safe-build.sh npm test 2&gt;&amp;1 | /bin/grep -E &quot;^. (tests|pass|fail)&quot;
 </code></pre>
 <ul>
-<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
 </ul>
 <pre><code class="language-bash">cd ~/projects/machine-readable-only
 git add llms.txt SKILL.md docs/ skills/
 git commit -m &quot;docs: the wire says a seed now lands, and what a child carries&quot;
 </code></pre>
 <hr>
-<h2>Task 9: Redeploy to Base Sepolia</h2>
+<h2>Task 8: Redeploy to Base Sepolia</h2>
 <p><strong>Files:</strong></p>
 <ul>
 <li>Create: <code>contracts/script/DeployPlan7.s.sol</code>,
@@ -1318,6 +1499,34 @@ git commit -m &quot;docs: the wire says a seed now lands, and what a child carri
 </ul>
 <p><strong>This task ends in an outward-facing action. Stop before Step 4 and get the operator&#39;s
 approval.</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 0: Make ABI-vs-chain skew LOUD before you deploy anything</strong></li>
+</ul>
+<p>Task 1b&#39;s review found that <code>read.mjs</code>&#39;s decode <code>catch</code> is silent, so an ABI
+that disagrees with the deployed contract is indistinguishable from an RPC
+outage: both return null and both say <code>chain-unavailable</code>, with no log line
+anywhere. That state is live on this branch right now, and it is strictly
+worse than the bug Task 1b fixed -- the old defect broke <code>upgrade</code> and <code>seed</code>,
+while a silent decode failure also takes out <code>tokenBlock</code>, <code>status</code>,
+<code>/t/&lt;id&gt;</code>, <code>freeIdFrom</code> and therefore <code>mint</code>.</p>
+<p>Two changes, both before the deploy:</p>
+<ol>
+<li><strong>A boot-time probe in <code>warden/src/chain/preflight.mjs</code></strong> -- that file
+already checks the chain id against the RPC and the treasury&#39;s EIP-55
+checksum at startup, so this belongs beside them. Decode one real <code>viewOf</code>
+for a token known to exist. If it throws, REFUSE TO START with a message
+naming the ABI and the contract. Skew then fails at boot, loudly, instead
+of per request, silently.</li>
+<li><strong>Distinguish the two failures at the call site.</strong> In <code>read.mjs</code>, log a
+decode failure differently from a transport failure. It must NOT carry the
+RPC url -- see <code>redact.mjs</code> and [[rpc-url-in-logs]]; the viem decode error
+does not carry it, but check rather than assume.</li>
+</ol>
+<p>Also close the guard gap the same review found: <code>warden/test/abi.test.mjs:31</code>
+SKIPS when <code>contracts/out/</code> is absent, and that directory is gitignored. The
+Warden&#39;s decoder now depends on <code>abi.mjs</code> being fresh, so make the deploy path
+run <code>forge build</code> before the pin -- in <code>rehearse-start.sh</code> or DEPLOY.md -- so
+the guard actually executes rather than skipping on a clean checkout.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 1: Write the deploy script from the working one</strong></li>
 </ul>

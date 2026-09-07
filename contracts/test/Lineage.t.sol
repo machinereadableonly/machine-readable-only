@@ -3,7 +3,6 @@ pragma solidity ^0.8.30;
 
 import {Ladder} from "../src/Ladder.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
-import {Renderer} from "../src/render/Renderer.sol";
 import {MroTestBase} from "./MroTestBase.sol";
 
 /// @notice The Echo: the days a token's LINE had already run when it was

@@ -48,9 +48,12 @@ test("the worst-case token still scans, off the decoded SVG", () => {
 test("the attributes carry the spec's full list", () => {
   const { json } = decodeTokenUri(uriFor(WORST));
   const a = attributesOf(json);
+  // `Echo` joined this list on 2026-09-07 with the spec's own attribute list,
+  // which had omitted it since Plan 7 added it. A test whose name claims to
+  // carry the full list has to actually carry it.
   for (const key of ["Level", "Streak", "Heart", "Years", "Whole", "Mint Day",
                      "Last Day", "Agent Key", "Generation", "Parent", "Children",
-                     "Resting", "Sunset", "Marks"]) {
+                     "Echo", "Resting", "Sunset", "Marks"]) {
     assert.ok(key in a, `attribute ${key} is missing`);
   }
   assert.equal(a.Heart, "364/365");
