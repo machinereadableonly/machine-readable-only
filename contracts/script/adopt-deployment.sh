@@ -52,15 +52,29 @@ if [ -z "$OLD_TOK" ] || [ -z "$OLD_REN" ]; then
   echo "FAIL: could not find the addresses currently published -- read $LLMS and $PROTO by hand" >&2
   exit 1
 fi
-if [ "$OLD_TOK" = "$NEW_TOK" ]; then
-  echo "Nothing to do: $NEW_TOK is already the published token address."
-  exit 0
+# RE-RUNNABLE, DELIBERATELY. This used to `exit 0` here whenever the served
+# copy already named the new token, on the reasoning that the work was done.
+# It is not the same statement: under `set -e` a failure anywhere after the
+# first `sed` -- most likely the render at the end, which shells out to npx --
+# leaves the addresses rewritten and the HTML stale, and the early exit then
+# made a re-run a silent no-op. Half a rename that reports success is the exact
+# drift class this repository has already shipped once.
+#
+# So the address pass is skipped only when there is genuinely nothing to
+# rewrite, and EVERY later step runs regardless. All of them are idempotent: a
+# sed whose pattern no longer matches changes nothing, `cp` is a copy either
+# way, and the renderer overwrites its output. Re-running after any failure
+# therefore converges rather than stalling.
+if [ "$OLD_TOK" = "$NEW_TOK" ] && [ "$OLD_REN" = "$NEW_REN" ]; then
+  echo "addresses already published; completing the remaining steps"
+  REWRITE=no
+else
+  REWRITE=yes
+  echo "superseding"
+  echo "  token     $OLD_TOK  ->  $NEW_TOK"
+  echo "  renderer  $OLD_REN  ->  $NEW_REN"
+  echo "  block                   $NEW_BLOCK"
 fi
-
-echo "superseding"
-echo "  token     $OLD_TOK  ->  $NEW_TOK"
-echo "  renderer  $OLD_REN  ->  $NEW_REN"
-echo "  block                   $NEW_BLOCK"
 echo
 
 # THE FILES THAT NAME THE DEPLOYMENT, and what each one is.
@@ -87,10 +101,23 @@ FILES=(
   CLAUDE.md
 )
 
+if [ "$REWRITE" = yes ]; then
+  for f in "${FILES[@]}"; do
+    before=$(/bin/grep -c "$OLD_TOK\|$OLD_REN" "$f" || true)
+    sed -i "s/$OLD_TOK/$NEW_TOK/g; s/$OLD_REN/$NEW_REN/g" "$f"
+    echo "  $f: $before reference(s) updated"
+  done
+fi
+
+# WHAT IS ACTUALLY TRUE ON DISK, checked rather than assumed. A partial run that
+# rewrote some files and died leaves the rest carrying the old address, and the
+# loop above cannot see that on a re-run because OLD_TOK is read from a file it
+# already fixed. This says so instead of reporting success over it.
+stale=0
 for f in "${FILES[@]}"; do
-  before=$(/bin/grep -c "$OLD_TOK\|$OLD_REN" "$f" || true)
-  sed -i "s/$OLD_TOK/$NEW_TOK/g; s/$OLD_REN/$NEW_REN/g" "$f"
-  echo "  $f: $before reference(s) updated"
+  if /bin/grep -q "$NEW_TOK" "$f" || /bin/grep -q "$NEW_REN" "$f"; then continue; fi
+  echo "  WARNING: $f names neither new address -- check it by hand" >&2
+  stale=$((stale + 1))
 done
 
 # The Clock reads DEPLOY_BLOCK at STARTUP and refuses without one for its chain,
@@ -99,6 +126,14 @@ done
 GROUPED=$(echo "$NEW_BLOCK" | sed -E ':a;s/([0-9])([0-9]{3})(_|$)/\1_\2\3/;ta')
 sed -i -E "s/^export const DEPLOY_BLOCK = \{ 84532: [0-9_]+n \};/export const DEPLOY_BLOCK = { 84532: ${GROUPED}n };/" \
   warden/src/clock/reconcile.mjs
+# ASSERTED, NOT ASSUMED. `sed -i` succeeds when its pattern matches nothing, so
+# a reformatted line here would silently leave the Clock pointed at the previous
+# deployment's block -- and the Clock refuses to start without one for its
+# chain, so it would stop rather than mis-run. Checking is one line.
+if ! /bin/grep -q "^export const DEPLOY_BLOCK = { 84532: ${GROUPED}n };" warden/src/clock/reconcile.mjs; then
+  echo "FAIL: DEPLOY_BLOCK was not set to $GROUPED -- edit warden/src/clock/reconcile.mjs by hand" >&2
+  exit 1
+fi
 /bin/grep -n "^export const DEPLOY_BLOCK" warden/src/clock/reconcile.mjs
 
 # THE SKILL'S COPY IS A COPY, byte for byte. It is the same document reaching
@@ -113,6 +148,13 @@ echo "  $SKILL_COPY: re-copied, byte-identical"
 
 # And the rendered form, because the operator reads the HTML.
 node "$HOME/scripts/render-md-to-html.js" "$PROTO"
+
+if [ "$stale" -ne 0 ]; then
+  echo
+  echo "FAIL: $stale file(s) above name neither new address. Every other step has" >&2
+  echo "      been completed, so fixing those and re-running this is safe." >&2
+  exit 1
+fi
 
 echo
 echo "Left for you, in order:"
