@@ -32,24 +32,26 @@ contract GasBudgetTest is Test {
     /// work; it sits 250,000 gas above where the renderer actually is, so a 14%
     /// regression would land silently inside it and nothing would go red until
     /// the next one. These two are set just above the MEASURED worst cases
-    /// (1,979,442 gas and 13,482 bytes on 2026-09-07), so any real growth in
+    /// (1,884,779 gas and 12,546 bytes on 2026-09-07), so any real growth in
     /// the renderer has to be looked at.
     ///
     /// A failure here is NOT necessarily a bug -- it is a change asking to be
     /// noticed. Move these deliberately, in the same commit as the change that
     /// costs the gas, and say in the message what bought the increase.
     ///
-    /// MOVED 2026-09-07, by lineage, and the gas half is no longer really a
-    /// band. It used to sit 200,000 gas below the hard limit; the dearest token
-    /// is now a seeded CHILD at day 364, whose echo ring costs 240,196 gas, and
-    /// that leaves 20,558 gas of headroom in total. There is no room left to
-    /// put a band in, so this one is set as close under the hard limit as a
-    /// measurement can safely be pinned. THE PIECE PASSES ITS OWN HARD LIMIT BY
-    /// ABOUT ONE PERCENT. Anything that adds drawing to a child needs a real
-    /// budget conversation before it is written, not a band nudge afterwards.
-    /// The byte half is unchanged in character: 13,482 of 20,000, 6,518 spare.
-    uint256 constant GAS_BAND = 1_990_000;
-    uint256 constant BYTE_BAND = 13_600;
+    /// MOVED TWICE ON 2026-09-07, and the second move is the one that matters.
+    /// Lineage first took the dearest token to 1,983,942 -- 16,058 under the
+    /// hard limit -- and the gas band had to be pinned just below the ceiling
+    /// because there was nothing left to put a band inside. The echo ring was
+    /// then changed from a dot to a DASH, which halved its run count, and the
+    /// headroom came back: the dearest token is 1,889,279 measured cold, so
+    /// there are 110,721 gas to spare. These are real bands again, set about
+    /// 2.8% above each measured worst case, the same margin they carried before
+    /// lineage. Each still sits well under its hard limit -- 60,000 gas and
+    /// 7,100 bytes -- so a regression trips a band long before it trips the
+    /// thing that actually breaks the piece.
+    uint256 constant GAS_BAND = 1_940_000;
+    uint256 constant BYTE_BAND = 12_900;
 
     /// @dev The maximal LEGAL token under the ten-Mark ladder: at most one Mark
     /// per pair -- (1,2) (3,4) (5,6) (7,8) (9,10) -- so "every Mark" is no
@@ -361,10 +363,10 @@ contract GasBudgetTest is Test {
     /// @notice What the echo ring costs, isolated: the same token, the same
     /// Marks, the same day, differing only in whether it was seeded.
     ///
-    /// @dev This is the first honest figure for the ring. Task 1 reported the
-    /// Echo costing 148 gas, measured on a spike token that had no `_echo`
-    /// mapping at all -- so that number was memory handling and nothing else.
-    /// It is superseded here, and there are TWO real costs, not one:
+    /// @dev This is the honest figure for the ring. Task 1 reported the Echo
+    /// costing 148 gas, measured on a spike token that had no `_echo` mapping
+    /// at all -- so that number was memory handling and nothing else. It is
+    /// superseded here, and there are TWO real costs, not one:
     ///
     ///   the STORAGE READ, paid by every token in the piece including founding
     ///   ones, because `viewOf` reads `_echo[id]` whether or not it is set; and
@@ -409,10 +411,12 @@ contract GasBudgetTest is Test {
     ///
     /// That artifact has been in the ladder test since it was written and was
     /// harmless while there were 250,000 gas of headroom. Lineage removed the
-    /// headroom: before `_call` stopped copying the answer back, the ladder
-    /// billed this child 2,007,226 -- OVER the 2,000,000 hard limit -- for
-    /// memory its own token never touched, while the same child measured alone
-    /// was under. This test is what the hard limit should be judged on.
+    /// headroom and made it matter: measured under the ORIGINAL dotted ring,
+    /// before `_call` stopped copying the answer back, the ladder billed this
+    /// child 2,007,226 -- OVER the 2,000,000 hard limit -- for memory its own
+    /// token never touched, while the same child measured alone was under. The
+    /// dash has since bought the headroom back, but the artifact was real and
+    /// the fix stands. This test is what the hard limit should be judged on.
     ///
     /// It reads about 4,500 gas HIGHER than the same token in the ladder, and
     /// that difference is real rather than a second artifact: this function

@@ -374,19 +374,26 @@ export function ringBars(rings, canvas) {
   return d;
 }
 
-// The echo ring: the innermost ring, drawn one cell on and one cell off, in the
-// GHOST fill rather than the token's own colour. It is the years the token
-// inherited, so it must not read as years it has kept.
+// The echo ring: the innermost ring, drawn as a DASH -- two cells on, two off --
+// in the GHOST fill rather than the token's own colour. It is the years the
+// token inherited, so it must not read as years it has kept.
 //
-// A cell is drawn when its offset along its own edge is EVEN -- in x from o on
-// the horizontal edges, in y from o on the vertical ones. Offset 0 is even, so
-// all four corners are drawn, which anchors the ring and makes the phase
-// unambiguous on every edge.
+// A cell is INK when its offset along its own edge is 0 or 1 mod 4 -- in x from
+// o on the horizontal edges, in y from o on the vertical ones. Offsets 0 and 1
+// are both ink, so all four corners are drawn and the phase is unambiguous on
+// every edge; 53 = 13 * 4 + 1, so offset 52 is ink too and every edge is
+// anchored at both ends.
+//
+// REVISED 2026-09-07, from one cell on and one off. The dot rule cost 240,196
+// gas and left the piece over its own ceiling by about one percent. The ink is
+// the same 104 cells either way; what changed is that consecutive ink is
+// emitted as ONE run, which halves the run count. Emitting a dash as two
+// adjacent single-cell runs would cost MORE than the dots did.
 //
 // The side length is ALWAYS 53: with r rings the innermost sits at o = 2(r-1)
 // and the canvas is 49 + 4r, so the depth cancels. That is why there is exactly
-// one of these -- at 1,386 to 1,456 bytes a dotted ring costs about 23 times a
-// solid one, and nine would blow the 20,000 byte limit.
+// one of these: even dashed it costs about twelve times a solid ring, and nine
+// would not fit the 20,000 byte limit.
 //
 // MUST stay identical to FrameRenderer.echoRingBars in Solidity.
 export function echoRingBars(o, len) {
@@ -397,17 +404,32 @@ export function echoRingBars(o, len) {
   if (len < 2) return "";
   const last = o + len - 1;
   let d = "";
-  // The two horizontal edges, corners included.
-  for (let i = 0; i < len; i += 2) {
+  // The two horizontal edges, corners included. A group starts every fourth
+  // offset and is two cells long, EMITTED AS ONE RUN -- two adjacent
+  // single-cell runs would cost more than the dots this replaced.
+  for (let i = 0; i < len; i += 4) {
+    // The group starting at the final offset has no room for a second cell.
+    // Clipped, not skipped: 53 = 13 * 4 + 1, so that offset is ink and it is
+    // what anchors the far end of the edge.
+    const run = len - i >= 2 ? 2 : 1;
     const x = o + i;
-    d += `M${x} ${o}h1v1h-1z`;
-    d += `M${x} ${last}h1v1h-1z`;
+    d += `M${x} ${o}h${run}v1h-${run}z`;
+    d += `M${x} ${last}h${run}v1h-${run}z`;
   }
-  // The two vertical edges, corners already drawn above.
-  for (let i = 2; i < len - 1; i += 2) {
-    const y = o + i;
-    d += `M${o} ${y}h1v1h-1z`;
-    d += `M${last} ${y}h1v1h-1z`;
+  // The two vertical edges. Offsets run from 1 to len - 2, because both corners
+  // belong to the horizontal edges that already drew them.
+  if (len > 2) {
+    // Offset 1 is ink and stands alone: offset 0 is its group's other half and
+    // was drawn above. Clipped to one cell, for that reason rather than for
+    // want of room.
+    d += `M${o} ${o + 1}h1v1h-1z`;
+    d += `M${last} ${o + 1}h1v1h-1z`;
+    for (let i = 4; i < len - 1; i += 4) {
+      const run = (len - 1) - i >= 2 ? 2 : 1;
+      const y = o + i;
+      d += `M${o} ${y}h1v${run}h-1z`;
+      d += `M${last} ${y}h1v${run}h-1z`;
+    }
   }
   return d;
 }

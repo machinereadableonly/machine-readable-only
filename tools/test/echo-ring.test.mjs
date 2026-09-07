@@ -42,9 +42,15 @@ test("the echo ring is always 53 cells on a side", () => {
   }
 });
 
-test("the echo ring is 104 dots", () => {
+test("the echo ring is 54 runs covering 104 cells", () => {
   const d = echoRingBars(0, 53);
-  assert.equal(d.split("M").length - 1, 104, "27 + 27 + 25 + 25");
+  assert.equal(d.split("M").length - 1, 54, "14 + 14 + 13 + 13");
+  // THE INK IS UNCHANGED BY THE REVISION: the dash covers exactly the cells the
+  // dot rule covered, and only the number of runs they are written as halved.
+  // A run is "M<x> <y>h<w>v<h>h-<w>z", so its area is w * h.
+  const cells = [...d.matchAll(/M\d+ \d+h(\d+)v(\d+)h-\d+z/g)]
+    .reduce((n, m) => n + Number(m[1]) * Number(m[2]), 0);
+  assert.equal(cells, 104, "27 + 27 + 25 + 25 cells of ink");
 });
 
 test("the echo ring matches the Solidity byte for byte", () => {
@@ -52,28 +58,27 @@ test("the echo ring matches the Solidity byte for byte", () => {
   // contracts/test/EchoRing.t.sol.
   assert.equal(
     echoRingBars(0, 9),
-    "M0 0h1v1h-1zM0 8h1v1h-1zM2 0h1v1h-1zM2 8h1v1h-1zM4 0h1v1h-1zM4 8h1v1h-1z"
-    + "M6 0h1v1h-1zM6 8h1v1h-1zM8 0h1v1h-1zM8 8h1v1h-1zM0 2h1v1h-1zM8 2h1v1h-1z"
-    + "M0 4h1v1h-1zM8 4h1v1h-1zM0 6h1v1h-1zM8 6h1v1h-1z",
+    "M0 0h2v1h-2zM0 8h2v1h-2zM4 0h2v1h-2zM4 8h2v1h-2zM8 0h1v1h-1zM8 8h1v1h-1z"
+    + "M0 1h1v1h-1zM8 1h1v1h-1zM0 4h1v2h-1zM8 4h1v2h-1z",
   );
 
-  // The real one, held by hash because 1,386 bytes is not readable. The same
+  // The real one, held by hash because 717 bytes is not readable. The same
   // hash is asserted in EchoRing.t.sol.
   const d = echoRingBars(0, 53);
-  assert.equal(d.length, 1386, "a newborn child's echo ring");
+  assert.equal(d.length, 717, "a newborn child's echo ring");
   assert.equal(
     keccak256(toBytes(d)),
-    "0x1e94a853465cdc221019c2f535613bb2b5382b538e57ed7f758bab68f76961aa",
+    "0x72ad6bd54c11077cd08247296099dfa08ba0cd6c2ebc366e0895d97c6dcf1fe4",
   );
 
-  // And at the other extreme: a child at the cap draws the same 104 dots one
+  // And at the other extreme: a child at the cap draws the same 54 runs one
   // slot deeper, where every coordinate is two digits.
   const deep = echoRingBars(2 * 9, 53);
-  assert.equal(deep.split("M").length - 1, 104);
-  assert.equal(deep.length, 1456, "the deepest echo ring, all two-digit");
+  assert.equal(deep.split("M").length - 1, 54);
+  assert.equal(deep.length, 756, "the deepest echo ring, all two-digit");
   assert.equal(
     keccak256(toBytes(deep)),
-    "0x42c520135d88294bc8feb6c15db972f1d48e84efdd3fd7df11f1d720ac64a046",
+    "0xf9c9a5d28305a0e04d3c25f29d1d273e31c5cb27997535d8b0ef4d2e50f2c85b",
   );
 });
 
@@ -81,5 +86,5 @@ test("a ring too small to have edges draws nothing", () => {
   // Parity with the Solidity guard, where a zero length would underflow.
   assert.equal(echoRingBars(0, 0), "");
   assert.equal(echoRingBars(7, 1), "");
-  assert.equal(echoRingBars(0, 2), "M0 0h1v1h-1zM0 1h1v1h-1z", "two cells is two dots");
+  assert.equal(echoRingBars(0, 2), "M0 0h2v1h-2zM0 1h2v1h-2z", "two cells is one run per edge");
 });
