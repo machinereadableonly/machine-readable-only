@@ -428,7 +428,13 @@ contract GasBudgetTest is Test {
         console.log("  gas  ", gasUsed);
         console.log("  bytes", len);
         if (_gasIsMeaningful()) {
-            console.log("  headroom", GAS_LIMIT - gasUsed);
+            // Ordered so a token OVER the limit reports the overrun and fails
+            // the assertion, rather than panicking on the subtraction before it
+            // gets there. Found the hard way: an experiment that made the ring
+            // dearer turned this test into an unsigned underflow, which says
+            // nothing about the number that caused it.
+            if (gasUsed < GAS_LIMIT) console.log("  headroom", GAS_LIMIT - gasUsed);
+            else console.log("  OVER THE HARD LIMIT BY", gasUsed - GAS_LIMIT);
             assertLt(gasUsed, GAS_LIMIT, "the dearest token must fit the hard limit");
         }
     }
