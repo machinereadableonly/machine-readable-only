@@ -73,15 +73,15 @@ contract RendererTest is Test {
     }
 
     function test_dayOneMatchesTheJavascriptReference() public view {
-        _diff("day one", _view(1, 1, 1000, 1000), 8826,
-            0xc9776123c933b8ea853356412691c9e8072b4b847462b0da095dcf1ba1b7df26);
+        _diff("day one", _view(1, 1, 1000, 1000), 8858,
+            0xea28a05e5dd4706abd4244cbd4ff692bb82e678a4d395308ee4c9e0e7a7ddb37);
     }
 
     function test_aPartYearMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(200, 45, 1000, 1000);
         v.agentKeyId = bytes32(uint256(0xa9e));
-        _diff("day 200", v, 8827,
-            0xa0378aded6012838abb1d42d2bbb6959733bbc6c229c9a4263178ae01c147ba4);
+        _diff("day 200", v, 8859,
+            0x5e20809788ea4004b4141c0177b6053f5a0a7a3ffd68fb07aae3e71abafb6068);
     }
 
     function test_aWholeHeartMatchesTheJavascriptReference() public view {
@@ -89,35 +89,64 @@ contract RendererTest is Test {
         v.generation = 1;
         v.parent = 7;
         v.seedsGiven = 2;
-        _diff("whole, one ring", v, 8881,
-            0x85eb55ad13ce55fa4a21d432cf09afd8090adc47a038066e5aba263c2cb29f33);
+        _diff("whole, one ring", v, 8913,
+            0xa80e610abf3229580e016334897a67905d5b606ef7914146b820cc4455d75b43);
     }
 
     function test_aLapsedTokenMatchesTheJavascriptReference() public view {
         // Forty days without a check-in. This is the case that caught a real
         // divergence: the JS renderer had a lapse function it never called, so
         // the image never paled while this renderer's did.
-        _diff("whole and lapsed", _view(365, 140, 1000, 1040), 8881,
-            0xdd998459c2ed3929a3eb70b1bec56c992fb01c9a742179b73e887a691493db58);
+        _diff("whole and lapsed", _view(365, 140, 1000, 1040), 8913,
+            0xc6f798ab4587de2c3d617b290cc5ae4fb5296b7cbbdd0e2e6a4b4b266c237fdd);
     }
 
     function test_theRingCapMatchesTheJavascriptReference() public view {
-        _diff("ten years, capped", _view(365 * 10, 400, 1000, 1000), 9751,
-            0x47f0687968543a35be923154d13d7224668c1dbf3c8fc91c0f066db12c0e6430);
+        _diff("ten years, capped", _view(365 * 10, 400, 1000, 1000), 9783,
+            0x4bde6972e8d158bb33392cd8799fbf119b666bc4af6d754355b764914e722092);
     }
 
     function test_everyMarkAtOnceMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(365 * 10, 400, 1000, 1000);
         v.marks = ALL_MARKS;
-        _diff("every drawn mark", v, 10976,
-            0x9926de14952c582758e63867875c31734df52fb322a88fc796993e13b04840c1);
+        _diff("every drawn mark", v, 11008,
+            0x45510b0c06b9319126f6002f027fe8a002ba423345dd4e0fc263ee4cfc1e4cc5);
     }
 
     function test_aSealedTokenMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(365 * 3, 200, 1000, 9999);
         v.resting = true;
-        _diff("sealed at rest", v, 9117,
-            0x3d365a93f4dc7bb11a537cfa45146857fe16807f7872184787c2cf149262be88);
+        _diff("sealed at rest", v, 9149,
+            0x171a4a60a1cca331bc85269d65d62719623e17d8f50b5ebd720274f93b3c95a4);
+    }
+
+    /// A seeded child, at both extremes of the echo ring.
+    ///
+    /// These two are the ONLY cross-language check on the dotted ring at the
+    /// whole-tokenURI level. The render matrix carries no `echo` field, so
+    /// RenderFixture and CombinationFixture are both blind to it: every case in
+    /// them renders a founding token. Without these, the JS and Solidity
+    /// `echoRingBars` could disagree and every suite would stay green.
+    function test_aNewbornChildMatchesTheJavascriptReference() public view {
+        // Level 1, so the token has no ring of its own: the echo ring is the
+        // outermost thing on the smallest canvas the piece draws, 53 cells.
+        TokenView memory v = _view(1, 1, 1000, 1000);
+        v.generation = 1;
+        v.parent = 7;
+        v.echo = 365;
+        _diff("a newborn child", v, 10748,
+            0xdefc722753cd05fc550ddbb1afd4ea6ada6ed07a9f8bdafeac5835c331a28a30);
+    }
+
+    function test_aChildAtTheRingCapMatchesTheJavascriptReference() public view {
+        // Ten years of its own, but only NINE rings are drawn: the tenth slot
+        // is the echo ring, at depth 18, where every coordinate is two digits.
+        TokenView memory v = _view(365 * 10, 400, 1000, 1000);
+        v.generation = 2;
+        v.parent = 7;
+        v.echo = 3650;
+        _diff("a child at the cap", v, 11682,
+            0x72229cad844cf98b237b4b81257b2c6b8aa6352962d4949a3db76a039720431e);
     }
 
     function test_theEyesAreDrawnLastOverTheNoise() public view {
@@ -332,7 +361,7 @@ contract RendererTest is Test {
         // as a fix -- and the ring count still stops where it always did.
         string memory ten = r.tokenURI(_view(365 * 10, 5, 1000, 1000));
         assertTrue(vm.contains(ten, '{"trait_type":"Years","value":10}'));
-        assertEq(FrameRenderer.rings(365 * 11), 10, "the drawn ring still stops at ten");
+        assertEq(FrameRenderer.rings(365 * 11, 0), 10, "the drawn ring still stops at ten");
     }
 
     function _gasIsMeaningful() internal view returns (bool) {

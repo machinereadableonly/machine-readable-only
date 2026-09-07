@@ -53,10 +53,37 @@ library FrameRenderer {
         return ringCount == 0 ? 0 : 2 * ringCount - 1;
     }
 
-    /// @notice Completed years, which is how many rings the token has earned.
-    function rings(uint32 level) internal pure returns (uint256 r) {
-        r = level / FrameGeometry.DAY_CELLS;
-        if (r > MAX_RINGS) r = MAX_RINGS;
+    /// @notice How the ten ring slots are shared between the years this token
+    /// inherited and the years it earned itself.
+    ///
+    /// @dev The echo ring takes one of the TEN rather than adding an eleventh.
+    /// That is forced: canvas(r) = 49 + 4r, so an eleventh ring grows the
+    /// artwork to 93 cells and creates a second byte worst case to measure and
+    /// defend. A child's own rings therefore cap at nine.
+    ///
+    /// The slot is taken by ANY non-zero echo, not by a whole year of it: the
+    /// ring says the token came from somewhere, and one day of inheritance is
+    /// as true as a thousand.
+    ///
+    /// MUST stay identical to ringBudget in tools/render-token.mjs.
+    /// @param level the token's own credited days
+    /// @param echo  the days its line had run when it was seeded; 0 if founding
+    function ringBudget(uint32 level, uint32 echo)
+        internal
+        pure
+        returns (uint256 own, uint256 echoRings)
+    {
+        echoRings = echo > 0 ? 1 : 0;
+        own = level / FrameGeometry.DAY_CELLS;
+        uint256 room = MAX_RINGS - echoRings;
+        if (own > room) own = room;
+    }
+
+    /// @notice Completed years plus the echo ring: the total rings drawn, which
+    /// is what sets the canvas size.
+    function rings(uint32 level, uint32 echo) internal pure returns (uint256) {
+        (uint256 own, uint256 echoRings) = ringBudget(level, echo);
+        return own + echoRings;
     }
 
     /// @notice The canvas edge for a token with `ringCount` rings.
@@ -75,7 +102,8 @@ library FrameRenderer {
         pure
         returns (string memory)
     {
-        uint256 ringCount = rings(v.level);
+        (uint256 ownRings, uint256 echoRings) = ringBudget(v.level, v.echo);
+        uint256 ringCount = ownRings + echoRings;
         uint256 size = canvas(ringCount);
         uint256 frameOff = ringSpan(ringCount) + GAP;
 
@@ -83,7 +111,7 @@ library FrameRenderer {
         uint256[] memory ghostRows = new uint256[](size);
         _fill(v, litRows, ghostRows, size, frameOff);
 
-        return _emit(litRows, ghostRows, size, ringCount, colour, ghostFill);
+        return _emit(litRows, ghostRows, size, ownRings, echoRings, colour, ghostFill);
     }
 
     /// @dev Marks every frame cell into one of the two row bitmaps.
@@ -153,7 +181,8 @@ library FrameRenderer {
         uint256[] memory litRows,
         uint256[] memory ghostRows,
         uint256 size,
-        uint256 ringCount,
+        uint256 ownRings,
+        uint256 echoRings,
         string memory colour,
         string memory ghostFill
     ) private pure returns (string memory) {
@@ -169,7 +198,12 @@ library FrameRenderer {
         }
 
         bytes memory ghostD = PathWriter.seal(ghostBuf);
-        bytes memory litD = abi.encodePacked(PathWriter.seal(litBuf), _ringBars(ringCount, size));
+        if (echoRings != 0) {
+            // The echo ring is the innermost slot, at depth 2 * ownRings, and
+            // is always 53 cells on a side whatever the ring count.
+            ghostD = abi.encodePacked(ghostD, echoRingBars(2 * ownRings, 53));
+        }
+        bytes memory litD = abi.encodePacked(PathWriter.seal(litBuf), _ringBars(ownRings, size));
 
         bytes memory out;
         if (ghostD.length != 0) out = abi.encodePacked('<path fill="', ghostFill, '" d="', ghostD, '"/>');
@@ -210,6 +244,47 @@ library FrameRenderer {
                     "h1v", LibString.toString(h), "h-1z"
                 );
             }
+        }
+    }
+
+    /// @dev The echo ring: the innermost ring, drawn one cell on and one cell
+    /// off, in the GHOST fill rather than the token's own colour. It is the
+    /// years the token inherited, so it must not read as years it has kept.
+    ///
+    /// A cell is drawn when its offset along its own edge is EVEN, measured in
+    /// x from `o` on the horizontal edges and in y from `o` on the vertical
+    /// ones. Offset 0 is even, so all four corners are drawn, which anchors the
+    /// ring and makes the phase unambiguous on every edge.
+    ///
+    /// The side length is ALWAYS 53: with r rings the innermost sits at
+    /// o = 2(r-1) and canvas is 49 + 4r, so the depth cancels. That is why
+    /// there is exactly one of these -- at 1,386 bytes at depth 0 and 1,456 at
+    /// depth 18 (the only difference is one-digit against two-digit
+    /// coordinates), a dotted ring costs about 23 times a solid one, and nine
+    /// would blow the 20,000 byte limit.
+    ///
+    /// MUST stay identical to echoRingBars in tools/render-token.mjs.
+    /// @param o   the ring's depth from the canvas edge, in cells
+    /// @param len its full width, corners included
+    function echoRingBars(uint256 o, uint256 len) internal pure returns (bytes memory d) {
+        uint256 last = o + len - 1;
+        // The two horizontal edges, corners included.
+        for (uint256 i; i < len; i += 2) {
+            uint256 x = o + i;
+            d = abi.encodePacked(
+                d,
+                "M", LibString.toString(x), " ", LibString.toString(o), "h1v1h-1z",
+                "M", LibString.toString(x), " ", LibString.toString(last), "h1v1h-1z"
+            );
+        }
+        // The two vertical edges, corners already drawn above.
+        for (uint256 i = 2; i < len - 1; i += 2) {
+            uint256 y = o + i;
+            d = abi.encodePacked(
+                d,
+                "M", LibString.toString(o), " ", LibString.toString(y), "h1v1h-1z",
+                "M", LibString.toString(last), " ", LibString.toString(y), "h1v1h-1z"
+            );
         }
     }
 
