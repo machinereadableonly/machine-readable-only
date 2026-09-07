@@ -16,19 +16,35 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 /// `Seeded` stub said `tokenId` until 2026-09-07, a name the event does not
 /// carry, and the reader read the same wrong name -- so the pair agreed with
 /// each other and with nothing on chain. Fixing the literal fixes it once.
-/// Deriving the check from `MRO_ABI` makes the whole CLASS impossible: rename
-/// an input in the contract and every stub of that event fails here, by name,
-/// instead of passing against a decoder that is wrong in the same direction.
+/// Deriving the check from `MRO_ABI` closes the class for every stub that goes
+/// through this helper -- which is all of them in this file, and this file is
+/// the only place that hand-writes one. Rename an input in the contract and the
+/// stub fails here, by name, instead of passing against a decoder that is wrong
+/// in the same direction. It cannot stop someone writing a raw
+/// `{ eventName, args }` literal again; nothing short of a lint rule can.
 /// Same idea as mint-id.test.mjs's "the test double exposes exactly the real
 /// chain reader's surface".
-function chainEvent(eventName, args) {
+/// `partial: true` is for a stub that deliberately carries only the arguments
+/// one test cares about. It relaxes COMPLETENESS only -- every name given is
+/// still checked against the ABI, which is the half that catches the drift.
+function chainEvent(eventName, args, { partial = false } = {}) {
   const spec = MRO_ABI.find((e) => e.type === "event" && e.name === eventName);
   assert.ok(spec, `the ABI has no event named ${eventName}`);
+  const real = spec.inputs.map((i) => i.name);
+
+  const invented = Object.keys(args).filter((k) => !real.includes(k));
   assert.deepEqual(
-    Object.keys(args).sort(),
-    spec.inputs.map((i) => i.name).sort(),
-    `${eventName} stub does not carry the ABI's own argument names`
+    invented,
+    [],
+    `${eventName} stub uses ${invented.join(", ")}, which the event does not carry (it has ${real.join(", ")})`
   );
+  if (!partial) {
+    assert.deepEqual(
+      Object.keys(args).sort(),
+      [...real].sort(),
+      `${eventName} stub does not carry the ABI's own argument names`
+    );
+  }
   return { eventName, args };
 }
 
@@ -256,7 +272,11 @@ test("the three events reconcile cannot apply are counted rather than dropped", 
 // mirror does not hold is still a skip, and still a divergence.
 test("an event for an unknown token is still counted as skipped", () => {
   const q = queries(openDb(":memory:"));
-  const applied = applyEvents(q, [{ eventName: "Rested", args: { tokenId: 404 } }]);
+  // `Rested(id, day, level, streak)` -- the id argument is `id`, NOT `tokenId`,
+  // which is what this stub said until the ABI guard was relaxed to admit it.
+  // No production bug: reconcile reads `args.tokenId ?? args.id`, so both land.
+  // Partial on purpose -- only the id decides a skip.
+  const applied = applyEvents(q, [chainEvent("Rested", { id: 404 }, { partial: true })]);
   assert.equal(applied.skipped, 1);
   assert.equal(applied.Rested, 0);
 });

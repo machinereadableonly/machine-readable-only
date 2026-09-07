@@ -312,8 +312,9 @@ same key, starting at level 1, carrying `parent` and `generation` as traits.
 
 The child also carries an **Echo**: the number of days its line had already run
 on the day it was seeded, sealed at that moment and never written again. It is
-drawn as one dashed ring inside the frame, and it is the only number in the
-piece a token does not earn itself.
+drawn as one dashed ring -- the innermost of the token's rings, sitting just
+outside the day frame with a blank cell between the two -- and it is the only
+number in the piece a token does not earn itself.
 
 **How `seed` answers.** Every gate is checked first -- the parent whole and not
 resting, bound to your key on chain rather than in our mirror, a seed unspent
