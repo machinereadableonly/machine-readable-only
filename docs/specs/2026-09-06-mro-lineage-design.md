@@ -187,111 +187,69 @@ renderer and `tools/render-token.mjs` byte-for-byte identical, and a rule
 either language can interpret differently will fail that test rather than
 merely look wrong.
 
-A cell is drawn when its offset along its own edge is EVEN, where offset is
-measured in `x` from `o` on the two horizontal edges and in `y` from `o` on the
-two vertical edges.
+**REVISED 2026-09-07 from a DASH to halve the cost.** The ring was originally
+one cell on, one cell off. Measured, that cost 240,196 gas and left the piece
+passing its own 2,000,000 ceiling by about one percent. A dash halves the run
+count for the same meaning, and at thumbnail size a dash reads as broken more
+clearly than a dot does. The rule below is the dash; the dotted rule is gone.
 
-- Top edge: `y = o`, `x` in `o .. o + 52`, drawn where `(x - o)` is even.
+A cell at offset `i` along its own edge is INK when `i mod 4` is 0 or 1 --
+two cells on, two cells off. Offset is measured in `x` from `o` on the two
+horizontal edges and in `y` from `o` on the two vertical edges.
+
+- Top edge: `y = o`, `x` in `o .. o + 52`, offset `i = x - o`.
 - Bottom edge: `y = o + 52`, same rule.
-- Left edge: `x = o`, `y` in `o + 1 .. o + 51`, drawn where `(y - o)` is even.
+- Left edge: `x = o`, `y` in `o + 1 .. o + 51`, offset `i = y - o`.
 - Right edge: `x = o + 52`, same rule.
 
-Offset 0 is even, so all four corners are drawn. That anchors the ring visually
-and makes the dot phase unambiguous on every edge.
+Offsets 0 and 1 are both ink, so all four corners are drawn and the phase is
+unambiguous on every edge. The side is 53 cells and 53 = 13 x 4 + 1, so offset
+52 is also ink and every edge is anchored at BOTH ends.
 
-Dot count, which is therefore also constant:
+Consecutive ink cells are emitted as ONE run, which is where the saving comes
+from -- not as two separate single-cell runs:
 
-| Edge | Dots |
-|---|---|
-| top | 27 |
-| bottom | 27 |
-| left | 25 |
-| right | 25 |
-| **total** | **104** |
+- horizontal: `M<x> <y>h<len>v1h-<len>z`
+- vertical:   `M<x> <y>h1v<len>h-1z`
 
-### 3.6 What it costs, measured
+Two runs are clipped to length 1 by the geometry and that is correct, not an
+edge case to special-case away: on a horizontal edge the run beginning at
+offset 52 has no room for a second cell, and on a vertical edge offset 1 is ink
+while offset 0 belongs to the horizontal edge that already drew it.
 
-A run in this renderer is `"M<x> <y>h1v1h-1z"`, 13 to 14 bytes at these
-coordinates. 104 runs is **1,386 bytes at depth 0 and 1,456 at depth 18**.
+The exact run and byte counts are a MEASUREMENT, not a derivation -- see 3.6.
 
-**CORRECTED 2026-09-07, from measurement.** This section previously said the
-cost was CONSTANT at ~1,456. It is not, and the reasoning behind that claim was
-half right. The DOT COUNT is genuinely constant at 104, because the ring's side
-length is always 53 -- section 3.4 stands. But the byte cost is not, because
-the coordinate DIGIT WIDTH grows with depth. Constant geometry does not imply
-constant bytes when the geometry is serialised as decimal text. Both figures
-are now pinned by keccak in `EchoRing.t.sol` and `echo-ring.test.mjs`.
+### 3.6 What it costs in bytes and gas
 
-For contrast, a solid ring is four bars, about 64 bytes. A dotted ring costs
-roughly 23 times a solid one. That ratio is the whole reason there is exactly
-one of them: nine dotted rings would be about 15,000 bytes and would blow the
-20,000 limit outright. The collapse to a single ring is not a simplification,
-it is what makes the texture affordable at all.
+**MEASURED, and re-measured after the dash.** Every figure in this section
+comes from `GasBudget.t.sol`, not from arithmetic.
 
-#### What a whole child costs, through `tokenURI`
+The DOTTED ring measured 240,196 gas and 1,899 bytes, which took the piece to
+1,983,942 of its 2,000,000 gas ceiling -- about one percent of headroom. That
+is what the dash in 3.5 exists to fix.
 
-Measured 2026-09-07 through `contracts/test/GasBudget.t.sol`, on the spike token
-with cold storage -- the call a marketplace actually makes. **The dearest token
-and the largest token are different tokens and are reported separately; pairing
-one's gas with the other's byte count is a mistake this project has made
-before.**
+A preallocated-buffer rewrite was tried TWICE and both were DEARER (257,243 and
+313,831 through `tokenURI`, against 240,196 shipped). The hypothesis that the
+cost was quadratic string building is REFUTED: one attempt removed the
+reallocation and all 208 `toString` calls and still came in 22,721 gas above.
+The cost is the bytes themselves through base64 and JSON, plus the canvas
+growing from 51 to 53 cells. Do not re-propose a buffer.
 
-| worst case | which token | measured | limit | margin |
-| --- | --- | ---: | ---: | ---: |
-| **gas** | a CHILD at day 364, four Marks, echo ring | **1,983,942** | 2,000,000 | **16,058** |
-| **bytes** | a CHILD at the ring cap, five Marks, echo ring | **13,482** | 20,000 | **6,518** |
+One thing that experiment established and that binds anything later: adding a
+second function to `PathWriter` TAXED THE WHOLE PIECE. `_writeRun` had a single
+call site that via-IR was inlining; a second call site made it a real internal
+call for the frame's hundreds of runs too, costing a token with no echo ring
+34,089 gas.
 
-Both worst cases are now children. The founding-token figures they replace were
-1,735,469 gas (token 9) and 11,582 bytes (token 7); both tokens are still
-measured and both are still correct as the founding worst cases.
+THE POST-DASH FIGURES GO HERE when the dash is measured. Until then this
+section records the dotted measurement and the fact that it was the reason for
+the change.
 
-The echo ring itself, isolated on one day-364 token that differs only in
-whether it was seeded: **240,196 gas and 1,899 bytes**. The gas was not
-estimated anywhere before this and is far larger than the byte cost suggests:
-1,386 bytes of path is about 175 gas per byte once `PathWriter` has written it,
-the SVG has been base64-encoded and the JSON assembled around it.
-
-#### The gas worst case is a child at day 364, and that is new
-
-**Lineage broke a mutual exclusion the budget was resting on.** Until now the
-two expensive states could not coexist: the day frame is filled to
-`min(level, 365)`, so a fragmented frame implied `level < 365`, which implied
-zero rings. `GasBudget.t.sol` says so in a comment and was right.
-
-A child breaks it. Its echo ring is drawn for any non-zero echo at any level, so
-a child at day 364 carries a fragmented frame AND a ring at once. That token is
-the dearest thing the piece can produce, and nothing before this measured it.
-
-**It passes with 16,058 gas of margin -- about one percent.** That is reported
-as the result, not as comfort. The piece has spent its gas headroom: before
-lineage the worst case sat 250,000 gas under the limit. `GAS_BAND`, the
-regression band that used to sit between the worst case and the hard limit, no
-longer has room to be a band and is now pinned just under the limit. Anything
-that adds drawing to a child needs a budget conversation before it is written.
-
-Two further things had to be established to get an honest number, and both are
-recorded in `GasBudget.t.sol` beside the code that does them:
-
-**The maximal legal Mark set is smaller below a whole heart.** A day-364 token
-cannot wear either side of pair 4: Vessel sets `requiresWhole` and `applyMark`
-refuses it while `level < 365`, and Break needs a completed run of 365 while
-`_credit` raises the level on every day it raises the run, so a run of 365
-implies a level of at least 365. The dearest child therefore wears FOUR Marks --
-Hush, Beat, the bought Iris in leaf, and Tint -- not five. Measured with the
-impossible five-Mark set instead, the same child reads 1,020 gas higher; the
-distinction turned out not to be what decided the limit, but the budget should
-not rest on a token that cannot exist.
-
-**The measurement itself was inflated.** `GasBudget.t.sol` measured
-`string memory uri = t.tokenURI(id)`, which copies twelve kilobytes into the
-CALLING test's memory and keeps it there. Memory is priced quadratically, so
-each stage in the eleven-stage ladder was billed for expansion its own token
-never caused -- the same child read 2,007,226 in the ladder and 1,990,703
-alone, a gap of about 19,000 gas. The first of those is over the hard limit and
-the second is not. The call is now made with `staticcall` and both return
-parameters zero, so the answer is left in the return buffer and the callee pays
-only for its own memory. Every figure in the file moved down by that artifact
-when it was removed; the ones in the table above are the corrected ones.
+**Both worst cases are now CHILDREN**, which is new and easy to mis-predict:
+the dearest is a child at day 364 wearing four Marks (pair 4 is shut below a
+whole heart, so five is not legal there), and the largest is a child at the
+ring cap wearing five. They are DIFFERENT TOKENS and their figures must never
+be paired.
 
 ### 3.7 Why the ghost fill, and what that does to Ache
 
