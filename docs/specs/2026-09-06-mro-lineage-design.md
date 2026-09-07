@@ -157,8 +157,9 @@ years sit at the core and the token's own years grow around them.
 
 ### 3.4 The ring is always 53 cells on a side
 
-A property worth stating because it makes the cost a constant rather than a
-range. With `r` rings:
+A property worth stating because it fixes the DOT COUNT at 104 whatever the
+depth. It does not fix the byte cost -- see 3.6, where that claim was corrected
+by measurement. With `r` rings:
 
 ```
 canvas = 49 + 4r
@@ -202,7 +203,15 @@ Dot count, which is therefore also constant:
 ### 3.6 What it costs in bytes
 
 A run in this renderer is `"M<x> <y>h1v1h-1z"`, 13 to 14 bytes at these
-coordinates. 104 runs is about **1,456 bytes**, constant at any depth.
+coordinates. 104 runs is about **1,386 to 1,456 bytes**.
+
+**CORRECTED 2026-09-07, from measurement.** This section previously said the
+cost was CONSTANT at ~1,456. It is not, and the reasoning behind that claim was
+half right. The DOT COUNT is genuinely constant at 104, because the ring's side
+length is always 53 -- section 3.4 stands. But the byte cost is not, because
+the coordinate DIGIT WIDTH grows with depth: measured 1,386 at depth 0 and
+1,456 at depth 18. Constant geometry does not imply constant bytes when the
+geometry is serialised as decimal text.
 
 The byte worst case today is 11,550 of 20,000 (`GasBudget.t.sol`, token 7 at the
 ring cap, `echo == 0`). A child at the cap draws NINE solid rings and one
