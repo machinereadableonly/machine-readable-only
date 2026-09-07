@@ -100,6 +100,34 @@ export function queries(db) {
       "INSERT INTO mints (tokenId, toAddress, keyId, payNonce, reservedAt, status) " +
         "VALUES (?, ?, ?, ?, ?, 'awaiting-payment')"
     ),
+    // --- lineage: the free route --------------------------------------------
+    insertSeedToken: db.prepare(
+      "INSERT INTO tokens (tokenId, keyId, owner, lastDay, mintDay, parentId, generation) " +
+        // The child's generation is the PARENT's plus one, read in the same
+        // statement so it cannot drift from the chain's p.generation + 1. The
+        // parent id is bound twice because it is both the column value and the
+        // subselect's key; a parent that does not exist makes this NULL, which
+        // the NOT NULL column refuses -- a child with no parent is exactly the
+        // row nothing downstream could interpret.
+        "VALUES (?, ?, ?, ?, ?, ?, (SELECT generation + 1 FROM tokens WHERE tokenId = ?))"
+    ),
+    insertSeedMint: db.prepare(
+      // payNonce and reservedAt are deliberately absent: a free row must not be
+      // reachable by expiredMints or by staleRows, both of which require a
+      // reservation. The same treatment the four EARNED Marks already get.
+      "INSERT INTO mints (tokenId, toAddress, keyId, status) VALUES (?, ?, ?, 'queued')"
+    ),
+    // BOTH deletes are guarded on `parentId IS NOT NULL`, so a bug in the Clock
+    // can never take a FOUNDING token's rows: those were paid for and are on
+    // chain, and they are the one thing here nobody can recreate. The mints
+    // half reads the tokens row, so it has to run BEFORE the tokens half --
+    // after it, the guard would find nothing and refuse to delete anything.
+    deleteSeedMint: db.prepare(
+      "DELETE FROM mints WHERE tokenId = ? AND EXISTS " +
+        "(SELECT 1 FROM tokens t WHERE t.tokenId = mints.tokenId AND t.parentId IS NOT NULL)"
+    ),
+    deleteSeedToken: db.prepare("DELETE FROM tokens WHERE tokenId = ? AND parentId IS NOT NULL"),
+
     reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId, variant) VALUES (?, ?, ?)"),
     reserveMarkPaid: db.prepare(
       "INSERT INTO mark_orders (tokenId, upgradeId, variant, payNonce, reservedAt, status) " +
@@ -160,10 +188,30 @@ export function queries(db) {
     pendingMints: db.prepare(
       "SELECT m.tokenId, m.toAddress, m.keyId, m.qr, t.keyId AS agentKeyId FROM mints m " +
         "JOIN tokens t ON t.tokenId = m.tokenId " +
-        "WHERE m.status = 'queued' AND m.solveState = 'done' ORDER BY m.tokenId ASC"
+        // A CHILD IS NOT A MINT. `seed` and `mint` are different functions with
+        // different arguments, and a child sent through the mint pass reverts
+        // for a reason no agent could act on.
+        "WHERE m.status = 'queued' AND m.solveState = 'done' AND t.parentId IS NULL " +
+        "ORDER BY m.tokenId ASC"
+    ),
+    pendingSeeds: db.prepare(
+      "SELECT m.tokenId, m.toAddress, m.qr, t.parentId, t.keyId AS agentKeyId FROM mints m " +
+        "JOIN tokens t ON t.tokenId = m.tokenId " +
+        "WHERE m.status = 'queued' AND m.solveState = 'done' AND t.parentId IS NOT NULL " +
+        "ORDER BY m.tokenId ASC"
     ),
     stuckMints: db.prepare(
-      "SELECT tokenId, solveState, solveTries FROM mints WHERE status = 'queued' AND solveState = 'failed'"
+      "SELECT m.tokenId, m.solveState, m.solveTries FROM mints m " +
+        "JOIN tokens t ON t.tokenId = m.tokenId " +
+        // The seed half is split out because the ALERT is different, not just
+        // the query: this one says the agent has PAID and has nothing, which
+        // is untrue of a seed and would send a human looking for a refund.
+        "WHERE m.status = 'queued' AND m.solveState = 'failed' AND t.parentId IS NULL"
+    ),
+    stuckSeeds: db.prepare(
+      "SELECT m.tokenId, m.solveState, m.solveTries, t.parentId FROM mints m " +
+        "JOIN tokens t ON t.tokenId = m.tokenId " +
+        "WHERE m.status = 'queued' AND m.solveState = 'failed' AND t.parentId IS NOT NULL"
     ),
     pendingCredits: db.prepare(
       "SELECT tokenId, day FROM credits WHERE status = 'queued' AND day <= ? ORDER BY day ASC, tokenId ASC"
@@ -389,6 +437,50 @@ export function queries(db) {
     },
 
     /**
+     * Reserve a SEEDED CHILD, which costs nothing.
+     *
+     * Queued outright, because nothing settles on this route and there is
+     * therefore no window in which the mirror could be believing in a payment
+     * that never arrives -- the same reasoning as reserveMark below.
+     *
+     * A SEPARATE METHOD rather than a flag on insertMint, which throws without
+     * a payment nonce. The rule is the one written beside reserveMark and
+     * reserveMarkPaid: a boolean argument in a money path is exactly the seam
+     * where something expensive gets handed out for free.
+     *
+     * BOTH ROWS LAND IN ONE TRANSACTION. The tokens row IS the reservation --
+     * seedsSpent counts `parentId IS NOT NULL` -- so a half-written pair would
+     * either spend a seed with nothing to write, or write with no seed spent.
+     * A key earns one seed per completed agent-year and can never earn that
+     * year again, so the rollback is what makes a failed reservation free.
+     */
+    insertSeed({ childId, parentId, toAddress, keyId, lastDay, mintDay }) {
+      return this.transact(() => {
+        s.insertSeedToken.run(childId, keyId, toAddress, lastDay, mintDay, parentId, parentId);
+        s.insertSeedMint.run(childId, toAddress, keyId);
+      });
+    },
+
+    /**
+     * A seed the chain will never accept.
+     *
+     * Deleting BOTH rows is what returns the key's seed for this agent-year,
+     * because seedsSpent counts the tokens row. A once-a-year budget burned on
+     * a child the chain never heard of is the worst failure this feature has,
+     * and it is a SILENT one: a free row has no reservedAt, so neither the
+     * expiry sweep nor staleRows would ever mention it.
+     *
+     * Both statements refuse a token with no parent, so this can never be the
+     * thing that deletes a founding token.
+     */
+    dropSeed(childId) {
+      return this.transact(() => {
+        s.deleteSeedMint.run(childId);
+        s.deleteSeedToken.run(childId);
+      });
+    },
+
+    /**
      * Reserve an EARNED Mark, which costs nothing.
      *
      * Queued outright, because nothing settles on that route and there is
@@ -571,9 +663,19 @@ export function queries(db) {
     /// bitmap is broken forever rather than merely late.
     pendingMints: () => s.pendingMints.all(),
 
+    /// Seeds ready to be written, on the same rule as pendingMints above: the
+    /// child's `code` is written once and permanently, so an unsolved bitmap
+    /// makes a permanently broken artwork out of a merely late one.
+    pendingSeeds: () => s.pendingSeeds.all(),
+
     /// Mints that can never proceed on their own. The agent has paid and has
     /// nothing, so a human has to see these.
     stuckMints: () => s.stuckMints.all(),
+
+    /// The same, for seeds. Nobody paid, so the money is not the problem -- but
+    /// the agent has spent one of the few seeds it will ever have, and only a
+    /// human can decide whether to drop the row and give the year back.
+    stuckSeeds: () => s.stuckSeeds.all(),
 
     /// Credits for days that have CLOSED. A check-in at 00:03 belongs to
     /// tomorrow's batch, which is why this is bounded rather than "everything".
@@ -631,6 +733,17 @@ export function queries(db) {
     /// state the comment promised was impossible. `transact` is what makes the
     /// sentence true.
     markMintWritten(tokenId) {
+      this.transact(() => {
+        s.markMintWritten.run(tokenId);
+        s.markTokenWritten.run(tokenId);
+      });
+    },
+    /// A seed landed. Deliberately the SAME two statements markMintWritten
+    /// runs, and deliberately its own name: 'written' means the identical thing
+    /// on both routes, but a Clock pass that sends `seed` must never read as
+    /// one that sends `mint`. Duplicating the SQL to make the two look
+    /// different would be two facts where there is one.
+    markSeedWritten(tokenId) {
       this.transact(() => {
         s.markMintWritten.run(tokenId);
         s.markTokenWritten.run(tokenId);
