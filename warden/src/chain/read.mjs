@@ -27,16 +27,27 @@
 // The selectors below were confirmed against the DEPLOYED contract on Base
 // Sepolia (0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D) on 2026-08-31 with
 // `cast call`, not computed and hoped for.
+//
+// THE viewOf RETURN IS DECODED BY NAME, THROUGH THE GENERATED ABI. It used to
+// be decoded by hard-coded tuple index, from a comment that described a
+// FOURTEEN-field TokenView. Plan 6 had already made it seventeen (sunsetDay,
+// fellRun, fellDay) and nothing updated the constants, so `agentKeyId` was
+// read from index 11 -- which is `fellRun`, and is zero. `boundKeyOf` returned
+// the zero key, `bindingBlock` compared it against the caller's real key, and
+// every `upgrade` and every `seed` on the live site was refused with
+// `not-bound-to-caller` from the 2026-09-06 redeploy until this fix.
+//
+// A CORRECTED SET OF NUMBERS WOULD BE THE SAME DEFECT WITH A LATER EXPIRY
+// DATE. `resting: 8` and `sunset: 9` were still correct on the day this was
+// found, which is why the fault stayed invisible in everything but the key.
+// So there are no field constants here at all: the ABI is generated from the
+// compiled artifact (test/abi.test.mjs pins it against contracts/out), and a
+// struct change now moves the decoder with it. This is what the Clock has
+// always done -- clock/run.mjs reads `view.agentKeyId` by name through viem.
+import { decodeFunctionResult } from "viem";
+import { MRO_ABI } from "../clock/abi.mjs";
 
-/// viewOf(uint256). The struct ends in a dynamic `bytes code` field, so the
-/// return is ABI-encoded as a dynamic tuple: a leading 32-byte offset word,
-/// then the tuple's static fields in order, then the dynamic bytes. Field
-/// order, from src/render/TokenView.sol:
-///   0 tokenId, 1 level, 2 streak, 3 lastDay, 4 mintDay, 5 generation,
-///   6 seedsGiven, 7 parent, 8 resting, 9 sunset, 10 marks, 11 agentKeyId,
-///   12 code, 13 today
-const VIEW_OF = "0x0fa4edbd";
-const FIELD = { level: 1, lastDay: 3, resting: 8, sunset: 9, agentKeyId: 11 };
+const VIEW_OF = "0x0fa4edbd"; // viewOf(uint256) -> TokenView
 const MINTED_TO = "0x118033bc"; // mintedTo(address) -> uint32
 const WALLET_CAP = "0x58950c22"; // walletCap() -> uint32
 const TOTAL_MINTED = "0xa2309ff8"; // totalMinted() -> uint32
@@ -50,20 +61,6 @@ const CALL_TIMEOUT_MS = 3000;
 /// cached, and only its `true` -- see writesOpen() for why pause is not.
 export const SUNSET_CACHE_MS = 60_000;
 
-/// One static field of a dynamic-tuple return, as a hex word, or null when the
-/// data is too short to contain it. Null always means "could not read", never
-/// a value.
-function tupleField(hex, index) {
-  const data = hex.slice(2);
-  const offsetWord = data.slice(0, WORD_HEX_CHARS);
-  if (offsetWord.length !== WORD_HEX_CHARS) return null;
-  const offsetBytes = parseInt(offsetWord, 16);
-  if (!Number.isFinite(offsetBytes)) return null;
-  const start = offsetBytes * 2 + index * WORD_HEX_CHARS;
-  const field = data.slice(start, start + WORD_HEX_CHARS);
-  return field.length === WORD_HEX_CHARS ? field : null;
-}
-
 /// A single non-tuple return word (uint32, bool), or null.
 function singleWord(hex) {
   const data = hex.slice(2);
@@ -74,7 +71,15 @@ const asNumber = (word) => (word === null ? null : Number(BigInt("0x" + word)));
 const asBool = (word) => (word === null ? null : BigInt("0x" + word) !== 0n);
 const addressArg = (address) => address.replace(/^0x/, "").toLowerCase().padStart(64, "0");
 
-export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch, now = () => Date.now() }) {
+export function makeChainReader({
+  rpcUrl,
+  contract,
+  fetchImpl = fetch,
+  now = () => Date.now(),
+  // Injectable only so a test can decode a return captured from an OLDER
+  // deployment against that deployment's shape. Production never passes it.
+  abi = MRO_ABI,
+}) {
   /**
    * One eth_call. Returns the result hex, or null on ANY failure.
    *
@@ -117,7 +122,27 @@ export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch, now = () 
     return body.result;
   }
 
-  const viewOf = (tokenId) => ethCall(VIEW_OF + BigInt(tokenId).toString(16).padStart(64, "0"));
+  /**
+   * One `viewOf` call, decoded to a named TokenView, or null.
+   *
+   * Null is "could not ask", exactly as it is for the transport above, and the
+   * decode is inside the guard for the same reason the JSON parse is: viem
+   * THROWS on a return whose shape disagrees with the ABI rather than
+   * returning a wrong answer, and a throw here would reach an agent as
+   * `internal` instead of a refusal. Measured on viem 2.56.0 against the real
+   * seventeen-field return from the deployed contract: "Position 20735 is out
+   * of bounds". Loud and null beats confident and wrong -- confident and wrong
+   * is what the index decoder did.
+   */
+  async function viewOf(tokenId) {
+    const result = await ethCall(VIEW_OF + BigInt(tokenId).toString(16).padStart(64, "0"));
+    if (result === null) return null;
+    try {
+      return decodeFunctionResult({ abi, functionName: "viewOf", data: result });
+    } catch {
+      return null;
+    }
+  }
 
   // Only a TRUE sunset is ever cached. Caching a false would keep the door open
   // for up to a minute after the operator closed the piece, and every write
@@ -134,14 +159,16 @@ export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch, now = () 
    * contract itself decides NoSuchToken.
    */
   async function lifecycleOf(tokenId) {
-    const result = await viewOf(tokenId);
-    if (result === null) return null;
-    const level = asNumber(tupleField(result, FIELD.level));
-    const resting = asBool(tupleField(result, FIELD.resting));
-    const sunset = asBool(tupleField(result, FIELD.sunset));
-    const lastDay = asNumber(tupleField(result, FIELD.lastDay));
-    if (level === null || resting === null || sunset === null || lastDay === null) return null;
-    return { exists: level > 0, resting, sunset, level, lastDay };
+    const v = await viewOf(tokenId);
+    if (v === null) return null;
+    // Present-and-right-typed, not merely truthy: an ABI that no longer
+    // carries one of these names would otherwise hand back `undefined` as a
+    // fact. Same rule as everywhere else here -- a missing answer is null.
+    if (typeof v.resting !== "boolean" || typeof v.sunset !== "boolean") return null;
+    const level = Number(v.level);
+    const lastDay = Number(v.lastDay);
+    if (!Number.isFinite(level) || !Number.isFinite(lastDay)) return null;
+    return { exists: level > 0, resting: v.resting, sunset: v.sunset, level, lastDay };
   }
 
   return {
@@ -153,10 +180,9 @@ export function makeChainReader({ rpcUrl, contract, fetchImpl = fetch, now = () 
      * refuses on null rather than admitting on it.
      */
     async boundKeyOf(tokenId) {
-      const result = await viewOf(tokenId);
-      if (result === null) return null;
-      const field = tupleField(result, FIELD.agentKeyId);
-      return field ? ("0x" + field).toLowerCase() : null;
+      const v = await viewOf(tokenId);
+      if (v === null || typeof v.agentKeyId !== "string") return null;
+      return v.agentKeyId.toLowerCase();
     },
 
     /**
