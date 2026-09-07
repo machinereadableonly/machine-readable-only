@@ -38,33 +38,100 @@ import { generateCombinations, packCombination } from "./mark-combinations.mjs";
 /// so the earned and bought routes are distinguishable in the output.
 const STATE = { level: 365, streak: 400, lastDay: 1000, today: 1000, irisRun: 400 };
 
+/// The same set again, on a SEEDED CHILD, for the sets that can hide an echo bug.
+///
+/// WHY THIS IS A SAMPLE WHEN THE MAIN PASS IS NOT. The comment at the top of
+/// this file says a sample would need a rule for what to leave out and that the
+/// honest rule was "nothing". That still holds for the MARK axis. This second
+/// pass is a different axis with a different rule, and the rule is stateable:
+/// ONE CASE PER ECHO-SENSITIVE DRAWING SITE.
+///
+/// The echo ring is ink in the ghost fill, and two of the six `_blockOff` call
+/// sites are Mark-gated -- `_eyes` returns early without an Iris, `_quiet`
+/// returns "" without Hush -- so those are the places a Mark and the ring can
+/// collide. Renderer.t.sol already renders a child in the maximal legal set,
+/// which covers every gated site AT ONCE; what it cannot show is a bug in one
+/// site alone, or two that cancel. These isolate each site instead.
+///
+/// Rendering all 459 a second time was measured and rejected: the Solidity half
+/// already costs 6.07s and 866M gas, which is most of the contracts suite, and
+/// doubling it buys repetition of an interaction the sites above already pin.
+const ECHO_STATE = { ...STATE, echo: 365, parent: 7, generation: 1 };
+
+/// Chosen by drawing site, not by taste:
+///   none                     the control -- the ring with no Mark near it
+///   hush                     `_quiet`, the site gated on Hush
+///   ache                     the deepening ghost, the ring's own fill
+///   iris-bought(target)      `_eyes`, once per shape, since each draws its own
+///   iris-bought(squircle)      geometry into the code's corners
+///   iris-bought(leaf)
+///   iris-earned              the earned route, whose ink comes from its own run
+///   vessel                   the whole-heart repaint, the largest erase
+///   iris-earned+aura         the tinted page the ring is drawn onto. Aura
+///                            cannot stand alone -- Ladder.sol's `requiresAny`
+///                            makes it wait on an Iris -- so this is the
+///                            SHORTEST legal set that reaches the Aura field.
+///   hush+static+iris-bought(target)+vessel+tint(violet)
+///                            the maximal legal set, kept as the union case
+const ECHO_LABELS = [
+  "none",
+  "hush",
+  "ache",
+  "iris-bought(target)",
+  "iris-bought(squircle)",
+  "iris-bought(leaf)",
+  "iris-earned",
+  "vessel",
+  "iris-earned+aura",
+  "hush+static+iris-bought(target)+vessel+tint(violet)",
+];
+
 export function fixtures(domain, tokenId) {
   const bitmap = tokenBitmap(domain, tokenId);
   const modules = unpackModules(Buffer.from(bitmap.hex, "hex"), SIZE);
   const want = unpackModules(heartMaskBytes(), SIZE);
   const { combos } = generateCombinations();
 
-  return combos.map(c => {
+  const render1 = (c, state, label) => {
     const uri = tokenUri(modules, want, SIZE, {
       tokenId,
       mintDay: 900,
-      ...STATE,
+      ...state,
       marks: c.ids,
       irisVariant: c.irisVariant,
       tintVariant: c.tintVariant,
     });
     return {
       ...c,
-      marksBits: packCombination(c, STATE.irisRun),
+      label,
+      echo: state.echo ?? 0,
+      parent: state.parent ?? 0,
+      generation: state.generation ?? 0,
+      marksBits: packCombination(c, state.irisRun),
       bytes: uri.length,
       hash: keccak256(toBytes(uri)),
     };
+  };
+
+  const founding = combos.map(c => render1(c, STATE, c.label));
+
+  // ASSERTED, NOT ASSUMED. A label typo here would silently drop a drawing site
+  // from the echo pass, and the fixture would regenerate smaller with nothing
+  // to say so -- the same failure the COUNT assertion in Solidity exists to
+  // catch, one layer earlier.
+  const children = ECHO_LABELS.map(label => {
+    const c = combos.find(x => x.label === label);
+    if (!c) throw new Error(`ECHO_LABELS names a combination that does not exist: ${label}`);
+    return render1(c, ECHO_STATE, `child: ${label}`);
   });
+
+  return [...founding, ...children];
 }
 
 export function render(all, domain, tokenId) {
   const lines = all.map(r =>
-    `        c[i++] = Case(${r.marksBits}, ${r.bytes}, ${r.hash}, "${r.label}");`
+    `        c[i++] = Case(${r.marksBits}, ${r.echo ?? 0}, ${r.parent ?? 0}, `
+    + `${r.generation ?? 0}, ${r.bytes}, ${r.hash}, "${r.label}");`
   ).join("\n");
 
   return `// SPDX-License-Identifier: MIT
@@ -81,12 +148,19 @@ pragma solidity ^0.8.30;
 /// the two renderers. This closes that: every legal set, every Iris shape and
 /// every Tint ink, diffed byte for byte.
 ///
-/// Every case is rendered at the SAME state -- level ${STATE.level}, streak ${STATE.streak},
-/// lastDay ${STATE.lastDay}, today ${STATE.today}, irisRun ${STATE.irisRun} -- so a failure is
-/// about the Marks and nothing else.
+/// The first ${all.length - ECHO_LABELS.length} are rendered at the SAME state -- level ${STATE.level},
+/// streak ${STATE.streak}, lastDay ${STATE.lastDay}, today ${STATE.today}, irisRun ${STATE.irisRun} -- so a
+/// failure is about the Marks and nothing else.
+///
+/// The last ${ECHO_LABELS.length}, labelled "child: ...", repeat one Mark set per
+/// echo-sensitive drawing site on a SEEDED CHILD (echo ${ECHO_STATE.echo}), so a Mark
+/// that collides with the dashed ring fails here rather than in nothing at all.
 library CombinationFixture {
     struct Case {
         uint256 marks;
+        uint32 echo;
+        uint256 parent;
+        uint32 generation;
         uint256 bytesLen;
         bytes32 hash;
         string label;

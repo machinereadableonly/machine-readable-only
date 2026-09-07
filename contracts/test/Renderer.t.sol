@@ -127,11 +127,18 @@ contract RendererTest is Test {
 
     /// A seeded child, at both extremes of the echo ring.
     ///
-    /// These two are the ONLY cross-language check on the dashed ring at the
-    /// whole-tokenURI level. The render matrix carries no `echo` field, so
-    /// RenderFixture and CombinationFixture are both blind to it: every case in
-    /// them renders a founding token. Without these, the JS and Solidity
-    /// `echoRingBars` could disagree and every suite would stay green.
+    /// These were once the ONLY cross-language check on the dashed ring at the
+    /// whole-tokenURI level, because the render matrix carried no `echo` field
+    /// and every case in RenderFixture and CombinationFixture rendered a
+    /// founding token. That is no longer true: the matrix now carries seven
+    /// seeded children and the combination fixture ten more, one per
+    /// echo-sensitive drawing site.
+    ///
+    /// They are kept because they are not redundant. These two are the
+    /// EXTREMES -- the smallest canvas the piece draws and the ring cap -- and
+    /// they are written by hand, so they fail with a name rather than as case
+    /// number 57 of 63. Verified 2026-09-07 by setting the dash period to 5 in
+    /// FrameRenderer: these went red, and so did both fixtures.
     function test_aNewbornChildMatchesTheJavascriptReference() public view {
         // Level 1, so the token has no ring of its own: the echo ring is the
         // outermost thing on the smallest canvas the piece draws, 53 cells.

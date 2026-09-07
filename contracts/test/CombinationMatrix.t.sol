@@ -48,7 +48,11 @@ contract CombinationMatrixTest is Test {
 
     function test_everyLegalMarkCombinationMatchesTheJavascriptReference() public view {
         CombinationFixture.Case[] memory cases = CombinationFixture.cases();
-        assertEq(cases.length, 459, "the combination fixture is not the size it should be");
+        // 459 founding, then 10 seeded children -- one per echo-sensitive
+        // drawing site, so a Mark that collides with the dashed ring fails
+        // here. Asserted so a fixture that regenerates smaller goes red rather
+        // than passing with less coverage.
+        assertEq(cases.length, 469, "the combination fixture is not the size it should be");
 
         for (uint256 i; i < cases.length; ++i) {
             CombinationFixture.Case memory c = cases[i];
@@ -63,6 +67,11 @@ contract CombinationMatrixTest is Test {
             v.streak = 400;
             v.lastDay = 1000;
             v.today = 1000;
+            // Zero on all 459 founding cases, so those render exactly as they
+            // always did; non-zero only on the ten children.
+            v.echo = c.echo;
+            v.parent = c.parent;
+            v.generation = c.generation;
 
             string memory uri = r.tokenURI(v);
             assertEq(
@@ -74,6 +83,20 @@ contract CombinationMatrixTest is Test {
                 string.concat(c.label, ": content differs from the reference")
             );
         }
+    }
+
+    /// @dev The echo pass, asserted present BY NAME for the same reason as the
+    /// three below: a regenerated fixture that silently lost the children would
+    /// still pass the sweep above, since that only walks whatever it is given.
+    /// These two are the gated `_blockOff` sites -- `_quiet` behind Hush and
+    /// `_eyes` behind an Iris -- which are the places a Mark and the ring can
+    /// collide at all.
+    function test_theEchoPassIsPresent() public pure {
+        CombinationFixture.Case[] memory cases = CombinationFixture.cases();
+
+        assertTrue(_has(cases, "child: hush"), "the Hush-gated erase, on a child");
+        assertTrue(_has(cases, "child: iris-bought(leaf)"), "the Iris-gated eyes, on a child");
+        assertTrue(_has(cases, "child: none"), "the control: a child wearing nothing");
     }
 
     /// @dev The three combinations the review named as having no differential
