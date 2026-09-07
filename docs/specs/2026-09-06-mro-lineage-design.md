@@ -113,7 +113,16 @@ as a new write path guarding a number that agents would try to time.
 
 - Mint: unchanged. Check-in: unchanged. Neither touches `_echo`.
 - `seed`: one SSTORE and one SLOAD, on a call that already writes four slots.
-- `tokenURI`: one cold SLOAD, against 249,256 gas of margin.
+- `tokenURI`: one cold SLOAD, **measured at 2,183 gas**, paid by every token in
+  the piece and not only by children -- `viewOf` reads `_echo[id]` whether or
+  not it was ever written. Measured 2026-09-07 by adding the mapping to the
+  spike token and re-running `GasBudget.t.sol`: all nine founding stages moved
+  by exactly the same 2,183, which is the 2,100 cold SLOAD plus 83 of
+  surrounding work.
+  This SUPERSEDES the "148 gas" reported when the storage was designed. That
+  figure was taken on a spike token that had no `_echo` mapping at all, so it
+  measured memory handling and could not see the storage read.
+  The margin it is drawn against is no longer 249,256 either. See section 3.6.
 
 ---
 
@@ -200,27 +209,18 @@ Dot count, which is therefore also constant:
 | right | 25 |
 | **total** | **104** |
 
-### 3.6 What it costs in bytes
+### 3.6 What it costs, measured
 
 A run in this renderer is `"M<x> <y>h1v1h-1z"`, 13 to 14 bytes at these
-coordinates. 104 runs is about **1,386 to 1,456 bytes**.
+coordinates. 104 runs is **1,386 bytes at depth 0 and 1,456 at depth 18**.
 
 **CORRECTED 2026-09-07, from measurement.** This section previously said the
 cost was CONSTANT at ~1,456. It is not, and the reasoning behind that claim was
 half right. The DOT COUNT is genuinely constant at 104, because the ring's side
 length is always 53 -- section 3.4 stands. But the byte cost is not, because
-the coordinate DIGIT WIDTH grows with depth: measured 1,386 at depth 0 and
-1,456 at depth 18. Constant geometry does not imply constant bytes when the
-geometry is serialised as decimal text.
-
-The byte worst case today is 11,550 of 20,000 (`GasBudget.t.sol`, token 7 at the
-ring cap, `echo == 0`). A child at the cap draws NINE solid rings and one
-dotted, so against that token the delta is `1,456 - 64 = about 1,392 bytes`,
-putting the new worst case near 12,950 with roughly 7,000 bytes of margin.
-
-Note what that implies for the suite: **the byte worst case becomes a CHILD
-token**, so `GasBudget.t.sol` needs a new case rather than a re-measurement of
-the existing one. Token 7 stays exactly as it is and stays correct.
+the coordinate DIGIT WIDTH grows with depth. Constant geometry does not imply
+constant bytes when the geometry is serialised as decimal text. Both figures
+are now pinned by keccak in `EchoRing.t.sol` and `echo-ring.test.mjs`.
 
 For contrast, a solid ring is four bars, about 64 bytes. A dotted ring costs
 roughly 23 times a solid one. That ratio is the whole reason there is exactly
@@ -228,9 +228,70 @@ one of them: nine dotted rings would be about 15,000 bytes and would blow the
 20,000 limit outright. The collapse to a single ring is not a simplification,
 it is what makes the texture affordable at all.
 
-**These are arithmetic from the geometry, not measurements.** The plan must
-re-run `GasBudget.t.sol` and record the real figures, and the gas cost of 104
-runs through `PathWriter` against 4 bars is NOT estimated here at all.
+#### What a whole child costs, through `tokenURI`
+
+Measured 2026-09-07 through `contracts/test/GasBudget.t.sol`, on the spike token
+with cold storage -- the call a marketplace actually makes. **The dearest token
+and the largest token are different tokens and are reported separately; pairing
+one's gas with the other's byte count is a mistake this project has made
+before.**
+
+| worst case | which token | measured | limit | margin |
+| --- | --- | ---: | ---: | ---: |
+| **gas** | a CHILD at day 364, four Marks, echo ring | **1,983,942** | 2,000,000 | **16,058** |
+| **bytes** | a CHILD at the ring cap, five Marks, echo ring | **13,482** | 20,000 | **6,518** |
+
+Both worst cases are now children. The founding-token figures they replace were
+1,735,469 gas (token 9) and 11,582 bytes (token 7); both tokens are still
+measured and both are still correct as the founding worst cases.
+
+The echo ring itself, isolated on one day-364 token that differs only in
+whether it was seeded: **240,196 gas and 1,899 bytes**. The gas was not
+estimated anywhere before this and is far larger than the byte cost suggests:
+1,386 bytes of path is about 175 gas per byte once `PathWriter` has written it,
+the SVG has been base64-encoded and the JSON assembled around it.
+
+#### The gas worst case is a child at day 364, and that is new
+
+**Lineage broke a mutual exclusion the budget was resting on.** Until now the
+two expensive states could not coexist: the day frame is filled to
+`min(level, 365)`, so a fragmented frame implied `level < 365`, which implied
+zero rings. `GasBudget.t.sol` says so in a comment and was right.
+
+A child breaks it. Its echo ring is drawn for any non-zero echo at any level, so
+a child at day 364 carries a fragmented frame AND a ring at once. That token is
+the dearest thing the piece can produce, and nothing before this measured it.
+
+**It passes with 16,058 gas of margin -- about one percent.** That is reported
+as the result, not as comfort. The piece has spent its gas headroom: before
+lineage the worst case sat 250,000 gas under the limit. `GAS_BAND`, the
+regression band that used to sit between the worst case and the hard limit, no
+longer has room to be a band and is now pinned just under the limit. Anything
+that adds drawing to a child needs a budget conversation before it is written.
+
+Two further things had to be established to get an honest number, and both are
+recorded in `GasBudget.t.sol` beside the code that does them:
+
+**The maximal legal Mark set is smaller below a whole heart.** A day-364 token
+cannot wear either side of pair 4: Vessel sets `requiresWhole` and `applyMark`
+refuses it while `level < 365`, and Break needs a completed run of 365 while
+`_credit` raises the level on every day it raises the run, so a run of 365
+implies a level of at least 365. The dearest child therefore wears FOUR Marks --
+Hush, Beat, the bought Iris in leaf, and Tint -- not five. Measured with the
+impossible five-Mark set instead, the same child reads 1,020 gas higher; the
+distinction turned out not to be what decided the limit, but the budget should
+not rest on a token that cannot exist.
+
+**The measurement itself was inflated.** `GasBudget.t.sol` measured
+`string memory uri = t.tokenURI(id)`, which copies twelve kilobytes into the
+CALLING test's memory and keeps it there. Memory is priced quadratically, so
+each stage in the eleven-stage ladder was billed for expansion its own token
+never caused -- the same child read 2,007,226 in the ladder and 1,990,703
+alone, a gap of about 19,000 gas. The first of those is over the hard limit and
+the second is not. The call is now made with `staticcall` and both return
+parameters zero, so the answer is left in the return buffer and the callee pays
+only for its own memory. Every figure in the file moved down by that artifact
+when it was removed; the ones in the table above are the corrected ones.
 
 ### 3.7 Why the ghost fill, and what that does to Ache
 
@@ -262,10 +323,47 @@ module code plus its 4-cell quiet zone on each side, and `GAP` keeps a blank
 cell between the innermost ring and the day frame -- so nothing here touches the
 quiet zone by construction.
 
-That is an argument, not a result. **A rendered child must pass the ZXing decode
-oracle before this is called done**, at the same pixel sizes the existing sheets
-use, and at both extremes: a newborn child (one ring, canvas 53) and a child at
-the cap (ten rings, canvas 89). See the decode-oracle memory: ZXing, never jsqr.
+That is an argument, not a result.
+
+**RESULT, 2026-09-07: a child scans, with zero rejections.**
+`tools/echo-decode-check.mjs` is the gate. It renders six states and decodes
+each at nine pixel sizes -- 256, 350, 500, 700, 848, 900, 1080, 1424, 1600 --
+through the project's ZXing oracle (`tools/test/helpers/decode.mjs`; never
+jsqr, see the decode-oracle memory), and requires not merely a decode but a
+decode to the token's own url. **54 of 54 passed.**
+
+The six states are the two extremes the plan asked for, each in the Marks it
+could actually be wearing, plus a control for each:
+
+| state | canvas | svg bytes | decodes |
+| --- | ---: | ---: | --- |
+| newborn child, bare (level 1, echo 365) | 53 | 7,059 | every size |
+| newborn child, Hush | 53 | 7,116 | every size |
+| founding token, 1 solid ring (control) | 53 | 5,674 | every size |
+| child at the cap, bare (level 3,650, echo 3,650) | 89 | 7,743 | every size |
+| child at the cap, every legal Mark | 89 | 9,032 | every size |
+| founding token, 10 solid rings (control) | 89 | 6,322 | every size |
+
+**The controls are what make the result attributable.** A child's canvas is not
+new: `canvasFor(0, echo)` is 53, exactly a founding token with one year ring,
+and `canvasFor(10, echo)` is 89, exactly the founding ring cap. So each child is
+paired with a founding token on the identical canvas at the identical module
+size, differing only in a dotted innermost ring against a solid one. Without
+that pair, a failure could not have been attributed to the ring rather than to
+the canvas.
+
+848 and 1424 are in the size list because they are 16 x 53 and 16 x 89: the
+exact multiples a consumer honouring the SVG's declared intrinsic size lands
+on. 350, 700 and 900 come from the existing ten-ring gate in
+`render-token.test.mjs`.
+
+A newborn child is the harsher of the two extremes and it is worth saying why:
+its ring is the OUTERMOST thing on the canvas at depth 0, where the dots are
+largest relative to the code, and it is the state most children will be in.
+
+The gate runs under the memory wrapper (`~/scripts/safe-build.sh`) and reports
+its own peak: **967 MB** across the 54 rasters, inside the 3 GB cap. It exits
+non-zero on any rejection.
 
 ---
 

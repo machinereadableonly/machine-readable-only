@@ -317,6 +317,36 @@ test("the worst case a token can reach still scans", () => {
   }
 });
 
+test("a seeded child still scans at both extremes of the echo ring", () => {
+  // THE ECHO RING IS THE FIRST HIGH-FREQUENCY PATTERN THIS PIECE DRAWS NEXT TO
+  // THE CODE. Every other ring is a solid line, which a binarizer ignores; this
+  // one is 104 dots, one cell on and one cell off, and at a small raster the
+  // dots are about the size of a module. tools/echo-decode-check.mjs is the
+  // full gate (nine sizes, with founding-token controls on the identical
+  // canvas). This is the regression half of it, so a change to the ring cannot
+  // land with every suite green.
+  //
+  // Both extremes, because the ring moves: a newborn child's ring is the
+  // OUTERMOST thing on a 53-cell canvas, and a child at the cap has it at depth
+  // 18 inside nine solid rings on an 89-cell one.
+  const SIZES = [256, 500, 848, 1080, 1600];
+  const CASES = [
+    { name: "newborn child", state: { level: 1, streak: 1, years: 0, echo: 365 } },
+    { name: "child at the cap",
+      state: { level: 365 * 10, streak: 400, years: 10, echo: 3650 } },
+  ];
+
+  for (const c of CASES) {
+    const svg = render({ marks: [], lastDay: 1000, today: 1000, ...c.state });
+    for (const px of SIZES) {
+      const got = scanResult(svg, px);
+      assert.ok(got.ok, `${c.name} failed to decode at ${px}px: ${got.why}`);
+      assert.equal(got.destination, DESTINATION,
+        `${c.name} decoded to the wrong url at ${px}px`);
+    }
+  }
+});
+
 test("the shipped quiet-zone tint keeps its decode margin", () => {
   // Measured 2026-08-29, then re-measured the same day after the noise inks were
   // matched to their tiers in luminance.

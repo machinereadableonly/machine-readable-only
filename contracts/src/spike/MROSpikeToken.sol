@@ -45,6 +45,11 @@ contract MROSpikeToken is ERC721, Ownable2Step, IERC4906 {
     mapping(uint256 => Token) private _tokens;
     mapping(uint256 => uint256) private _marks;
     mapping(uint256 => uint256) private _parentOf;
+    /// @dev A child's inherited days. Its own mapping, exactly as the real
+    /// contract stores it, because the slot is what the measurement is for: a
+    /// second mapping means a second COLD SLOAD on every `tokenURI`, and a
+    /// spike that skipped it would report the echo as free.
+    mapping(uint256 => uint32) private _echo;
     mapping(uint256 => bytes32) private _agentKeyOf;
     mapping(uint256 => bytes) private _codeOf;
 
@@ -109,6 +114,7 @@ contract MROSpikeToken is ERC721, Ownable2Step, IERC4906 {
         v.generation = s.generation;
         v.seedsGiven = s.seedsGiven;
         v.parent = _parentOf[id];
+        v.echo = _echo[id];
         v.resting = s.resting;
         v.sunset = isSunset;
         v.marks = _marks[id];
@@ -164,6 +170,17 @@ contract MROSpikeToken is ERC721, Ownable2Step, IERC4906 {
     function setParent(uint256 id, uint256 parentId) external onlyOwner {
         _requireOwned(id);
         _parentOf[id] = parentId;
+        emit MetadataUpdate(id);
+    }
+
+    /// @notice Place a token's inherited days, so a child can be measured.
+    /// @dev The real contract derives this at `seed` time and never lets it be
+    /// set directly. The spike takes it wholesale for the same reason
+    /// `setState` does: this contract exists to place a token at a life stage,
+    /// not to model the rules that get it there.
+    function setEcho(uint256 id, uint32 echo) external onlyOwner {
+        _requireOwned(id);
+        _echo[id] = echo;
         emit MetadataUpdate(id);
     }
 
