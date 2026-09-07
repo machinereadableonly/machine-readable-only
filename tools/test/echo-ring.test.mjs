@@ -4,7 +4,7 @@
 // contracts/test/EchoRing.t.sol asserts the SAME short-ring string and the
 // SAME keccak256 against FrameRenderer.echoRingBars. The render matrix has no
 // echo-bearing case in it, so RenderFixture.sol cannot see this path at all --
-// these two pins are the only thing that proves the dotted ring is drawn the
+// these two pins are the only thing that proves the dashed ring is drawn the
 // same way in both languages. Regenerate both with
 // `node tools/echo-ring-fixture.mjs`.
 import { test } from "node:test";
@@ -45,8 +45,10 @@ test("the echo ring is always 53 cells on a side", () => {
 test("the echo ring is 54 runs covering 104 cells", () => {
   const d = echoRingBars(0, 53);
   assert.equal(d.split("M").length - 1, 54, "14 + 14 + 13 + 13");
-  // THE INK IS UNCHANGED BY THE REVISION: the dash covers exactly the cells the
-  // dot rule covered, and only the number of runs they are written as halved.
+  // The ink is the same NUMBER of cells the dot rule drew, but NOT the same
+  // cells: the two rules agree only on offsets divisible by 4, so 52 of the 104
+  // are shared and the other half moved. Only the number of runs they are
+  // written as halved.
   // A run is "M<x> <y>h<w>v<h>h-<w>z", so its area is w * h.
   const cells = [...d.matchAll(/M\d+ \d+h(\d+)v(\d+)h-\d+z/g)]
     .reduce((n, m) => n + Number(m[1]) * Number(m[2]), 0);
@@ -87,4 +89,19 @@ test("a ring too small to have edges draws nothing", () => {
   assert.equal(echoRingBars(0, 0), "");
   assert.equal(echoRingBars(7, 1), "");
   assert.equal(echoRingBars(0, 2), "M0 0h2v1h-2zM0 1h2v1h-2z", "two cells is one run per edge");
+
+  // len 6 IS THE ONLY SHORT RING THAT EXERCISES THE VERTICAL CLIP. That branch
+  // -- `run = (len - 1) - i >= 2 ? 2 : 1` -- is DEAD at the shipped len of 53
+  // and fires only when len is 2 mod 4. An untested branch in a function that
+  // must stay byte-identical across two languages is exactly where a future
+  // edit diverges with every suite green, so it is pinned here and in
+  // contracts/test/EchoRing.t.sol with the same string. At len 6 the vertical
+  // group starting at offset 4 has only offset 4 in range, since offset 5 is
+  // the corner the horizontal edge already drew.
+  assert.equal(
+    echoRingBars(0, 6),
+    "M0 0h2v1h-2zM0 5h2v1h-2zM4 0h2v1h-2zM4 5h2v1h-2z"
+    + "M0 1h1v1h-1zM5 1h1v1h-1zM0 4h1v1h-1zM5 4h1v1h-1z",
+    "the vertical clip, at the only length that reaches it",
+  );
 });

@@ -3,6 +3,8 @@ pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 
+import {Ladder} from "../src/Ladder.sol";
+import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {MROSpikeToken} from "../src/spike/MROSpikeToken.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 import {MarkRenderer} from "../src/render/MarkRenderer.sol";
@@ -91,11 +93,15 @@ contract GasBudgetTest is Test {
     /// So a token at level 364 wears at most four Marks, and MAX_MARKS above is
     /// legal only from the day the heart seals.
     ///
-    /// This was not a distinction the budget had to make until lineage: token 9
-    /// has always over-approximated the day-364 case with the whole-heart set
-    /// and had room to spare. A CHILD does not -- see
-    /// test_theDayBeforeWholeIsOnlyAffordableBecauseTheLadderShutsPairFour,
-    /// which measures the over-approximation and finds it OVER the hard limit.
+    /// THE REASON IS LEGALITY, NOT AFFORDABILITY. An earlier draft of this
+    /// comment claimed the whole-heart set on a day-364 child busts the hard
+    /// limit, and cited a test that was never written. Both were wrong: with
+    /// the dashed ring the illegal five-Mark version measures 873 gas dearer
+    /// and is comfortably inside the limit. It is excluded because the
+    /// ladder cannot produce it, and the budget should not rest on a token that
+    /// cannot exist. test_theLadderShutsBothSidesOfPairFourBelowAWholeHeart
+    /// asserts both gates against Ladder.sol and measures what the difference
+    /// is actually worth.
     uint256 constant MAX_MARKS_UNSEALED = MarkRenderer.HUSH | MarkRenderer.BEAT
         | MarkRenderer.IRIS_BOUGHT | MarkRenderer.TINT | (uint256(2) << 16);
 
@@ -215,7 +221,7 @@ contract GasBudgetTest is Test {
         _place(8, 365 * 3, 200, 1000, true, 0);          // sealed
         _place(9, 364, 400, 1000, false, MAX_MARKS);     // the day before whole
         // The two children. A child spends one of its ten ring slots on the
-        // dotted echo ring, so 11 is at NINE own rings plus the echo, and 12
+        // dashed echo ring, so 11 is at NINE own rings plus the echo, and 12
         // has zero own rings and the echo alone.
         _placeChild(11, 365 * 10, 400, 1000, 3650, MAX_MARKS);
         // 12 wears the UNSEALED set: at level 364 the ladder shuts both sides
@@ -246,7 +252,13 @@ contract GasBudgetTest is Test {
         maxBytes = _max(maxBytes, lastBytes);
         (, b) = _measure("ten years, a child at the cap", 11);
         maxBytes = _max(maxBytes, b);
-        (uint256 worstGas,) = _measure("day 364, a child, max marks", 12);
+        // Token 12's byte count is FED IN as well, though it is not today's
+        // largest. This file's discipline is that each limit tracks its own
+        // worst case; dropping a candidate from the byte side because it
+        // happens to lose is how a file like this stops being able to see a
+        // change that reorders them.
+        (uint256 worstGas, uint256 childBytes) = _measure("day 364, a child, max marks", 12);
+        maxBytes = _max(maxBytes, childBytes);
 
         // A sealed token takes a branch, not extra work.
         assertLt(sealedGas, capAndMarks, "sealing must not cost more than wearing the max marks");
@@ -440,6 +452,62 @@ contract GasBudgetTest is Test {
             if (gasUsed < GAS_LIMIT) console.log("  headroom", GAS_LIMIT - gasUsed);
             else console.log("  OVER THE HARD LIMIT BY", gasUsed - GAS_LIMIT);
             assertLt(gasUsed, GAS_LIMIT, "the dearest token must fit the hard limit");
+        }
+    }
+
+    /// @notice Why MAX_MARKS_UNSEALED exists: the ladder shuts BOTH sides of
+    /// pair 4 below a whole heart, so a day-364 token wears at most four Marks.
+    ///
+    /// @dev Asserted against `Ladder.sol` itself rather than restated in a
+    /// comment, because the whole point is that the budget's worst case must be
+    /// a token the ladder can actually produce. If either gate is ever turned
+    /// down, this test goes red and the day-364 cases have to be revisited --
+    /// which is the only warning the budget would otherwise get.
+    ///
+    /// The two gates, and why each shuts:
+    ///   Vessel (id 7) sets `requiresWhole`, and applyMark refuses it while
+    ///     `level < 365`.
+    ///   Break (id 8) asks for a completed run of 365, and `_credit` raises the
+    ///     level on every day it raises the run, so a run of 365 implies a level
+    ///     of at least 365. `bestRun` is only ever written on the way up, so it
+    ///     cannot exceed the level either.
+    ///
+    /// IT IS NOT AN AFFORDABILITY ARGUMENT, and an earlier comment wrongly said
+    /// it was. The measurement below is what settles that: the illegal
+    /// five-Mark version is dearer, but only by 873 gas -- it was 1,020 under
+    /// the dotted ring -- and it sits inside the hard limit. Vessel is a same-length hex substitution, so
+    /// it buys almost no bytes. The four-Mark set is used because it is the
+    /// legal one, not because it is the cheap one.
+    function test_theLadderShutsBothSidesOfPairFourBelowAWholeHeart() public {
+        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        assertTrue(u[7].requiresWhole, "Vessel must still require a whole heart");
+        assertEq(u[8].minStreak, 365, "Break must still require a run of 365");
+
+        _placeChild(50, 364, 364, 1000, 3650, MAX_MARKS_UNSEALED);
+        _placeChild(51, 364, 364, 1000, 3650, MAX_MARKS);
+
+        // WARM THE RENDERER BEFORE COMPARING. Whichever token is measured first
+        // pays the 2,600 cold account access and the cold SLOAD of `renderer`,
+        // which is about 4,500 gas and four times the difference being looked
+        // for -- measured, it made the FIVE-Mark token read 3,627 gas cheaper
+        // than the four-Mark one, which is the opposite of the truth. Each
+        // token still has its own cold storage; only the shared renderer is
+        // warmed, and it is warmed for both equally.
+        _placeChild(52, 364, 364, 1000, 3650, 0);
+        _call(52);
+
+        (uint256 legal,) = _call(50);
+        (uint256 illegal,) = _call(51);
+
+        console.log("day 364 child, the four Marks it can wear", legal);
+        console.log("day 364 child, the illegal five           ", illegal);
+        console.log("what the unreachable Mark would have cost ", illegal - legal);
+
+        assertGt(illegal, legal, "the excluded Mark is not free, merely unreachable");
+        if (_gasIsMeaningful()) {
+            assertLt(illegal, GAS_LIMIT,
+                "even the impossible five-Mark day-364 child fits: the reason for the "
+                "four-Mark set is legality, not the budget");
         }
     }
 

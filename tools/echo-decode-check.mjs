@@ -8,10 +8,15 @@
 // module.
 //
 // RUN THIS AGAIN WHENEVER THE PATTERN CHANGES, not only when the ring is added.
-// The dot rule and the dash cover the identical cells and differ only in how
-// they are grouped, which is exactly the kind of change that looks free and is
-// a different spatial frequency to a binarizer. Both have been through this
-// gate; both passed 54 of 54.
+// The dot rule and the dash draw the same NUMBER of cells, 104, which makes the
+// revision look like a pure regrouping. It is not: the two rules agree only on
+// the offsets divisible by 4, so 52 cells are shared and THE OTHER HALF OF THE
+// INK MOVED. Both the spatial frequency and the ink's actual positions changed.
+//
+// That is why both rules were put through this gate rather than the dash being
+// waved through on the strength of an unchanged cell count, and it is why the
+// dash's 54 of 54 means MORE than the dot rule's did: the pattern next to the
+// code is genuinely different and still decodes at every size.
 //
 // So this is a gate, not a sheet. It renders a child at BOTH extremes of the
 // ring's depth and decodes each render at nine pixel sizes, and it exits
@@ -42,6 +47,11 @@
 // are alive at a time (a state is rendered, decoded across every size, and
 // dropped before the next state is built). Peak RSS is printed at the end so
 // the claim is measured rather than asserted.
+//
+// EXPECT THAT PEAK TO MOVE between runs -- 951 to 968 MB over four runs of the
+// identical workload. The allocations are native, so V8 cannot see them and the
+// peak follows collection timing rather than the work done. It is a sanity
+// check that the sweep is nowhere near the cap, not a figure to pin.
 import { renderSvg, canvasFor, HUSH, BEAT, IRIS_BOUGHT, VESSEL, TINT } from "./render-token.mjs";
 import * as SHEET from "./sheet-code.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";

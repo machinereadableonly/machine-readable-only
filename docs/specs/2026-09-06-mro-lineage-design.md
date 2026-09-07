@@ -32,7 +32,7 @@ The other names in this piece are Hush, Ache, Static, Beat, Iris, Vessel,
 Break, Tint and Aura -- short concrete nouns. "Line Tenure" is administrative
 language and does not belong beside them.
 
-A dotted ring is a solid one heard faintly. On a piece built entirely out of
+A broken ring is a solid one heard faintly. On a piece built entirely out of
 signal and silence, that is the right register, and it cannot be misread: no
 other trait is a count of days, and unlike "Root" or "Parent" it can never be
 mistaken for a token id.
@@ -130,7 +130,7 @@ as a new write path guarding a number that agents would try to time.
 
 ### 3.1 What is drawn
 
-A child draws ONE dotted ring, innermost, in the ghost fill. Its own completed
+A child draws ONE dashed ring, innermost, in the ghost fill. Its own completed
 years draw as solid lit rings outside it, exactly as they do today.
 
 A founding token has `echo == 0`, draws no echo ring, and is rendered
@@ -153,7 +153,7 @@ Keeping the total at ten means the canvas ceiling stays 89 and the project keeps
 one worst case.
 
 The consequence, stated plainly: a child's own rings cap at 9, not 10. A child
-that runs for a decade shows nine lit rings and one dotted.
+that runs for a decade shows nine lit rings and one dashed.
 
 ### 3.3 Where it sits, and why that needs no work
 
@@ -252,11 +252,20 @@ call for the frame's hundreds of runs too, costing a token with no echo ring
 | ring through `tokenURI`, gas | 240,196 | **145,533** | **-94,663** |
 | ring through `tokenURI`, bytes | 1,899 | **1,007** | -892 |
 
-The ink is deliberately unchanged: a dash covers exactly the cells the dot rule
-covered, 27 on each horizontal edge and 25 on each vertical one. The saving is
-entirely in how many RUNS those cells are written as, which is why merging
-consecutive ink was the whole revision. Every child `tokenURI` in the fixtures
-came down by exactly 892 bytes.
+The ink is the same NUMBER of cells the dot rule drew -- 104, being 27 on each
+horizontal edge and 25 on each vertical one -- but **not the same cells**. The
+two rules agree only where the offset is divisible by 4, so 52 cells are shared
+and the other half of the ink MOVED. It is a genuinely different pattern, not a
+regrouping of the same one, which is why 3.8's decode gate was re-run rather
+than reasoned about. The saving comes entirely from how many RUNS those cells
+are written as, which is why merging consecutive ink was the whole revision.
+
+The three child references in `Renderer.t.sol` came down by **892, 932 and 932
+bytes**, not by one figure. The ring is 669 SVG bytes smaller at depth 0 and 700
+at depth 10 or deeper, where every coordinate is two digits; base64 expands by
+four bytes for every three, so those become 892 and 932 in the `tokenURI`. The
+newborn child is the depth-0 case and the other two both sit at depth 10 or
+more.
 
 #### The worst cases after the dash
 
@@ -331,6 +340,11 @@ That is an argument, not a result.
 the dotted ring and again after the change to a dash -- because a dash is a
 different spatial frequency from a dot and the gate is the only thing that could
 have said so. Both runs: 54 of 54.**
+
+The second run was not a formality, and the unchanged cell COUNT is the reason
+it could have looked like one. Half the ink moved (see 3.6), so the dash puts
+different pixels next to the code as well as grouping them differently. The
+result is therefore stronger than the first run's, not a repeat of it.
 `tools/echo-decode-check.mjs` is the gate. It renders six states and decodes
 each at nine pixel sizes -- 256, 350, 500, 700, 848, 900, 1080, 1424, 1600 --
 through the project's ZXing oracle (`tools/test/helpers/decode.mjs`; never
@@ -353,7 +367,7 @@ could actually be wearing, plus a control for each:
 new: `canvasFor(0, echo)` is 53, exactly a founding token with one year ring,
 and `canvasFor(10, echo)` is 89, exactly the founding ring cap. So each child is
 paired with a founding token on the identical canvas at the identical module
-size, differing only in a dotted innermost ring against a solid one. Without
+size, differing only in a dashed innermost ring against a solid one. Without
 that pair, a failure could not have been attributed to the ring rather than to
 the canvas.
 
@@ -367,7 +381,12 @@ its ring is the OUTERMOST thing on the canvas at depth 0, where the dots are
 largest relative to the code, and it is the state most children will be in.
 
 The gate runs under the memory wrapper (`~/scripts/safe-build.sh`) and reports
-its own peak: **967 MB** across the 54 rasters, inside the 3 GB cap. It exits
+its own peak, which is **951 to 968 MB** across the 54 rasters and well inside
+the 3 GB cap. It is quoted as a range because it MEASURES AS A RANGE: four runs
+gave 967, 968, 968 and 951. `@resvg/resvg-js` allocates natively, where V8
+cannot see it, so the peak moves with collection timing rather than being a
+property of the workload. Treat it as "comfortably under one gigabyte", and do
+not pin a single figure that the next run will contradict. It exits
 non-zero on any rejection.
 
 ---
@@ -381,7 +400,7 @@ The parent's picture is unchanged.
 
 Two alternatives were considered:
 
-- **The parent gets the same dotted ring**, so one echo ring means "belongs to a
+- **The parent gets the same dashed ring**, so one echo ring means "belongs to a
   line" in either direction. Elegant, and it would make the ring not
   child-exclusive at all. Rejected because it costs a founding token one of its
   ten ring slots for something it did rather than something it is, and it
