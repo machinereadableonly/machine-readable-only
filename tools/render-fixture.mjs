@@ -61,7 +61,12 @@ export function render(all, domain, tokenId) {
   const lines = all.map(r =>
     `        c[i++] = Case(${r.level}, ${r.streak}, ${r.lastDay}, ${r.today}, `
     + `${r.marksBits}, ${!!r.resting}, ${!!r.sunset}, ${r.sunsetDay ?? 0}, `
-    + `${r.fellRun ?? 0}, ${r.fellDay ?? 0}, ${r.bytes}, ${r.hash}, "${r.label}");`
+    + `${r.fellRun ?? 0}, ${r.fellDay ?? 0}, `
+    // The lineage three. They travel together because all three reach the
+    // metadata as attributes: an echo without its generation and parent would
+    // render a token that cannot exist.
+    + `${r.echo ?? 0}, ${r.parent ?? 0}, ${r.generation ?? 0}, `
+    + `${r.bytes}, ${r.hash}, "${r.label}");`
   ).join("\n");
 
   return `// SPDX-License-Identifier: MIT
@@ -84,6 +89,9 @@ library RenderFixture {
         uint32 sunsetDay;
         uint16 fellRun;
         uint24 fellDay;
+        uint32 echo;
+        uint256 parent;
+        uint32 generation;
         uint256 bytesLen;
         bytes32 hash;
         string label;

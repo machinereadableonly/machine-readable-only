@@ -196,6 +196,61 @@ export function renderCases() {
     ...base, streak: 100, lastDay: 1100, today: 1100, fellRun: 400, fellDay: 1000,
   });
 
+  // SEEDED CHILDREN, so the echo ring is not invisible to this matrix.
+  //
+  // Until these existed every case here rendered a FOUNDING token, and
+  // Renderer.t.sol said so in as many words: the dashed ring's only
+  // cross-language coverage was three cases written by hand. The two
+  // `echoRingBars` implementations could have drifted with every suite green.
+  //
+  // These do NOT repeat those three (a newborn, a child at the ring cap, and a
+  // child in the maximal legal Mark set). They cover what those leave out.
+  //
+  // `parent` and `generation` travel with `echo` on purpose. All three reach
+  // the metadata as attributes, so a case carrying an echo while claiming
+  // generation 0 would be a token that cannot exist, and the JS reference would
+  // render one thing while the Solidity view said another.
+  //
+  // THESE ARE EXCLUDED FROM THE SOAK by `soakCases`, and that is not an
+  // oversight: see the comment there.
+  const child = { parent: 7, generation: 1 };
+
+  // THE RING-BUDGET BOUNDARY, which nothing tested. `ringBudget` spends a slot
+  // on ANY non-zero echo rather than on a whole year of it, so one single
+  // inherited day costs a ring. This case and "1 years" differ by exactly that
+  // one day of echo, and must therefore differ in ring count.
+  out.push({ label: "child, echo of one day", ...base, ...child, echo: 1 });
+
+  // Own years AND an echo, where the slot arithmetic actually bites rather than
+  // only at the cap: two years earned, nine slots left, ten drawn.
+  out.push({ label: "child, two years and an echo", ...base, ...child, level: 730, echo: 1000 });
+
+  // The ghost fill and the echo ring meet on the same cells. A child that never
+  // came back is the shape a line most often ends in, and the absence steps
+  // (C4.10) were written when no token could carry an echo at all.
+  out.push({
+    label: "child, never returned, a year",
+    ...base, ...child, level: 1, streak: 1, lastDay: 1000, today: 1365, echo: 365,
+  });
+
+  // A lapse pales the heart; the echo is inherited and must not pale with it.
+  out.push({ label: "child, 30 days lapsed", ...base, ...child, today: 1030, echo: 365 });
+
+  // Both frozen lifecycles, carrying an echo. `sunset` is dropped from the soak
+  // generator separately, by `!c.sunset`; `resting` is not, which is one more
+  // reason the echo exclusion cannot be left to either of them.
+  out.push({ label: "child, resting", ...base, ...child, today: 9999, resting: true, echo: 365 });
+  out.push({ label: "child, sunset", ...base, ...child, today: 9999, sunset: true, echo: 365 });
+
+  // A deeper line, with a wide parent id. Generation, Parent and Echo are all
+  // rendered as NUMBERS into the metadata, so their digit widths are part of
+  // the byte length this fixture pins -- and every other child case here is
+  // generation 1, parent 7, one digit each.
+  out.push({
+    label: "child, deep line and a wide parent",
+    ...base, parent: 4242, generation: 3, echo: 3650,
+  });
+
   return out;
 }
 
@@ -233,7 +288,20 @@ export function decodeExtremes() {
 
 /// The subset driven through the live contract on Sepolia.
 export function soakCases() {
-  return renderCases().filter(c => !c.label.startsWith("mark "));
+  // THE ECHO CASES CANNOT BE SOAKED, and dropping them here is load-bearing.
+  //
+  // The soak drives REAL tokens on a real chain, and a child exists only by
+  // `seed`, which needs a whole heart and a full agent-year. Nothing in the
+  // soak can manufacture one.
+  //
+  // Worse than merely failing: `renderSoakStates` builds each line field by
+  // field, and `SoakStates.State` has no `echo`. Left in, these would be
+  // emitted as FOUNDING tokens wearing a child's label -- a fixture that
+  // states something untrue rather than one that breaks.
+  //
+  // Filtered on `c.echo` rather than on the "child" label, because a label is
+  // prose and a typo in it would silently put a child back into the soak.
+  return renderCases().filter(c => !c.label.startsWith("mark ") && !c.echo);
 }
 
 // ---------------------------------------------------------------------------

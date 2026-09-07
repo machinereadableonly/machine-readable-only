@@ -39,10 +39,12 @@ contract RenderMatrixTest is Test {
     function test_everyStateInTheMatrixMatchesTheJavascriptReference() public view {
         RenderFixture.Case[] memory cases = RenderFixture.cases();
         // 50 until C4.10 added the six absence states (the three fade steps,
-        // plus Ache and Aura against the last one). The count is asserted so a
-        // fixture that silently regenerates SMALLER -- a matrix case dropped by
-        // an edit -- fails here rather than passing with less coverage.
-        assertEq(cases.length, 56, "the fixture is not the size it should be");
+        // plus Ache and Aura against the last one), then 63 when seven seeded
+        // children were added so the echo ring stopped being invisible here.
+        // The count is asserted so a fixture that silently regenerates SMALLER
+        // -- a matrix case dropped by an edit -- fails here rather than passing
+        // with less coverage.
+        assertEq(cases.length, 63, "the fixture is not the size it should be");
 
         for (uint256 i; i < cases.length; ++i) {
             RenderFixture.Case memory c = cases[i];
@@ -60,6 +62,11 @@ contract RenderMatrixTest is Test {
             v.sunsetDay = c.sunsetDay;
             v.fellRun = c.fellRun;
             v.fellDay = c.fellDay;
+            // The lineage three. Zero on every founding case, so the cases that
+            // came before these existed render exactly as they always did.
+            v.echo = c.echo;
+            v.parent = c.parent;
+            v.generation = c.generation;
             v.code = _bitmap();
 
             string memory uri = r.tokenURI(v);
