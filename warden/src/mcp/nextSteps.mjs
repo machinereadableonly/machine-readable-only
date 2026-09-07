@@ -47,10 +47,12 @@ export const NEXT = {
     "This token was sealed by its owner. It cannot be credited or marked again.",
   "parent-not-whole":
     "A token may only seed a child once its own heart is whole, at 365 days.",
+  // `seed-not-available` was here beside this one until 2026-09-07, saying the
+  // same sentence for a different fact: the write path did not exist, so the
+  // tool refused every call. It does exist, nothing emits that reason, and a
+  // next step for a refusal that can never happen is a dead end of its own.
   "no-seed-available":
-    "This key has already used its seed for the agent-year.",
-  "seed-not-available":
-    "This key has already used its seed for the agent-year.",
+    "This key has already used its seed for the agent-year. A key earns one a year after its first mint, and a seed spent on a child the chain later refuses is handed back automatically.",
   "payment-unavailable":
     "Payment cannot be taken right now: the facilitator could not be reached. Nothing was charged. Try again later.",
   "payment-not-configured":

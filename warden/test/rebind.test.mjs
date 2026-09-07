@@ -101,9 +101,10 @@ test("seed admits a caller whose binding exists only on chain", async () => {
   const r = await tool.handler({ parentId: 1, to: "0x" + "a1".repeat(20) }, { keyId: "new-key" });
 
   assert.equal(chainWasRead, true, "the chain must be read before refusing");
-  // seed refuses everything today (`seed-not-available`, the write path does
-  // not exist), so the assertion is that it does NOT refuse for the wrong
-  // reason -- getting past the binding is the thing being tested.
+  // The assertion is that seed does NOT refuse for the WRONG reason: getting
+  // past the binding is the thing being tested, and what happens at the gates
+  // after it belongs to seed's own suite. Asserted this way rather than on
+  // `ok` so it keeps testing the binding whatever those later gates do.
   assert.notEqual(r.reason, "not-bound-to-caller", "the binding must be judged by the chain, not the mirror");
 });
 

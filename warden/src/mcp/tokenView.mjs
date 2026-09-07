@@ -74,10 +74,15 @@ export function tokenView(q, tokenId, links = null, now = Date.now()) {
     // contract's `lastDay < day <= today()` reads.
     nextWindowOpensAt: new Date((t.lastDay + 1) * 86_400_000).toISOString(),
     streakDeadline: new Date((t.lastDay + 2) * 86_400_000).toISOString(),
-    // Counted, not stored. `seedsAvailable` is deliberately NOT here: `seed`
-    // refuses every call today (`seed-not-available`, the write path does not
-    // exist), and publishing an entitlement the service will refuse to honour
-    // is a promise, not a fact. It belongs here the day seeding does.
+    // Counted, not stored. `seedsAvailable` is still deliberately NOT here,
+    // for a different reason than before: the write path exists since
+    // 2026-09-07, so the old objection -- publishing an entitlement the
+    // service would refuse to honour -- is gone. What remains is that this
+    // view is served UNAUTHENTICATED at `/t/<id>`, and a seed budget belongs
+    // to a KEY rather than to a token; a token's page is the wrong place to
+    // publish what its agent may still spend elsewhere. `seed` answers it
+    // exactly, to the key that owns it, and refuses `no-seed-available` with
+    // the reason spelled out.
     children: q.childCount?.(t.tokenId) ?? 0,
     owner: t.owner,
     ...(links ?? {}),

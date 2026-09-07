@@ -54,12 +54,11 @@ how you collect a challenge.
 | `sunset` | The piece is closed. Every token rests where it stands; transfers and rebind still work. Nothing more can be minted, credited or marked. |
 | `resting` | This token was sealed by its owner. It cannot be credited or marked again. |
 | `parent-not-whole` | A token may only seed a child once its own heart is whole, at 365 days. |
-| `no-seed-available` | This key has already used its seed for the agent-year. |
+| `no-seed-available` | This key has already used its seed for the agent-year. A key earns one a year after its first mint, and a seed spent on a child the chain later refuses is handed back automatically. |
 | `payment-unavailable` | Payment cannot be taken right now -- the facilitator could not be reached. Nothing was charged. Try again later. |
 | `payment-already-used` | That signed authorisation has already reserved something else. One authorisation buys one thing: sign a fresh one and call again. Nothing was charged for this. |
 | `mark-inactive` | No Mark is registered under that id on chain. `ladder` lists the ten that exist. |
 | `mark-sold-out` | Every unit of that Mark has been taken. Its partner is unaffected. |
-| `seed-not-available` | Seeding is not built yet -- the write path for a child token does not exist, so this refuses rather than promising one. Every other gate was still checked, so the reason you get is the real one. |
 
 ## Routing and malformed input
 
