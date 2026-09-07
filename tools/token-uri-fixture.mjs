@@ -36,6 +36,18 @@ export const STAGES = [
   ["every drawn mark", { level: 365 * 10, streak: 400, lastDay: 1000, today: 1000,
                          marks: [HUSH, BEAT, IRIS_BOUGHT, VESSEL, AURA] }],
   ["sealed at rest",   { level: 365 * 3,  streak: 200, lastDay: 1000, today: 9999, resting: true }],
+  // The two echo-bearing extremes. Nothing else in either fixture family sets
+  // `echo`: the render matrix does not carry the field, and RenderFixture is
+  // generated from it, so without these two cases the dotted ring is never
+  // compared between the two renderers on a whole tokenURI at all.
+  //
+  // A newborn child draws the ring at depth 0 on a 53-cell canvas; a child at
+  // the cap draws the same 104 dots at depth 18, where every coordinate is two
+  // digits. Those are the shortest and longest the ring can be.
+  ["a newborn child",  { level: 1,        streak: 1,   lastDay: 1000, today: 1000,
+                         generation: 1, parent: 7, echo: 365 }],
+  ["a child at the cap", { level: 365 * 10, streak: 400, lastDay: 1000, today: 1000,
+                         generation: 2, parent: 7, echo: 3650 }],
 ];
 
 export function uriFixtures(domain, tokenId) {

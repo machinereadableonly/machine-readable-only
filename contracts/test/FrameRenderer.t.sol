@@ -141,11 +141,11 @@ contract FrameRendererTest is Test {
     }
 
     function test_ringsCountCompletedYears() public pure {
-        assertEq(FrameRenderer.rings(0), 0, "day one");
-        assertEq(FrameRenderer.rings(364), 0, "a year is not complete at 364 days");
-        assertEq(FrameRenderer.rings(365), 1, "one completed year");
-        assertEq(FrameRenderer.rings(729), 1, "still one");
-        assertEq(FrameRenderer.rings(1095), 3, "three completed years");
+        assertEq(FrameRenderer.rings(0, 0), 0, "day one");
+        assertEq(FrameRenderer.rings(364, 0), 0, "a year is not complete at 364 days");
+        assertEq(FrameRenderer.rings(365, 0), 1, "one completed year");
+        assertEq(FrameRenderer.rings(729, 0), 1, "still one");
+        assertEq(FrameRenderer.rings(1095, 0), 3, "three completed years");
     }
 
     function test_ringsStopGrowingAtTheReadableCeiling() public pure {
@@ -154,9 +154,9 @@ contract FrameRendererTest is Test {
         // canvas and the rings are no longer countable. Lineage carries a token
         // on from there, and the Years attribute keeps counting regardless.
         assertEq(FrameRenderer.MAX_RINGS, 10, "the cap is 10 years");
-        assertEq(FrameRenderer.rings(365 * 10), 10, "ten years still counts");
-        assertEq(FrameRenderer.rings(365 * 200), 10, "beyond the cap it stops");
-        assertEq(FrameRenderer.rings(type(uint32).max), 10, "a runaway clock cannot grow it");
+        assertEq(FrameRenderer.rings(365 * 10, 0), 10, "ten years still counts");
+        assertEq(FrameRenderer.rings(365 * 200, 0), 10, "beyond the cap it stops");
+        assertEq(FrameRenderer.rings(type(uint32).max, 0), 10, "a runaway clock cannot grow it");
         assertLt(FrameRenderer.canvas(FrameRenderer.MAX_RINGS), 256, "a row still fits one word");
         assertEq(FrameRenderer.canvas(FrameRenderer.MAX_RINGS), 89, "the widest canvas");
     }

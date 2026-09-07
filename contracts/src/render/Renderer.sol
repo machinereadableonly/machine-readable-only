@@ -108,7 +108,7 @@ contract Renderer is IRenderer {
             : rung;
         (string memory base,) = MarkRenderer.inks(v.marks, eyeRung);
         return EyeRenderer.eyes(
-            _blockOff(v.level) + QUIET,
+            _blockOff(v.level, v.echo) + QUIET,
             MarkRenderer.irisShape(v.marks),
             MarkRenderer.eyeInk(v.marks, base),
             MarkRenderer.ground(v.marks, _absence(v))
@@ -171,8 +171,11 @@ contract Renderer is IRenderer {
     }
 
     /// @dev Where the 45-cell block sits on the canvas, in cells.
-    function _blockOff(uint32 level) private pure returns (uint256) {
-        uint256 rim = FrameRenderer.ringSpan(FrameRenderer.rings(level)) + FrameRenderer.GAP;
+    /// @dev Takes `echo` as well as `level` because a seeded child spends one
+    /// of its ten ring slots on the echo ring, so two tokens at the same level
+    /// can sit on different canvases.
+    function _blockOff(uint32 level, uint32 echo) private pure returns (uint256) {
+        uint256 rim = FrameRenderer.ringSpan(FrameRenderer.rings(level, echo)) + FrameRenderer.GAP;
         return rim + FrameGeometry.THICK;
     }
 
@@ -219,7 +222,7 @@ contract Renderer is IRenderer {
     /// gradient near stop must move with the exchange too, so Break + Beat
     /// gives the noise ink rather than the token's own colour.
     function _head(TokenView memory v, string memory heartInk) private pure returns (string memory) {
-        string memory c = LibString.toString(FrameRenderer.canvas(FrameRenderer.rings(v.level)));
+        string memory c = LibString.toString(FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)));
         string memory open = string(
             abi.encodePacked(
                 '<svg xmlns="http://www.w3.org/2000/svg"', _intrinsic(v), ' viewBox="0 0 ', c, " ", c,
@@ -231,7 +234,7 @@ contract Renderer is IRenderer {
                 open,
                 MarkRenderer.defs(v.marks, heartInk),
                 '<rect width="', c, '" height="', c, '" fill="', MarkRenderer.field(v.marks, _absence(v)), '"/>',
-                _quiet(v.marks, _blockOff(v.level))
+                _quiet(v.marks, _blockOff(v.level, v.echo))
             )
         );
     }
@@ -255,7 +258,7 @@ contract Renderer is IRenderer {
                 CodeRenderer.paths(
                     v.code,
                     HeartMask.bits(),
-                    _blockOff(v.level) + QUIET,
+                    _blockOff(v.level, v.echo) + QUIET,
                     MarkRenderer.heartFill(v.marks, heartInk),
                     noiseInk
                 )
@@ -270,7 +273,7 @@ contract Renderer is IRenderer {
         uint256 k = pxPerCell();
         if (k == 0) return "";
         string memory px =
-            LibString.toString(FrameRenderer.canvas(FrameRenderer.rings(v.level)) * k);
+            LibString.toString(FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)) * k);
         return string(abi.encodePacked(' width="', px, '" height="', px, '"'));
     }
 
@@ -328,6 +331,9 @@ contract Renderer is IRenderer {
                 _str("Agent Key", LibString.toHexString(uint256(v.agentKeyId), 32)),
                 _num("Generation", v.generation),
                 _num("Parent", v.parent),
+                // Emitted ALWAYS, including 0 on a founding token, so an agent
+                // can filter on it without having to special-case absence.
+                _num("Echo", v.echo),
                 _num("Children", v.seedsGiven),
                 _str("Resting", v.resting ? "yes" : "no"),
                 _str("Sunset", v.sunset ? "yes" : "no"),

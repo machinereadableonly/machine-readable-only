@@ -289,14 +289,42 @@ export function rungFor({
 //
 // MUST stay identical to FrameRenderer.MAX_RINGS in Solidity.
 export const MAX_RINGS = 10;
-export const ringsFor = years => Math.min(years, MAX_RINGS);
+
+// How the ten ring slots are shared between the years a token inherited and the
+// years it earned itself. A seeded child spends one slot on its echo ring, so
+// its own rings cap at nine.
+//
+// The echo ring takes one of the TEN rather than adding an eleventh. That is
+// forced: canvas(r) = 49 + 4r, so an eleventh ring grows the artwork to 93 cells
+// and creates a second byte worst case to measure and defend.
+//
+// The slot is taken by ANY non-zero echo, not by a whole year of it: the ring
+// says the token came from somewhere, and one day of inheritance is as true as
+// a thousand.
+//
+// MUST stay identical to FrameRenderer.ringBudget in Solidity.
+export const ringBudget = (years, echoDays = 0) => {
+  const echoRings = echoDays > 0 ? 1 : 0;
+  return { own: Math.min(years, MAX_RINGS - echoRings), echoRings };
+};
+
+// Completed years plus the echo ring: the total rings drawn, which is what sets
+// the canvas size. `echo` defaults to 0, so every founding-token caller keeps
+// the answer it always had.
+//
+// MUST stay identical to FrameRenderer.rings in Solidity.
+export const ringsFor = (years, echoDays = 0) => {
+  const { own, echoRings } = ringBudget(years, echoDays);
+  return own + echoRings;
+};
 
 // Rings are drawn one cell wide with one cell of field between them, so they can
 // be counted. Contiguous rings merged into a single slab of colour: at five you
 // could no longer tell them apart, which defeats the point of drawing one per
 // year. The gap costs two extra cells of canvas per year rather than one.
 export const ringSpan = rings => (rings === 0 ? 0 : 2 * rings - 1);
-export const canvasFor = years => BLOCK + 2 * (THICK + GAP + ringSpan(ringsFor(years)));
+export const canvasFor = (years, echoDays = 0) =>
+  BLOCK + 2 * (THICK + GAP + ringSpan(ringsFor(years, echoDays)));
 
 const FRAME = frameCells();
 
@@ -342,6 +370,39 @@ export function ringBars(rings, canvas) {
       d += `M${o} ${o + 1}h1v${h}h-1z`;
       d += `M${canvas - 1 - o} ${o + 1}h1v${h}h-1z`;
     }
+  }
+  return d;
+}
+
+// The echo ring: the innermost ring, drawn one cell on and one cell off, in the
+// GHOST fill rather than the token's own colour. It is the years the token
+// inherited, so it must not read as years it has kept.
+//
+// A cell is drawn when its offset along its own edge is EVEN -- in x from o on
+// the horizontal edges, in y from o on the vertical ones. Offset 0 is even, so
+// all four corners are drawn, which anchors the ring and makes the phase
+// unambiguous on every edge.
+//
+// The side length is ALWAYS 53: with r rings the innermost sits at o = 2(r-1)
+// and the canvas is 49 + 4r, so the depth cancels. That is why there is exactly
+// one of these -- at 1,386 to 1,456 bytes a dotted ring costs about 23 times a
+// solid one, and nine would blow the 20,000 byte limit.
+//
+// MUST stay identical to FrameRenderer.echoRingBars in Solidity.
+export function echoRingBars(o, len) {
+  const last = o + len - 1;
+  let d = "";
+  // The two horizontal edges, corners included.
+  for (let i = 0; i < len; i += 2) {
+    const x = o + i;
+    d += `M${x} ${o}h1v1h-1z`;
+    d += `M${x} ${last}h1v1h-1z`;
+  }
+  // The two vertical edges, corners already drawn above.
+  for (let i = 2; i < len - 1; i += 2) {
+    const y = o + i;
+    d += `M${o} ${y}h1v1h-1z`;
+    d += `M${last} ${y}h1v1h-1z`;
   }
   return d;
 }
@@ -417,6 +478,10 @@ export function renderSvg(modules, want, size, state) {
   const {
     level = 0, streak = 0, years: rawYears = 0, marks = [],
     lastDay = 0, today = 0, resting = false, sunset = false,
+    // The days this token's LINE had already run when it was seeded; 0 for a
+    // founding token. Drawing only -- it never reaches the heart, the palette
+    // or a Mark gate. See docs/specs/2026-09-06-mro-lineage-design.md.
+    echo = 0,
     // The day the piece closed, and the run that most recently ended with the
     // day it ended. All three default to 0, which is what a token that has
     // never slipped holds on a piece that is still open.
@@ -431,9 +496,12 @@ export function renderSvg(modules, want, size, state) {
     // Tint's ink, and the streak the EARNED Iris stored when it was applied.
     irisVariant = 0, tintVariant = 0, irisRun = 0,
   } = state;
-  const years = ringsFor(rawYears);
-  const canvas = canvasFor(years);
-  const frameOff = ringSpan(years) + GAP;   // where the 49-grid frame starts
+  // `years` is the token's OWN rings, capped at nine once a child spends a slot
+  // on its echo ring; `total` is what the canvas is sized from.
+  const { own: years, echoRings } = ringBudget(rawYears, echo);
+  const total = years + echoRings;
+  const canvas = canvasFor(rawYears, echo);
+  const frameOff = ringSpan(total) + GAP;   // where the 49-grid frame starts
   const blockOff = frameOff + THICK;     // where the 45-cell block starts
   const codeOff = blockOff + QUIET;      // where the modules start
 
@@ -484,7 +552,13 @@ export function renderSvg(modules, want, size, state) {
   // them would force both libraries to be split into single-path functions for no
   // visual gain.
   const groups = [];
-  if (dim.size) groups.push([ghost, dim]);
+  // The ghost group carries the echo ring the way the frame group below carries
+  // the year rings: as a path string appended after the cell walk, because a
+  // bar is not a cell and cannot go in the set. Mirrors FrameRenderer._emit,
+  // which appends echoRingBars to ghostD. The ring is always 53 cells on a
+  // side, at depth 2 * years -- one slot inside the innermost earned ring.
+  const ghostPath = pathFor(dim, canvas) + (echoRings ? echoRingBars(2 * years, 53) : "");
+  if (ghostPath) groups.push([ghost, ghostPath]);
   const frameColour = gold ?? colour;
   // The frame's own cells first, then the rings, so the contract can emit its
   // row walk and then append the bars.
@@ -608,7 +682,7 @@ export const hasMark = (ids, id) => ids.includes(id);
 
 /**
  * @param state { tokenId, level, streak, lastDay, mintDay, today, generation,
- *                seedsGiven, parent, agentKeyId, resting, sunset, marks,
+ *                seedsGiven, parent, echo, agentKeyId, resting, sunset, marks,
  *                irisVariant, tintVariant, irisRun }
  */
 // The attribute list is the spec's, in the spec's order. `Sunset` is the one
@@ -618,7 +692,7 @@ export const hasMark = (ids, id) => ids.includes(id);
 export function tokenUri(modules, want, size, state) {
   const {
     tokenId = 0, level = 0, streak = 0, lastDay = 0, mintDay = 0, today = 0,
-    generation = 0, seedsGiven = 0, parent = 0, agentKeyId = 0,
+    generation = 0, seedsGiven = 0, parent = 0, echo = 0, agentKeyId = 0,
     resting = false, sunset = false, sunsetDay = 0, fellRun = 0, fellDay = 0,
     marks = [],
     irisVariant = 0, tintVariant = 0, irisRun = 0,
@@ -634,7 +708,7 @@ export function tokenUri(modules, want, size, state) {
   // BigInt so a plain number and a 0x..n literal both render the same 66 chars.
   const keyHex = `0x${BigInt(agentKeyId).toString(16).padStart(64, "0")}`;
   const svg = renderSvg(modules, want, size,
-    { level, streak, years, marks, lastDay, today, resting, sunset,
+    { level, streak, years, echo, marks, lastDay, today, resting, sunset,
       sunsetDay, fellRun, fellDay, irisVariant, tintVariant, irisRun });
   const image = Buffer.from(svg, "utf8").toString("base64");
 
@@ -685,6 +759,9 @@ export function tokenUri(modules, want, size, state) {
         str("Agent Key", keyHex),
         num("Generation", generation),
         num("Parent", parent),
+        // Emitted ALWAYS, including 0 on a founding token, so an agent can
+        // filter on it without having to special-case absence.
+        num("Echo", echo),
         num("Children", seedsGiven),
         str("Resting", resting ? "yes" : "no"),
         str("Sunset", sunset ? "yes" : "no"),
