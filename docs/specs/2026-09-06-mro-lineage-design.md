@@ -180,7 +180,7 @@ The depth cancels exactly. The innermost ring always sits the same distance from
 the day frame, so the echo ring is 53 cells on a side whether the token has one
 ring or ten.
 
-### 3.5 The dot rule
+### 3.5 The dash rule
 
 It must be specified exactly, because `Renderer.t.sol` holds the Solidity
 renderer and `tools/render-token.mjs` byte-for-byte identical, and a rule
@@ -311,7 +311,7 @@ earned by this token". Inherited days are exactly that.
 
 `MarkRenderer.ghost()` recolours the ghost fill when a token wears Ache, so a
 child wearing Ache has its echo ring recoloured too. That is ACCEPTED rather
-than worked around, because the dots carry the distinction: the ring is
+than worked around, because the dashes carry the distinction: the ring is
 identifiable by texture, so it does not depend on colour to be legible.
 
 The alternative -- pinning the echo ring to `Palette.ghost()` and ignoring Ache
@@ -377,7 +377,7 @@ on. 350, 700 and 900 come from the existing ten-ring gate in
 `render-token.test.mjs`.
 
 A newborn child is the harsher of the two extremes and it is worth saying why:
-its ring is the OUTERMOST thing on the canvas at depth 0, where the dots are
+its ring is the OUTERMOST thing on the canvas at depth 0, where the marks are
 largest relative to the code, and it is the state most children will be in.
 
 The gate runs under the memory wrapper (`~/scripts/safe-build.sh`) and reports

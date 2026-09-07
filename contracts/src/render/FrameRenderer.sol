@@ -280,7 +280,7 @@ library FrameRenderer {
         // `len - 1` below is unsigned, so a zero length would underflow to
         // 2**256-1 and loop forever. Unreachable today -- the only call site
         // passes the literal 53 -- but a ring of under two cells has no edges
-        // to dot anyway, so refusing it makes this provably safe rather than
+        // to mark anyway, so refusing it makes this provably safe rather than
         // safe by accident.
         if (len < 2) return d;
         uint256 last = o + len - 1;

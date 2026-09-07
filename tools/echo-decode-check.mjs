@@ -30,7 +30,7 @@
 // canvasFor(10, echo) is 89, exactly the founding ring cap. So each child is
 // compared against a FOUNDING token on the identical canvas, at the identical
 // module size, whose only difference is that its innermost ring is solid
-// instead of dotted. Without that pair, a failure could not be attributed to
+// instead of dashed. Without that pair, a failure could not be attributed to
 // the ring rather than to the canvas.
 //
 // MEMORY. This is a rendering sweep, which is the exact shape of job that took

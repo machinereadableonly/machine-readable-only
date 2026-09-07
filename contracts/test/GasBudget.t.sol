@@ -275,7 +275,8 @@ contract GasBudgetTest is Test {
         // 12 carries a fragmented frame AND a ring at once. That makes the
         // dearest token in the piece a CHILD, and it is measured here rather
         // than reasoned about.
-        assertGt(worstGas, foundingWorstGas, "a child at day 364 is the dearest token, not a founding one");
+        assertGt(worstGas, foundingWorstGas,
+            "a child at day 364 is the dearest token, not a founding one");
 
         // The 1,000,000 / 5,000 target is missed and is reported as missed
         // rather than quietly dropped. Flip these the day they pass -- and
@@ -475,9 +476,9 @@ contract GasBudgetTest is Test {
     /// IT IS NOT AN AFFORDABILITY ARGUMENT, and an earlier comment wrongly said
     /// it was. The measurement below is what settles that: the illegal
     /// five-Mark version is dearer, but only by 873 gas -- it was 1,020 under
-    /// the dotted ring -- and it sits inside the hard limit. Vessel is a same-length hex substitution, so
-    /// it buys almost no bytes. The four-Mark set is used because it is the
-    /// legal one, not because it is the cheap one.
+    /// the dotted ring -- and it sits inside the hard limit. Vessel is a
+    /// same-length hex substitution, so it buys almost no bytes. The four-Mark
+    /// set is used because it is the legal one, not because it is the cheap one.
     function test_theLadderShutsBothSidesOfPairFourBelowAWholeHeart() public {
         MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
         assertTrue(u[7].requiresWhole, "Vessel must still require a whole heart");
@@ -503,8 +504,12 @@ contract GasBudgetTest is Test {
         console.log("day 364 child, the illegal five           ", illegal);
         console.log("what the unreachable Mark would have cost ", illegal - legal);
 
-        assertGt(illegal, legal, "the excluded Mark is not free, merely unreachable");
+        // Both gas assertions sit behind the same guard as every other one in
+        // this file. The direction happens to hold under the coverage profile
+        // too, but a gas assertion that is true there by luck is exactly the
+        // kind that stops being true after an unrelated change.
         if (_gasIsMeaningful()) {
+            assertGt(illegal, legal, "the excluded Mark is not free, merely unreachable");
             assertLt(illegal, GAS_LIMIT,
                 "even the impossible five-Mark day-364 child fits: the reason for the "
                 "four-Mark set is legality, not the budget");
