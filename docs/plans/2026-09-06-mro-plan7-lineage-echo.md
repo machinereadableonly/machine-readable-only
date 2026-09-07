@@ -1512,6 +1512,35 @@ git commit -m "docs: the wire says a seed now lands, and what a child carries"
 **This task ends in an outward-facing action. Stop before Step 4 and get the operator's
 approval.**
 
+- [ ] **Step 0: Make ABI-vs-chain skew LOUD before you deploy anything**
+
+Task 1b's review found that `read.mjs`'s decode `catch` is silent, so an ABI
+that disagrees with the deployed contract is indistinguishable from an RPC
+outage: both return null and both say `chain-unavailable`, with no log line
+anywhere. That state is live on this branch right now, and it is strictly
+worse than the bug Task 1b fixed -- the old defect broke `upgrade` and `seed`,
+while a silent decode failure also takes out `tokenBlock`, `status`,
+`/t/<id>`, `freeIdFrom` and therefore `mint`.
+
+Two changes, both before the deploy:
+
+1. **A boot-time probe in `warden/src/chain/preflight.mjs`** -- that file
+   already checks the chain id against the RPC and the treasury's EIP-55
+   checksum at startup, so this belongs beside them. Decode one real `viewOf`
+   for a token known to exist. If it throws, REFUSE TO START with a message
+   naming the ABI and the contract. Skew then fails at boot, loudly, instead
+   of per request, silently.
+2. **Distinguish the two failures at the call site.** In `read.mjs`, log a
+   decode failure differently from a transport failure. It must NOT carry the
+   RPC url -- see `redact.mjs` and [[rpc-url-in-logs]]; the viem decode error
+   does not carry it, but check rather than assume.
+
+Also close the guard gap the same review found: `warden/test/abi.test.mjs:31`
+SKIPS when `contracts/out/` is absent, and that directory is gitignored. The
+Warden's decoder now depends on `abi.mjs` being fresh, so make the deploy path
+run `forge build` before the pin -- in `rehearse-start.sh` or DEPLOY.md -- so
+the guard actually executes rather than skipping on a clean checkout.
+
 - [ ] **Step 1: Write the deploy script from the working one**
 
 Copy `DeployPlan5.s.sol` / `deploy-plan6.sh`, not from memory.
