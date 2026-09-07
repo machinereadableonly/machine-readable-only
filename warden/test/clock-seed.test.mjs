@@ -111,22 +111,32 @@ const blindChain = {
   async readContract() { throw new Error("rpc down"); },
 };
 
+/// One child reserved against parent 1, its bitmap in whatever state is asked
+/// for. Separate from seedRig so a test can queue a SECOND child, which is the
+/// only way an assertion about the loop stopping can discriminate at all.
+function reserveChild(q, db, childId, { solveState = "done" } = {}) {
+  q.insertSeed({ childId, parentId: 1, toAddress: CHILD_OWNER, keyId: "k", lastDay: TODAY, mintDay: TODAY });
+  db.prepare("UPDATE mints SET qr = ?, solveState = ? WHERE tokenId = ?").run(QR, solveState, childId);
+}
+
 /**
- * A parent with one child reserved against it, solved and waiting.
+ * A parent with children reserved against it, solved and waiting.
  *
- * `solveState` is the only knob: a child whose bitmap never solved is the
+ * `solveState` is the bitmap knob: a child whose bitmap never solved is the
  * stuckSeeds case, and it must never be sent, because the contract takes `code`
  * once and keeps it forever.
+ *
+ * `children` is how many are queued. It defaults to one because most tests are
+ * about what happens to ONE row, and the run-level tests ask for two because
+ * "the loop stopped" is not a claim a single row can support.
  */
-function seedRig({ fail = null, solveState = "done" } = {}) {
+function seedRig({ fail = null, solveState = "done", children = 1 } = {}) {
   const { db, q } = mirror();
   parentToken(q);
-  q.insertSeed({ childId: 2, parentId: 1, toAddress: CHILD_OWNER, keyId: "k", lastDay: TODAY, mintDay: TODAY });
-  db.prepare("UPDATE mints SET qr = ?, solveState = ? WHERE tokenId = 2").run(QR, solveState);
+  for (let i = 0; i < children; i += 1) reserveChild(q, db, 2 + i, { solveState });
   return { db, q, writer: writerThat(fail) };
 }
 
-const alerts = [];
 const baseArgs = (q) => ({
   q,
   publicClient: noChain,
@@ -134,7 +144,7 @@ const baseArgs = (q) => ({
   chainId: 84532,
   today: TODAY,
   log: () => {},
-  alert: (m) => alerts.push(m),
+  alert: () => {},
 });
 
 // ---------------------------------------------------------------------------
@@ -312,16 +322,26 @@ test("a child id that cannot be identified on chain is KEPT, never dropped on a 
 // Run-level: one refusal must not become a hundred deletions
 // ---------------------------------------------------------------------------
 
+// TWO CHILDREN, and that is the whole point of the count below. With one
+// queued, `sent.length === 1` is true whether the loop breaks or runs to the
+// end, so the assertion reads as a control and is not one -- flipping `break`
+// to `continue` in run.mjs left all 26 tests green. With two, the count
+// discriminates: break sends one, continue sends both.
 for (const errorName of ["NotWarden", "EnforcedPause", "Sunset"]) {
-  test(`${errorName} aborts the run and drops nothing`, async () => {
-    const { q, writer } = seedRig({ fail: errorName });
+  test(`${errorName} aborts the run, drops nothing, and stops the queue`, async () => {
+    const { q, writer } = seedRig({ fail: errorName, children: 2 });
     const summary = await runClock({ ...baseArgs(q), writer });
 
     assert.equal(summary.aborted, errorName);
     assert.ok(q.getToken(2), "the piece being shut is not this row's fault");
+    assert.ok(q.getToken(3), "nor the next row's");
+    assert.equal(q.seedsSpent("k"), 2, "both reservations survive");
     assert.deepEqual(summary.droppedSeeds, []);
-    assert.equal(writer.sent.filter((s) => s.functionName === "seed").length, 1,
-      "and the rest of the queue is not tried against the same refusal");
+    assert.deepEqual(
+      writer.sent.filter((s) => s.functionName === "seed").map((s) => s.args[0]),
+      [2n],
+      "the SECOND child was never attempted: one refusal must not become a hundred"
+    );
   });
 }
 
@@ -382,4 +402,3 @@ test("CONTROL: an empty seed queue sends nothing and reports nothing", async () 
   assert.deepEqual(summary.stuckSeeds, []);
 });
 
-void alerts;

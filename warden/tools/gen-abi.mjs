@@ -25,13 +25,11 @@ if (!Array.isArray(abi) || abi.length === 0) {
 // re-signatured contract function fails LOUDLY at generation time rather than
 // as a confusing revert at 00:05 UTC.
 //
-// `seed` is on this list but the Clock does NOT send it: runClock has three
-// passes -- mint, batchCheckIn, applyMark -- and nothing in src/clock/ mentions
-// seed. It is checked anyway because the ABI is what a fourth pass will be
-// written against, and a signature that drifted in the meantime should fail
-// here rather than on the day someone builds it. The comment used to say
-// "the functions the Clock actually sends", which is how a tool that writes
-// nothing on chain read as finished.
+// All four are sent. `seed` used to be the exception -- listed here against a
+// fourth pass that did not exist yet -- and runClock has sent it since the seed
+// pass landed, so this list is once again exactly "the functions the Clock
+// actually sends". A drifted signature fails here, at generation time, rather
+// than as a confusing revert at 00:05 UTC.
 const REQUIRED_FUNCTIONS = ["mint", "batchCheckIn", "applyMark", "seed"];
 // 4.M8: Seeded and SunsetAt are here because reconcile now COUNTS them. They
 // apply nothing -- see applyEvents for why neither can -- but an event the ABI
