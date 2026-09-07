@@ -117,16 +117,31 @@ export function queries(db) {
       // reservation. The same treatment the four EARNED Marks already get.
       "INSERT INTO mints (tokenId, toAddress, keyId, status) VALUES (?, ?, ?, 'queued')"
     ),
-    // BOTH deletes are guarded on `parentId IS NOT NULL`, so a bug in the Clock
-    // can never take a FOUNDING token's rows: those were paid for and are on
-    // chain, and they are the one thing here nobody can recreate. The mints
-    // half reads the tokens row, so it has to run BEFORE the tokens half --
-    // after it, the guard would find nothing and refuse to delete anything.
+    // BOTH deletes carry BOTH guards, and each rules out a different disaster.
+    //
+    // `parentId IS NOT NULL` means a bug in the Clock can never take a FOUNDING
+    // token's rows: those were paid for and are on chain, and they are the one
+    // thing here nobody can recreate.
+    //
+    // `status != 'written'` means a child that is ALREADY ON CHAIN cannot be
+    // deleted either. Without it, dropping a written seed removed both rows and
+    // handed the budget back, while the token went on existing on chain forever
+    // -- and nothing heals that: reconcile only LOGS `Seeded`, so `/t/<childId>`
+    // would 404 for the life of the piece. The contract still refuses the
+    // over-spend loudly (NoSeedAvailable), so it is not a free second seed; it
+    // is an unrecoverable hole in the mirror. A seed that FAILED to write is
+    // still 'queued', so nothing legitimate is blocked.
+    //
+    // The mints half reads the tokens row, so it has to run BEFORE the tokens
+    // half -- after it, the guard would find nothing and refuse to delete
+    // anything.
     deleteSeedMint: db.prepare(
-      "DELETE FROM mints WHERE tokenId = ? AND EXISTS " +
+      "DELETE FROM mints WHERE tokenId = ? AND status != 'written' AND EXISTS " +
         "(SELECT 1 FROM tokens t WHERE t.tokenId = mints.tokenId AND t.parentId IS NOT NULL)"
     ),
-    deleteSeedToken: db.prepare("DELETE FROM tokens WHERE tokenId = ? AND parentId IS NOT NULL"),
+    deleteSeedToken: db.prepare(
+      "DELETE FROM tokens WHERE tokenId = ? AND parentId IS NOT NULL AND status != 'written'"
+    ),
 
     reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId, variant) VALUES (?, ?, ?)"),
     reserveMarkPaid: db.prepare(
@@ -447,6 +462,11 @@ export function queries(db) {
      * a payment nonce. The rule is the one written beside reserveMark and
      * reserveMarkPaid: a boolean argument in a money path is exactly the seam
      * where something expensive gets handed out for free.
+     *
+     * THIS METHOD OWNS ITS TRANSACTION, unlike insertMint, which deliberately
+     * does not because mint.mjs already holds one. node:sqlite has no nested
+     * transactions, so calling this from inside a `q.transact` throws "cannot
+     * start a transaction within a transaction" -- call it at the top level.
      *
      * BOTH ROWS LAND IN ONE TRANSACTION. The tokens row IS the reservation --
      * seedsSpent counts `parentId IS NOT NULL` -- so a half-written pair would
