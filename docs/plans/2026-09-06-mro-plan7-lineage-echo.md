@@ -97,7 +97,7 @@ Copied from the spec so no task has to re-derive them:
 | `canvas(r)`, for `r >= 1` | `49 + 4r` |
 | Echo ring side length, any depth | **53 cells, constant** |
 | Echo ring dot count | **104** (27 top, 27 bottom, 25 left, 25 right) |
-| Echo ring cost | ~1,456 bytes (104 runs at 13-14 bytes) |
+| Echo ring cost | 1,386 bytes at depth 0, 1,456 at depth 18 (MEASURED; the dot count is constant, the digit width is not) |
 | Byte worst case today | 11,550 of 20,000 (`GasBudget.t.sol`, token 7) |
 | Expected new byte worst case | ~12,950 (delta `1,456 - 64`) |
 | Gas worst case today | 1,750,744 of 2,000,000 (token 9) |
@@ -880,6 +880,20 @@ Token 11 is a seeded child at level 3,650 with `echo` set and the maximal
 LEGAL Mark set. **The maximal legal set is five Marks, not seven** -- the
 exclusive pairs cap it at Hush + Beat + the bought Iris in leaf + Vessel +
 Tint. Do not construct a seven-Mark token; that state is unreachable.
+
+- [ ] **Step 1a: Know what the fixtures do NOT cover before you trust them**
+
+Task 2 found and reported this, and Task 3 inherits it: the pre-existing render
+matrix carries no `echo` field, so `RenderFixture` and `CombinationFixture` are
+BLIND to `echoRingBars`. Regenerating them proves only that the two renderers
+agree about `"Echo":0`.
+
+Task 2 closed that with two echo-bearing stages in `token-uri-fixture.mjs` (a
+newborn child and a child at the cap) plus keccak pins on `echoRingBars`
+asserted in both languages. **Read those pins before you add a measurement
+case**, and make sure your new gas/byte case actually exercises a token with a
+non-zero echo -- Task 2's report warns that this task measures the ring in
+SOLIDITY ONLY and can inherit the same blind spot without noticing.
 
 - [ ] **Step 1b: Give the spike token an Echo, or the measurement lies**
 
