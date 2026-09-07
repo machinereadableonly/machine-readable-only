@@ -76,3 +76,10 @@ test("the echo ring matches the Solidity byte for byte", () => {
     "0x42c520135d88294bc8feb6c15db972f1d48e84efdd3fd7df11f1d720ac64a046",
   );
 });
+
+test("a ring too small to have edges draws nothing", () => {
+  // Parity with the Solidity guard, where a zero length would underflow.
+  assert.equal(echoRingBars(0, 0), "");
+  assert.equal(echoRingBars(7, 1), "");
+  assert.equal(echoRingBars(0, 2), "M0 0h1v1h-1zM0 1h1v1h-1z", "two cells is two dots");
+});

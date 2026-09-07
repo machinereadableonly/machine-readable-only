@@ -390,6 +390,11 @@ export function ringBars(rings, canvas) {
 //
 // MUST stay identical to FrameRenderer.echoRingBars in Solidity.
 export function echoRingBars(o, len) {
+  // Mirrors the Solidity guard. There the reason is real -- `len - 1` is
+  // unsigned and a zero length underflows into an endless loop -- and here it
+  // is only parity, because a JavaScript number goes negative and the loop
+  // simply does not run. The two functions must stay literally the same shape.
+  if (len < 2) return "";
   const last = o + len - 1;
   let d = "";
   // The two horizontal edges, corners included.
