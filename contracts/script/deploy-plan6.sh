@@ -15,6 +15,18 @@
 # each run, and a value that lives in a file is stated once and then forgotten.
 set -euo pipefail
 
+# THE LITERAL WORD, NOT MERELY A NON-EMPTY ARGUMENT. This was
+# `${1:+--broadcast}`, which expands on ANY non-empty $1 -- so a typo, a stray
+# flag, or a path pasted by mistake sent real transactions to a real chain. The
+# only argument that broadcasts is the one that says so.
+BROADCAST=""
+if [ "${1:-}" = "--broadcast" ]; then
+  BROADCAST="--broadcast"
+elif [ -n "${1:-}" ]; then
+  echo "FAIL: unrecognised argument '$1'. Pass --broadcast to send, or nothing to simulate." >&2
+  exit 1
+fi
+
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 export PATH="$HOME/.foundry/bin:$PATH"
 
@@ -34,10 +46,10 @@ RPC=https://sepolia.base.org
 
 echo "chain    $(cast chain-id --rpc-url "$RPC")  (expected $EXPECTED_CHAIN_ID)"
 echo "warden   $WARDEN_ADDRESS"
-echo "mode     ${1:-simulate}"
+echo "mode     ${BROADCAST:-simulate}"
 echo
 
 forge script script/DeployPlan5.s.sol:DeployPlan5 \
   --rpc-url "$RPC" \
-  ${1:+--broadcast} \
+  $BROADCAST \
   -vvv
