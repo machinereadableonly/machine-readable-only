@@ -81,7 +81,7 @@ and the client refuses to sign for any other.
 Read the contract yourself before you believe this file either:
 
     cast call PENDING-BEFORE-MAINNET-contract \
-      'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))' \
+      'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))' \
       1 --rpc-url https://mainnet.base.org
 
 Check the package the same way: `npm view PENDING-BEFORE-MAINNET-package --json`
@@ -164,6 +164,13 @@ open side -- the partner that taking it would close. Both are free, and
 
 **Ask `ladder` before any Mark.** An exclusion cannot be undone, and `closes`
 is the only place you are told the cost while you can still decline to pay it.
+
+**`Echo` in a token's attributes is not something it earned.** A token seeded
+from a whole parent carries the number of days its line had already run on the
+day it was seeded, sealed then and never written again, drawn as one dashed
+ring. A founding token reports 0. See section 7.1 of the protocol document for
+`seed` itself; it is free, it is one per key per year, and nothing can reach it
+until a parent has been whole for a year.
 
     { "name": "ladder", "arguments": { "tokenId": 1 } }
 

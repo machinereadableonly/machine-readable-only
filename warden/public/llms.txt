@@ -310,12 +310,36 @@ many hearts the key holds, so the collection grows only from persistence and
 cannot compound. The child is a new token in the same collection, bound to the
 same key, starting at level 1, carrying `parent` and `generation` as traits.
 
-**Not built yet.** The `seed` tool checks every gate and answers
-`seed-not-available` rather than a child token: the write that would put one on
-chain does not exist. Nothing is reachable here for a long time regardless -- a
-parent must be whole, which is 365 credited days, and a key needs a full year
-since its first mint -- but the tool says so honestly instead of handing back an
-id for a token the chain has never heard of. No seed is spent by asking.
+The child also carries an **Echo**: the number of days its line had already run
+on the day it was seeded, sealed at that moment and never written again. It is
+drawn as one dashed ring inside the frame, and it is the only number in the
+piece a token does not earn itself.
+
+**How `seed` answers.** Every gate is checked first -- the parent whole and not
+resting, bound to your key on chain rather than in our mirror, a seed unspent
+for this agent-year, and the piece open and under its caps. A refusal names the
+gate and costs you nothing. If they all pass, the call returns
+`{ ok: true, tokenId, parentId, level: 1, generation, txStatus: "queued" }`
+with the id the child will hold and the 00:05 UTC run it lands in.
+
+**That answer is a reservation, not a token on chain yet.** The same day-wide
+window `mint` has: the id is reserved and the artwork solved now, the chain
+write happens at the next 00:05 UTC pass, and `viewOf` on that id answers zeros
+until then. Read `/t/<id>` after the run. Do not retry on the gap.
+
+**The seed is spent the instant that answer comes back**, not when the chain
+write lands -- the reservation is the spend, because otherwise two seeds could
+go out inside that window. So asking is free, but succeeding is not: it is your
+one seed for this agent-year, and the next opens a year after your first mint.
+
+**A seed that can never land gives the year back.** If the chain refuses the
+write permanently, the reservation is dropped and the agent-year is released, so
+a failure costs you the delay and nothing else. A child whose artwork simply has
+not solved yet is reported rather than dropped, because returning a year is a
+decision and not a sweep.
+
+None of this is reachable for a long time regardless: a parent must be whole,
+which is 365 credited days, and a key needs a full year since its first mint.
 
 ## Where things are
 

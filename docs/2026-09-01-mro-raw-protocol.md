@@ -775,6 +775,55 @@ Refusals: `unknown-token`, `not-bound-to-caller`, and the chain gates. A token
 whose key was rebound is re-checked against the chain, not against our
 database, so a legitimate rebind is never locked out.
 
+### 7.1 Seed a child, once a year
+
+`seed` with `parentId` and `to`. It costs nothing, because it is earned: the
+parent must be whole (365 credited days) and not resting, bound to your key on
+chain, and your key gets one seed per full year since its first mint however
+many hearts it holds. Every gate is read before anything is written, and a
+refusal names the one that stopped it -- `parent-not-whole`, `no-seed-available`,
+`not-bound-to-caller`, or a chain gate. Asking costs nothing.
+
+An accepted call answers:
+
+    { "ok": true, "tokenId": 42, "parentId": 1, "to": "0x...",
+      "level": 1, "generation": 1, "txStatus": "queued",
+      "onChainBy": "2026-09-08T00:05:00Z" }
+
+**That is a reservation, and it is already the spend.** The id is held and the
+child's artwork is being solved now; the chain write happens at the next 00:05
+UTC pass, exactly as `mint` does, so `viewOf` on that id answers zeros until
+then and that is correct rather than a failure. But your seed for this
+agent-year is spent the moment this returns, not when the write lands -- the
+reservation has to count, or two seeds could go out inside the window. If the
+chain refuses the write permanently the reservation is dropped and the year is
+handed back.
+
+The child is a new token in the same collection, bound to the same key, starting
+at level 1, carrying `parent`, `generation` and an **`echo`**: the days its line
+had already run when it was seeded. The echo is sealed at the seed and never
+written again, and it is drawn as one dashed ring inside the frame.
+
+### 7.2 What changed on 2026-09-07, and it is all additive
+
+Nothing was removed and no field changed meaning. If your client already works
+it still works.
+
+- **`seed` used to answer `{ ok: false, reason: "seed-not-available" }` to every
+  call**, because the write path did not exist. It now returns the object above.
+  That reason string is retired and nothing emits it.
+- **`viewOf` returns an eighteenth value, `echo`, inserted after `parent`.**
+  The function SELECTOR is unchanged (`0x0fa4edbd` -- it is derived from the
+  `uint256` argument, not from the struct that comes back), so a stale decoder
+  is not rejected: it decodes the same bytes against the wrong field list and
+  gives you silently wrong answers from `resting` onwards. Use the type list in
+  section 8.
+- **`tokenURI` metadata carries a new `Echo` attribute.** Founding tokens report
+  0.
+- `Renderer.svg` takes the struct as an ARGUMENT, so ITS selector did move,
+  `0xe6c54f9a` to `0x91321088`. That only matters if you call the renderer
+  library directly.
+
 ---
 
 ## 8. Read the chain instead of asking us
@@ -787,20 +836,20 @@ about a token, and it does not involve us at all.
     Renderer:  0x48B6f41E0B8C4f38EBC67dfE57AeF18D553BC7f4
 
     cast call 0xe032054D54b407C52C49c40A423aC79031401C03 \
-      'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))' \
+      'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))' \
       1 --rpc-url https://sepolia.base.org
 
-A live answer, token 1, read 2026-09-06 against the pair above, which was
-deployed that day. Nothing has been minted on it yet, so this is what an
-UNMINTED id looks like -- zeros throughout, with the contract's own day in the
-last field. It is not an error: ids are not reserved, and `viewOf` answers for
-any id you ask about.
+Token 1, read on 2026-09-07 against the pair above, shortened here in the two
+long fields. It is a minted token on day one of its life wearing one Mark. The
+`echo` value is shown at 0, which is what every founding token carries and what
+the id above returns: only a seeded child ever holds a non-zero one.
 
-    (1, 0, 0, 0, 0, 0, 0, 0, false, false, 0, 0, 0, 0, 0x00...00, 0x, 20702)
+    (1, 1, 1, 20702, 20702, 0, 0, 0, 0, false, false, 0, 0, 0, 2,
+     0x4eaddc8c...bd0a77, 0xfe3390...c180, 20703)
 
 Reading left to right: tokenId, level, streak, lastDay, mintDay, generation,
-seedsGiven, parent, resting, sunset, sunsetDay, fellRun, fellDay, marks,
-agentKeyId, code, today.
+seedsGiven, parent, echo, resting, sunset, sunsetDay, fellRun, fellDay, marks,
+agentKeyId, code, today. Eighteen values.
 
 `marks` is 2 there, which is bit 1 set, which is Hush. The Mark set lives in bits
 1 to 10; bits 16 and up carry the Iris shape, the Tint ink and the earned run, so
@@ -809,12 +858,25 @@ test `marks & 0xFFFE` for "wears any Mark" and never `marks != 0`.
 **`level` is 1 from the moment a token is minted, so `level == 0` means never
 minted.** Do not read the leading `1` as existence: that is the id you asked
 about, echoed back, and it comes back the same for a token that was never
-minted.
+minted. Ids are not reserved, and `viewOf` answers for any id you ask about --
+an unminted one comes back as zeros throughout with the contract's own day in
+the last field, which is an answer and not an error.
 
 In order: `tokenId`, `level` (credited days), `streak`, `lastDay`, `mintDay`,
-`generation`, `seedsGiven`, `parent`, `resting`, `sunset`, `marks` (bit n set
-means mark n), `agentKeyId`, `code` (172 bytes, the packed 37x37 code written
-once at mint), `today`.
+`generation` (0 for a founding token, 1+ for a seeded child), `seedsGiven`,
+`parent` (0 for a founding token, else the id it was seeded from), `echo` (days
+the LINE had already run when this token was seeded; 0 for a founding token,
+sealed at the seed and never written again), `resting`, `sunset`, `sunsetDay`
+(the day the piece closed; 0 while it is open), `fellRun` (the run that most
+recently ended; 0 if none ever has), `fellDay` (the day that run ended), `marks`
+(bit n set means mark n), `agentKeyId`, `code` (172 bytes, the packed 37x37 code
+written once at mint), `today`.
+
+**This list was wrong in two ways before 2026-09-07 and both are worth knowing
+if you cached an older copy of this page.** It omitted `sunsetDay`, `fellRun`
+and `fellDay`, which have been in the struct since Plan 6, and it predates
+`echo` entirely. If your decoder was built from the old list it is off by five
+fields from `resting` onwards.
 
 So a token's whole history -- how many days it has, whether the run is intact,
 which Marks it carries, which key it is bound to -- is one `eth_call` away. If
@@ -834,8 +896,11 @@ Useful selectors, all verified against the deployment above:
 | `rest(uint256)` | `0x6e8eb222` | owner-signed, irreversible |
 
 `tokenURI` returns the image inline. There is no IPFS, no gateway and no
-server in that path. It is also the expensive call: the worst measured case is
-1,633,224 gas for a token the day before its heart seals. That is a read, so it
+server in that path. It is also the expensive call: the worst case measured in
+the contract's own test suite is 1,889,279 gas, on a seeded child at day 364
+wearing four Marks. Budget against that rather than against a founding token,
+which tops out lower at 1,735,469 -- a child draws one ring a founding token
+never has. That is a read, so it
 costs you nothing in fees -- but some RPC providers cap the gas an `eth_call`
 may consume, and a token near that worst case can exceed the cap and come back
 as an error rather than an image. If that happens, it is your provider's

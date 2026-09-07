@@ -20,6 +20,14 @@ const address = process.argv[2];
 const rpc = process.argv[3] ?? "https://sepolia.base.org";
 if (!address) throw new Error("usage: absence-on-chain.mjs <renderer> [rpc]");
 
+// THIS LIST MUST TRACK contracts/src/render/TokenView.sol FIELD FOR FIELD, and
+// nothing here can tell you when it has drifted. `svg` takes the struct as an
+// ARGUMENT, so its selector is derived from this component list: the Echo field
+// moved it from 0xe6c54f9a to 0x91321088, and a stale copy does not decode
+// wrongly, it calls a function the deployed library does not have. (`viewOf` is
+// the opposite case and is why the two got confused: it takes a `uint256` and
+// returns the struct, so its selector 0x0fa4edbd did NOT move -- only the
+// caller's return DECODER did.)
 const VIEW = {
   type: "tuple",
   components: [
@@ -27,6 +35,7 @@ const VIEW = {
     { name: "streak", type: "uint32" }, { name: "lastDay", type: "uint32" },
     { name: "mintDay", type: "uint32" }, { name: "generation", type: "uint32" },
     { name: "seedsGiven", type: "uint32" }, { name: "parent", type: "uint256" },
+    { name: "echo", type: "uint32" },
     { name: "resting", type: "bool" }, { name: "sunset", type: "bool" },
     { name: "sunsetDay", type: "uint32" }, { name: "fellRun", type: "uint16" },
     { name: "fellDay", type: "uint24" }, { name: "marks", type: "uint256" },
@@ -41,7 +50,7 @@ const client = createPublicClient({ chain: baseSepolia, transport: http(rpc) });
 // A token that minted on day 1000 and never came back, seen at four ages.
 const view = (gap, extra = {}) => ({
   tokenId: 1n, level: 1, streak: 1, lastDay: 1000, mintDay: 1000, generation: 0,
-  seedsGiven: 0, parent: 0n, resting: false, sunset: false, sunsetDay: 0,
+  seedsGiven: 0, parent: 0n, echo: 0, resting: false, sunset: false, sunsetDay: 0,
   fellRun: 0, fellDay: 0, marks: 0n,
   agentKeyId: "0x" + "00".repeat(32), code: "0x" + "00".repeat(172),
   today: 1000 + gap, ...extra,

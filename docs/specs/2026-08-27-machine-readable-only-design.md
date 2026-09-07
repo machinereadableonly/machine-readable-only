@@ -819,7 +819,13 @@ cron for. Three endings, all on-chain, give the piece a shape.
   depth, and no generation ever gets an exclusive visual: in every breeding
   market, depth became a discount because it tracked abundance, whereas here
   a third-generation token is proof of three unbroken years.
-- **Deliberately open, to be settled in a follow-up brainstorm before the
+- **SETTLED 2026-09-06, and the record is
+  `docs/specs/2026-09-06-mro-lineage-design.md`:** a child carries a sealed
+  `echo` -- the days its line had already run when it was seeded -- drawn as one
+  dashed innermost ring, and the write path is built. What follows is the
+  question as it stood open, kept because the reasoning above about per-token
+  seeding compounding is what the answer had to respect.
+- **Was deliberately open, to be settled in a follow-up brainstorm before the
   Renderer is built:** what a child looks like (how it shows its parent and
   generation), what a parent shows per seed, and the narrative framing of a
   lineage (names, what a generation means in the piece). Candidates recorded

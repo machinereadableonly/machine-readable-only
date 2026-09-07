@@ -5,8 +5,32 @@ import { readEvents, applyEvents, MAX_LOG_SPAN, DEPLOY_BLOCK } from "../src/cloc
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
+import { MRO_ABI } from "../src/clock/abi.mjs";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
+
+/// A stubbed log entry whose ARG NAMES are checked against the contract's own
+/// ABI before the test can use it.
+///
+/// Hand-written event doubles are the drift that hid a real bug: this file's
+/// `Seeded` stub said `tokenId` until 2026-09-07, a name the event does not
+/// carry, and the reader read the same wrong name -- so the pair agreed with
+/// each other and with nothing on chain. Fixing the literal fixes it once.
+/// Deriving the check from `MRO_ABI` makes the whole CLASS impossible: rename
+/// an input in the contract and every stub of that event fails here, by name,
+/// instead of passing against a decoder that is wrong in the same direction.
+/// Same idea as mint-id.test.mjs's "the test double exposes exactly the real
+/// chain reader's surface".
+function chainEvent(eventName, args) {
+  const spec = MRO_ABI.find((e) => e.type === "event" && e.name === eventName);
+  assert.ok(spec, `the ABI has no event named ${eventName}`);
+  assert.deepEqual(
+    Object.keys(args).sort(),
+    spec.inputs.map((i) => i.name).sort(),
+    `${eventName} stub does not carry the ABI's own argument names`
+  );
+  return { eventName, args };
+}
 
 /// A node that records the windows it was asked for and returns nothing.
 function recordingRpc(logsByRange = () => []) {
@@ -204,13 +228,15 @@ test("the three events reconcile cannot apply are counted rather than dropped", 
 
   const logs = [];
   const applied = applyEvents(q, [
-    { eventName: "BatchCheckedIn", args: { day: 20_700, count: 3 } },
-    { eventName: "SunsetAt", args: { day: 20_700 } },
-    // THE ABI'S OWN NAMES: `Seeded(parentId, childId, generation)`. This stub
-    // said `tokenId` until 2026-09-07 -- a name the event does not carry --
-    // and the reader read the same wrong name, so the pair agreed with each
-    // other and with nothing on chain. Exactly the drift a double hides.
-    { eventName: "Seeded", args: { parentId: 1, childId: 9, generation: 1 } },
+    // `BatchCheckedIn(fromDay, toDay, count)`. This stub said `day, count`
+    // until the ABI guard above was written, and it was caught on the guard's
+    // FIRST run. Nothing in production reads these args -- reconcile only
+    // counts this event, because it names no token ids and so can heal
+    // nothing -- so this one was a lie with no consequence yet. The `Seeded`
+    // one next to it was not.
+    chainEvent("BatchCheckedIn", { fromDay: 20_700, toDay: 20_700, count: 3 }),
+    chainEvent("SunsetAt", { day: 20_700 }),
+    chainEvent("Seeded", { parentId: 1, childId: 9, generation: 1 }),
   ], { log: (m) => logs.push(m) });
 
   assert.equal(applied.BatchCheckedIn, 1);
