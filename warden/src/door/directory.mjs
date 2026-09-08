@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Where public keys come from, and the guard around fetching one.
 //
 // Two paths, one rule. An agent that has a domain hosts its own JWKS and sends

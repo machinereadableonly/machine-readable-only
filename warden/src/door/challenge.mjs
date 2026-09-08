@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The five-second entry challenge.
 //
 // This is an ACCESS CONDITION for an art piece: answering it is how a caller

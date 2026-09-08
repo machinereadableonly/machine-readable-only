@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Sorting a request into one of four cases.
 import { createHash } from "node:crypto";
 import { issueChallenge, checkChallenge, CHALLENGE_MS } from "./challenge.mjs";

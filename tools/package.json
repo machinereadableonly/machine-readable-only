@@ -20,5 +20,6 @@
   },
   "devDependencies": {
     "marked": "18.0.11"
-  }
+  },
+  "license": "PolyForm-Noncommercial-1.0.0"
 }
