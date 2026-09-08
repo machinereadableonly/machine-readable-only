@@ -2658,9 +2658,9 @@ point this finding&#39;s own citation supports.</p>
 <h3>16.5 The internet-facing Warden and the key-holding Clock share a uid, a directory and one configuration file, and the Warden can write the Clock&#39;s code</h3>
 <p><strong>Severity: Medium</strong></p>
 <p><code>warden/src/main.mjs:50-65</code>, <code>warden/deploy/mro-clock.service:11,16,27</code>, and the
-live modes: <code>~/projects</code> 750 <code><user>:<user></code>,
-<code>~/projects/machine-readable-only/warden</code> <strong>775</strong> <code><user>:<user></code>, the Warden&#39;s
-configuration file 600 <code><user>:<user></code>, <code>~/.config/systemd/user/</code> 775 <code><user>:<user></code>.</p>
+live modes: <code>~/projects</code> 750 <code>&lt;user&gt;:&lt;user&gt;</code>,
+<code>~/projects/machine-readable-only/warden</code> <strong>775</strong> <code>&lt;user&gt;:&lt;user&gt;</code>, the Warden&#39;s
+configuration file 600 <code>&lt;user&gt;:&lt;user&gt;</code>, <code>~/.config/systemd/user/</code> 775 <code>&lt;user&gt;:&lt;user&gt;</code>.</p>
 <p><code>main.mjs:65</code> deletes <code>CLOCK_PRIVATE_KEY</code> from the Warden&#39;s environment and
 <code>main.mjs:60-64</code> is admirably honest that this is &quot;defence in depth, not a
 boundary&quot;. This finding is the size of the gap that comment names, stated
@@ -2816,13 +2816,13 @@ chmod 600 &quot;$ENV_FILE&quot;
 <p><code>cat &gt;</code> creates the file with <code>0666 &amp; ~umask</code>, which on this box is 664. The
 secret is written, the redirect closes, and only then does line 82 restore 600.
 Between the two there is a real file on disk containing the HMAC key behind the
-5-second entry challenge, readable by every member of group <code>tj</code> and -- if the
+5-second entry challenge, readable by every member of the operator&#39;s own group and -- if the
 umask were ever 022 in the operator&#39;s shell rather than 002 -- by anyone who can
 traverse to it. <code>~/projects</code> being 750 is what keeps this small.</p>
 <p>Contrast <code>set-domain.sh:51-52</code>, which gets this right: <code>mktemp</code>, then
 <code>chmod 600</code> <strong>before</strong> writing, then an atomic <code>mv</code>. The two scripts disagree
 about their own rule.</p>
-<p><strong>Failure scenario.</strong> A process running as another member of group <code>tj</code>, or a
+<p><strong>Failure scenario.</strong> A process running as another member of the operator&#39;s own group, or a
 backup job with group read, samples the file during the window. Narrow --
 milliseconds -- and it needs a local account that does not currently exist on
 this box, which is why this is Low.</p>
@@ -2833,7 +2833,7 @@ this box, which is why this is Low.</p>
 <p><strong>Severity: Low</strong></p>
 <p><code>warden/src/clock/write.mjs:227-229</code> and <code>:133,155</code>, plus the live modes:
 <code>~/logs</code> 755, <code>~/logs/mro-clock.log</code> <strong>664</strong>, <code>~/logs/mro-warden.*.log</code> 644,
-<code>~</code> 755.</p>
+<code>~</code> (the operator&#39;s home) 755.</p>
 <pre><code>function shortMessage(err) {
   return String(err?.shortMessage ?? err?.message ?? err).slice(0, 300);
 }
@@ -3020,7 +3020,7 @@ actually pointed at&quot;.</p>
 <p><strong>Severity: Info</strong></p>
 <p><code>warden/nginx.conf.example:11-13</code> and <code>warden/DEPLOY.md:64-66</code> both say the
 repository &quot;lives under /home/<user>/projects which is mode 0750, and www-data
-cannot traverse it&quot;. Live: <code>~</code> is <strong>755</strong>, <code>~/projects</code> is 750,
+cannot traverse it&quot;. Live: the operator&#39;s home is <strong>755</strong>, <code>~/projects</code> is 750,
 <code>.../machine-readable-only</code> is 775 and <code>.../warden/public</code> is 775.</p>
 <p>The conclusion is correct -- <code>www-data</code> is stopped, at <code>projects</code> -- but it is
 stopped by exactly one directory, and the document attributes it to the home
@@ -3122,7 +3122,7 @@ else, and there is no second listener anywhere in <code>warden/src</code>.</p>
 <code>ecosystem.config.cjs:36-40</code> both explain that it is deliberately not read from
 the environment, so no <code>HOST</code> value in PM2, in a shell, or in the configuration
 file can move it. Verified live: <code>ss -ltnp</code> shows <code>127.0.0.1:3006</code> for pid
-3344625, and a request to <code>http://<tailscale-ip>:3006/</code> over the Tailscale
+3344625, and a request to <code>http://&lt;tailscale-ip&gt;:3006/</code> over the Tailscale
 interface is refused. The <code>ufw deny 3006</code> rule is the one claim here I could not
 check -- <code>ufw status</code> needs sudo, which is denied to me -- but it is defence in
 depth over a binding that already holds, exactly as <code>DEPLOY.md:189-192</code> says.</p>
@@ -3508,7 +3508,7 @@ five down). Post-verification distribution: <strong>2 Critical, 9 High, 15 Mediu
 <td>16.5</td>
 <td>Medium</td>
 <td>CONFIRMED</td>
-<td><code>main.mjs:65</code> and its honest <code>:60-64</code> comment confirmed; live modes confirmed (<code>projects</code> 750, <code>warden</code> 775, <code>~/.config/systemd/user</code> 775, all <code><user>:<user></code>); <code>mro-clock.service:27</code> grants <code>ReadWritePaths</code> over the whole <code>warden</code> subtree. Understated -- see New material below.</td>
+<td><code>main.mjs:65</code> and its honest <code>:60-64</code> comment confirmed; live modes confirmed (<code>projects</code> 750, <code>warden</code> 775, <code>~/.config/systemd/user</code> 775, all <code>&lt;user&gt;:&lt;user&gt;</code>); <code>mro-clock.service:27</code> grants <code>ReadWritePaths</code> over the whole <code>warden</code> subtree. Understated -- see New material below.</td>
 </tr>
 <tr>
 <td>16.6</td>

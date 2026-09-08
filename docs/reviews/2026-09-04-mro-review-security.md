@@ -2956,7 +2956,7 @@ chmod 600 "$ENV_FILE"
 `cat >` creates the file with `0666 & ~umask`, which on this box is 664. The
 secret is written, the redirect closes, and only then does line 82 restore 600.
 Between the two there is a real file on disk containing the HMAC key behind the
-5-second entry challenge, readable by every member of group `tj` and -- if the
+5-second entry challenge, readable by every member of the operator's own group and -- if the
 umask were ever 022 in the operator's shell rather than 002 -- by anyone who can
 traverse to it. `~/projects` being 750 is what keeps this small.
 
@@ -2964,7 +2964,7 @@ Contrast `set-domain.sh:51-52`, which gets this right: `mktemp`, then
 `chmod 600` **before** writing, then an atomic `mv`. The two scripts disagree
 about their own rule.
 
-**Failure scenario.** A process running as another member of group `tj`, or a
+**Failure scenario.** A process running as another member of the operator's own group, or a
 backup job with group read, samples the file during the window. Narrow --
 milliseconds -- and it needs a local account that does not currently exist on
 this box, which is why this is Low.
@@ -2980,7 +2980,7 @@ this box, which is why this is Low.
 
 `warden/src/clock/write.mjs:227-229` and `:133,155`, plus the live modes:
 `~/logs` 755, `~/logs/mro-clock.log` **664**, `~/logs/mro-warden.*.log` 644,
-`~` 755.
+`~` (the operator's home) 755.
 
 ```
 function shortMessage(err) {
@@ -3215,7 +3215,7 @@ actually pointed at".
 
 `warden/nginx.conf.example:11-13` and `warden/DEPLOY.md:64-66` both say the
 repository "lives under /home/<user>/projects which is mode 0750, and www-data
-cannot traverse it". Live: `~` is **755**, `~/projects` is 750,
+cannot traverse it". Live: the operator's home is **755**, `~/projects` is 750,
 `.../machine-readable-only` is 775 and `.../warden/public` is 775.
 
 The conclusion is correct -- `www-data` is stopped, at `projects` -- but it is
