@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // RFC 9421 verification: the piece's entry rule.
 //
 // WHAT THE LIBRARY DOES AND DOES NOT DO. Read from web-bot-auth 0.1.3's own
