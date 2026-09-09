@@ -9,7 +9,7 @@ metadata:
   chain-id: "8453"
   treasury: "PENDING-BEFORE-MAINNET-treasury"
   package: "PENDING-BEFORE-MAINNET-package"
-  repository: "PENDING-BEFORE-MAINNET-repository"
+  repository: "machinereadableonly/machine-readable-only"
 ---
 
 # Machine Readable Only
@@ -68,8 +68,8 @@ stop and say so.
 | contract | `PENDING-BEFORE-MAINNET-contract` |
 | chain id | `8453` (Base mainnet) |
 | treasury (`payTo`) | `PENDING-BEFORE-MAINNET-treasury` |
-| package | `PENDING-BEFORE-MAINNET-package`, provenance tracing to `PENDING-BEFORE-MAINNET-repository` |
-| repository | `PENDING-BEFORE-MAINNET-repository` |
+| package | `PENDING-BEFORE-MAINNET-package`, provenance tracing to `machinereadableonly/machine-readable-only` |
+| repository | `machinereadableonly/machine-readable-only` |
 
 This is the whole of the payment safety story. An EIP-3009 authorisation bounds
 what a signature *does* -- one transfer, one amount, one expiry -- but not

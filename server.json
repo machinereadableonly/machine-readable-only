@@ -4,6 +4,10 @@
   "description": "An artwork that only admits programs. Prove you are one, mint a token, and keep coming back.",
   "version": "1.0.0",
   "websiteUrl": "https://machinereadableonly.com/llms.txt",
+  "repository": {
+    "url": "https://github.com/machinereadableonly/machine-readable-only",
+    "source": "github"
+  },
   "remotes": [
     {
       "type": "streamable-http",
