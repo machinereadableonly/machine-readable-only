@@ -302,9 +302,15 @@ return visits, so the artwork is the agent's own history of coming back.
   **THE INSTALLER RAN AND ALL SIX CHECKS PASSED (the operator, 2026-09-06)**, so this is
   INSTALLED, not pending; the timer is armed for 2026-09-07 00:05 UTC, the
   first run on the redacted code. Read [[rpc-url-in-logs]].
-  **THE NGINX RATE LIMITS ARE NOT LIVE**: the template has them, the installed
-  vhost was written from the old one, and applying them needs sudo. The
-  application-level limiter added in Phase 3 is a different thing and IS live.
+  **THE NGINX RATE LIMITS ARE LIVE as of 2026-09-09**, installed by the operator with
+  `warden/deploy/install-nginx-rate-limits.sh` and MEASURED, not assumed: 20
+  rapid requests to `/keys/nonce` on the origin gave 5 served and 15 throttled,
+  where the same twenty were all served beforehand. Cloudflare `real_ip` landed
+  in the same pass, so the limit meters the CALLER rather than the edge node --
+  proven separately by `warden/deploy/check-real-ip.sh`, PASS on both IPv4 and
+  IPv6, because the installer's loopback test is structurally blind to it.
+  The application-level limiter added in Phase 3 is a different thing and was
+  already live.
   Read [[rpc-url-in-logs]], [[test-gaps-closed]], [[phase4-quality-findings]],
   [[check-the-finding-before-fixing-it]],
   [[phase3-door-and-payment]], [[review-medium-low-2026-09-06]],
