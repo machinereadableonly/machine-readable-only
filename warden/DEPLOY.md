@@ -247,6 +247,41 @@ broken deploy -- `127.0.0.1` is allowlisted, so local curl keeps working and
 hides it. Deliberately NOT part of the first deploy: get the piece live and
 verified, then harden.
 
+### Rate limits on the registration routes -- [the operator runs one command]
+
+`POST /keys` and `GET /keys/nonce` are the only two routes a caller reaches
+without a signature: registering is how an agent becomes able to sign at all.
+The application therefore has no per-key budget to charge them, and minting a
+fresh Ed25519 keypair is free, so the aggregate limit has to be nginx's.
+
+```
+sudo bash warden/deploy/install-nginx-rate-limits.sh
+```
+
+It needs root because it writes `/etc/nginx` and reloads nginx. It backs the
+vhost up first, runs `nginx -t` before activating anything, rolls back by
+itself if that test fails, and then PROVES the limiter fires by sending twenty
+rapid requests to the origin over loopback and requiring at least one 429. Run
+it twice and the second run changes nothing.
+
+It installs two things together, because they are only correct together:
+
+- `limit_req_zone` at 10 requests a minute with a burst of 5, and
+  `limit_req_status 429` so a throttled caller is told to slow down rather than
+  handed nginx's default 503, which reads as "this server is broken".
+- Cloudflare `real_ip`, so the limit meters the CALLER rather than the edge
+  node. **This half REQUIRES the origin lock above to be enabled first** -- and
+  on this deployment it already is. Without the lock, `CF-Connecting-IP` can be
+  set by anyone who can reach the box, and an attacker rotating it gets a fresh
+  bucket per request: worse than no limit, because the config reads as though
+  it protects something.
+
+The lock keeps working unchanged, because its map is keyed on
+`$realip_remote_addr` -- the address BEFORE any real_ip rewrite.
+
+Not the same thing as the application's own `/mcp` budget of 60 calls a minute
+per key, which has been live since the Phase 3 build and needs no sudo.
+
 ## 8. If a visitor's signing fails
 
 Point them at Cloudflare's signed-agent test endpoint first, before digging

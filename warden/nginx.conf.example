@@ -83,6 +83,28 @@ server {
     #
     #   if ($cf_real_ip_ok = 0) { return 403; }
 
+    # ALSO NOT enabled at first deploy, and enabled only in the same step as the
+    # line above -- never before it. With real_ip on, the rate limits below meter
+    # the real caller instead of the Cloudflare edge node that proxied the
+    # request. That is only safe once the origin lock refuses connections that
+    # did not arrive through Cloudflare, because until then CF-Connecting-IP can
+    # be set by anyone who can reach the box, and an attacker rotating it gets a
+    # fresh bucket per request -- worse than no limit, because the config reads
+    # as though it protects something.
+    #
+    # `warden/deploy/install-nginx-rate-limits.sh` adds both halves to an
+    # already-installed vhost and proves the limiter fires afterwards. The
+    # ranges are Cloudflare's published set (https://www.cloudflare.com/ips-v4
+    # and ips-v6), the same 15 v4 + 7 v6 the global allowlist map carries.
+    # Re-fetch them rather than trusting this copy; Cloudflare does change them.
+    #
+    #   real_ip_header    CF-Connecting-IP;
+    #   set_real_ip_from  <each Cloudflare range>;
+    #
+    # The origin lock keeps working unchanged either way: its map is keyed on
+    # $realip_remote_addr, which nginx documents as the address BEFORE any
+    # real_ip rewrite.
+
     # Declared once at server scope and INHERITED by every location below.
     # Repeating them per location is how one of them eventually goes missing
     # from the block that needed it.
