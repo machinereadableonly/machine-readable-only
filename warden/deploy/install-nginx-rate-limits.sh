@@ -128,7 +128,7 @@ realip = '''
     # meter the real caller instead of the edge node that proxied it. Scoped to
     # this server block on purpose: other sites on this box are not changed.
     # $realip_remote_addr keeps the pre-rewrite address, so the origin lock
-    # above is unaffected.
+    # below is unaffected.
     real_ip_header    CF-Connecting-IP;
     set_real_ip_from  173.245.48.0/20;
     set_real_ip_from  103.21.244.0/22;
