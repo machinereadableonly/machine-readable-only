@@ -495,10 +495,14 @@ return visits, so the artwork is the agent's own history of coming back.
   commit messages. The pre-rewrite repository is a verified bundle at
   `~/backups/mro-prescrub-20260908T195236Z.bundle`. Every hash changed, so any
   reference to a commit id from before 2026-09-09 is dead.
-  Deliberately NOT scrubbed, and they must stay: `/home/secret/state.db` is an
-  invented fixture whose whole function is asserting it never leaks, and the
-  10.x / 192.168.x / 100.64.0.1 addresses in `directory.test.mjs` are SSRF test
-  vectors -- scrubbing a guard disables the guard.
+  Deliberately NOT scrubbed, and they must stay: the invented home-path fixture
+  in `warden/test/mcp.test.mjs`, whose whole function is asserting that exact
+  string never reaches a caller, and the private-range addresses in
+  `directory.test.mjs`, which are SSRF test vectors. Scrubbing a guard disables
+  the guard. Both are named in `tools/prepublish-check.mjs`'s ALLOW list with
+  their reasons; that list is per-file and deliberately short, so DO NOT add a
+  file to it to silence a finding -- reword the file instead, which is what this
+  paragraph itself had to do.
 
 ## Gotchas
 
