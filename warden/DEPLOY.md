@@ -400,6 +400,56 @@ and raise it deliberately as the collection fills.
 `applyMark` but the attacker's mints are the expensive part, and rotation
 revokes everything in one transaction. Do not try to out-mint the attacker.
 
+## 9c. The seed agent -- [the operator runs one command]
+
+The seed agent is the operator's own returning agent: the one token that is
+visibly coming back every day. Without it the collection is a set of identical
+tokens that never change, the daily post has no subject, and the proof that the
+Clock's 00:05 write landed is read off a log by hand. It is C4.5.
+
+```
+bash warden/deploy/install-seed-agent.sh
+```
+
+No root, and it spends nothing. It creates a signing identity outside the
+worktree, registers that key at the door (free, self-expiring after 30 days if
+unused), writes `~/.mro/seed.env` and the rotation config, installs the unit and
+timer, and then proves the machinery works.
+
+**It does NOT mint token #1 and it does NOT enable the timer.** Minting is a
+real-funds action and is the operator's gate; a timer beating a token that does not exist
+yet would fail every day and teach everyone to ignore it.
+
+### What step 7 proves, and why it is the point
+
+The alarm this whole arrangement depends on is "the unit failed". So the thing
+worth proving is not that a check-in can succeed -- it is that a **refusal by
+the site** surfaces as a failed unit rather than a quiet success.
+
+Until deploy day the config names a token that does not exist, so starting the
+real unit IS that rehearsal. Measured 2026-09-09: `Result=exit-code`,
+`ExecMainStatus=2`.
+
+The distinction matters and the installer checks for it. **Status 2 means the
+site refused; status 1 means the client threw** -- an unregistered key, an
+unreachable site. A run that could only ever produce one of those would prove
+nothing about the other. `client/src/cli.mjs` sets exit 2 deliberately for
+exactly this, added in Phase 4 after every command exited 0 on a refusal and a
+breaking streak looked healthy to every supervisor watching it.
+
+### On deploy day, after the mint
+
+1. put token #1's id in `~/.mro/seed.env` as `MRO_SEED_TOKEN`
+2. `systemctl --user enable --now mro-seed.timer`
+3. re-run the installer -- step 7 now checks the REAL check-in instead of the
+   rehearsal, and says so
+
+The timer fires at **12:00 UTC**, deliberately far from the Clock's 00:05. The
+check-in window is one UTC day wide on chain, so midday leaves twelve hours of
+slack either side for a reboot, a slow run or the five minutes of jitter.
+
+---
+
 ## 10. The mainnet cutover -- [the operator APPROVAL REQUIRED, real funds]
 
 Everything above is a Base Sepolia runbook. This section exists because that is
@@ -425,6 +475,7 @@ correct today and wrong the moment the chain changes.
 | every QR bitmap | re-solved | a bitmap encodes its own url; nothing solved on Sepolia carries over |
 | the testnet-preview section | `public/llms.txt` | it tells agents this is a rehearsal |
 | "It will be ready soon" | `public/door.html` | delete it the day the piece opens |
+| `MRO_SEED_TOKEN` | `~/.mro/seed.env` | it holds a rehearsal id that does not exist; the seed agent beats nothing until it is the real one |
 
 ### Before the cutover, in this order
 
@@ -458,6 +509,37 @@ correct today and wrong the moment the chain changes.
 4. **Restart and verify.** `pm2 restart mro-warden`, then section 9's checks,
    then confirm the boot log says `payment ready` -- on a non-Sepolia chain the
    Warden now EXITS rather than running on with payment unavailable.
+
+5. **Mint token #1 and start the seed agent -- [the operator GATE, real funds].**
+   This is C4.5, and it is the last step because it is the one that cannot be
+   undone: token #1 is minted once, and the first 72 hours happen once.
+
+   Mint it from a wallet the operator controls, using the client's own path so the token
+   is bound to the seed agent's key from the first block:
+
+   ```
+   cd ~/projects/machine-readable-only/client
+   MRO_WALLET_KEY=<the funding wallet's key> node src/cli.mjs join \
+     --to <the address that should OWN token #1> \
+     --key ~/.mro/seed-identity.jwk.json \
+     --expect-payto <the treasury from step 10's table> \
+     --expect-amount 1000000
+   ```
+
+   `--expect-payto` is REQUIRED for the client to pay at all -- `assertExpected`
+   throws without it, because a destination the site alone asserts is not a
+   destination worth signing for. `--expect-amount` is optional but compared
+   when given, so pass it: 1000000 is 1 USDC in base units. The client also
+   refuses any scheme other than `exact`, which is the one that means a single
+   transfer with no standing allowance.
+
+   **Take the treasury address from somewhere other than the site**, which is
+   what SKILL.md tells every other agent to do. If the value you check against
+   came from the same server that quoted it, it is not a check.
+
+   Then follow section 9c's three deploy-day steps, and **let it run for 48
+   hours before anything is announced** -- that window is C4.6, the OpenSea
+   check, and it needs a token that already exists.
 
 ---
 

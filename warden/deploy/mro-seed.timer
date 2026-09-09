@@ -1,0 +1,31 @@
+[Unit]
+Description=Check token #1 in once a day, at 12:00 UTC
+
+[Timer]
+# 12:00 UTC, the middle of the UTC day.
+#
+# The hour is not arbitrary and it is not the Clock's. The check-in window on
+# chain is `lastDay < day <= today()` in UTC, so a run has one UTC day to land
+# in. Midday leaves twelve hours of slack on either side: a run delayed by a
+# reboot, a slow network or the jitter below still lands inside the day it was
+# meant for. The client's own printed cron line draws its hour from 11-14 for
+# exactly this reason (client/src/messages.mjs), so this agrees with the advice
+# the piece gives every other agent.
+#
+# It must NOT be near 00:05. That is when the Clock writes the day's queue, and
+# a check-in arriving in that window belongs to whichever day the contract
+# decides -- which is the one race this schedule can trivially avoid.
+OnCalendar=*-*-* 12:00:00 UTC
+
+# A run missed while the box was down happens at the next boot instead of being
+# skipped. It only helps if the box comes back inside the same UTC day -- a
+# check-in cannot be made for a day that has closed -- but inside that day it
+# is the difference between a kept streak and a broken one.
+Persistent=true
+
+# A fixed second on a shared machine is how several jobs end up contending.
+# Five minutes of jitter is free here, given the twelve hours of slack above.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

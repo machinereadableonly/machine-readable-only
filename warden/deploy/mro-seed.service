@@ -1,0 +1,94 @@
+[Unit]
+Description=Machine Readable Only -- the seed agent, checking token #1 in for the day
+Documentation=file://%h/projects/machine-readable-only/warden/DEPLOY.md
+# The client talks to the site over HTTPS and nothing else. A run started
+# before the network is up would fail on its first request to the door.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/machine-readable-only/client
+
+# Rotate before the run, for the same reason the Clock does: this log only
+# grows when this unit runs, so this unit is exactly the right cadence. The
+# leading "-" makes a rotation failure non-fatal, because rotation must never
+# be the reason a day's check-in is missed.
+ExecStartPre=-/usr/sbin/logrotate --state %h/logs/mro-logrotate.status %h/logs/mro-seed-logrotate.conf
+
+# WHICH TOKEN AND WHICH SITE come from here, not from this file. The token does
+# not exist until deploy day, and a unit carrying a hardcoded id would either
+# have to be edited on the day or would quietly beat the wrong token.
+#
+# EnvironmentFile= is correct HERE and would be wrong in the Clock's unit. This
+# file holds a token id and an origin -- neither is a secret, and both are
+# already public the moment the token is minted. The Clock reads a PRIVATE KEY,
+# which is why it uses node's own --env-file instead: an EnvironmentFile value
+# shows up in `systemctl show` and in a `systemd-analyze dump`.
+#
+# No "-" prefix on purpose. If the file is missing the unit must fail loudly,
+# because the alternative is a check-in that silently never happens and a
+# streak that looks healthy right up until it is gone.
+EnvironmentFile=%h/.mro/seed.env
+
+# The client from the checkout, not `npx mro-agent@<version>`.
+#
+# The review's proposed line pins a published package, and that is the right
+# shape -- but `mro-agent` is NOT on npm (checked 2026-09-09: the registry
+# returns 404). A unit that pins a package which does not exist is a timer that
+# has never once run. SWITCH TO THE PINNED npx FORM THE DAY IT IS PUBLISHED:
+#
+#   ExecStart=/usr/bin/npx --yes mro-agent@<version> beat --site ${MRO_SEED_SITE} --token ${MRO_SEED_TOKEN} --key %h/.mro/seed-identity.jwk.json
+#
+# --key is a PATH, not key material: nothing secret reaches argv, where it
+# would be readable by every process on the box via /proc/<pid>/cmdline.
+#
+# The identity lives OUTSIDE the worktree, and in its own file rather than the
+# client's default: a scratch identity created by a test or a manual run must
+# never be able to become, or destroy, the key token #1 is bound to.
+ExecStart=%h/.nvm/versions/node/v24.14.1/bin/node src/cli.mjs beat --site ${MRO_SEED_SITE} --token ${MRO_SEED_TOKEN} --key %h/.mro/seed-identity.jwk.json
+
+# One check-in is a challenge, a signed request and a tool call. Two minutes is
+# already generous; a run still going after that is stuck, and killing it is
+# correct because there is nothing to resume -- the next day's run is a fresh
+# attempt at a different day.
+TimeoutStartSec=120
+
+# The same sandbox the Clock runs in, for the same reason: this process holds
+# an identity that is the only thing able to grow token #1.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+
+# ProtectHome=read-only is doing REAL WORK here, not box-ticking. The client
+# calls ensureIdentity(), which CREATES a signing key when the file is absent.
+# A silently regenerated identity would be a new key id, so the check-in would
+# be refused as an unknown key and token #1 would need an on-chain rebind by
+# its owner to ever be credited again. Read-only makes that impossible: a
+# missing identity fails the run instead of inventing one.
+ProtectHome=read-only
+ReadWritePaths=%h/logs
+
+ProtectKernelTunables=true
+# NOT ProtectKernelModules=true -- it needs CAP_SETPCAP, which an unprivileged
+# user manager does not have, and systemd fails the whole unit at
+# 218/CAPABILITIES rather than degrading. Measured on this box 2026-09-03 and
+# recorded in commit 623f9a5. The seccomp half below works unprivileged and is
+# the half that was protecting anything.
+SystemCallFilter=~@module
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+# A run that is OOM-killed must not take the user's whole slice with it.
+OOMPolicy=continue
+MemoryMax=512M
+
+# The log records this agent's key id and the site's answers. Owner-only, for
+# the same reason the Clock's is: a 0755 home on a box shared with six other
+# projects. UMask governs file CREATION, so it covers a log that has been
+# rotated away or not yet written; the installer chmods any existing one.
+UMask=0077
+
+StandardOutput=append:%h/logs/mro-seed.log
+StandardError=append:%h/logs/mro-seed.log
