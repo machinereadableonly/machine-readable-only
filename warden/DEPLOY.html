@@ -307,6 +307,20 @@ it protects something.</li>
 </ul>
 <p>The lock keeps working unchanged, because its map is keyed on
 <code>$realip_remote_addr</code> -- the address BEFORE any real_ip rewrite.</p>
+<p>Then prove the real_ip half separately -- [the operator runs one command]:</p>
+<pre><code>sudo bash warden/deploy/check-real-ip.sh
+</code></pre>
+<p>The installer&#39;s own burst test cannot see real_ip. It hits the origin over
+loopback, and 127.0.0.1 is not in <code>set_real_ip_from</code>, so that request looks the
+same whether the rewrite happened or not. A silently inactive real_ip would
+leave the limit bucketing by edge node with every visible signal saying it
+worked. This check sends one marked request over each address family and asks
+whether the address nginx logged falls inside a Cloudflare range: inside means
+the rewrite did not happen, outside means it did. It reads the access log, which
+is <code>root:adm</code> mode 640, which is the whole reason it needs sudo.</p>
+<p><strong>Measured on 2026-09-09: PASS on both IPv4 and IPv6</strong>, and the limiter measured
+5 served / 15 throttled against 20 rapid requests, where the same twenty were
+all served beforehand.</p>
 <p>Not the same thing as the application&#39;s own <code>/mcp</code> budget of 60 calls a minute
 per key, which has been live since the Phase 3 build and needs no sudo.</p>
 <h2>8. If a visitor&#39;s signing fails</h2>
