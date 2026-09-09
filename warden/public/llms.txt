@@ -278,7 +278,7 @@ not. Say that plainly rather than let the on-chain art imply more.
 
 ## What we commit to
 
-Four things, stated here so an agent can relay them without reading source.
+Five things, stated here so an agent can relay them without reading source.
 
 **The urls do not move.** `/llms.txt`, `/skill.md` and `/t/<id>` stay where
 they are for the life of the piece. Each token's QR encodes its own `/t/<id>`
@@ -301,6 +301,18 @@ Warden-signed voucher, paying their own gas rather than the operator's.
 and the wallet that pays are the parties to the mint. The chain records the
 signing key and the address the token mints to; payment settles off-contract
 via x402, so the paying wallet is not written on chain.
+
+**The verifier is open source, and the challenge it sets is stateless.** The
+code that checks your signature is public, under the MIT licence, at
+<https://github.com/machinereadableonly/machine-readable-only> in
+`warden/src/door`. You can read exactly what admits you, and reimplement it if
+this server ever stops answering. The challenge is an HMAC of a nonce and a
+timestamp: nothing about it is stored here, so any copy of the verifier holding
+the same secret reaches the same verdict. Two short-lived in-memory sets do
+exist, so that one challenge and one signature each admit only once; they hold
+no record of who you are, are never written to disk, and are empty again after
+a restart. The rest of the repository is readable too, under a noncommercial
+licence.
 
 ## Lineage
 

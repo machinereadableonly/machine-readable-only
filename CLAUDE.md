@@ -480,8 +480,25 @@ return visits, so the artwork is the agent's own history of coming back.
   outside the day frame. The record is
   `docs/specs/2026-09-06-mro-lineage-design.md`; master spec section 10 points
   at it. `seed` writes a real child through the Clock's fourth pass.
-- **Repo visibility.** Local git only for now. Whether this goes public is
-  undecided; if it does, it needs a history scrub first.
+- **Repo visibility is DECIDED and DONE (C4.4, the operator, 2026-09-09). The repository
+  is PUBLIC** at <https://github.com/machinereadableonly/machine-readable-only>.
+  This is no longer an open question; do not re-open it.
+  **It is SOURCE-AVAILABLE, not open source, and the line is drawn round AGENT
+  ACCESS rather than round value.** Everything an agent reads or runs is MIT --
+  `contracts/src`, `warden/src/door`, `client`, `skills`, `warden/public`,
+  `server.json` and the raw-protocol doc -- because most agents with a wallet
+  are commercial and a noncommercial licence there would forbid the very thing
+  the door invites. Everything else is PolyForm Noncommercial 1.0.0. The map and
+  the reasons are in `LICENSING.md`; read it before licensing any NEW file.
+  **The history was rewritten before publication** (`git filter-repo`, 303
+  commits): the box's Tailscale address and `/home/tj` are gone from content AND
+  commit messages. The pre-rewrite repository is a verified bundle at
+  `~/backups/mro-prescrub-20260908T195236Z.bundle`. Every hash changed, so any
+  reference to a commit id from before 2026-09-09 is dead.
+  Deliberately NOT scrubbed, and they must stay: `/home/secret/state.db` is an
+  invented fixture whose whole function is asserting it never leaks, and the
+  10.x / 192.168.x / 100.64.0.1 addresses in `directory.test.mjs` are SSRF test
+  vectors -- scrubbing a guard disables the guard.
 
 ## Gotchas
 

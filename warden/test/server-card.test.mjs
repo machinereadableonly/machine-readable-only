@@ -83,13 +83,19 @@ test("the card points at THIS piece and nowhere else", () => {
   assert.ok(CARD.name.startsWith("com.machinereadableonly/"));
 });
 
-test("the card does not claim a public repository while the repo is private", () => {
-  // C4.4 -- whether this goes public -- is undecided, and the repository is
-  // private today. `repository` is optional in the schema, and publishing one
-  // would point every reader at a 404. Same call as the omitted "the verifier
-  // is open source" commitment in llms.txt: do not serve a promise that is not
-  // true yet. Add it the day C4.4 lands.
-  assert.equal("repository" in CARD, false, "add repository only when the repo is actually public");
+test("the card names the public repository", () => {
+  // INVERTED 2026-09-09, the day C4.4 landed and the repository went public.
+  // This test previously asserted `repository` was ABSENT, because publishing
+  // one while the repo was private would have pointed every reader at a 404.
+  // It is kept as an assertion rather than deleted: the url is a promise to a
+  // reader who cannot check it, and it must name the repository the skill
+  // install line and the npm provenance also name, or the three disagree.
+  assert.ok(CARD.repository, "the repository is public now; the card must name it");
+  assert.equal(
+    CARD.repository.url,
+    "https://github.com/machinereadableonly/machine-readable-only"
+  );
+  assert.equal(CARD.repository.source, "github");
 });
 
 test("the card states the entry condition rather than leaving a client to discover a 401", () => {
