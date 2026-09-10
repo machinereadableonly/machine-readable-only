@@ -101,7 +101,34 @@ FILES=(
   CLAUDE.md
 )
 
+# FILES THAT MAY NAME EACH ADDRESS ONLY ONCE.
+#
+# On 2026-09-07 this script rewrote a HISTORICAL paragraph in CLAUDE.md, leaving
+# the 2026-09-06 record naming the 2026-09-07 pair at the old block. the operator restored
+# it by hand. The cause was structural: CLAUDE.md held live statements AND dated
+# history in one file, and a blanket `sed` cannot tell them apart.
+#
+# CLAUDE.md was trimmed on 2026-09-10 so it now names the CURRENT pair exactly
+# once and carries no deploy history at all -- the history lives in auto-memory
+# and in git. This guard keeps it that way: more than one occurrence means a
+# historical record has crept back in, and rewriting it would falsify it. Fail
+# loudly rather than corrupt the record.
+SINGLE_ADDRESS_FILES=(CLAUDE.md)
+
 if [ "$REWRITE" = yes ]; then
+  for f in "${SINGLE_ADDRESS_FILES[@]}"; do
+    for addr in "$OLD_TOK" "$OLD_REN"; do
+      n=$(/bin/grep -c "$addr" "$f" || true)
+      if [ "$n" -gt 1 ]; then
+        echo "REFUSING: $f names $addr $n times; it may name it at most once." >&2
+        echo "  A second occurrence is almost certainly a dated historical record." >&2
+        echo "  Rewriting it would state that an old deploy used the new address." >&2
+        echo "  Move the history to auto-memory, leave the live line, then re-run." >&2
+        exit 1
+      fi
+    done
+  done
+
   for f in "${FILES[@]}"; do
     before=$(/bin/grep -c "$OLD_TOK\|$OLD_REN" "$f" || true)
     sed -i "s/$OLD_TOK/$NEW_TOK/g; s/$OLD_REN/$NEW_REN/g" "$f"
