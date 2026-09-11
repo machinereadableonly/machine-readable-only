@@ -305,34 +305,39 @@ function gasStubWriter(limit) {
 
 // NOTHING PINNED THIS REASON AT ALL. clock-batch covered `reverted-on-chain`
 // and `send-failed`, and the gas refusal -- the one the halve path exists for --
-// was tested by nothing, which is why 4.M5's abort went unnoticed. The chunk
-// size it guards is an explicitly UNVERIFIED number, so "too big to estimate"
-// is an ordinary outcome, and aborting on it meant nobody was credited at all.
-test("a chunk too big to estimate is HALVED, not abandoned", async () => {
+// was tested by nothing, which is why 4.M5's abort went unnoticed. Aborting on
+// it meant nobody was credited at all.
+//
+// AND THEN THESE TWO PINNED THE NEXT DEFECT AS CORRECT. Until 2026-09-11 they
+// asserted [1, 2] and [1] of four: the halving kept the first half and
+// DISCARDED the rest, neither written nor dropped, and "the half that fits is
+// written" read as the intended behaviour. Every entry is written now, in the
+// order it was queued, and each half is halved again until it fits.
+test("a chunk too big to estimate is HALVED, not abandoned, and every half is written", async () => {
   const writer = gasStubWriter(2);
   const entries = [entry(1, 100), entry(2, 100), entry(3, 100), entry(4, 100)];
 
   const r = await writeCheckInChunk(writer, entries);
 
   assert.equal(r.aborted, null, "the run must not abort on a chunk that merely will not estimate");
-  assert.deepEqual(r.written.map((e) => e.tokenId), [1, 2], "the half that fits is written");
+  assert.deepEqual(r.written.map((e) => e.tokenId), [1, 2, 3, 4], "both halves are written, in order");
   assert.deepEqual(r.dropped, [], "nothing is condemned: the entries are fine, the chunk was big");
   assert.deepEqual(
     writer.calls.map((c) => c.count),
-    [4, 2],
-    "four refused, then two -- halved, never retried at the same size",
+    [4, 2, 2],
+    "four refused, then each half of two -- halved, never retried at the same size",
   );
 });
 
-test("halving repeats until the chunk fits", async () => {
+test("halving repeats on each half until it fits", async () => {
   const writer = gasStubWriter(1);
   const entries = [entry(1, 100), entry(2, 100), entry(3, 100), entry(4, 100)];
 
   const r = await writeCheckInChunk(writer, entries);
 
   assert.equal(r.aborted, null);
-  assert.deepEqual(r.written.map((e) => e.tokenId), [1]);
-  assert.deepEqual(writer.calls.map((c) => c.count), [4, 2, 1]);
+  assert.deepEqual(r.written.map((e) => e.tokenId), [1, 2, 3, 4]);
+  assert.deepEqual(writer.calls.map((c) => c.count), [4, 2, 1, 1, 2, 1, 1]);
 });
 
 // The floor of the halve. A SINGLE entry that will not estimate is genuinely

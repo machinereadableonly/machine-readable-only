@@ -214,25 +214,28 @@ export async function writeCheckInChunk(
     // This branch used to abort the run for every reason that was not
     // `reverted-on-simulate`, and it sits BEFORE the bisect below -- so
     // `gas-estimate-too-large` could never reach the halve path that exists
-    // precisely for it. The chunk size it guards is an explicitly UNVERIFIED
-    // number (run.mjs:17-22 says so in its own words), which makes "too big"
-    // an ordinary outcome rather than an exotic one, and the consequence was
-    // that nobody was credited that night at all.
+    // precisely for it, and the consequence was that nobody was credited that
+    // night at all. CHECKIN_CHUNK has been MEASURED since 2026-09-11 and leaves
+    // 500,000 of margin, so this should not fire -- but a contract change that
+    // makes a check-in dearer would reach it without any other warning.
     //
     // Halving is safe here in a way retrying is not: nothing was sent. The
     // estimate failed, so there is no transaction, no nonce and no gas spent.
     // A single entry that cannot be estimated is genuinely undeliverable and
     // is condemned by name.
+    //
+    // BOTH HALVES ARE WRITTEN. Until 2026-09-11 this kept the first half and
+    // DISCARDED the second: those entries came back neither written nor
+    // dropped, so the night reported success. writeInHalves is now the only
+    // way either split happens.
     if (result.reason === "gas-estimate-too-large") {
       if (remaining.length === 1) {
         dropped.push({ entry: remaining[0], reason: "gas-estimate-too-large" });
         return { written: [], healed, dropped, aborted: null, attempts };
       }
-      const half = Math.ceil(remaining.length / 2);
-      log(`batchCheckIn: ${remaining.length} entries will not estimate; halving to ${half}`);
-      remaining = remaining.slice(0, half);
       shrinks += 1;
-      continue;
+      log(`batchCheckIn: ${remaining.length} entries will not estimate; writing them in two halves`);
+      return writeInHalves(writer, remaining, { maxAttempts: maxAttempts - shrinks, log, lastDayOf }, { healed, dropped, attempts });
     }
 
     if (result.reason !== "reverted-on-simulate") {
@@ -294,27 +297,47 @@ export async function writeCheckInChunk(
       dropped.push({ entry: remaining[0], reason: errorName ?? "unknown-revert" });
       return { written: [], healed, dropped, aborted: null, attempts };
     }
-    const half = Math.ceil(remaining.length / 2);
-    log(`clock: ${errorName ?? "unknown revert"} named no entry, bisecting ${remaining.length} into ${half}`);
-    const opts = { maxAttempts: maxAttempts - shrinks, log, lastDayOf };
-    const first = await writeCheckInChunk(writer, remaining.slice(0, half), opts);
-    if (first.aborted) {
-      return {
-        ...first,
-        healed: [...healed, ...first.healed],
-        dropped: [...dropped, ...first.dropped],
-        attempts: attempts + first.attempts,
-      };
-    }
-    const second = await writeCheckInChunk(writer, remaining.slice(half), opts);
-    return {
-      written: [...first.written, ...second.written],
-      healed: [...healed, ...first.healed, ...second.healed],
-      dropped: [...dropped, ...first.dropped, ...second.dropped],
-      aborted: second.aborted,
-      attempts: attempts + first.attempts + second.attempts,
-    };
+    log(`clock: ${errorName ?? "unknown revert"} named no entry, bisecting ${remaining.length} into ${Math.ceil(remaining.length / 2)}`);
+    return writeInHalves(writer, remaining, { maxAttempts: maxAttempts - shrinks, log, lastDayOf }, { healed, dropped, attempts });
   }
 
   return { written: [], healed, dropped, aborted: null, attempts };
+}
+
+/**
+ * Write `entries` as two halves, first then second, and merge what came back.
+ *
+ * BOTH SPLITS GO THROUGH HERE because the one that did not lost entries. The
+ * gas-estimate halving kept the first half and discarded the rest, which came
+ * back neither written nor dropped -- see clock-resilience.test.mjs. One helper
+ * means the two can no longer disagree about what "halve" means.
+ *
+ * The first half goes first because entries arrive ordered by day: a token's
+ * older day must land before its newer one, or the chain refuses the older one
+ * for good (`day <= lastDay`).
+ *
+ * An abort in the first half stops here, and the second half is not sent. Its
+ * entries stay queued and the run exits loudly, which is what an abort is for;
+ * a discard, by contrast, reported success.
+ */
+async function writeInHalves(writer, entries, opts, sofar) {
+  const half = Math.ceil(entries.length / 2);
+  const first = await writeCheckInChunk(writer, entries.slice(0, half), opts);
+  const halves = first.aborted
+    ? [first]
+    : [first, await writeCheckInChunk(writer, entries.slice(half), opts)];
+  const last = halves.at(-1);
+  return {
+    written: halves.flatMap((h) => h.written),
+    healed: [...sofar.healed, ...halves.flatMap((h) => h.healed)],
+    dropped: [...sofar.dropped, ...halves.flatMap((h) => h.dropped)],
+    aborted: last.aborted,
+    attempts: sofar.attempts + halves.reduce((n, h) => n + h.attempts, 0),
+    // Carried through rather than lost, as the bisect used to lose them: the
+    // hash names a receipt-unknown transaction in the alert, and the block is
+    // what a caller verifying the write must wait for.
+    hash: last.hash,
+    detail: last.detail,
+    blockNumber: halves.map((h) => h.blockNumber).filter(Boolean).at(-1) ?? null,
+  };
 }
