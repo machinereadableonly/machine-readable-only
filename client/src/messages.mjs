@@ -41,6 +41,23 @@ export function unpayableMessage(accepted, keyPath) {
 }
 
 /**
+ * What to say when the site answers a PAID call with another demand.
+ *
+ * That is how @x402/mcp reports a payment that did not complete: a settlement
+ * the facilitator could not land, or an authorisation it would not accept. The
+ * site releases its reservation in the same moment, so the honest next step is
+ * to look at the wallet and try again -- never to assume a token is coming.
+ */
+export function paymentFailedMessage(demand) {
+  return [
+    `The payment did not complete: ${demand?.error ?? "the site asked for payment again"}.`,
+    "NOTHING WAS MINTED, and the site released its reservation. A failed",
+    "settlement moves no money, but check the wallet's balance before re-running",
+    "this command: the site quotes a fresh payment each time it is asked.",
+  ].join("\n");
+}
+
+/**
  * The crontab line for a token's daily check-in.
  *
  * Three things here are deliberate. The version is PINNED, because an unpinned

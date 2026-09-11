@@ -10,7 +10,7 @@ import { ensureIdentity, loadIdentity, defaultKeyPath } from "./keys.mjs";
 import { registerKey } from "./door.mjs";
 import { listTools, callTool, structured } from "./mcp.mjs";
 import { payFor, readDemand } from "./pay.mjs";
-import { DEFAULT_SITE, cronLine, unpayableMessage } from "./messages.mjs";
+import { DEFAULT_SITE, cronLine, unpayableMessage, paymentFailedMessage } from "./messages.mjs";
 
 // The commands that exist. Checked BEFORE an identity key is created, because
 // creating a signing key as a side effect of a typo is not something a package
@@ -157,6 +157,19 @@ async function main() {
     if (meta) {
       out("paying", meta["x402/payment"].accepted);
       result = await callTool({ ...call, name: "mint", arguments: { to: args.to }, _meta: meta });
+
+      // A PAID call answered with a demand is a payment that did not complete.
+      // @x402/mcp answers a failed settlement with the same payment-required
+      // result, the facilitator's reason in `error` -- and with no `ok` field,
+      // so report() alone let it exit 0. On 2026-09-11 that made a mint that
+      // never happened look like success to anything reading the exit status.
+      const failed = readDemand(result);
+      if (failed) {
+        out("mint", failed);
+        console.log(`\n${paymentFailedMessage(failed)}`);
+        process.exitCode = 2;
+        return;
+      }
     }
     const minted = report("mint", result);
 

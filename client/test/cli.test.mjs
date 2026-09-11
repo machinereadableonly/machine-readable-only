@@ -21,6 +21,7 @@ import { openDb } from "../../warden/src/mirror/db.mjs";
 import { queries } from "../../warden/src/mirror/queries.mjs";
 import { utcDay } from "../../warden/src/mcp/tools/checkin.mjs";
 import { openChain } from "../../warden/test/chain-stub.mjs";
+import { adaptContext } from "../../warden/src/pay/x402.mjs";
 import { loadIdentity } from "../src/keys.mjs";
 import { VERSION, cronLine, unpayableMessage, doorMessage, DOOR_REASONS } from "../src/messages.mjs";
 
@@ -41,6 +42,10 @@ const DEMAND = {
     extra: { name: "USDC", version: "2" },
   }],
 };
+
+/// The body of a failed settlement, as seen live on 2026-09-11 from the
+/// x402.org testnet facilitator: the demand again, with the reason in `error`.
+const SETTLEMENT_FAILED = { ...DEMAND, error: "Payment settlement failed: invalid_exact_evm_transaction_failed" };
 
 let dir, server, endpoint, keyPath, q;
 
@@ -65,11 +70,24 @@ before(async () => {
     contract: "0xcontract", chainId: 84532,
     challengeSecret: SECRET, domain: DOMAIN, llmsTxt: "",
     catalogue: {}, supplyCap: 10_000,
-    paid: () => async () => ({
-      structuredContent: DEMAND,
-      content: [{ type: "text", text: JSON.stringify(DEMAND) }],
-      isError: true,
-    }),
+    // An unpaid call gets the demand. A PAID call gets what @x402/mcp sends
+    // when the facilitator cannot settle: createSettlementFailedResult is
+    // createPaymentRequiredResult with the reason in `error` -- the same shape,
+    // isError included, which is exactly why the client could not tell it from
+    // an ordinary demand without looking.
+    //
+    // The payment is found through the Warden's OWN adaptContext, the accessor
+    // the real paid() wrapper uses (it lives at mcpCtx.mcpReq._meta, a level
+    // deeper than it looks) -- so this double cannot drift from the real path.
+    paid: () => async (_args, ctx) => {
+      const paying = adaptContext(ctx?.mcpCtx)._meta?.["x402/payment"];
+      const body = paying ? SETTLEMENT_FAILED : DEMAND;
+      return {
+        structuredContent: body,
+        content: [{ type: "text", text: JSON.stringify(body) }],
+        isError: true,
+      };
+    },
   });
 
   server = createServer({
@@ -218,6 +236,23 @@ test("REFUSES to pay when the expected payTo does not match the demand", async (
   );
   assert.equal(code, 1);
   assert.match(out, /refusing to pay: payTo is/);
+});
+
+// 2026-09-11, the first paid mint through the persistent test wallet. The
+// testnet facilitator failed to settle; the site answered the PAID call with a
+// payment demand carrying the reason, as @x402/mcp does; and this client
+// printed it and EXITED 0. A cron job, or an agent reading the exit status,
+// saw a mint that never happened.
+test("a payment that fails to settle exits non-zero and says nothing was minted", async () => {
+  const { code, out } = await cli(
+    "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+    "--key", join(dir, "payer3.json"), "--to", "0x" + "a1".repeat(20),
+    "--wallet-key", "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+    "--expect-payto", TREASURY, "--expect-amount", "1000000"
+  );
+  assert.equal(code, 2, `a failed payment must not look like success: ${out}`);
+  assert.match(out, /Payment settlement failed: invalid_exact_evm_transaction_failed/);
+  assert.match(out, /NOTHING WAS MINTED/);
 });
 
 test("a signature over the wrong origin is refused at the door, in a sentence", async () => {
