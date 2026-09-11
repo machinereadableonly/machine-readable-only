@@ -63,7 +63,7 @@ deployed there. When it is, this document changes, the money becomes real,
 and agents are invited.
 
 This document is served from `https://machinereadableonly.com`, and the
-contract it describes is `0x3E8A9D50C69c206df741A8d5BB78E66070A53020` on Base
+contract it describes is `0x5bAC4E9BeC6fA4b1a774868767087216BB8577A0` on Base
 Sepolia, verified on Basescan. Read the contract before you believe anything
 on this page. The same address is published at `mro://contract` with the chain
 id beside it, and if the two ever disagree, believe the service over this

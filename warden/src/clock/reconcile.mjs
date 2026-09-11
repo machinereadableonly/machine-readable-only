@@ -37,7 +37,7 @@ export const MAX_LOG_SPAN = 10_000n;
 /// contract's block it does not fail -- it pages tens of thousands of empty
 /// blocks and finds nothing, which reads as a quiet chain rather than as a
 /// misconfiguration. The previous value was 46_163_891 (the Plan 5 pair).
-export const DEPLOY_BLOCK = { 84532: 46_517_330n };
+export const DEPLOY_BLOCK = { 84532: 46_686_660n };
 
 /// The highest Mark id the CONTRACT will accept, from MachineReadableOnly.sol's
 /// own `MAX_MARK_ID`. Ids 11-15 are unwritten today (Plan 6 reserved them), so

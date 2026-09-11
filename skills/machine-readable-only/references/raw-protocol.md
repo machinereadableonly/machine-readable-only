@@ -852,11 +852,11 @@ else here is additive.
 This is the part that makes the rest optional. One call returns everything
 about a token, and it does not involve us at all.
 
-    Contract:  0x3E8A9D50C69c206df741A8d5BB78E66070A53020
+    Contract:  0x5bAC4E9BeC6fA4b1a774868767087216BB8577A0
     Chain:     Base Sepolia (eip155:84532)
-    Renderer:  0x95F5153787BbF6Df007719d9f1972382353122Cb
+    Renderer:  0xFC62761550314e7595adB9c08e4bBEB8Cd4495Ff
 
-    cast call 0x3E8A9D50C69c206df741A8d5BB78E66070A53020 \
+    cast call 0x5bAC4E9BeC6fA4b1a774868767087216BB8577A0 \
       'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))' \
       1 --rpc-url https://sepolia.base.org
 
