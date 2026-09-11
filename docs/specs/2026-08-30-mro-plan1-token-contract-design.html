@@ -277,7 +277,10 @@ cents:</p>
 year more; at a realistic 1,000 active agents, about 5.50 USD per year. Money is
 not the deciding factor. The only real constraint is the per-transaction gas
 budget, and 1,500 per chunk still fits the spec&#39;s own <code>estimateGas &lt; 15M</code> guard
-with per-token emits included -- which a test must assert, not just the Clock.</p>
+with per-token emits included -- which a test must assert, not just the Clock.
+Amended 2026-09-11: measured against a real node, 1,500 fits the Clock&#39;s
+padded guard by only 177,808 gas, so the Clock now uses chunks of 1,400. The
+emit comparison above is unaffected.</p>
 <p><code>sunset()</code> emits no metadata event at all, matching the spike and resolving
 conflict 7. The spec asserts the catch-all in two places (lines 405 and 481)
 while forbidding it in a third (line 373); both assertions go.</p>
@@ -346,7 +349,7 @@ zero (the regression conflict 3 came from).</li>
 <li>Effective-streak paling for lapsed tokens and colour lock for resting ones.</li>
 <li>A <code>tokenURI</code> golden test that decodes the base64 and asserts cell count,
 colour, rings and mark elements against the REAL Renderer, not a stub.</li>
-<li>A gas test asserting a full 1,500-token chunk including per-token emits stays
+<li>A gas test asserting a full 1,500-token chunk (1,400 since 2026-09-11) including per-token emits stays
 under the 15M guard.</li>
 <li>CLAUDE.md hard rule 7: <code>forge build --sizes</code> showing positive runtime margin,
 AND a strict-limit anvil deploy returning non-empty <code>cast code</code>.</li>
@@ -387,10 +390,9 @@ fixable later. This is why step 0 exists.</li>
 <li>Child token visuals. Deferred to its own brainstorm before any renderer swap.</li>
 <li>Anything about Base mainnet. Plan 1 spends nothing.</li>
 <li>The Clock&#39;s chunking and sorting behaviour, beyond requiring that the contract
-stay under the gas guard at 1,500 per chunk.</li>
+stay under the gas guard at 1,500 per chunk (1,400 since 2026-09-11).</li>
 <li>Whether the spike contract and its tests are deleted afterwards. That needs
 the operator&#39;s explicit approval and is not assumed here.</li>
 </ul>
-
 </body>
 </html>

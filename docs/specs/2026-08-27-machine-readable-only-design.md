@@ -499,9 +499,14 @@ matters. Both contracts declare ERC-4906 support in `supportsInterface`
 
 ### Limits that must be respected
 
-- Base blocks carry ~400M gas; per-transaction cap 16,777,216 gas (EIP-7825).
-  At ~7k gas per check-in a 2,000-token chunk is ~14M; the Clock uses chunks
-  of 1,500 and asserts `estimateGas < 15M` before sending.
+- Base blocks carry ~400M gas; per-transaction cap 16,777,216 gas (EIP-7825,
+  live on Base since the Azul upgrade, 2026-05-28). A check-in costs 8,763 gas
+  plus 30,896 per transaction. The Clock uses chunks of 1,400, pads its
+  estimate by 12.5%, and refuses anything over 15M before sending. Amended
+  2026-09-11: this line said ~7k gas a check-in and chunks of 1,500, both from
+  arithmetic. Measured against a real node by `warden/tools/chunk-rehearsal.sh`,
+  1,500 passes the padded guard by only 177,808 gas; 1,400 is the largest
+  hundred leaving at least 500,000.
 - `forge build --sizes` must show positive margin under 24,576 bytes for both
   contracts, and a deploy to a plain `anvil` (strict code-size limit) must
   return non-empty `cast code`, before either is called deployable.
@@ -902,8 +907,9 @@ so an agent can read it before running it.
    and streaks come out identical whenever the write lands.
 2. Read all pending rows with `day <= yesterday` (a check-in at 00:03 belongs
    to the next batch).
-3. Send in order: `mint` calls, `batchCheckIn` in chunks of 1,500 entries
-   (each entry 4-byte id + day), `applyMark` calls. `viem`; wait for each
+3. Send in order: `mint` calls, `batchCheckIn` in chunks of 1,400 entries
+   (each entry 4-byte id + day; 1,500 until 2026-09-11, see "Limits that must
+   be respected"), `applyMark` calls. `viem`; wait for each
    receipt; mark rows `written` only on `receipt.status === "success"`.
 4. Reconcile the mirror against the emitted events, then call OpenSea's
    metadata refresh API for every token written or paled that day (the
@@ -1097,19 +1103,21 @@ for vetting delegation targets, not for avoiding the standard.
 ## 14. Costs (verified live 2026-08-27, revised for revision 2)
 
 Base gas was at its protocol floor (0.005-0.006 gwei) and ETH at $2,494 when
-checked; 1M gas cost $0.015. With one packed slot, one event per batch and a
-static QR, a check-in is **~7k gas** (5,000 slot overwrite + share of batch
-overhead + 8 bytes calldata). Only *active* tokens cost anything.
+checked; 1M gas cost $0.015. With one packed slot, a `MetadataUpdate` per token
+and a static QR, a check-in is **8,763 gas**, plus 30,896 per transaction.
+Only *active* tokens cost anything. Amended 2026-09-11: this said ~7k, which
+was arithmetic; 8,763 is measured against a real node, and every figure below
+is rescaled from it at the same 2026-08-27 prices.
 
 | Active tokens | Check-in gas per month | Mint income at 1 USDC (one-off) |
 |---|---|---|
-| 100 | $0.32 | $100 |
-| 1,000 | $3.20 | $1,000 |
-| 10,000 | $32 | $10,000 |
-| 100,000 | $320 | $100,000 |
+| 100 | $0.39 | $100 |
+| 1,000 | $3.94 | $1,000 |
+| 10,000 | $39 | $10,000 |
+| 100,000 | $394 | $100,000 |
 
-One mint fee covers roughly 26 years of that token's check-ins at today's gas
-(365 check-ins a year at ~7k gas is 2.55M gas, about $0.038).
+One mint fee covers roughly 21 years of that token's check-ins at today's gas
+(365 check-ins a year at 8,763 gas is 3.2M gas, about $0.048).
 A 10x gas spike multiplies the gas column, and the gas guard means the site
 only pays it if the spike outlasts the deferral.
 
@@ -1117,7 +1125,7 @@ only pays it if the spike outlasts the deferral.
 |---|---|---|---|
 | Contract deploys (~4.5M gas, two contracts) | $0.07 | -- | n/a |
 | Mints (~120k gas each; static QR) | $0.002 each, covered by the fee | -- | n/a |
-| Daily `batchCheckIn` | -- | $3.20 | n/a |
+| Daily `batchCheckIn` | -- | $3.94 | n/a |
 | `applyMark` (~50k gas) | -- | $0.00075 each | n/a |
 | x402 (CDP facilitator) | $0 | $0 up to 1,000 settlements, then $0.001 flat (0.1% of the mint fee) | Yes |
 | Alchemy RPC | $0 | $0 | Yes: 30M CU/month, 300 CU/s |
