@@ -3,6 +3,7 @@
 // different stories about the same token.
 
 import { onChainBy } from "./nextSteps.mjs";
+import { dayStartIso } from "../day.mjs";
 
 /**
  * Where a token says the rest of the piece is.
@@ -72,8 +73,8 @@ export function tokenView(q, tokenId, links = null, now = Date.now()) {
     // run survives only if the next credit lands INSIDE that day, which is why
     // the deadline is its end. Both from `lastDay`, which is the same field the
     // contract's `lastDay < day <= today()` reads.
-    nextWindowOpensAt: new Date((t.lastDay + 1) * 86_400_000).toISOString(),
-    streakDeadline: new Date((t.lastDay + 2) * 86_400_000).toISOString(),
+    nextWindowOpensAt: dayStartIso(t.lastDay + 1),
+    streakDeadline: dayStartIso(t.lastDay + 2),
     // Counted, not stored. `seedsAvailable` is still deliberately NOT here,
     // for a different reason than before: the write path exists since
     // 2026-09-07, so the old objection -- publishing an entitlement the

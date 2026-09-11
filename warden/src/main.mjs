@@ -28,7 +28,8 @@ import { tokenView } from "./mcp/tokenView.mjs";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
 import { makeChainReader } from "./chain/read.mjs";
-import { verifyChainId, verifyDecoder, treasuryBalance } from "./chain/preflight.mjs";
+import { verifyChainId, verifyDecoder, verifyDay, treasuryBalance } from "./chain/preflight.mjs";
+import { DAY_MS } from "./day.mjs";
 import { requeueOrphans, runSolver } from "./solve/queue.mjs";
 import { utcDay } from "./mcp/tools/checkin.mjs";
 
@@ -210,6 +211,14 @@ async function main() {
   // RPC that will not answer. See chain/preflight.mjs.
   const probe = await verifyDecoder({ rpcUrl, contract });
   console.error(`warden: decoder verified against ${contract} (viewOf returned ${Object.keys(probe).length} fields)`);
+
+  // THE DAY LENGTH MUST BE THE CONTRACT'S. day.mjs defaults to a real day and
+  // the TEST-ONLY fast-days copy sets MRO_DAY_SECONDS; a Warden whose setting
+  // does not match its contract would open windows and promise writes on a
+  // different calendar from the chain's, and queue days the chain refuses. It
+  // stops here instead.
+  const dayCheck = await verifyDay({ rpcUrl, contract });
+  console.error(`warden: day ${dayCheck.chainDay} on chain matches this box (${DAY_MS / 1000} s days)`);
 
   // NOT A GATE. The treasury is validated for shape and checksum and nothing
   // else, so a valid-but-wrong address is invisible: settlements to it succeed.

@@ -6,6 +6,7 @@
 // The ONE converter between a thumbprint and the bytes32 the contract stores.
 // Imported rather than reimplemented, for the reason keyId.mjs gives.
 import { keyIdToBytes32 } from "../mcp/keyId.mjs";
+import { DAY_MS } from "../day.mjs";
 
 /// The exact SQLite error for a violated UNIQUE index. Matching on the message
 /// rather than catching everything is deliberate: a dropped table and a
@@ -739,7 +740,7 @@ export function queries(db) {
      * with no reservation at all. They are not stale, they are free.
      */
     staleRows(today, now = Date.now(), runs = 3) {
-      const before = now - runs * 86_400_000;
+      const before = now - runs * DAY_MS;
       return {
         credits: s.staleCredits.all(today - runs),
         mints: s.staleMints.all(before),

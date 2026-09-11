@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan: a fast-days test copy</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan: a fast-days test copy of Machine Readable Only</h1>
+<p><strong>Status:</strong> approved by the operator and built, 2026-09-11. The fast pair is live on
+Base Sepolia; addresses and the running processes are in auto-memory
+(<code>fast-days-stack</code>), not here.
+<strong>After completing any operator-only step, tell the assistant so it can update memory immediately.</strong></p>
+<h2>Why</h2>
+<p>Everything the piece does over time -- streak colours at 3 / 7 / 30 / 100, a
+lapse paling the heart, the earned Marks (runs of 7 / 30 / 100 / 365), the
+level-gated bought Marks (Static at 30, Iris at 100), a whole heart at 365, and
+seeding a child after an agent-year -- is proven only by contract tests that
+jump the clock forward. None of it has ever run through the real parts together:
+an agent checking in through the door, the Clock writing it, the Warden&#39;s
+windows and deadlines, paid Marks through the real payment service.</p>
+<p>On the live testnet copy that takes real days: a whole heart is a year. A
+separate throwaway copy where <strong>a day lasts 5 minutes</strong> runs the same parts on
+Base Sepolia with the real x402 facilitator and the real client:</p>
+<table>
+<thead>
+<tr>
+<th>Milestone</th>
+<th>Real time on the fast copy</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Streak colour at 3 / 7</td>
+<td>15 / 35 minutes</td>
+</tr>
+<tr>
+<td>Level 30 (Static), run 30 (Beat)</td>
+<td>about 2.5 hours</td>
+</tr>
+<tr>
+<td>Level 100 (Iris), run 100</td>
+<td>about 8.5 hours</td>
+</tr>
+<tr>
+<td>Whole heart (365), agent-year (seed a child)</td>
+<td>about 30 hours</td>
+</tr>
+</tbody></table>
+<p>It is the testnet rehearsal the project&#39;s own rule asks for before mainnet:
+exercise the whole matrix where it is cheap.</p>
+<h2>What already works in our favour (checked 2026-09-11)</h2>
+<ul>
+<li>The Clock takes the day from the contract&#39;s <code>today()</code> and only WARNS if the
+box disagrees (<code>warden/src/clock/main.mjs</code>), so it follows a fast chain day.</li>
+<li>The artwork reads the day through the token&#39;s own view, so it pales and
+rings on the fast day with no change.</li>
+<li>The Warden and Clock keep every file beside their database, so a second
+instance with its own <code>STATE_DB_PATH</code> shares nothing with the live one.</li>
+</ul>
+<h2>What has to change</h2>
+<ol>
+<li><strong>The contract.</strong> <code>today()</code> is <code>block.timestamp / 1 days</code> and is not
+overridable. Add the word <code>virtual</code>, and a test-only
+<code>MachineReadableOnlyFast</code> (under <code>contracts/script/fast/</code>, never under
+<code>src/</code>) that returns <code>block.timestamp / DAY</code> with <code>DAY = 300</code>.
+<strong>GATE:</strong> the real contract&#39;s runtime bytecode must be identical apart from
+the trailing metadata hash (which changes with any source edit). If it
+differs, stop -- the mainnet contract is permanent.</li>
+<li><strong>The Warden.</strong> It takes &quot;today&quot; from the box clock (<code>main.mjs:313</code>,
+<code>today: utcDay</code>) and assumes 24-hour days in eight places (<code>utcDay</code>,
+<code>onChainBy</code>, <code>nextWindowOpensAt</code>, <code>streakDeadline</code>, the stale-row window).
+One module, <code>warden/src/day.mjs</code>, owns the day length: <code>MRO_DAY_SECONDS</code>,
+default 86,400, so the live Warden is unchanged. Plus a boot check: read the
+contract&#39;s <code>today()</code> and refuse to start if it differs from the Warden&#39;s day
+by more than one -- a mismatched day length then fails loudly instead of
+queueing days the chain refuses.</li>
+<li><strong>Tests.</strong> Unit tests for <code>day.mjs</code> (the default is exactly 86,400,000 ms; an
+override changes every derived time; the boot check refuses a mismatch).
+All four suites green. A contract test that the fast variant&#39;s day is 300 s.</li>
+</ol>
+<h2>Steps</h2>
+<ol>
+<li>Contract change + bytecode gate + fast variant + a <code>DeployFast.s.sol</code> that
+states its chain (Base Sepolia only, via the existing <code>guardChain</code>).</li>
+<li>Warden <code>day.mjs</code>, the eight call sites, the boot check, tests. Commit.</li>
+<li>A fresh throwaway <strong>fast Clock key</strong> (address printed, key never), funded
+with 0.01 test ETH from the testnet deployer. Deploy the fast pair to Base
+Sepolia with that key as its Warden, and the ten Marks.</li>
+<li>Run the fast stack under PM2 (not systemd, which is blocked for the assistant):<ul>
+<li><code>mro-fast-warden</code> on <strong>127.0.0.1:4006</strong>, its own settings and database in
+<code>~/.mro-fast/</code> (outside every repo, mode 700), domain <code>fast.test</code></li>
+<li><code>mro-fast-clock</code>, the real Clock every 5 minutes, 30 s after each fast day</li>
+<li><code>mro-fast-agent</code>, the test agent checking in once per fast day</li>
+</ul>
+</li>
+<li>Drive the milestones with the test wallet and verify each ON CHAIN and in the
+rendered artwork: mint, streak 3 and 7, a missed day and the lapse, Ache
+(run 7), Static (level 30, 5 USDC), Beat (run 30), Iris (level 100, 25
+USDC), Aura (25 USDC), whole heart, and a seeded child.</li>
+<li>Report, memory, and stop the fast stack when the operator says.</li>
+</ol>
+<h2>Cost and trade-offs</h2>
+<ul>
+<li><strong>Test USDC:</strong> about 57 to reach Iris and Aura (mint 1, Hush 1, Static 5,
+Iris 25, Aura 25). Circle gives 20 per 2 hours, so <strong>the operator claims three times</strong>
+over the run. Tint ($250) and Vessel ($1,250) stay out of reach unless the
+fast copy gets lower prices -- not proposed here.</li>
+<li><strong>Test ETH:</strong> the deploy plus about 288 Clock writes a day, a few cents&#39;
+worth of free testnet ETH; the deployer holds 0.039.</li>
+<li><strong>It touches the Warden&#39;s time code.</strong> The default stays 86,400 s and all four
+suites must pass, but a mistake there would reach the live Warden -- which is
+why the boot check exists.</li>
+<li><strong>Nothing is irreversible:</strong> every step is on Base Sepolia, and the fast copy
+can be abandoned at any time.</li>
+</ul>
+<h2>Not in this plan</h2>
+<ul>
+<li>Any change to the live Sepolia pair or the live Warden&#39;s behaviour.</li>
+<li>Mainnet, in any form.</li>
+</ul>
+</body>
+</html>

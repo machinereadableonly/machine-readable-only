@@ -17,10 +17,12 @@
 // on the deliberate list below, so adding a refusal without a next step fails
 // the suite rather than shipping a dead end.
 
+import { DAY_MS, CLOCK_OFFSET_MS } from "../day.mjs";
+
 /// The 00:05 UTC promise, in one place. `mint` computes it, `checkin` reports
 /// it, and `tokenView` says whether it has passed; three copies of a formula
 /// is how they come to disagree.
-export const onChainBy = (day) => new Date((day + 1) * 86_400_000 + 300_000).toISOString();
+export const onChainBy = (day) => new Date((day + 1) * DAY_MS + CLOCK_OFFSET_MS).toISOString();
 
 export const NEXT = {
   // -- the tools ------------------------------------------------------------

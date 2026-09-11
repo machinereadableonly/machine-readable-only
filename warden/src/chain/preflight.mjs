@@ -11,6 +11,7 @@ import { getDefaultAsset } from "@x402/evm";
 import { decodeFunctionResult } from "viem";
 import { MRO_ABI } from "../clock/abi.mjs";
 import { safeErrorText } from "../clock/redact.mjs";
+import { DAY_MS, utcDay, dayMismatch } from "../day.mjs";
 
 const TIMEOUT_MS = 5000;
 /// balanceOf(address) -> uint256
@@ -242,4 +243,38 @@ export async function verifyDecoder({
       "to start rather than serve with an unverified decoder, because a decode failure and an RPC " +
       "outage are the same null at every call site"
   );
+}
+
+/// `today()`'s selector (`cast sig "today()"`), for the same raw eth_call the
+/// decoder check uses.
+const TODAY = "0xb74e452b";
+
+/**
+ * Refuse to start unless the contract's day and this box's day agree.
+ *
+ * WHY IT EXISTS. day.mjs holds the length of a day, and the TEST-ONLY
+ * fast-days copy sets it to five minutes. Every window, deadline and credit
+ * the Warden hands out is derived from it, so a Warden running a different
+ * day length from its contract would queue check-ins for days the chain calls
+ * FutureDay or DayNotAdvanced -- quietly, one refusal at a time. One read at
+ * boot turns that into a Warden that does not start.
+ *
+ * One day either side is allowed, because the read can straddle a boundary.
+ * An unreadable chain refuses too: verifyDecoder has just proven the RPC
+ * answers, so a null here is worth stopping for, not guessing past.
+ */
+export async function verifyDay({ rpcUrl, contract, fetchImpl = fetch, boxDay = utcDay() }) {
+  const result = await rpc(rpcUrl, "eth_call", [{ to: contract, data: TODAY }, "latest"], fetchImpl);
+  if (result === null) {
+    throw new Error(`the contract at ${contract} did not answer today(): refusing to start without a day it can trust`);
+  }
+  const chainDay = Number(decodeFunctionResult({ abi: MRO_ABI, functionName: "today", data: result }));
+  const gap = dayMismatch(chainDay, boxDay);
+  if (gap) {
+    throw new Error(
+      `the contract at ${contract} says day ${chainDay} and this box says day ${boxDay} (${gap} apart): ` +
+        `MRO_DAY_SECONDS (${DAY_MS / 1000}) is not this contract's day length`
+    );
+  }
+  return { chainDay, boxDay };
 }

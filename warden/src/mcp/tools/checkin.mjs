@@ -3,10 +3,13 @@ import * as z from "zod";
 import { keyIdToBytes32 } from "../keyId.mjs";
 import { chainBlock, tokenBlock, requireChain } from "../gates.mjs";
 import { onChainBy } from "../nextSteps.mjs";
+import { DAY_MS, utcDay } from "../../day.mjs";
 
-/// Day numbers are whole UTC days since the epoch, the same unit the contract
-/// uses, so the mirror and the chain cannot drift on what "today" means.
-export const utcDay = (now = Date.now()) => Math.floor(now / 86_400_000);
+/// Day numbers are whole days since the epoch, the same unit the contract
+/// uses, so the mirror and the chain cannot drift on what "today" means. The
+/// length of a day lives in day.mjs; this re-export keeps every importer of
+/// `utcDay` from here working unchanged.
+export { utcDay };
 
 /// The runs at which the heart's colour changes, in the copy's own words:
 /// "at 3 days, at 7, at 30 and at 100". Named here so the daily reply can tell
@@ -97,7 +100,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
           ok: false,
           accepted: false,
           reason: "already-credited-today",
-          nextWindowOpensAt: new Date((token.lastDay + 1) * 86_400_000).toISOString(),
+          nextWindowOpensAt: new Date((token.lastDay + 1) * DAY_MS).toISOString(),
           onChainBy: onChainBy(token.lastDay),
         };
       }
@@ -148,7 +151,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
           ok: false,
           accepted: false,
           reason: "already-credited-today",
-          nextWindowOpensAt: new Date((day + 1) * 86_400_000).toISOString(),
+          nextWindowOpensAt: new Date((day + 1) * DAY_MS).toISOString(),
           onChainBy: onChainBy(day),
         };
       }
@@ -160,7 +163,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // yesterday. The one thing the copy makes matter went unannounced by the
       // only tool that knew. Every field below is computed from values this
       // handler already holds; nothing new is read.
-      const streakDeadline = new Date((day + 2) * 86_400_000).toISOString();
+      const streakDeadline = new Date((day + 2) * DAY_MS).toISOString();
       const runBroke = streak === 1 && token.streak > 1
         ? { was: token.streak, lastCreditedDay: token.lastDay }
         : undefined;
@@ -173,7 +176,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
         level,
         streak,
         heart: `${Math.min(level, 365)}/365`,
-        nextWindowOpensAt: new Date((day + 1) * 86_400_000).toISOString(),
+        nextWindowOpensAt: new Date((day + 1) * DAY_MS).toISOString(),
         onChainBy: onChainBy(day),
         streakDeadline,
         nextRung: nextRung === null ? null : { at: nextRung, daysAway: nextRung - streak },
