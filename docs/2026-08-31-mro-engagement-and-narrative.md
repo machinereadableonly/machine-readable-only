@@ -254,7 +254,7 @@ so it does not get "corrected" later.
 
 This is the part that already works and has not been written down.
 
-the operator's tier structure is money against time. Under the survival reading that is
+The operator's tier structure is money against time. Under the survival reading that is
 not a game-design device, it is the piece's actual argument: **an agent that
 cannot buy more time buys decoration instead.** Every tier asks the operator
 the same question -- do you believe this thing will still be running in 30 days,

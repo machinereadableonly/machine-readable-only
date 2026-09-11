@@ -75,14 +75,14 @@
 </head>
 <body>
 <h1>Warden deployment runbook</h1>
-<p>Steps marked <strong>[the operator ONLY]</strong> need a browser, a payment method, or a dashboard
+<p>Steps marked <strong>[OPERATOR ONLY]</strong> need a browser, a payment method, or a dashboard
 login Claude does not have. Steps with no mark can be run by Claude once
 approved for that specific run.</p>
 <p><strong>Claude cannot <code>sudo</code> on this box.</strong> Permission rules deny it, including
 <code>sudo -n true</code>. The root work is therefore NOT a list of commands to copy --
 it is folded into one script, <code>deploy/install-warden-site.sh</code>, which the operator runs
 with a single command. Plan for that rather than discovering it mid-deploy.</p>
-<h2>1. Register a domain -- [the operator ONLY] -- DONE 2026-09-03</h2>
+<h2>1. Register a domain -- [OPERATOR ONLY] -- DONE 2026-09-03</h2>
 <p><code>machinereadableonly.com</code>, at Cloudflare Registrar. One year with auto-renew,
 expires 2027-09-03, registrar lock on. The reasoning, the names rejected and
 the measured cost to the artwork are in
@@ -104,7 +104,7 @@ is the one the shared VPS runbook gives:</p>
 <code>Zone / DNS / Edit</code> and <code>Zone / Zone Settings / Edit</code> on this single zone
 lives in the infra secrets file as <code>CLOUDFLARE_API_TOKEN_MRO</code>; it cannot see
 or touch any other zone. Claude reads it from a script and never prints it.
-Without that token this step is [the operator ONLY] in the dashboard.</p>
+Without that token this step is [OPERATOR ONLY] in the dashboard.</p>
 <h2>3. Install the vhost and issue the certificate -- [the operator runs one command]</h2>
 <pre><code>sudo bash ~/projects/machine-readable-only/warden/deploy/install-warden-site.sh
 </code></pre>
@@ -128,7 +128,7 @@ Warden on 2026-09-03; <code>warden/test/static.test.mjs</code> pins them.</p>
 <p><code>/client.mjs</code> and <code>/skill.md</code> still 404, and llms.txt says so in plain words.
 That is disclosed behaviour, not an oversight. They become real when the
 client is published.</p>
-<h2>4. Create the configuration file -- [the operator ONLY]</h2>
+<h2>4. Create the configuration file -- [OPERATOR ONLY]</h2>
 <p><strong>The file already exists as of 2026-09-03.</strong> What it needed after the domain
 was registered was one key changed, and there is a script for that which
 prints no secret:</p>
@@ -144,7 +144,7 @@ facilitator URL) so they can be eyeballed for typos.</p>
 naming the first one missing, if any is absent. They come from a
 configuration file in <code>warden/</code> that is never committed and that Claude never
 reads, creates or prints.</p>
-<p>the operator creates it via WinSCP (saved site <code>vps</code>), copying <code>warden/.env.example</code> to
+<p>The operator creates it via WinSCP (saved site <code>vps</code>), copying <code>warden/.env.example</code> to
 <code>warden/.env</code> in the same directory and filling in every value. <code>.env.example</code>
 is the schema and carries a comment for each variable; it is the only
 env-shaped file in git.</p>
@@ -234,7 +234,7 @@ with no <code>MRO_DOMAIN</code> would pin the signature authority to the literal
 only thing standing between 3006 and the internet -- but a UFW rule that
 matches the binding is one less way a misconfiguration elsewhere could expose
 it directly.</p>
-<h2>7. Cloudflare settings -- [the operator ONLY, dashboard]</h2>
+<h2>7. Cloudflare settings -- [OPERATOR ONLY, dashboard]</h2>
 <p>These all need the Cloudflare dashboard.</p>
 <ul>
 <li><strong>Bot Fight Mode: OFF.</strong> Bot Fight Mode runs outside Cloudflare&#39;s ruleset
@@ -444,7 +444,7 @@ rehearsal, and says so</li>
 check-in window is one UTC day wide on chain, so midday leaves twelve hours of
 slack either side for a reboot, a slow run or the five minutes of jitter.</p>
 <hr>
-<h2>10. The mainnet cutover -- [the operator APPROVAL REQUIRED, real funds]</h2>
+<h2>10. The mainnet cutover -- [OPERATOR APPROVAL REQUIRED, real funds]</h2>
 <p>Everything above is a Base Sepolia runbook. This section exists because that is
 easy to miss: sections 1 to 9 read as &quot;the deploy&quot;, and following them with a
 mainnet chain id produces a piece that boots and cannot be used.</p>
@@ -546,7 +546,7 @@ optional and not reversible after a mint.</p>
 then confirm the boot log says <code>payment ready</code> -- on a non-Sepolia chain the
 Warden now EXITS rather than running on with payment unavailable.</p>
 </li>
-<li><p><strong>Mint token #1 and start the seed agent -- [the operator GATE, real funds].</strong>
+<li><p><strong>Mint token #1 and start the seed agent -- [OPERATOR GATE, real funds].</strong>
 This is C4.5, and it is the last step because it is the one that cannot be
 undone: token #1 is minted once, and the first 72 hours happen once.</p>
 <p>Mint it from a wallet the operator controls, using the client&#39;s own path so the token
@@ -573,7 +573,7 @@ check, and it needs a token that already exists.</p>
 </li>
 </ol>
 <hr>
-<h2>11. Redeploying the contract pair -- [the operator APPROVAL REQUIRED]</h2>
+<h2>11. Redeploying the contract pair -- [OPERATOR APPROVAL REQUIRED]</h2>
 <p>A contract change means a new address, and a new address means the Warden, the
 Clock, the served copy and the skill are all pointing at a contract that no
 longer exists. This is the order that gets all of them across together.</p>

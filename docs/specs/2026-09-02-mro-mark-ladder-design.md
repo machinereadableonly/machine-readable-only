@@ -5,7 +5,7 @@ Status: APPROVED 2026-09-02, REVISED the same day. Nothing here is built.
 The mechanics were settled in this document; the three visual decisions in
 section 7 were taken by the operator from rendered contact sheets on the same day.
 
-**Revision 2, 2026-09-02.** the operator read the ladder through and called the cross-pair
+**Revision 2, 2026-09-02.** The operator read the ladder through and called the cross-pair
 exclusion a trap. It is removed, and a second trap of the same shape was found
 and removed with it. Every exclusion is now pair-internal. See 3.1.1 and 3.1.2;
 that is the only structural change, and sections 5.3, 6.3, 6.4 and 8.3 follow
@@ -577,13 +577,13 @@ The sheets are kept so any of it can be re-judged.
 
 ### 7.1 Violet Beat -- already decided, recorded for completeness
 
-the operator chose violet on 2026-08-31. `BLOOM_TO` moves from `#c8102e` to `#2000ff`: one
+The operator chose violet on 2026-08-31. `BLOOM_TO` moves from `#c8102e` to `#2000ff`: one
 constant, in both languages, **zero bytes and zero gas** because the two hex
 strings are the same length. Measured at all five rungs, all five raster sizes,
 decodes everywhere.
 
 It changes what the piece is -- the heart becomes bi-chromatic and reads as
-spectrum rather than blood. the operator was told that plainly and chose it anyway. Not
+spectrum rather than blood. The operator was told that plainly and chose it anyway. Not
 reopened here.
 
 ### 7.2 Static's ink -- GREEN (the operator, 2026-09-02)

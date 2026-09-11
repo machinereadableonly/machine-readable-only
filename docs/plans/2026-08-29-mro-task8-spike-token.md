@@ -118,7 +118,7 @@ cheaper in gas and it is defensible. It is not what I would pick, because
 `agentKeyId` sitting unused in `TokenView` is a loose end that Plan 2 would
 trip over, and "which agent minted this" is close to the point of the piece.
 
-**the operator chose to close all five, 2026-08-29.** Step group A below is written for
+**The operator chose to close all five, 2026-08-29.** Step group A below is written for
 that choice and is the plan of record. The alternative above is kept only so the
 reasoning behind the choice stays legible; do not re-open it.
 

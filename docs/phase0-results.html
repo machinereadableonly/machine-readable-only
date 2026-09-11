@@ -1456,7 +1456,7 @@ module edges blur was tried on all three failures. All three still failed.</li>
 that honour the SVG&#39;s intrinsic size; a CDN asked for 500px still makes 500px.</li>
 </ul>
 <h3>The fix: robustness first, heart match second</h3>
-<p>the operator chose option A on 2026-08-29. <code>tools/robust-solve.mjs</code> now selects the
+<p>The operator chose option A on 2026-08-29. <code>tools/robust-solve.mjs</code> now selects the
 <strong>highest-matching mask that survives a decode gate</strong> -- five states x nine
 raster sizes plus each state&#39;s exact multiple, 50 decodes per candidate. Masks
 are tried in match order and the first survivor wins, so a healthy token pays for
@@ -2328,7 +2328,7 @@ Plan 3 poke must VERIFY <code>timeLastUpdated</code> moved rather than fire and 
 leaves ERC-4906 behaviour unknown until mainnet, where discovering it costs real
 money. The verifying poke is what limits that.</p>
 <h2>Phase 0: SIGNED OFF</h2>
-<p><strong>the operator signed Phase 0 off on 2026-08-30.</strong></p>
+<p><strong>The operator signed Phase 0 off on 2026-08-30.</strong></p>
 <p>Every task in plan revision 2 is complete (Tasks 1-10, plus Task 10b, the state
 soak, and Task 10c Phases 1-3). Task 11, the throwaway Base mainnet deploy for
 the OpenSea check, was dropped on 2026-08-29, so Phase 0 spent no real funds at
@@ -2637,6 +2637,5 @@ again -- exactly the property it exists to be free of. Both comments are
 corrected; no behaviour changed, confirmed by regenerating
 <code>contracts/test/RenderFixture.sol</code> and <code>contracts/test/ColourFixture.sol</code> and
 seeing an empty <code>git status</code>.</p>
-
 </body>
 </html>

@@ -37,7 +37,7 @@ What it unblocks:
 
 The spec files five separate subsystems under the heading "the Warden". Trying
 to build them as one plan would be roughly three times the size of Plan 1, so
-the work is split three ways. the operator chose this split on 2026-08-30.
+the work is split three ways. The operator chose this split on 2026-08-30.
 
 | Plan | What it covers |
 |---|---|
@@ -53,7 +53,7 @@ environment file.
 
 They are not APPLIED, because the project has no domain. Six domains are served
 from this VPS and none of them is MRO's. Registering one spends money and needs
-a browser login, so it is a the operator gate, and it is the one thing that unblocks
+a browser login, so it is an operator gate, and it is the one thing that unblocks
 deployment. Nothing else is deferred: the deployment configuration is written
 now precisely so that none of it is retrofitted later.
 

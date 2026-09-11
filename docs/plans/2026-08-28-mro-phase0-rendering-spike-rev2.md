@@ -90,7 +90,7 @@ every mint for no information. This is what makes duotone affordable.
   redefined (quiet-zone tint plus receipts in attributes), so the old
   `voiceQr` second code is gone.
 
-> **operator-manual steps in this plan.** After completing any of these, tell Claude
+> **Operator-manual steps in this plan.** After completing any of these, tell Claude
 > so it can update memory immediately.
 > - **Task 3:** scan `docs/scan-test.png` with a phone and report failures.
 >   This is the last unverified assumption in the whole design.
@@ -142,7 +142,7 @@ This task also closes the last unverified assumption in the design.
 4. Write `tools/token-bitmap.mjs` wrapping `bestOfAllMasks` and `packModules`.
 5. Run the tests to green, generate `HeartMask.sol`, and confirm it compiles
    with `forge build --sizes`.
-6. **operator-manual gate:** the operator scans `docs/scan-test.png` at 100% zoom and reports
+6. **Operator-manual gate:** the operator scans `docs/scan-test.png` at 100% zoom and reports
    which tiles fail. Expected: all pass; the marginal ones are tile 3 (base at
    120px) and tile 10 (inverted at 180px). **If tiles 6 or 7 fail, stop** -- that
    is the low-streak grey state, and it would mean new tokens do not scan, which
@@ -394,7 +394,7 @@ only works locally is not proven.
    provider's `eth_call` gas cap, and run `verify-tokenuri.mjs` against it.
 4. Record every number in `docs/phase0-results.md`.
 
-## Task 11: Throwaway mainnet deploy for the OpenSea test (the operator approval)
+## Task 11: Throwaway mainnet deploy for the OpenSea test (the operator's approval)
 
 **Why:** OpenSea discontinued all testnet support in July 2025, so display and
 refresh behaviour can only be checked on mainnet.
@@ -410,7 +410,7 @@ only on an explicit yes.
 
 **Steps:**
 
-1. **operator-manual:** OpenSea API key into the env file, about 0.001 ETH on Base
+1. **Operator-manual:** OpenSea API key into the env file, about 0.001 ETH on Base
    mainnet to the spike address.
 2. Write `opensea-check.mjs` (GET the token, optionally POST a refresh).
 3. Deploy on explicit approval.

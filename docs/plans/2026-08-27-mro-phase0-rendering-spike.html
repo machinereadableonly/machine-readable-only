@@ -96,7 +96,7 @@ apply and are carried into the revision.</p>
 <p><strong>Tech Stack:</strong> Foundry 1.7.1 (forge, anvil, cast) on the VPS; Solidity 0.8.35, EVM <code>cancun</code> (matches base-200); OpenZeppelin Contracts v5.7.0 (git tag; npm <code>latest</code> is 5.6.1); Solady v0.1.26 (<code>DynamicBufferLib</code>, <code>LibString</code>, <code>Base64</code>); Node 24.14.1 via nvm with built-in <code>node:test</code>; npm <code>qrcode</code> 1.5.4, <code>@resvg/resvg-js</code> 2.6.2, <code>jsqr</code> 1.4.0, <code>viem</code> 2.56.0; Base Sepolia (chain 84532) and Base mainnet (8453) via Alchemy; OpenSea API v2.</p>
 <p><strong>Spec:</strong> <code>docs/specs/2026-08-27-machine-readable-only-design.md</code> (sections 7, 8, 13 and the rendering-risks subsection). Comparable-projects evidence: <code>docs/2026-08-27-mro-comparable-projects.md</code>.</p>
 <blockquote>
-<p><strong>operator-manual steps in this plan</strong> (after completing any of these, tell Claude so it can update memory):</p>
+<p><strong>Operator-manual steps in this plan</strong> (after completing any of these, tell Claude so it can update memory):</p>
 <ul>
 <li>Task 1: put the Alchemy Base Sepolia and Base mainnet RPC URLs and the Etherscan V2 API key into <code>contracts/.env</code> via WinSCP (same keys base-200 uses).</li>
 <li>Task 2: look at the heart preview PNG and say yes or tune it.</li>
@@ -1933,7 +1933,7 @@ Renderer / MROSpikeToken on Base Sepolia: &lt;addr&gt; / &lt;addr&gt;
 </code></pre>
 <p>Fill the Sepolia rows from Tasks 7-9. Commit: <code>git add docs &amp;&amp; git commit -q -m &quot;docs(phase0): Sepolia deployment and measured gas, size and decode results&quot;</code>.</p>
 <hr>
-<h3>Task 10: Throwaway mainnet deploy for the OpenSea test (the operator approval)</h3>
+<h3>Task 10: Throwaway mainnet deploy for the OpenSea test (the operator&#39;s approval)</h3>
 <p><strong>Files:</strong></p>
 <ul>
 <li>Create: <code>tools/opensea-check.mjs</code></li>
@@ -2023,6 +2023,5 @@ cd ../tools &amp;&amp; node opensea-check.mjs $T 1 refresh
 <li><strong>Placeholders.</strong> None: every step has its code or exact command; the results table has literal <code>&lt;n&gt;</code> slots that Task 9-11 fill with measurements, which is the deliverable, not a gap.</li>
 <li><strong>Type consistency.</strong> <code>TokenView</code> field names match across <code>HeartRenderer</code>, <code>MarkRenderer</code>, <code>Renderer</code>, <code>MROSpikeToken.tokenURI</code> and the tests; <code>MarkRenderer</code> bit constants match the <code>names()</code> order and the spec&#39;s Mark ids; <code>qrBitmap().packedHex</code> packing matches <code>QRRenderer.isDark</code> (row-major, MSB first); <code>HeartGeometry</code> constants match the generator&#39;s <code>CANVAS</code>, <code>QR_OFFSET</code>, <code>CELL_COUNT</code>; <code>MROSpikeToken.State</code> field order matches the <code>cast send</code> tuple in Task 10.</li>
 </ul>
-
 </body>
 </html>

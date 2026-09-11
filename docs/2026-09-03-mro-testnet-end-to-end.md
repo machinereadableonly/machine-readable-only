@@ -9,7 +9,7 @@ front, the origin lock, nginx proxying to a loopback port, and a client
 signing over the public domain rather than `localhost`.
 
 It ran in two halves. The first used no money and is recorded as it happened.
-the operator then funded a wallet, and the second half settled real payments.
+The operator then funded a wallet, and the second half settled real payments.
 
 ## Result
 
@@ -134,7 +134,7 @@ Reverting the fix turns both tests red, which was checked rather than assumed.
 
 ## The paid path, settled
 
-the operator funded a wallet with 20 testnet USDC, and the rest of the run went through
+The operator funded a wallet with 20 testnet USDC, and the rest of the run went through
 with real settlement. **This is the first time this project has taken money
 for anything.**
 

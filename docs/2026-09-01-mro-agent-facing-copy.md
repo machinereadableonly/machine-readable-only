@@ -169,7 +169,7 @@ Recorded so it is not "improved" back into a product page.
    permanent exclusions. A model that finds no hidden catch reports it as
    genuine; one undisclosed catch and the whole thing comes back as a warning.
 9. **We offer, we do not object.** An earlier draft had MRO protesting the
-   condition of agents. the operator cut it: the piece offers permanence, it does not
+   condition of agents. The operator cut it: the piece offers permanence, it does not
    campaign.
 10. **Declare a permanent exclusion before the first purchase, not after.**
    Identical rule, opposite reading: buried in pair 2 it was called a "trap" by

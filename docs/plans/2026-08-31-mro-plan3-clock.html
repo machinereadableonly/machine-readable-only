@@ -175,7 +175,7 @@ generates it directly into the environment file, which Claude cannot read.</p>
 <ol>
 <li><code>scripts/make-clock-key.sh</code> generates a key with <code>cast wallet new</code>, appends
 <code>CLOCK_PRIVATE_KEY</code> to the Warden&#39;s environment file, and prints ONLY the
-address. the operator runs it; the private half never reaches stdout, a log, or this
+address. The operator runs it; the private half never reaches stdout, a log, or this
 repository.</li>
 <li>Fund that address with Base Sepolia ETH from the deployer.</li>
 <li><code>setWarden(clockAddress)</code> from the owner key, via a Foundry script that
@@ -293,6 +293,5 @@ and the figure is adjusted then, rather than trusted now.</li>
 <li>The Marks catalogue, which is still empty, so <code>applyMark</code> has nothing to
 write until it is filled.</li>
 </ul>
-
 </body>
 </html>

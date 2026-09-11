@@ -45,7 +45,7 @@ return visits, so the artwork is the agent's own history of coming back.
 1. **Base MAINNET and permanent.** The whole point is a record of return
    visits, and that history cannot be moved to another chain later. Do not
    propose a chain migration.
-2. **Never spend real funds without explicit the operator approval, every time.**
+2. **Never spend real funds without the operator's explicit approval, every time.**
    Mainnet deploys and any transaction with real value are operator-approval gates.
    There is no standing approval.
 3. **Read the spec before any MRO work:**

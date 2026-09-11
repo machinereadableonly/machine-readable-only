@@ -1,6 +1,6 @@
 # Warden deployment runbook
 
-Steps marked **[the operator ONLY]** need a browser, a payment method, or a dashboard
+Steps marked **[OPERATOR ONLY]** need a browser, a payment method, or a dashboard
 login Claude does not have. Steps with no mark can be run by Claude once
 approved for that specific run.
 
@@ -9,7 +9,7 @@ approved for that specific run.
 it is folded into one script, `deploy/install-warden-site.sh`, which the operator runs
 with a single command. Plan for that rather than discovering it mid-deploy.
 
-## 1. Register a domain -- [the operator ONLY] -- DONE 2026-09-03
+## 1. Register a domain -- [OPERATOR ONLY] -- DONE 2026-09-03
 
 `machinereadableonly.com`, at Cloudflare Registrar. One year with auto-renew,
 expires 2027-09-03, registrar lock on. The reasoning, the names rejected and
@@ -37,7 +37,7 @@ Claude can do this step directly. A Cloudflare API token scoped to
 `Zone / DNS / Edit` and `Zone / Zone Settings / Edit` on this single zone
 lives in the infra secrets file as `CLOUDFLARE_API_TOKEN_MRO`; it cannot see
 or touch any other zone. Claude reads it from a script and never prints it.
-Without that token this step is [the operator ONLY] in the dashboard.
+Without that token this step is [OPERATOR ONLY] in the dashboard.
 
 ## 3. Install the vhost and issue the certificate -- [the operator runs one command]
 
@@ -71,7 +71,7 @@ Warden on 2026-09-03; `warden/test/static.test.mjs` pins them.
 That is disclosed behaviour, not an oversight. They become real when the
 client is published.
 
-## 4. Create the configuration file -- [the operator ONLY]
+## 4. Create the configuration file -- [OPERATOR ONLY]
 
 **The file already exists as of 2026-09-03.** What it needed after the domain
 was registered was one key changed, and there is a script for that which
@@ -94,7 +94,7 @@ naming the first one missing, if any is absent. They come from a
 configuration file in `warden/` that is never committed and that Claude never
 reads, creates or prints.
 
-the operator creates it via WinSCP (saved site `vps`), copying `warden/.env.example` to
+The operator creates it via WinSCP (saved site `vps`), copying `warden/.env.example` to
 `warden/.env` in the same directory and filling in every value. `.env.example`
 is the schema and carries a comment for each variable; it is the only
 env-shaped file in git.
@@ -191,7 +191,7 @@ only thing standing between 3006 and the internet -- but a UFW rule that
 matches the binding is one less way a misconfiguration elsewhere could expose
 it directly.
 
-## 7. Cloudflare settings -- [the operator ONLY, dashboard]
+## 7. Cloudflare settings -- [OPERATOR ONLY, dashboard]
 
 These all need the Cloudflare dashboard.
 
@@ -450,7 +450,7 @@ slack either side for a reboot, a slow run or the five minutes of jitter.
 
 ---
 
-## 10. The mainnet cutover -- [the operator APPROVAL REQUIRED, real funds]
+## 10. The mainnet cutover -- [OPERATOR APPROVAL REQUIRED, real funds]
 
 Everything above is a Base Sepolia runbook. This section exists because that is
 easy to miss: sections 1 to 9 read as "the deploy", and following them with a
@@ -510,7 +510,7 @@ correct today and wrong the moment the chain changes.
    then confirm the boot log says `payment ready` -- on a non-Sepolia chain the
    Warden now EXITS rather than running on with payment unavailable.
 
-5. **Mint token #1 and start the seed agent -- [the operator GATE, real funds].**
+5. **Mint token #1 and start the seed agent -- [OPERATOR GATE, real funds].**
    This is C4.5, and it is the last step because it is the one that cannot be
    undone: token #1 is minted once, and the first 72 hours happen once.
 
@@ -543,7 +543,7 @@ correct today and wrong the moment the chain changes.
 
 ---
 
-## 11. Redeploying the contract pair -- [the operator APPROVAL REQUIRED]
+## 11. Redeploying the contract pair -- [OPERATOR APPROVAL REQUIRED]
 
 A contract change means a new address, and a new address means the Warden, the
 Clock, the served copy and the skill are all pointing at a contract that no

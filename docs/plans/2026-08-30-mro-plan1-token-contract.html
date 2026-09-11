@@ -85,7 +85,7 @@
 <ul>
 <li><strong>Plain ASCII only</strong> in all code comments and docs. No em dashes, smart quotes, arrows or emoji.</li>
 <li><strong>The contract is permanent.</strong> No proxy, no upgrade path. A design error here is not fixable later.</li>
-<li><strong>Never spend real funds.</strong> This plan touches Base Sepolia only. Base mainnet is a operator-approval gate and this plan does not create one.</li>
+<li><strong>Never spend real funds.</strong> This plan touches Base Sepolia only. Base mainnet is an operator-approval gate and this plan does not create one.</li>
 <li><strong>Foundry needs <code>export PATH=$HOME/.foundry/bin:$PATH</code>;</strong> Node needs <code>source ~/.nvm/nvm.sh</code>. Non-interactive shells have neither.</li>
 <li><strong>All work runs from <code>contracts/</code></strong> for forge commands. <code>cd</code> back to the repo root before editing root-level files -- the project-isolation hook compares write targets against the shell&#39;s working directory.</li>
 <li><strong>Deployability rule (CLAUDE.md hard rule 7):</strong> nothing is done until <code>forge build --sizes</code> shows positive runtime margin under 24,576 bytes AND <code>bash script/anvil-size-check.sh</code> returns non-empty <code>cast code</code>.</li>
@@ -2264,6 +2264,5 @@ it right at deploy time costs nothing.&quot;
 </ol>
 <p><strong>Type consistency.</strong> <code>Token</code> and <code>Upgrade</code> are declared once in Task 1 and referenced by the same names throughout. <code>_tokens</code>, <code>_marks</code>, <code>_parentOf</code>, <code>_agentKeyOf</code>, <code>_codeOf</code>, <code>_hasMinted</code>, <code>_firstMintDay</code>, <code>_seedsSpent</code>, <code>_upgrades</code> keep their names across Tasks 1-7. <code>today()</code>, <code>viewOf()</code>, <code>seedsAvailable()</code>, <code>voucherHash()</code>, <code>marksOf()</code>, <code>upgradeOf()</code> are used consistently. The <code>Resting(uint256)</code> error is declared in Task 3 and reused in Tasks 4, 6 and 7 -- it must not be re-declared there.</p>
 <p><strong>Known deferrals, deliberate:</strong> child token visuals (needs its own brainstorm), the Clock&#39;s chunking and sorting, and whether the spike contract is deleted afterwards, which needs the operator&#39;s explicit approval.</p>
-
 </body>
 </html>

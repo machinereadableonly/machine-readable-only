@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - **Plain ASCII only** in all code, comments and docs. No em dashes, smart quotes, arrows or emoji.
-- **This plan writes nothing to any chain.** No private key is read, stored or used. Chain access is read-only `eth_call` via a public RPC URL. Base mainnet remains a operator-approval gate that this plan does not create.
+- **This plan writes nothing to any chain.** No private key is read, stored or used. Chain access is read-only `eth_call` via a public RPC URL. Base mainnet remains an operator-approval gate that this plan does not create.
 - **Frame the entry rule as an access condition** for an art piece: it proves a program sent the request. It is not an anti-abuse or bot-defence system, and no comment may describe it as one.
 - **Node needs `source ~/.nvm/nvm.sh`.** Non-interactive shells do not have it on PATH.
 - **All Warden work runs from `warden/`.** `cd` back to the repo root before editing root-level files: the project-isolation hook compares write targets against the shell's working directory.

@@ -24,7 +24,7 @@
 
 **Spec:** `docs/specs/2026-08-27-machine-readable-only-design.md` (sections 7, 8, 13 and the rendering-risks subsection). Comparable-projects evidence: `docs/2026-08-27-mro-comparable-projects.md`.
 
-> **operator-manual steps in this plan** (after completing any of these, tell Claude so it can update memory):
+> **Operator-manual steps in this plan** (after completing any of these, tell Claude so it can update memory):
 > - Task 1: put the Alchemy Base Sepolia and Base mainnet RPC URLs and the Etherscan V2 API key into `contracts/.env` via WinSCP (same keys base-200 uses).
 > - Task 2: look at the heart preview PNG and say yes or tune it.
 > - Task 9: fund the throwaway spike key with Base Sepolia ETH from the CDP faucet (0.1 ETH per 24 h, needs a CDP login).
@@ -1979,7 +1979,7 @@ Fill the Sepolia rows from Tasks 7-9. Commit: `git add docs && git commit -q -m 
 
 ---
 
-### Task 10: Throwaway mainnet deploy for the OpenSea test (the operator approval)
+### Task 10: Throwaway mainnet deploy for the OpenSea test (the operator's approval)
 
 **Files:**
 - Create: `tools/opensea-check.mjs`

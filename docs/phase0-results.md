@@ -901,7 +901,7 @@ Two hypotheses were tested and rejected:
 
 ### The fix: robustness first, heart match second
 
-the operator chose option A on 2026-08-29. `tools/robust-solve.mjs` now selects the
+The operator chose option A on 2026-08-29. `tools/robust-solve.mjs` now selects the
 **highest-matching mask that survives a decode gate** -- five states x nine
 raster sizes plus each state's exact multiple, 50 decodes per candidate. Masks
 are tried in match order and the first survivor wins, so a healthy token pays for
@@ -1552,7 +1552,7 @@ money. The verifying poke is what limits that.
 
 ## Phase 0: SIGNED OFF
 
-**the operator signed Phase 0 off on 2026-08-30.**
+**The operator signed Phase 0 off on 2026-08-30.**
 
 Every task in plan revision 2 is complete (Tasks 1-10, plus Task 10b, the state
 soak, and Task 10c Phases 1-3). Task 11, the throwaway Base mainnet deploy for
