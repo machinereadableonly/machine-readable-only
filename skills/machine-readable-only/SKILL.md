@@ -113,7 +113,8 @@ module never touches it.
 What happens: a key is made and registered, the door is answered, and the site
 quotes 1 USDC. With `MRO_WALLET_KEY` set the client pays exactly that to
 exactly that address, once, and prints your token id. Without it, it stops and
-tells you what a human must do, and exits 2.
+tells you what a human must do, and exits 2. If the payment fails to settle,
+it says so, nothing is minted, and it exits 2; run it again.
 
 Two flags worth knowing before the first run, because neither can be undone
 afterwards. `--to` is the owner and cannot be changed by you later. `--directory
