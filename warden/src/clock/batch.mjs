@@ -1,9 +1,10 @@
 // batchCheckIn, and the rule that one bad entry must not cost a whole day.
 //
 // THE PROBLEM. batchCheckIn reverts the WHOLE chunk on one bad entry, and a
-// chunk is up to 1,500 tokens' days. Retrying it unchanged reverts again,
-// forever, and every token in it loses that day permanently -- a token's record
-// is the artwork, so a lost day is not a retryable inconvenience.
+// chunk is up to CHECKIN_CHUNK tokens' days (run.mjs). Retrying it unchanged
+// reverts again, forever, and every token in it loses that day permanently --
+// a token's record is the artwork, so a lost day is not a retryable
+// inconvenience.
 //
 // THE RULE, inherited from Plan 1's fix wave:
 //

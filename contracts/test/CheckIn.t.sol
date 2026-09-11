@@ -11,6 +11,19 @@ import {MroTestBase} from "./MroTestBase.sol";
 /// per-token ERC-4906 emits that replaced the impossible range form.
 contract CheckInTest is MroTestBase {
 
+    /// The Clock's chunk size, CHECKIN_CHUNK in warden/src/clock/run.mjs.
+    /// warden/test/clock-run.test.mjs reads this line and fails if the two
+    /// disagree, so a change to either one cannot go untested.
+    uint32 internal constant CHECKIN_CHUNK = 1400;
+
+    /// The Clock's ceiling on a padded estimate, MAX_TX_GAS in write.mjs.
+    uint256 internal constant MAX_TX_GAS = 15_000_000;
+
+    /// What a full chunk must leave under MAX_TX_GAS once padded -- the rule
+    /// CHECKIN_CHUNK was chosen by (run.mjs). 1,500 passes the guard itself by
+    /// only 177,808, so without this a bump back to it would stay green.
+    uint256 internal constant CHUNK_MARGIN = 500_000;
+
     function setUp() public {
         _deployAndMintOne();
     }
@@ -126,12 +139,31 @@ contract CheckInTest is MroTestBase {
         t.batchCheckIn(packed, ds);
     }
 
-    /// @notice A full 1,500-token chunk, per-token emits included, must fit the
-    /// 15M guard the Clock uses -- and well inside EIP-7825's 16,777,216 cap.
+    /// @notice A full chunk, per-token emits included, must pass the SAME check
+    /// the Clock makes before it sends: the estimate padded by 12.5% must stay
+    /// under MAX_TX_GAS (warden/src/clock/write.mjs). EIP-7825's 16,777,216 is
+    /// the chain's own cap, above that.
     /// @dev This is the number the whole batching design rests on. If it fails,
     /// the chunk size changes, not the emit policy.
+    ///
+    /// TWO THINGS MAKE THIS NUMBER TRUE, and each was missing once. The truth
+    /// is a real node's receipt: 13,175,282 gas at 1,500 entries, measured
+    /// 2026-09-11 by warden/tools/chunk-rehearsal.sh.
+    ///
+    ///   ISOLATION. Without it the whole test function is ONE transaction, so
+    ///   the slots `mint` has just written are warm and dirty when batchCheckIn
+    ///   touches them -- 100 gas to read and 100 to write, against 2,100 and
+    ///   2,900 on chain. That read 6,836,778, half the truth. Isolation also
+    ///   charges the 21,000 base and the calldata, as the Clock's estimate does.
+    ///
+    ///   PRE-ENCODED CALLDATA. `t.batchCheckIn(packed, ds)` ABI-encodes both
+    ///   arrays in THIS contract, after gasleft() is read, and that loop is
+    ///   harness work. With it inside the window the isolated figure read
+    ///   14,353,906 -- 1,178,624 over the node -- and made 1,500 look like a
+    ///   size the Clock refuses. It is not; it passes by 177,808.
+    /// forge-config: default.isolate = true
     function test_aFullChunkFitsTheGasGuard() public {
-        uint32 n = 1500;
+        uint32 n = CHECKIN_CHUNK;
         vm.startPrank(WARDEN);
         for (uint32 i = 2; i < 2 + n; i++) {
             t.mint(i, address(uint160(0x10000 + i)), bytes32(uint256(i)), _code());
@@ -152,16 +184,26 @@ contract CheckInTest is MroTestBase {
         // gasleft() window it swamps the number with test-only overhead that
         // has nothing to do with what batchCheckIn actually costs on chain.
         bytes memory packed = _packed(ids);
+        // And the call's own ABI encoding, for the same reason: a high-level
+        // call encodes its arguments after gasleft() has been read.
+        bytes memory callData = abi.encodeCall(MachineReadableOnly.batchCheckIn, (packed, ds));
 
         // Outside the gasleft() window: this is harness setup, not contract work.
         _warpToDay(d);
 
         vm.prank(WARDEN);
         uint256 before = gasleft();
-        t.batchCheckIn(packed, ds);
+        (bool ok,) = address(t).call(callData);
         uint256 used = before - gasleft();
+        assertTrue(ok, "a full chunk must not revert");
 
-        emit log_named_uint("gas for a 1500-token chunk", used);
-        assertLt(used, 15_000_000, "a full chunk must fit the Clock's 15M guard");
+        // The Clock pads its estimate by 12.5% and refuses anything over
+        // MAX_TX_GAS AFTER padding (write.mjs), so the raw figure alone would
+        // pass a chunk the Clock never sends.
+        uint256 padded = (used * 1125) / 1000;
+        emit log_named_uint("chunk size", n);
+        emit log_named_uint("gas for a full chunk", used);
+        emit log_named_uint("padded as the Clock pads it", padded);
+        assertLe(padded, MAX_TX_GAS - CHUNK_MARGIN, "a full chunk, padded, must leave CHUNK_MARGIN under the Clock's guard");
     }
 }

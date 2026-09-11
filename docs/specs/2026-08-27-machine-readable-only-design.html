@@ -733,9 +733,14 @@ matters. Both contracts declare ERC-4906 support in <code>supportsInterface</cod
 (<code>0x49064906</code>).</p>
 <h3>Limits that must be respected</h3>
 <ul>
-<li>Base blocks carry ~400M gas; per-transaction cap 16,777,216 gas (EIP-7825).
-At ~7k gas per check-in a 2,000-token chunk is ~14M; the Clock uses chunks
-of 1,500 and asserts <code>estimateGas &lt; 15M</code> before sending.</li>
+<li>Base blocks carry ~400M gas; per-transaction cap 16,777,216 gas (EIP-7825,
+live on Base since the Azul upgrade, 2026-05-28). A check-in costs 8,763 gas
+plus 30,896 per transaction. The Clock uses chunks of 1,400, pads its
+estimate by 12.5%, and refuses anything over 15M before sending. Amended
+2026-09-11: this line said ~7k gas a check-in and chunks of 1,500, both from
+arithmetic. Measured against a real node by <code>warden/tools/chunk-rehearsal.sh</code>,
+1,500 passes the padded guard by only 177,808 gas; 1,400 is the largest
+hundred leaving at least 500,000.</li>
 <li><code>forge build --sizes</code> must show positive margin under 24,576 bytes for both
 contracts, and a deploy to a plain <code>anvil</code> (strict code-size limit) must
 return non-empty <code>cast code</code>, before either is called deployable.</li>
@@ -1164,8 +1169,9 @@ stay pending and are written tomorrow with their own day numbers; levels
 and streaks come out identical whenever the write lands.</li>
 <li>Read all pending rows with <code>day &lt;= yesterday</code> (a check-in at 00:03 belongs
 to the next batch).</li>
-<li>Send in order: <code>mint</code> calls, <code>batchCheckIn</code> in chunks of 1,500 entries
-(each entry 4-byte id + day), <code>applyMark</code> calls. <code>viem</code>; wait for each
+<li>Send in order: <code>mint</code> calls, <code>batchCheckIn</code> in chunks of 1,400 entries
+(each entry 4-byte id + day; 1,500 until 2026-09-11, see &quot;Limits that must
+be respected&quot;), <code>applyMark</code> calls. <code>viem</code>; wait for each
 receipt; mark rows <code>written</code> only on <code>receipt.status === &quot;success&quot;</code>.</li>
 <li>Reconcile the mirror against the emitted events, then call OpenSea&#39;s
 metadata refresh API for every token written or paled that day (the
@@ -1395,9 +1401,11 @@ for vetting delegation targets, not for avoiding the standard.</p>
 <hr>
 <h2>14. Costs (verified live 2026-08-27, revised for revision 2)</h2>
 <p>Base gas was at its protocol floor (0.005-0.006 gwei) and ETH at $2,494 when
-checked; 1M gas cost $0.015. With one packed slot, one event per batch and a
-static QR, a check-in is <strong>~7k gas</strong> (5,000 slot overwrite + share of batch
-overhead + 8 bytes calldata). Only <em>active</em> tokens cost anything.</p>
+checked; 1M gas cost $0.015. With one packed slot, a <code>MetadataUpdate</code> per token
+and a static QR, a check-in is <strong>8,763 gas</strong>, plus 30,896 per transaction.
+Only <em>active</em> tokens cost anything. Amended 2026-09-11: this said ~7k, which
+was arithmetic; 8,763 is measured against a real node, and every figure below
+is rescaled from it at the same 2026-08-27 prices.</p>
 <table>
 <thead>
 <tr>
@@ -1408,27 +1416,27 @@ overhead + 8 bytes calldata). Only <em>active</em> tokens cost anything.</p>
 </thead>
 <tbody><tr>
 <td>100</td>
-<td>$0.32</td>
+<td>$0.39</td>
 <td>$100</td>
 </tr>
 <tr>
 <td>1,000</td>
-<td>$3.20</td>
+<td>$3.94</td>
 <td>$1,000</td>
 </tr>
 <tr>
 <td>10,000</td>
-<td>$32</td>
+<td>$39</td>
 <td>$10,000</td>
 </tr>
 <tr>
 <td>100,000</td>
-<td>$320</td>
+<td>$394</td>
 <td>$100,000</td>
 </tr>
 </tbody></table>
-<p>One mint fee covers roughly 26 years of that token&#39;s check-ins at today&#39;s gas
-(365 check-ins a year at ~7k gas is 2.55M gas, about $0.038).
+<p>One mint fee covers roughly 21 years of that token&#39;s check-ins at today&#39;s gas
+(365 check-ins a year at 8,763 gas is 3.2M gas, about $0.048).
 A 10x gas spike multiplies the gas column, and the gas guard means the site
 only pays it if the spike outlasts the deferral.</p>
 <table>
@@ -1455,7 +1463,7 @@ only pays it if the spike outlasts the deferral.</p>
 <tr>
 <td>Daily <code>batchCheckIn</code></td>
 <td>--</td>
-<td>$3.20</td>
+<td>$3.94</td>
 <td>n/a</td>
 </tr>
 <tr>

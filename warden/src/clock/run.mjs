@@ -19,12 +19,20 @@ import { readEvents, applyEvents, DEPLOY_BLOCK, MAX_LOG_SPAN } from "./reconcile
 import { MRO_ABI } from "./abi.mjs";
 import { keyIdToBytes32 } from "../mcp/keyId.mjs";
 
-/// The spec's chunk size. UNVERIFIED against a real full chunk: it comes from
-/// arithmetic (about 7k gas per check-in against a 15M ceiling), and only one
-/// token existed when this was written, so a 1,500-entry estimate could not be
-/// taken. Task 8 measures the real per-entry cost. Until then the writer's own
-/// `gas-estimate-too-large` refusal is the backstop, not this number.
-export const CHECKIN_CHUNK = 1_500;
+/// How many check-ins go in one batchCheckIn. MEASURED 2026-09-11 against a
+/// real node's receipts (warden/tools/chunk-rehearsal.sh, Osaka rules with
+/// EIP-7825 enforced): 8,763 gas per entry plus 30,896 fixed.
+///
+/// The rule: the largest multiple of 100 whose estimate, padded as write.mjs
+/// pads it, leaves at least 500,000 under MAX_TX_GAS. 1,400 pads to 13,836,282.
+/// The spec's 1,500 came from arithmetic at ~7k a check-in and passes by only
+/// 177,808 -- so one dearer opcode and every full night would be refused and
+/// halved into two transactions.
+///
+/// contracts/test/CheckIn.t.sol measures this same chunk, and
+/// clock-run.test.mjs fails if its constant and this one disagree. Re-run the
+/// rehearsal whenever batchCheckIn, _credit or the Token struct changes.
+export const CHECKIN_CHUNK = 1_400;
 
 /// How far behind the chain head reconcile reads. Base's blocks are two
 /// seconds, so this is under a minute of lag against a nightly job -- and the

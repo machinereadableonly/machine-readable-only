@@ -1,10 +1,12 @@
 // One Clock run, end to end, against stubs. No network, no key, no chain.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { encodeFunctionData } from "viem";
 import { MRO_ABI } from "../src/clock/abi.mjs";
 import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
 import { runClock, CHECKIN_CHUNK } from "../src/clock/run.mjs";
+import { MAX_TX_GAS } from "../src/clock/write.mjs";
 // DERIVED, not hardcoded: this changes with every redeploy, and a test that
 // pins the old value fails for a reason that has nothing to do with what it
 // is testing. The 2026-09-06 redeploy broke two tests exactly that way.
@@ -359,8 +361,18 @@ test("an empty queue is a clean no-op, not an EmptyBatch revert", async () => {
   assert.equal(summary.aborted, null);
 });
 
-test("the chunk size is the spec's, and is applied", async () => {
-  assert.equal(CHECKIN_CHUNK, 1500);
+test("the chunk size is the one the contract suite measures, and is applied", async () => {
+  // contracts/test/CheckIn.t.sol proves ONE number fits the Clock's guard: a
+  // full chunk, isolated, padded as write.mjs pads it, leaving CHUNK_MARGIN
+  // under MAX_TX_GAS. That proof is worth nothing for a different number, so
+  // both constants are read out of the Solidity source and must be these.
+  const sol = readFileSync(new URL("../../contracts/test/CheckIn.t.sol", import.meta.url), "utf8");
+  const chunk = sol.match(/uint32 internal constant CHECKIN_CHUNK = ([\d_]+);/);
+  const cap = sol.match(/uint256 internal constant MAX_TX_GAS = ([\d_]+);/);
+  assert.ok(chunk && cap, "CheckIn.t.sol no longer declares CHECKIN_CHUNK and MAX_TX_GAS");
+  assert.equal(CHECKIN_CHUNK, Number(chunk[1].replaceAll("_", "")), "run.mjs and CheckIn.t.sol disagree on the chunk size");
+  assert.equal(MAX_TX_GAS, BigInt(cap[1].replaceAll("_", "")), "write.mjs and CheckIn.t.sol disagree on the gas guard");
+
   const { db, q } = mirror();
   queueMint(q, db, 1);
   db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");

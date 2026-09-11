@@ -163,6 +163,9 @@ year more; at a realistic 1,000 active agents, about 5.50 USD per year. Money is
 not the deciding factor. The only real constraint is the per-transaction gas
 budget, and 1,500 per chunk still fits the spec's own `estimateGas < 15M` guard
 with per-token emits included -- which a test must assert, not just the Clock.
+Amended 2026-09-11: measured against a real node, 1,500 fits the Clock's
+padded guard by only 177,808 gas, so the Clock now uses chunks of 1,400. The
+emit comparison above is unaffected.
 
 `sunset()` emits no metadata event at all, matching the spike and resolving
 conflict 7. The spec asserts the catch-all in two places (lines 405 and 481)
@@ -243,7 +246,7 @@ Spec section 13's contract list in full. Specifically:
 - Effective-streak paling for lapsed tokens and colour lock for resting ones.
 - A `tokenURI` golden test that decodes the base64 and asserts cell count,
   colour, rings and mark elements against the REAL Renderer, not a stub.
-- A gas test asserting a full 1,500-token chunk including per-token emits stays
+- A gas test asserting a full 1,500-token chunk (1,400 since 2026-09-11) including per-token emits stays
   under the 15M guard.
 - CLAUDE.md hard rule 7: `forge build --sizes` showing positive runtime margin,
   AND a strict-limit anvil deploy returning non-empty `cast code`.
@@ -286,6 +289,6 @@ Phase boundaries for check-in, per the operator's working style: after step 1, a
 - Child token visuals. Deferred to its own brainstorm before any renderer swap.
 - Anything about Base mainnet. Plan 1 spends nothing.
 - The Clock's chunking and sorting behaviour, beyond requiring that the contract
-  stay under the gas guard at 1,500 per chunk.
+  stay under the gas guard at 1,500 per chunk (1,400 since 2026-09-11).
 - Whether the spike contract and its tests are deleted afterwards. That needs
   the operator's explicit approval and is not assumed here.
