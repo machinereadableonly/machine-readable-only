@@ -49,6 +49,21 @@ abstract contract MroTestBase is Test {
         out[0] = day;
     }
 
+    /// @dev Today's day number, computed HERE rather than read from `t`, so it
+    /// can sit inside the arguments of a call under `vm.expectRevert`: an
+    /// external `t.today()` there would be the call the cheatcode matched
+    /// (foundry-test-traps). The contract's own formula, `timestamp / 1 days`.
+    ///
+    /// `vm.getBlockTimestamp()`, NOT `block.timestamp`: under via_ir the
+    /// optimiser treats `block.timestamp` as one value per function (see
+    /// `_warpToDay`), so after a `vm.warp` in the same test it still read the
+    /// old time -- three seed tests passed day 1000 while the contract stood at
+    /// 1,729 and were refused StaleDay. A cheatcode call is not a call
+    /// `vm.expectRevert` counts, so the trap above stays closed.
+    function _today() internal view returns (uint32) {
+        return uint32(vm.getBlockTimestamp() / 1 days);
+    }
+
     /// @dev Deploy the pair and mint token 1 to ALICE, past day zero so that
     /// `lastDay + 1` arithmetic is meaningful.
     function _deployAndMintOne() internal {
@@ -56,7 +71,7 @@ abstract contract MroTestBase is Test {
         t = new MachineReadableOnly(address(r), WARDEN);
         vm.warp(86_400 * 1000 + 1);
         vm.prank(WARDEN);
-        t.mint(1, ALICE, KEY, _code());
+        t.mint(1, ALICE, KEY, _code(), _today());
     }
 
     /// @dev Advance the clock by one year. NEVER write `vm.warp(block.timestamp
@@ -157,6 +172,6 @@ abstract contract MroTestBase is Test {
         while (t.seedsAvailable(parentId) == 0) _warpToDay(t.today() + 365);
         childId = ++_nextSeedId;
         vm.prank(WARDEN);
-        t.seed(childId, parentId, address(uint160(0x5EED0000 + childId)), _code());
+        t.seed(childId, parentId, address(uint160(0x5EED0000 + childId)), _code(), _today());
     }
 }

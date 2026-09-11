@@ -245,6 +245,10 @@ async function main() {
   // itself on the first paid call, because initialize() is a live HTTP call
   // that throws, and the whole process must not fail to boot because a third
   // party is down. See src/pay/x402.mjs.
+  // Set to the solver's drain once it exists, below. A payment cannot settle
+  // before the server is listening, so onSettled never sees the placeholder.
+  let wakeSolver = () => {};
+
   const paid = makePaymentGateway({
     facilitatorUrl,
     network: paymentNetwork,
@@ -257,6 +261,12 @@ async function main() {
     onSettled: (payNonce, tx) => {
       const moved = q.settleByNonce(payNonce, tx);
       if (moved) console.log(`warden: settled ${moved.kind} for token ${moved.tokenId} (${tx})`);
+      // A SETTLED MINT NEEDS ITS ARTWORK NOW, not at the solver's next
+      // five-minute tick. Found by the fast-days copy (2026-09-11): a mint paid
+      // just before a Clock run missed it because its bitmap had not been
+      // solved, although the reply had promised it for that run. The timer
+      // below stays as the backstop.
+      if (moved?.kind === "mint") wakeSolver();
       return moved;
     },
     // And the other direction: a reservation whose settlement never happened is
@@ -381,6 +391,9 @@ async function main() {
       });
   };
   drainQueue();
+  // A settled mint drains the queue at once (onSettled, above); the timer is
+  // the backstop for everything else -- a restart, a solve that failed a try.
+  wakeSolver = drainQueue;
   const solverTimer = setInterval(drainQueue, 5 * 60_000);
   solverTimer.unref();
 

@@ -15,7 +15,7 @@ contract MarksTest is MroTestBase {
         t = new MachineReadableOnly(address(r), WARDEN);
         vm.warp(86_400 * 1000 + 1);
         vm.prank(WARDEN);
-        t.mint(1, ALICE, bytes32(uint256(1)), _code());
+        t.mint(1, ALICE, bytes32(uint256(1)), _code(), _today());
         // Vein: cheap, uncapped, no gates.
         t.setUpgrade(1, MachineReadableOnly.Upgrade({
             priceUsdc6: 1_000_000, maxSupply: 0, sold: 0,
@@ -67,7 +67,7 @@ contract MarksTest is MroTestBase {
             excludes: 0, requiresAny: 0
         }));
         vm.prank(WARDEN);
-        t.mint(2, MALLORY, bytes32(uint256(2)), _code());
+        t.mint(2, MALLORY, bytes32(uint256(2)), _code(), _today());
         vm.startPrank(WARDEN);
         t.applyMark(1, 2, 0);
         vm.expectRevert(MachineReadableOnly.MarkSoldOut.selector);

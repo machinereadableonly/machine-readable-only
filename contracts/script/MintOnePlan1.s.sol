@@ -28,7 +28,7 @@ contract MintOnePlan1 is MroScript {
         address to = vm.addr(key);
 
         vm.startBroadcast(key);
-        MachineReadableOnly(token).mint(1, to, bytes32(uint256(0xa9e1)), SpikeBitmaps.code(1));
+        MachineReadableOnly(token).mint(1, to, bytes32(uint256(0xa9e1)), SpikeBitmaps.code(1), uint32(block.timestamp / 1 days));
         vm.stopBroadcast();
 
         console.log("minted token 1 to", to);

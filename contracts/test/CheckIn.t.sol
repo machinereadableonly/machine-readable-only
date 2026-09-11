@@ -126,7 +126,7 @@ contract CheckInTest is MroTestBase {
     function test_batchCheckedInReportsTheDayRangeAndCount() public {
         uint32 d = t.today();
         vm.prank(WARDEN);
-        t.mint(2, MALLORY, bytes32(uint256(2)), _code());
+        t.mint(2, MALLORY, bytes32(uint256(2)), _code(), _today());
         uint32[] memory ids = new uint32[](2);
         ids[0] = 1; ids[1] = 2;
         uint32[] memory ds = new uint32[](2);
@@ -166,7 +166,7 @@ contract CheckInTest is MroTestBase {
         uint32 n = CHECKIN_CHUNK;
         vm.startPrank(WARDEN);
         for (uint32 i = 2; i < 2 + n; i++) {
-            t.mint(i, address(uint160(0x10000 + i)), bytes32(uint256(i)), _code());
+            t.mint(i, address(uint160(0x10000 + i)), bytes32(uint256(i)), _code(), _today());
         }
         vm.stopPrank();
 

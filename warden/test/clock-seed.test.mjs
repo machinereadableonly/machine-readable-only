@@ -157,7 +157,9 @@ test("a queued seed is sent as seed(), not mint()", async () => {
 
   assert.equal(writer.sent.length, 1, "exactly one write");
   assert.equal(writer.sent[0].functionName, "seed", "a child is created by seed, never by mint");
-  assert.deepEqual(writer.sent[0].args, [2n, 1n, CHILD_OWNER, `0x${QR}`]);
+  // The fifth argument is the day the seed was ASKED for (reserveChild records
+  // TODAY), not the day the Clock writes it -- the first-day fix, 2026-09-11.
+  assert.deepEqual(writer.sent[0].args, [2n, 1n, CHILD_OWNER, `0x${QR}`, TODAY]);
   assert.deepEqual(summary.seeded, [2]);
   assert.deepEqual(summary.droppedSeeds, []);
   assert.equal(q.getToken(2).status, "written");

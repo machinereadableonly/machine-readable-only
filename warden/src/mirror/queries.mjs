@@ -218,7 +218,10 @@ export function queries(db) {
     // --- the Clock's statements. Everything below is written by Plan 3 only;
     // the Warden queues rows and never marks one written.
     pendingMints: db.prepare(
-      "SELECT m.tokenId, m.toAddress, m.keyId, m.qr, t.keyId AS agentKeyId FROM mints m " +
+      // `day` is the day the agent PAID, which the contract now takes as
+      // mint's fifth argument (the first-day fix, 2026-09-11). The token row
+      // has held it since payment; the Clock only has to send it.
+      "SELECT m.tokenId, m.toAddress, m.keyId, m.qr, t.keyId AS agentKeyId, t.mintDay AS day FROM mints m " +
         "JOIN tokens t ON t.tokenId = m.tokenId " +
         // A CHILD IS NOT A MINT. `seed` and `mint` are different functions with
         // different arguments, and a child sent through the mint pass reverts
@@ -227,7 +230,9 @@ export function queries(db) {
         "ORDER BY m.tokenId ASC"
     ),
     pendingSeeds: db.prepare(
-      "SELECT m.tokenId, m.toAddress, m.qr, t.parentId, t.keyId AS agentKeyId FROM mints m " +
+      // `day`: the day the seed was asked for, seed's fifth argument -- the same
+      // first-day rule as pendingMints above.
+      "SELECT m.tokenId, m.toAddress, m.qr, t.parentId, t.keyId AS agentKeyId, t.mintDay AS day FROM mints m " +
         "JOIN tokens t ON t.tokenId = m.tokenId " +
         "WHERE m.status = 'queued' AND m.solveState = 'done' AND t.parentId IS NOT NULL " +
         "ORDER BY m.tokenId ASC"

@@ -120,7 +120,22 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // bug as the mint-day credit, which is why both gates are read rather
       // than assumed. This tool is FREE, so there is no settlement window and
       // no second check.
-      const blocked = (await chainBlock(chain)) ?? (await tokenBlock(chain, tokenId, q));
+      //
+      // A PAID MINT THE CLOCK HAS NOT WRITTEN YET IS A TOKEN, not an unknown
+      // id. The chain does not hold it until the next run -- 00:05 UTC on the
+      // live site -- but the payment has settled, the mirror has its row, and
+      // the Clock writes mints BEFORE check-ins in the same run, so a credit
+      // queued now lands after the token exists. Refusing it told the agent
+      // "no token with this id is known here" about a token `status` listed,
+      // and cost it the day (found by the fast-days copy, 2026-09-11). Only a
+      // SETTLED row counts ('queued'; 'awaiting-payment' is a promise, not a
+      // sale), and not one whose artwork failed for good -- that mint cannot
+      // be written, so a credit behind it could only ever be condemned.
+      // Pause and sunset are still read: they would refuse the write either way.
+      const mint = q.getMint(tokenId);
+      const paidAndPending = mint?.status === "queued" && mint.solveState !== "failed";
+      const blocked =
+        (await chainBlock(chain)) ?? (paidAndPending ? null : await tokenBlock(chain, tokenId, q));
       if (blocked) return { ok: false, accepted: false, reason: blocked };
 
       // Level counts distinct credited days and never falls. A streak

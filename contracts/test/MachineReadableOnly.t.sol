@@ -153,7 +153,7 @@ contract MachineReadableOnlyTest is MroTestBase {
 
     function _mint(uint256 id, address to, bytes32 key) internal {
         vm.prank(WARDEN);
-        t.mint(id, to, key, _code());
+        t.mint(id, to, key, _code(), _today());
     }
 
     function test_mintSetsDayOneState() public {
@@ -195,27 +195,27 @@ contract MachineReadableOnlyTest is MroTestBase {
     function test_mintRevertsForANonWarden() public {
         vm.prank(MALLORY);
         vm.expectRevert(MachineReadableOnly.NotWarden.selector);
-        t.mint(1, ALICE, KEY, _code());
+        t.mint(1, ALICE, KEY, _code(), _today());
     }
 
     function test_oneMintPerKeyEver() public {
         _mint(1, ALICE, KEY);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.AlreadyMinted.selector);
-        t.mint(2, ALICE, KEY, _code());
+        t.mint(2, ALICE, KEY, _code(), _today());
     }
 
     function test_mintRejectsATakenId() public {
         _mint(1, ALICE, KEY);
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.TokenExists.selector, uint256(1)));
-        t.mint(1, ALICE, bytes32(uint256(2)), _code());
+        t.mint(1, ALICE, bytes32(uint256(2)), _code(), _today());
     }
 
     function test_mintRejectsAWrongLengthCode() public {
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadCodeLength.selector, uint256(3)));
-        t.mint(1, ALICE, KEY, hex"010203");
+        t.mint(1, ALICE, KEY, hex"010203", _today());
     }
 
     function test_mintEnforcesTheSupplyCap() public {
@@ -223,7 +223,7 @@ contract MachineReadableOnlyTest is MroTestBase {
         _mint(1, ALICE, KEY);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.SupplyCap.selector);
-        t.mint(2, ALICE, bytes32(uint256(2)), _code());
+        t.mint(2, ALICE, bytes32(uint256(2)), _code(), _today());
     }
 
     /// @dev The cap counts tokens ever minted to an address, not tokens held,
@@ -235,21 +235,21 @@ contract MachineReadableOnlyTest is MroTestBase {
         t.transferFrom(ALICE, MALLORY, 1);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.WalletCap.selector);
-        t.mint(2, ALICE, bytes32(uint256(2)), _code());
+        t.mint(2, ALICE, bytes32(uint256(2)), _code(), _today());
     }
 
     function test_mintIsBlockedByPause() public {
         t.pause();
         vm.prank(WARDEN);
         vm.expectRevert();
-        t.mint(1, ALICE, KEY, _code());
+        t.mint(1, ALICE, KEY, _code(), _today());
     }
 
     function test_mintIsBlockedBySunset() public {
         t.sunset();
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.Sunset.selector);
-        t.mint(1, ALICE, KEY, _code());
+        t.mint(1, ALICE, KEY, _code(), _today());
     }
 
     function test_transferStillWorksWhenPaused() public {

@@ -384,6 +384,22 @@ test("the chunk size is the one the contract suite measures, and is applied", as
   assert.equal(batches.length, 2, "four entries at a chunk size of two");
 });
 
+test("a mint is written with the day it was PAID for, not the day the Clock runs", async () => {
+  // 2026-09-11, found by the fast-days copy: `mint` took today() at the write,
+  // and the Clock writes at 00:05 the day AFTER payment -- so on chain every
+  // token began a day later than the mirror recorded, and its next-day
+  // check-in landed on its first day and was lost. The contract now takes the
+  // day as a fifth argument, and the Clock must send the day the mirror
+  // recorded at payment. queueMint records TODAY - 5.
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const writer = okWriter();
+  await runClock({ ...baseArgs(q), writer });
+  const mint = writer.sent.find((s) => s.functionName === "mint");
+  assert.ok(mint, "the queued mint was sent");
+  assert.equal(Number(mint.args[4]), TODAY - 5, "the paid day, not today");
+});
+
 test("reconcile refuses to guess at its history on an unknown chain", async () => {
   const { q } = mirror();
   await assert.rejects(
