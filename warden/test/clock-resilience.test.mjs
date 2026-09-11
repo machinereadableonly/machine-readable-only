@@ -87,13 +87,37 @@ function tooBigOver(limit) {
 
 const entriesFor = (n) => Array.from({ length: n }, (_, i) => ({ tokenId: i + 1, day: 100 }));
 
-test("a chunk too big to estimate is halved rather than ending the night", async () => {
+test("a chunk too big to estimate is halved, and BOTH halves are written", async () => {
   const writer = tooBigOver(4);
-  const result = await writeCheckInChunk(writer, entriesFor(16));
+  const entries = entriesFor(16);
+  const result = await writeCheckInChunk(writer, entries);
 
   assert.equal(result.aborted, null, "this used to abort the WHOLE run");
-  assert.equal(result.written.length, 4, "it shrinks until the estimate fits");
-  assert.deepEqual(writer.calls, [16, 8, 4], "halving, not one-at-a-time");
+  // UNTIL 2026-09-11 THIS ASSERTED 4 OF 16, and so pinned the defect as the
+  // behaviour. The halving kept the first half and DISCARDED the rest: neither
+  // written nor dropped, so nothing reported them. Mostly they came back the
+  // next night, a day late -- but a second halving could credit a token's
+  // newer day in a later chunk first, after which the chain refuses the older
+  // one forever and the heal path records it as already on chain. Found by
+  // warden/tools/chunk-rehearsal.sh against a real node: 800 of 1,600.
+  assert.deepEqual(
+    result.written.map((e) => e.tokenId),
+    entries.map((e) => e.tokenId),
+    "every entry is written, in the order it was queued"
+  );
+  assert.deepEqual(result.dropped, []);
+  assert.deepEqual(writer.calls, [16, 8, 4, 4, 8, 4, 4], "halving, not one-at-a-time");
+});
+
+test("the halving accounts for every entry it was given", async () => {
+  // The invariant the defect broke, stated once for any size: whatever the
+  // writer does, each entry comes back written, healed or dropped. An entry in
+  // none of the three is a check-in nobody will ever be told about.
+  for (const [n, limit] of [[5, 2], [7, 3], [1600, 800], [9, 1]]) {
+    const result = await writeCheckInChunk(tooBigOver(limit), entriesFor(n));
+    const seen = result.written.length + result.healed.length + result.dropped.length;
+    assert.equal(seen, n, `${n} entries at a limit of ${limit}: ${seen} accounted for`);
+  }
 });
 
 test("a single entry that cannot be estimated is condemned by name, not silently", async () => {
