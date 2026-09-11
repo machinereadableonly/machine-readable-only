@@ -190,7 +190,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     // ---------------------------------------------------------------------
 
     /// @notice The UTC day index, the unit every date in this piece uses.
-    function today() public view returns (uint32) {
+    function today() public view virtual returns (uint32) {
         return uint32(block.timestamp / 1 days);
     }
 
