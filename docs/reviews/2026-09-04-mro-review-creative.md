@@ -1980,7 +1980,7 @@ returns visible rather than to chase a number.
    Builder Code registered at base.dev (spec `:1017`, operator-manual, BEFORE the
    first write). Measurable: `npm view mro-agent --json` shows
    `dist.attestations`.
-4. **Day 0, deploy.** the operator approval, real funds. `DeployPlan5.s.sol` to Base
+4. **Day 0, deploy.** The operator's approval, real funds. `DeployPlan5.s.sol` to Base
    mainnet; Basescan verify; all ten Mark records read back; `MRO_CHAIN_ID`
    8453; Warden restarted with a real treasury so the placeholder guard is
    satisfied. Mint token #1 with the seed agent (C4.5). Do not announce.
@@ -2005,7 +2005,7 @@ returns visible rather than to chase a number.
    day-2 return rate.
 8. **Day 4 onward, legitimacy.** ERC-8257 `registerTool` with the
    `accessPredicate` pointed at the token (spec `:1019`), ERC-8004 identity
-   for the seed agent (`:1021`), each a operator-gated gas-only transaction; the
+   for the seed agent (`:1021`), each an operator-gated gas-only transaction; the
    MCP registry entry via `mcp-publisher` under `io.github.machinereadableonly/`
    (the process checked 2026-09-04: GitHub-authenticated namespace, no
    moderation step, registry "in preview") with a description whose first
@@ -2297,7 +2297,7 @@ Checked and kept, with the reason:
    installed copy, or the audit promise is false on the day it is served.
 7. **C4.8 -- the domain term.** At stake: after the first mint the lapse
    risk belongs to tokens the operator does not own. Change: extend to the
-   ten-year cap (about 110 USD, real funds, the operator approval) and a calendar
+   ten-year cap (about 110 USD, real funds, the operator's approval) and a calendar
    entry off the VPS. If wrong: a stranger controls the destination of
    every token.
 8. **C2.1 -- the words and the picture.** At stake: the primary artwork
@@ -2381,7 +2381,7 @@ a provenance workflow (C4.4's mechanism); the Warden restarted after every
 12. **C1.2 (slot only)** -- a WHY between `:60` and `:62` and the heading
     rename; the text is the lock owner's to draft, in the pair's voice.
 13. **C1.3** -- the door page's entry paragraph in the piece's register.
-    the operator co-wrote this page on 2026-09-03; it is his line to change.
+    The operator co-wrote this page on 2026-09-03; it is his line to change.
 14. **C2.3** -- lapse pales by chroma, not by rung; ten tiles through the
     decode gate first. Decide before the first mainnet lapse, which is
     day two.

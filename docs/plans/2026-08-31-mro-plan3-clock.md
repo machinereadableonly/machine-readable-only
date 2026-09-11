@@ -77,7 +77,7 @@ generates it directly into the environment file, which Claude cannot read.
 
 1. `scripts/make-clock-key.sh` generates a key with `cast wallet new`, appends
    `CLOCK_PRIVATE_KEY` to the Warden's environment file, and prints ONLY the
-   address. the operator runs it; the private half never reaches stdout, a log, or this
+   address. The operator runs it; the private half never reaches stdout, a log, or this
    repository.
 2. Fund that address with Base Sepolia ETH from the deployer.
 3. `setWarden(clockAddress)` from the owner key, via a Foundry script that

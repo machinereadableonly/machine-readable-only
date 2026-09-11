@@ -154,7 +154,7 @@ redefined (quiet-zone tint plus receipts in attributes), so the old
 <code>voiceQr</code> second code is gone.</li>
 </ul>
 <blockquote>
-<p><strong>operator-manual steps in this plan.</strong> After completing any of these, tell Claude
+<p><strong>Operator-manual steps in this plan.</strong> After completing any of these, tell Claude
 so it can update memory immediately.</p>
 <ul>
 <li><strong>Task 3:</strong> scan <code>docs/scan-test.png</code> with a phone and report failures.
@@ -205,7 +205,7 @@ Node 24; the script is bare <code>node --test</code>).</li>
 <li>Write <code>tools/token-bitmap.mjs</code> wrapping <code>bestOfAllMasks</code> and <code>packModules</code>.</li>
 <li>Run the tests to green, generate <code>HeartMask.sol</code>, and confirm it compiles
 with <code>forge build --sizes</code>.</li>
-<li><strong>operator-manual gate:</strong> the operator scans <code>docs/scan-test.png</code> at 100% zoom and reports
+<li><strong>Operator-manual gate:</strong> the operator scans <code>docs/scan-test.png</code> at 100% zoom and reports
 which tiles fail. Expected: all pass; the marginal ones are tile 3 (base at
 120px) and tile 10 (inverted at 180px). <strong>If tiles 6 or 7 fail, stop</strong> -- that
 is the low-streak grey state, and it would mean new tokens do not scan, which
@@ -430,7 +430,7 @@ anywhere else. Wait for the operator to confirm both.</li>
 provider&#39;s <code>eth_call</code> gas cap, and run <code>verify-tokenuri.mjs</code> against it.</li>
 <li>Record every number in <code>docs/phase0-results.md</code>.</li>
 </ol>
-<h2>Task 11: Throwaway mainnet deploy for the OpenSea test (the operator approval)</h2>
+<h2>Task 11: Throwaway mainnet deploy for the OpenSea test (the operator&#39;s approval)</h2>
 <p><strong>Why:</strong> OpenSea discontinued all testnet support in July 2025, so display and
 refresh behaviour can only be checked on mainnet.</p>
 <p><strong>This is the irreversible step.</strong> Before any <code>--broadcast</code> against <code>base</code>, state
@@ -442,7 +442,7 @@ only on an explicit yes.</p>
 <p><strong>Files:</strong> create <code>tools/opensea-check.mjs</code>; modify <code>docs/phase0-results.md</code>.</p>
 <p><strong>Steps:</strong></p>
 <ol>
-<li><strong>operator-manual:</strong> OpenSea API key into the env file, about 0.001 ETH on Base
+<li><strong>Operator-manual:</strong> OpenSea API key into the env file, about 0.001 ETH on Base
 mainnet to the spike address.</li>
 <li>Write <code>opensea-check.mjs</code> (GET the token, optionally POST a refresh).</li>
 <li>Deploy on explicit approval.</li>
@@ -488,6 +488,5 @@ Task 5. The lapse palette may fail contrast and Task 4 forces that decision
 early rather than discovering it in Task 7. The phone scan test is the last
 unverified assumption and gates Task 3.</li>
 </ul>
-
 </body>
 </html>

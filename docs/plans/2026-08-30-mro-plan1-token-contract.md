@@ -12,7 +12,7 @@
 
 - **Plain ASCII only** in all code comments and docs. No em dashes, smart quotes, arrows or emoji.
 - **The contract is permanent.** No proxy, no upgrade path. A design error here is not fixable later.
-- **Never spend real funds.** This plan touches Base Sepolia only. Base mainnet is a operator-approval gate and this plan does not create one.
+- **Never spend real funds.** This plan touches Base Sepolia only. Base mainnet is an operator-approval gate and this plan does not create one.
 - **Foundry needs `export PATH=$HOME/.foundry/bin:$PATH`;** Node needs `source ~/.nvm/nvm.sh`. Non-interactive shells have neither.
 - **All work runs from `contracts/`** for forge commands. `cd` back to the repo root before editing root-level files -- the project-isolation hook compares write targets against the shell's working directory.
 - **Deployability rule (CLAUDE.md hard rule 7):** nothing is done until `forge build --sizes` shows positive runtime margin under 24,576 bytes AND `bash script/anvil-size-check.sh` returns non-empty `cast code`.

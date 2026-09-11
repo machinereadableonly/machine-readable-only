@@ -1,7 +1,7 @@
 # Machine Readable Only -- Design Spec
 
 **Date:** 2026-08-27 (revision 3, same day)
-**Status:** Draft (awaiting the operator review)
+**Status:** Draft (awaiting the operator's review)
 **Brief:** `docs/superpowers/2026-08-27-machine-readable-only-brief.md`
 **Brainstorming session:** Output of one `superpowers:brainstorming` session in
 the move-to-vps hub on 2026-08-27: clarifying questions, a three-agent live
@@ -12,7 +12,7 @@ that produced revision 3. Every
 outside-world fact was checked against a live source on 2026-08-27; sources
 are in section 17.
 
-> **operator-manual tasks** (flag for the build plan; after completing any of these,
+> **Operator-manual tasks** (flag for the build plan; after completing any of these,
 > tell Claude so it can update memory):
 > 1. Buy the domain and add it to Cloudflare (proxy ON, Full (Strict), Bot Fight
 >    Mode OFF, AI "Agent" policy Allow -- see section 12).
@@ -1065,7 +1065,7 @@ on-chain SVG. The same script is the Sepolia smoke test.
 2. Base Sepolia (`eip155:84532`; CDP faucet 0.1 ETH/24h): both contracts,
    Warden, seed agent, testnet facilitator with test USDC. Soak **7 days**:
    seed agent checking in daily, one paid mint from a second key, one Mark.
-3. Base mainnet deploy (the operator approval; irreversible). Seed agent mints token #1.
+3. Base mainnet deploy (the operator's approval; irreversible). Seed agent mints token #1.
 4. Distribution, in the order the evidence ranks it: publish `mro-agent` and
    its `SKILL.md` (npm, `/skill.md`, ClawHub, openclaw/skills); early access
    for wallets holding Claws, Shellborn, Base Buds or BLOKS (the only wallets

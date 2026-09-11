@@ -2,7 +2,7 @@
 
 Draft 2026-09-01. Not started.
 
-**operator-manual steps live in tasks 1, 3, 6 and 8.** After completing any operator-only
+**Operator-manual steps live in tasks 1, 3, 6 and 8.** After completing any operator-only
 step, tell Claude so memory updates immediately.
 
 ---
@@ -120,7 +120,7 @@ Source: <https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/s
 - **The contract address is the Base Sepolia one**
   (`0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D`), used so test agents had
   something real to check. It must become the mainnet address, and the page must
-  say which chain it means. The mainnet deploy is a operator-approval gate.
+  say which chain it means. The mainnet deploy is an operator-approval gate.
 - **Bound the permanence claim.** A reader put it exactly right: "It is a token
   on Base; its permanence is the permanence of Base." The page currently implies
   more than that. Say the bounded version.
@@ -164,7 +164,7 @@ keeping it possible rather than precluding it.
 ## Order
 
 1, 2, 4 and 5 can proceed now and are independent of any deploy. 3 needs 1.
-6 needs the mainnet deploy, which is a the operator gate. 7 is a decision, cheap once
+6 needs the mainnet deploy, which is an operator gate. 7 is a decision, cheap once
 made. 8 is last and gates shipping the page.
 
 Nothing here spends real funds except the mainnet deploy in task 6, which is

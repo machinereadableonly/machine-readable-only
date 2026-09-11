@@ -1639,7 +1639,7 @@ git commit -m "deploy: the chain carries the Echo"
 
 ## What this plan does NOT do
 
-- **No mainnet.** Base Sepolia only. Mainnet is a separate the operator gate.
+- **No mainnet.** Base Sepolia only. Mainnet is a separate operator gate.
 - **No child-specific narrative in the token name.** Section 9 of the spec
   leaves it deliberately.
 - **No daily-post integration.** Unbuilt and credential-blocked.

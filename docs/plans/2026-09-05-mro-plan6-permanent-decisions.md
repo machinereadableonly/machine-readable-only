@@ -186,7 +186,7 @@ proves deployability, which this project requires before anything is called done
 ## What this plan does not do
 
 - **It does not deploy.** A Base Sepolia redeploy is the natural next step and
-  is a separate decision; a mainnet deploy spends real funds and is a the operator gate
+  is a separate decision; a mainnet deploy spends real funds and is an operator gate
   every time.
 - **It does not touch the payment path.** 14.1 and 14.3 are the next plan, and
   they are Criticals -- they are second only because they can be fixed on a

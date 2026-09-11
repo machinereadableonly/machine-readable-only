@@ -7,7 +7,7 @@ before we spend real money."
 Status: APPROVED by the operator 2026-08-29 ("Use placeholder" for the domain question).
 
 Phase 1 is complete and changed the shape of the task -- it found a real defect
-in the solver rather than merely closing a blind spot. the operator chose **option A** from
+in the solver rather than merely closing a blind spot. The operator chose **option A** from
 `docs/2026-08-29-mro-fragile-mask-finding.md`: select the code by robustness
 first, heart match second. Option C's intrinsic SVG pixel size was NOT chosen and
 is not being built; step 3 below is therefore superseded and step 4 reduces to
@@ -212,7 +212,7 @@ of headroom, so no faucet trip is needed.
   the results.
 - **Nothing here is irreversible.** No real funds, no mainnet, no deletions.
 
-## operator-manual steps
+## Operator-manual steps
 
 After completing any operator-only step, tell Claude so it can update memory
 immediately.

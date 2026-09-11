@@ -104,7 +104,7 @@ FILES=(
 # FILES THAT MAY NAME EACH ADDRESS ONLY ONCE.
 #
 # On 2026-09-07 this script rewrote a HISTORICAL paragraph in CLAUDE.md, leaving
-# the 2026-09-06 record naming the 2026-09-07 pair at the old block. the operator restored
+# the 2026-09-06 record naming the 2026-09-07 pair at the old block. The operator restored
 # it by hand. The cause was structural: CLAUDE.md held live statements AND dated
 # history in one file, and a blanket `sed` cannot tell them apart.
 #

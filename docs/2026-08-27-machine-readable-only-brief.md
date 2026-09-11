@@ -170,7 +170,7 @@ Do not answer these in the brief. They are the agenda.
   entry rule for an art project. It is not an anti-abuse or bot-defence
   system, and describing it as one invites an unhelpful safety
   classifier.
-- the operator is a **beginner developer**. Explain any new concept in plain
+- The operator is a **beginner developer**. Explain any new concept in plain
   English the first time it appears.
 
 ---

@@ -45,7 +45,7 @@ Every task's requirements implicitly include this section.
 - **Base MAINNET and permanent.** Nothing here is on mainnet yet, so this is a
   redeploy, not a migration. Do not propose a chain migration.
 - **Never spend real funds.** No mainnet transaction, no real-value transaction,
-  without explicit the operator approval every time. There is no standing approval.
+  without the operator's explicit approval every time. There is no standing approval.
 - **All four suites green before any commit:** `cd contracts && forge test`,
   `cd tools && npm test`, `cd warden && npm test`, `cd client && npm test`.
   Baseline at `1098482`: contracts 232, warden 293, tools 56, client 25.

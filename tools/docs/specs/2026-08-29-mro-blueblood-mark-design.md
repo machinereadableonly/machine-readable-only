@@ -11,7 +11,7 @@ once, second copy spent only on encoding, HTML because OpenSea's live media
 documentation supports SVG for `image` only -- and it cost +469,027 gas. That
 put the day-364 worst case at 2,025,331 gas with the minimum Mark set and
 2,065,436 with every Mark, over the 2,000,000 hard limit. Bytes were never the
-problem; gas was. the operator dropped it.
+problem; gas was. The operator dropped it.
 
 That leaves rung 2 empty. The ladder is a priced ladder, so an empty rung is not
 a cosmetic gap: Vein at 1 and Voice at 20 have nothing between them.
