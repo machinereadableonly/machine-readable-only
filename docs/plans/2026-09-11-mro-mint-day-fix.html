@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan: a token's first day is the day it was paid for</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan: a token&#39;s first day is the day it was paid for</h1>
+<p><strong>Status:</strong> approved 2026-09-11 -- Option A, with the working-file cleanup and the history rewrite (the rewrite last, once the fix has landed).
+<strong>After completing any operator-only step, tell the assistant so it can update memory immediately.</strong></p>
+<p>Also in this plan: two smaller fixes the fast-days copy found, and removing the
+operator&#39;s initials from the repository.</p>
+<h2>Why</h2>
+<p>Within an hour of running, the fast-days copy (a five-minute day on Base
+Sepolia) showed that <strong>every token loses its first check-in, and the Warden&#39;s
+record of it runs one level ahead of the artwork from then on.</strong> Measured on
+fast token 1, 2026-09-11:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>first day</th>
+<th>last day</th>
+<th>level</th>
+<th>streak</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Chain (the artwork)</td>
+<td>5,963,787</td>
+<td>5,963,787</td>
+<td><strong>1</strong></td>
+<td>1</td>
+</tr>
+<tr>
+<td>Warden&#39;s mirror</td>
+<td>5,963,785</td>
+<td>5,963,787</td>
+<td><strong>2</strong></td>
+<td>1</td>
+</tr>
+</tbody></table>
+<p>The agent was told &quot;Day 2 credited&quot;. The Clock then sent that day, the contract
+refused it (it was already the token&#39;s first day), and the Clock recorded it
+as &quot;already on chain&quot;.</p>
+<p><strong>The root cause is a rule the project already states and does not follow.</strong>
+The Clock, the writer and the spec all say <em>&quot;a pending row keeps its own day
+number, so levels and streaks come out identical whenever the write lands.&quot;</em>
+That holds for check-ins. It does not hold for mints and seeds: the Warden
+records the day the agent PAID, but the contract sets <code>mintDay</code> and <code>lastDay</code>
+from <code>today()</code> at the moment the Clock WRITES -- on the live site, 00:05 the
+next day. So the two disagree by one day for every token, and for every child
+(<code>seed</code> does the same).</p>
+<p>It must be fixed before mainnet: mainnet is permanent, and a record that is
+wrong by a day on every token is wrong forever.</p>
+<h2>The choice (the operator&#39;s decision)</h2>
+<h3>Option A -- the contract takes the day (recommended)</h3>
+<p><code>mint(id, to, keyId, code, day)</code> and <code>seed(childId, parentId, to, code, day)</code>
+take the day the Warden recorded at payment. The contract checks it:</p>
+<ul>
+<li><code>day &lt;= today()</code> -- the existing <code>FutureDay</code> error, as for check-ins.</li>
+<li><code>day + 30 &gt;= today()</code> -- a new <code>StaleDay(day)</code> error. Without a floor, a
+Warden could backdate a mint and credit every day since, fabricating a year
+of history in one night. Thirty days is far beyond any delay the gas guard
+or an outage would cause; a mint older than that is refused and reported as a
+paid mint needing a human, by the path that already exists for stuck mints.</li>
+</ul>
+<p><code>mintDay</code>, <code>lastDay</code> and <code>_firstMintDay</code> (the agent-year for seeding) are then
+the payment day. Mirror and chain agree by construction, the day the agent paid
+is its first cell, and the next day&#39;s check-in counts.</p>
+<ul>
+<li><strong>Cost:</strong> a change to the permanent contract -- allowed, because mainnet is
+not deployed yet. A Sepolia redeploy (new pair; the mirror is reset by the
+2026-09-06 rule, keys kept). About 57 test call sites updated mechanically,
+the ABI regenerated, and one column added to the Clock&#39;s pending-mint query.
+Gas: one extra calldata word per mint. Deployability re-proved.</li>
+<li><strong>What is lost:</strong> live Sepolia tokens 1 and 2 stay on the old pair, which is
+superseded like every pair before it. The test wallet mints again.</li>
+</ul>
+<h3>Option B -- the Warden adopts the chain&#39;s day</h3>
+<p>No contract change. When a mint or seed lands, the Clock reads the token back
+and overwrites the mirror&#39;s days, level and streak with the chain&#39;s; the Warden
+tells the agent its token begins on the day it is written.</p>
+<ul>
+<li><strong>Cost:</strong> the day the agent paid never counts -- on the live site every token
+is born the day after it is bought. Two meanings of &quot;the first day&quot; stay in
+the code, and every future feature has to remember which one it is using.</li>
+</ul>
+<p><strong>Recommendation: A.</strong> It fixes the cause, it makes the project&#39;s own stated
+rule true for every row, and this is the last moment it can be done cheaply.</p>
+<h2>In both options: the two smaller findings</h2>
+<ol>
+<li><strong>A paid token cannot be checked in until it is minted.</strong> Check-in asks the
+chain whether the token exists and refuses <code>unknown-token</code> -- telling the
+agent the site does not know a token it lists in <code>status</code>. Fix: accept and
+queue the check-in when the mirror holds a paid mint for it (the Clock writes
+mints before check-ins in the same run); keep <code>unknown-token</code> only when
+neither the chain nor a paid mint knows the id.</li>
+<li><strong>The artwork solver runs on a fixed 5-minute timer</strong>, not when payment
+settles, so a mint paid just before a Clock run can miss it. Fix: start the
+solver when a mint settles; keep the timer as a backstop.</li>
+</ol>
+<h2>Steps (Option A)</h2>
+<ol>
+<li><strong>Contract:</strong> <code>mint</code> and <code>seed</code> take <code>day</code>, with both bounds. Tests first:
+a future day and a stale day revert by name; the recorded day becomes
+<code>mintDay</code>, <code>lastDay</code> and <code>_firstMintDay</code>; a check-in the next day is level
+2; the seed budget counts from the paid day. All 57 call sites updated.
+Gas budget, sizes and a strict-limit deploy re-measured.</li>
+<li><strong>Spec:</strong> dated amendments to the <code>mint</code> and <code>seed</code> rows.</li>
+<li><strong>Warden and Clock:</strong> regenerate the ABI; the Clock sends the day from the
+token row; the two smaller fixes; tests first for each.</li>
+<li><strong>Gate:</strong> all four suites, the pre-publish check, and
+<code>warden/tools/rehearse-start.sh</code> (the real Warden against a copy of
+production state).</li>
+<li><strong>Redeploy the live Sepolia pair</strong>, adopt it, back the mirror up with
+<code>VACUUM INTO</code>, reset it by the rule, restart <code>mro-warden</code>. Re-mint with the
+test wallet.</li>
+<li><strong>Redeploy the fast copy</strong> and prove it end to end: mint, then the next fast
+day&#39;s check-in -- chain and mirror both at level 2.</li>
+<li>Commit; push on the operator&#39;s approval.</li>
+</ol>
+<h2>Removing the operator&#39;s initials</h2>
+<p><strong>Working files.</strong> The initials appear 374 times in 67 of the repository&#39;s own files
+(plans, specs, reviews, code comments, <code>CLAUDE.md</code> and <code>.claude/rules/</code>). The
+16 matches under <code>contracts/lib</code> are binary audit PDFs in vendored code and are
+left alone. Each becomes &quot;the operator&quot; (possessives and dated decisions read
+the same way: &quot;the operator, 2026-08-30&quot;). The 26 changed Markdown files with
+an HTML twin are re-rendered, and all four suites and the pre-publish check
+run. One commit.</p>
+<p><strong>History -- a separate decision, and irreversible.</strong> The initials are also in 17 of
+316 commit messages and in earlier versions of those files. Only rewriting the
+whole history and force-pushing removes it, as on 2026-09-09: every commit id
+changes, every id quoted in memory and docs goes dead, and anyone who has cloned
+the repository keeps the old history. <strong>Recommendation:</strong> clean the working
+files now; if the history is to be rewritten, do it once, after the mint-day
+fix has landed, so it is not rewritten twice.</p>
+<h2>What this plan does not do</h2>
+<ul>
+<li>Deploy anything to mainnet.</li>
+<li>Rewrite history without a separate, explicit yes.</li>
+</ul>
+</body>
+</html>

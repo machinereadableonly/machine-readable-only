@@ -69,13 +69,13 @@ contract TokenUriGoldenTest is MroTestBase {
     function test_tokenUriDistinguishesGenerationFromParent() public {
         bytes32 otherKey = bytes32(uint256(0x5EED));
         vm.prank(WARDEN);
-        t.mint(5, ALICE, otherKey, _code());
+        t.mint(5, ALICE, otherKey, _code(), _today());
         _makeWhole(5);
         _warpOneYear();
         assertEq(t.seedsAvailable(5), 1);
 
         vm.prank(WARDEN);
-        t.seed(6, 5, ALICE, _code());
+        t.seed(6, 5, ALICE, _code(), _today());
         assertEq(t.viewOf(6).generation, 1);
         assertEq(t.viewOf(6).parent, 5);
 

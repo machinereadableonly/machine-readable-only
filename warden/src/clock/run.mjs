@@ -213,7 +213,12 @@ export async function runClock({
       // refused to encode the argument and NO mint could ever be written.
       // The revert surfaced only as "reverted-on-simulate" with no error name,
       // because it never reached the chain to produce one.
-      [BigInt(mint.tokenId), mint.toAddress, keyIdToBytes32(mint.agentKeyId), `0x${mint.qr}`],
+      // The FIFTH argument is the day the agent paid, as the mirror recorded it
+      // -- not the day this run happens to execute. `mint` used to take
+      // today() at the write, and since the Clock writes at 00:05 the next day
+      // every token began a day later on chain than here, and lost its first
+      // check-in (found by the fast-days copy, 2026-09-11).
+      [BigInt(mint.tokenId), mint.toAddress, keyIdToBytes32(mint.agentKeyId), `0x${mint.qr}`, mint.day],
       { label: `mint ${mint.tokenId}` }
     );
     if (result.ok) {
@@ -300,7 +305,9 @@ export async function runClock({
     // checks against the real ABI.
     const result = await writer.send(
       "seed",
-      [BigInt(s.tokenId), BigInt(s.parentId), s.toAddress, `0x${s.qr}`],
+      // The fifth argument is the day the seed was asked for -- the same
+      // first-day rule as the mint above, and for the same reason.
+      [BigInt(s.tokenId), BigInt(s.parentId), s.toAddress, `0x${s.qr}`, s.day],
       { label: `seed ${s.tokenId} from ${s.parentId}` }
     );
     if (result.ok) {
@@ -608,9 +615,13 @@ function isFinalMark(result) {
  * reverted-on-chain, and a simulate revert whose error had no name -- leaves the
  * row exactly where it was.
  *
- * These are every named error `seed(uint256,uint256,address,bytes)` can raise,
- * read off MachineReadableOnly.sol:809-826 plus its three modifiers, and each is
- * here or below the line for a stated reason.
+ * These are every named error `seed(uint256,uint256,address,bytes,uint32)` can
+ * raise, read off MachineReadableOnly.sol's `seed` plus its three modifiers and
+ * `_checkCreationDay`, and each is here or below the line for a stated reason.
+ * `StaleDay` joined 2026-09-11 with the first-day fix: a seed's day is frozen in
+ * its row and the chain's today() only moves forward, so a day more than
+ * MAX_CREATION_LAG behind can never become writable. `FutureDay` cannot fire
+ * here -- the day is recorded when the seed is asked for, so it is never ahead.
  *
  * PERMANENT, because no later run can clear it:
  *   Resting               `rest` sets `s.resting = true` at :780 and NOTHING in
@@ -669,6 +680,10 @@ function isFinalSeed(result) {
     "IdTooLarge",
     "BadCodeLength",
     "ERC721InvalidReceiver",
+    // The seed's recorded day is more than MAX_CREATION_LAG behind today() --
+    // the row is frozen and the chain's clock only moves forward, so no later
+    // run can write it. Dropping hands the agent-year back to ask again.
+    "StaleDay",
   ].includes(result.errorName);
 }
 

@@ -90,13 +90,13 @@ contract BoundsTest is MroTestBase {
         uint256 big = uint256(type(uint32).max) + 5;
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.IdTooLarge.selector, big));
-        t.mint(big, ALICE, bytes32(uint256(0xcafe)), _code());
+        t.mint(big, ALICE, bytes32(uint256(0xcafe)), _code(), _today());
     }
 
     function test_theLargestLegalIdStillMints() public {
         uint256 max = uint256(type(uint32).max);
         vm.prank(WARDEN);
-        t.mint(max, ALICE, bytes32(uint256(0xcafe)), _code());
+        t.mint(max, ALICE, bytes32(uint256(0xcafe)), _code(), _today());
         assertEq(t.ownerOf(max), ALICE, "2**32 - 1 is legal");
 
         uint32 tomorrow = t.today() + 1;
@@ -113,7 +113,7 @@ contract BoundsTest is MroTestBase {
         uint256 big = uint256(type(uint32).max) + 1;
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.IdTooLarge.selector, big));
-        t.seed(big, 1, ALICE, _code());
+        t.seed(big, 1, ALICE, _code(), _today());
     }
 
     // -------------------------------------------------------------------
@@ -179,7 +179,7 @@ contract BoundsTest is MroTestBase {
 
         // Still sold out, rather than silently re-opened.
         vm.prank(WARDEN);
-        t.mint(2, MALLORY, bytes32(uint256(2)), _code());
+        t.mint(2, MALLORY, bytes32(uint256(2)), _code(), _today());
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.MarkSoldOut.selector);
         t.applyMark(2, 3, 0);
@@ -195,7 +195,7 @@ contract BoundsTest is MroTestBase {
     function test_mintRejectsTheZeroKey() public {
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.ZeroKeyId.selector);
-        t.mint(2, ALICE, bytes32(0), _code());
+        t.mint(2, ALICE, bytes32(0), _code(), _today());
     }
 
     // -------------------------------------------------------------------

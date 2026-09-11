@@ -350,7 +350,14 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// @dev The id is chosen by the Warden rather than a counter, so a mint can
     /// be reserved before it settles. `hasMinted` is per key and permanent: a
     /// later `rebind` moves a token to a new key but never frees the old one.
-    function mint(uint256 id, address to, bytes32 keyId, bytes calldata code)
+    /// @param day The day the agent PAID, as the Warden recorded it. Not
+    /// `today()`: the Clock writes a mint at 00:05 the day after payment, and a
+    /// token that began on the write day disagreed with the Warden by one day
+    /// for its whole life -- its next-day check-in landed ON its first day and
+    /// was lost (found by the fast-days copy, 2026-09-11). A pending row keeps
+    /// its own day number, as check-ins always have. Bounded both ways by
+    /// `_checkCreationDay`.
+    function mint(uint256 id, address to, bytes32 keyId, bytes calldata code, uint32 day)
         external
         onlyWarden
         whenNotPaused
@@ -369,8 +376,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (totalMinted >= supplyCap) revert SupplyCap();
         if (mintedTo[to] >= walletCap) revert WalletCap();
         if (code.length != CODE_BYTES) revert BadCodeLength(code.length);
+        _checkCreationDay(day);
 
-        uint32 d = today();
+        uint32 d = day;
         // Named rather than positional: the struct now carries ten fields, three
         // of them adjacent small ints, and a positional list is how one of those
         // silently lands in the wrong one. `bestRun` is 1 because the token's run
@@ -394,6 +402,26 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
     error DayNotAdvanced(uint256 id);
     error FutureDay(uint32 day);
+    /// A creation day more than MAX_CREATION_LAG days behind today().
+    error StaleDay(uint32 day);
+
+    /// How far behind `today()` a mint or seed may be dated. The Warden
+    /// records the day an agent paid and the Clock writes it later -- normally
+    /// at 00:05 the next day, longer only if the gas guard defers or the box is
+    /// down. Without a floor, a Warden could backdate a mint and credit every
+    /// day since, fabricating a year of history in one night; thirty days is
+    /// far beyond any honest delay. A paid mint older than that is refused by
+    /// name and waits for a human, by the path stuck mints already take.
+    uint32 internal constant MAX_CREATION_LAG = 30;
+
+    /// @dev The one bound on a creation day, shared by `mint` and `seed`: not
+    /// after today (the FutureDay rule check-ins already follow) and not more
+    /// than MAX_CREATION_LAG days before it.
+    function _checkCreationDay(uint32 day) internal view {
+        uint32 tday = today();
+        if (day > tday) revert FutureDay(day);
+        if (day + MAX_CREATION_LAG < tday) revert StaleDay(day);
+    }
     error LengthMismatch();
     error Resting(uint256 id);
     error NoSuchToken(uint256 id);
@@ -806,7 +834,11 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     }
 
     /// @notice Create a child token from a whole parent. Free.
-    function seed(uint256 childId, uint256 parentId, address to, bytes calldata code)
+    /// @param day The day the seed was asked for, as the Warden recorded it --
+    /// the same rule and the same bounds as `mint`, for the same reason: the
+    /// Clock writes it at 00:05 the next day, and a child must begin on the day
+    /// it was made, not the day it was written.
+    function seed(uint256 childId, uint256 parentId, address to, bytes calldata code, uint32 day)
         external
         onlyWarden
         whenNotPaused
@@ -822,9 +854,10 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (mintedTo[to] >= walletCap) revert WalletCap();
         if (code.length != CODE_BYTES) revert BadCodeLength(code.length);
         if (seedsAvailable(parentId) == 0) revert NoSeedAvailable();
+        _checkCreationDay(day);
 
         bytes32 key = _agentKeyOf[parentId];
-        uint32 d = today();
+        uint32 d = day;
 
         _tokens[childId] = Token({
             level: 1, streak: 1, lastDay: d, mintDay: d,

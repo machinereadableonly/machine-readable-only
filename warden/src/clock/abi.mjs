@@ -316,6 +316,11 @@ export const MRO_ABI = [
         "name": "code",
         "type": "bytes",
         "internalType": "bytes"
+      },
+      {
+        "name": "day",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "outputs": [],
@@ -543,6 +548,11 @@ export const MRO_ABI = [
         "name": "code",
         "type": "bytes",
         "internalType": "bytes"
+      },
+      {
+        "name": "day",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "outputs": [],
@@ -1903,6 +1913,17 @@ export const MRO_ABI = [
         "name": "id",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "StaleDay",
+    "inputs": [
+      {
+        "name": "day",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ]
   },

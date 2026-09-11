@@ -4,6 +4,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeCheckinTool } from "../src/mcp/tools/checkin.mjs";
 import { openChain } from "./chain-stub.mjs";
+import { seedPaidMint } from "./mirror-seed.mjs";
 
 function withToken({ keyId = "k1", lastDay = 100 } = {}) {
   const db = openDb(":memory:");
@@ -61,6 +62,34 @@ test("a token the CHAIN has but the mirror does not is not-yet-mirrored", async 
   const tool = makeCheckinTool({ q, chain: openChain(), today: () => 101 });
   const r = await tool.handler({ tokenId: 99 }, { keyId: "k1" });
   assert.equal(r.reason, "not-yet-mirrored");
+});
+
+// 2026-09-11, found by the fast-days copy: a PAID token the Clock had not yet
+// written was refused `unknown-token` -- "no token with this id is known here"
+// -- while `status` listed it. The Clock writes mints BEFORE check-ins in the
+// same run, so the credit is safe to queue now; refusing it cost the agent the
+// day on the live site between 00:00 and the 00:05 write, and every first day
+// on the fast copy.
+const notOnChainYet = () =>
+  openChain({ lifecycleOf: async () => ({ exists: false, resting: false, sunset: false, level: 0, lastDay: 0 }) });
+
+test("a PAID token the chain does not hold yet is credited, not refused as unknown", async () => {
+  const { q } = withToken();
+  seedPaidMint(q, { tokenId: 1, toAddress: "0xabc", keyId: "k1" });
+  const tool = makeCheckinTool({ q, chain: notOnChainYet(), today: () => 101 });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.accepted, true, JSON.stringify(r));
+  assert.equal(r.creditedDay, 101);
+});
+
+test("an UNPAID reservation is still unknown until its payment settles", async () => {
+  const { q } = withToken();
+  // insertMint alone lands 'awaiting-payment': verified, not settled. Nothing
+  // is owed to it yet, so it earns no credit.
+  q.insertMint({ tokenId: 1, toAddress: "0xabc", keyId: "k1", payNonce: "0x" + "01".repeat(32) });
+  const tool = makeCheckinTool({ q, chain: notOnChainYet(), today: () => 101 });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.reason, "unknown-token");
 });
 
 // Two things hold this now and BOTH are load-bearing: the day guard refuses

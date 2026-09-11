@@ -71,10 +71,13 @@ const read = (functionName, args = []) =>
 // length, and batchCheckIn never reads it. One address per token, because
 // walletCap is 20; one key per token, because a key mints once.
 const QR = "0x" + "ab".repeat(172);
+// The day each mint is "paid" on: the chain's today, read once. mint takes it
+// as its fifth argument since the first-day fix (2026-09-11).
+const MINT_DAY = Number(await read("today"));
 let nonce = await pub.getTransactionCount({ address: account.address });
 const sent = [];
 for (let id = 1; id <= MINTED; id += 1) {
-  const args = [BigInt(id), `0x${(0x10000 + id).toString(16).padStart(40, "0")}`, `0x${id.toString(16).padStart(64, "0")}`, QR];
+  const args = [BigInt(id), `0x${(0x10000 + id).toString(16).padStart(40, "0")}`, `0x${id.toString(16).padStart(64, "0")}`, QR, MINT_DAY];
   const hash = await wallet.writeContract({
     address: CONTRACT,
     abi: MRO_ABI,
