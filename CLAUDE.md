@@ -139,7 +139,8 @@ return visits, so the artwork is the agent's own history of coming back.
   commercial and a noncommercial licence there would forbid what the door
   invites. Everything else is PolyForm Noncommercial 1.0.0. **Read
   `LICENSING.md` before licensing any NEW file.** History was rewritten before
-  publication, so **any commit id from before 2026-09-09 is dead.**
+  publication and again on 2026-09-11, so **any commit id from before
+  2026-09-11 is dead.**
 - **Renderer** is swappable, split three ways.
 - **Voucher check-in path ships paused.**
 - **The reference client is the product.** Built-in MCP clients cannot sign,
