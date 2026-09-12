@@ -172,7 +172,16 @@ pm2 save
 `ecosystem.config.cjs` runs one fork-mode instance bound to `127.0.0.1:3006`
 only -- nginx is the only thing that talks to it from outside. It passes
 `--env-file` to the interpreter, so the file from step 4 is what configures
-the process; PM2 itself supplies only `NODE_ENV` and `PORT`.
+the process, and PM2 adds `NODE_ENV` and `PORT`.
+
+PM2 would ALSO pass on the entire environment of the shell that ran
+`pm2 start`, and Node lets a variable already in the environment win over the
+same one in the file. On this box that shell carries the operator's infra
+secrets, so `filter_env` in the ecosystem file drops anything named like a
+credential. It must stay a LIST: `filter_env: true` does nothing in PM2 7.0.1.
+To apply a change to the ecosystem file, `pm2 delete mro-warden`, start it
+again as above, and `pm2 save` -- deleting guarantees the environment is
+rebuilt from the file rather than carried over.
 
 If step 4 was skipped the process will not start, and `pm2 logs mro-warden`
 will name the missing variable. That is the intended behaviour: a Warden

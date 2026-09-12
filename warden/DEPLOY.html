@@ -221,7 +221,15 @@ pm2 save
 <p><code>ecosystem.config.cjs</code> runs one fork-mode instance bound to <code>127.0.0.1:3006</code>
 only -- nginx is the only thing that talks to it from outside. It passes
 <code>--env-file</code> to the interpreter, so the file from step 4 is what configures
-the process; PM2 itself supplies only <code>NODE_ENV</code> and <code>PORT</code>.</p>
+the process, and PM2 adds <code>NODE_ENV</code> and <code>PORT</code>.</p>
+<p>PM2 would ALSO pass on the entire environment of the shell that ran
+<code>pm2 start</code>, and Node lets a variable already in the environment win over the
+same one in the file. On this box that shell carries the operator&#39;s infra
+secrets, so <code>filter_env</code> in the ecosystem file drops anything named like a
+credential. It must stay a LIST: <code>filter_env: true</code> does nothing in PM2 7.0.1.
+To apply a change to the ecosystem file, <code>pm2 delete mro-warden</code>, start it
+again as above, and <code>pm2 save</code> -- deleting guarantees the environment is
+rebuilt from the file rather than carried over.</p>
 <p>If step 4 was skipped the process will not start, and <code>pm2 logs mro-warden</code>
 will name the missing variable. That is the intended behaviour: a Warden
 started with no <code>CHALLENGE_SECRET</code> would issue forgeable challenges, and one

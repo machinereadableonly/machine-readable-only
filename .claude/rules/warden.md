@@ -58,6 +58,12 @@ Loaded only when working under `warden/` or `client/`.
   that catches a bad boot check. Green tests cannot -- every suite opens a fresh
   in-memory database, so the one ordering that matters is unreachable from them.
 - **Every deploy script must STATE its chain.**
+- **The shell beats `--env-file`.** Node gives a variable already in the
+  environment precedence over the file, and PM2 passes on the whole shell that
+  ran `pm2 start` -- which carries the operator's infra secrets.
+  `ecosystem.config.cjs` drops credential-named variables with a `filter_env`
+  LIST; never `true`, which does nothing in PM2 7.0.1. Apply a change to it
+  with `pm2 delete` + `pm2 start`, then `pm2 save`.
 - A tool that seeds rows no agent paid for runs against a SCRATCH mirror, never
   the Warden's own.
 
