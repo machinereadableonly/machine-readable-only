@@ -60,6 +60,10 @@ Loaded only when working under `warden/` or `client/`.
   that catches a bad boot check. Green tests cannot -- every suite opens a fresh
   in-memory database, so the one ordering that matters is unreachable from them.
 - **Every deploy script must STATE its chain.**
+- **Every Clock write carries the Base Builder Code** (`src/clock/builder-code.mjs`,
+  passed as `dataSuffix` to simulate, estimate AND send in `write.mjs`). It is
+  `null` until Base issues MRO's code; nothing refuses to start without it, so
+  DEPLOY.md section 10 is the only guard. Never reuse another project's code.
 - **The shell beats `--env-file`.** Node gives a variable already in the
   environment precedence over the file, and PM2 passes on the whole shell that
   ran `pm2 start` -- which carries the operator's infra secrets.

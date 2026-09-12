@@ -480,6 +480,7 @@ correct today and wrong the moment the chain changes.
 | `X402_FACILITATOR_URL` | the configuration file | `https://api.cdp.coinbase.com/platform/v2/x402` -- the testnet host settles only Base Sepolia |
 | `CDP_API_KEY_ID` / `CDP_API_KEY_SECRET` | the configuration file | the CDP host answers 401 without them; the Warden REFUSES to start if the url is CDP's and these are unset |
 | `DEPLOY_BLOCK[8453]` | `src/clock/reconcile.mjs` | the Clock REFUSES to start without it, before writing anything |
+| `BUILDER_CODE` | `src/clock/builder-code.mjs` | Base credits the piece's on-chain activity only through this ERC-8021 suffix, and a write sent without it can never be attributed afterwards. It is `null` until Base issues the code (registering a second app on the operator's Base account is blocked by base/docs#1950; Base's agent route, `POST api.base.dev/v1/agents/builder-codes` with the writer wallet, is the fallback). **Nothing refuses to start without it** -- the operator chose a checklist line over a startup refusal on 2026-09-12 -- so this row is the only guard. The Clock logs `builder code none yet` every run until it is set |
 | the Clock's gas float | the warden wallet on mainnet | writes are paid in real ETH, not testnet ETH |
 | every QR bitmap | re-solved | a bitmap encodes its own url; nothing solved on Sepolia carries over |
 | the testnet-preview section | `public/llms.txt` | it tells agents this is a rehearsal |
