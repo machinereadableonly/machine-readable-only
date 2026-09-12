@@ -29,6 +29,10 @@ const INHERITED = [
   "GITHUB_TOKEN_MRO",
 ];
 
+// The operator's personal settings the hub's PM2 audit found still held by the
+// live Warden, 2026-09-12. Not credentials, so the first list missed them.
+const PERSONAL = ["NTFY_TOPIC", "DEFAULT_TO_ADDRESS"];
+
 // Variables the process genuinely needs from the environment PM2 builds.
 const NEEDED = ["PATH", "HOME", "NODE_ENV", "PORT"];
 
@@ -46,6 +50,10 @@ test("filter_env is a non-empty list, because `true` does nothing in PM2 7.0.1",
 
 test("every credential found in the live Warden is dropped", () => {
   assert.deepEqual(INHERITED.filter(survives), []);
+});
+
+test("the operator's personal settings found in the live Warden are dropped", () => {
+  assert.deepEqual(PERSONAL.filter(survives), []);
 });
 
 test("the variables the process needs still get through", () => {
