@@ -178,7 +178,8 @@ PM2 would ALSO pass on the entire environment of the shell that ran
 `pm2 start`, and Node lets a variable already in the environment win over the
 same one in the file. On this box that shell carries the operator's infra
 secrets, so `filter_env` in the ecosystem file drops anything named like a
-credential. It must stay a LIST: `filter_env: true` does nothing in PM2 7.0.1.
+credential, and the operator's personal settings (`NTFY_*`, `*_ADDRESS`) with
+it. It must stay a LIST: `filter_env: true` does nothing in PM2 7.0.1.
 To apply a change to the ecosystem file, `pm2 delete mro-warden`, start it
 again as above, and `pm2 save` -- deleting guarantees the environment is
 rebuilt from the file rather than carried over.

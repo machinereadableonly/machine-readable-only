@@ -59,7 +59,15 @@ module.exports = {
       // passed all five names through, this list passed none. Each entry drops
       // any variable whose NAME contains it. The Warden's real configuration
       // arrives through --env-file above, which this does not touch.
-      filter_env: ["TOKEN", "SECRET", "_KEY", "PASSWORD", "CDP_", "CLOUDFLARE"],
+      //
+      // Not only credentials. The operator's personal settings are no business
+      // of this process either, and a credential-shaped list misses them: on
+      // 2026-09-12 the hub's PM2 audit found the live Warden still holding the
+      // operator's alert topic (NTFY_TOPIC -- an ntfy topic has no password, so
+      // its name IS the access) and personal mailbox (DEFAULT_TO_ADDRESS).
+      // Nothing in this repository reads either. `_ADDRESS` drops the whole
+      // family; the Warden's own addresses come from --env-file, untouched.
+      filter_env: ["TOKEN", "SECRET", "_KEY", "PASSWORD", "CDP_", "CLOUDFLARE", "NTFY_", "_ADDRESS"],
       exec_mode: "fork",
       instances: 1,
       max_memory_restart: "512M",
