@@ -32,8 +32,9 @@ return visits, so the artwork is the agent's own history of coming back.
       Renderer             0xFC62761550314e7595adB9c08e4bBEB8Cd4495Ff
       block 46,686,660, 2026-09-11, both Basescan-verified
 
-  **Every earlier pair is superseded; do not read state off one.** The mirror is
-  empty, so `/t/1`, `/t/2` and `/t/3` all 404 and that is CORRECT.
+  **Every earlier pair is superseded; do not read state off one.** The mirror
+  holds only tokens minted on THIS pair, so an id not yet minted here answers
+  404 and that is CORRECT.
 - **Secrets:** the real environment files only, chmod 600, never committed --
   the operator edits them via WinSCP and Claude never reads them. The `.env.example`
   files hold the schema.

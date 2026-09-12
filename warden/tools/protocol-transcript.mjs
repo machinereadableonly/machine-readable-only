@@ -34,8 +34,10 @@ const FACILITATOR = "https://x402.org/facilitator";
 const CHAIN_ID = 84_532;
 const NETWORK = `eip155:${CHAIN_ID}`;
 const TREASURY = "0x000000000000000000000000000000000000dEaD";
-// The Plan 5 deployment, 2026-09-03: the first contract to carry the ten
-// Mark records and the three-argument applyMark. Held as a constant rather
+// The CURRENT deployment. adopt-deployment.sh rewrites this address on every
+// redeploy, so this comment names no pair: it once named the 2026-09-03 one,
+// and the rename left it describing a contract long gone (found 2026-09-12).
+// Held as a constant rather
 // than read from the environment so the capture is reproducible from a
 // clean checkout, the same reason DOMAIN and SECRET are constants here.
 const CONTRACT = "0x5bAC4E9BeC6fA4b1a774868767087216BB8577A0";

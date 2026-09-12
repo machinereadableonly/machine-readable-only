@@ -31,12 +31,15 @@ export const MAX_LOG_SPAN = 10_000n;
 /// blocks with no logs at all, so "nothing recent" is a normal state rather
 /// than a signal.
 ///
-/// UPDATED 2026-09-06 for the Plan 6 + C4.10 redeploy, from the broadcast
-/// receipt rather than by bisecting: all twelve deploy transactions landed in
-/// block 46,468,133. THIS MUST CHANGE WITH EVERY REDEPLOY. Left at a previous
-/// contract's block it does not fail -- it pages tens of thousands of empty
-/// blocks and finds nothing, which reads as a quiet chain rather than as a
-/// misconfiguration. The previous value was 46_163_891 (the Plan 5 pair).
+/// THIS MUST CHANGE WITH EVERY REDEPLOY, and contracts/script/adopt-deployment.sh
+/// changes it, from the broadcast receipt. Left at a previous contract's block
+/// it does not fail -- it pages tens of thousands of empty blocks and finds
+/// nothing, which reads as a quiet chain rather than as a misconfiguration.
+///
+/// This comment deliberately names no block. It used to ("block 46,468,133",
+/// the 2026-09-06 pair), and the script, which rewrites only the value, left
+/// it describing a superseded deployment (found 2026-09-12). The value is the
+/// fact.
 export const DEPLOY_BLOCK = { 84532: 46_686_660n };
 
 /// The highest Mark id the CONTRACT will accept, from MachineReadableOnly.sol's
