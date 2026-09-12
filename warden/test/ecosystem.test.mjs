@@ -53,5 +53,13 @@ test("the variables the process needs still get through", () => {
 });
 
 test("the configuration still arrives through --env-file, which filter_env does not touch", () => {
-  assert.deepEqual(app.node_args, ["--env-file=.env"]);
+  assert.ok(app.node_args.includes("--env-file=.env"), JSON.stringify(app.node_args));
+});
+
+// Coinbase's CDP facilitator refuses the key over IPv6 and accepts it over IPv4
+// (measured 2026-09-12, three rounds each way). Both flags, or Node still races
+// an IPv6 connection.
+test("every outgoing connection is pinned to IPv4, with both flags", () => {
+  assert.ok(app.node_args.includes("--dns-result-order=ipv4first"), JSON.stringify(app.node_args));
+  assert.ok(app.node_args.includes("--no-network-family-autoselection"), JSON.stringify(app.node_args));
 });

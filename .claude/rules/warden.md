@@ -47,8 +47,10 @@ Loaded only when working under `warden/` or `client/`.
   BEFORE the claim).
 - The testnet facilitator is `https://x402.org/facilitator`. The spec's
   `https://facilitator.x402.org` DOES NOT RESOLVE. Mainnet is CDP's and needs a
-  key -- **the key on the box is currently REFUSED**, so mainnet payment is
-  impossible until that is fixed.
+  key. **The key WORKS over IPv4 and is refused over IPv6** (2026-09-12, three
+  rounds each way) -- this box prefers IPv6, so the Warden runs pinned to IPv4
+  (`node_args` in `ecosystem.config.cjs`). When CDP refuses, vary the route
+  before blaming the key.
 - The mint price is the Warden constant `MINT_PRICE`, **not** an on-chain value.
 
 ## Deploying
