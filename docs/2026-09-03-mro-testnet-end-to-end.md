@@ -236,6 +236,11 @@ the same way.
 
 Nothing that money unblocks. What remains needs time or credentials:
 
+> **Corrected 2026-09-12; the list below is kept as it was written.** Two of
+> its items stopped being true within a day: `paid-but-unavailable` was
+> provoked on 2026-09-04, on an isolated copy of the Warden, and the Clock's
+> systemd timer was installed on 2026-09-04 and has run every night since.
+
 - **The four EARNED Marks** need runs of 7, 30, 100 and 365 days. No amount of
   funding shortens them; that is the point of the piece.
 - **`paid-but-unavailable`** -- a gate closing between settlement and write --
