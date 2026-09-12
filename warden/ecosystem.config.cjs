@@ -30,6 +30,23 @@ module.exports = {
       // configuration file must stop the process, not start it with half its
       // settings.
       node_args: ["--env-file=.env"],
+      // THE SHELL'S SECRETS ARE NOT THIS PROCESS'S BUSINESS. PM2 copies the whole
+      // environment of whoever ran `pm2 start` into the app, and every session
+      // shell on this box loads the operator's infra secrets file -- so the
+      // Warden was holding a Cloudflare token, two GitHub tokens and the CDP
+      // key, none of which it reads from there. Worse, Node lets the
+      // ENVIRONMENT win over --env-file ("the value from the environment takes
+      // precedence", Node 24 docs), so a stale CDP key in the shell would
+      // silently override a corrected one in the file above.
+      //
+      // A LIST, NEVER `true`. PM2's docs say `filter_env: true` drops every
+      // inherited variable. In the installed PM2 7.0.1 it does nothing:
+      // lib/Common.js tests `filter_env.length`, and a boolean has none.
+      // Measured 2026-09-12 with a throwaway app -- no filter and `true` both
+      // passed all five names through, this list passed none. Each entry drops
+      // any variable whose NAME contains it. The Warden's real configuration
+      // arrives through --env-file above, which this does not touch.
+      filter_env: ["TOKEN", "SECRET", "_KEY", "PASSWORD", "CDP_", "CLOUDFLARE"],
       exec_mode: "fork",
       instances: 1,
       max_memory_restart: "512M",
