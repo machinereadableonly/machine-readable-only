@@ -2,6 +2,16 @@
 //
 //   node --env-file=.env tools/cdp-live-check.mjs
 //
+// Run it the way the Warden runs -- pinned to IPv4 -- or it tests a route the
+// Warden never takes (see the refusal message below):
+//
+//   node --dns-result-order=ipv4first --no-network-family-autoselection \
+//     --env-file=.env tools/cdp-live-check.mjs
+//
+// From a session shell, remember the environment beats --env-file: a CDP key
+// already in the shell is the one tested. `env -u CDP_API_KEY_ID -u
+// CDP_API_KEY_SECRET` in front tests the file's copy instead.
+//
 // test/cdp.test.mjs proves the token is a well-formed EdDSA JWT with the right
 // claims, verified against the public half of the signing key. It cannot prove
 // that CDP accepts it -- only CDP can say that, and until it does, "mainnet
@@ -51,12 +61,13 @@ if (res.status === 401 || res.status === 403) {
   console.error("\nREFUSED. No agent could pay on mainnet with these credentials.");
   console.error(body.slice(0, 400));
   console.error(
-    "\nThe token SHAPE is not the likely cause: it is transcribed from @coinbase/cdp-sdk's own\n" +
-      "generateJwt and pinned against it in test/cdp.test.mjs. Measured 2026-09-05, Coinbase's own\n" +
-      "generator was refused by this host with the same key -- which points at the CREDENTIAL:\n" +
-      "wrong project, never activated, revoked, or without x402 access. Check it in the CDP portal.\n" +
-      "To re-confirm that reading, generate a token with their SDK and send it yourself. If theirs\n" +
-      "is refused too, nothing in this repository is at fault."
+    "\nCHECK THE ROUTE BEFORE THE KEY. Measured 2026-09-12: this box prefers IPv6, and CDP refused\n" +
+      "the SAME key over IPv6 (401) while accepting it over IPv4 (200), three rounds each way -- the\n" +
+      "key's IP allowlist holds only the IPv4 address. Re-run pinned to IPv4:\n" +
+      "  node --dns-result-order=ipv4first --no-network-family-autoselection --env-file=.env tools/cdp-live-check.mjs\n" +
+      "Only if it is refused THAT way too, look at the credential in the CDP portal: wrong project,\n" +
+      "revoked, or without x402 access. The token SHAPE is not the likely cause: it is pinned against\n" +
+      "@coinbase/cdp-sdk's own generateJwt in test/cdp.test.mjs."
   );
   process.exit(1);
 }

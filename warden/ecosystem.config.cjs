@@ -29,7 +29,20 @@ module.exports = {
       // environment file. NOT the --env-file-if-exists variant: a missing
       // configuration file must stop the process, not start it with half its
       // settings.
-      node_args: ["--env-file=.env"],
+      //
+      // IPv4 ONLY, for every outgoing connection. This box prefers IPv6, and
+      // Coinbase's CDP facilitator refuses our key over IPv6 while accepting it
+      // over IPv4 -- measured 2026-09-12, three rounds each way, 401 against
+      // 200 (the key's IP allowlist holds the IPv4 address). BOTH flags are
+      // needed: the first orders DNS answers, the second stops Node racing an
+      // IPv6 connection anyway. Pinned for the whole process rather than per
+      // call, so the facilitator, the RPC and anything added later all leave
+      // from the one address an allowlist knows.
+      node_args: [
+        "--dns-result-order=ipv4first",
+        "--no-network-family-autoselection",
+        "--env-file=.env",
+      ],
       // THE SHELL'S SECRETS ARE NOT THIS PROCESS'S BUSINESS. PM2 copies the whole
       // environment of whoever ran `pm2 start` into the app, and every session
       // shell on this box loads the operator's infra secrets file -- so the
