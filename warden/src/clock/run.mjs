@@ -254,6 +254,17 @@ export async function runClock({
       summary.stuckMints.push(mint.tokenId);
       continue;
     }
+    // STALEDAY NEVER CLEARS FOR THIS ROW. The day the agent paid is more than
+    // MAX_CREATION_LAG behind the chain, and it only falls further behind, so
+    // the contract refuses the same argument every night. The agent has PAID:
+    // same treatment as a mint blocked by somebody else's token -- left queued
+    // for a human, never closed, and counted so the run fails.
+    if (result.errorName === "StaleDay") {
+      alert(`clock: mint ${mint.tokenId} was paid on day ${mint.day}, which the chain now refuses as StaleDay -- this PAID mint can never land and needs a human`);
+      summary.stuckMints = summary.stuckMints ?? [];
+      summary.stuckMints.push(mint.tokenId);
+      continue;
+    }
     alert(`clock: mint ${mint.tokenId} failed (${result.reason}${result.errorName ? ` ${result.errorName}` : ""})`);
     if (isRunLevel(result)) {
       // ABORT THE WRITES, NOT THE RUN. 4.L9: this used to `return summary`,

@@ -99,6 +99,14 @@ export function nextCursor(summary) {
  * `reservedAt`, so staleRows and the expiry sweep are both blind to it. This is
  * the only place it can be signalled.
  *
+ * A PAID MINT THAT CANNOT LAND UNDER ITS ID (`stuckMints`: a different token
+ * holds it, it cannot be identified, or the chain refuses its day as StaleDay)
+ * and A PAID MARK THE CHAIN REFUSED (`stuckMarks`) are failures too. Both were
+ * collected and alerted, and then not read here, so systemd recorded success
+ * on a night an agent's money sat in something that will never be written
+ * (found 2026-09-12). Both stay failing every night until a human acts, the
+ * same as a stuck mint.
+ *
  * A DROPPED seed is deliberately NOT a failure. The drop is the remedy: the
  * year is already back and the agent can ask again.
  */
@@ -106,7 +114,9 @@ export function exitCodeFor(summary) {
   if (!summary) return 1;
   if (summary.aborted) return 1;
   if ((summary.stuck?.length ?? 0) > 0) return 1;
+  if ((summary.stuckMints?.length ?? 0) > 0) return 1;
   if ((summary.stuckCredits?.length ?? 0) > 0) return 1;
   if ((summary.stuckSeeds?.length ?? 0) > 0) return 1;
+  if ((summary.stuckMarks?.length ?? 0) > 0) return 1;
   return 0;
 }

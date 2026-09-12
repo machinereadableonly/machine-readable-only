@@ -233,10 +233,9 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         // `authorization` flow settles after this function returns -- so a
         // refusal here still cancels it rather than charging for it. See
         // cancelSettlementOnRefusal in pay/x402.mjs.
-        // The binding is re-read HERE TOO. `fresh.keyId` below is the mirror's
-        // word, and a rebind mined during the settlement round trip would not
-        // be in it -- so without this the second check is blind to exactly the
-        // thing the first one was added to catch.
+        // The binding is re-read HERE TOO, from the CHAIN: a rebind mined during
+        // the settlement round trip is in no mirror. This read is the ONLY
+        // binding check after payment -- see the note on `blocked` below.
         const nowBlocked =
           (await paidWriteBlock(chain, { tokenId, q })) ??
           (await bindingBlock(chain, tokenId, ctx.keyId, keyIdToBytes32));
@@ -255,9 +254,15 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         const heldNow = fresh ? fresh.marks | q.reservedMask(tokenId) : 0;
         // EVERY gate, not a subset -- the same function the pre-payment block
         // runs, so the two cannot come apart when a Mark or a gate is added.
+        //
+        // NO MIRROR BINDING CHECK HERE, deliberately (removed 2026-09-12). It
+        // compared `fresh.keyId`, which is stale BY DESIGN until the next Clock
+        // run after a rebind (5.M2, at the top of this handler), so it refused
+        // every rebound agent AFTER the chain read above had admitted it --
+        // re-imposing, on the paid route only, the lockout 5.M2 removed. The
+        // chain read is the authority in both directions.
         const blocked =
           !fresh ? "unknown-token"
-          : fresh.keyId !== ctx.keyId ? "not-bound-to-caller"
           : q.markSold(upgradeId) >= mark.supply ? "mark-sold-out"
           : markGateBlock({ token: fresh, held: heldNow, mark, variant });
 
