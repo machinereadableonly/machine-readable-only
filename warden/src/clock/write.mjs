@@ -29,6 +29,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia, base } from "viem/chains";
 import { MRO_ABI } from "./abi.mjs";
 import { safeErrorText } from "./redact.mjs";
+import { BUILDER_CODE, builderCodeSuffix } from "./builder-code.mjs";
 
 /// Base's per-transaction gas cap is 16,777,216 (EIP-7825). The spec asserts
 /// below 15M, leaving room for the estimate to be optimistic.
@@ -60,9 +61,14 @@ export function makeWriter({
   maxGasGwei = "0.05",
   publicClient,
   walletClient,
+  builderCode = BUILDER_CODE,
   log = console.log,
 }) {
   const chain = chainFor(chainId);
+  // The Base Builder Code as an ERC-8021 calldata suffix, or undefined while no
+  // code has been issued (builder-code.mjs). Passed PER CALL below, not set on
+  // the client, so an injected client carries it too and no call can drop it.
+  const dataSuffix = builderCodeSuffix(builderCode);
   const account = walletClient?.account ?? privateKeyToAccount(privateKey);
   const pub = publicClient ?? createPublicClient({ chain, transport: http(rpcUrl) });
   const wallet =
@@ -114,7 +120,7 @@ export function makeWriter({
     // A simulation that reverts names the contract's own custom error, which is
     // what makes the re-chunk rule implementable rather than a bisect.
     try {
-      await pub.simulateContract({ address: contract, abi: MRO_ABI, functionName, args, account });
+      await pub.simulateContract({ address: contract, abi: MRO_ABI, functionName, args, account, dataSuffix });
     } catch (err) {
       const decoded = decodeContractError(err);
       return {
@@ -129,7 +135,9 @@ export function makeWriter({
     // SEPARATELY, because the simulate result has no gas on it.
     let gas;
     try {
-      gas = await pub.estimateContractGas({ address: contract, abi: MRO_ABI, functionName, args, account });
+      // The suffix is in the estimate too: its 29 bytes cost gas like any other
+      // calldata, so an estimate without them would under-count the send.
+      gas = await pub.estimateContractGas({ address: contract, abi: MRO_ABI, functionName, args, account, dataSuffix });
     } catch (err) {
       return { ok: false, reason: "gas-estimate-failed", detail: shortMessage(err) };
     }
@@ -164,6 +172,7 @@ export function makeWriter({
         chain,
         gas,
         nonce,
+        dataSuffix,
       });
     } catch (err) {
       // The nonce was NOT consumed by a send that never happened, so it is not
@@ -206,6 +215,8 @@ export function makeWriter({
     address: account.address,
     chain,
     contract,
+    /// The Builder Code attached to every send, or null while none is issued.
+    builderCode: builderCode ?? null,
     startRun,
     gasOk,
     send,

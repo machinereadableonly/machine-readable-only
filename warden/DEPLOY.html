@@ -500,6 +500,11 @@ correct today and wrong the moment the chain changes.</p>
 <td>the Clock REFUSES to start without it, before writing anything</td>
 </tr>
 <tr>
+<td><code>BUILDER_CODE</code></td>
+<td><code>src/clock/builder-code.mjs</code></td>
+<td>Base credits the piece&#39;s on-chain activity only through this ERC-8021 suffix, and a write sent without it can never be attributed afterwards. It is <code>null</code> until Base issues the code (registering a second app on the operator&#39;s Base account is blocked by base/docs#1950; Base&#39;s agent route, <code>POST api.base.dev/v1/agents/builder-codes</code> with the writer wallet, is the fallback). <strong>Nothing refuses to start without it</strong> -- the operator chose a checklist line over a startup refusal on 2026-09-12 -- so this row is the only guard. The Clock logs <code>builder code none yet</code> every run until it is set</td>
+</tr>
+<tr>
 <td>the Clock&#39;s gas float</td>
 <td>the warden wallet on mainnet</td>
 <td>writes are paid in real ETH, not testnet ETH</td>

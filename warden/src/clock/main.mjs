@@ -149,6 +149,9 @@ async function main() {
   }
 
   console.log(`clock: run starting, warden ${writer.address}, chain ${chainId}, day ${today}`);
+  // Said every run, so a mainnet night without attribution is visible in the
+  // log rather than discovered on a leaderboard. See builder-code.mjs.
+  console.log(`clock: builder code ${writer.builderCode ?? "none yet -- see DEPLOY.md section 10"}`);
 
   const summary = await runClock({
     q,

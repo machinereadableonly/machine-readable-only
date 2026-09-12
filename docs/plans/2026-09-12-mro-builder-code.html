@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan: attach a Base Builder Code to every transaction the Clock sends</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan: attach a Base Builder Code to every transaction the Clock sends</h1>
+<p>2026-09-12. Status: APPROVED by the operator 2026-09-12 WITHOUT step 3 (no
+mainnet guard) -- &quot;flag this in the mainnet plan&quot; instead: DEPLOY.md section 10
+carries a <code>BUILDER_CODE</code> row, and the Clock logs <code>builder code none yet</code> every
+run until it is set.</p>
+<h2>Why this matters</h2>
+<p>Base credits an app&#39;s on-chain activity -- App Leaderboards, the Base App store,
+future rewards -- only when each transaction carries the app&#39;s Builder Code as
+an ERC-8021 suffix on the end of its calldata. It has to be in place before the
+first mainnet write, or that history is credited to nobody. base-200 did this
+on 2026-09-12; the operator asked for the same here and for every Base project.</p>
+<p>We cannot get MRO&#39;s code yet: registering a second app on the operator&#39;s Base
+account is broken (open Base bug base/docs#1950), and the operator chose to wait
+for the fix. So this plan builds and proves the plumbing NOW, so that the day the
+code is issued it is a one-line change.</p>
+<h2>What was checked</h2>
+<ul>
+<li><strong>One place sends every transaction</strong>: <code>send()</code> in
+<code>warden/src/clock/write.mjs</code> -- simulate, estimate gas, send. The Clock is the
+only on-chain writer in the project (the agents&#39; USDC payments are settled by
+Coinbase&#39;s facilitator, which is not ours to tag).</li>
+<li><strong>No contract reads raw calldata</strong> (<code>msg.data</code>, <code>calldatasize</code>,
+<code>calldataload</code>: zero hits in <code>contracts/src</code>), so normal argument decoding
+ignores the extra bytes. Proved per function in step 4, not assumed.</li>
+<li><strong>viem 2.56.0 accepts <code>dataSuffix</code></strong> on <code>simulateContract</code>,
+<code>estimateContractGas</code> and <code>writeContract</code> (installed type definitions), and
+Base&#39;s official viem guide requires &gt;= 2.45.0.</li>
+<li><strong><code>ox/erc8021</code> already works in the Warden</strong> (ox 0.14.34, via viem):
+<code>Attribution.toDataSuffix</code> produces the same 29-byte schema-0 layout base-200
+ships. The bytes are not hand-rolled.</li>
+<li>Cost: 29 bytes of calldata, about 464 gas a transaction -- noise against the
+Clock&#39;s 500,000-gas chunk margin.</li>
+</ul>
+<h2>Steps</h2>
+<ol>
+<li><strong><code>warden/src/clock/builder-code.mjs</code></strong>: <code>BUILDER_CODE</code>, set to <code>null</code> until
+Base issues one, and the suffix derived from it with
+<code>Attribution.toDataSuffix</code>. A comment says it is public, not a secret (it is
+written into public calldata by design).</li>
+<li><strong><code>write.mjs</code></strong>: pass <code>dataSuffix</code> to all three calls in <code>send()</code> --
+simulate, estimate and send -- so the gas estimate includes the extra bytes.
+<code>makeWriter</code> takes the code as an injectable setting defaulting to the
+constant, so tests can exercise the &quot;code set&quot; path while it is <code>null</code>.</li>
+<li><strong>A mainnet guard</strong>: the Clock refuses to start on Base mainnet (8453) while
+<code>BUILDER_CODE</code> is <code>null</code>, with a message saying why. Same pattern as the
+placeholder-treasury refusal: a mainnet-only omission that no testnet run can
+surface. Base Sepolia runs as today.</li>
+<li><strong>Tests</strong>:<ul>
+<li>the suffix matches the ERC-8021 schema-0 layout rebuilt by hand from a test
+code (base-200&#39;s test, ported);</li>
+<li>through the REAL <code>send()</code>: the calldata sent ends in the suffix when a code
+is set and is byte-identical to today when it is <code>null</code>; simulate and
+estimate receive it too. Proved by breaking the wiring, not the helper;</li>
+<li>the mainnet guard refuses with no code and allows Sepolia;</li>
+<li><strong>a Foundry test that calls each function the Clock sends -- <code>mint</code>,
+<code>batchCheckIn</code>, <code>applyMark</code>, <code>seed</code> -- with and without a suffix and
+asserts identical state</strong>, so &quot;contracts ignore trailing bytes&quot; is pinned
+in the contracts suite for good.</li>
+</ul>
+</li>
+<li><code>DEPLOY.md</code> section 10 gains a Builder Code row; <code>.claude/rules/warden.md</code>
+gains one line.</li>
+<li>All four suites green, <code>prepublish-check</code> clean, commit.</li>
+</ol>
+<p>Nothing live changes: with the code <code>null</code>, the Clock&#39;s transactions are
+byte-identical to today&#39;s, so no restart is needed. Pushing needs the operator&#39;s
+approval as always.</p>
+<h2>The day the code is issued</h2>
+<p>Set <code>BUILDER_CODE</code>, update the test&#39;s expected code, run the suites, commit,
+push. The next Clock run carries it. Verify on the first real transaction: its
+input data must end in <code>8021</code> repeated eight times, and Base&#39;s Builder Code
+Validation tool should credit it.</p>
+<h2>Trade-off</h2>
+<p>The mainnet guard (step 3) makes the mainnet launch depend on having a code --
+from the dashboard once #1950 is fixed, or from Base&#39;s agent route
+(<code>POST api.base.dev/v1/agents/builder-codes</code> with the mainnet writer wallet) as a
+fallback. That is the point of the guard, but it is a real dependency. Drop
+step 3 if a launch without attribution should stay possible.</p>
+<h2>Also noted</h2>
+<p>The <code>base:app_id</code> tag stays PARKED (uncommitted in <code>warden/public/door.html</code>
+and <code>warden/test/door-page.test.mjs</code>) until a registration succeeds -- see the
+publish-readiness memory.</p>
+</body>
+</html>
