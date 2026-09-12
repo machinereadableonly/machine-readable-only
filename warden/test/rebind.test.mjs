@@ -84,6 +84,14 @@ test("upgrade admits a caller whose binding exists only on chain", async () => {
     r.reason, "not-bound-to-caller",
     "a rebound agent must not be refused something it is about to pay for",
   );
+  // THE ASSERTION ABOVE COULD NOT SEE THE FAILURE (found 2026-09-12). After
+  // payment the tool re-checked the binding against the MIRROR's key, so a
+  // rebound agent came back `paid-but-unavailable` with `not-bound-to-caller`
+  // in `detail` -- a different `reason`, so the line above stayed green while
+  // the agent was refused every paid Mark until the next Clock run. settleNow
+  // runs the paid half, and Hush has no gate this token misses, so the whole
+  // purchase must succeed.
+  assert.equal(r.ok, true, `a rebound agent must be able to BUY, got ${JSON.stringify(r)}`);
 });
 
 test("seed admits a caller whose binding exists only on chain", async () => {

@@ -182,6 +182,20 @@ test("a condemned credit alone fails the run", () => {
   assert.equal(exitCodeFor({ stuck: [], stuckCredits: [{ tokenId: 7, day: 20_700 }], aborted: null }), 1);
 });
 
+// Both of these were collected into the summary, alerted, and then ignored by
+// exitCodeFor, so systemd recorded success on a night an agent's money was in
+// a mint or a Mark that could not land (found 2026-09-12).
+test("a paid mint the chain will not take under its id fails the run", () => {
+  assert.equal(exitCodeFor({ stuck: [], stuckCredits: [], stuckMints: [7], aborted: null }), 1);
+});
+
+test("a paid Mark the chain refused fails the run", () => {
+  assert.equal(
+    exitCodeFor({ stuck: [], stuckCredits: [], stuckMarks: [{ tokenId: 7, upgradeId: 9 }], aborted: null }),
+    1,
+  );
+});
+
 test("a summary that is missing its arrays does not crash the exit path", () => {
   // A run that threw before filling the summary must still produce an exit
   // code. Reading `.length` off undefined here would turn a bad night into an

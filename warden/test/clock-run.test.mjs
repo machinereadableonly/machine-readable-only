@@ -286,6 +286,31 @@ test("a mint whose id cannot be identified on chain is left queued", async () =>
   assert.ok(alerts.some((a) => /could not be identified/.test(a)));
 });
 
+// StaleDay: the day the agent paid is more than MAX_CREATION_LAG behind the
+// chain, so this mint can never land -- the contract will refuse the same day
+// every night. It used to fall through to "stays queued" with one ordinary
+// alert a night and a clean exit. The agent has PAID, so it is a stuck mint:
+// left queued for a human, reported, and failing the run (found 2026-09-12).
+test("a mint the chain refuses as StaleDay is reported stuck, not retried in silence", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const alerts = [];
+  const summary = await runClock({
+    ...baseArgs(q),
+    writer: okWriter({
+      async send(fn, args, opts) {
+        assertEncodable(fn, args);
+        this.sent.push({ functionName: fn, args, label: opts?.label });
+        return { ok: false, reason: "reverted-on-simulate", errorName: "StaleDay", errorArgs: ["100", "200"] };
+      },
+    }),
+    alert: (m) => alerts.push(m),
+  });
+  assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued");
+  assert.deepEqual(summary.stuckMints, [1]);
+  assert.ok(alerts.some((a) => /StaleDay/.test(a) && /needs a human/.test(a)), JSON.stringify(alerts));
+});
+
 test("a Mark that lands is written and its bit is set", async () => {
   const { db, q } = mirror();
   queueMint(q, db, 1);
