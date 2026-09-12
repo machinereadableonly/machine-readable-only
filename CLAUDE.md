@@ -22,8 +22,8 @@ return visits, so the artwork is the agent's own history of coming back.
   and live.** Phase 0 is signed off, every review finding is closed, and the
   repository is PUBLIC. **There is no build work left that Claude can start
   alone** -- what remains is the operator's: the mainnet mint of token #1, a real
-  treasury, the CDP key into the Warden's own settings file (the key WORKS --
-  it was only ever refused over IPv6), the domain term, and X credentials.
+  treasury, the domain term, and X credentials. (The CDP key is DONE: it was
+  only ever refused over IPv6, and the Warden now runs pinned to IPv4.)
   For what to do next read the `publish-readiness` memory; for what exists read
   `build-status`; for the reviews read `reviews-closed`.
 - **The live deployment on Base Sepolia, chain 84532** -- the only pair to use:
