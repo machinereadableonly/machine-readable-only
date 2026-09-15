@@ -12,8 +12,9 @@
 // insertToken, setTokenAwaitingPayment), then settleByNonce -- what the payment
 // hook does when money moves -- then completeSolve, what the solver does. So a
 // schema or reservation change breaks this the way it would break production.
-// clock-rehearsal.mjs predates the reservation model and still calls insertMint
-// without a nonce; it is Sepolia-only and would crash if run today.
+// Its Sepolia predecessor, clock-rehearsal.mjs (and its wrapper rehearse.sh),
+// predated the reservation model and called insertMint without a nonce; it
+// was retired on 2026-09-15 at the operator's decision.
 //
 // SCRATCH ONLY. It seeds rows no agent paid for, so it refuses any database
 // that is not inside a rehearsal work directory -- never the Warden's mirror,
