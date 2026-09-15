@@ -4,7 +4,8 @@
 //
 //   cd warden && bash tools/mark-rehearse.sh <path-to-solved-bitmap-hex> [tokenId]
 //
-// WHY THIS EXISTS SEPARATELY FROM clock-rehearsal.mjs. That script proves the
+// WHY THIS EXISTS SEPARATELY FROM clock-rehearsal.mjs (retired 2026-09-15; the
+// mainnet path is mainnet-fork-rehearsal.sh). That script proved the
 // mint, the check-in, the re-chunk rule and reconcile, and it assumes a token
 // already on chain to credit. This one proves the single thing Plan 5 added and
 // nothing had ever exercised: applyMark reaching the chain with a variant. From

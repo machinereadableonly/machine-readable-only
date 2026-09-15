@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Which contract is this Warden configured to talk to?
 #
-# The wrapper exists for the same reason tools/rehearse.sh does: node loads the
+# The wrapper exists so that node loads the
 # configuration file itself, exactly as the systemd unit does, and nothing here
 # reads or prints it. The two values it does print -- a contract address and a
 # chain id -- are public by definition; they are on chain and in every token's

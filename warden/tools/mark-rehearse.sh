@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Prove a Mark lands on chain, with the real key. Sibling of tools/rehearse.sh.
+# Prove a Mark lands on chain, with the real key. (Its sibling tools/rehearse.sh
+# was retired on 2026-09-15; for the mainnet path see mainnet-fork-rehearsal.sh.)
 #
 #   cd warden && bash tools/mark-rehearse.sh <bitmap-hex-file> [tokenId]
 #
