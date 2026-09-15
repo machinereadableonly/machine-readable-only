@@ -466,10 +466,26 @@ Everything above is a Base Sepolia runbook. This section exists because that is
 easy to miss: sections 1 to 9 read as "the deploy", and following them with a
 mainnet chain id produces a piece that boots and cannot be used.
 
-**Nothing here has been rehearsed.** Base Sepolia cannot exercise any of it --
-its facilitator needs no key, its deploy block is already recorded, and its
-treasury is allowed to be a placeholder. Each item below is a value that is
-correct today and wrong the moment the chain changes.
+**REHEARSED 2026-09-15 on a fork of Base mainnet, and it now runs as one
+command:**
+
+```
+~/scripts/safe-build.sh bash warden/tools/mainnet-fork-rehearsal.sh
+```
+
+It forks Base mainnet into a local, disposable chain, then runs the steps
+below with the same scripts the day will run: the deploy, the read-back, the
+adoption, the Warden's mainnet boot against Coinbase's facilitator, the
+refusals, and the Clock writing a mint, a check-in and a Mark. It sends
+nothing to a real chain. **It must exit 0 before the real cutover starts.**
+Base Sepolia could exercise none of this: its facilitator needs no key, its
+deploy block is already recorded, and its treasury may be a placeholder. Each
+item below is a value that is correct today and wrong the moment the chain
+changes.
+
+What a fork cannot prove, and so stays a mainnet-day item: a real Coinbase
+settlement (a fork's payment would settle on real mainnet), OpenSea, and the
+handling of the real owner key.
 
 ### The values that must change together
 
@@ -480,15 +496,27 @@ correct today and wrong the moment the chain changes.
 | `TREASURY_ADDRESS` | the configuration file | a placeholder is REFUSED at startup off Sepolia; USDC sent to one is gone |
 | `X402_FACILITATOR_URL` | the configuration file | `https://api.cdp.coinbase.com/platform/v2/x402` -- the testnet host settles only Base Sepolia |
 | `CDP_API_KEY_ID` / `CDP_API_KEY_SECRET` | the configuration file | the CDP host answers 401 without them; the Warden REFUSES to start if the url is CDP's and these are unset |
-| `DEPLOY_BLOCK[8453]` | `src/clock/reconcile.mjs` | the Clock REFUSES to start without it, before writing anything |
+| `DEPLOY_BLOCK[8453]` | `src/clock/reconcile.mjs` | the Clock REFUSES to start without it, before writing anything (proven on the fork). `adopt-deployment.sh --chain 8453` writes it and keeps the Sepolia entry |
+| the mainnet Clock key | a NEW key, passed to `deploy-mainnet.sh --warden` and set as `CLOCK_PRIVATE_KEY` | the contract's warden is fixed at deploy; only `setWarden` corrects it afterwards |
 | `BUILDER_CODE` | `src/clock/builder-code.mjs` | Base credits the piece's on-chain activity only through this ERC-8021 suffix, and a write sent without it can never be attributed afterwards. It is `null` until Base issues the code (registering a second app on the operator's Base account is blocked by base/docs#1950; Base's agent route, `POST api.base.dev/v1/agents/builder-codes` with the writer wallet, is the fallback). **Nothing refuses to start without it** -- the operator chose a checklist line over a startup refusal on 2026-09-12 -- so this row is the only guard. The Clock logs `builder code none yet` every run until it is set |
 | the Clock's gas float | the warden wallet on mainnet | writes are paid in real ETH, not testnet ETH |
-| every QR bitmap | re-solved | a bitmap encodes its own url; nothing solved on Sepolia carries over |
+| every QR bitmap | solved at mint, from `MRO_DOMAIN` | a bitmap encodes its own url, so nothing solved on Sepolia carries over -- but mainnet tokens are solved fresh when they are minted (`main.mjs` builds the solver from `MRO_DOMAIN`), so this row is satisfied by `MRO_DOMAIN=machinereadableonly.com`. The rehearsal solves its token against that domain |
 | the testnet-preview section | `public/llms.txt` | it tells agents this is a rehearsal |
 | "It will be ready soon" | `public/door.html` | delete it the day the piece opens |
 | `MRO_SEED_TOKEN` | `~/.mro/seed.env` | it holds a rehearsal id that does not exist; the seed agent beats nothing until it is the real one |
 
 ### Before the cutover, in this order
+
+0. **Run the rehearsal, and do not start until it exits 0:**
+
+   ```
+   ~/scripts/safe-build.sh bash warden/tools/mainnet-fork-rehearsal.sh
+   ```
+
+   It is the whole list below, against a disposable fork of Base mainnet, with
+   the same scripts. It sends nothing to a real chain. Its report is in
+   `report.txt` in the work directory it names; the 2026-09-15 run is written
+   up in `docs/2026-09-15-mro-mainnet-rehearsal-report.md`.
 
 1. **Prove the facilitator credentials work**, because this is the one that
    fails silently in the direction of "nobody can enter":
@@ -514,20 +542,58 @@ correct today and wrong the moment the chain changes.
    IPv4. The 2026-09-05 reading -- that the key itself was bad -- never varied
    the route, and was wrong.
 
-2. **Record the deploy block.** After the mainnet contract is deployed, find the
-   block it landed in and add it to `DEPLOY_BLOCK` in `src/clock/reconcile.mjs`.
-   Until it is there the Clock refuses to run at all, which is deliberate: the
+2. **Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].** First the
+   simulation, then the send:
+
+   ```
+   cd ~/projects/machine-readable-only/contracts
+   bash script/deploy-mainnet.sh --warden <the mainnet Clock's address>
+   bash script/deploy-mainnet.sh --warden <the mainnet Clock's address> --broadcast
+   ```
+
+   It states chain 8453, refuses any `--warden` that is not EIP-55, signs with
+   `MAINNET_DEPLOYER_KEY` (which becomes the permanent owner; `MroScript`
+   refuses the throwaway spike key), gates on `test/ContractSize.t.sol` and the
+   ABI pin, and prints the renderer and token. Rehearsed on the fork with
+   `--fork`; the real run differs only in the RPC and the key.
+
+3. **Read it back, against mainnet:**
+
+   ```
+   cd ../warden
+   node tools/check-deployed-abi.mjs <token> https://mainnet.base.org
+   node tools/read-ladder.mjs <token> https://mainnet.base.org
+   ```
+
+4. **Adopt it, which also records the deploy block:**
+
+   ```
+   bash contracts/script/adopt-deployment.sh --chain 8453 <renderer> <token> <deploy-block>
+   ```
+
+   The deploy block is the block of the FIRST deploy transaction (forge's
+   `broadcast/DeployPlan5.s.sol/8453/run-latest.json`). Until it is recorded the
+   Clock refuses to run at all -- proven on the fork -- which is deliberate: the
    alternative was doing every write and then failing on the last step, every
    night, with the mirror never learning about a `rest`, a transfer or a rebind.
 
-3. **Re-solve every bitmap** against the real domain. See CLAUDE.md; this is not
-   optional and not reversible after a mint.
+5. **Change the settings together, rehearse the start, then restart.** The
+   operator sets the rows in the table above in the Warden's settings file (and
+   the Clock's key) via WinSCP. Then, before PM2 sees them:
 
-4. **Restart and verify.** `pm2 restart mro-warden`, then section 9's checks,
-   then confirm the boot log says `payment ready` -- on a non-Sepolia chain the
-   Warden now EXITS rather than running on with payment unavailable.
+   ```
+   bash warden/tools/rehearse-start.sh
+   ```
 
-5. **Mint token #1 and start the seed agent -- [OPERATOR GATE, real funds].**
+   It now runs the Warden with the same IPv4 flags PM2 uses, and must print
+   `payment ready (eip155:8453 via https://api.cdp.coinbase.com/...)`. Then
+   `pm2 restart mro-warden`, section 9's checks, and the same boot line in the
+   log -- on a non-Sepolia chain the Warden EXITS rather than running on with
+   payment unavailable, and it refuses a placeholder treasury outright (both
+   proven on the fork). Bitmaps need nothing: they are solved at mint from
+   `MRO_DOMAIN`.
+
+6. **Mint token #1 and start the seed agent -- [OPERATOR GATE, real funds].**
    This is C4.5, and it is the last step because it is the one that cannot be
    undone: token #1 is minted once, and the first 72 hours happen once.
 
@@ -549,6 +615,16 @@ correct today and wrong the moment the chain changes.
    when given, so pass it: 1000000 is 1 USDC in base units. The client also
    refuses any scheme other than `exact`, which is the one that means a single
    transfer with no standing allowance.
+
+   **`--to` MUST BE ABLE TO RECEIVE AN ERC-721.** `mint` ends in `_safeMint`,
+   which calls `onERC721Received` on any recipient that has code, and the
+   Warden does not check the recipient before taking payment. The 2026-09-15
+   rehearsal proved it on a fork: a paid mint to an EIP-7702-delegated account
+   can NEVER land, retries every night until StaleDay, and condemns any
+   check-in queued behind it. Use a plain wallet (no code) or one known to
+   implement `onERC721Received`, and check with `cast code <address>` -- `0x`
+   means no code. Whether the Warden should refuse such a recipient before
+   payment is an open operator decision (the rehearsal report, finding F5).
 
    **Take the treasury address from somewhere other than the site**, which is
    what SKILL.md tells every other agent to do. If the value you check against
