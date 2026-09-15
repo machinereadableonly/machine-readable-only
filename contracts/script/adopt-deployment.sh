@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 #
-# Point this repository at a NEW Base Sepolia deployment, everywhere at once.
+# Point this repository at a NEW deployment, everywhere at once.
 #
 #   bash contracts/script/adopt-deployment.sh <renderer> <token> <deploy-block>
+#   bash contracts/script/adopt-deployment.sh --chain 8453 <renderer> <token> <deploy-block>
+#
+# --chain says which chain the deploy block belongs to; the default is Base
+# Sepolia (84532). It used to be Sepolia-only by construction: the Clock's
+# DEPLOY_BLOCK was rewritten with a pattern that matched `{ 84532: ... }` and
+# nothing else, so a MAINNET adoption would have failed at exactly the step
+# that keeps the Clock from mis-running (found 2026-09-15). That step is now
+# set-deploy-block.sh, which keeps every other chain's entry.
 #
 # WHY ONE SCRIPT RATHER THAN A CHECKLIST. The address is in nine places across
 # five kinds of file -- served copy, the reference copy inside the skill, a
@@ -20,6 +28,16 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 export PATH="$HOME/.foundry/bin:$PATH"
+
+CHAIN=84532
+if [ "${1:-}" = "--chain" ]; then
+  CHAIN="${2:?--chain needs a chain id}"
+  shift 2
+fi
+case "$CHAIN" in
+  84532|8453) ;;
+  *) echo "FAIL: --chain must be 84532 (Base Sepolia) or 8453 (Base mainnet), got '$CHAIN'" >&2; exit 1 ;;
+esac
 
 NEW_REN="${1:?renderer address}"
 NEW_TOK="${2:?token address}"
@@ -149,19 +167,10 @@ done
 
 # The Clock reads DEPLOY_BLOCK at STARTUP and refuses without one for its chain,
 # so a redeploy that forgets this stops the Clock rather than mis-running it.
-# The number is grouped the way the file already writes it.
-GROUPED=$(echo "$NEW_BLOCK" | sed -E ':a;s/([0-9])([0-9]{3})(_|$)/\1_\2\3/;ta')
-sed -i -E "s/^export const DEPLOY_BLOCK = \{ 84532: [0-9_]+n \};/export const DEPLOY_BLOCK = { 84532: ${GROUPED}n };/" \
-  warden/src/clock/reconcile.mjs
-# ASSERTED, NOT ASSUMED. `sed -i` succeeds when its pattern matches nothing, so
-# a reformatted line here would silently leave the Clock pointed at the previous
-# deployment's block -- and the Clock refuses to start without one for its
-# chain, so it would stop rather than mis-run. Checking is one line.
-if ! /bin/grep -q "^export const DEPLOY_BLOCK = { 84532: ${GROUPED}n };" warden/src/clock/reconcile.mjs; then
-  echo "FAIL: DEPLOY_BLOCK was not set to $GROUPED -- edit warden/src/clock/reconcile.mjs by hand" >&2
-  exit 1
-fi
-/bin/grep -n "^export const DEPLOY_BLOCK" warden/src/clock/reconcile.mjs
+# set-deploy-block.sh writes THIS chain's entry, keeps every other chain's,
+# asserts the result rather than assuming it, and is tested on its own
+# (warden/test/set-deploy-block.test.mjs).
+bash contracts/script/set-deploy-block.sh "$CHAIN" "$NEW_BLOCK" warden/src/clock/reconcile.mjs
 
 # THE SKILL'S COPY IS A COPY, byte for byte. It is the same document reaching
 # agents by a second route, and a skill that quotes a different address from the
