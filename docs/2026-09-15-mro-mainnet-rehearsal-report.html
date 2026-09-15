@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Report: the mainnet cutover, rehearsed on a Base mainnet fork (2026-09-15)</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Report: the mainnet cutover, rehearsed on a Base mainnet fork (2026-09-15)</h1>
+<p>Plan: <code>docs/plans/2026-09-15-mro-mainnet-rehearsal.md</code>. This is testnet
+coverage Phase 5.</p>
+<h2>The headline</h2>
+<p><strong>The cutover now runs end to end, as one command, and it passed.</strong></p>
+<pre><code>~/scripts/safe-build.sh bash warden/tools/mainnet-fork-rehearsal.sh
+</code></pre>
+<p>Run 3 of the rehearsal passed every step. It forked real Base mainnet at block
+51,341,835 into a local, disposable chain. Nothing was sent to a real chain. Real
+mainnet was only read: its state, its gas price, and its fee oracle.</p>
+<p>It also found <strong>one real mainnet risk that needs the operator&#39;s decision</strong> (F5
+below).</p>
+<h2>What passed (run 3)</h2>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Export the working tree; fork mainnet with <code>--prune-history</code></td>
+<td>PASS; <code>~/.foundry/anvil/tmp</code> stayed at 4 KB</td>
+</tr>
+<tr>
+<td><code>deploy-mainnet.sh --fork --broadcast</code></td>
+<td>PASS; 12 transactions, 8,001,122 gas</td>
+</tr>
+<tr>
+<td><code>check-deployed-abi.mjs</code>, <code>read-ladder.mjs</code> against the fork</td>
+<td>PASS; the ABI describes the bytecode, and the ten Marks match the spec</td>
+</tr>
+<tr>
+<td>Owner is the deploying key; warden is the <code>--warden</code> key</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>adopt-deployment.sh --chain 8453</code> in the exported copy</td>
+<td>PASS; <code>{ 84532: 46_686_660n, 8453: 51_341_836n }</code></td>
+</tr>
+<tr>
+<td>The Warden booted in mainnet mode through <code>rehearse-start.sh</code></td>
+<td>PASS; <code>payment ready (eip155:8453 via https://api.cdp.coinbase.com/platform/v2/x402, ...)</code></td>
+</tr>
+<tr>
+<td>The <code>0x...dEaD</code> treasury on 8453</td>
+<td>REFUSED, for the right reason: &quot;TREASURY_ADDRESS is a placeholder ... and chain 8453 is not Base Sepolia&quot;</td>
+</tr>
+<tr>
+<td>The Clock with no <code>DEPLOY_BLOCK[8453]</code></td>
+<td>REFUSED before writing anything</td>
+</tr>
+<tr>
+<td>The Clock&#39;s gas guard (the fork prices at about 1 gwei; the cap is 0.05)</td>
+<td>HELD; nothing written, exit 0</td>
+</tr>
+<tr>
+<td>The Clock: a mint, then a check-in and a Mark two days on</td>
+<td>PASS; 356,650 / 42,643 / 62,722 gas</td>
+</tr>
+<tr>
+<td>Reconcile</td>
+<td>PASS; read <code>Minted: 1</code> back from the fork</td>
+</tr>
+<tr>
+<td>A paid mint to an EIP-7702-delegated wallet</td>
+<td>cannot land, as asserted (F5)</td>
+</tr>
+</tbody></table>
+<h2>Findings</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>F1</td>
+<td>There was no mainnet deploy wrapper: <code>deploy-plan7.sh</code> hard-codes Base Sepolia.</td>
+<td><strong>Fixed</strong> in <code>b478404</code>: <code>contracts/script/deploy-mainnet.sh</code>, run on the fork.</td>
+</tr>
+<tr>
+<td>F2</td>
+<td><code>adopt-deployment.sh</code> could only record a Sepolia deploy block.</td>
+<td><strong>Fixed</strong> in <code>b478404</code>: <code>--chain</code>, plus <code>set-deploy-block.sh</code> with its own test.</td>
+</tr>
+<tr>
+<td>F3</td>
+<td><code>rehearse-start.sh</code> ran node without the ecosystem&#39;s IPv4 flags, so a mainnet rehearsal would have tested the CDP key over IPv6, where it is refused.</td>
+<td><strong>Fixed</strong> in <code>b478404</code>.</td>
+</tr>
+<tr>
+<td>F4</td>
+<td><code>warden/tools/clock-rehearsal.mjs</code> is stale. It calls <code>insertMint</code> without the payment nonce required since 2026-09-05, so it would crash, and it is Sepolia-only.</td>
+<td>Open. Superseded for mainnet by <code>mainnet-fork-clock.mjs</code>. Update it or retire it.</td>
+</tr>
+<tr>
+<td><strong>F5</strong></td>
+<td><strong>A paid mint to a recipient that cannot receive an ERC-721 can never land.</strong> <code>mint</code> ends in <code>_safeMint</code> (<code>MachineReadableOnly.sol:399</code>), which calls <code>onERC721Received</code> on any recipient with code. The Warden takes the payment without checking the recipient. On the fork, the anvil test accounts carry an EIP-7702 delegation inherited from real mainnet (<code>0xef0100</code> followed by <code>8a67b502...</code>), and a mint to one fails every run.</td>
+<td><strong>Operator decision.</strong> See below.</td>
+</tr>
+<tr>
+<td>F6</td>
+<td>A revert raised by the recipient&#39;s own code is not in MRO&#39;s ABI, so the Clock logs a bare <code>reverted-on-simulate</code> with no error name.</td>
+<td>Open; it follows from F5.</td>
+</tr>
+<tr>
+<td>F7</td>
+<td>A mint that cannot land takes the check-in queued behind it down with it: <code>NoSuchToken</code>, then <code>stuckCredits</code>, then exit 1. Fork run 2 showed exactly this. It is the path-inventory flag 3.16, made concrete.</td>
+<td>Open; it follows from F5.</td>
+</tr>
+<tr>
+<td>F8</td>
+<td>The gas guard works in mainnet mode. Real Base was at 0.006 gwei, well under the 0.05 cap.</td>
+<td>Proven.</td>
+</tr>
+<tr>
+<td>F9</td>
+<td>The Builder Code is still null, so every mainnet write would go unattributed.</td>
+<td>Known; waits on base/docs#1950.</td>
+</tr>
+<tr>
+<td>F10</td>
+<td>Section 10&#39;s &quot;re-solve every bitmap&quot; is satisfied by configuration: bitmaps are solved at mint from <code>MRO_DOMAIN</code>.</td>
+<td>Proven; DEPLOY.md corrected.</td>
+</tr>
+<tr>
+<td>F11</td>
+<td><code>https://mainnet.base.org</code> refused requests after about five quick calls during measurement.</td>
+<td>Note. The production Warden and Clock should not depend on the public endpoint under load.</td>
+</tr>
+</tbody></table>
+<h3>F5: the decision</h3>
+<p>On mainnet, agents increasingly pay from smart wallets or EIP-7702-delegated
+accounts, and the client sends whatever <code>--to</code> the operator gives it. There
+are three options:</p>
+<ol>
+<li><strong>Refuse before payment (recommended).</strong> Before issuing a payment demand,
+the Warden asks whether <code>--to</code> can receive: if the address has code, it
+calls <code>onERC721Received</code> on it and requires the ERC-721 magic value. An
+agent is then refused with a clear reason and pays nothing. This changes the
+Warden only; no redeploy.</li>
+<li><strong>Change <code>mint</code> to use <code>_mint</code>.</strong> Anything can then receive a token,
+including contracts that can never move it. This changes the contract, and
+mainnet is not deployed yet, so it is still possible.</li>
+<li><strong>Document it only</strong>, in SKILL.md and llms.txt: <code>--to</code> must be an ordinary
+wallet or one that accepts ERC-721. This is cheapest, and it relies on every
+agent reading the documentation.</li>
+</ol>
+<p>Seeds are not affected in the same way: <code>seed</code> treats <code>ERC721InvalidReceiver</code>
+as a permanent refusal and hands the seed back, and nobody paid for it.</p>
+<h2>What it costs on real Base mainnet</h2>
+<p>Gas used was measured on the fork. The gas price, 0.006 gwei, was read live
+from <code>mainnet.base.org</code> on 2026-09-15. Base&#39;s L1 data fee was measured live
+with the GasPriceOracle predeploy, <code>getL1Fee</code> (version 1.6.0), on each
+transaction&#39;s real calldata. ETH was $2,474.43 at Coinbase spot that day.</p>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>L2 gas</th>
+<th>Total ETH</th>
+<th>USD</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Deploy, all 12 transactions</td>
+<td>8,001,122</td>
+<td>0.000048160</td>
+<td>about $0.12</td>
+</tr>
+<tr>
+<td>One mint</td>
+<td>356,650</td>
+<td>0.000002141</td>
+<td>about $0.005</td>
+</tr>
+<tr>
+<td>One check-in (a one-entry batch)</td>
+<td>42,643</td>
+<td>0.000000257</td>
+<td>about $0.0006</td>
+</tr>
+<tr>
+<td>One Mark</td>
+<td>62,722</td>
+<td>0.000000377</td>
+<td>about $0.0009</td>
+</tr>
+<tr>
+<td>A night&#39;s 100-entry check-in batch</td>
+<td>907,196 (estimated)</td>
+<td>0.000005446</td>
+<td>about $0.014</td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>The L1 data fee is about 0.3% of each total</strong>, so L2 execution dominates.</li>
+<li>Of the deploy&#39;s L1 fee, five of the twelve transactions were measured. The
+other seven are identical-size Mark writes, taken as equal to the three
+measured ones.</li>
+<li>The 100-entry batch&#39;s L2 gas comes from the anvil-measured 30,896 gas per
+transaction plus 8,763 per entry. Its L1 fee was measured.</li>
+<li><strong>These figures move with the gas price.</strong> The Clock&#39;s cap of 0.05 gwei is
+about eight times that day&#39;s price, and above it the Clock writes nothing
+and waits.</li>
+</ul>
+<h2>What the rehearsal cannot prove</h2>
+<ul>
+<li>A real Coinbase settlement.</li>
+<li>OpenSea.</li>
+<li>The handling of the real owner key.</li>
+</ul>
+<p>These stay mainnet-day items; see DEPLOY.md section 10.</p>
+</body>
+</html>
