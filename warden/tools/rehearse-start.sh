@@ -121,8 +121,26 @@ NODE_BIN="$HOME/.nvm/versions/node/v24.14.1/bin/node"
 [ -x "$NODE_BIN" ] || NODE_BIN="$(command -v node)"
 
 cd "$WARDEN_DIR"
+
+# THE SAME INTERPRETER FLAGS PM2 USES, read from ecosystem.config.cjs rather than
+# copied here. This ran bare `node` until 2026-09-15, so it never took the two
+# IPv4 flags production runs with -- and Coinbase's facilitator refuses the key
+# over IPv6 and accepts it over IPv4 (measured 2026-09-12). A mainnet-mode
+# rehearsal would therefore have reported "payment NOT ready" for a Warden that
+# production would start cleanly: a rehearsal that is not the real start path.
+# `--env-file` is left out of the list because this script supplies its own.
+NODE_FLAGS=$("$NODE_BIN" -e '
+  const app = require(process.argv[1]).apps[0];
+  process.stdout.write((app.node_args ?? []).filter((f) => !f.startsWith("--env-file")).join(" "));
+' "$WARDEN_DIR/ecosystem.config.cjs") || {
+  echo "rehearse: could not read node_args from ecosystem.config.cjs -- refusing to rehearse a different start" >&2
+  exit 2
+}
+echo "rehearse: interpreter flags from ecosystem.config.cjs: ${NODE_FLAGS:-none}"
+
+# shellcheck disable=SC2086  # NODE_FLAGS is a list of separate flags, split on purpose
 timeout --preserve-status -s TERM "$SECONDS_TO_RUN" \
-  "$NODE_BIN" --env-file="$REHEARSAL_ENV" src/main.mjs 2>&1 | sed 's/^/  /'
+  "$NODE_BIN" $NODE_FLAGS --env-file="$REHEARSAL_ENV" src/main.mjs 2>&1 | sed 's/^/  /'
 STATUS="${PIPESTATUS[0]}"
 
 echo "--- end of service output ---"

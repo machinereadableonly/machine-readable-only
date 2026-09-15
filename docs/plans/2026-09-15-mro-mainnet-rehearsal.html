@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan: rehearse the mainnet cutover on a Base mainnet fork (testnet coverage, Phase 5)</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan: rehearse the mainnet cutover on a Base mainnet fork (testnet coverage, Phase 5)</h1>
+<p><strong>Status:</strong> proposed 2026-09-15, awaiting the operator&#39;s approval.
+<strong>After completing any operator-only step, tell the assistant so it can update memory immediately.</strong></p>
+<h2>Why</h2>
+<p>A mainnet deploy is permanent (Hard Rule 1), and <code>warden/DEPLOY.md</code> section 10
+says of the cutover, in so many words: &quot;Nothing here has been rehearsed.&quot; Every
+other phase of the testnet coverage work ran on Base Sepolia, and Sepolia cannot
+exercise this part: its facilitator needs no key, its treasury may be a
+placeholder, and its deploy block is already recorded.</p>
+<p>A <strong>fork</strong> of Base mainnet closes that gap for free. <code>anvil --fork-url</code> runs a
+local copy of the real mainnet state -- real USDC contract, real chain id 8453 --
+that no one else can see, costs nothing, and is thrown away afterwards. Every
+cutover step can run against it with the same scripts that will run on the day.</p>
+<p>It unblocks the operator&#39;s mainnet steps (C4.5 onward): they should start from a
+cutover that has been run once end to end, not from a checklist.</p>
+<h2>What research already found (2026-09-15, before touching anything)</h2>
+<ol>
+<li><strong>There is no mainnet deploy wrapper.</strong> <code>contracts/script/deploy-plan7.sh</code>
+hard-codes the chain (84532), the RPC and the Sepolia Clock&#39;s address. The
+Solidity script under it, <code>DeployPlan5.s.sol</code>, DOES support mainnet --
+<code>guardChain()</code> and a separate <code>MAINNET_DEPLOYER_KEY</code> that refuses the
+throwaway key -- but nothing calls it for mainnet.</li>
+<li><strong><code>adopt-deployment.sh</code> cannot adopt a mainnet deploy.</strong> It sets
+<code>DEPLOY_BLOCK</code> with a pattern that matches only <code>{ 84532: ... }</code>
+(line 154), and asserts that shape; a mainnet adoption would fail there.</li>
+<li><strong><code>rehearse-start.sh</code> does not run the Warden the way PM2 does.</strong> It starts
+node without the two IPv4 flags from <code>ecosystem.config.cjs</code>, so a mainnet
+rehearsal would test the Coinbase key over IPv6 -- where it is refused -- and
+report a failure that production would not have.</li>
+<li><strong><code>clock-rehearsal.mjs</code> is Base Sepolia only</strong> (it throws on any other chain).</li>
+</ol>
+<p>And one worry that turned out not to apply: <strong>bitmaps are solved at mint time</strong>
+from <code>MRO_DOMAIN</code> (<code>main.mjs:80</code>, <code>:382</code>), so &quot;re-solve every bitmap&quot; in
+section 10 is satisfied by configuration. The rehearsal confirms it.</p>
+<h2>Steps</h2>
+<h3>A. Repository fixes (tests first where they can be tested; all four suites before each commit)</h3>
+<ol>
+<li><strong><code>contracts/script/deploy-mainnet.sh</code></strong> -- the mainnet wrapper. States chain
+8453, defaults to <code>https://mainnet.base.org</code>, takes the Warden (Clock)
+address as a REQUIRED argument (the mainnet Clock is a new key, chosen at
+cutover), broadcasts only on the literal <code>--broadcast</code>, and runs the same
+build, size check and ABI pin as today. A <code>--fork &lt;url&gt;</code> mode for rehearsal
+only: it refuses any address that is not loopback and signs with anvil&#39;s
+public test key, so the rehearsal can never touch the real mainnet key.</li>
+<li><strong><code>adopt-deployment.sh --chain &lt;id&gt;</code></strong> -- records <code>DEPLOY_BLOCK</code> for the named
+chain and keeps the other chain&#39;s entry; the default stays 84532. Proven
+against a scratch copy both ways before it is trusted.</li>
+<li><strong><code>rehearse-start.sh</code></strong> reads the interpreter flags from
+<code>ecosystem.config.cjs</code>, so a rehearsal runs exactly as PM2 does.</li>
+<li><strong><code>warden/tools/mainnet-fork-rehearsal.sh</code></strong> -- one script that runs part B
+end to end, committed so the same run can be repeated on cutover day.</li>
+</ol>
+<h3>B. The rehearsal (one run; the fork is thrown away at the end)</h3>
+<ol start="5">
+<li>Start anvil forking Base mainnet at a pinned block, loopback only, with
+<code>--prune-history</code> (the 2026-09-11 disk incident), inside <code>safe-build.sh</code>;
+check <code>~/.foundry/anvil/tmp</code> afterwards.</li>
+<li>Deploy with <code>deploy-mainnet.sh --fork</code>; then <code>forge build --sizes</code>,
+<code>check-deployed-abi.mjs</code> and <code>read-ladder.mjs</code> against the fork.</li>
+<li><code>adopt-deployment.sh --chain 8453</code> on an exported copy of the repository,
+never the repository itself; confirm <code>DEPLOY_BLOCK[8453]</code>.</li>
+<li>Boot the Warden in mainnet mode against the fork with <code>rehearse-start.sh</code>
+(chain 8453, the fork contract, Coinbase&#39;s facilitator, a non-placeholder
+treasury). Expected: decoder verified, day matches, the treasury&#39;s balance
+read from the real mainnet USDC contract, and <code>payment ready</code> for
+<code>eip155:8453</code>. Also the refusal: the <code>0x...dEaD</code> placeholder on 8453 must
+stop it starting.</li>
+<li>The Clock in mainnet mode against the fork: without a deploy block it must
+refuse; with one, a mint (solved against <code>machinereadableonly.com</code>), a
+check-in and a reconcile, with the real gas used recorded.</li>
+<li><strong>A cost table at today&#39;s Base mainnet gas price:</strong> the deploy, one mint,
+one day&#39;s check-in batch, one Mark -- what the operator will actually pay.</li>
+</ol>
+<h3>C. Report</h3>
+<ol start="11">
+<li>Findings, plus DEPLOY.md section 10 rewritten as the ordered checklist the
+rehearsal actually ran, rendered to HTML and committed.</li>
+</ol>
+<h2>What a fork cannot prove</h2>
+<ul>
+<li><strong>A real Coinbase settlement.</strong> A payment made on the fork would settle on
+real mainnet, not on the fork; only the facilitator&#39;s handshake
+(<code>/supported</code>) can be exercised, and it is free.</li>
+<li><strong>OpenSea</strong>, and <strong>the real owner key</strong> (a hardware wallet or a Safe is the
+treasury decision, C4.7). Those stay mainnet-day items.</li>
+</ul>
+<h2>Cost, risk, and what cannot be undone</h2>
+<ul>
+<li><strong>Nothing irreversible and no real funds.</strong> The fork is local and disposable;
+anvil&#39;s test keys hold only fork money.</li>
+<li><strong>The auto-mode safety check may block the assistant</strong> from starting anvil or
+signing on the fork, as it did for the testnet transactions. If so, the
+operator runs the rehearsal as one script, as in Phase 3.</li>
+<li><strong>Memory is tight on this box</strong> (background tasks have been killed three
+times). anvil runs capped by <code>safe-build.sh</code>, and the rehearsal is one
+foreground run rather than a long-lived background process.</li>
+<li><strong>Parts A1-A3 change operator tooling</strong> that the real cutover will use. That is
+the point -- the day should run tooling that has been run -- and each change is
+tested before it is trusted.</li>
+</ul>
+<h2>Not in this plan</h2>
+<ul>
+<li>Any real mainnet transaction, in any form.</li>
+<li>The treasury, the domain term, the owner key, the X credentials (operator
+items C4.5-C4.8).</li>
+</ul>
+</body>
+</html>
