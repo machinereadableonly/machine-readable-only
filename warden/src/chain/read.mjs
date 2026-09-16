@@ -56,6 +56,12 @@ const SUPPLY_CAP = "0x8f770ad0"; // supplyCap() -> uint32
 const SEEDS_AVAILABLE = "0xb3451815"; // seedsAvailable(uint256) -> uint32
 const IS_SUNSET = "0x90b8b0c8"; // isSunset() -> bool
 const IS_PAUSED = "0x5c975abb"; // paused() -> bool
+// onERC721Received(address,address,uint256,bytes). THE SELECTOR AND THE MAGIC
+// VALUE ARE THE SAME FOUR BYTES -- a conforming receiver returns its own
+// msg.sig, which is why solady's Receiver implements all three token callbacks
+// by returning the selector it was called with.
+const ON_ERC721_RECEIVED = "0x150b7a02";
+const ZERO_ADDRESS = "0x" + "00".repeat(20);
 const WORD_HEX_CHARS = 64; // 32 bytes, as hex
 const CALL_TIMEOUT_MS = 3000;
 
@@ -127,6 +133,54 @@ export function makeChainReader({
    * between "the answer is no" and "we could not ask", and every caller here
    * treats the second as a refusal rather than an admission.
    */
+  /**
+   * One JSON-RPC call to ANY method, distinguishing the three outcomes.
+   *
+   * `{ ok: true, result }`, or `{ ok: false, kind: "revert" }` when the node
+   * reported an execution revert, or `{ ok: false, kind: "transport" }` for
+   * everything else.
+   *
+   * WHY THIS IS SEPARATE FROM ethCall BELOW rather than a refactor of it.
+   * ethCall's contract is "null on ANY failure", which is exactly right for
+   * the view functions: a reverted `viewOf` and a dead provider both mean
+   * "could not ask", and every caller refuses. The receiver check is the one
+   * question where a REVERT IS THE ANSWER -- the recipient will not take the
+   * token -- while a dead provider still means "could not ask". Collapsing the
+   * two would either charge an agent for a mint that cannot land, or tell an
+   * agent with a working wallet that its wallet is broken. ethCall is
+   * load-bearing for every gate, so it is left exactly as it is.
+   */
+  async function rpcCall(method, params) {
+    let res;
+    try {
+      res = await fetchImpl(rpcUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+      });
+    } catch {
+      return { ok: false, kind: "transport" };
+    }
+    if (!res.ok) return { ok: false, kind: "transport" };
+    let body;
+    try {
+      body = await res.json();
+    } catch {
+      return { ok: false, kind: "transport" };
+    }
+    if (body.error) {
+      // Told apart by the error itself, and this is the fragile seam: both a
+      // revert and a rate limit arrive as an error object on a 200. Erring
+      // towards "transport" is the safe direction -- it costs a retry, where
+      // the other way refuses a wallet that was fine.
+      const isRevert = body.error.code === 3 || /revert/i.test(String(body.error.message ?? ""));
+      return { ok: false, kind: isRevert ? "revert" : "transport" };
+    }
+    if (typeof body.result !== "string") return { ok: false, kind: "transport" };
+    return { ok: true, result: body.result };
+  }
+
   async function ethCall(data) {
     let res;
     try {
@@ -295,6 +349,58 @@ export function makeChainReader({
         return "sunset";
       }
       return paused ? "paused" : null;
+    },
+
+    /**
+     * Can this address actually HOLD an ERC-721?
+     *
+     * true, false, or null when the chain could not be asked. Null is "could
+     * not ask" and the gate refuses on it -- it is never read as "no".
+     *
+     * WHY (F5, found on a Base mainnet fork 2026-09-15). `mint` ends in
+     * `_safeMint`, which calls `onERC721Received` on any recipient WITH CODE
+     * and reverts unless it answers the magic value. The Warden took payment
+     * without asking, so a mint to such an address was charged for and then
+     * reverted on simulate every night, forever, taking the check-in queued
+     * behind it down too. anvil's stock accounts carry an EIP-7702 delegation
+     * on real mainnet, and every fork mint to one failed.
+     *
+     * THIS EXCLUDES NOBODY THE CONTRACT WOULD HAVE ACCEPTED. It refuses the
+     * same addresses `_safeMint` already refuses, before the money moves
+     * rather than after.
+     *
+     * A codeless address is accepted without a second round trip, because
+     * `_safeMint` makes no callback to one either.
+     */
+    async canReceiveERC721(address) {
+      const code = await rpcCall("eth_getCode", [address, "latest"]);
+      if (!code.ok) {
+        noteTransportFailure();
+        return null;
+      }
+      // An ordinary wallet: no code, no callback, nothing to ask.
+      if (code.result === "0x" || code.result === "0x0") return true;
+
+      // Built by hand, like every other call here. The tail is the empty
+      // `bytes data` argument: offset 0x80, then length 0.
+      const data =
+        ON_ERC721_RECEIVED +
+        addressArg(ZERO_ADDRESS) + // operator
+        addressArg(ZERO_ADDRESS) + // from, which is what _safeMint passes
+        "0".repeat(64) + // tokenId: any id, since the id is not yet assigned
+        (128).toString(16).padStart(64, "0") +
+        "0".repeat(64);
+
+      // FROM THE TOKEN CONTRACT, because a receiver may accept only from the
+      // collection it expects. Simulating from the zero address would answer a
+      // different question from the one the mint will really ask.
+      const answer = await rpcCall("eth_call", [{ to: address, from: contract, data }, "latest"]);
+      if (!answer.ok) {
+        if (answer.kind === "revert") return false;
+        noteTransportFailure();
+        return null;
+      }
+      return answer.result.slice(0, 10).toLowerCase() === ON_ERC721_RECEIVED;
     },
 
     /**

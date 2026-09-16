@@ -2,7 +2,7 @@
 import * as z from "zod";
 import { onChainBy } from "../nextSteps.mjs";
 import { MINT_PRICE, MINT_RESOURCE } from "../../pay/x402.mjs";
-import { paidWriteBlock, requireChain } from "../gates.mjs";
+import { paidWriteBlock, requireChain, RECIPIENT_REMEDY } from "../gates.mjs";
 import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
 
 export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
@@ -16,7 +16,7 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
       description:
         `Costs ${MINT_PRICE} in USDC on Base. One per key. Returns immediately with your token id; the artwork is solved within the hour and written on chain at 00:05 UTC. The first call answers with an x402 payment demand; repeat the identical call with the signed authorisation under \`_meta["x402/payment"]\`.`,
       inputSchema: z.object({
-        to: z.string().regex(/^0x[0-9a-fA-F]{40}$/, "expected a 20-byte address").describe("The Base address that will OWN the token: your operator's wallet, usually. Your signing key grows the token; this address owns it and can sell, rebind or seal it."),
+        to: z.string().regex(/^0x[0-9a-fA-F]{40}$/, "expected a 20-byte address").describe("The Base address that will OWN the token: your operator's wallet, usually. Your signing key grows the token; this address owns it and can sell, rebind or seal it. It must be able to hold an ERC-721 -- an ordinary wallet, or a contract with onERC721Received. This is checked before you are asked to pay."),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
@@ -32,7 +32,15 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
       // payment: charging for a mint the chain will refuse is the worst failure
       // this tool has.
       const blocked = await paidWriteBlock(chain, { to: args.to, mints: true });
-      if (blocked) return { ok: false, reason: blocked };
+      if (blocked) {
+        // One refusal here is the agent's own address choice rather than a
+        // fact about the piece, and it is fixable in a single retry -- so it
+        // is the one that names its remedy. `to` is the OWNER address the
+        // agent supplied, not the agent.
+        return blocked === "recipient-cannot-receive"
+          ? { ok: false, reason: blocked, detail: RECIPIENT_REMEDY }
+          : { ok: false, reason: blocked };
+      }
 
       // Expire reservations nobody paid for BEFORE deciding anything. The
       // unique index on mints.keyId is what makes one mint per key real, and a

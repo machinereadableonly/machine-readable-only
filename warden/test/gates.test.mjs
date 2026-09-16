@@ -8,7 +8,7 @@
 // to revert.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chainBlock, tokenBlock, walletCapBlock, supplyBlock, paidWriteBlock, requireChain } from "../src/mcp/gates.mjs";
+import { chainBlock, tokenBlock, walletCapBlock, supplyBlock, receiverBlock, paidWriteBlock, requireChain } from "../src/mcp/gates.mjs";
 import { makeChainReader, SUNSET_CACHE_MS } from "../src/chain/read.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
@@ -18,7 +18,7 @@ import { makeCheckinTool } from "../src/mcp/tools/checkin.mjs";
 import { makeSeedTool } from "../src/mcp/tools/seed.mjs";
 import {
   openChain, sunsetChain, pausedChain, unreadableChain,
-  restingChain, unknownTokenChain, walletFullChain, supplyFullChain,
+  restingChain, unknownTokenChain, walletFullChain, supplyFullChain, nonReceiverChain,
 } from "./chain-stub.mjs";
 
 const TO = "0x" + "11".repeat(20);
@@ -97,6 +97,45 @@ test("paidWriteBlock asks the supply cap only for a call that MINTS", async () =
   assert.equal(asked, 1);
 });
 
+// --- the receiver gate (F5) ------------------------------------------------
+//
+// `mint` ends in `_safeMint`, which calls `onERC721Received` on any recipient
+// that has code and reverts unless it answers the magic value. The Warden took
+// the payment without ever asking, so a mint to such an address was charged
+// for, queued, and then reverted on simulate EVERY night, forever: the agent
+// paid a dollar for a token that could never exist.
+//
+// Measured on a Base MAINNET fork, 2026-09-15: anvil's test accounts carry an
+// EIP-7702 delegation inherited from real mainnet, and every mint to one
+// failed. That is not an exotic case -- it is where agent wallets are going.
+//
+// This gate excludes NOBODY the contract would have accepted. It refuses the
+// same addresses `_safeMint` already refuses, before the money moves instead
+// of after.
+test("receiverBlock passes an ordinary wallet and refuses one that cannot receive", async () => {
+  assert.equal(await receiverBlock(openChain(), TO), null);
+  assert.equal(await receiverBlock(nonReceiverChain(), TO), "recipient-cannot-receive");
+});
+
+test("receiverBlock refuses an unreadable chain rather than assuming it can receive", async () => {
+  // THE NULL RULE, the same one every gate in this file follows. Admitting on
+  // "could not ask" is what costs an agent a payment for a write that was
+  // always going to revert.
+  assert.equal(await receiverBlock(unreadableChain(), TO), "chain-unavailable");
+});
+
+test("paidWriteBlock asks the receiver gate only when there is a recipient", async () => {
+  // `upgrade` buys a Mark and mints nothing, so it has no recipient and must
+  // not pay for the read. Same shape as the supply-cap test above.
+  let asked = 0;
+  const counting = () =>
+    openChain({ canReceiveERC721: async () => { asked += 1; return false; } });
+  assert.equal(await paidWriteBlock(counting(), {}), null);
+  assert.equal(asked, 0, "upgrade must not pay for a read its write never makes");
+  assert.equal(await paidWriteBlock(counting(), { to: TO }), "recipient-cannot-receive");
+  assert.equal(asked, 1);
+});
+
 test("a tool factory refuses to build without a chain reader", () => {
   for (const make of [makeMintTool, makeUpgradeTool, makeCheckinTool, makeSeedTool]) {
     assert.throws(() => make({ q: {}, paid: settleNow, supplyCap: 10, today: () => 1, catalogue: {} }),
@@ -119,6 +158,12 @@ test("a tool factory refuses to build without a chain reader", () => {
   const { seedsAvailable, ...missingSeeds } = openChain();
   assert.throws(() => makeSeedTool({ q: {}, chain: missingSeeds, today: () => 1 }),
     /requires a chain reader with seedsAvailable\(\)/);
+  // And the newest again, `canReceiveERC721` (F5, 2026-09-16). A reader
+  // without it would throw at the first mint rather than at build time -- on
+  // the one call where an agent's money is already in flight.
+  const { canReceiveERC721, ...missingReceiver } = openChain();
+  assert.throws(() => makeMintTool({ q: {}, chain: missingReceiver, paid: settleNow, today: () => 1 }),
+    /requires a chain reader with canReceiveERC721\(\)/);
 });
 
 // THE DOUBLE MUST CARRY THE REAL THING'S SURFACE. A stub that implements only
@@ -144,6 +189,9 @@ for (const [label, chain, reason] of [
   // money genuinely moved.
   ["a full collection", supplyFullChain, "supply-cap-reached"],
   ["an unreachable chain", unreadableChain, "chain-unavailable"],
+  // F5. The refusal an agent would otherwise have PAID for and received
+  // nothing from: the write reverts on simulate every night, forever.
+  ["a recipient that cannot hold an ERC-721", nonReceiverChain, "recipient-cannot-receive"],
 ]) {
   test(`mint refuses ${label} without ever requesting payment`, async () => {
     const q = queries(openDb(":memory:"));
