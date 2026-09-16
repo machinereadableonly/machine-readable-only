@@ -47,6 +47,10 @@ export function openChain({ boundTo = "k1", ...overrides } = {}) {
     // answering a large number would hide every off-by-one in the subtraction
     // `seedBudgetBlock` does against the mirror's reservations.
     seedsAvailable: async () => 1,
+    // Can the recipient hold an ERC-721? An open chain's `to` is an ordinary
+    // wallet, which is what almost every --to is. True rather than null: null
+    // is "could not ask" and refuses.
+    canReceiveERC721: async () => true,
     ...overrides,
   };
 }
@@ -62,6 +66,7 @@ export const unreadableChain = () =>
     supplyRoom: async () => null,
     boundKeyOf: async () => null,
     seedsAvailable: async () => null,
+    canReceiveERC721: async () => null,
   });
 export const restingChain = () =>
   openChain({
@@ -76,6 +81,12 @@ export const walletFullChain = () => openChain({ walletRoomFor: async () => 0 })
 export const supplyFullChain = () => openChain({ supplyRoom: async () => 0 });
 /// The parent's key has no seed left for this agent-year: NoSeedAvailable().
 export const noSeedChain = () => openChain({ seedsAvailable: async () => 0 });
+
+/// A recipient with code that does not answer onERC721Received: `_safeMint`
+/// reverts, so the mint can never land however many times it is retried. The
+/// live shape of this is an EIP-7702-delegated wallet whose delegate has no
+/// such callback.
+export const nonReceiverChain = () => openChain({ canReceiveERC721: async () => false });
 
 /// A chain whose ids are already taken, so freeIdFrom must skip past them.
 export const takenIdsChain = (taken = [1]) =>

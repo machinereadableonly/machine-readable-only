@@ -101,6 +101,42 @@ export async function seedBudgetBlock(chain, q, parentId, keyId) {
 }
 
 /**
+ * Refuse when the recipient cannot hold an ERC-721.
+ *
+ * Mirrors no named MRO error, which is what makes it different from every
+ * other gate here: the revert comes from OpenZeppelin's `_safeMint` calling
+ * `onERC721Received` on the recipient, or from the recipient's own code. It is
+ * not in our ABI, so the Clock could only ever log a bare
+ * `reverted-on-simulate` for it (F6).
+ *
+ * THE COST OF NOT HAVING THIS, measured on a Base mainnet fork 2026-09-15: the
+ * agent pays, the mint is queued, and it reverts on simulate every night
+ * forever -- and a check-in queued behind it is condemned `NoSuchToken` into
+ * `stuckCredits`, so one bad recipient also fails the whole Clock run (F7).
+ *
+ * IT EXCLUDES NOBODY THE CONTRACT WOULD ACCEPT. `--to` is the OWNER address the
+ * agent names, not the agent itself, so a refusal costs a retry with a
+ * different address and no money at all.
+ */
+export async function receiverBlock(chain, to) {
+  const canReceive = await chain.canReceiveERC721(to);
+  if (canReceive === null) return "chain-unavailable";
+  return canReceive ? null : "recipient-cannot-receive";
+}
+
+/**
+ * What to tell an agent that named an address which cannot hold the token.
+ *
+ * A bare reason would leave it guessing at a problem it can fix in one call,
+ * and the cold-read work says an agent acts on a refusal only when the refusal
+ * names the remedy.
+ */
+export const RECIPIENT_REMEDY =
+  "That address has code that does not accept ERC-721 tokens -- a contract with no " +
+  "onERC721Received, or a delegated wallet whose delegate has none. Nothing was charged. " +
+  "Call mint again with an ordinary wallet address, or one that accepts ERC-721.";
+
+/**
  * Every gate a PAID write needs, in one call.
  *
  * `to` is optional: `upgrade` does not mint anything, so it has no wallet cap
@@ -112,13 +148,16 @@ export async function seedBudgetBlock(chain, q, parentId, keyId) {
  * in gate order wins so the answer is stable rather than a race.
  */
 export async function paidWriteBlock(chain, { tokenId, to, q, mints = false } = {}) {
-  const [contractState, token, wallet, supply] = await Promise.all([
+  const [contractState, token, wallet, supply, receiver] = await Promise.all([
     chainBlock(chain),
     tokenId === undefined ? null : tokenBlock(chain, tokenId, q),
     to === undefined ? null : walletCapBlock(chain, to),
     mints ? supplyBlock(chain) : null,
+    // Keyed off `to` like the wallet cap, and for the same reason: a write
+    // with no recipient has nothing to deliver to. `upgrade` never asks.
+    to === undefined ? null : receiverBlock(chain, to),
   ]);
-  return contractState ?? token ?? wallet ?? supply ?? null;
+  return contractState ?? token ?? wallet ?? supply ?? receiver ?? null;
 }
 
 /**
@@ -159,7 +198,7 @@ export function requireChain(chain, toolName) {
   // not hypothetical: `chain.freeIdFrom is not a function` reached production
   // in 2026-09-03 while every tool test passed, because the test double had the
   // methods the doubles were written with rather than the ones the code calls.
-  for (const method of ["writesOpen", "lifecycleOf", "walletRoomFor", "supplyRoom", "freeIdFrom", "boundKeyOf", "seedsAvailable"]) {
+  for (const method of ["writesOpen", "lifecycleOf", "walletRoomFor", "supplyRoom", "freeIdFrom", "boundKeyOf", "seedsAvailable", "canReceiveERC721"]) {
     if (typeof chain?.[method] !== "function") {
       throw new Error(`${toolName} requires a chain reader with ${method}()`);
     }

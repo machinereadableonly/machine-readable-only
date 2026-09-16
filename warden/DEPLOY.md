@@ -616,15 +616,20 @@ handling of the real owner key.
    refuses any scheme other than `exact`, which is the one that means a single
    transfer with no standing allowance.
 
-   **`--to` MUST BE ABLE TO RECEIVE AN ERC-721.** `mint` ends in `_safeMint`,
-   which calls `onERC721Received` on any recipient that has code, and the
-   Warden does not check the recipient before taking payment. The 2026-09-15
-   rehearsal proved it on a fork: a paid mint to an EIP-7702-delegated account
-   can NEVER land, retries every night until StaleDay, and condemns any
-   check-in queued behind it. Use a plain wallet (no code) or one known to
-   implement `onERC721Received`, and check with `cast code <address>` -- `0x`
-   means no code. Whether the Warden should refuse such a recipient before
-   payment is an open operator decision (the rehearsal report, finding F5).
+   **`--to` MUST BE ABLE TO RECEIVE AN ERC-721, and since 2026-09-16 the
+   Warden enforces it.** `mint` ends in `_safeMint`, which calls
+   `onERC721Received` on any recipient that has code. F5 was decided as option
+   1, so `receiverBlock` checks the recipient BEFORE any payment demand: one
+   that cannot hold the token is refused `recipient-cannot-receive` with a
+   remedy line, and nothing is charged. The 2026-09-15 rehearsal proved why on
+   a fork: a paid mint to an EIP-7702-delegated account can NEVER land, retries
+   every night until StaleDay, and condemns any check-in queued behind it.
+
+   Use a plain wallet (no code) or one known to implement `onERC721Received`;
+   `cast code <address>` returning `0x` means no code. **The gate covers the
+   mint TOOL only.** A row seeded straight into the mirror bypasses it -- which
+   is exactly how the fork rehearsal creates the failing case -- so any path
+   that does not go through `mint` still needs this checked by hand.
 
    **Take the treasury address from somewhere other than the site**, which is
    what SKILL.md tells every other agent to do. If the value you check against

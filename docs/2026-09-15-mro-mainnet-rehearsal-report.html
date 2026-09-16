@@ -84,7 +84,7 @@ coverage Phase 5.</p>
 <p>Run 3 of the rehearsal passed every step. It forked real Base mainnet at block
 51,341,835 into a local, disposable chain. Nothing was sent to a real chain. Real
 mainnet was only read: its state, its gas price, and its fee oracle.</p>
-<p>It also found <strong>one real mainnet risk that needs the operator&#39;s decision</strong> (F5
+<p>It also found <strong>one real mainnet risk, decided and closed on 2026-09-16</strong> (F5
 below).</p>
 <h2>What passed (run 3)</h2>
 <table>
@@ -174,8 +174,8 @@ below).</p>
 </tr>
 <tr>
 <td><strong>F5</strong></td>
-<td><strong>A paid mint to a recipient that cannot receive an ERC-721 can never land.</strong> <code>mint</code> ends in <code>_safeMint</code> (<code>MachineReadableOnly.sol:399</code>), which calls <code>onERC721Received</code> on any recipient with code. The Warden takes the payment without checking the recipient. On the fork, the anvil test accounts carry an EIP-7702 delegation inherited from real mainnet (<code>0xef0100</code> followed by <code>8a67b502...</code>), and a mint to one fails every run.</td>
-<td><strong>Operator decision.</strong> See below.</td>
+<td><strong>A paid mint to a recipient that cannot receive an ERC-721 can never land.</strong> <code>mint</code> ends in <code>_safeMint</code> (<code>MachineReadableOnly.sol:399</code>), which calls <code>onERC721Received</code> on any recipient with code. The Warden took the payment without checking the recipient. On the fork, the anvil test accounts carry an EIP-7702 delegation inherited from real mainnet (<code>0xef0100</code> followed by <code>8a67b502...</code>), and a mint to one fails every run.</td>
+<td><strong>DECIDED AND BUILT 2026-09-16: option 1</strong>, the Warden refuses before payment (<code>receiverBlock</code>). See below.</td>
 </tr>
 <tr>
 <td>F6</td>
@@ -209,6 +209,19 @@ below).</p>
 </tr>
 </tbody></table>
 <h3>F5: the decision</h3>
+<p><strong>DECIDED AND BUILT, 2026-09-16: option 1.</strong> <code>receiverBlock</code> in
+<code>warden/src/mcp/gates.mjs</code> reads the code at <code>--to</code> and, when there is any,
+simulates <code>onERC721Received</code> from the token contract&#39;s own address and requires
+the magic value. An unreadable RPC refuses rather than admits, like every other
+gate. The refusal names the remedy, because <code>--to</code> is the OWNER address the
+agent supplied rather than the agent itself: a refused agent passes a different
+address and mints, having paid nothing. It excludes no address the contract
+would have accepted -- <code>_safeMint</code> already refuses exactly this set, and the
+only change is that the refusal now happens before the money moves.</p>
+<p>Options 2 and 3 were considered and are recorded below as they stood. Option 2
+remains available until the mainnet deploy, and was declined for now because a
+token minted into an address that cannot move it is frozen in ownership
+forever: never transferable, never rebindable, never sealable.</p>
 <p>On mainnet, agents increasingly pay from smart wallets or EIP-7702-delegated
 accounts, and the client sends whatever <code>--to</code> the operator gives it. There
 are three options:</p>

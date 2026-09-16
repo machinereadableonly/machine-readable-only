@@ -15,7 +15,7 @@ Run 3 of the rehearsal passed every step. It forked real Base mainnet at block
 51,341,835 into a local, disposable chain. Nothing was sent to a real chain. Real
 mainnet was only read: its state, its gas price, and its fee oracle.
 
-It also found **one real mainnet risk that needs the operator's decision** (F5
+It also found **one real mainnet risk, decided and closed on 2026-09-16** (F5
 below).
 
 ## What passed (run 3)
@@ -43,7 +43,7 @@ below).
 | F2 | `adopt-deployment.sh` could only record a Sepolia deploy block. | **Fixed** in `b478404`: `--chain`, plus `set-deploy-block.sh` with its own test. |
 | F3 | `rehearse-start.sh` ran node without the ecosystem's IPv4 flags, so a mainnet rehearsal would have tested the CDP key over IPv6, where it is refused. | **Fixed** in `b478404`. |
 | F4 | `warden/tools/clock-rehearsal.mjs` is stale. It calls `insertMint` without the payment nonce required since 2026-09-05, so it would crash, and it is Sepolia-only. | **Retired** the same day at the operator's decision, with its wrapper `rehearse.sh`. Superseded for mainnet by `mainnet-fork-clock.mjs`. |
-| **F5** | **A paid mint to a recipient that cannot receive an ERC-721 can never land.** `mint` ends in `_safeMint` (`MachineReadableOnly.sol:399`), which calls `onERC721Received` on any recipient with code. The Warden takes the payment without checking the recipient. On the fork, the anvil test accounts carry an EIP-7702 delegation inherited from real mainnet (`0xef0100` followed by `8a67b502...`), and a mint to one fails every run. | **Operator decision.** See below. |
+| **F5** | **A paid mint to a recipient that cannot receive an ERC-721 can never land.** `mint` ends in `_safeMint` (`MachineReadableOnly.sol:399`), which calls `onERC721Received` on any recipient with code. The Warden took the payment without checking the recipient. On the fork, the anvil test accounts carry an EIP-7702 delegation inherited from real mainnet (`0xef0100` followed by `8a67b502...`), and a mint to one fails every run. | **DECIDED AND BUILT 2026-09-16: option 1**, the Warden refuses before payment (`receiverBlock`). See below. |
 | F6 | A revert raised by the recipient's own code is not in MRO's ABI, so the Clock logs a bare `reverted-on-simulate` with no error name. | Open; it follows from F5. |
 | F7 | A mint that cannot land takes the check-in queued behind it down with it: `NoSuchToken`, then `stuckCredits`, then exit 1. Fork run 2 showed exactly this. It is the path-inventory flag 3.16, made concrete. | Open; it follows from F5. |
 | F8 | The gas guard works in mainnet mode. Real Base was at 0.006 gwei, well under the 0.05 cap. | Proven. |
@@ -52,6 +52,21 @@ below).
 | F11 | `https://mainnet.base.org` refused requests after about five quick calls during measurement. | Note. The production Warden and Clock should not depend on the public endpoint under load. |
 
 ### F5: the decision
+
+**DECIDED AND BUILT, 2026-09-16: option 1.** `receiverBlock` in
+`warden/src/mcp/gates.mjs` reads the code at `--to` and, when there is any,
+simulates `onERC721Received` from the token contract's own address and requires
+the magic value. An unreadable RPC refuses rather than admits, like every other
+gate. The refusal names the remedy, because `--to` is the OWNER address the
+agent supplied rather than the agent itself: a refused agent passes a different
+address and mints, having paid nothing. It excludes no address the contract
+would have accepted -- `_safeMint` already refuses exactly this set, and the
+only change is that the refusal now happens before the money moves.
+
+Options 2 and 3 were considered and are recorded below as they stood. Option 2
+remains available until the mainnet deploy, and was declined for now because a
+token minted into an address that cannot move it is frozen in ownership
+forever: never transferable, never rebindable, never sealable.
 
 On mainnet, agents increasingly pay from smart wallets or EIP-7702-delegated
 accounts, and the client sends whatever `--to` the operator gives it. There
