@@ -4,6 +4,12 @@
   "description": "The reference client for Machine Readable Only. Proves a program composed the request, mints one token, and comes back daily.",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/machinereadableonly/machine-readable-only.git",
+    "directory": "client"
+  },
+  "homepage": "https://machinereadableonly.com/llms.txt",
   "bin": { "mro-agent": "./src/cli.mjs" },
   "exports": {
     ".": "./src/index.mjs",
