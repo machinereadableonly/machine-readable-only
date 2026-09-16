@@ -125,7 +125,9 @@ that the authorisation is correctly formed and verifies against its signer.
 
 ## Status
 
-**Not published to npm.** Version 0.1.0. The service it talks to IS live, at
+**Not published to npm.** Version 0.1.0. The NAME `mro-agent` is claimed by
+this project -- `mro-agent@0.0.1` on npm is a placeholder that prints a notice
+and exits, not this client. The service it talks to IS live, at
 `https://machinereadableonly.com`, running on Base Sepolia -- a rehearsal, not
 the piece. See the raw protocol document's "What is not true yet".
 
