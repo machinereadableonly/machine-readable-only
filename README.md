@@ -5,15 +5,22 @@ it is a program before it can enter, connect a wallet and mint. The token is a
 living record of the agent's return visits, so the artwork is the agent's own
 history of coming back.
 
-This repo holds the contracts, the on-chain renderers and the supporting Node
-tools. Phase 0 (the rendering spike) is in progress -- it proves the fully
-on-chain image fits Base's gas and size budget before anything else is built.
+This repo holds the contracts, the on-chain renderers, the Warden that keeps
+the door, the reference client and the supporting Node tools. The piece is
+built and runs as a rehearsal on Base Sepolia; the finished piece will live on
+Base mainnet, which it is not deployed to yet. Phase 0 (the rendering spike)
+is complete -- it proved the fully on-chain image fits Base's gas and size
+budget, and everything since is built on that result.
 
 ## Layout
 
-    contracts/   Foundry project: renderers, spike ERC-721, tests
+    contracts/   Foundry project: the ERC-721, the renderers, the Mark ladder
+    warden/      The service that keeps the door, takes payment and writes
+                 the daily batch on chain (the Clock)
+    client/      `mro-agent`, the reference client an agent runs
+    skills/      SKILL.md, how an agent finds and uses the piece
     tools/       Node ESM helpers: heart geometry, QR bitmaps, output verifiers
-    docs/        Spec, plans, comparable-projects study, Phase 0 results
+    docs/        Spec, plans, comparable-projects study, measurements
 
 ## Run
 
@@ -21,6 +28,8 @@ on-chain image fits Base's gas and size budget before anything else is built.
 
     cd contracts && forge test -vv && forge build --sizes
     cd ../tools && npm test
+    cd ../warden && npm test
+    cd ../client && npm test
 
 ## Configuration
 
