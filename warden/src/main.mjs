@@ -317,6 +317,10 @@ async function main() {
   );
   const llmsTxt = readFileSync(fileURLToPath(new URL("../public/llms.txt", import.meta.url)), "utf8");
   const doorHtml = readFileSync(fileURLToPath(new URL("../public/door.html", import.meta.url)), "utf8");
+  // The crawl rules. Read here with the other public documents rather than
+  // left to nginx, for the same permission reason recorded in server.mjs --
+  // and because a robots.txt that 4xx's states no rule at all (RFC 9309).
+  const robotsTxt = readFileSync(fileURLToPath(new URL("../public/robots.txt", import.meta.url)), "utf8");
   // The MCP discovery card, read from the REPOSITORY ROOT rather than copied
   // into public/. It is the same document that would be published to the
   // official MCP registry, and a second copy on disk is a second thing to keep
@@ -371,6 +375,7 @@ async function main() {
     // through rather than serving them itself -- see the note in server.mjs.
     doorHtml,
     llmsTxt,
+    robotsTxt,
     serverCard,
   });
 

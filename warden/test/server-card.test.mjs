@@ -109,6 +109,26 @@ test("the card states the entry condition rather than leaving a client to discov
   assert.equal(meta.docs, "https://machinereadableonly.com/llms.txt");
 });
 
+test("the card names no package that is not published", () => {
+  // MEASURED 2026-09-16: this card carried `"client": "npx mro-agent"` while
+  // registry.npmjs.org/mro-agent answered 404. The name is unclaimed, so an
+  // agent that read our own discovery card and followed it would have run
+  // whatever a stranger chose to publish under that name. We served the
+  // instruction; the supply chain was somebody else's to fill.
+  //
+  // llms.txt and SKILL.md were both already honest about this ("NOT
+  // PUBLISHED, and the name is unclaimed", `PENDING-BEFORE-MAINNET-package`).
+  // The card was the one document that disagreed, which is the whole reason
+  // this is pinned by test rather than fixed once.
+  //
+  // The rule is the same one /.well-known/x402 obeys below: only advertise a
+  // capability we HAVE. When `mro-agent` is really on npm, this test is what
+  // deliberately goes red, and the line comes back with the publication.
+  const meta = CARD._meta["com.machinereadableonly/entry"];
+  assert.equal(meta.client, undefined, "no client may be advertised until the package is published");
+  assert.doesNotMatch(RAW, /npx /, "the card must not tell an agent to run an unclaimed package name");
+});
+
 // -- what is actually served ------------------------------------------------
 
 test("every discovery path serves the card, byte for byte", async () => {

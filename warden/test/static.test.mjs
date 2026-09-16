@@ -14,10 +14,12 @@
 // readers are the ones who already know everything the documents say.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createServer } from "../src/server.mjs";
 
 const DOOR = "<!doctype html><title>door</title>";
 const LLMS = "# what this piece is\n";
+const ROBOTS = "User-agent: *\nDisallow:\n";
 
 async function start(overrides = {}) {
   const server = createServer({
@@ -30,6 +32,7 @@ async function start(overrides = {}) {
     allowRegistration: () => true,
     doorHtml: DOOR,
     llmsTxt: LLMS,
+    robotsTxt: ROBOTS,
     ...overrides,
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -123,6 +126,110 @@ test("the two unbuilt documents 404, which is what llms.txt promises", async () 
   } finally {
     server.close();
   }
+});
+
+// -- robots.txt -------------------------------------------------------------
+//
+// Added 2026-09-16, after an outside-in probe measured /robots.txt answering
+// 401 to an unsigned request. The gate bought nothing there: RFC 9309 section
+// 2.3.1.3 says that if the status code indicates robots.txt is UNAVAILABLE --
+// which every 4xx is -- "the crawler MAY access any resources on the server".
+// So a gated robots.txt is not a stricter robots.txt, it is NO robots.txt,
+// and it costs us the ability to state any rule at all.
+//
+// It is public for the same reason the door page, llms.txt and the discovery
+// card are: the reader it exists for is the one who has not been admitted.
+
+test("GET /robots.txt serves rules as plain text, unsigned", async () => {
+  const { server, base } = await start();
+  try {
+    const res = await fetch(`${base}/robots.txt`);
+    assert.equal(res.status, 200, "a 4xx here means 'no rules', not 'no crawling'");
+    assert.match(res.headers.get("content-type"), /text\/plain/);
+    assert.equal(await res.text(), ROBOTS);
+    assert.equal(res.headers.get("content-length"), String(Buffer.byteLength(ROBOTS)));
+  } finally {
+    server.close();
+  }
+});
+
+test("robots.txt is served even when the door would refuse the caller", async () => {
+  // Proven by contrast, like the documents above: the same unsigned caller
+  // that reads the rules is refused at /mcp.
+  const { server, base } = await start();
+  try {
+    assert.equal((await fetch(`${base}/robots.txt`)).status, 200);
+    const gated = await fetch(`${base}/mcp`, { method: "POST", body: "{}" });
+    assert.equal(gated.status, 401, "/mcp must still be gated");
+  } finally {
+    server.close();
+  }
+});
+
+test("a Warden built without robots.txt 404s it rather than throwing", async () => {
+  const { server, base } = await start({ robotsTxt: undefined });
+  try {
+    assert.equal((await fetch(`${base}/robots.txt`)).status, 404);
+  } finally {
+    server.close();
+  }
+});
+
+// THE GUARD THAT MATTERS. A robots.txt is a list of urls written for a reader
+// who will not check them, which is the same shape as the `/skill.md` promise
+// this project shipped broken for weeks: llms.txt committed that the url would
+// never move while the server answered 404 to it. Both halves were tested; the
+// JOIN between them was not.
+//
+// So this reads the REAL file off disk and follows every path it names,
+// exactly as a crawler would. An Allow: line pointing at nothing is the same
+// defect wearing different clothes.
+test("every path the real robots.txt names is actually served", async () => {
+  const real = readFileSync(new URL("../public/robots.txt", import.meta.url), "utf8");
+  // `/t/` needs a token view to serve anything: the default helper answers
+  // null for every id, and a 404 from that would be this test failing on its
+  // own fixture rather than on the rules it is meant to check.
+  // Two fixtures the default helper does not supply, both needed because the
+  // rules name their paths: a token view for `/t/`, and a discovery card for
+  // `/.well-known/`. Without them this test would fail on its own setup
+  // rather than on the rules -- which is how it failed when first written.
+  const { server, base } = await start({
+    robotsTxt: real,
+    tokenView: () => ({ tokenId: 1, level: 1 }),
+    serverCard: JSON.stringify({ name: "com.machinereadableonly/machine-readable-only" }),
+  });
+  try {
+    const allowed = real
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^allow:/i.test(line))
+      .map((line) => line.slice(line.indexOf(":") + 1).trim())
+      .filter(Boolean);
+
+    assert.ok(allowed.length > 0, "a robots.txt that allows nothing explicitly states nothing");
+
+    for (const path of allowed) {
+      // A trailing slash in a robots rule is a PREFIX, not a fetchable url:
+      // `/t/` matches `/t/1`. Follow a real member of the prefix instead, or
+      // the test asserts against a path no agent would ever request.
+      const probe = path === "/t/" ? "/t/1" : path === "/.well-known/" ? "/.well-known/mcp.json" : path;
+      const res = await fetch(`${base}${probe}`);
+      // 404 is the failure. 401 is fine and expected for /mcp: gated is not
+      // the same as absent, and robots rules describe what may be CRAWLED,
+      // not what may be entered without signing.
+      assert.notEqual(res.status, 404, `robots.txt allows ${path}, which does not exist`);
+    }
+  } finally {
+    server.close();
+  }
+});
+
+test("robots.txt advertises no sitemap, because none is served", async () => {
+  // The project's standing rule, stated in server.mjs beside /.well-known/x402
+  // and proven there: only advertise a capability we HAVE. A Sitemap: line
+  // pointing at a 401 or a 404 is the x402 mistake in a different file.
+  const real = readFileSync(new URL("../public/robots.txt", import.meta.url), "utf8");
+  assert.doesNotMatch(real, /^\s*sitemap:/im, "no sitemap is served, so none may be named");
 });
 
 test("an unknown path is still gated, not 404d", async () => {

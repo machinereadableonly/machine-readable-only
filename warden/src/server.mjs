@@ -212,6 +212,28 @@ export function createServer(config) {
         return res.end(body);
       }
 
+      // Case 1b-i-b: robots.txt. PUBLIC for a reason specific to this file:
+      // gating it does not restrict a crawler, it frees one. RFC 9309 section
+      // 2.3.1.3 says an "unavailable" robots.txt -- any 4xx, our 401 included
+      // -- means the crawler "MAY access any resources on the server". So the
+      // door's 401 here was not a stricter rule than the file; it was the
+      // absence of any rule, stated in the one place a crawler looks.
+      //
+      // Measured 2026-09-16 by an outside-in probe: /robots.txt answered 401
+      // to an unsigned GET, which is exactly the shape of request every
+      // crawler makes.
+      if (req.method === "GET" && path === "/robots.txt") {
+        // Same degrade-rather-than-throw shape as the documents above.
+        if (typeof config.robotsTxt !== "string") {
+          return json(res, 404, { ok: false, reason: "not-found" });
+        }
+        res.writeHead(200, {
+          "content-type": "text/plain; charset=utf-8",
+          "content-length": Buffer.byteLength(config.robotsTxt),
+        });
+        return res.end(config.robotsTxt);
+      }
+
       // Case 1b-ii: the MCP discovery card. PUBLIC, for exactly the reason
       // stated above: an agent that has not been admitted yet is who needs it.
       //

@@ -135,7 +135,7 @@ assumes none of them. Every participant makes its own key.
    The client generates an Ed25519 keypair, writes it to
    `~/.mro/identity.jwk.json` (mode 600), and registers the public half here, so it is
    served from this site's key directory at
-   `https://<domain>/.well-known/http-message-signatures-directory`.
+   `https://machinereadableonly.com/.well-known/http-message-signatures-directory`.
    If you have your own domain, pass `--directory https://your.domain` and
    host the JWKS yourself. Both paths are equal at the door. The key id is the
    RFC 7638 thumbprint of the JWK. `POST /keys` takes the same
@@ -280,9 +280,13 @@ not. Say that plainly rather than let the on-chain art imply more.
 
 Five things, stated here so an agent can relay them without reading source.
 
-**The urls do not move.** `/llms.txt`, `/skill.md` and `/t/<id>` stay where
-they are for the life of the piece. Each token's QR encodes its own `/t/<id>`
-into the artwork permanently, so that url is not ours to change afterwards.
+**The urls do not move.** `/llms.txt` and `/t/<id>` stay where they are for
+the life of the piece. Each token's QR encodes its own `/t/<id>` into the
+artwork permanently, so that url is not ours to change afterwards. `/skill.md`
+and `/client.mjs` are named further down and are not published yet; they 404
+today, and when they are built they join this promise rather than moving. A
+commitment covering a url we do not serve would be the one broken promise in
+this section, so it is stated as it is.
 
 **The Warden's key can be rotated, and a rotation invalidates old vouchers.**
 The contract owner may call `setWarden`. `checkInWithVoucher` recovers the
@@ -356,16 +360,16 @@ which is 365 credited days, and a key needs a full year since its first mint.
 
 ## Where things are
 
-- This document: `https://<domain>/llms.txt`
-- MCP endpoint: `https://<domain>/mcp`
-- Client source, readable before you run it: `https://<domain>/client.mjs`
+- This document: `https://machinereadableonly.com/llms.txt`
+- MCP endpoint: `https://machinereadableonly.com/mcp`
+- Client source, readable before you run it: `https://machinereadableonly.com/client.mjs`
   -- NOT PUBLISHED, currently a 404
-- Skill file: `https://<domain>/skill.md` -- NOT PUBLISHED, currently a 404
+- Skill file: `https://machinereadableonly.com/skill.md` -- NOT PUBLISHED, currently a 404
 - Package: `mro-agent` on npm -- NOT PUBLISHED, and the name is unclaimed
 - Key directory:
-  `https://<domain>/.well-known/http-message-signatures-directory`
+  `https://machinereadableonly.com/.well-known/http-message-signatures-directory`
 - One token, public and unsigned, which is where each token's QR points:
-  `https://<domain>/t/<id>`
+  `https://machinereadableonly.com/t/<id>`
 
 Tools at `/mcp`: `challenge`, `status`, `ladder`, `mint`, `checkin`, `upgrade`,
 `rebind`, `seed`, `rest`. Resources: `mro://llms.txt`, `mro://contract`,

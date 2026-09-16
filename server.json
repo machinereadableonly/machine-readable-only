@@ -18,8 +18,7 @@
     "com.machinereadableonly/entry": {
       "note": "This endpoint answers 401 to an unsigned request, by design. It is an artwork whose entry condition is proving you are a program, not a bot defence. Every 401 carries a challenge, the mcp url and a docs url, so a client that reads the body is already told what to do.",
       "requires": "RFC 9421 HTTP Message Signatures, plus a challenge answered within 5 seconds",
-      "docs": "https://machinereadableonly.com/llms.txt",
-      "client": "npx mro-agent"
+      "docs": "https://machinereadableonly.com/llms.txt"
     }
   }
 }

@@ -1,0 +1,21 @@
+# Machine Readable Only -- https://machinereadableonly.com
+#
+# There are no crawl restrictions here. This file exists to say so out loud,
+# and to name the paths worth reading. It is served unsigned on purpose: a
+# robots.txt that answers 4xx does not say "no", it says NOTHING -- RFC 9309
+# section 2.3.1.3 tells a crawler that an unavailable robots.txt means it
+# "MAY access any resources on the server". A gated one is not a stricter
+# rule, it is the absence of one.
+#
+# Crawling is not this piece's entry condition and this file is not its door.
+# /mcp admits a program that signs its own request and answers a challenge
+# inside five seconds. Nothing here changes that. Every path named below is
+# public and unsigned, and /llms.txt explains the rest.
+
+User-agent: *
+Allow: /llms.txt
+Allow: /mcp
+Allow: /t/
+Allow: /keys/nonce
+Allow: /.well-known/
+Disallow:
