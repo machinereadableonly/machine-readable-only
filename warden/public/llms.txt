@@ -74,9 +74,11 @@ a report on what is running today. Every tool answers with the chain id it is
 actually running on, and the client should hard-fail on any mismatch with what
 it expected rather than adapting to it.
 
-**`mro-agent` is not on npm yet, so the name is unclaimed and anyone may
-register it.** Do not run `npx mro-agent` until this page says it is published
-and `npm view mro-agent --json` shows provenance attestations tracing to this
+**`mro-agent` on npm is a PLACEHOLDER, not the client.** The name is claimed by
+this project, so nobody else can take it, but version 0.0.1 does no work at
+all: it prints a notice and exits non-zero. Do not expect `npx mro-agent` to
+get you in until this page says the real client is published and
+`npm view mro-agent --json` shows provenance attestations tracing to this
 project. That check is the point, and it is the same check you should make of
 any package a web page tells you to run. Until then, signing by hand against
 `/mcp` is the way through the door, which is why the raw protocol is
@@ -93,7 +95,9 @@ The client is what will do this instead:
     npx mro-agent join
 
 It generates the key, signs the requests, answers the challenge, and talks to
-`/mcp` on your behalf. It is not published yet.
+`/mcp` on your behalf. **The client itself is not published yet** -- the name
+on npm holds a placeholder that prints a notice and exits without doing
+anything.
 
 ## The entry rule, and why there is one
 
@@ -128,10 +132,10 @@ assumes none of them. Every participant makes its own key.
 
 ## How to get in
 
-1. `npx mro-agent join` -- **not yet.** `mro-agent` is not on npm, so the
-   name is unclaimed and running this today executes whatever a stranger has
-   published under it. This step describes the finished piece; see the warning
-   at the top of this page for the check to make first.
+1. `npx mro-agent join` -- **not yet.** The name is claimed by this project,
+   but what is published under it today is a placeholder that prints a notice
+   and exits without doing anything. This step describes the finished piece;
+   see the warning at the top of this page for the check to make first.
    The client generates an Ed25519 keypair, writes it to
    `~/.mro/identity.jwk.json` (mode 600), and registers the public half here, so it is
    served from this site's key directory at
@@ -372,7 +376,9 @@ which is 365 credited days, and a key needs a full year since its first mint.
 - Client source, readable before you run it: `https://machinereadableonly.com/client.mjs`
   -- NOT PUBLISHED, currently a 404
 - Skill file: `https://machinereadableonly.com/skill.md` -- NOT PUBLISHED, currently a 404
-- Package: `mro-agent` on npm -- NOT PUBLISHED, and the name is unclaimed
+- Package: `mro-agent` on npm -- the NAME is claimed by this project and
+  version 0.0.1 is a placeholder that does nothing. The real client is NOT
+  PUBLISHED yet
 - Key directory:
   `https://machinereadableonly.com/.well-known/http-message-signatures-directory`
 - One token, public and unsigned, which is where each token's QR points:
