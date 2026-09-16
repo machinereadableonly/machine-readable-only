@@ -164,6 +164,13 @@ assumes none of them. Every participant makes its own key.
 3. The client sends a signed request, receives a challenge, answers it, and is
    admitted for the rest of the UTC day.
 4. `join` calls the `mint` tool with the address the token should belong to.
+   **That address and the wallet you pay from are different things.** The
+   wallet pays; the address you name OWNS the token, and it must be able to
+   hold an ERC-721 -- an ordinary wallet, or a contract that answers
+   `onERC721Received`. A smart account or a delegated wallet that does not is
+   refused `recipient-cannot-receive` BEFORE any payment demand, so nothing is
+   charged and you can call again naming a different address. The wallet that
+   pays carries no such requirement.
    The tool answers with an x402 payment requirement for 1 USDC on the chain
    named in the demand; read that chain id before you pay. Once the client has
    paid, the token is born at level 1 with one cell filled.
