@@ -180,12 +180,12 @@ below).</p>
 <tr>
 <td>F6</td>
 <td>A revert raised by the recipient&#39;s own code is not in MRO&#39;s ABI, so the Clock logs a bare <code>reverted-on-simulate</code> with no error name.</td>
-<td>Open; it follows from F5.</td>
+<td><strong>FIXED 2026-09-16.</strong> An unnamed revert is now diagnosed: the Clock asks whether the recipient can hold an ERC-721 and names that as the cause, and otherwise prints the (redaction-safe) <code>detail</code>. A recipient that cannot receive makes the mint <code>stuckMints</code>, so the run fails instead of retrying in silence.</td>
 </tr>
 <tr>
 <td>F7</td>
 <td>A mint that cannot land takes the check-in queued behind it down with it: <code>NoSuchToken</code>, then <code>stuckCredits</code>, then exit 1. Fork run 2 showed exactly this. It is the path-inventory flag 3.16, made concrete.</td>
-<td>Open; it follows from F5.</td>
+<td><strong>FIXED 2026-09-16.</strong> A <code>NoSuchToken</code> for a token whose own mint is still unwritten is &quot;not yet&quot;, not &quot;never&quot;: it stays queued instead of being condemned by <code>failCredit</code>, and goes out on the first run where the mint lands. The credit is still SENT -- withholding it was too broad and stopped a seeding parent&#39;s own check-ins.</td>
 </tr>
 <tr>
 <td>F8</td>

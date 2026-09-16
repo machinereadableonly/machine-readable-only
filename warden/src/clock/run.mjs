@@ -83,6 +83,63 @@ export async function chainLastDay({ publicClient, contract, tokenId }) {
   }
 }
 
+/// Just enough ABI to ask a recipient the one question that matters.
+const ERC721_RECEIVER_ABI = [
+  {
+    type: "function",
+    name: "onERC721Received",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "operator", type: "address" },
+      { name: "from", type: "address" },
+      { name: "tokenId", type: "uint256" },
+      { name: "data", type: "bytes" },
+    ],
+    outputs: [{ name: "", type: "bytes4" }],
+  },
+];
+const ZERO_ADDRESS = "0x" + "00".repeat(20);
+const ERC721_RECEIVED = "0x150b7a02";
+
+/**
+ * Can `to` hold an ERC-721? true, false, or null for "could not ask".
+ *
+ * F6. A revert raised by the RECIPIENT's own code is not in MRO's ABI, so viem
+ * decodes no error name and the Clock could only log a bare
+ * `reverted-on-simulate` -- the least useful thing it could say about an
+ * agent's paid mint. This turns that into a named cause.
+ *
+ * NULL IS NOT FALSE, and the difference is what stops a human being sent after
+ * a problem that does not exist: a revert is the recipient's answer, while an
+ * RPC blip is no answer at all, and only the first makes a PAID mint
+ * permanently stuck. Same distinction the Warden's own gate makes before
+ * taking the money (`chain/read.mjs canReceiveERC721`).
+ *
+ * The callback is asked AS THE TOKEN CONTRACT, because that is who `_safeMint`
+ * makes the call as, and a receiver may accept only from the collection it
+ * expects.
+ */
+export async function recipientCanReceive({ publicClient, contract, to }) {
+  try {
+    // A client without getCode is a stub from an older test, not a chain that
+    // said no. Refusing to guess is the whole point of the null.
+    if (typeof publicClient?.getCode !== "function") return null;
+    const code = await publicClient.getCode({ address: to });
+    // No code, no callback: `_safeMint` does not make one either.
+    if (!code || code === "0x") return true;
+    const answer = await publicClient.readContract({
+      address: to,
+      abi: ERC721_RECEIVER_ABI,
+      functionName: "onERC721Received",
+      args: [ZERO_ADDRESS, ZERO_ADDRESS, 0n, "0x"],
+      account: contract,
+    });
+    return answer === ERC721_RECEIVED;
+  } catch (err) {
+    return /revert/i.test(String(err?.shortMessage ?? err?.message ?? "")) ? false : null;
+  }
+}
+
 export async function mintIsOnChain({ publicClient, contract, mint }) {
   try {
     const [owner, view] = await Promise.all([
@@ -265,7 +322,36 @@ export async function runClock({
       summary.stuckMints.push(mint.tokenId);
       continue;
     }
-    alert(`clock: mint ${mint.tokenId} failed (${result.reason}${result.errorName ? ` ${result.errorName}` : ""})`);
+    // F6. AN UNNAMED REVERT IS USUALLY THE RECIPIENT'S OWN CODE. `mint` ends in
+    // `_safeMint`, which calls `onERC721Received` on any recipient with code;
+    // that revert is not in MRO's ABI, so there is no error name to print and
+    // the line said only `reverted-on-simulate`.
+    let failureLine = `clock: mint ${mint.tokenId} failed (${result.reason}${result.errorName ? ` ${result.errorName}` : ""})`;
+    if (result.reason === "reverted-on-simulate" && !result.errorName) {
+      const canReceive = await recipientCanReceive({ publicClient, contract, to: mint.toAddress });
+      if (canReceive === false) {
+        // It can NEVER land, so it gets the same treatment as StaleDay and a
+        // foreign TokenExists: left queued for a human and counted, rather
+        // than retried in silence every night until the day goes stale.
+        // The Warden refuses this recipient before payment now (F5), so a row
+        // in this state was either taken before that shipped or reached the
+        // mirror by some route other than the mint tool.
+        alert(
+          `clock: mint ${mint.tokenId} cannot land -- the recipient ${mint.toAddress} cannot hold an ` +
+            "ERC-721 (it has code and does not answer onERC721Received), so this PAID mint can never " +
+            "land and needs a human"
+        );
+        summary.stuckMints = summary.stuckMints ?? [];
+        summary.stuckMints.push(mint.tokenId);
+        continue;
+      }
+      // Not the recipient, so say what the node actually said. `detail` is
+      // routed through safeErrorText, which is why it is safe to print: the
+      // raw error message carries the RPC url and its provider key.
+      if (result.detail) failureLine += `: ${result.detail}`;
+      if (canReceive === null) failureLine += " (the recipient could not be checked)";
+    }
+    alert(failureLine);
     if (isRunLevel(result)) {
       // ABORT THE WRITES, NOT THE RUN. 4.L9: this used to `return summary`,
       // which skipped reconcile -- so a paused or sunset contract stopped the
@@ -414,6 +500,20 @@ export async function runClock({
   // Filtered here, by name, with an alert: the row is reported and the night
   // continues. It stays queued rather than being marked written, because
   // nothing about it reached the chain.
+  // F7. WHICH TOKENS HAVE NOT HAD THEIR OWN MINT WRITTEN YET. Used far below,
+  // where the chain's refusals are judged: a `NoSuchToken` for one of these is
+  // "not yet" rather than "never", and must not be condemned terminally.
+  //
+  // It does NOT hold these credits back from being sent. An earlier version
+  // did, and it was too broad -- a PARENT that seeds a child in the same run
+  // also carries an unwritten `mints` row, so perfectly good check-ins stopped
+  // going out. Sending one costs a bisection; condemning one destroys a day of
+  // the artwork, and only the second is worth preventing.
+  //
+  // Read AFTER the mints pass, deliberately: a mint written moments ago is
+  // already marked, so its credit is judged normally.
+  const awaitingMint = new Set(q.awaitingMint());
+
   const sendable = [];
   for (const entry of pending) {
     if (packableId(entry.tokenId)) { sendable.push(entry); continue; }
@@ -448,6 +548,26 @@ export async function runClock({
       // judged, only rationed, so it stays queued for tomorrow.
       if (drop.reason === "attempts-exhausted") {
         alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was not attempted (${drop.reason}) and stays queued`);
+        continue;
+      }
+      // F7. A CREDIT IS NOT CONDEMNED FOR ITS MINT BEING LATE. `NoSuchToken`
+      // is normally terminal and rightly so -- the chain will say it again
+      // every night. But when this token's OWN mint is still unwritten, the
+      // chain is answering "not yet", not "never": the mints pass runs first,
+      // so a mint that failed tonight leaves its token absent and takes the
+      // day queued behind it down with it. Measured on the fork (F7): one
+      // unlandable mint condemned the check-in behind it and failed the run.
+      //
+      // A token's record IS the artwork, so a day destroyed here cannot be
+      // recovered by anything. It stays queued, and goes out unchanged on the
+      // first run where the mint has landed. Logged rather than alerted: the
+      // mint's own failure already raised the alarm and this is its
+      // consequence, not a second problem.
+      if (drop.reason === "NoSuchToken" && awaitingMint.has(drop.entry.tokenId)) {
+        log(
+          `clock: token ${drop.entry.tokenId} day ${drop.entry.day} was refused NoSuchToken while its own ` +
+            "mint is still unwritten; it stays queued rather than being condemned"
+        );
         continue;
       }
       q.failCredit(drop.entry.tokenId, drop.entry.day);

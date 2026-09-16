@@ -776,3 +776,162 @@ test("a head that moves backwards between runs does not drag the cursor back", a
   assert.ok(second.reconciled.from > second.reconciled.to, "the window is empty and known to be");
   db.close();
 });
+
+// --- F7: a mint that has not landed must not condemn the day behind it ------
+//
+// The mints pass runs BEFORE the check-ins in the same run. So a mint that
+// fails tonight leaves its token absent from the chain, and the credit queued
+// for that token goes into the batch, comes back `NoSuchToken`, and is
+// condemned by `failCredit` -- TERMINALLY. Measured on the fork (F7): one
+// unlandable mint took the check-in behind it down and failed the whole run.
+//
+// A token's record IS the artwork, so condemning a day because its mint is
+// merely late destroys something that the next run might well have fixed.
+// The credit stays queued instead, and is not offered to the chain at all.
+
+/// A writer that refuses the mint with an UNNAMED revert -- the shape a
+/// recipient's own code produces, since that revert is not in MRO's ABI.
+function writerRefusingMint(sent) {
+  return {
+    formatGas: (w) => `${w} wei`,
+    async gasOk() { return { ok: true, gasPrice: 6_000_000n, capWei: 50_000_000n }; },
+    async startRun() { return 0; },
+    async send(functionName, args) {
+      if (functionName === "mint") {
+        return { ok: false, reason: "reverted-on-simulate", errorName: null, errorArgs: [], detail: "execution reverted" };
+      }
+      assertEncodable(functionName, args);
+      sent.push({ functionName, args });
+      return { ok: true, hash: `0x${sent.length}` };
+    },
+  };
+}
+
+// THE FIRST VERSION OF THIS TEST ASSERTED THE CREDIT WAS NEVER SENT, and the
+// filter written to satisfy it withheld any credit whose token had an unwritten
+// `mints` row -- which includes a PARENT that seeds a child in the same run, so
+// it broke `seeds are written after mints and before check-ins`. The fixture
+// was right and the design was too broad: what must not happen is the TERMINAL
+// condemnation, not the attempt. Sending it costs one bisection; condemning it
+// destroys a day of the artwork.
+test("a credit refused NoSuchToken while its mint is unwritten is not condemned", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  q.insertCredit(1, TODAY - 1, "sig");
+
+  // The mint fails, so token 1 is absent from the chain; the chain then
+  // refuses the credit queued behind it exactly as the fork did.
+  const writer = {
+    formatGas: (w) => `${w} wei`,
+    async gasOk() { return { ok: true, gasPrice: 6_000_000n, capWei: 50_000_000n }; },
+    async startRun() { return 0; },
+    async send(functionName, args) {
+      if (functionName === "mint") {
+        return { ok: false, reason: "reverted-on-simulate", errorName: null, errorArgs: [], detail: "execution reverted" };
+      }
+      assertEncodable(functionName, args);
+      return { ok: false, reason: "reverted-on-simulate", errorName: "NoSuchToken", errorArgs: ["1"] };
+    },
+  };
+
+  const summary = await runClock({ ...baseArgs(q), writer, alert: () => {} });
+
+  assert.deepEqual(summary.stuckCredits, [], "a day must not be condemned because its mint is late");
+  assert.equal(
+    db.prepare("SELECT status FROM credits WHERE tokenId = 1 AND day = ?").get(TODAY - 1).status,
+    "queued",
+    "it stays queued for a run where the mint has landed",
+  );
+  db.close();
+});
+
+test("CONTROL: when the mint lands in the same run, its credit IS sent", async () => {
+  // The inverse, and the one that keeps the filter honest: if it were keyed on
+  // anything but "the mint is still unwritten", this would stop sending too.
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  q.insertCredit(1, TODAY - 1, "sig");
+
+  const writer = okWriter();
+  const summary = await runClock({ ...baseArgs(q), writer, alert: () => {} });
+
+  assert.ok(
+    writer.sent.some((s) => s.functionName === "batchCheckIn"),
+    "a landed mint's credit must still be written the same night",
+  );
+  assert.deepEqual(summary.stuckCredits, []);
+  db.close();
+});
+
+// --- F6: name the cause instead of logging a bare revert -------------------
+//
+// A revert raised by the RECIPIENT's own code is not in MRO's ABI, so viem
+// decodes no error name and the Clock logged only `reverted-on-simulate`. That
+// is the least useful line it could print about an agent's paid mint.
+
+/// A chain where `to` has code and refuses the ERC-721 callback: the
+/// EIP-7702-delegated shape the fork actually hit.
+const chainWithNonReceiver = {
+  ...noChain,
+  async getCode() { return "0xef0100" + "8a67b502".padEnd(40, "0"); },
+  async readContract({ functionName }) {
+    if (functionName === "onERC721Received") throw new Error("execution reverted");
+    throw new Error(`unexpected read: ${functionName}`);
+  },
+};
+
+/// The same, but the recipient accepts.
+const chainWithReceiver = {
+  ...noChain,
+  async getCode() { return "0x60006000"; },
+  async readContract({ functionName }) {
+    if (functionName === "onERC721Received") return "0x150b7a02";
+    throw new Error(`unexpected read: ${functionName}`);
+  },
+};
+
+test("an unnamed revert names the recipient when that is the cause, and the mint is stuck", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const alerts = [];
+
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainWithNonReceiver,
+    writer: writerRefusingMint([]),
+    alert: (m) => alerts.push(m),
+  });
+
+  assert.ok(
+    alerts.some((a) => /cannot hold an ERC-721|cannot receive/i.test(a)),
+    `the alert must name the cause, got: ${alerts.join(" | ")}`,
+  );
+  // It can NEVER land: same treatment as StaleDay and a foreign TokenExists --
+  // left queued for a human and counted, so the run fails rather than retrying
+  // in silence every night forever.
+  assert.deepEqual(summary.stuckMints, [1]);
+  db.close();
+});
+
+test("an unnamed revert with a GOOD recipient reports the detail and stays queued", async () => {
+  // The other half. The recipient is fine, so the cause is something else and
+  // the run must not condemn the mint -- but it must stop printing a bare
+  // `reverted-on-simulate` with nothing else on the line.
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const alerts = [];
+
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainWithReceiver,
+    writer: writerRefusingMint([]),
+    alert: (m) => alerts.push(m),
+  });
+
+  assert.ok(
+    alerts.some((a) => a.includes("execution reverted")),
+    `the detail must reach the log, got: ${alerts.join(" | ")}`,
+  );
+  assert.deepEqual(summary.stuckMints ?? [], [], "a mint that may yet land must not be condemned");
+  db.close();
+});

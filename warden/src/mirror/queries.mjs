@@ -276,6 +276,11 @@ export function queries(db) {
       "UPDATE mark_orders SET status = 'failed' WHERE tokenId = ? AND upgradeId = ?"
     ),
     markMintWritten: db.prepare("UPDATE mints SET status = 'written' WHERE tokenId = ?"),
+    // F7. Tokens whose own mint (or seed -- both live here) has not been
+    // written to the chain yet. A credit for one of these cannot be sent: the
+    // contract answers NoSuchToken and the batch condemns the entry TERMINALLY,
+    // destroying a day of the artwork because its mint was merely late.
+    awaitingMint: db.prepare("SELECT tokenId FROM mints WHERE status != 'written'"),
     markTokenWritten: db.prepare("UPDATE tokens SET status = 'written' WHERE tokenId = ?"),
     markCreditWritten: db.prepare("UPDATE credits SET status = 'written' WHERE tokenId = ? AND day = ?"),
     failCredit: db.prepare("UPDATE credits SET status = 'failed' WHERE tokenId = ? AND day = ?"),
@@ -728,6 +733,7 @@ export function queries(db) {
     /// Credits for days that have CLOSED. A check-in at 00:03 belongs to
     /// tomorrow's batch, which is why this is bounded rather than "everything".
     pendingCredits: (throughDay) => s.pendingCredits.all(throughDay),
+    awaitingMint: () => s.awaitingMint.all().map((r) => r.tokenId),
 
     pendingMarkOrders: () => s.pendingMarkOrders.all(),
 
