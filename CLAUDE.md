@@ -16,8 +16,9 @@ return visits, so the artwork is the agent's own history of coming back.
 - **Role:** Art piece and protocol demo (both, deliberately -- not a
   speculative collectible)
 - **Stack:** Solidity (Foundry 1.7.1) + Node 24.14.1; MCP server; the reference
-  client `mro-agent` in `client/` (built, not yet published to npm); `skills/`
-  holds SKILL.md.
+  client `mro-agent` in `client/` (built; the npm NAME is claimed and holds a
+  placeholder that does nothing -- the real client is still unpublished);
+  `skills/` holds SKILL.md.
 - **Status: Plans 1 through 7 are ALL BUILT, deployed on Base Sepolia, pushed
   and live.** Phase 0 is signed off, every review finding is closed, and the
   repository is PUBLIC. **There is no build work left that Claude can start
