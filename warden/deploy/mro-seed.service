@@ -34,9 +34,13 @@ EnvironmentFile=%h/.mro/seed.env
 # The client from the checkout, not `npx mro-agent@<version>`.
 #
 # The review's proposed line pins a published package, and that is the right
-# shape -- but `mro-agent` is NOT on npm (checked 2026-09-09: the registry
-# returns 404). A unit that pins a package which does not exist is a timer that
-# has never once run. SWITCH TO THE PINNED npx FORM THE DAY IT IS PUBLISHED:
+# shape -- but the package does not yet do anything. On 2026-09-09 the registry
+# answered 404 for `mro-agent`; since 2026-09-16 the NAME is claimed and holds a
+# placeholder, version 0.0.1, that prints a notice and exits 1 (checked live
+# 2026-09-17: registry 200, that one version). Either way the unit would be a
+# timer that never once checks in -- first pinning nothing, now pinning a stub.
+# SWITCH TO THE PINNED npx FORM THE DAY THE REAL CLIENT IS PUBLISHED, which
+# means a version that actually performs `beat` -- not the day the name exists:
 #
 #   ExecStart=/usr/bin/npx --yes mro-agent@<version> beat --site ${MRO_SEED_SITE} --token ${MRO_SEED_TOKEN} --key %h/.mro/seed-identity.jwk.json
 #
