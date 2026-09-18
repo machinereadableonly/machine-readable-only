@@ -98,7 +98,7 @@ const lookupED = async () => ED.key;
 /// headers a real client would also carry. `req.url` is a PATH, matching what
 /// Node's IncomingMessage actually gives admit() -- the whole point of
 /// toRequestLike is turning that back into what the signature covers.
-async function signedRequest({ extraHeaders = {}, windowMs = 60_000, body = "", components = CLIENT_COMPONENTS } = {}) {
+async function signedRequest({ extraHeaders = {}, windowMs = 60_000, body = "", components = CLIENT_COMPONENTS, createdAt = null } = {}) {
   const signer = await signerFromJWK(ED.key);
   const message = {
     method: "POST",
@@ -110,7 +110,7 @@ async function signedRequest({ extraHeaders = {}, windowMs = 60_000, body = "", 
       ...extraHeaders,
     },
   };
-  const created = new Date();
+  const created = createdAt ?? new Date();
   const headers = await signatureHeaders(message, signer, {
     created,
     expires: new Date(created.getTime() + windowMs),
@@ -1157,4 +1157,36 @@ test("a body with invalid utf-8 is digested as it arrived, not as it re-encodes"
   } finally {
     server.close();
   }
+});
+
+// A CLOCK REFUSAL MUST HAND BACK THE SERVER'S CLOCK.
+//
+// Until 2026-09-18 a client whose clock ran fast was refused `signature`,
+// whose published prescription is "check your key and the origin you signed".
+// It could follow that forever. The door now names the clock and shows its
+// own, which is the only fact that makes the problem fixable from the client.
+test("a request signed with a fast clock is refused `clock-skew`, with the server's time", async () => {
+  const seen = new Set();
+  const req = await signedRequest({ createdAt: new Date(Date.now() + 2 * 60_000) });
+  const decision = await admit(req, {
+    secret: SECRET, lookupKey: lookupED, seen, spent: new Map(), domain: DOMAIN,
+  });
+
+  assert.equal(decision.ok, false);
+  assert.equal(decision.status, 401);
+  assert.equal(decision.body.reason, "clock-skew");
+  assert.ok(decision.body.serverTime, "the client cannot correct itself without our time");
+  assert.ok(Math.abs(Date.parse(decision.body.serverTime) - Date.now()) < 5_000);
+
+  // And the challenge is still there: a clock refusal is still an invitation.
+  assert.ok(decision.body.challenge, "every 401 carries a challenge, this one included");
+});
+
+test("an ordinary refusal carries NO serverTime, because time is not its problem", async () => {
+  const seen = new Set();
+  const req = { method: "POST", url: "/mcp", headers: { host: DOMAIN } };
+  const decision = await admit(req, {
+    secret: SECRET, lookupKey: lookupED, seen, spent: new Map(), domain: DOMAIN,
+  });
+  assert.equal(decision.body.serverTime, undefined);
 });

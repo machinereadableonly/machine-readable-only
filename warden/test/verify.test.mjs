@@ -32,7 +32,7 @@ const EMPTY_DIGEST = contentDigest("");
 
 /// Build a signed request the way a real client will, so the test exercises the
 /// same code path an agent hits rather than a hand-rolled header.
-async function signedRequest({ windowMs = 60_000, components = CLIENT_COMPONENTS } = {}) {
+async function signedRequest({ windowMs = 60_000, components = CLIENT_COMPONENTS, createdAt = null } = {}) {
   const signer = await signerFromJWK(ED.key);
   const message = {
     method: "POST",
@@ -43,7 +43,11 @@ async function signedRequest({ windowMs = 60_000, components = CLIENT_COMPONENTS
       "content-digest": EMPTY_DIGEST,
     },
   };
-  const created = new Date();
+  // `createdAt` is how a WRONG CLOCK is built: a client whose clock runs fast
+  // stamps a `created` in our future, and one whose signature has been sitting
+  // around stamps an `expires` in our past. Both are ordinary, and neither is
+  // a bad signature.
+  const created = createdAt ?? new Date();
   const headers = await signatureHeaders(message, signer, {
     created,
     expires: new Date(created.getTime() + windowMs),
@@ -183,11 +187,65 @@ test("an unknown key is refused without calling the verifier", async () => {
   assert.equal(r.reason, "unknown-key");
 });
 
-test("a signature window longer than five minutes is refused", async () => {
+// -----------------------------------------------------------------------
+// WHAT THE REFUSAL IS CALLED, which is the whole of a client's diagnosis.
+//
+// Until 2026-09-18 all three of these came back as `signature`, or as
+// `expired` meaning something else, and the published prescription for
+// `signature` is "check you signed with the registered key and the right
+// origin". A client whose clock is one second fast would follow that advice
+// forever and never find the problem. web-bot-auth throws on created-in-future,
+// on expiry and on a bad signature alike, and the catch flattened all of them.
+// -----------------------------------------------------------------------
+
+test("a signature window longer than five minutes is refused as `window`", async () => {
+  // Not `expired`: nothing has expired. The client asked for a validity longer
+  // than the door allows, and the fix is to ask for less -- which is the
+  // opposite of "sign a fresh one", the advice `expired` carries.
   const req = await signedRequest({ windowMs: MAX_WINDOW_MS + 1000 });
   const r = await verifyRequest(req, lookup);
   assert.equal(r.ok, false);
+  assert.equal(r.reason, "window");
+});
+
+test("a signature that has genuinely expired says `expired`, not `signature`", async () => {
+  // Signed ten minutes ago with a one-minute life: valid when it was made,
+  // stale now. Nothing is wrong with the key.
+  const req = await signedRequest({ createdAt: new Date(Date.now() - 10 * 60_000), windowMs: 60_000 });
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, false);
   assert.equal(r.reason, "expired");
+});
+
+test("a client whose clock runs fast is told the CLOCK is wrong", async () => {
+  // web-bot-auth refuses `created` in the future with zero tolerance, so a
+  // clock two minutes ahead -- ordinary on an unsynchronised box -- is refused.
+  // That refusal must not read as "your signature is bad".
+  const req = await signedRequest({ createdAt: new Date(Date.now() + 2 * 60_000) });
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "clock-skew");
+});
+
+test("a time refusal carries the server's own time, so a client can correct itself", async () => {
+  // The one fact that makes a skew fixable by the client. Without it the
+  // client knows only that it was refused.
+  const req = await signedRequest({ createdAt: new Date(Date.now() + 2 * 60_000) });
+  const r = await verifyRequest(req, lookup);
+  assert.equal(typeof r.serverTime, "string", "an ISO timestamp");
+  assert.ok(Math.abs(Date.parse(r.serverTime) - Date.now()) < 5_000, "and it must be the real one");
+});
+
+test("a genuinely bad signature is still just `signature`", async () => {
+  // THE CONTROL. The new words must not swallow the old one: a request whose
+  // timestamps are perfectly sane and whose bytes were tampered with is a
+  // signature failure and nothing else.
+  const req = await signedRequest();
+  req.headers["content-digest"] = EMPTY_DIGEST.replace("=:", "=:A");
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "signature");
+  assert.equal(r.serverTime, undefined, "and it carries no time, because time is not the problem");
 });
 
 test("a signature that does not cover @path is refused", async () => {

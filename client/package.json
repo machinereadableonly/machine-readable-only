@@ -19,7 +19,7 @@
     "./door": "./src/door.mjs",
     "./pay": "./src/pay.mjs"
   },
-  "files": ["src", "README.md"],
+  "files": ["src", "README.md", "LICENSE"],
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "node --test \"test/**/*.test.mjs\""

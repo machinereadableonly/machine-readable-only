@@ -180,7 +180,15 @@ already in flight, and nothing else.</p>
 </tr>
 <tr>
 <td><code>expired</code></td>
-<td>the signature window exceeds five minutes, or the challenge is stale</td>
+<td>the signature&#39;s own <code>expires</code> has passed, or the challenge is stale. Carries <code>serverTime</code></td>
+</tr>
+<tr>
+<td><code>window</code></td>
+<td>the signature asked to be valid for longer than five minutes. Sign a shorter one</td>
+</tr>
+<tr>
+<td><code>clock-skew</code></td>
+<td>your <code>created</code> is in our future. Carries <code>serverTime</code>: re-sign against it</td>
 </tr>
 <tr>
 <td><code>unknown-key</code></td>
@@ -203,6 +211,14 @@ already in flight, and nothing else.</p>
 <td>that exact signature has been admitted once already</td>
 </tr>
 </tbody></table>
+<p><strong><code>window</code>, <code>clock-skew</code> and <code>expired</code> were ONE WORD until 2026-09-18</strong>, and
+that word was usually <code>signature</code> -- which says &quot;your key is wrong&quot;. A machine
+whose clock is a minute fast was told to check its key, forever. They are three
+different problems with three different remedies: ask for a shorter validity,
+re-sign against our clock, or sign a fresh one. The two that are about time
+carry <code>serverTime</code>, an ISO timestamp of our own clock, which is the one fact
+that makes a skew fixable from your end. <code>mro-agent</code> retries a <code>clock-skew</code>
+once, against that time, automatically.</p>
 <p>Those first two are worth telling apart, because until 2026-09-06 they were
 not: a directory we could not reach was reported as <code>unknown-key</code>, which sends
 you to re-derive the thumbprint -- the one trap named below -- for a key that

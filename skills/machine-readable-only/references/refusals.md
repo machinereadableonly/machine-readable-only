@@ -16,9 +16,11 @@ how you collect a challenge.
 
 | reason | what to do |
 |---|---|
-| `signature` | The RFC 9421 signature did not verify. Check you signed with the key whose public half is registered, and that you signed the SITE origin rather than the address you dialled. |
+| `signature` | The RFC 9421 signature did not verify. Check you signed with the key whose public half is registered, and that you signed the SITE origin rather than the address you dialled. **It no longer means "your clock is wrong"** -- until 2026-09-18 a stale or skewed timestamp was reported as this, and no amount of key-checking could fix it. Those are now `expired` and `clock-skew`. |
 | `components` | The signature did not cover all four required components. Sign `@method`, `@authority`, `@path` and `content-digest`. |
-| `expired` | The signature's `created` is outside the window. Sign a fresh one per request; do not cache. |
+| `expired` | The signature's `expires` has already passed, or the challenge is stale. Sign a fresh one per request; do not cache. Carries `serverTime`. |
+| `window` | You asked for a validity longer than five minutes, which is the door's maximum. Nothing has expired -- sign a SHORTER window. |
+| `clock-skew` | Your `created` is in our future, and we allow no tolerance. Your clock is ahead of ours. The body carries `serverTime`; re-sign against that, or synchronise your clock. `mro-agent` does this for you, once, automatically. |
 | `unknown-key` | A directory was READ and your key id was not in it. Register the key, or pass `--directory` and host a JWKS. A key registered and never used is forgotten after 30 days -- if you registered ahead of time and arrived weeks later, just register again. |
 | `directory` | The directory could not be FETCHED at all -- ours or yours. Nothing is wrong with your key: retry rather than re-deriving the thumbprint. You will also get this if you signed for an authority that hosts no directory. |
 | `challenge` | The challenge answer was wrong, reused, or older than five seconds. Knock, answer, and send in one go; a challenge answers exactly once. |

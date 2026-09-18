@@ -82,7 +82,7 @@ async function readRpc(res) {
 
 /// One JSON-RPC call through the door. Returns the whole envelope, because a
 /// payment demand arrives inside `result` and the caller has to see it.
-export async function rpc({ origin, site, privateJwk, signatureAgent, method, params = {}, id = 1, fetchImpl = fetch, onTiming, retry = true }) {
+export async function rpc({ origin, site, privateJwk, signatureAgent, method, params = {}, id = 1, fetchImpl = fetch, onTiming, retry = true, clockOffsetMs = 0 }) {
   // The protocol fields go LAST so a caller cannot overwrite them. `_meta` is
   // shared with the x402 payment authorisation, which uses its own namespaced
   // keys, so the two sit side by side rather than competing.
@@ -96,6 +96,7 @@ export async function rpc({ origin, site, privateJwk, signatureAgent, method, pa
     },
   };
   const res = await admittedFetch({
+    clockOffsetMs,
     onTiming,
     origin,
     site,
@@ -115,7 +116,25 @@ export async function rpc({ origin, site, privateJwk, signatureAgent, method, pa
     // Every other reason -- a wrong key, an unregistered key, an altered body
     // -- is retried into the same refusal, so it is not.
     if (retry && (body.reason === "expired" || body.reason === "challenge")) {
-      return rpc({ origin, site, privateJwk, signatureAgent, method, params, id, fetchImpl, onTiming, retry: false });
+      return rpc({ origin, site, privateJwk, signatureAgent, method, params, id, fetchImpl, onTiming, retry: false, clockOffsetMs });
+    }
+
+    // A THIRD RETRYABLE REASON, and the only one that needs an answer from the
+    // refusal itself. `clock-skew` means this machine's clock is ahead of the
+    // site's, so the signature was stamped in the site's future. Re-signing
+    // with the same clock reproduces it exactly; re-signing against the time
+    // the site just told us does not. One retry, never a loop: the second
+    // attempt carries `retry: false`, so a site that answered `clock-skew` to
+    // everything would get two requests and then an error.
+    if (retry && body.reason === "clock-skew" && body.serverTime) {
+      const offset = Date.parse(body.serverTime) - Date.now();
+      if (Number.isFinite(offset)) {
+        return rpc({
+          origin, site, privateJwk, signatureAgent, method, params, id, fetchImpl, onTiming,
+          retry: false,
+          clockOffsetMs: offset,
+        });
+      }
     }
     throw new Error(doorMessage(body.reason));
   }

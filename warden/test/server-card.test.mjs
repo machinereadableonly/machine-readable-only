@@ -109,6 +109,21 @@ test("the card states the entry condition rather than leaving a client to discov
   assert.equal(meta.docs, "https://machinereadableonly.com/llms.txt");
 });
 
+test("the card says this deployment is a rehearsal, not the permanent piece", () => {
+  // A discovery card is read by agents that will never read anything else of
+  // ours. Without this, the only honest statement of what chain they are
+  // joining lived in llms.txt, and the card advertised a permanent-sounding
+  // artwork on a testnet.
+  //
+  // THIS TEST IS MEANT TO GO RED at the mainnet deploy, in that commit, which
+  // is the point: the card cannot be left saying "rehearsal" about the real
+  // thing.
+  const meta = CARD._meta["com.machinereadableonly/entry"];
+  assert.ok(meta.status, "the card must state what this deployment is");
+  assert.match(meta.status, /Base Sepolia/, "and name the chain");
+  assert.match(meta.status, /84532/, "by id as well as by name, because a client matches on the id");
+});
+
 test("the card names no package that is not published", () => {
   // MEASURED 2026-09-16: this card carried `"client": "npx mro-agent"` while
   // registry.npmjs.org/mro-agent answered 404. The name is unclaimed, so an
