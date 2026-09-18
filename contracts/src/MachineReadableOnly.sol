@@ -170,6 +170,32 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         _;
     }
 
+    /// @notice Say, on chain, that the operator is still here. Writes nothing
+    /// else.
+    ///
+    /// @dev Added 2026-09-18, pre-deploy. Every other `onlyWarden` function
+    /// needs real work to do, and the Clock writes nothing on a day with no
+    /// credits, mints or mark orders -- so `lastWardenDay` stops advancing when
+    /// AGENTS go quiet, not only when the operator does. A year of that and any
+    /// caller may `sunsetByAbsence`, after which `mint` and `batchCheckIn`
+    /// revert `Sunset` forever: the piece closed under an operator who is
+    /// present, attending, and paying to host it. For a work whose comparable
+    /// projects include one with a single mint out of 5,555, a quiet year is a
+    /// likely season rather than an edge case.
+    ///
+    /// A one-token `batchCheckIn` would restamp the clock just as cheaply. It
+    /// is refused on MEANING: it writes a visit the agent never made, forging
+    /// the one thing the artwork is a record of. This writes no token state at
+    /// all, which is what makes it an honest stamp.
+    ///
+    /// Deliberately NOT `whenNotPaused`: a pause outlasting `ABSENCE_DAYS`
+    /// would otherwise force the ending with no way to speak against it.
+    /// Liveness is precisely what a paused piece still needs to assert.
+    ///
+    /// It does not reopen a closed piece -- `isSunset` is one-way and nothing
+    /// here clears it -- so a heartbeat after the end is a no-op, not a revival.
+    function heartbeat() external onlyWarden {}
+
     constructor(address renderer_, address warden_)
         ERC721("Machine Readable Only", "MRO")
         Ownable(msg.sender)

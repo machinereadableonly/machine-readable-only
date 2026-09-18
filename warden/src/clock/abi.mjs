@@ -226,6 +226,13 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "heartbeat",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "isApprovedForAll",
     "inputs": [
       {
