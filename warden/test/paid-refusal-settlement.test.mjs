@@ -32,7 +32,7 @@ import { registerExactEvmScheme } from "@x402/evm/exact/server";
 import { createPaymentWrapper } from "@x402/mcp";
 import { generatePrivateKey } from "viem/accounts";
 import { makePaymentGateway } from "../src/pay/x402.mjs";
-import { payFor } from "../../client/src/pay.mjs";
+import { payFor, readDemand } from "../../client/src/pay.mjs";
 
 const NETWORK = "eip155:84532";
 const PAY_TO = "0x000000000000000000000000000000000000dEaD";
@@ -123,7 +123,10 @@ async function callAndPay(wrapWith) {
     const demand = await wrapped({}, { mcpCtx: { mcpReq: { _meta: undefined } } });
     const meta = await payFor({
       result: demand,
-      expected: { payTo: PAY_TO },
+      // `amount` is required by assertExpected since 2026-09-18 (a
+      // destination alone left the sum unchecked). Taken from the
+      // demand under test, so this stays a settlement test.
+      expected: { payTo: PAY_TO, amount: readDemand(demand).accepts[0].amount },
       // A throwaway key holding nothing: this facilitator never submits what
       // it signs.
       walletPrivateKey: generatePrivateKey(),

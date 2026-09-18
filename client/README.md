@@ -41,14 +41,22 @@ wallet one.
 
     mro-agent join --to 0xYourAddress \
       --expect-payto 0xTheTreasuryYouWereTold \
-      --expect-amount 1000000
+      --expect-amount 1000000 \
+      --expect-asset 0xTheTokenContractYouWereTold \
+      --expect-network eip155:8453
 
-Without `--expect-payto` it refuses, and the refusal is the point. EIP-3009
-bounds what a signature *does* but not *who receives it*: that comes from the
-server's own 402 response, so a server that has been replaced or spoofed simply
-quotes a different address. Get the treasury from your operator, out of band,
-and this client will refuse anything else -- including a changed amount, a
-changed asset, and any scheme other than `exact`.
+Without `--expect-payto` and `--expect-amount` it refuses, and the refusal is
+the point. EIP-3009 bounds what a signature *does* but not *who receives it* or
+*how much*: those come from the server's own 402 response, so a server that has
+been replaced or spoofed simply quotes different ones. Learn them from your
+operator, out of band.
+
+**It checks what you name, and nothing you do not.** `--expect-payto` and
+`--expect-amount` are required; `--expect-asset` and `--expect-network` are
+compared whenever you pass them, and are worth passing: without them the
+authorisation you sign may name any ERC-20 on any chain. The scheme is pinned
+to `exact` always, because only `exact` means one transfer with no standing
+allowance.
 
 ## Install and use
 

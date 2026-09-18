@@ -61,6 +61,16 @@ export function assertExpected(accepted, expected) {
   if (!expected || typeof expected.payTo !== "string") {
     throw new Error("refusing to pay: an expected payTo address is required, from a source other than this server");
   }
+  // THE AMOUNT IS MANDATORY TOO, since 2026-09-18. It was compared only when
+  // supplied, and the instructions printed at the moment of payment asked for
+  // `--expect-payto` alone -- so the documented flow signed whatever sum the
+  // site named, provided it named the right treasury. A site that is
+  // compromised, or simply wrong, does not become harmless by being the right
+  // destination: the ladder runs to $1,250.00, and an authorisation is signed
+  // once and cannot be recalled.
+  if (typeof expected.amount !== "string" && typeof expected.amount !== "number") {
+    throw new Error("refusing to pay: an expected amount is required, from a source other than this server");
+  }
   const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
 
   if (!same(accepted.payTo, expected.payTo)) {

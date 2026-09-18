@@ -23,7 +23,7 @@ import { utcDay } from "../../warden/src/mcp/tools/checkin.mjs";
 import { openChain } from "../../warden/test/chain-stub.mjs";
 import { adaptContext } from "../../warden/src/pay/x402.mjs";
 import { loadIdentity } from "../src/keys.mjs";
-import { VERSION, cronLine, unpayableMessage, doorMessage, DOOR_REASONS } from "../src/messages.mjs";
+import { VERSION, PUBLISHED, cronLine, invocation, unpayableMessage, doorMessage, DOOR_REASONS } from "../src/messages.mjs";
 
 const run = promisify(execFile);
 const CLI = fileURLToPath(new URL("../src/cli.mjs", import.meta.url));
@@ -165,15 +165,32 @@ test("join registers, lists the tools, and STOPS with what a human must do", asy
   // C3.4: the line is still printed for an operator who asked for it, pinned
   // to a version, at a scattered minute, and honest about the missing id.
   assert.match(out, /crontab -e/);
-  assert.match(out, new RegExp(`^\\d{1,2} (11|12|13) \\* \\* \\* npx --yes mro-agent@${VERSION.replace(/\./g, "\\.")} beat --site https://example\\.com --token <your token id> >> ~/\\.mro/beat\\.log 2>&1$`, "m"));
+  // The invocation is whichever form is true TODAY -- see `invocation()`.
+  // Pinning the npx form here is what let a line naming an unpublished version
+  // ship: the test asserted the shape it wanted rather than one that runs.
+  const run = invocation().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  assert.match(out, new RegExp(`^\\d{1,2} (11|12|13) \\* \\* \\* ${run} beat --site https://example\\.com --token <your token id> >> ~/\\.mro/beat\\.log 2>&1$`, "m"));
   assert.doesNotMatch(out, /^0 12 \* \* \* mro-agent beat/m, "the old unpinned line must be gone");
 });
 
 // C3.4, as arithmetic rather than as a regex over a process. The three
 // properties that matter are the pin, the scatter, and the real id.
 test("the cron line pins a version and UTC, scatters the minute, and carries the token id", () => {
-  const line = cronLine({ site: "https://example.com", tokenId: 7, version: "9.9.9", minute: 41, hour: 12 });
-  assert.equal(line, "CRON_TZ=UTC\n41 12 * * * npx --yes mro-agent@9.9.9 beat --site https://example.com --token 7 >> ~/.mro/beat.log 2>&1");
+  // BOTH FORMS, because only one of them is live at a time and the dead one is
+  // where the bug hid. M7: the published form named a version the registry
+  // answers 404 for, every night, into a redirected log.
+  const published = cronLine({ site: "https://example.com", tokenId: 7, version: "9.9.9", minute: 41, hour: 12, published: true });
+  assert.equal(published, "CRON_TZ=UTC\n41 12 * * * npx --yes mro-agent@9.9.9 beat --site https://example.com --token 7 >> ~/.mro/beat.log 2>&1");
+
+  const unpublished = cronLine({ site: "https://example.com", tokenId: 7, minute: 41, hour: 12, published: false, entry: "/opt/mro/cli.mjs" });
+  assert.equal(unpublished, "CRON_TZ=UTC\n41 12 * * * node /opt/mro/cli.mjs beat --site https://example.com --token 7 >> ~/.mro/beat.log 2>&1");
+
+  // And the live default never names npx while the package cannot run.
+  const line = cronLine({ site: "https://example.com", tokenId: 7, minute: 41, hour: 12 });
+  if (!PUBLISHED) {
+    assert.doesNotMatch(line, /npx/, "an unpublished client must not schedule npx");
+    assert.match(line, /node \/.*cli\.mjs beat/, "it schedules the file that is actually running");
+  }
 
   // 5.M5. THE ZONE IS THE POINT, not decoration: crontab(5) runs a table in the
   // daemon's LOCAL zone, while the check-in window is a UTC day on chain. On a
@@ -189,7 +206,10 @@ test("the cron line pins a version and UTC, scatters the minute, and carries the
   }
   assert.ok(minutes.size > 20, `the minute must be drawn, not fixed: saw ${minutes.size}`);
   for (const h of hours) assert.ok(["11", "12", "13"].includes(h), `hour out of range: ${h}`);
-  assert.match(cronLine({ site: "https://example.com", tokenId: 1 }), new RegExp(`mro-agent@${VERSION.replace(/\./g, "\\.")} `));
+  assert.match(
+    cronLine({ site: "https://example.com", tokenId: 1, published: true }),
+    new RegExp(`mro-agent@${VERSION.replace(/\./g, "\\.")} `)
+  );
   // And the hour still leaves room for an hour of drift inside the same UTC day.
 });
 
@@ -232,10 +252,76 @@ test("REFUSES to pay when the expected payTo does not match the demand", async (
     "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
     "--key", join(dir, "payer2.json"), "--to", "0x" + "a1".repeat(20),
     "--wallet-key", "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
-    "--expect-payto", "0x" + "b2".repeat(20)
+    // The amount is named so this stops at the payTo check, which is its
+    // subject -- an absent amount is now refused first, and would make this
+    // pass for the wrong reason.
+    "--expect-payto", "0x" + "b2".repeat(20), "--expect-amount", "1000000"
   );
   assert.equal(code, 1);
   assert.match(out, /refusing to pay: payTo is/);
+});
+
+// -- all four payment fields, not two ---------------------------------------
+//
+// `assertExpected` compares amount, asset and network whenever the caller
+// supplies them -- but the CLI only ever built `{ payTo, amount }`, so `asset`
+// and `network` were unreachable through the binary at any price. Measured
+// 2026-09-18 against the real modules: with only payTo pinned, the client
+// signed a transferWithAuthorization for an attacker's ERC-20 on Base MAINNET,
+// with a one-year validity window, against a comment calling that window
+// "deliberately short". payTo itself was never the hole -- it is mandatory, and
+// an absent --expect-payto throws before anything is signed.
+
+test("REFUSES to pay when the expected asset does not match the demand", async () => {
+  const { code, out } = await cli(
+    "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+    "--key", join(dir, "payer-asset.json"), "--to", "0x" + "a1".repeat(20),
+    "--wallet-key", "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+    "--expect-payto", TREASURY, "--expect-amount", "1000000",
+    "--expect-asset", "0x" + "cc".repeat(20)
+  );
+  assert.equal(code, 1);
+  assert.match(out, /refusing to pay: asset is/);
+});
+
+test("REFUSES to pay when the expected network does not match the demand", async () => {
+  const { code, out } = await cli(
+    "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+    "--key", join(dir, "payer-network.json"), "--to", "0x" + "a1".repeat(20),
+    "--wallet-key", "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+    "--expect-payto", TREASURY, "--expect-amount", "1000000",
+    "--expect-network", "eip155:1"
+  );
+  assert.equal(code, 1);
+  assert.match(out, /refusing to pay: network is/);
+});
+
+test("REFUSES to pay with no expected amount at all", async () => {
+  // The amount was optional, and the instruction printed at the moment of
+  // payment asked only for --expect-payto -- so the documented flow left the
+  // sum unchecked. A demand for any amount, payable to the right treasury, was
+  // signed without complaint.
+  const { code, out } = await cli(
+    "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+    "--key", join(dir, "payer-noamount.json"), "--to", "0x" + "a1".repeat(20),
+    "--wallet-key", "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+    "--expect-payto", TREASURY
+  );
+  assert.equal(code, 1);
+  assert.match(out, /an expected amount is required/);
+});
+
+test("the instructions name every flag the client needs to pay", async () => {
+  // The promise and the prescription have to agree: the text asserted the
+  // client "refuses to pay any other address, amount or asset" while telling
+  // the operator to pass one flag.
+  const { out } = await cli(
+    "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+    "--key", join(dir, "payer-instructions.json"), "--to", "0x" + "a1".repeat(20)
+  );
+  for (const flag of ["--expect-payto", "--expect-amount", "--expect-asset", "--expect-network"]) {
+    assert.ok(out.includes(flag), `the payment instructions never mention ${flag}: ${out}`);
+  }
 });
 
 // 2026-09-11, the first paid mint through the persistent test wallet. The

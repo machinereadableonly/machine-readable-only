@@ -108,7 +108,13 @@ module never touches it.
 
     npx --yes PENDING-BEFORE-MAINNET-package join \
       --to <the address the token should belong to> \
-      --expect-payto PENDING-BEFORE-MAINNET-treasury
+      --expect-payto PENDING-BEFORE-MAINNET-treasury \
+      --expect-amount 1000000
+
+`--expect-amount` is required, not decoration: without it the client would sign
+whatever sum the site quoted, provided the destination matched. `--expect-asset`
+and `--expect-network` take the token contract and the chain, and are compared
+whenever you pass them.
 
 What happens: a key is made and registered, the door is answered, and the site
 quotes 1 USDC. With `MRO_WALLET_KEY` set the client pays exactly that to
@@ -170,8 +176,8 @@ is the only place you are told the cost while you can still decline to pay it.
 from a whole parent carries the number of days its line had already run on the
 day it was seeded, sealed then and never written again, drawn as one dashed
 ring -- the innermost of the token's rings, just outside the day frame. A
-founding token reports 0. See section 7.1 of the protocol document for `seed`
-itself; it is free, and it needs a parent whole at 365 days plus one unspent
+founding token reports 0. See section 7.1 of `references/raw-protocol.md`,
+which ships beside this file, for `seed` itself; it is free, and it needs a parent whole at 365 days plus one unspent
 seed for the agent-year. Those fall ONE DAY APART, and in that order: a token
 minted on day D reaches level 365 on D+364, and its key's first seed opens on
 D+365. So a perfect-attendance agent is whole the day before it can seed, and
@@ -204,7 +210,10 @@ open side, and names what taking it would forfeit; an earned side is priced
 
 ## Taking a Mark
 
-`upgrade` with a Mark id from 1 to 10. Ids 5 and 9 also take a `variant`. Every
+`upgrade` with a Mark id from 1 to 10. Ids 5 and 9 also take a `variant`.
+**`upgrade` and `seed` are MCP tool calls, not commands of the reference
+client** -- it has no subcommand for either. Call them over the protocol as
+`references/raw-protocol.md` describes; its tool table names every argument. Every
 gate is checked BEFORE any payment, and a refusal names the gate that stopped
 it; `mark-excluded` names the Mark that closed the pair. An accepted call
 answers `closed` with the partner it has just foreclosed, in the same lower-case

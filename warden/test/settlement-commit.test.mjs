@@ -41,7 +41,7 @@ import { makeUpgradeTool } from "../src/mcp/tools/upgrade.mjs";
 import { LADDER, assertLadderSane } from "../src/mcp/ladder.mjs";
 import { makePaymentGateway } from "../src/pay/x402.mjs";
 import { openChain } from "./chain-stub.mjs";
-import { payFor } from "../../client/src/pay.mjs";
+import { payFor, readDemand } from "../../client/src/pay.mjs";
 
 const NETWORK = "eip155:84532";
 const PAY_TO = "0x000000000000000000000000000000000000dEaD";
@@ -149,7 +149,10 @@ async function mintPaying({ settle }) {
     const demand = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: undefined } } });
     const meta = await payFor({
       result: demand,
-      expected: { payTo: PAY_TO },
+      // `amount` is required by assertExpected since 2026-09-18 (a
+      // destination alone left the sum unchecked). Taken from the
+      // demand under test, so this stays a settlement test.
+      expected: { payTo: PAY_TO, amount: readDemand(demand).accepts[0].amount },
       // A throwaway key holding nothing: this facilitator submits nothing.
       walletPrivateKey: generatePrivateKey(),
     });
@@ -222,7 +225,10 @@ async function upgradePaying({ settle }) {
     const demand = await tool.handler(args, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: undefined } } });
     const meta = await payFor({
       result: demand,
-      expected: { payTo: PAY_TO },
+      // `amount` is required by assertExpected since 2026-09-18 (a
+      // destination alone left the sum unchecked). Taken from the
+      // demand under test, so this stays a settlement test.
+      expected: { payTo: PAY_TO, amount: readDemand(demand).accepts[0].amount },
       walletPrivateKey: generatePrivateKey(),
     });
     assert.ok(meta, "the first call must produce a payment demand");
