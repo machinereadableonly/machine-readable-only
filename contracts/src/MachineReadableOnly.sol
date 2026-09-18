@@ -8,7 +8,7 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC4906} from "@openzeppelin/contracts/interfaces/IERC4906.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
 import {IRenderer} from "./render/IRenderer.sol";
 import {TokenView} from "./render/TokenView.sol";
@@ -616,8 +616,23 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (s.level == 0) revert NoSuchToken(id);
         if (s.resting) revert Resting(id);
 
-        address signer = ECDSA.recoverCalldata(voucherHash(id, day), wardenSig);
-        if (signer != warden) revert BadVoucher();
+        // ASK, DO NOT RECOVER. `ECDSA.recoverCalldata` -- what this line did
+        // until 2026-09-18 -- resolves a signature to an address, which only
+        // works when the signer holds a private key. The Warden most likely to
+        // outlive its operator is a Safe or a 4337 account, and a CONTRACT has
+        // no key: no signature it authorises can ever recover to its own
+        // address, so rotating to one would have silently broken every voucher
+        // that will ever be signed. On the one path whose entire purpose is
+        // surviving the Warden, in bytecode with no upgrade path.
+        //
+        // SignatureChecker keeps the ECDSA path byte-for-byte for an EOA
+        // (`signer.code.length == 0`) and asks the contract through ERC-1271
+        // otherwise. A contract that does not implement it, or answers
+        // anything but the magic value, is refused -- so a misconfigured
+        // rotation is a closed door, never an open one.
+        if (!SignatureChecker.isValidSignatureNowCalldata(warden, voucherHash(id, day), wardenSig)) {
+            revert BadVoucher();
+        }
 
         // Bounded above for the same reason as batchCheckIn: a signed voucher
         // for a nonsense future day would brick the token permanently.
