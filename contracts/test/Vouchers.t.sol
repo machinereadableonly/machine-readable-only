@@ -4,6 +4,28 @@ pragma solidity ^0.8.30;
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 import {MroTestBase} from "./MroTestBase.sol";
+import {ECDSA} from "../lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
+
+
+/// @notice The smallest honest ERC-1271 wallet: it answers "yes" for exactly
+/// the signatures its own owner made.
+/// @dev Stands in for a Safe or a 4337 account. Those are contracts, and a
+/// contract has no private key -- so `ECDSA.recover` on a signature "from" one
+/// can never return its address. A contract signs by being ASKED, which is
+/// what ERC-1271 is.
+contract ERC1271Wallet {
+    address public immutable owner;
+
+    constructor(address o) {
+        owner = o;
+    }
+
+    function isValidSignature(bytes32 hash, bytes memory signature) external view returns (bytes4) {
+        (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(hash, signature);
+        if (err == ECDSA.RecoverError.NoError && recovered == owner) return 0x1626ba7e;
+        return 0xffffffff;
+    }
+}
 
 /// @notice The durability path. Ships present and OFF, so a token can outlive
 /// the Warden if the operator ever switches to voucher-only mode.
@@ -160,11 +182,18 @@ contract VouchersTest is MroTestBase {
     /// @dev ECDSA.recoverCalldata reverts on a malformed signature (wrong
     /// length here) rather than resolving to address(0), so a garbage
     /// signature can never be mistaken for a valid one.
-    function test_aMalformedSignatureReverts() public {
+    /// @dev NAMED, not a blanket `vm.expectRevert()`. This used to accept any
+    /// revert at all, which meant it could not see the change of 2026-09-18:
+    /// under `ECDSA.recoverCalldata` a four-byte signature reverted
+    /// `ECDSAInvalidSignatureLength`, and under SignatureChecker it reverts
+    /// `BadVoucher` -- because `tryRecover` returns its error rather than
+    /// throwing it. Same refusal, one error instead of four, and the three
+    /// ECDSA errors have left the ABI. A caller now handles exactly one.
+    function test_aMalformedSignatureRevertsAsBadVoucher() public {
         t.setVouchersEnabled(true);
         uint32 d = t.today() + 1;
         vm.prank(MALLORY);
-        vm.expectRevert();
+        vm.expectRevert(MachineReadableOnly.BadVoucher.selector);
         t.checkInWithVoucher(1, d, hex"deadbeef");
     }
 
@@ -190,6 +219,87 @@ contract VouchersTest is MroTestBase {
         // about the voucher being invalid in general.
         vm.prank(MALLORY);
         t.checkInWithVoucher(1, d, sigForToken1);
+        assertEq(t.viewOf(1).level, 2);
+    }
+
+    // -----------------------------------------------------------------
+    // A WARDEN THAT IS A CONTRACT
+    //
+    // The durability path exists so the piece can outlive the Warden, and the
+    // Warden most likely to outlive a person is a Safe or a 4337 account --
+    // not the single key this box holds. Both are CONTRACTS, and a contract
+    // cannot produce a signature that `ECDSA.recover` resolves to its own
+    // address; it signs by being asked, through ERC-1271.
+    //
+    // Until 2026-09-18 `checkInWithVoucher` recovered an address and compared
+    // it, so rotating the warden to either would have silently broken every
+    // voucher that will ever be signed -- in bytecode with no upgrade path,
+    // on the one path whose entire purpose is surviving the operator.
+    // -----------------------------------------------------------------
+
+    /// @dev The whole point: a Safe-shaped warden can authorise a voucher.
+    function test_aContractWardenCanSignAVoucher() public {
+        ERC1271Wallet safe = new ERC1271Wallet(vm.addr(WARDEN_KEY));
+        t.setWarden(address(safe));
+        t.setVouchersEnabled(true);
+
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        bytes memory sig = _sign(1, d);   // signed by the safe's OWNER
+
+        vm.prank(MALLORY);
+        t.checkInWithVoucher(1, d, sig);
+
+        assertEq(t.viewOf(1).level, 2, "the day must be credited");
+        assertEq(t.viewOf(1).streak, 2);
+    }
+
+    /// @dev And the refusal that proves the acceptance means something: the
+    /// wallet is asked, and it says no to a signature its owner did not make.
+    function test_aContractWardenRefusesAStrangersSignature() public {
+        ERC1271Wallet safe = new ERC1271Wallet(vm.addr(WARDEN_KEY));
+        t.setWarden(address(safe));
+        t.setVouchersEnabled(true);
+
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        bytes32 digest = t.voucherHash(1, d);
+        (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(0xBADBEEF, digest);
+        bytes memory sig = abi.encodePacked(rr, ss, v);
+
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.BadVoucher.selector);
+        t.checkInWithVoucher(1, d, sig);
+    }
+
+    /// @dev A warden contract that answers NOTHING useful -- any contract that
+    /// is not ERC-1271 at all -- must refuse rather than pass. This is the
+    /// case that would otherwise turn a misconfigured rotation into an open
+    /// door.
+    function test_aWardenContractThatIsNotERC1271RefusesEverything() public {
+        // The renderer is a contract with no isValidSignature at all.
+        t.setWarden(address(r));
+        t.setVouchersEnabled(true);
+
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        bytes memory sig = _sign(1, d);
+
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.BadVoucher.selector);
+        t.checkInWithVoucher(1, d, sig);
+    }
+
+    /// @dev THE CONTROL. An EOA warden must keep working exactly as before --
+    /// which is what the rest of this file asserts, and is restated here
+    /// beside the new path so the two are read together.
+    function test_anEoaWardenStillSignsVouchers() public {
+        t.setVouchersEnabled(true);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        bytes memory sig = _sign(1, d);
+        vm.prank(MALLORY);
+        t.checkInWithVoucher(1, d, sig);
         assertEq(t.viewOf(1).level, 2);
     }
 }

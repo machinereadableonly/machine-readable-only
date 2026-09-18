@@ -206,4 +206,78 @@ contract CheckInTest is MroTestBase {
         emit log_named_uint("padded as the Clock pads it", padded);
         assertLe(padded, MAX_TX_GAS - CHUNK_MARGIN, "a full chunk, padded, must leave CHUNK_MARGIN under the Clock's guard");
     }
+
+    // -----------------------------------------------------------------
+    // ALL-OR-NOTHING IS THE DESIGN, not an oversight
+    //
+    // The 2026-09-17 review asked for skip-and-continue per entry. Declined,
+    // 2026-09-18, and this pins the reasoning so it is not re-raised as new:
+    //
+    //   1. `batchCheckIn` is `onlyWarden`, so it has exactly ONE caller, and
+    //      that caller already does better than skipping. The contract's custom
+    //      errors NAME the offending entry (NoSuchToken(id), Resting(id)), so
+    //      `warden/src/clock/batch.mjs` re-chunks with that id removed --
+    //      precisely, not by bisecting -- and reports each dropped entry.
+    //   2. Skipping on chain would make those failures SILENT. The caller would
+    //      have to diff what it asked for against what happened, and a day that
+    //      quietly went missing is exactly the class of defect this project has
+    //      twice found the expensive way. A token's record IS the artwork.
+    //   3. Nothing is lost by reverting. A queued credit is re-offered on later
+    //      nights (`day <= today()` is the only upper bound), so a batch that
+    //      reverts is a night delayed, not a day destroyed.
+    //   4. It is the gas-critical loop, and every added branch is permanent
+    //      bytecode with no upgrade path.
+    //
+    // What an owner CAN do is make one batch revert by resting mid-flight.
+    // That is bounded: the Clock re-chunks without them and the night lands.
+    // -----------------------------------------------------------------
+
+    /// @dev The revert an owner can cause, and the proof it costs nobody a day.
+    function test_oneRestingTokenRevertsTheWholeBatchAndTheRestAreRetryable() public {
+        vm.prank(WARDEN);
+        t.mint(2, MALLORY, bytes32(uint256(0xb0b)), _code(), _today());
+
+        // Mallory seals their own token between the batch being built and sent.
+        vm.prank(MALLORY);
+        t.rest(2);
+
+        uint32 d = _today() + 1;
+        _warpToDay(d);
+
+        uint32[] memory ids = new uint32[](2);
+        ids[0] = 1;
+        ids[1] = 2;
+        uint32[] memory ds = new uint32[](2);
+        ds[0] = d;
+        ds[1] = d;
+
+        // The WHOLE batch reverts, and the error NAMES the entry to drop --
+        // which is what makes the Warden's re-chunk precise rather than a
+        // bisect.
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, 2));
+        t.batchCheckIn(_packed(ids), ds);
+
+        assertEq(t.viewOf(1).lastDay, d - 1, "token 1 was not credited by the reverted batch");
+
+        // Re-chunked without the resting id: the day lands, unchanged.
+        uint32[] memory good = new uint32[](1);
+        good[0] = 1;
+        vm.prank(WARDEN);
+        t.batchCheckIn(_packed(good), _days(d));
+        assertEq(t.viewOf(1).lastDay, d, "the day is credited on the re-chunk");
+        assertEq(t.viewOf(1).streak, 2, "and the run is unbroken, so nothing was lost");
+    }
+
+    /// @dev And the day survives a night being missed entirely: a past day is
+    /// creditable for as long as the token has not passed it, which is why a
+    /// reverted batch is a delay rather than a loss.
+    function test_aDayMissedEntirelyCanStillBeCreditedLater() public {
+        uint32 missed = _today() + 1;
+        _warpToDay(missed + 5);          // five nights go by with nothing sent
+
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(missed));
+        assertEq(t.viewOf(1).lastDay, missed, "the missed day is still creditable");
+    }
 }
