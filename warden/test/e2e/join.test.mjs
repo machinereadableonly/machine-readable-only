@@ -373,16 +373,25 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       // THE CREDIT NAMES THE REQUEST THAT BOUGHT IT. credits.sigHash was
       // written by nobody -- `ctx.sigHash ?? ""` into a NOT NULL column --
       // because the door held the signature and the tool asked for it and
-      // nothing joined them. It is the SHA-256 of the Signature header this
-      // client actually sent, recomputed here from the header itself rather
-      // than from a copy of the rule.
+      // nothing joined them.
+      //
+      // IT IS THE SIGNATURE BASE, NOT THE HEADER TEXT, since 2026-09-18. This
+      // assertion used to recompute SHA-256 over the `Signature` header sent,
+      // which was the door's own rule -- and that rule was the relabelling
+      // bypass: the header carries a caller-chosen label the signed base does
+      // not, so one signature could wear many header texts and be admitted once
+      // per text. The base is not reconstructible from the headers alone here
+      // (the library builds it), so what is pinned is the PROPERTY that
+      // mattered: a real, full-width hash that is not the empty string.
       const stored = journey.db
         .prepare("SELECT sigHash FROM credits WHERE tokenId = ? AND day = ?")
         .get(tokenId, firstDay);
-      const expected = createHash("sha256").update(sentHeader(sent, "signature"), "utf8").digest("hex");
-      assert.equal(stored.sigHash.length, 64);
+      assert.match(stored.sigHash, /^[0-9a-f]{64}$/, "a sha-256 hex digest, not a placeholder");
       assert.notEqual(stored.sigHash, "", "the empty string is the bug this replaces");
-      assert.equal(stored.sigHash, expected);
+      // And it is NOT the old header-text hash, which is what a silent revert
+      // of the fix would produce.
+      const headerTextHash = createHash("sha256").update(sentHeader(sent, "signature"), "utf8").digest("hex");
+      assert.notEqual(stored.sigHash, headerTextHash, "the evidence must not be the relabellable header text");
 
       // THE MIRROR ADVANCED, not just the credits table. It is the source of
       // truth for the tools, so a token that never grows here never grows at

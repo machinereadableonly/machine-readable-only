@@ -225,6 +225,109 @@ test("a captured signature stays refused however many times it is presented", as
   assert.equal(admitted.length, 1);
 });
 
+/// Rename the signature label in BOTH headers, changing nothing else.
+///
+/// RFC 9421 lets the caller name its own signature -- `sig1=` by convention,
+/// but any token will do -- and the label is NOT part of the signature base:
+/// the library strips it (`http-message-sig`, `verify()`) before building the
+/// signed data, and `parseSignatureHeader` only requires the two headers to
+/// agree with each other. So this leaves the signed bytes byte-identical and
+/// the Ed25519 signature valid, while changing the raw header text.
+///
+/// That is the whole bypass: while the door keyed `spent` on a hash of the raw
+/// header, one captured signature was admissible once per label, and labels are
+/// unlimited. Measured at twelve admissions from one signature, and end to end
+/// over HTTP at 200 on every relabelled replay.
+function relabel(req, from, to) {
+  const headers = {};
+  for (const [name, value] of Object.entries(req.headers)) {
+    const lower = name.toLowerCase();
+    headers[name] =
+      lower === "signature" || lower === "signature-input"
+        ? String(value).replace(new RegExp(`^${from}=`), `${to}=`)
+        : value;
+  }
+  return { ...req, headers };
+}
+
+test("a captured signature cannot be readmitted by renaming its label", async () => {
+  const seen = new Set();
+  const spent = new Map();
+  const signer = await signerFromJWK(ED.key);
+  const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
+
+  const captured = await signedRequest();
+  const first = await admit(withFreshChallenge(captured, signer.keyid), deps);
+  assert.equal(first.ok, true, `expected the first presentation to be admitted, got ${JSON.stringify(first)}`);
+
+  const relabelled = relabel(captured, "sig1", "sig2");
+  const second = await admit(withFreshChallenge(relabelled, signer.keyid), deps);
+  assert.equal(second.ok, false, "a rename is not a new signature");
+  assert.equal(second.body.reason, "replay");
+});
+
+test("no number of fresh labels buys a second admission", async () => {
+  const seen = new Set();
+  const spent = new Map();
+  const signer = await signerFromJWK(ED.key);
+  const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
+
+  const captured = await signedRequest();
+  const admitted = [];
+  for (const label of ["sig1", "sig2", "sigA", "a-b_c", "x"]) {
+    const attempt = label === "sig1" ? captured : relabel(captured, "sig1", label);
+    const decision = await admit(withFreshChallenge(attempt, signer.keyid), deps);
+    if (decision.ok) admitted.push(decision.sigHash);
+  }
+  // Before the fix: five admissions, five DIFFERENT sigHashes from one
+  // signature -- which also meant one signed request could produce several
+  // distinct `credits.sigHash` evidence values.
+  assert.equal(admitted.length, 1, "one signature, one admission, whatever it is called");
+});
+
+test("renaming only one of the two headers is refused by the library, not by us", async () => {
+  // The controls that stop the tests above passing for the wrong reason. If the
+  // library rejected a mismatched pair as `replay`, they would prove nothing
+  // about the door's own guard.
+  //
+  // CASE-BLIND, and that is not fussiness: the first version of this control
+  // indexed `headers.signature` directly, the signed request capitalises its
+  // header names, so the "mutation" changed nothing and the control passed a
+  // pristine request. It reported the door admitting a forgery it had never
+  // been shown. A control that does not actually mutate is worse than none.
+  const signer = await signerFromJWK(ED.key);
+  const deps = () => ({ secret: SECRET, lookupKey: lookupED, seen: new Set(), spent: new Map(), domain: DOMAIN });
+  const captured = await signedRequest();
+
+  for (const target of ["signature", "signature-input"]) {
+    const headers = {};
+    for (const [name, value] of Object.entries(captured.headers)) {
+      headers[name] =
+        name.toLowerCase() === target ? String(value).replace(/^sig1=/, "sig2=") : value;
+    }
+    const mutated = { ...captured, headers };
+    assert.notDeepEqual(mutated.headers, captured.headers, `${target} was not actually changed`);
+
+    const decision = await admit(withFreshChallenge(mutated, signer.keyid), deps());
+    assert.equal(decision.ok, false, `renaming ${target} alone must not be admitted`);
+    assert.equal(decision.body.reason, "signature");
+  }
+});
+
+test("a relabelled signature that was never presented is still admitted once", async () => {
+  // The other control: the guard must key on the SIGNED MATERIAL, not on
+  // "anything that looks relabelled". A fresh request wearing an unusual label
+  // is a perfectly good request.
+  const seen = new Set();
+  const spent = new Map();
+  const signer = await signerFromJWK(ED.key);
+  const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
+
+  const fresh = relabel(await signedRequest(), "sig1", "whatever");
+  const decision = await admit(withFreshChallenge(fresh, signer.keyid), deps);
+  assert.equal(decision.ok, true, `an unusual label is not an attack, got ${JSON.stringify(decision)}`);
+});
+
 test("two genuinely distinct signatures are both admitted", async () => {
   // The control. A replay guard that refused everything would pass the two
   // tests above and close the door.

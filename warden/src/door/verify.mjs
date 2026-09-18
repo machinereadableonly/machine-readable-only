@@ -182,6 +182,7 @@ export async function verifyRequest(request, lookupKey) {
   let reason = "signature";
   let verifiedKeyId = null;
   let verifiedExpiresAt = null;
+  let verifiedSigHash = null;
 
   try {
     await verify(request, async (data, signature, params) => {
@@ -228,6 +229,22 @@ export async function verifyRequest(request, lookupKey) {
       // it decides how long the door must remember this signature, and reading
       // it off the raw header would let a replayer shorten its own sentence.
       verifiedExpiresAt = params.expires.getTime();
+      // THE REPLAY IDENTITY, AND IT IS THE SIGNATURE BASE -- the exact bytes
+      // this verifier just checked -- not the raw `Signature` header.
+      //
+      // The header carries a LABEL (`sig1=`), RFC 9421 lets the caller choose
+      // it, and the base does not contain it: the library strips it before
+      // building `data`, and only requires the two headers to agree with each
+      // other. So a captured request renamed `sig1` -> `sig2` in both headers
+      // verifies identically while the header TEXT differs -- and the door,
+      // which hashed that text, admitted the same signature once per label,
+      // unbounded, for its whole five-minute life. Measured at twelve
+      // admissions from one signature, and 200 over real HTTP.
+      //
+      // `data` cannot have that problem: it is what was signed, so anything a
+      // replayer can change without breaking the signature is by definition
+      // not in it, and it commits to created, expires, nonce and keyid.
+      verifiedSigHash = createHash("sha256").update(data, "utf8").digest("hex");
       reason = null;
     });
   } catch {
@@ -238,7 +255,7 @@ export async function verifyRequest(request, lookupKey) {
   }
 
   if (!verifiedKeyId) return { ok: false, reason: "signature" };
-  return { ok: true, keyId: verifiedKeyId, expiresAt: verifiedExpiresAt };
+  return { ok: true, keyId: verifiedKeyId, expiresAt: verifiedExpiresAt, sigHash: verifiedSigHash };
 }
 
 /**
