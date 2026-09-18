@@ -12,6 +12,13 @@ import {MarkRenderer} from "../src/render/MarkRenderer.sol";
 /// @notice The spike's headline numbers: what a marketplace pays to read
 /// `tokenURI` off the token contract, at every life stage that matters.
 ///
+/// @dev THESE ARE THE SPIKE'S NUMBERS, NOT THE SHIPPING CONTRACT'S, and the
+/// difference is about 5,300 gas -- `MachineReadableOnly.viewOf` also reads
+/// `sunsetDay`, `fellRun` and `fellDay`, none of which `MROSpikeToken` has.
+/// This file stays because a twelve-stage sweep is only affordable against
+/// `setState`. `RealTokenGas.t.sol` measures the real thing, and is what any
+/// published figure must come from.
+///
 /// @dev Every earlier gas figure on this spike measured the renderer alone,
 /// with its TokenView already sitting in memory. This file measures the call a
 /// marketplace actually makes, which has to read storage first.

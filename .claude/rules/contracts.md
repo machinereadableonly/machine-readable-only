@@ -48,9 +48,20 @@ The dearest token and the largest token are DIFFERENT TOKENS, and pairing one's
 gas with the other's bytes is a number describing nothing. `GasBudget.t.sol`
 prints each headroom against its own worst case.
 
+**TWO FILES MEASURE THIS, and only one of them measures the contract that
+ships.** `GasBudget.t.sol` sweeps twelve life stages on `MROSpikeToken`, whose
+`setState` places any stage in one call -- right for comparing stages, wrong for
+a published figure. `RealTokenGas.t.sol` builds real tokens the only way a real
+one can be built (mint, check in, apply Marks, seed) on
+`MachineReadableOnly` itself. The shipping contract is DEARER, measured
+2026-09-18: 1,890,021 gas against the spike's 1,884,779 for the same dearest
+case, because the real `viewOf` also reads `sunsetDay`, `fellRun` and `fellDay`.
+**Quote the REAL file for any published number.**
+
 **Do not quote a gas figure from memory -- run `forge test --match-path
-test/GasBudget.t.sol -vv` and read it.** The `gas-budget` memory file carries the
-current figures and the reasons all three coexist.
+test/RealTokenGas.t.sol -vv` (and `test/GasBudget.t.sol -vv` for the stage
+sweep) and read it.** The `gas-budget` memory file carries the current figures
+and the reasons all three coexist.
 
 ## Decided, do not re-propose
 
