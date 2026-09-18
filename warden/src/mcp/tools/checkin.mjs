@@ -150,8 +150,12 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // behind it. The unique index on (tokenId, day) is still what decides
       // whether the day was new -- there is deliberately no lock.
       //
-      // ctx.sigHash is the SHA-256 of the RFC 9421 Signature header the door
-      // verified for this request, threaded through authInfo. The `?? ""`
+      // ctx.sigHash is the SHA-256 of the RFC 9421 SIGNATURE BASE the door
+      // verified for this request -- the bytes that were signed -- threaded
+      // through authInfo. It was the Signature HEADER until 2026-09-18, which
+      // was relabellable: the same signature under a different label hashed
+      // differently, so one request could mint several distinct evidence
+      // values, and the replay guard keyed on it admitted each of them. The `?? ""`
       // fallback is unreachable through the door and is kept only so a
       // check-in can never be refused over bookkeeping; if it ever fires,
       // empty strings in credits.sigHash are the symptom to look for.

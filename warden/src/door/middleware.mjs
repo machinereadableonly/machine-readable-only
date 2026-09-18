@@ -107,7 +107,23 @@ export async function admit(req, deps) {
   // Recorded ONLY AFTER the cryptography has passed. Writing the set before the
   // proof would hand an attacker a way to pre-spend a signature it had seen but
   // could not use, locking out the agent that legitimately holds it.
-  const sigHash = sigHashOf(signature);
+  // KEYED ON THE SIGNATURE BASE, captured by the verifier -- the exact bytes the
+  // cryptography checked -- and NOT on the raw `Signature` header.
+  //
+  // The header carries a caller-chosen LABEL (`sig1=`) that the base does not
+  // contain, so renaming it in both headers left the signature valid while the
+  // header text changed. Hashing the text therefore admitted one captured
+  // signature once per label, unbounded, for its whole five-minute life:
+  // measured at twelve admissions, and 200 on every relabelled replay over real
+  // HTTP, with all 723 tests green because they replayed the headers verbatim.
+  //
+  // The tempting one-liner -- strip the label in `sigHashOf` the way the library
+  // does -- is refused deliberately. That is string surgery on an
+  // attacker-shaped structured field, which is the exact pattern defeated twice
+  // before on this door (see coveredComponents above). Anything a replayer can
+  // change without breaking the signature is, by definition, not in the base.
+  const sigHash = verified.sigHash;
+  if (!sigHash) return fail("signature");
   if (spent.has(sigHash)) return fail("replay");
 
   // THE BODY, CHECKED AFTER THE SIGNATURE AND NEVER BEFORE. Verification is
@@ -125,10 +141,15 @@ export async function admit(req, deps) {
 
   // THE EVIDENCE, CARRIED FORWARD. `credits.sigHash` is the record of which
   // signed request bought a day, and the door is the only place that ever
-  // holds that signature. Hashing it here rather than storing the header
-  // itself keeps a fixed-width value out of which nothing can be replayed,
-  // while still being reproducible by anyone holding the original request.
-  // Before this it was set by nobody and every credit row stored "".
+  // holds that signature. Storing a hash rather than the material itself keeps
+  // a fixed-width value out of which nothing can be replayed. Before this it
+  // was set by nobody and every credit row stored "".
+  //
+  // SINCE 2026-09-18 IT IS A HASH OF THE SIGNATURE BASE, not of the `Signature`
+  // header. The header was relabellable, so one signed request could produce
+  // several distinct "evidence" values -- evidence that forks is not evidence.
+  // The base is still reproducible by anyone holding the original request; it
+  // is simply reproduced by verifying it rather than by copying a header.
   //
   // The signature is spent at the same moment it is honoured. It is remembered
   // until its own `expires`, which is the exact instant after which the library
@@ -137,10 +158,11 @@ export async function admit(req, deps) {
   return { ok: true, keyId: verified.keyId, sigHash };
 }
 
-/// SHA-256 of the Signature header value, in hex.
-export function sigHashOf(signature) {
-  return createHash("sha256").update(signature, "utf8").digest("hex");
-}
+// `sigHashOf` IS GONE. It hashed the raw `Signature` header, which is what the
+// relabelling bypass turned on: the label is not part of the signed base, so
+// two texts that differ can carry the identical signature. The replay identity
+// now comes from `verifyRequest`, which returns a hash of the base it verified.
+// Do not reintroduce a header-text hash under any name.
 
 // `headerOf` is imported from verify.mjs rather than written again here. It has
 // to be case-blind (see its own comment), and two copies of that rule is two
