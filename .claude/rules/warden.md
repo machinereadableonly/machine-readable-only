@@ -41,6 +41,17 @@ Loaded only when working under `warden/` or `client/`.
   EIP-3009 nonce; only `hooks.onAfterSettlement` promotes it to `queued`. There
   is NO settlement-failure hook in `@x402/mcp`, so the gateway watches whether
   the success hook fired for its own nonce.
+- **"Failed" and "unknown" are DIFFERENT OUTCOMES, and only one may be
+  released.** `@x402/mcp` funnels an explicit `success: false` and a thrown
+  settle -- a timeout or a dropped response, by which point the transfer may be
+  mined -- into the same `createSettlementFailedResult`, with the same fallback
+  message. The difference exists only at the call, so `src/pay/x402.mjs` wraps
+  `settlePayment` to see it, and refuses a resource server it cannot wrap.
+  A declined payment releases its reservation; an unknown one is HELD as
+  `payment-unresolved` with the payer and token contract, which the Clock then
+  resolves by reading EIP-3009 `authorizationState(payer, nonce)`. Never
+  release on silence, and never ask that question at the moment of failure --
+  a public RPC is not read-after-write consistent.
 - **A refusal must carry `isError`**, or x402 settles it anyway and the agent
   pays for nothing.
 - **One payment authorisation buys exactly one thing** (`pay_nonces`, written

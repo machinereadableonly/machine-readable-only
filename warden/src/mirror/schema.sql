@@ -93,6 +93,10 @@ CREATE TABLE IF NOT EXISTS mark_orders (
   -- take no payment at all and are therefore queued outright. See `status`.
   payNonce   TEXT,
   reservedAt INTEGER,
+  -- The payer and the token contract of the authorisation, written only when a
+  -- settlement's outcome is unknown. See the same pair on `mints` below.
+  payer      TEXT,
+  asset      TEXT,
   -- awaiting-payment | queued | written | failed.
   --
   -- 'awaiting-payment' is where a BOUGHT Mark starts. The `authorization` flow
@@ -134,12 +138,31 @@ CREATE TABLE IF NOT EXISTS mints (
   -- never NULL on a row this service wrote.
   payNonce   TEXT,
   reservedAt INTEGER,
+  -- WHO SIGNED THE AUTHORISATION, and WHICH TOKEN CONTRACT it spends. Written
+  -- only when a settlement's outcome is UNKNOWN, because that is the only case
+  -- anything reads them: together with payNonce they are exactly what
+  -- EIP-3009's `authorizationState(payer, nonce)` needs, so the Clock can ask
+  -- the chain whether the money actually moved instead of guessing.
+  --
+  -- The payer is NOT toAddress. The wallet that pays and the address that
+  -- receives the token are allowed to differ, and asking USDC about the
+  -- recipient would answer about an authorisation nobody signed.
+  payer     TEXT,
+  asset     TEXT,
   qr        TEXT,                            -- the solved bitmap, hex; NULL until solved
   solveState TEXT NOT NULL DEFAULT 'pending', -- pending | solving | done | failed
   solveTries INTEGER NOT NULL DEFAULT 0,
-  -- awaiting-payment | queued | written. Same meaning as in mark_orders above:
-  -- a mint is reserved before settlement is attempted and only promoted to
-  -- 'queued' when the money has actually moved.
+  -- awaiting-payment | payment-unresolved | queued | written. Same meaning as
+  -- in mark_orders above: a mint is reserved before settlement is attempted and
+  -- only promoted to 'queued' when the money has actually moved.
+  --
+  -- 'payment-unresolved' is where a settlement goes when NOBODY KNOWS whether
+  -- it happened -- the facilitator threw, timed out, or its answer was lost,
+  -- after the point where the EIP-3009 transfer may already have been mined.
+  -- It is terminal until something resolves it: the expiry sweep will not
+  -- delete it (deleting it is how an agent's money disappeared), the Clock will
+  -- not write it, and the Clock's resolve pass asks the chain and then either
+  -- promotes it to 'queued' or releases it.
   status    TEXT NOT NULL DEFAULT 'queued'
 );
 

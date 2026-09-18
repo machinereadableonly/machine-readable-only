@@ -273,6 +273,12 @@ async function main() {
     // released at once, so the agent is free to try again rather than waiting
     // for the row to age out.
     onUnsettled: (payNonce) => q.releaseReservation(payNonce),
+    // AND THE CASE THAT IS NEITHER. A settlement that threw, timed out or whose
+    // answer was lost may already have moved the money, so its row is HELD
+    // rather than released, carrying the payer and token contract the Clock
+    // needs to ask the chain whether it was spent. Releasing it -- what this
+    // service did until 2026-09-18 -- is how an agent pays and holds nothing.
+    onUnresolved: (payment) => q.holdUnresolvedPayment(payment),
   });
 
   // Ask it to build now. Without this a misconfigured facilitator or an

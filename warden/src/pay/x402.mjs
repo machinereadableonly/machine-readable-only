@@ -58,6 +58,30 @@ export function payNonceOf(paymentPayload) {
   return p?.authorization?.nonce ?? p?.permit2Authorization?.nonce ?? null;
 }
 
+/**
+ * WHO SIGNED the authorisation -- which is not necessarily who receives the
+ * token, and not the treasury either.
+ *
+ * It is needed for exactly one question: EIP-3009's
+ * `authorizationState(payer, nonce)`, which is the only way to learn from the
+ * chain whether a settlement whose answer was lost actually moved the money.
+ * Asking about `toAddress` would answer about an authorisation nobody signed,
+ * and would answer FALSE every time -- which reads as "no payment" and would
+ * delete the very row this exists to save.
+ */
+export function payerOf(paymentPayload) {
+  const p = paymentPayload?.payload;
+  return p?.authorization?.from ?? p?.permit2Authorization?.from ?? null;
+}
+
+/// The token contract an authorisation spends, off the requirement the
+/// facilitator was asked to settle. An array is tolerated because @x402's
+/// requirements travel as a list everywhere except the settle call itself.
+export function assetOf(paymentRequirements) {
+  const one = Array.isArray(paymentRequirements) ? paymentRequirements[0] : paymentRequirements;
+  return one?.asset ?? null;
+}
+
 /// The same value, read from the raw `_meta` a tool handler is given. Uses
 /// @x402/mcp's own extractor rather than reaching into `_meta` by key, so the
 /// handler side and the hook side cannot drift apart.
@@ -232,6 +256,13 @@ export function makePaymentGateway({
   // reason this gateway can release a dead reservation immediately instead of
   // waiting for it to age out.
   onUnsettled = null,
+  // Called with { payNonce, payer, asset, detail } when a settlement's outcome
+  // is UNKNOWN rather than known-failed: it threw, timed out, or its answer was
+  // lost. NOT a third flavour of failure -- the money may well have moved, and
+  // this is the one case where releasing the reservation is how an agent's
+  // payment disappears. Left null, such a call is treated as a failure, which
+  // is what this service did until 2026-09-18.
+  onUnresolved = null,
   // Supplied only for a facilitator that authenticates. Undefined is the
   // testnet host's correct configuration, not a missing setting.
   createAuthHeaders = undefined,
@@ -260,9 +291,72 @@ export function makePaymentGateway({
    */
   const settled = new Set();
 
+  /**
+   * What the facilitator actually said, for nonces whose settlement did not
+   * succeed: `declined` (it answered `success: false`) or `unresolved` (it
+   * threw, which is also what a timeout or a dropped response looks like).
+   *
+   * WHY IT CANNOT BE READ OFF THE RESULT. @x402/mcp funnels both into
+   * createSettlementFailedResult (dist index.js:1094 and :1118) and fires no
+   * hook for either, so from outside they are the same value -- and the error
+   * TEXT cannot separate them, because an explicit failure carrying no reason
+   * falls back to the literal string the catch uses. The difference exists only
+   * at the call itself, so that is where it is taken: settlePayment is wrapped
+   * below and reports what it saw.
+   *
+   * Entries are removed by the call that consumes them, exactly as `settled`
+   * entries are, and a nonce is single-use.
+   */
+  const outcomes = new Map();
+
+  /**
+   * Wrap one resource server so this gateway sees each settlement attempt.
+   *
+   * It observes and never interferes: the result is returned untouched and a
+   * throw is re-thrown, so @x402/mcp behaves precisely as it would without
+   * this. Recording is best-effort by construction -- a nonce it cannot read
+   * simply leaves no record, and no record is treated as unknown, which is the
+   * safe side.
+   */
+  function observeSettlement(server) {
+    // A REFUSAL, NOT A SHRUG. Without this method there is no way to tell a
+    // declined payment from one whose outcome is unknown, and the whole
+    // service falls back to the behaviour that deleted paid reservations. A
+    // resource server that cannot be observed is therefore no resource server
+    // at all: the rejection surfaces as `payment-unavailable` and the gateway
+    // retries the build on the next call, exactly as an unreachable
+    // facilitator does. Skipping the wrap silently would put the money bug
+    // back the first time a library renamed a method.
+    if (typeof server?.settlePayment !== "function") {
+      throw new Error("resource server exposes no settlePayment: a settlement outcome could not be observed");
+    }
+    const settlePayment = server.settlePayment.bind(server);
+    server.settlePayment = async (paymentPayload, paymentRequirements, ...rest) => {
+      const payNonce = payNonceOf(paymentPayload);
+      const where = {
+        payNonce,
+        payer: payerOf(paymentPayload),
+        asset: assetOf(paymentRequirements),
+      };
+      try {
+        const settlement = await settlePayment(paymentPayload, paymentRequirements, ...rest);
+        if (payNonce && !settlement?.success) {
+          outcomes.set(payNonce, { ...where, kind: "declined", detail: settlement?.errorReason ?? null });
+        }
+        return settlement;
+      } catch (err) {
+        // THE CASE THIS WHOLE FILE TURNS ON. By here the transfer may already
+        // be mined; what failed may only be the news of it coming back.
+        if (payNonce) outcomes.set(payNonce, { ...where, kind: "unresolved", detail: err?.message ?? null });
+        throw err;
+      }
+    };
+    return server;
+  }
+
   function resourceServer() {
     if (!serverPromise) {
-      serverPromise = build(facilitatorUrl, network, createAuthHeaders);
+      serverPromise = build(facilitatorUrl, network, createAuthHeaders).then(observeSettlement);
       // Clear the cache on failure so the next paid call retries. The rejection
       // is still delivered to the awaiting caller below; this handler exists
       // only to reset the cache, and to keep the rejection from being seen as
@@ -390,16 +484,45 @@ export function makePaymentGateway({
       // left to age out, so the agent can try again immediately.
       if (reservedNonce) {
         if (settled.delete(reservedNonce)) return result;
+        const outcome = outcomes.get(reservedNonce);
+        outcomes.delete(reservedNonce);
+
+        // KNOWN FAILED is the only case safe to release. The facilitator said
+        // in as many words that the payment did not go through, so the agent
+        // has lost nothing and is freed to try again at once.
+        if (outcome?.kind === "declined") {
+          try {
+            const released = await onUnsettled?.(reservedNonce);
+            alert(
+              `${tool}: settlement did not complete, so the reservation was released` +
+                (released?.tokenId ? ` (token ${released.tokenId})` : "")
+            );
+          } catch (err) {
+            // The sweep is the backstop for exactly this: the row keeps its
+            // 'awaiting-payment' status, so it is still unwritable by the Clock.
+            alert(`${tool}: a reservation could not be released and will expire instead: ${err.message}`);
+          }
+          return result;
+        }
+
+        // ANYTHING ELSE IS UNKNOWN, including no record at all -- a settlement
+        // that threw, timed out, or was never observed. Releasing here is how
+        // an agent pays and holds nothing, so the row is HELD instead and the
+        // chain is asked later, when a public RPC has had time to agree with
+        // itself.
         try {
-          const released = await onUnsettled?.(reservedNonce);
+          const held = await onUnresolved?.({ ...outcome, payNonce: reservedNonce });
           alert(
-            `${tool}: settlement did not complete, so the reservation was released` +
-              (released?.tokenId ? ` (token ${released.tokenId})` : "")
+            `${tool}: SETTLEMENT OUTCOME UNKNOWN (${outcome?.detail ?? "settlement was never observed"}). ` +
+              `The payment may have gone through, so the reservation is HELD for resolution` +
+              (held?.tokenId ? ` (token ${held.tokenId})` : "") +
+              (held ? "" : " -- AND NOTHING WAS HELD: a human must check this payment")
           );
         } catch (err) {
-          // The sweep is the backstop for exactly this: the row keeps its
-          // 'awaiting-payment' status, so it is still unwritable by the Clock.
-          alert(`${tool}: a reservation could not be released and will expire instead: ${err.message}`);
+          alert(
+            `${tool}: settlement outcome unknown AND the reservation could not be held: ${err.message}. ` +
+              `Check whether nonce ${reservedNonce} was spent before this row expires`
+          );
         }
       }
       return result;

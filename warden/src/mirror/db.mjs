@@ -87,6 +87,19 @@ export function migrate(db) {
     db.exec("ALTER TABLE mints ADD COLUMN reservedAt INTEGER");
   }
 
+  // The unresolved-settlement columns. NULL on every existing row, which is
+  // correct: they are written only at the moment a settlement's outcome is
+  // unknown, and no row written before this existed has an outcome in doubt --
+  // the old code had already decided, wrongly, that silence meant failure.
+  if (!mintCols.has("payer")) {
+    db.exec("ALTER TABLE mints ADD COLUMN payer TEXT");
+    db.exec("ALTER TABLE mints ADD COLUMN asset TEXT");
+  }
+  if (!orderCols.has("payer")) {
+    db.exec("ALTER TABLE mark_orders ADD COLUMN payer TEXT");
+    db.exec("ALTER TABLE mark_orders ADD COLUMN asset TEXT");
+  }
+
   // ONE PAID MINT PER KEY, which is narrower than what this guard used to say
   // and is what it always meant.
   //
