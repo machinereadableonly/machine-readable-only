@@ -19,6 +19,7 @@ import { readEvents, applyEvents, DEPLOY_BLOCK, MAX_LOG_SPAN } from "./reconcile
 import { heartbeatDue } from "./heartbeat.mjs";
 import { MRO_ABI } from "./abi.mjs";
 import { keyIdToBytes32 } from "../mcp/keyId.mjs";
+import { resolveUnresolvedPayments } from "./unresolved.mjs";
 
 /// How many check-ins go in one batchCheckIn. MEASURED 2026-09-11 against a
 /// real node's receipts (warden/tools/chunk-rehearsal.sh, Osaka rules with
@@ -235,7 +236,21 @@ export async function runClock({
     /// block: the public RPC is load balanced and a read issued straight after
     /// a receipt can land on one that has not imported it yet.
     lastBlock: null,
+    /// Held payments this run asked the chain about and got an answer for:
+    /// `resolvedPaid` was spent after all and is now queued, `resolvedUnpaid`
+    /// never happened and has been released.
+    resolvedPaid: [],
+    resolvedUnpaid: [],
+    /// And the ones still in doubt. They fail the run every night until a
+    /// human settles them, because the defect these replaced was silent.
+    unresolvedPayments: [],
   };
+
+  // 0. MONEY WHOSE FATE IS UNKNOWN, BEFORE ANYTHING ELSE. It costs no gas, it
+  //    is the only step that can hand an agent back something it paid for, and
+  //    a payment resolved here is written by the same run rather than waiting
+  //    another day.
+  Object.assign(summary, await resolveUnresolvedPayments({ q, publicClient, alert, log }));
 
   // 1. THE GAS GUARD, BEFORE ANYTHING IS SENT. Stopping the whole run rather
   //    than skipping individual writes is deliberate: a run that wrote the

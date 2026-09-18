@@ -118,5 +118,10 @@ export function exitCodeFor(summary) {
   if ((summary.stuckCredits?.length ?? 0) > 0) return 1;
   if ((summary.stuckSeeds?.length ?? 0) > 0) return 1;
   if ((summary.stuckMarks?.length ?? 0) > 0) return 1;
+  // A PAYMENT WHOSE OUTCOME IS STILL UNKNOWN is a failure in the same sense:
+  // an agent may have been debited and hold nothing, and only a human can
+  // settle it once the chain will not answer. It fails every night until it is
+  // resolved, which is the point -- the defect this replaced was silent.
+  if ((summary.unresolvedPayments?.length ?? 0) > 0) return 1;
   return 0;
 }

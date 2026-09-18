@@ -33,7 +33,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
-import { generatePrivateKey } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeMintTool } from "../src/mcp/tools/mint.mjs";
@@ -114,6 +114,7 @@ function gatewayAgainst(facilitatorUrl, q) {
     payTo: PAY_TO,
     onSettled: (nonce, tx) => q.settleByNonce(nonce, tx),
     onUnsettled: (nonce) => q.releaseReservation(nonce),
+    onUnresolved: (payment) => q.holdUnresolvedPayment(payment),
     alert: () => {},
     build: async () => {
       const server = registerExactEvmScheme(
@@ -147,19 +148,23 @@ async function mintPaying({ settle }) {
     });
 
     const demand = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: undefined } } });
+    // A throwaway key holding nothing: this facilitator submits nothing. The
+    // ADDRESS is returned because it is the payer an unresolved row must
+    // store -- the authorisation is the payer's, not the recipient's, and
+    // asking USDC about the wrong one answers about the wrong authorisation.
+    const walletPrivateKey = generatePrivateKey();
     const meta = await payFor({
       result: demand,
       // `amount` is required by assertExpected since 2026-09-18 (a
       // destination alone left the sum unchecked). Taken from the
       // demand under test, so this stays a settlement test.
       expected: { payTo: PAY_TO, amount: readDemand(demand).accepts[0].amount },
-      // A throwaway key holding nothing: this facilitator submits nothing.
-      walletPrivateKey: generatePrivateKey(),
+      walletPrivateKey,
     });
     assert.ok(meta, "the first call must produce a payment demand the client can read");
 
     const result = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: meta } } });
-    return { result, q, db, settled: fac.settled() };
+    return { result, q, db, settled: fac.settled(), payer: privateKeyToAccount(walletPrivateKey).address };
   } finally {
     await fac.close();
   }
@@ -190,15 +195,42 @@ test("a mint whose settlement FAILS is never written on chain", async () => {
   assert.deepEqual(q.stuckMints(), [], "and nothing is reported as stuck -- it was unpaid, not broken");
 });
 
-// THE OTHER FAILURE PATH. A facilitator that answers with something @x402/core
-// cannot parse makes settlePaymentResult THROW rather than return
-// success:false, and the two are handled by different lines of the library. An
-// agent must not be able to tell them apart, and neither must the Clock.
-test("a settlement that THROWS releases the reservation too", async () => {
-  const { db, q } = await mintPaying({ settle: "malformed" });
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM mints").get().n, 0);
-  assert.deepEqual(q.pendingMints(), []);
-  assert.equal(q.hasMinted(KEY_ID), false);
+// THE OTHER FAILURE PATH, AND IT IS NOT THE SAME FAILURE. A facilitator that
+// answers with something @x402/core cannot parse makes settlePaymentResult
+// THROW rather than return success:false -- and a throw is also what a timeout
+// or a dropped response looks like, by which time the EIP-3009 transfer may
+// ALREADY BE MINED. The library reports both through
+// createSettlementFailedResult and fires no hook either way, so until
+// 2026-09-18 this service read "unknown" as "did not happen" and DELETED the
+// reservation: the agent was debited up to $1,250.00, its row vanished, its
+// authorisation stayed spent, and one log line was the only trace.
+//
+// This test asserted that deletion was correct. It now asserts the opposite,
+// which is the whole fix: money whose fate is unknown is HELD.
+test("a settlement whose outcome is UNKNOWN holds the reservation for a human", async () => {
+  const { db, q, payer } = await mintPaying({ settle: "malformed" });
+
+  const row = db.prepare("SELECT tokenId, status, payer, asset FROM mints").get();
+  assert.ok(row, "the row must survive: the transfer may already be on chain");
+  assert.equal(row.status, "payment-unresolved", "and it must sit in a state the Clock will not write");
+  assert.deepEqual(q.pendingMints(), [], "so no unpaid mint reaches the chain");
+  assert.equal(q.hasMinted(KEY_ID), true, "the key's one paid mint stays taken while its money is in doubt");
+  assert.deepEqual(
+    q.unresolvedPayments().map((r) => r.tokenId),
+    [row.tokenId],
+    "and it is reported, because silence is how the money was lost"
+  );
+
+  // The two facts the Clock needs to ASK THE CHAIN whether this authorisation
+  // was used. Without them the row can only ever wait for a human.
+  assert.equal(row.payer.toLowerCase(), payer.toLowerCase(), "the payer signed the authorisation");
+  assert.match(row.asset, /^0x[0-9a-fA-F]{40}$/, "the token contract the authorisation spends");
+
+  // THE SWEEP MUST NOT UNDO THIS. Leaving the row 'awaiting-payment' would
+  // have delayed the same deletion by ten minutes, not prevented it.
+  q.dropExpiredReservations(Date.now() + 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM mints").get().n, 1, "the expiry sweep leaves it alone");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM tokens").get().n, 1, "and its token row with it");
 });
 
 // THE SAME PROPERTY FOR `upgrade`, which is where the money actually is: a

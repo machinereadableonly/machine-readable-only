@@ -160,6 +160,43 @@ export function queries(db) {
       "DELETE FROM tokens WHERE tokenId = ? AND parentId IS NOT NULL AND status != 'written'"
     ),
 
+    // --- a settlement whose outcome is UNKNOWN --------------------------
+    // Both of these move a reservation OUT of 'awaiting-payment' without
+    // deciding whether it was paid for, and they write the two facts that let
+    // the chain decide later. `status = 'awaiting-payment'` in the WHERE is
+    // what makes them safe to call twice: a row already promoted by a
+    // settlement that arrived late is left exactly as it is.
+    holdUnresolvedMint: db.prepare(
+      "UPDATE mints SET status = 'payment-unresolved', payer = ?, asset = ? " +
+        "WHERE payNonce = ? AND status = 'awaiting-payment'"
+    ),
+    holdUnresolvedMarkOrder: db.prepare(
+      "UPDATE mark_orders SET status = 'payment-unresolved', payer = ?, asset = ? " +
+        "WHERE payNonce = ? AND status = 'awaiting-payment'"
+    ),
+    // Resolving one. Both are keyed on 'payment-unresolved' so a row that
+    // something else has already moved is left alone rather than overwritten.
+    settleUnresolvedMint: db.prepare(
+      "UPDATE mints SET status = 'queued' WHERE payNonce = ? AND status = 'payment-unresolved' RETURNING tokenId"
+    ),
+    settleUnresolvedMarkOrder: db.prepare(
+      "UPDATE mark_orders SET status = 'queued' WHERE payNonce = ? AND status = 'payment-unresolved' " +
+        "RETURNING tokenId, upgradeId"
+    ),
+    unresolvedMintForNonce: db.prepare(
+      "SELECT tokenId FROM mints WHERE payNonce = ? AND status = 'payment-unresolved'"
+    ),
+    dropUnresolvedMarkOrder: db.prepare(
+      "DELETE FROM mark_orders WHERE payNonce = ? AND status = 'payment-unresolved'"
+    ),
+    unresolvedMints: db.prepare(
+      "SELECT tokenId, payNonce, payer, asset, reservedAt FROM mints " +
+        "WHERE status = 'payment-unresolved' ORDER BY tokenId ASC"
+    ),
+    unresolvedMarkOrders: db.prepare(
+      "SELECT tokenId, upgradeId, variant, payNonce, payer, asset, reservedAt FROM mark_orders " +
+        "WHERE status = 'payment-unresolved' ORDER BY tokenId ASC, upgradeId ASC"
+    ),
     reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId, variant) VALUES (?, ?, ?)"),
     reserveMarkPaid: db.prepare(
       "INSERT INTO mark_orders (tokenId, upgradeId, variant, payNonce, reservedAt, status) " +
@@ -610,6 +647,46 @@ export function queries(db) {
     },
 
     /**
+     * Act on the chain's answer about one held payment.
+     *
+     * `paid` comes from EIP-3009's `authorizationState`, which is permanent and
+     * cannot be mistaken for anything else: true means this exact authorisation
+     * was spent, false means it never was. So there is no third outcome here --
+     * a question that could not be answered never reaches this method, and the
+     * row stays held.
+     *
+     * A promoted row carries NO paymentTx. The transfer was the facilitator's
+     * and this service never saw its hash; inventing one would put a fiction in
+     * the place the receipt lives. The nonce is how the transfer is found.
+     *
+     * Returns what moved, or null when the row was no longer held.
+     */
+    resolveUnresolvedPayment(payNonce, { paid }) {
+      if (!payNonce) return null;
+      return this.transact(() => {
+        if (paid) {
+          const mint = s.settleUnresolvedMint.get(payNonce);
+          if (mint) {
+            // The token row moves with its mint row, exactly as settleByNonce
+            // does: a queued mint beside an awaiting-payment token is a state
+            // nothing else in this service knows how to read.
+            s.settleMintToken.run(mint.tokenId);
+            return { kind: "mint", tokenId: mint.tokenId };
+          }
+          const order = s.settleUnresolvedMarkOrder.get(payNonce);
+          return order ? { kind: "mark", tokenId: order.tokenId, upgradeId: order.upgradeId } : null;
+        }
+        const mint = s.unresolvedMintForNonce.get(payNonce);
+        if (mint) {
+          s.dropMintToken.run(mint.tokenId);
+          s.dropMint.run(mint.tokenId);
+          return { kind: "mint", tokenId: mint.tokenId };
+        }
+        return s.dropUnresolvedMarkOrder.run(payNonce).changes ? { kind: "mark" } : null;
+      });
+    },
+
+    /**
      * Release one reservation whose payment is KNOWN to have failed.
      *
      * The expiry sweep below would eventually do this, and waiting for it is
@@ -623,6 +700,52 @@ export function queries(db) {
      * Returns what was released, or null when there was nothing to release
      * (the handler refused before reserving, which is the ordinary case).
      */
+    /**
+     * Hold one reservation whose settlement outcome is UNKNOWN.
+     *
+     * THE DIFFERENCE THIS EXISTS TO DRAW. releaseReservation below is for a
+     * payment KNOWN to have failed -- the facilitator said so. This one is for
+     * a settlement that threw, timed out, or whose answer was lost: by that
+     * point the EIP-3009 transfer may ALREADY BE MINED, and the two are
+     * indistinguishable from @x402/mcp, which reports both through
+     * createSettlementFailedResult and fires no hook for either.
+     *
+     * Until 2026-09-18 both went to releaseReservation. An agent could be
+     * debited up to $1,250.00 and have its row deleted underneath it, its
+     * authorisation still spent in `pay_nonces` so the same payment answered
+     * `payment-already-used` on the retry. Irreversible, and the only trace was
+     * one log line.
+     *
+     * Leaving the row 'awaiting-payment' would NOT have been enough: the expiry
+     * sweep deletes those after ten minutes, so that only delays the same loss.
+     * The row needs a status nothing sweeps, which is what this writes.
+     *
+     * Returns what was held, or null when there was nothing to hold.
+     */
+    holdUnresolvedPayment({ payNonce, payer = null, asset = null } = {}) {
+      if (!payNonce) return null;
+      return this.transact(() => {
+        const mint = s.mintForNonce.get(payNonce);
+        if (mint && s.holdUnresolvedMint.run(payer, asset, payNonce).changes) {
+          return { kind: "mint", tokenId: mint.tokenId };
+        }
+        return s.holdUnresolvedMarkOrder.run(payer, asset, payNonce).changes ? { kind: "mark" } : null;
+      });
+    },
+
+    /**
+     * Every reservation waiting on the question "did this money actually move?"
+     *
+     * The Clock reads this to ask the chain, and reports what is left over so
+     * an unanswerable one reaches a human rather than sitting in silence.
+     */
+    unresolvedPayments() {
+      return [
+        ...s.unresolvedMints.all().map((r) => ({ ...r, kind: "mint" })),
+        ...s.unresolvedMarkOrders.all().map((r) => ({ ...r, kind: "mark" })),
+      ];
+    },
+
     releaseReservation(payNonce) {
       if (!payNonce) return null;
       return this.transact(() => {

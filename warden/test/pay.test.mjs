@@ -255,6 +255,13 @@ test("a successful upgrade answers ok:true as well as accepted:true", async () =
 function fakeServer(asked = []) {
   return {
     asked,
+    // THE DOUBLE MUST CARRY WHAT THE GATEWAY USES. It wraps settlePayment to
+    // learn whether a settlement was declined or merely unanswered, and
+    // refuses a server that has no such method -- so a double without one is
+    // interface drift, not a simplification.
+    async settlePayment() {
+      return { success: true };
+    },
     async buildPaymentRequirements(resource) {
       asked.push(resource);
       return [{ scheme: "exact", network: resource.network, amount: "1", payTo: resource.payTo }];
@@ -409,7 +416,7 @@ test("an empty accepts list refuses rather than reaching createPaymentWrapper, w
     network: "eip155:8453",
     payTo: "0xdead",
     alert: (m) => alerts.push(m),
-    build: async () => ({ buildPaymentRequirements: async () => [] }),
+    build: async () => ({ settlePayment: async () => ({ success: true }), buildPaymentRequirements: async () => [] }),
     wrapFactory: () => { throw new Error("wrapFactory must not be reached"); },
   });
 
@@ -1086,4 +1093,27 @@ test("a free Mark re-reads the pair after its chain read, not before", async () 
   assert.equal(r.reason, "mark-excluded");
   assert.equal(r.detail, "static");
   assert.equal(q.markSold(4), 0, "the earned side was reserved anyway");
+});
+
+// THE OBSERVER IS NOT OPTIONAL. The gateway tells a declined payment from one
+// whose outcome is unknown by watching settlePayment itself -- the library
+// reports both the same way and fires no hook for either. A server it cannot
+// watch would silently restore the behaviour that DELETED paid reservations,
+// so it is refused outright rather than used unwatched.
+test("a resource server whose settlement cannot be observed is refused, not used unwatched", async () => {
+  const alerts = [];
+  let handlerRan = false;
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xdead",
+    alert: (m) => alerts.push(m),
+    build: async () => ({ buildPaymentRequirements: async () => [{ scheme: "exact" }] }),
+    wrapFactory: () => { throw new Error("wrapFactory must not be reached"); },
+  });
+
+  const r = await paid(async () => { handlerRan = true; }, "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
+  assert.equal(r.structuredContent.reason, "payment-unavailable");
+  assert.equal(handlerRan, false, "no money may be taken by a gateway that cannot see the outcome");
+  assert.match(alerts[0], /no settlePayment/);
 });

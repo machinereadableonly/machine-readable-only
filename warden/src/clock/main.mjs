@@ -177,7 +177,12 @@ async function main() {
       // Both seed counts are named in full, because a bare number next to
       // "dropped" would read as the credit kind. A returned seed is a year
       // handed back; a stuck one is a year still held.
-      `${summary.droppedSeeds.length} seeds returned, ${summary.stuckSeeds.length} seeds stuck`
+      `${summary.droppedSeeds.length} seeds returned, ${summary.stuckSeeds.length} seeds stuck, ` +
+      // Named in full for the same reason: "2 payments" beside a list of counts
+      // would read as two sales. These are payments whose outcome was unknown
+      // and now is not -- and any left unresolved fail the run.
+      `${summary.resolvedPaid.length} held payments found paid, ` +
+      `${summary.resolvedUnpaid.length} released, ${summary.unresolvedPayments.length} still unresolved`
   );
   db.close();
 

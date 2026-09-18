@@ -111,6 +111,9 @@ test("a payment demand is a one-shot exact transfer, at the tool's own price", a
     network: "eip155:84532",
     payTo: "0xtreasury",
     build: async () => ({
+      // The gateway wraps settlePayment to tell a declined payment from one
+      // whose outcome is unknown, and refuses a server that has none.
+      settlePayment: async () => ({ success: true }),
       buildPaymentRequirements: async (req) => {
         asked.push(req);
         return [{ scheme: req.scheme, network: req.network, payTo: req.payTo, amount: "1000000" }];
@@ -141,6 +144,9 @@ test("each price builds its own demand, so no tool can be charged another's amou
     network: "eip155:84532",
     payTo: "0xtreasury",
     build: async () => ({
+      // The gateway wraps settlePayment to tell a declined payment from one
+      // whose outcome is unknown, and refuses a server that has none.
+      settlePayment: async () => ({ success: true }),
       buildPaymentRequirements: async (req) => {
         asked.push(req.price);
         return [{ scheme: "exact", amount: "1" }];
