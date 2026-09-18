@@ -66,7 +66,21 @@ export function verifyUriString({ uri, id, domain, px = 700, pngPath = null }) {
 
   // "It scans" is not enough. The destination has to be THIS token's URL --
   // a code that decodes cleanly to the wrong id is still a failure.
-  if (ok && !expected.startsWith(scan.destination)) {
+  //
+  // EQUALITY, NOT `startsWith`. It was `expected.startsWith(scan.destination)`
+  // until 2026-09-18, which passes whenever the decoded destination is a PREFIX
+  // of the expected one: verifying token 12 accepted a code decoding to
+  // `.../t/1`, and 4242 accepted 4, 42 or 424. It never fired because
+  // `script/anvil-verify.sh` checks ids 1-4, among which no single digit is a
+  // prefix of another -- and because this function had no test at all. A bitmap
+  // is permanent per token, so the first two-digit token would have carried the
+  // wrong URL in its artwork for good.
+  //
+  // The `#` is stripped rather than matched: `payloadFor` ends the payload with
+  // it (the QArt alphabet needs the terminator) and a scanner reports the URL
+  // without a fragment, which is the whole reason a loose comparison was
+  // reached for in the first place.
+  if (ok && scan.destination !== expected.replace(/#$/, "")) {
     ok = false;
     why = `decoded to ${scan.destination}, expected ${expected.replace(/#$/, "")}`;
   }

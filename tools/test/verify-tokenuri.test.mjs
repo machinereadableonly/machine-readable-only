@@ -8,7 +8,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { decodeTokenUri, attributesOf } from "../verify-tokenuri.mjs";
+import { decodeTokenUri, attributesOf, verifyUriString } from "../verify-tokenuri.mjs";
 import { tokenBitmap, SIZE } from "../token-bitmap.mjs";
 import { heartMaskBytes } from "../heart-mask.mjs";
 import { unpackModules } from "../qart.mjs";
@@ -108,4 +108,48 @@ test("the Years attribute counts past the ten-ring cap", () => {
     level: 3_650, streak: 5, lastDay: 20_700, today: 20_700,
   })).json);
   assert.equal(ten.Years, 10);
+});
+
+// -- the destination check ---------------------------------------------------
+//
+// `verifyUriString` was imported by NO test until 2026-09-18, and this is the
+// check that was wrong: it asked whether the expected URL STARTS WITH the
+// decoded destination, so any id whose decimal string is a prefix of the
+// claimed id passed. Token 1's bitmap verified as token 12, 123, 1000. The
+// post-deploy gate in script/anvil-verify.sh runs ids 1-4, where no single
+// digit is a prefix of another, so it never fired -- and a bitmap is permanent
+// per token, so the first two-digit token would have carried the wrong URL
+// into the artwork forever.
+//
+// These are slow (a real rasterise and ZXing decode each), which is why there
+// are three and not thirty.
+
+/// A real tokenURI whose bitmap encodes `id`, built the way the real one is.
+function uriForId(id) {
+  const bitmap = tokenBitmap(DOMAIN, id);
+  const modules = unpackModules(Buffer.from(bitmap.hex, "hex"), SIZE);
+  const want = unpackModules(heartMaskBytes(), SIZE);
+  return tokenUri(modules, want, SIZE, { tokenId: id, mintDay: 900, level: 10, lastDay: 1000, today: 1000 });
+}
+
+test("a token's own code verifies", () => {
+  // The control. A destination check that refused everything would pass the
+  // two tests below while breaking the deploy gate entirely.
+  const result = verifyUriString({ uri: uriForId(12), id: 12, domain: DOMAIN });
+  assert.equal(result.ok, true, result.why ?? "");
+  assert.equal(result.destination, `https://${DOMAIN}/t/12`);
+});
+
+test("one token's code is refused as another whose id it is a prefix of", () => {
+  // THE BUG: `expected.startsWith(destination)` made this pass.
+  const result = verifyUriString({ uri: uriForId(1), id: 12, domain: DOMAIN });
+  assert.equal(result.ok, false, "token 1's bitmap must not verify as token 12");
+  assert.match(result.why, /decoded to https:\/\/example\.com\/t\/1, expected/);
+});
+
+test("a wholly unrelated id is refused too", () => {
+  // The case that always worked, kept so a fix that only handles prefixes is
+  // not mistaken for a fix of the whole check.
+  const result = verifyUriString({ uri: uriForId(3), id: 99, domain: DOMAIN });
+  assert.equal(result.ok, false);
 });

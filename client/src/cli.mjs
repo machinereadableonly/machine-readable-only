@@ -42,7 +42,9 @@ Options
   --to <0xaddress>     who the minted token belongs to (join)
   --token <id>         which token (beat)
   --expect-payto <0x>  the treasury you were told to expect. REQUIRED to pay.
-  --expect-amount <n>  the amount in base units you were told to expect
+  --expect-amount <n>  the amount in base units you were told to expect. REQUIRED to pay.
+  --expect-asset <0x>  the token contract you were told to expect
+  --expect-network <s> the chain you were told to expect, e.g. eip155:8453
   --wallet-key <0x>    a wallet private key, for paying. Prefer MRO_WALLET_KEY.
   --cron               print a crontab line instead of installing one
 `;
@@ -150,7 +152,17 @@ async function main() {
       ? await payFor({
           result,
           walletPrivateKey: walletKey,
-          expected: { payTo: args["expect-payto"], amount: args["expect-amount"] },
+          // ALL FOUR FIELDS. `asset` and `network` had no flags at all, so
+          // they could not be pinned through this binary at any price: the
+          // signed authorisation could name any ERC-20 on any chain, as long
+          // as the destination matched. An omitted flag stays undefined and is
+          // simply not compared, so nothing that worked before changes.
+          expected: {
+            payTo: args["expect-payto"],
+            amount: args["expect-amount"],
+            asset: args["expect-asset"],
+            network: args["expect-network"],
+          },
         })
       : null;
 

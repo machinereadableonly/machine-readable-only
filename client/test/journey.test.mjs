@@ -231,7 +231,7 @@ test("REFUSES to sign without an expected payTo given out of band", async () => 
 
 test("REFUSES a demand whose payTo is not the one expected", () => {
   assert.throws(
-    () => assertExpected(DEMAND.accepts[0], { payTo: "0x" + "b2".repeat(20) }),
+    () => assertExpected(DEMAND.accepts[0], { payTo: "0x" + "b2".repeat(20), amount: "1000000" }),
     /payTo is 0x000000000000000000000000000000000000dEaD, expected/
   );
 });
@@ -243,9 +243,19 @@ test("REFUSES a demand whose amount was changed under us", () => {
   );
 });
 
+test("REFUSES a demand when no amount was expected at all", () => {
+  // Required since 2026-09-18, the same way payTo always was. Optional meant
+  // the documented flow -- which asked for --expect-payto alone -- signed
+  // whatever sum the site named, and the ladder runs to $1,250.00.
+  assert.throws(
+    () => assertExpected(DEMAND.accepts[0], { payTo: TREASURY }),
+    /an expected amount is required/
+  );
+});
+
 test("REFUSES any scheme but exact, because only exact leaves no allowance", () => {
   assert.throws(
-    () => assertExpected({ ...DEMAND.accepts[0], scheme: "upto" }, { payTo: TREASURY }),
+    () => assertExpected({ ...DEMAND.accepts[0], scheme: "upto" }, { payTo: TREASURY, amount: "1000000" }),
     /this client only signs "exact"/
   );
 });
