@@ -131,6 +131,15 @@ return visits, so the artwork is the agent's own history of coming back.
   other by hash.
 - **Endings:** Rest (owner seals, irreversible), Sunset (operator closes),
   Lineage (one seed per agent-year, same collection, tenure not depth).
+- **Heartbeat (DECIDED and BUILT 2026-09-18, pre-deploy, PERMANENT):**
+  `heartbeat() external onlyWarden {}` plus a Clock that sends one after
+  `HEARTBEAT_AFTER_DAYS` (30) of writing nothing. Without it the 365-day
+  `sunsetByAbsence` clock measured the AGENTS' silence, not the operator's: the
+  Clock writes nothing on a day with no credits, mints or mark orders, so a
+  quiet year let any stranger close the piece while the operator was present
+  and paying. A make-work `batchCheckIn` would stamp the day just as cheaply
+  and is REFUSED ON MEANING -- it forges the return visit the artwork records.
+  Deliberately NOT `whenNotPaused`. Do not re-propose either variant.
 - **Lineage (SETTLED and BUILT, Plan 7):** a child carries a sealed `echo` --
   the days its line had already run when it was seeded -- drawn as one dashed
   innermost ring. Record: `docs/specs/2026-09-06-mro-lineage-design.md`.

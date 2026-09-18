@@ -16,6 +16,7 @@
 // a crash re-reads the world rather than replaying a plan.
 import { chunk, writeCheckInChunk, packIds, packableId } from "./batch.mjs";
 import { readEvents, applyEvents, DEPLOY_BLOCK, MAX_LOG_SPAN } from "./reconcile.mjs";
+import { heartbeatDue } from "./heartbeat.mjs";
 import { MRO_ABI } from "./abi.mjs";
 import { keyIdToBytes32 } from "../mcp/keyId.mjs";
 
@@ -659,6 +660,66 @@ export async function runClock({
       `clock: ${staleTotal} row(s) have been queued for ${STALE_AFTER_RUNS} runs or more and are not fixing themselves -- ` +
         `${stale.mints.length} mint(s), ${stale.credits.length} credit(s), ${stale.markOrders.length} mark order(s)`
     );
+  }
+
+  // 6b. SAY THE OPERATOR IS STILL HERE, IF NOTHING ELSE SAID IT.
+  //
+  //     `sunsetByAbsence` measures silence from `lastWardenDay`, and that stamp
+  //     only advances inside `onlyWarden` -- every one of which needs real work
+  //     to do. So on a day with no credits, no mints and no mark orders this
+  //     run writes NOTHING and the stamp stands still. The silence it then
+  //     measures is the AGENTS', not the operator's, and after a year any
+  //     stranger may close the piece permanently while the operator is present
+  //     and paying to host it.
+  //
+  //     The stamp is read from the CHAIN, never from the mirror: the mirror
+  //     does not hold it, and the whole question is what the contract believes.
+  //     A read that fails is not treated as silence -- it would send a write on
+  //     no evidence, nightly, whenever the RPC was unwell.
+  if (!summary.aborted) {
+    const wroteThisRun =
+      summary.minted.length > 0 ||
+      summary.seeded.length > 0 ||
+      summary.credited.length > 0 ||
+      summary.healed.length > 0 ||
+      summary.marks.length > 0;
+    let lastWardenDay = null;
+    try {
+      lastWardenDay = Number(
+        await publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "lastWardenDay" })
+      );
+    } catch (err) {
+      // `shortMessage` ONLY. `err.message` from viem carries the RPC endpoint,
+      // provider key and all, into a log this project ships to an operator.
+      // LOGGED, NOT ALERTED. The margin below ABSENCE_DAYS is months wide, so
+      // one unreadable night is not an event; alerting here would page an
+      // operator every time the RPC was briefly unwell and teach them to
+      // ignore it. `shortMessage` ONLY -- viem's `message` carries the RPC
+      // endpoint and its provider key into a log an operator reads.
+      log(
+        "clock: could not read lastWardenDay, so no heartbeat decision was made " +
+          `(${err?.shortMessage ?? "no short message"})`
+      );
+    }
+    if (lastWardenDay !== null) {
+      const decision = heartbeatDue({ today, lastWardenDay, wroteThisRun });
+      summary.heartbeat = decision;
+      if (decision.due) {
+        const result = await writer.send("heartbeat", []);
+        if (result.ok) {
+          log(`clock: heartbeat sent after ${decision.gap} quiet day(s), tx ${result.hash}, gas ${result.gasUsed}`);
+        } else {
+          // Not fatal to the run: nothing else depends on it today, and the
+          // margin below ABSENCE_DAYS is months wide. It is alerted because a
+          // heartbeat that keeps failing IS the path to losing the piece.
+          summary.heartbeat = { ...decision, sent: false, error: result.errorName ?? result.reason };
+          alert(
+            `clock: the heartbeat was refused (${result.errorName ?? result.reason}) after ${decision.gap} quiet day(s) -- ` +
+              "the piece becomes closeable by anyone at 365"
+          );
+        }
+      }
+    }
   }
 
   // 7. RECONCILE. Last, so it sees this run's own writes as well as whatever

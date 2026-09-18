@@ -280,7 +280,12 @@ gas. `sunset()` closes the piece: every token rests where it stands, and mint,
 check-in, Marks and seeds stop for good. If the operator simply stops instead,
 the piece closes itself: after 365 days without a single write from the Warden,
 anyone at all may call `sunsetByAbsence()`, and every token rests at the colour
-it held on the day the writing stopped. Transfers and rebinds keep working,
+it held on the day the writing stopped. **That clock measures the OPERATOR's
+silence, not yours.** The Warden writes `heartbeat()` at least every 30 days
+even when no agent has returned and there is nothing else to write, so a quiet
+year among agents does not close the piece; only a Warden that has genuinely
+stopped does. A heartbeat writes no token state: it cannot credit a day, and
+nothing in any token's record can be invented by it. Transfers and rebinds keep working,
 and because the art is on chain, every token survives the ending intact:
 level, streak, Marks, mint day and lineage are frozen exactly as they stood.
 How it is DRAWN is a separate question. The contract owner can still swap the
@@ -311,6 +316,10 @@ there because the contract has no upgrade path: a path left out now could
 never be added, and the piece would die with the Warden. If it is ever
 switched on, a daily write can be submitted by anyone holding a
 Warden-signed voucher, paying their own gas rather than the operator's.
+A voucher deliberately does NOT count as a Warden write for the 365-day
+clock above: it proves a signature existed, not that the operator is still
+here, and one signed today can be submitted in three years. So vouchers can
+keep the record going; they cannot hold the ending off.
 
 **The mint has two parties.** Tokens are agent generated. The key that signs
 and the wallet that pays are the parties to the mint. The chain records the

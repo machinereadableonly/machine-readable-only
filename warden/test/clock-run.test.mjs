@@ -935,3 +935,84 @@ test("an unnamed revert with a GOOD recipient reports the detail and stays queue
   assert.deepEqual(summary.stuckMints ?? [], [], "a mint that may yet land must not be condemned");
   db.close();
 });
+
+// -- THE LIVENESS STAMP -------------------------------------------------------
+//
+// The decision itself is unit-tested in clock-heartbeat.test.mjs. What these
+// pin is the CALL SITE: a heartbeat nothing sends is decoration, and the hazard
+// it exists for -- a quiet year letting any stranger close the piece -- would
+// still be live with every unit test green.
+
+/// A chain whose `lastWardenDay` is `day`, and which answers nothing else.
+const chainStampedAt = (day) => ({
+  ...noChain,
+  async readContract({ functionName }) {
+    if (functionName === "lastWardenDay") return day;
+    throw new Error(`unexpected read: ${functionName}`);
+  },
+});
+
+test("an idle run with a stale stamp sends a heartbeat", async () => {
+  const { q } = mirror();
+  const writer = okWriter();
+  // Nothing queued: no mints, no seeds, no credits, no marks. Before the
+  // heartbeat this run wrote NOTHING and the stamp stood still.
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainStampedAt(TODAY - 40),
+    writer,
+  });
+
+  assert.equal(summary.heartbeat.due, true);
+  assert.equal(summary.heartbeat.gap, 40);
+  const beats = writer.sent.filter((s) => s.functionName === "heartbeat");
+  assert.equal(beats.length, 1, "exactly one heartbeat, actually sent");
+  assert.deepEqual(beats[0].args, [], "it takes no arguments and writes no token state");
+});
+
+test("an idle run with a fresh stamp sends nothing", async () => {
+  const { q } = mirror();
+  const writer = okWriter();
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainStampedAt(TODAY - 1),
+    writer,
+  });
+
+  assert.equal(summary.heartbeat.due, false);
+  assert.equal(writer.sent.length, 0, "a recent stamp costs nothing");
+});
+
+test("a run that wrote a check-in does not also pay for a heartbeat", async () => {
+  // THE CONTROL. Without it, a heartbeat sent unconditionally would pass the
+  // test above and quietly double the transactions on every busy night.
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const writer = okWriter();
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainStampedAt(TODAY - 40),
+    writer,
+  });
+
+  assert.ok(writer.sent.some((s) => s.functionName === "mint"), "the run did write");
+  assert.equal(summary.heartbeat.due, false);
+  assert.equal(summary.heartbeat.why, "already-stamped");
+  assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 0);
+});
+
+test("a chain that cannot be read sends no heartbeat and does not stop the run", async () => {
+  // Refusing to guess: a write on no evidence would fire nightly whenever the
+  // RPC was unwell, and this is the one decision with no way to check itself.
+  const { q } = mirror();
+  const writer = okWriter();
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: { ...noChain, async readContract() { throw new Error("rpc down"); } },
+    writer,
+  });
+
+  assert.equal(summary.heartbeat, undefined);
+  assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 0);
+  assert.ok(summary.reconciled, "and the run still reconciled");
+});
