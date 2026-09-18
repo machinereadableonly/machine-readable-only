@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { getAddress } from "viem";
 import { createServer } from "./server.mjs";
 import { makeAllowRegistration, makeAllowToolCall, makeSpawnSolve } from "./bootstrap.mjs";
-import { makePaymentGateway, warmUp } from "./pay/x402.mjs";
+import { makePaymentGateway, warmUp, bootDecisionFor } from "./pay/x402.mjs";
 import { makeCdpAuthHeaders, isCdpFacilitator } from "./pay/cdp.mjs";
 import { makeMcpHandler } from "./mcp/server.mjs";
 import { LADDER, assertLadderSane } from "./mcp/ladder.mjs";
@@ -294,19 +294,27 @@ async function main() {
   // a credential this deploy got wrong, which will not heal by waiting. So it
   // exits, the same shape and for the same reason as the placeholder-treasury
   // refusal above.
-  warmUp(paid).then((ready) => {
-    if (ready) {
+  warmUp(paid).then((result) => {
+    const decision = bootDecisionFor({ ...result, chainId, rehearsalChainId: BASE_SEPOLIA });
+    if (decision === "ready") {
       console.log(`warden: payment ready (${paymentNetwork} via ${facilitatorUrl}, to ${treasuryAddress})`);
       return;
     }
-    if (chainId !== BASE_SEPOLIA) {
+    if (decision === "exit") {
       console.error(
-        `warden: payment is NOT ready on chain ${chainId} via ${facilitatorUrl} -- ` +
-          "refusing to run a piece nobody can enter. Check the facilitator url and its credentials."
+        `warden: payment is NOT ready on chain ${chainId} via ${facilitatorUrl}, and the failure looks ` +
+          "like a CREDENTIAL being refused rather than an outage -- refusing to run a piece nobody can " +
+          "enter. Check the facilitator url and its credentials."
       );
       process.exit(1);
     }
-    console.log("warden: payment NOT ready -- mint and upgrade will refuse until the facilitator answers");
+    // The rule itself lives in bootDecisionFor, which is tested; this only
+    // carries it out. An outage leaves the door, key registration, `/t/<id>`
+    // and `beat` all working, and a check-in is what the artwork records.
+    console.error(
+      `warden: payment NOT ready on chain ${chainId} -- mint and upgrade will refuse until the ` +
+        "facilitator answers. Check-ins, the door and token reads are unaffected."
+    );
   });
 
   // The static JWKS nginx serves from

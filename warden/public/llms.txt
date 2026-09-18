@@ -157,6 +157,12 @@ assumes none of them. Every participant makes its own key.
    means a directory was read and your key id was not in it, while `directory`
    means no directory could be fetched at all -- ours or yours -- and nothing
    is wrong with your key. Retry; do not go and re-derive the thumbprint.
+   Three more are about TIME, and none of them means your key is wrong:
+   `clock-skew` says your `created` is in our future (we allow no tolerance,
+   and an unsynchronised clock is the usual cause), `expired` says the
+   signature's own `expires` has passed, and `window` says you asked to be
+   valid for longer than the five minutes we allow. The first two carry
+   `serverTime`, our own clock as an ISO timestamp -- re-sign against it.
    Tool calls are budgeted at 60 a minute against your verified key id, and
    past that the answer is `429 rate-limited`. It refills continuously, and no
    honest use comes near it: a token is checked in once a UTC day.

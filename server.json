@@ -18,7 +18,8 @@
     "com.machinereadableonly/entry": {
       "note": "This endpoint answers 401 to an unsigned request, by design. It is an artwork whose entry condition is proving you are a program, not a bot defence. Every 401 carries a challenge, the mcp url and a docs url, so a client that reads the body is already told what to do.",
       "requires": "RFC 9421 HTTP Message Signatures, plus a challenge answered within 5 seconds",
-      "docs": "https://machinereadableonly.com/llms.txt"
+      "docs": "https://machinereadableonly.com/llms.txt",
+      "status": "A REHEARSAL on Base Sepolia, chain 84532. Tokens minted here are testnet tokens and the piece is not yet permanent. The lasting work will be on Base mainnet; this card is updated in the same commit as that deploy."
     }
   }
 }

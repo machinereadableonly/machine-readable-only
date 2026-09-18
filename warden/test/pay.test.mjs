@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adaptContext, makePaymentGateway, warmUp, MINT_PRICE, MINT_RESOURCE } from "../src/pay/x402.mjs";
+import { adaptContext, makePaymentGateway, warmUp, bootDecisionFor, MINT_PRICE, MINT_RESOURCE } from "../src/pay/x402.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeUpgradeTool } from "../src/mcp/tools/upgrade.mjs";
@@ -525,7 +525,7 @@ test("warmUp reports readiness and never rejects when the facilitator is down", 
     build: async () => { throw new Error("facilitator down"); },
     wrapFactory: fakeWrap(),
   });
-  assert.equal(await warmUp(down, "$0.10", (m) => alerts.push(m)), false);
+  assert.equal((await warmUp(down, "$0.10", (m) => alerts.push(m))).ready, false);
   assert.match(alerts[0], /payment is not ready/);
 
   const up = makePaymentGateway({
@@ -535,7 +535,7 @@ test("warmUp reports readiness and never rejects when the facilitator is down", 
     build: async () => fakeServer(),
     wrapFactory: fakeWrap(),
   });
-  assert.equal(await warmUp(up, "$0.10", () => {}), true);
+  assert.equal((await warmUp(up, "$0.10", () => {})).ready, true);
 });
 
 test("mint asks for exactly the price its own description quotes", async () => {
@@ -701,7 +701,7 @@ test("the warm-up builds the same cache entry the mint tool will use", async () 
     wrapFactory: fakeWrap(wrapped),
   });
 
-  assert.equal(await warmUp(paid, MINT_PRICE, () => {}), true);
+  assert.equal((await warmUp(paid, MINT_PRICE, () => {})).ready, true);
   const q = queries(openDb(":memory:"));
   const tool = makeMintTool({ q, chain: openChain(), paid, supplyCap: 10, today: () => 100 });
   await tool.handler({ to: "0x" + "6".repeat(40) }, { keyId: "k1" });
@@ -1116,4 +1116,62 @@ test("a resource server whose settlement cannot be observed is refused, not used
   assert.equal(r.structuredContent.reason, "payment-unavailable");
   assert.equal(handlerRan, false, "no money may be taken by a gateway that cannot see the outcome");
   assert.match(alerts[0], /no settlePayment/);
+});
+
+// -----------------------------------------------------------------------
+// WHAT A DEAD FACILITATOR SHOULD COST, which is not the whole piece.
+//
+// The boot used to exit(1) on ANY payment failure on any chain but Sepolia.
+// The reasoning was sound as far as it went -- a credential this deploy got
+// wrong will not heal by waiting -- but it treated a third party's outage the
+// same way, and taking the Warden down stops far more than payment: the door,
+// key registration, `/t/<id>`, and `beat`, which takes no payment at all. A
+// token that cannot check in loses that day permanently, and the days ARE the
+// artwork. So the two are told apart.
+// -----------------------------------------------------------------------
+
+test("warmUp reports WHY it failed, not just that it did", async () => {
+  const refused = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:8453",
+    payTo: "0xdead",
+    build: async () => { throw new Error("Failed to initialize: 401 Unauthorized"); },
+    wrapFactory: fakeWrap(),
+  });
+  const auth = await warmUp(refused, "$0.10", () => {});
+  assert.equal(auth.ready, false);
+  assert.equal(auth.authFailure, true, "401 is a credential problem and will not heal");
+
+  const down = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:8453",
+    payTo: "0xdead",
+    build: async () => { throw new Error("fetch failed: ECONNREFUSED"); },
+    wrapFactory: fakeWrap(),
+  });
+  const outage = await warmUp(down, "$0.10", () => {});
+  assert.equal(outage.ready, false);
+  assert.equal(outage.authFailure, false, "an unreachable host is an outage, and outages end");
+});
+
+test("a mainnet boot exits on a credential failure and stays up through an outage", () => {
+  const MAINNET = 8453;
+  const SEPOLIA = 84_532;
+
+  assert.equal(
+    bootDecisionFor({ ready: false, authFailure: true, chainId: MAINNET }),
+    "exit",
+    "a wrong credential will be wrong tomorrow: say so and stop"
+  );
+  assert.equal(
+    bootDecisionFor({ ready: false, authFailure: false, chainId: MAINNET }),
+    "warn",
+    "an outage must not cost every token its check-in"
+  );
+  assert.equal(
+    bootDecisionFor({ ready: false, authFailure: true, chainId: SEPOLIA }),
+    "warn",
+    "on the rehearsal chain nothing is worth exiting for"
+  );
+  assert.equal(bootDecisionFor({ ready: true, authFailure: false, chainId: MAINNET }), "ready");
 });

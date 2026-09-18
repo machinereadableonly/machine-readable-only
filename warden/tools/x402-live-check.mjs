@@ -5,11 +5,21 @@
 // to ignore. This is the other half -- the part that can only be answered by
 // asking the live service.
 //
-//   node tools/x402-live-check.mjs [facilitatorUrl] [chainId] [payTo]
+//   node --env-file=.env tools/x402-live-check.mjs [facilitatorUrl] [chainId] [payTo]
 //
 // Defaults are the testnet ones. Exits non-zero on any failed assertion.
+//
+// IT AUTHENTICATES, and until 2026-09-18 it did not. The testnet facilitator
+// takes no credentials, so the default path worked and hid the gap -- but this
+// tool exists to be run BEFORE the mainnet cutover, and CDP's facilitator
+// refuses an unauthenticated caller. The check that was meant to prove payment
+// works on mainnet could only ever fail there, which is worse than not having
+// it: a red pre-flight that is red for its own reasons teaches you to ignore
+// the pre-flight. Same wiring as src/main.mjs, read from the same environment,
+// which is why the usage line now names --env-file.
 import assert from "node:assert/strict";
 import { makePaymentGateway, MINT_PRICE } from "../src/pay/x402.mjs";
+import { isCdpFacilitator, makeCdpAuthHeaders } from "../src/pay/cdp.mjs";
 
 const [, , urlArg, chainArg, payToArg] = process.argv;
 const facilitatorUrl = urlArg ?? "https://x402.org/facilitator";
@@ -25,9 +35,31 @@ const USDC = {
   8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
 };
 
-console.log(`facilitator: ${facilitatorUrl}\nnetwork:     ${network}\npayTo:       ${payTo}\n`);
+// Exactly what main.mjs does, and it must stay exactly that: a pre-flight that
+// authenticates differently from the service is not a pre-flight.
+const cdpKeyId = process.env.CDP_API_KEY_ID ?? "";
+const cdpKeySecret = process.env.CDP_API_KEY_SECRET ?? "";
+const needsAuth = isCdpFacilitator(facilitatorUrl);
+if (needsAuth && !(cdpKeyId && cdpKeySecret)) {
+  // REFUSE RATHER THAN MEASURE. Running on would produce a confident red that
+  // says nothing about the facilitator, which is the failure this file had.
+  console.error(
+    `${facilitatorUrl} authenticates, and CDP_API_KEY_ID / CDP_API_KEY_SECRET are not both set.\n` +
+      "Run it as:  node --env-file=.env tools/x402-live-check.mjs " +
+      `${facilitatorUrl} ${chainId} ${payTo}`
+  );
+  process.exit(2);
+}
+const createAuthHeaders = needsAuth
+  ? makeCdpAuthHeaders({ keyId: cdpKeyId, secret: cdpKeySecret, facilitatorUrl })
+  : undefined;
 
-const paid = makePaymentGateway({ facilitatorUrl, network, payTo });
+console.log(
+  `facilitator: ${facilitatorUrl}\nnetwork:     ${network}\npayTo:       ${payTo}\n` +
+    `auth:        ${needsAuth ? "CDP JWT (credentials present)" : "none (this host takes none)"}\n`
+);
+
+const paid = makePaymentGateway({ facilitatorUrl, network, payTo, createAuthHeaders });
 
 // paid.prepare builds the requirements without running a tool call.
 const started = Date.now();
@@ -39,7 +71,10 @@ assert.equal(typeof wrap, "function", "createPaymentWrapper must return a wrappe
 const { x402ResourceServer, HTTPFacilitatorClient } = await import("@x402/core/server");
 const { registerExactEvmScheme } = await import("@x402/evm/exact/server");
 const server = registerExactEvmScheme(
-  new x402ResourceServer(new HTTPFacilitatorClient({ url: facilitatorUrl })),
+  // The same credentials as the gateway above. Without them this second client
+  // would be unauthenticated while the first was not, and the two halves of
+  // one check would be asking different questions.
+  new x402ResourceServer(new HTTPFacilitatorClient({ url: facilitatorUrl, createAuthHeaders })),
   { networks: [network] }
 );
 await server.initialize();

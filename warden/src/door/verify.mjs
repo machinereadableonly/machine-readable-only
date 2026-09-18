@@ -110,6 +110,53 @@ const REQUIRED = ["@authority", "@method", "@path", "signature-agent", "content-
  * is missing or will not parse, in which case a single-member dictionary is
  * still unambiguous and anything else is refused.
  */
+/**
+ * Why a refused signature was refused, when the reason is its TIMESTAMPS.
+ *
+ * WHY THIS IS NEEDED. web-bot-auth throws for created-in-the-future, for a
+ * past `expires` and for a signature that simply does not verify, all the
+ * same way and all before our verifier callback ever runs. So every one of
+ * them arrived here as `signature`, whose published prescription is "check you
+ * signed with the registered key and the right origin" -- advice a client with
+ * a fast clock can follow forever without ever finding the problem. Clock skew
+ * is ordinary; an unsynchronised box is one `ntp` away from being refused.
+ *
+ * FOR DIAGNOSIS ONLY, AND ONLY AFTER A REFUSAL. This parses attacker-shaped
+ * text, so it decides nothing: the signature has already been refused by the
+ * library when this is called, and the worst a liar can do is choose which
+ * true-sounding word it is refused with. Admission is never reached from here.
+ *
+ * Returns null when the timestamps are fine or unreadable, in which case the
+ * refusal keeps the word it already had.
+ */
+export function timeReason(request, now = Date.now()) {
+  const input = headerOf(request, "signature-input");
+  if (typeof input !== "string") return null;
+  let created = null;
+  let expires = null;
+  try {
+    for (const [, value] of parseDictionary(input)) {
+      const params = Array.isArray(value) ? value[1] : null;
+      if (!params || typeof params.get !== "function") continue;
+      const c = params.get("created");
+      const e = params.get("expires");
+      // Structured-field integers, in SECONDS since the epoch (RFC 9421).
+      if (typeof c === "number") created = c * 1000;
+      if (typeof e === "number") expires = e * 1000;
+      break;   // the first signature is the one this door reads
+    }
+  } catch {
+    return null;
+  }
+
+  // A CLOCK AHEAD IS CHECKED FIRST, because it is the one a client can fix.
+  // web-bot-auth refuses `created > now` with no tolerance at all, so this is
+  // reached by an ordinary machine a minute out of step, not by an attacker.
+  if (created !== null && created > now) return "clock-skew";
+  if (expires !== null && expires < now) return "expired";
+  return null;
+}
+
 export function signatureLabel(request) {
   const input = headerOf(request, "signature-input");
   if (typeof input !== "string") return null;
@@ -199,7 +246,11 @@ export async function verifyRequest(request, lookupKey) {
       }
 
       if (params.expires.getTime() - params.created.getTime() > MAX_WINDOW_MS) {
-        reason = "expired";
+        // `window`, NOT `expired`. Nothing has expired: the client asked for a
+        // validity longer than the door allows, and the remedy is to ask for
+        // less. `expired`'s published prescription is "sign a fresh one per
+        // request", which a client can follow forever without fixing this.
+        reason = "window";
         throw new Error("signature window exceeds five minutes");
       }
 
@@ -248,9 +299,19 @@ export async function verifyRequest(request, lookupKey) {
       reason = null;
     });
   } catch {
-    // web-bot-auth throws on every failure, including its own expiry and tag
-    // checks. `reason` carries whichever of ours fired; anything else is a
-    // signature failure.
+    // web-bot-auth throws on every failure, including its own expiry, its
+    // created-in-the-future check and its tag check. `reason` carries
+    // whichever of OUR checks fired; anything else used to be called a
+    // signature failure, which was a lie for the two time cases.
+    if (reason === "signature") reason = timeReason(request) ?? "signature";
+    // The server's own time, on the refusals where time IS the problem. It is
+    // the single fact that makes a skew fixable from the other end: a client
+    // that is told only "no" can do nothing, and one that is told our clock
+    // can re-sign against it. Omitted elsewhere, because a timestamp beside
+    // an unrelated refusal invites debugging the wrong thing.
+    if (reason === "clock-skew" || reason === "expired") {
+      return { ok: false, reason, serverTime: new Date().toISOString() };
+    }
     return { ok: false, reason: reason ?? "signature" };
   }
 

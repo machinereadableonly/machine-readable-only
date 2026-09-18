@@ -54,7 +54,7 @@ export function pinnedUrl(target, domain) {
  * `challenge` tool agree; they disagreed before. Put it back when something is
  * served there, and not a moment earlier.
  */
-export function challengeBody(challenge, expires, domain, reason) {
+export function challengeBody(challenge, expires, domain, reason, extra = null) {
   const body = {
     about: "An artwork that only admits programs. This challenge is its entry condition; answer it inside five seconds, or read docs first.",
     challenge,
@@ -63,6 +63,11 @@ export function challengeBody(challenge, expires, domain, reason) {
     docs: `https://${domain}/llms.txt`,
   };
   if (reason) body.reason = reason;
+  // `extra` carries the one extra fact a particular refusal needs -- today only
+  // `serverTime`, on the two refusals where the client's CLOCK is the problem.
+  // It is merged rather than spread over the defaults so a refusal can never
+  // overwrite the challenge itself.
+  if (extra) for (const [k, v] of Object.entries(extra)) if (!(k in body)) body[k] = v;
   return body;
 }
 
@@ -82,9 +87,9 @@ export async function admit(req, deps) {
     throw new Error("admit needs a `spent` Map to record signatures against");
   }
 
-  const fail = (reason) => {
+  const fail = (reason, extra = null) => {
     const { challenge, expires } = issueChallenge(secret, now);
-    return { ok: false, status: 401, body: challengeBody(challenge, expires, domain, reason) };
+    return { ok: false, status: 401, body: challengeBody(challenge, expires, domain, reason, extra) };
   };
 
   const like = toRequestLike(req, domain);
@@ -92,7 +97,12 @@ export async function admit(req, deps) {
   if (!signature) return fail(undefined);
 
   const verified = await verifyRequest(like, lookupKey);
-  if (!verified.ok) return fail(verified.reason);
+  // `serverTime` rides along on a clock refusal: it is what lets a client whose
+  // clock is out of step re-sign against ours instead of re-checking its key
+  // forever. verifyRequest sets it on exactly the two time reasons.
+  if (!verified.ok) {
+    return fail(verified.reason, verified.serverTime ? { serverTime: verified.serverTime } : null);
+  }
 
   // ONE SIGNATURE, ONE ADMISSION.
   //

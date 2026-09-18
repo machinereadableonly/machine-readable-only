@@ -547,9 +547,49 @@ export function makePaymentGateway({
 export async function warmUp(paid, price = MINT_PRICE, alert = console.error) {
   try {
     await paid.prepare(price, MINT_RESOURCE.tool, MINT_RESOURCE.description);
-    return true;
+    return { ready: true, authFailure: false, message: null };
   } catch (err) {
-    alert(`payment is not ready: ${err.message}`);
-    return false;
+    const message = err.message ?? String(err);
+    alert(`payment is not ready: ${message}`);
+    return { ready: false, authFailure: looksLikeAuthFailure(message), message };
   }
+}
+
+/// Does this failure look like a CREDENTIAL being refused, rather than a host
+/// being unreachable?
+///
+/// Deliberately generous about what counts as auth and strict about the
+/// consequence: a false positive costs a refused boot the operator will see
+/// immediately and can fix, while a false negative leaves the piece up and
+/// refusing payment with an alert on every boot. Only the second is silent, so
+/// the doubt is spent on staying up.
+export function looksLikeAuthFailure(message = "") {
+  return /\b(401|403)\b|unauthor|forbidden|invalid[\s_-]*(api[\s_-]*)?(key|token|credential|secret|jwt)|authentication|not authenticated|signature verification failed/i.test(
+    message
+  );
+}
+
+/**
+ * What a boot should DO about a payment layer that is not ready.
+ *
+ * A pure function, and separate from main.mjs on purpose: main.mjs is loaded
+ * by no test -- it reads the environment and listens on a port -- so a rule
+ * written inline there is a rule nothing can check. This is the rule; main.mjs
+ * only carries it out.
+ *
+ *   "ready" -- nothing to do.
+ *   "exit"  -- a credential that this deploy got wrong, anywhere real money can
+ *              arrive. It will be just as wrong tomorrow, and an operator who
+ *              is not stopped will not look.
+ *   "warn"  -- everything else. The piece runs, mint and upgrade refuse, and
+ *              THE DOOR, KEY REGISTRATION, `/t/<id>` AND `beat` ALL KEEP
+ *              WORKING. That last one is the whole argument: a check-in takes
+ *              no payment, a day missed can never be re-lived, and the days
+ *              are what the artwork is a record of. Trading every token's
+ *              streak for a third party's outage is the wrong trade.
+ */
+export function bootDecisionFor({ ready, authFailure, chainId, rehearsalChainId = 84_532 }) {
+  if (ready) return "ready";
+  if (chainId === rehearsalChainId) return "warn";
+  return authFailure ? "exit" : "warn";
 }

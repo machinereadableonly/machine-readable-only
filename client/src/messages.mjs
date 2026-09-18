@@ -156,6 +156,13 @@ export const DOOR_REASONS = {
     "the body was altered after signing. This client signs the exact bytes it sends; something in between changed them.",
   replay:
     "this exact signed request was already used. Sign each request once and send it once; this client does, so a retry loop above it is the usual cause.",
+  // 2026-09-18. Both words are new because the door used to answer `signature`
+  // for either -- and `signature` says "your key is wrong", which is advice a
+  // machine with a fast clock can follow forever without ever being admitted.
+  "clock-skew":
+    "this machine's clock is ahead of the site's, and a signature stamped in the site's future is refused. Retried once against the site's own clock; if this persists, synchronise the clock (ntp).",
+  window:
+    "the signature asked to stay valid for longer than the door allows (five minutes). This client signs a short window, so this is a version mismatch. Update mro-agent.",
 };
 
 /// What to tell an operator about a door refusal: the reason, and its meaning.

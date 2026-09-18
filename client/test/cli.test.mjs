@@ -7,6 +7,7 @@
 // was visible from the library tests.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
@@ -467,4 +468,21 @@ test("a tool REFUSAL exits non-zero, so a cron job can see it", async () => {
 test("CONTROL: a successful call still exits 0", async () => {
   const { code } = await cli("status", "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath);
   assert.equal(code, 0);
+});
+
+// THE PACKAGE MUST CARRY THE LICENCE IT DECLARES.
+//
+// package.json said "license": "MIT" while `files` listed only src and
+// README.md, so `npm publish` would have shipped a package claiming MIT with
+// no licence text in it -- the one document the MIT licence itself requires to
+// be included ("The above copyright notice and this permission notice shall be
+// included in all copies"). Found by the 2026-09-17 review.
+test("the published package includes the licence it declares", async () => {
+  const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(pkg.license, "MIT");
+  assert.ok(pkg.files.includes("LICENSE"), "npm ships only what `files` lists");
+
+  const text = await readFile(new URL("../LICENSE", import.meta.url), "utf8");
+  assert.match(text, /MIT License/);
+  assert.match(text, /THE SOFTWARE IS PROVIDED "AS IS"/, "the whole licence, not a reference to one");
 });

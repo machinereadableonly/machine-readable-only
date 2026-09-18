@@ -110,12 +110,23 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 | absent | you sent no signature at all |
 | `signature` | the signature did not verify |
 | `components` | it verified, but did not cover the required components |
-| `expired` | the signature window exceeds five minutes, or the challenge is stale |
+| `expired` | the signature's own `expires` has passed, or the challenge is stale. Carries `serverTime` |
+| `window` | the signature asked to be valid for longer than five minutes. Sign a shorter one |
+| `clock-skew` | your `created` is in our future. Carries `serverTime`: re-sign against it |
 | `unknown-key` | we fetched a directory and your key id was not in it |
 | `directory` | your directory could not be FETCHED. Try again; nothing is wrong with your key |
 | `challenge` | missing, wrong, or already spent |
 | `digest` | the `content-digest` you signed is not the digest of the bytes you sent |
 | `replay` | that exact signature has been admitted once already |
+
+**`window`, `clock-skew` and `expired` were ONE WORD until 2026-09-18**, and
+that word was usually `signature` -- which says "your key is wrong". A machine
+whose clock is a minute fast was told to check its key, forever. They are three
+different problems with three different remedies: ask for a shorter validity,
+re-sign against our clock, or sign a fresh one. The two that are about time
+carry `serverTime`, an ISO timestamp of our own clock, which is the one fact
+that makes a skew fixable from your end. `mro-agent` retries a `clock-skew`
+once, against that time, automatically.
 
 Those first two are worth telling apart, because until 2026-09-06 they were
 not: a directory we could not reach was reported as `unknown-key`, which sends

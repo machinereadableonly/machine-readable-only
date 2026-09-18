@@ -83,7 +83,7 @@ export async function knock({ origin, path = "/mcp", fetchImpl = fetch }) {
  * `signatureAgent` is separate again: it is the site's origin when you
  * registered a key with it, and YOUR origin when you host your own JWKS.
  */
-export async function admittedFetch({ origin, site = origin, privateJwk, signatureAgent = site, path = "/mcp", body, headers: extraHeaders = {}, fetchImpl = fetch, onTiming }) {
+export async function admittedFetch({ origin, site = origin, privateJwk, signatureAgent = site, path = "/mcp", body, headers: extraHeaders = {}, fetchImpl = fetch, onTiming, clockOffsetMs = 0 }) {
   const started = Date.now();
   // 5.L6, AND WHY THE `challenge` TOOL IS NOT USED HERE. The tool exists to
   // save this unsigned knock, and for a client shaped like this one it saves
@@ -103,7 +103,15 @@ export async function admittedFetch({ origin, site = origin, privateJwk, signatu
   // content-digest. `body` is passed through to fetch UNCHANGED below, so what
   // is hashed is exactly what goes on the wire -- re-serialising it here would
   // produce a digest for bytes nobody sends.
-  const { headers, keyId } = await signRequest({ privateJwk, origin: site, signatureAgent, path, body });
+  // `clockOffsetMs` is normally 0. It is set only on the one retry that follows
+  // a `clock-skew` refusal, and it carries the difference between this
+  // machine's clock and the site's -- so the retry is stamped in the site's
+  // present rather than its future. It shifts the timestamp only; nothing else
+  // about the signature changes.
+  const { headers, keyId } = await signRequest({
+    privateJwk, origin: site, signatureAgent, path, body,
+    now: new Date(Date.now() + clockOffsetMs),
+  });
 
   const res = await fetchImpl(new URL(path, origin), {
     method: "POST",
