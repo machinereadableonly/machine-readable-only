@@ -57,6 +57,46 @@ export function readDemand(result) {
  * checked, and omitting `payTo` is refused outright because it is the field
  * that decides who receives the money.
  */
+/// The longest this client will ever sign an authorisation for, and the
+/// default when a demand names no window at all.
+export const MAX_AUTHORISATION_SECONDS = 600;
+export const DEFAULT_AUTHORISATION_SECONDS = 300;
+
+/**
+ * Pick the offered requirement that matches what you expect.
+ *
+ * WHY THIS EXISTS. `accepts` is a LIST, and the client read `accepts[0]` and
+ * compared that one against the expectation. An honest site offering mainnet
+ * first and the chain you asked for second was refused; a hostile one could
+ * put an attractive entry first and keep the real terms out of reach. Reading
+ * the whole list and refusing when none matches is both more permissive to
+ * honest sites and stricter about what gets signed.
+ *
+ * The expectation is still checked in full by assertExpected: this only
+ * decides WHICH entry that check is applied to.
+ */
+export function chooseAccepted(accepts, expected) {
+  const list = Array.isArray(accepts) ? accepts : [];
+  if (!list.length) throw new Error("refusing to pay: the demand offered no payment requirements");
+
+  const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+  const fields = ["payTo", "amount", "asset", "network"].filter((f) => expected?.[f] !== undefined);
+  const match = list.find((one) => fields.every((f) => same(one?.[f], expected[f])));
+  if (match) return match;
+
+  // ONE OFFER THAT DOES NOT MATCH IS HANDED BACK, NOT REFUSED HERE. There is
+  // no ambiguity about which entry was meant, and assertExpected's complaint
+  // names the field that is wrong ("payTo is X, expected Y") where anything
+  // this function could say would be vaguer. It is refused either way; the
+  // difference is whether the operator is told WHAT is wrong.
+  if (list.length === 1) return list[0];
+
+  throw new Error(
+    `refusing to pay: none of the ${list.length} offered requirement(s) matches what you expected ` +
+      `(${fields.map((f) => `${f}=${expected[f]}`).join(", ")})`
+  );
+}
+
 export function assertExpected(accepted, expected) {
   if (!expected || typeof expected.payTo !== "string") {
     throw new Error("refusing to pay: an expected payTo address is required, from a source other than this server");
@@ -103,6 +143,20 @@ export function assertExpected(accepted, expected) {
  */
 export async function signAuthorization({ accepted, walletPrivateKey, now = Math.floor(Date.now() / 1000) }) {
   const account = privateKeyToAccount(walletPrivateKey);
+  // THE WINDOW IS NOT THE SITE'S TO CHOOSE. `maxTimeoutSeconds` arrives in the
+  // demand, and until 2026-09-18 it was used verbatim -- so a site that asked
+  // for a year got an authorisation valid for a year. An EIP-3009
+  // authorisation cannot be recalled: anyone holding it can spend it at any
+  // point inside the window, and the ladder runs to $1,250.00. Ten minutes is
+  // far longer than a settlement takes and short enough that a leak is already
+  // dead. A shorter ask is honoured; a nonsense one is refused rather than
+  // silently replaced, because a demand this malformed is not one to trust the
+  // rest of.
+  const asked = Number(accepted.maxTimeoutSeconds ?? DEFAULT_AUTHORISATION_SECONDS);
+  if (!Number.isFinite(asked) || asked <= 0) {
+    throw new Error(`refusing to pay: the demand's maxTimeoutSeconds is ${accepted.maxTimeoutSeconds}`);
+  }
+  const window = Math.min(asked, MAX_AUTHORISATION_SECONDS);
   const authorization = {
     from: account.address,
     to: accepted.payTo,
@@ -110,7 +164,7 @@ export async function signAuthorization({ accepted, walletPrivateKey, now = Math
     // Backdated by a minute so a small clock difference between us and the
     // chain cannot make a fresh authorisation invalid on arrival.
     validAfter: BigInt(now - 60),
-    validBefore: BigInt(now + Number(accepted.maxTimeoutSeconds ?? 300)),
+    validBefore: BigInt(now + window),
     nonce: `0x${randomBytes(32).toString("hex")}`,
   };
 
@@ -166,7 +220,7 @@ export async function payFor({ result, expected, walletPrivateKey }) {
   const demand = readDemand(result);
   if (!demand) return null;
 
-  const accepted = assertExpected(demand.accepts[0], expected);
+  const accepted = assertExpected(chooseAccepted(demand.accepts, expected), expected);
   const payload = await signAuthorization({ accepted, walletPrivateKey });
   return paymentMeta({ demand, accepted, payload });
 }

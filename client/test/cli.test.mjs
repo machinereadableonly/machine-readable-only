@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,11 +50,32 @@ const SETTLEMENT_FAILED = { ...DEMAND, error: "Payment settlement failed: invali
 
 let dir, server, endpoint, keyPath, q;
 
+/// An anvil account nobody funds, for the tests that exercise the paid path.
+/// IT GOES IN THE ENVIRONMENT, never in argv: `--wallet-key <0x>` was removed
+/// on 2026-09-19 because every argument is world-readable in `ps` and in
+/// /proc/<pid>/cmdline, and the client's own unpayable message has always said
+/// "MRO_WALLET_KEY (never on the command line)". A test that kept passing one
+/// on the command line would be publishing the habit the client refuses.
+const TEST_WALLET_KEY = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+
 /// The CLI, run to completion. Non-zero exit is returned rather than thrown,
 /// because several of these tests are about how it REFUSES.
+///
+/// `withWallet()` is the same runner with the key in the environment.
 async function cli(...args) {
+  return cliWithEnv({}, ...args);
+}
+
+async function withWallet(...args) {
+  return cliWithEnv({ MRO_WALLET_KEY: TEST_WALLET_KEY }, ...args);
+}
+
+async function cliWithEnv(env, ...args) {
   try {
-    const { stdout, stderr } = await run("node", [CLI, ...args], { timeout: 20_000 });
+    const { stdout, stderr } = await run("node", [CLI, ...args], {
+      timeout: 20_000,
+      env: { ...process.env, ...env },
+    });
     return { code: 0, out: stdout + stderr };
   } catch (err) {
     return { code: err.code ?? 1, out: (err.stdout ?? "") + (err.stderr ?? "") };
@@ -239,20 +260,18 @@ test("status works with the identity join left behind", async () => {
 // The cold readers' finding, enforced where it is easiest to get wrong: at the
 // command line, in a hurry, with a wallet key in the environment.
 test("REFUSES to pay when a wallet key is given but no expected payTo is", async () => {
-  const { code, out } = await cli(
+  const { code, out } = await withWallet(
     "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
     "--key", join(dir, "payer.json"), "--to", "0x" + "a1".repeat(20),
-    "--wallet-key", "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
   );
   assert.equal(code, 1);
   assert.match(out, /an expected payTo address is required/);
 });
 
 test("REFUSES to pay when the expected payTo does not match the demand", async () => {
-  const { code, out } = await cli(
+  const { code, out } = await withWallet(
     "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
     "--key", join(dir, "payer2.json"), "--to", "0x" + "a1".repeat(20),
-    "--wallet-key", "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
     // The amount is named so this stops at the payTo check, which is its
     // subject -- an absent amount is now refused first, and would make this
     // pass for the wrong reason.
@@ -274,10 +293,9 @@ test("REFUSES to pay when the expected payTo does not match the demand", async (
 // an absent --expect-payto throws before anything is signed.
 
 test("REFUSES to pay when the expected asset does not match the demand", async () => {
-  const { code, out } = await cli(
+  const { code, out } = await withWallet(
     "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
     "--key", join(dir, "payer-asset.json"), "--to", "0x" + "a1".repeat(20),
-    "--wallet-key", "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
     "--expect-payto", TREASURY, "--expect-amount", "1000000",
     "--expect-asset", "0x" + "cc".repeat(20)
   );
@@ -286,10 +304,9 @@ test("REFUSES to pay when the expected asset does not match the demand", async (
 });
 
 test("REFUSES to pay when the expected network does not match the demand", async () => {
-  const { code, out } = await cli(
+  const { code, out } = await withWallet(
     "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
     "--key", join(dir, "payer-network.json"), "--to", "0x" + "a1".repeat(20),
-    "--wallet-key", "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
     "--expect-payto", TREASURY, "--expect-amount", "1000000",
     "--expect-network", "eip155:1"
   );
@@ -302,10 +319,9 @@ test("REFUSES to pay with no expected amount at all", async () => {
   // payment asked only for --expect-payto -- so the documented flow left the
   // sum unchecked. A demand for any amount, payable to the right treasury, was
   // signed without complaint.
-  const { code, out } = await cli(
+  const { code, out } = await withWallet(
     "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
     "--key", join(dir, "payer-noamount.json"), "--to", "0x" + "a1".repeat(20),
-    "--wallet-key", "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
     "--expect-payto", TREASURY
   );
   assert.equal(code, 1);
@@ -331,10 +347,9 @@ test("the instructions name every flag the client needs to pay", async () => {
 // printed it and EXITED 0. A cron job, or an agent reading the exit status,
 // saw a mint that never happened.
 test("a payment that fails to settle exits non-zero and says nothing was minted", async () => {
-  const { code, out } = await cli(
+  const { code, out } = await withWallet(
     "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
     "--key", join(dir, "payer3.json"), "--to", "0x" + "a1".repeat(20),
-    "--wallet-key", "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
     "--expect-payto", TREASURY, "--expect-amount", "1000000"
   );
   assert.equal(code, 2, `a failed payment must not look like success: ${out}`);
@@ -485,4 +500,108 @@ test("the published package includes the licence it declares", async () => {
   const text = await readFile(new URL("../LICENSE", import.meta.url), "utf8");
   assert.match(text, /MIT License/);
   assert.match(text, /THE SOFTWARE IS PROVIDED "AS IS"/, "the whole licence, not a reference to one");
+});
+
+// -- a private key must never travel in argv --------------------------------
+
+test("a wallet key file anybody can read is refused, and names the fix", async () => {
+  const path = join(dir, "loose-wallet.key");
+  writeFileSync(path, TEST_WALLET_KEY);
+  chmodSync(path, 0o644);
+
+  const { code, out } = await cli(
+    "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+    "--key", join(dir, "wkf1.json"), "--to", "0x" + "a1".repeat(20),
+    "--wallet-key-file", path,
+    "--expect-payto", TREASURY, "--expect-amount", "1000000"
+  );
+  assert.equal(code, 1);
+  assert.match(out, /readable by others/);
+  assert.match(out, /chmod 600/, "the message must carry the remedy");
+});
+
+test("a wallet key file only its owner can read is used", async () => {
+  const path = join(dir, "tight-wallet.key");
+  writeFileSync(path, TEST_WALLET_KEY, { mode: 0o600 });
+  chmodSync(path, 0o600);
+
+  // THE CONTROL for the test above: same flag, same key, tight mode. It gets
+  // as far as paying -- which this fake facilitator then declines -- so the
+  // key was read and used rather than refused.
+  const { out } = await cli(
+    "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+    "--key", join(dir, "wkf2.json"), "--to", "0x" + "a1".repeat(20),
+    "--wallet-key-file", path,
+    "--expect-payto", TREASURY, "--expect-amount", "1000000"
+  );
+  assert.doesNotMatch(out, /readable by others/);
+  assert.match(out, /paying|payment|refusing to pay/i, "the key was read and the paid path entered");
+});
+
+test("a file that does not hold a private key is refused", async () => {
+  const path = join(dir, "not-a-key");
+  writeFileSync(path, "hello", { mode: 0o600 });
+  chmodSync(path, 0o600);
+  const { code, out } = await cli(
+    "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+    "--key", join(dir, "wkf3.json"), "--to", "0x" + "a1".repeat(20),
+    "--wallet-key-file", path, "--expect-payto", TREASURY, "--expect-amount", "1000000"
+  );
+  assert.equal(code, 1);
+  assert.match(out, /does not hold a 32-byte hex private key/);
+});
+
+test("the help no longer advertises a key on the command line", async () => {
+  const { out } = await cli("--help");
+  assert.doesNotMatch(out, /--wallet-key </, "a flag that takes a key in argv must not be offered");
+  assert.match(out, /--wallet-key-file/);
+});
+
+// -- the chain you expected, checked before anything is done ----------------
+
+test("a chain that is not the one you expected stops the run", async () => {
+  // llms.txt has always said to hard-fail on a mismatch rather than adapt.
+  // Until 2026-09-19 the client could not express the expectation at all.
+  const { code, out } = await cli(
+    "status", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+    "--key", keyPath, "--expect-chain", "1"
+  );
+  assert.equal(code, 1);
+  assert.match(out, /refusing to continue/);
+  assert.match(out, /84532/, "it must say what the site actually is");
+  assert.match(out, /expected 1/);
+});
+
+test("a contract that is not the one you expected stops the run", async () => {
+  const { code, out } = await cli(
+    "status", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+    "--key", keyPath, "--expect-contract", "0x" + "ff".repeat(20)
+  );
+  assert.equal(code, 1);
+  assert.match(out, /refusing to continue/);
+});
+
+test("CONTROL: the chain and contract you DID expect pass straight through", async () => {
+  const { code, out } = await cli(
+    "status", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+    "--key", keyPath, "--expect-chain", "84532", "--expect-contract", "0xcontract"
+  );
+  assert.equal(code, 0, out);
+  assert.doesNotMatch(out, /refusing to continue/);
+});
+
+test("the README never tells a reader to npx a package that is a placeholder", async () => {
+  // The install block said `npx mro-agent help` while the Status section two
+  // screens down said the published package is a placeholder that prints a
+  // notice and exits. This file ships AS THE NPM PAGE, so the contradiction
+  // was published on the very page the instruction fails from.
+  //
+  // Tied to PUBLISHED rather than to a date: when the real client is
+  // published, this test stops applying by itself.
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  if (PUBLISHED) return;
+  const instructions = readme.split("\n").filter((l) => /^\s+(npx|mro-agent)\s/.test(l));
+  const npxLines = instructions.filter((l) => l.includes("npx mro-agent"));
+  assert.deepEqual(npxLines, [], "an unpublished client must not be invoked with npx in its own README");
+  assert.match(readme, /node src\/cli\.mjs/, "and it must say how to run what actually exists");
 });

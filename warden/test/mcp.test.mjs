@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeMcpHandler } from "../src/mcp/server.mjs";
+import { makeStatusTool } from "../src/mcp/tools/status.mjs";
 import { openChain } from "./chain-stub.mjs";
 import { LADDER, ladderSentence } from "../src/mcp/ladder.mjs";
 import { envelope } from "./mcp-envelope.mjs";
@@ -426,4 +427,28 @@ test("a schema-invalid call is refused by the protocol layer, in the protocol's 
   // And the message names the field, which is what makes it actionable.
   assert.match(body.result.content[0].text, /tokenId/);
   assert.match(body.result.content[0].text, /expected number/);
+});
+
+// EVERY status ANSWER NAMES THE CHAIN, including one with no tokens in it.
+//
+// llms.txt says "Every tool answers with the chain id it is actually running
+// on, and the client should hard-fail on any mismatch". That was not true of
+// the one answer a client reads BEFORE it owns anything: `contract` and
+// `chainId` travelled inside each token's `links`, so an agent with no token
+// -- which is every agent about to mint -- got neither, and could not check
+// the chain before paying. Found 2026-09-19 while building `--expect-chain`.
+test("a status answer names the chain and contract even when the caller owns nothing", async () => {
+  const q = queries(openDb(":memory:"));
+  const tool = makeStatusTool({
+    q,
+    chain: openChain(),
+    domain: "example.com",
+    contract: "0x" + "c0de".repeat(10),
+    chainId: 84_532,
+  });
+
+  const empty = await tool.handler({}, { keyId: "a-key-that-owns-nothing" });
+  assert.deepEqual(empty.tokens, [], "this is the no-tokens case");
+  assert.equal(empty.chainId, 84_532, "the chain must be stated anyway");
+  assert.equal(empty.contract, "0x" + "c0de".repeat(10));
 });

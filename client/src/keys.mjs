@@ -67,6 +67,19 @@ export function saveIdentity(identity, path = defaultKeyPath()) {
     // the key over that would be worse than saving it: the FILE mode below is
     // the protection that matters, and it is set either way.
   }
+  // TIGHTEN BEFORE WRITING, NOT AFTER. `writeFileSync`'s `mode` applies only
+  // when it CREATES the file -- over an existing 0644 file the new key bytes
+  // landed world-readable, and the chmod that fixed it ran afterwards. The
+  // window was brief and real. Nothing is lost if the file does not exist yet:
+  // the mode below creates it at 0600 in the first place.
+  if (existsSync(path)) {
+    try {
+      chmodSync(path, 0o600);
+    } catch {
+      // A file somebody else owns cannot be chmodded, and the write below will
+      // fail for the same reason, with a better message than this could give.
+    }
+  }
   writeFileSync(path, JSON.stringify(identity, null, 2), { mode: 0o600 });
   chmodSync(path, 0o600);
   return path;

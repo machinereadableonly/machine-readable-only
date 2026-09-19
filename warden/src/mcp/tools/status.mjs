@@ -32,7 +32,13 @@ export function makeStatusTool({ q, chain, domain, contract, chainId }) {
       // The caller's own tokens. Read from the verified key id, never from an
       // argument, so nobody can enumerate somebody else's holdings.
       const mine = q.tokensForKey(ctx.keyId).map((t) => tokenView(q, t.tokenId, links));
-      return { ok: true, tokens: mine };
+      // THE CHAIN IS NAMED EVEN WITH NO TOKENS. `contract` and `chainId` ride
+      // inside each token's `links`, so this answer carried neither for a
+      // caller that owns nothing -- which is every agent about to mint, and
+      // exactly the moment llms.txt tells a client to check the chain and
+      // hard-fail on a mismatch. It could not. Stated here so the promise is
+      // true of the answer a client actually reads first.
+      return { ok: true, tokens: mine, contract: links.contract, chainId: links.chainId };
     },
   };
 }
