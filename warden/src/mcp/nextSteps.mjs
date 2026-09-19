@@ -101,6 +101,13 @@ export const NO_NEXT = new Set([
   // its own vocabulary, and mapped to sentences client-side (C3.9).
   "signature", "components", "expired", "unknown-key", "directory", "challenge",
   "digest", "replay", "proof", "nonce", "invalid-jwk", "rate-limited",
+  // The door's time words and the origin check, all 2026-09-18/19. Silent here
+  // for the same reason as their neighbours: they are answered AT THE DOOR,
+  // where the 401 body carries the reason and -- for the two about time --
+  // `serverTime` to correct against. `refusals.md` and the client's
+  // DOOR_REASONS carry the sentences. `origin` is never seen by an agent at
+  // all: agents send no Origin header.
+  "clock-skew", "window", "origin",
   // Routing and malformed input: not tool refusals.
   "target", "unknown-route", "malformed", "not-found", "not-built-yet",
   // Clock-internal. These are written to the mirror and read by the operator;

@@ -3,10 +3,12 @@
 //   npm run marks-preview          -- token 1
 //   npm run marks-preview -- 42    -- token 42
 //
-// ONE STATE shows all seven surfaces, which is why there is only one here:
-// level 200 leaves unearned frame cells for Vein to colour, and years 1 draws
-// the year ring Crown gilds. A whole heart would hide Vein entirely (no dim
-// cells remain) and a year-zero token would hide half of Crown.
+// ONE STATE, chosen so most surfaces are visible at once: level 200 leaves
+// unearned frame cells, and the streak sits on a middle rung so the tier
+// colour is not the darkest. A whole heart would leave no dim cells at all.
+//
+// (This comment described Vein and Crown, two of the SEVEN Marks retired on
+// 2026-09-02 when the ten-Mark ladder replaced them. Corrected 2026-09-19.)
 import { writeFileSync, mkdirSync } from "node:fs";
 import { Resvg } from "@resvg/resvg-js";
 import { unpackModules } from "./qart.mjs";
@@ -32,10 +34,19 @@ const bitmap = tokenBitmap(DOMAIN, id);
 const modules = unpackModules(Uint8Array.from(Buffer.from(bitmap.hex, "hex")), SIZE);
 const { want } = heartTarget(SIZE);
 
+// MARK IDS, NOT NAMES. `render-token.mjs` documents `state.marks` as "an array
+// of Mark ids (1..10), not names", and this passed the names -- so every
+// variant rendered the bare token, every row reported `+0 B`, and the tool
+// that exists to show what a Mark looks like drew no Mark at all. MARKS is
+// indexed bottom-up, so a name's id is its index plus one.
+const ids = MARKS.map((_, i) => i + 1);
 const variants = [
   ["base", []],
-  ...MARKS.map(m => [m, [m]]),
-  ["all", MARKS],
+  ...MARKS.map((name, i) => [name, [i + 1]]),
+  // Every Mark at once. NO TOKEN CAN LEGALLY WEAR THIS -- the ladder is five
+  // exclusive pairs -- and it is here as an upper bound on the drawing, not as
+  // a state to review. `GasBudget.t.sol` holds the maximal LEGAL set.
+  ["all-illegal", ids],
 ];
 
 const rows = [];

@@ -30,6 +30,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { utcDay } from "../src/mcp/tools/checkin.mjs";
 import { x402MCPClient } from "@x402/mcp";
+import { isCdpFacilitator, makeCdpAuthHeaders } from "../src/pay/cdp.mjs";
 import { makePaymentGateway, MINT_PRICE } from "../src/pay/x402.mjs";
 import { makeChainReader } from "../src/chain/read.mjs";
 
@@ -50,7 +51,30 @@ const q = queries(db);
 
 // THE REAL GATEWAY. This is the only difference from test/e2e/join.test.mjs,
 // which mocks `paid` at this exact seam.
-const paid = makePaymentGateway({ facilitatorUrl: FACILITATOR, network: NETWORK, payTo: TREASURY });
+// AND IT AUTHENTICATES, for the same reason x402-live-check.mjs does: CDP's
+// facilitator refuses an unauthenticated caller, so on mainnet -- the one
+// place this journey is worth running before real money arrives -- it could
+// only ever have failed, and failed as "facilitator unreachable".
+const cdpKeyId = process.env.CDP_API_KEY_ID ?? "";
+const cdpKeySecret = process.env.CDP_API_KEY_SECRET ?? "";
+const needsAuth = isCdpFacilitator(FACILITATOR);
+if (needsAuth && !(cdpKeyId && cdpKeySecret)) {
+  console.error(
+    `${FACILITATOR} authenticates, and CDP_API_KEY_ID / CDP_API_KEY_SECRET are not both set.\n` +
+      "Run it as:  node --env-file=.env tools/x402-live-mint-check.mjs"
+  );
+  process.exit(2);
+}
+const createAuthHeaders = needsAuth
+  ? makeCdpAuthHeaders({ keyId: cdpKeyId, secret: cdpKeySecret, facilitatorUrl: FACILITATOR })
+  : undefined;
+
+const paid = makePaymentGateway({
+  facilitatorUrl: FACILITATOR,
+  network: NETWORK,
+  payTo: TREASURY,
+  createAuthHeaders,
+});
 
 // THE REAL CHAIN READER, against the deployed contract. mint now checks the
 // contract's own gates -- sunset, pause, wallet cap -- before it will ask for

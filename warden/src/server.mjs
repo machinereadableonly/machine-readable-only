@@ -410,6 +410,21 @@ export function createServer(config) {
         return;
       }
 
+      // ORIGIN, BEFORE THE DOOR. The SDK's own `allowedOrigins` is deprecated
+      // in favour of exactly this -- "Use external middleware for origin
+      // validation instead" -- and we are the middleware.
+      //
+      // AN AGENT SENDS NO ORIGIN, so this is invisible to every real caller:
+      // absent means allowed. It refuses only a caller that names a DIFFERENT
+      // site, which is a browser page on somebody else's domain aiming a
+      // request here with a viewer's credentials attached. There is no path to
+      // exploit that while the door stands; the door should not be the only
+      // thing standing.
+      const origin = req.headers.origin;
+      if (origin && origin !== `https://${config.domain}` && origin !== `http://${config.domain}`) {
+        return json(res, 403, { ok: false, reason: "origin" });
+      }
+
       const decision = await admit(req, {
         secret: config.challengeSecret, lookupKey, seen, spent, domain: config.domain, body: raw,
       });

@@ -355,3 +355,60 @@ test("every 401 points at the protocol document by url", async () => {
     server.close();
   }
 });
+
+// -----------------------------------------------------------------------
+// ORIGIN, FOR THE ONE CALLER THAT SENDS ONE
+//
+// The MCP endpoint never looked at `Origin`. The SDK's own `allowedOrigins`
+// is DEPRECATED -- "Use external middleware for origin validation instead" --
+// so this is that middleware, in the one layer we own.
+//
+// An agent sends no Origin header at all, so nothing an agent does changes.
+// What changes is a browser page on somebody else's site being able to aim a
+// request at /mcp with a viewer's credentials attached. There is no path to
+// exploit that while the door stands, and the door is not the only thing that
+// should have to stand.
+// -----------------------------------------------------------------------
+
+test("a request from another site's Origin is refused before the door", async () => {
+  const { server, base } = await start();
+  try {
+    const res = await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: { origin: "https://evil.example", "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(res.status, 403);
+    assert.equal((await res.json()).reason, "origin");
+  } finally {
+    server.close();
+  }
+});
+
+test("an agent, which sends no Origin at all, is unaffected", async () => {
+  // THE CONTROL, and the one that matters: every real caller is here. It still
+  // gets the door's 401 with a challenge -- refused by the door, on its own
+  // terms, not by this check.
+  const { server, base } = await start();
+  try {
+    const res = await fetch(`${base}/mcp`, { method: "POST", body: "{}" });
+    assert.equal(res.status, 401);
+    assert.ok((await res.json()).challenge);
+  } finally {
+    server.close();
+  }
+});
+
+test("our own Origin is allowed through to the door", async () => {
+  const { server, base } = await start();
+  try {
+    const res = await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: { origin: "https://example.com" },
+      body: "{}",
+    });
+    assert.equal(res.status, 401, "the door refuses it, the origin check does not");
+  } finally {
+    server.close();
+  }
+});

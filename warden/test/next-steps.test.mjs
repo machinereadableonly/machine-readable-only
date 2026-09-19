@@ -33,8 +33,19 @@ function sources(dir, found = []) {
 
 test("every reason the service can emit is answered or deliberately silent", () => {
   const text = sources(src).join("\n");
-  const emitted = new Set([...text.matchAll(/reason: *"([a-z-]+)"/g)].map((m) => m[1]));
-  assert.ok(emitted.size > 20, `expected the real set, found ${emitted.size}`);
+  // THE SAME THREE SHAPES the skill-doc guard reads, and for the same reason:
+  // `reason: "x"` is the common one, but the door ASSIGNS its own
+  // (`reason = "x"`) and the middleware calls `fail("x")`. Reading only the
+  // first shape meant this completeness check -- whose whole job is that a
+  // refusal added later cannot ship as a dead end -- could not see the door's
+  // refusals at all. Broadened 2026-09-19, which is how `origin` was caught.
+  const emitted = new Set([
+    ...[...text.matchAll(/reason["']?\s*[:=,]\s*["']([a-z][a-z-]*)["']/g)].map((m) => m[1]),
+    ...[...text.matchAll(/fail\(["']([a-z][a-z-]*)["']/g)].map((m) => m[1]),
+  ]);
+  // The computed ones, which no scan can see: `reason = timeReason(...)`.
+  for (const computed of ["signature", "clock-skew", "expired"]) emitted.add(computed);
+  assert.ok(emitted.size >= 32, `expected the real set, found ${emitted.size}`);
 
   const orphans = [...emitted].filter((r) => !NEXT[r] && !NO_NEXT.has(r));
   assert.deepEqual(orphans, [], "a refusal with no next step and no decision to omit one");

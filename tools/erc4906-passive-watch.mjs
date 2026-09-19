@@ -15,7 +15,14 @@
 // them would destroy the experiment.
 import { loadEnv, nftApiBase, getNftMetadata } from "./alchemy-nft.mjs";
 
-const CONTRACT = "0x12C641d5C15DeEc21D71912973Bd8f63967b9bF6";
+// THE CONTRACT TO WATCH, required rather than hardcoded. This held
+// 0x12C641d5..., a pair superseded twice over, so the harness would have
+// watched a dead contract and reported its silence as evidence.
+const CONTRACT = process.env.MRO_CONTRACT_ADDRESS;
+if (!CONTRACT) {
+  console.error("Set MRO_CONTRACT_ADDRESS to the pair you are watching. It is not hardcoded any more.");
+  process.exit(2);
+}
 const TOKEN = 1;
 const base = nftApiBase(loadEnv().ALCHEMY_BASE_SEPOLIA_RPC_URL);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -34,8 +41,14 @@ async function read() {
 
 const before = await read();
 console.log(`[${stamp()}] baseline  Level ${before.level}  ${before.timeLastUpdated}`);
-console.log(`chain is at Level 200 (verified by RPC at 22:00Z). NO refresh calls will be made.`);
-console.log(`If the re-crawl theory holds, expect movement near 04:50Z.`);
+// MEASURED, NOT ASSERTED. This printed "chain is at Level 200 (verified by RPC
+// at 22:00Z)" -- a figure from one afternoon in August, stated as a fact of
+// whatever run you are doing now, beside a contract that had since been
+// replaced. An experiment that prints an unmeasured number as its baseline is
+// evidence of nothing.
+console.log(`watching ${CONTRACT} token ${TOKEN}. NO refresh calls will be made.`);
+console.log(`baseline above is what the metadata API says NOW; read the chain yourself if you`);
+console.log(`need the on-chain level to compare it against.`);
 
 // 12 hours at 10-minute spacing. Long enough to catch a second cycle if the
 // first estimate is off, cheap enough to leave running unattended.

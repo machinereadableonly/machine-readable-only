@@ -16,14 +16,41 @@ const root = new URL("..", import.meta.url).pathname;
 // Files that are allowed to contain what would otherwise be a finding, with
 // the reason. Keep this list short and justified -- an entry here is a
 // decision, not a convenience.
+/**
+ * Files exempted from ONE NAMED RULE each, with the reason.
+ *
+ * The value used to be a bare reason string and the check was
+ * `ALLOW.has(rel)`, which exempted the file from EVERY rule -- so a fixture
+ * allowed for its invented home path was also unchecked for real email
+ * addresses and for AI attribution, for as long as it stayed on the list. The
+ * value is now `{ rules, why }` and only the named rules are waived.
+ *
+ * Do NOT add a file here to silence a finding. Reword the file instead. Both
+ * entries below exist because scrubbing them would disable the thing they are
+ * for.
+ */
 const ALLOW = new Map([
-  ["tools/prepublish-check.mjs", "this file defines the patterns"],
+  [
+    "tools/prepublish-check.mjs",
+    { rules: ["absolute home path", "email address", "AI attribution"], why: "this file defines the patterns" },
+  ],
   [
     "warden/test/mcp.test.mjs",
-    "the /home/secret/... path is an invented fixture; the test asserts that " +
-      "exact string never reaches a caller, so removing it would remove the test",
+    {
+      rules: ["absolute home path"],
+      why:
+        "the /home/secret/... path is an invented fixture; the test asserts that " +
+        "exact string never reaches a caller, so removing it would remove the test",
+    },
   ],
 ]);
+
+/// Is this file exempt from THIS rule? An entry that names other rules does
+/// not help it here, which is the whole point.
+function allows(rel, ruleName) {
+  const entry = ALLOW.get(rel);
+  return Boolean(entry && entry.rules.includes(ruleName));
+}
 
 // Vendored third-party sources. Their contributors' addresses are upstream's
 // to publish, not ours, and rewriting them would corrupt the dependency.
@@ -87,7 +114,13 @@ for (const rel of tracked) {
       const m = line.match(rule.re);
       if (!m) continue;
       if (rule.ok && rule.ok(m[0])) continue;
-      if (ALLOW.has(rel)) continue;
+      // THE EXEMPTION IS PER RULE, not per file. `ALLOW.has(rel)` exempted a
+      // file from EVERY rule -- so a fixture allowed for its invented home
+      // path was also unchecked for real email addresses and for AI
+      // attribution, silently, for as long as it stayed on the list. Each
+      // entry now names the rule it was granted, and anything else in that
+      // file is still a finding.
+      if (allows(rel, rule.name)) continue;
       findings.push({ file: rel, line: i + 1, rule: rule.name });
     }
   });
