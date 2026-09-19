@@ -70,9 +70,28 @@ test("every refusal an AGENT can be sent is one the skill explains", () => {
 
   const emitted = new Set();
   for (const src of agentFacing) {
-    for (const m of src.matchAll(/reason: "([a-z-]+)"/g)) emitted.add(m[1]);
+    // THREE SHAPES, not one. `reason: "x"` in an object literal is the common
+    // one, and the only one this saw until 2026-09-19 -- so it was blind to
+    // `reason = "x"` (how the door assigns its own) and to `fail("x")`. It
+    // read 28 of the 32 literals in the tree and reported a clean sweep, which
+    // is exactly what a guard that cannot see the failure looks like.
+    for (const m of src.matchAll(/reason["']?\s*[:=,]\s*["']([a-z][a-z-]*)["']/g)) emitted.add(m[1]);
+    for (const m of src.matchAll(/fail\(["']([a-z][a-z-]*)["']/g)) emitted.add(m[1]);
   }
-  assert.ok(emitted.size > 20, `expected the whole surface, parsed ${emitted.size}`);
+
+  // AND THE ONES NO SCAN CAN SEE, because they are computed rather than
+  // written: `reason = timeReason(request) ?? "signature"` yields these three
+  // and a regex will never find them. Listed by hand BECAUSE they are
+  // invisible -- the list is short, it is commented at the site that produces
+  // them, and leaving them out would mean the door's commonest refusals were
+  // the ones this never checked.
+  for (const computed of ["signature", "clock-skew", "expired"]) emitted.add(computed);
+
+  // A FLOOR THAT RATCHETS. The old `> 20` passed comfortably while four
+  // reasons were invisible; this is set just under what the broadened scan
+  // actually finds, so losing sight of the surface fails here rather than
+  // quietly reducing what is checked.
+  assert.ok(emitted.size >= 32, `expected the whole surface, parsed ${emitted.size}`);
 
   const undocumented = [...emitted].filter((r) => !documented.has(r)).sort();
   assert.deepEqual(undocumented, [], "the service sends a refusal no published page explains");

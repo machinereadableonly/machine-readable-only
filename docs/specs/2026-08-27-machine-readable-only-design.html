@@ -416,7 +416,11 @@ exists so the piece is standards-pure for those that do.</p>
 nginx serves <code>door.html</code> from disk.</li>
 <li><strong>Unsigned request anywhere else, or signed without a valid challenge
 answer:</strong> the Warden replies <code>401</code> with
-<code>{ &quot;challenge&quot;: &quot;&lt;nonce&gt;.&lt;unix-ms&gt;.&lt;hmac&gt;&quot;, &quot;expires&quot;: &quot;&lt;now+5s ISO&gt;&quot;, &quot;mcp&quot;: &quot;https://&lt;domain&gt;/mcp&quot;, &quot;docs&quot;: &quot;https://&lt;domain&gt;/llms.txt&quot;, &quot;client&quot;: &quot;https://&lt;domain&gt;/client.mjs&quot;, &quot;reason&quot;: &quot;&lt;one word, or absent&gt;&quot; }</code>.
+<code>{ &quot;about&quot;: &quot;&lt;one sentence&gt;&quot;, &quot;challenge&quot;: &quot;&lt;nonce&gt;.&lt;unix-ms&gt;.&lt;hmac&gt;&quot;, &quot;expires&quot;: &quot;&lt;now+5s ISO&gt;&quot;, &quot;mcp&quot;: &quot;https://&lt;domain&gt;/mcp&quot;, &quot;docs&quot;: &quot;https://&lt;domain&gt;/llms.txt&quot;, &quot;protocol&quot;: &quot;https://&lt;domain&gt;/protocol&quot;, &quot;reason&quot;: &quot;&lt;one word, or absent&gt;&quot; }</code>.
+(AS BUILT, corrected 2026-09-19. <code>client</code> was removed before launch: it
+advertised <code>/client.mjs</code>, which the server answers 404 by design, so the
+first thing the piece ever said pointed at nothing. <code>about</code> and <code>protocol</code>
+were added. Two refusals also carry <code>serverTime</code>.)
 The challenge is <strong>stateless</strong>: <code>hmac = HMAC-SHA256(CHALLENGE_SECRET, nonce || timestamp)</code>.
 Nothing is keyed by IP, so agents behind one cloud NAT never collide. A
 5-second in-memory set of used nonces gives burn-after-use.</li>
@@ -427,16 +431,22 @@ caches it for 1 hour; picks the JWK whose thumbprint equals <code>keyid</code>;<
 <li>calls <code>verify()</code> from Cloudflare&#39;s <code>web-bot-auth</code> package (v0.1.3) with
 a verifier from <code>verifierFromJWK()</code> (<code>web-bot-auth/crypto</code>); the library
 does not fetch keys itself;</li>
-<li>requires the signature to cover <code>@authority</code>, <code>@method</code>, <code>@path</code> and
-<code>signature-agent</code>, with <code>tag=web-bot-auth</code>, and <code>expires - created</code> no
-more than 5 minutes (the standard only mandates <code>@authority</code>; MRO adds
-method and path so a captured signature cannot be replayed against a
-different tool);</li>
+<li>requires the signature to cover <code>@authority</code>, <code>@method</code>, <code>@path</code>,
+<code>signature-agent</code> AND <code>content-digest</code> -- five components, corrected
+2026-09-19; this said four, and <code>content-digest</code> is the one that binds a
+signature to the BODY, so a signature captured from one call could
+otherwise be replayed with different arguments -- with <code>tag=web-bot-auth</code>,
+and <code>expires - created</code> no more than 5 minutes (the standard only mandates
+<code>@authority</code>; MRO adds method and path so a captured signature cannot be
+replayed against a different tool);</li>
 <li>checks the <code>Challenge-Response</code> header equals
 <code>SHA-256(challenge || keyid)</code> in hex, and the challenge is unexpired and
 unused.
-Both pass: the key id is admitted for the rest of the UTC day (in-memory
-set, cleared at 00:00 UTC) and the request proceeds to <code>/mcp</code>. Either
+Both pass: THAT REQUEST is admitted and proceeds to <code>/mcp</code>. (Corrected
+2026-09-19. This said &quot;the key id is admitted for the rest of the UTC day
+(in-memory set, cleared at 00:00 UTC)&quot;, which described a session the door
+does not have: the UTC-day set holds SPENT CHALLENGES, and every request is
+signed and admitted individually -- one signature, one admission.) Either
 fails: <code>401</code> with a fresh challenge and <code>reason</code> in
 <code>signature | expired | challenge | directory | components | unknown-key | digest</code>.</li>
 </ul>

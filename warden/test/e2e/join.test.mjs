@@ -289,7 +289,7 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       const res = await fetch(`${base}/mcp`, { method: "POST" });
       assert.equal(res.status, 401);
       const body = await res.json();
-      assert.deepEqual(Object.keys(body).sort(), ["about", "challenge", "docs", "expires", "mcp"]);
+      assert.deepEqual(Object.keys(body).sort(), ["about", "challenge", "docs", "expires", "mcp", "protocol"]);
       assert.equal(body.mcp, `https://${DOMAIN}/mcp`);
       assert.equal(body.docs, `https://${DOMAIN}/llms.txt`);
       // C1.4. The first thing the piece ever says now says what it is, and it

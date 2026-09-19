@@ -61,6 +61,10 @@ export function challengeBody(challenge, expires, domain, reason, extra = null) 
     expires,
     mcp: `https://${domain}/mcp`,
     docs: `https://${domain}/llms.txt`,
+    // THE WIRE FORMAT, not the invitation. `docs` describes the journey;
+    // this names the header fields, which is what an agent signing by hand
+    // needs and what no served document carried until 2026-09-19.
+    protocol: `https://${domain}/protocol`,
   };
   if (reason) body.reason = reason;
   // `extra` carries the one extra fact a particular refusal needs -- today only

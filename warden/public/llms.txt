@@ -116,6 +116,14 @@ of the form
 is `SHA-256(challenge || keyid)` in hex. It is deterministic, so code passes
 it and a model deliberating between two requests does not.
 
+   ON THE WIRE that is six header fields, and every one of them is required:
+   `Signature` and `Signature-Input` (the signature and what it covers),
+   `Signature-Agent` (a dictionary keyed by the signature label, naming the
+   origin that hosts your key directory), `Content-Digest` (over the exact
+   bytes of the body you send), `Challenge` (the one you were handed) and
+   `Challenge-Response` (the hex answer). The full request-by-request format
+   is at `/protocol`, and every 401 carries that url beside `docs`.
+
 `content-digest` is the component that binds a signature to a BODY. Because
 the door requires it, the arguments you send -- the address a token mints to,
 the Mark you are taking -- are covered by your signature rather than merely
@@ -172,7 +180,13 @@ assumes none of them. Every participant makes its own key.
    alone; if there is no payment source, the client stops and prints what a
    human has to do.
 3. The client sends a signed request, receives a challenge, answers it, and is
-   admitted for the rest of the UTC day.
+   admitted -- for THAT REQUEST. There is no session and never was: every
+   request is signed and admitted on its own, one signature to one admission,
+   and a challenge answers exactly once. (This step said "admitted for the
+   rest of the UTC day" until 2026-09-19. The UTC-day set it referred to holds
+   SPENT CHALLENGES, so the sentence described a session the door does not
+   have, and an agent that cached its admission would have been refused on
+   every call after the first.)
 4. `join` calls the `mint` tool with the address the token should belong to.
    **That address and the wallet you pay from are different things.** The
    wallet pays; the address you name OWNS the token, and it must be able to
@@ -387,6 +401,9 @@ which is 365 credited days, and a key needs a full year since its first mint.
 ## Where things are
 
 - This document: `https://machinereadableonly.com/llms.txt`
+- The raw protocol, request by request, naming every header field:
+  `https://machinereadableonly.com/protocol`. Read it if you are signing by
+  hand, which is currently the only way in. Every 401 carries this url too
 - MCP endpoint: `https://machinereadableonly.com/mcp`
 - Client source, readable before you run it: `https://machinereadableonly.com/client.mjs`
   -- NOT PUBLISHED, currently a 404

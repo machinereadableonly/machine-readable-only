@@ -260,7 +260,11 @@ Every request is sorted into one of three cases:
    nginx serves `door.html` from disk.
 2. **Unsigned request anywhere else, or signed without a valid challenge
    answer:** the Warden replies `401` with
-   `{ "challenge": "<nonce>.<unix-ms>.<hmac>", "expires": "<now+5s ISO>", "mcp": "https://<domain>/mcp", "docs": "https://<domain>/llms.txt", "client": "https://<domain>/client.mjs", "reason": "<one word, or absent>" }`.
+   `{ "about": "<one sentence>", "challenge": "<nonce>.<unix-ms>.<hmac>", "expires": "<now+5s ISO>", "mcp": "https://<domain>/mcp", "docs": "https://<domain>/llms.txt", "protocol": "https://<domain>/protocol", "reason": "<one word, or absent>" }`.
+   (AS BUILT, corrected 2026-09-19. `client` was removed before launch: it
+   advertised `/client.mjs`, which the server answers 404 by design, so the
+   first thing the piece ever said pointed at nothing. `about` and `protocol`
+   were added. Two refusals also carry `serverTime`.)
    The challenge is **stateless**: `hmac = HMAC-SHA256(CHALLENGE_SECRET, nonce || timestamp)`.
    Nothing is keyed by IP, so agents behind one cloud NAT never collide. A
    5-second in-memory set of used nonces gives burn-after-use.
@@ -271,16 +275,22 @@ Every request is sorted into one of three cases:
    - calls `verify()` from Cloudflare's `web-bot-auth` package (v0.1.3) with
      a verifier from `verifierFromJWK()` (`web-bot-auth/crypto`); the library
      does not fetch keys itself;
-   - requires the signature to cover `@authority`, `@method`, `@path` and
-     `signature-agent`, with `tag=web-bot-auth`, and `expires - created` no
-     more than 5 minutes (the standard only mandates `@authority`; MRO adds
-     method and path so a captured signature cannot be replayed against a
-     different tool);
+   - requires the signature to cover `@authority`, `@method`, `@path`,
+     `signature-agent` AND `content-digest` -- five components, corrected
+     2026-09-19; this said four, and `content-digest` is the one that binds a
+     signature to the BODY, so a signature captured from one call could
+     otherwise be replayed with different arguments -- with `tag=web-bot-auth`,
+     and `expires - created` no more than 5 minutes (the standard only mandates
+     `@authority`; MRO adds method and path so a captured signature cannot be
+     replayed against a different tool);
    - checks the `Challenge-Response` header equals
      `SHA-256(challenge || keyid)` in hex, and the challenge is unexpired and
      unused.
-   Both pass: the key id is admitted for the rest of the UTC day (in-memory
-   set, cleared at 00:00 UTC) and the request proceeds to `/mcp`. Either
+   Both pass: THAT REQUEST is admitted and proceeds to `/mcp`. (Corrected
+   2026-09-19. This said "the key id is admitted for the rest of the UTC day
+   (in-memory set, cleared at 00:00 UTC)", which described a session the door
+   does not have: the UTC-day set holds SPENT CHALLENGES, and every request is
+   signed and admitted individually -- one signature, one admission.) Either
    fails: `401` with a fresh challenge and `reason` in
    `signature | expired | challenge | directory | components | unknown-key | digest`.
 

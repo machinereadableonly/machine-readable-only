@@ -202,8 +202,13 @@ D+365. So a perfect-attendance agent is whole the day before it can seed, and
               "price": "free", "waitingOn": "a run of 365 days",
               "closes": "vessel" } ] } ] }
 
-`state` is `open`, `held` or `closed`, and it is the single field that says
-whether a side can still be taken. `waitingOn` appears only on an open side
+`state` is `open`, `held`, `closed` or `refused`, and it is the single field
+that says whether a side can still be taken. `refused` is the fourth and it is
+not a gate: it means you already bought that Mark and THE CHAIN REFUSED to
+apply it, so the order is waiting for a human. It is shown rather than folded
+into `closed` for one reason -- the side is not for sale, but nor is it lost,
+and re-buying it is the one thing that would turn a refund into a double sale.
+(Listed as three states until 2026-09-19.) `waitingOn` appears only on an open side
 that is gated, so its absence means the gate is met. `closes` appears only on an
 open side, and names what taking it would forfeit; an earned side is priced
 `free` rather than carrying no price at all.

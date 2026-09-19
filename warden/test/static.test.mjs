@@ -19,6 +19,7 @@ import { createServer } from "../src/server.mjs";
 
 const DOOR = "<!doctype html><title>door</title>";
 const LLMS = "# what this piece is\n";
+const PROTOCOL = "# The raw protocol\n\nSignature, Signature-Input, Signature-Agent, Content-Digest.\n";
 const ROBOTS = "User-agent: *\nDisallow:\n";
 
 async function start(overrides = {}) {
@@ -269,7 +270,10 @@ test("a Warden built without the documents still starts and 404s them", async ()
 // This follows the advertised url the way an arriving agent would: reads it out
 // of the refusal, and fetches it.
 test("every url the 401 advertises can actually be fetched", async () => {
-  const { server, base } = await start();
+  // Wired with the protocol document because the 401 names it: this test is
+  // the guard that would have caught `client`, so it must be run against a
+  // Warden that serves everything the body promises.
+  const { server, base } = await start({ protocolMd: PROTOCOL });
   try {
     // An unsigned POST is the arrival every agent makes first.
     const refusal = await fetch(`${base}/mcp`, { method: "POST", body: "{}" });
@@ -289,12 +293,64 @@ test("every url the 401 advertises can actually be fetched", async () => {
 
     // And the guard that would have caught `client`: every url in the body is
     // checked, so a field added later cannot quietly point at nothing.
+    const protocol = await fetch(`${base}${new URL(body.protocol).pathname}`);
+    assert.equal(protocol.status, 200, `the 401 advertises ${body.protocol}, which does not serve`);
+    assert.equal(await protocol.text(), PROTOCOL, "and it serves the protocol, not something else");
+
     const advertised = Object.entries(body).filter(([, v]) => typeof v === "string" && v.startsWith("http"));
     assert.deepEqual(
       advertised.map(([k]) => k).sort(),
-      ["docs", "mcp"],
+      ["docs", "mcp", "protocol"],
       "a new url appeared in the 401: add it to this test or it is unverified",
     );
+  } finally {
+    server.close();
+  }
+});
+
+// -----------------------------------------------------------------------
+// THE ONLY DOCUMENT THAT NAMES THE HTTP HEADERS
+//
+// Hand-signing is the only way in today -- the client is unpublished -- and
+// the document that actually names the six header fields (the raw protocol)
+// was neither linked from llms.txt nor served anywhere. An agent that could
+// not use the client had to guess the wire format, or find a file in a git
+// repository. Found by the 2026-09-17 review.
+// -----------------------------------------------------------------------
+
+test("GET /protocol serves the raw protocol document, unsigned", async () => {
+  const { server, base } = await start({ protocolMd: "# The raw protocol\nSignature-Input: ..." });
+  try {
+    const res = await fetch(`${base}/protocol`);
+    assert.equal(res.status, 200, "an agent that cannot be admitted yet is exactly who needs this");
+    assert.match(res.headers.get("content-type"), /text\/markdown|text\/plain/);
+    assert.match(await res.text(), /The raw protocol/);
+  } finally {
+    server.close();
+  }
+});
+
+test("a Warden wired without the protocol document 404s it rather than throwing", async () => {
+  const { server, base } = await start({ protocolMd: undefined });
+  try {
+    assert.equal((await fetch(`${base}/protocol`)).status, 404);
+    assert.equal((await fetch(`${base}/`)).status, 200, "and the door still stands");
+  } finally {
+    server.close();
+  }
+});
+
+test("every 401 points at the protocol document by url", async () => {
+  // The body already carries `mcp` and `docs`. `protocol` is the third thing a
+  // hand-signing agent needs and the one it could not find: llms.txt describes
+  // the journey, this names the fields.
+  const { server, base } = await start({ protocolMd: "# The raw protocol" });
+  try {
+    const res = await fetch(`${base}/mcp`, { method: "POST" });
+    assert.equal(res.status, 401);
+    const body = await res.json();
+    assert.equal(body.protocol, "https://example.com/protocol");
+    assert.ok(body.challenge && body.mcp && body.docs, "and the rest of the invitation is unchanged");
   } finally {
     server.close();
   }

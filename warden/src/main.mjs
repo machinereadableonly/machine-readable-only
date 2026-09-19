@@ -335,6 +335,13 @@ async function main() {
   // left to nginx, for the same permission reason recorded in server.mjs --
   // and because a robots.txt that 4xx's states no rule at all (RFC 9309).
   const robotsTxt = readFileSync(fileURLToPath(new URL("../public/robots.txt", import.meta.url)), "utf8");
+  // The raw protocol, read from docs/ rather than copied into public/: a second
+  // copy is a second thing to keep in step, and tools/test/skill-doc.test.mjs
+  // already asserts the skill's copy matches this one byte for byte.
+  const protocolMd = readFileSync(
+    fileURLToPath(new URL("../../docs/2026-09-01-mro-raw-protocol.md", import.meta.url)),
+    "utf8"
+  );
   // The MCP discovery card, read from the REPOSITORY ROOT rather than copied
   // into public/. It is the same document that would be published to the
   // official MCP registry, and a second copy on disk is a second thing to keep
@@ -353,6 +360,7 @@ async function main() {
     challengeSecret,
     domain,
     llmsTxt,
+    protocolMd,
     paid,
     // The ten Marks, mirroring contracts/src/Ladder.sol. assertLadderSane
     // throws HERE, at boot, rather than letting a malformed entry reach an
