@@ -252,10 +252,19 @@ function finalize(results, { isFullCoverage }) {
   console.log(`svg bytes: min ${Math.min(...bytes)}, max ${Math.max(...bytes)}`);
   const worst = results.reduce((a, b) => (b.bytes > a.bytes ? b : a));
   console.log(`largest: [${worst.label}] at ${worst.bytes} B`);
+  // BY VALUE, NOT BY REFERENCE. `x.ids === n.combo.ids` compares array
+  // identity, which holds only when the result object came straight from
+  // renderOne in this process. The orchestrated run collects its results by
+  // parsing RESULT lines out of worker stdout, so every `ids` is a fresh array
+  // and this matched nothing -- the named cases printed in the direct run and
+  // silently vanished from the full-coverage run, which is the one that
+  // matters and the one nobody could see them in.
+  const key = (c) => `${[...c.ids].sort((a, b) => a - b).join(",")}|${c.irisVariant}|${c.tintVariant}`;
+  const byKey = new Map(results.map((r) => [key(r), r]));
   for (const n of NAMED) {
-    const r = results.find(x => x.ids === n.combo.ids && x.irisVariant === n.combo.irisVariant
-      && x.tintVariant === n.combo.tintVariant);
+    const r = byKey.get(key(n.combo));
     if (r) console.log(`named result -- ${n.name}: ${r.all ? "PASS" : "FAIL"} (decoded at ${r.ok.join(",") || "no size"})`);
+    else console.log(`named result -- ${n.name}: NOT FOUND in this run's results`);
   }
 
   if (isFullCoverage) {

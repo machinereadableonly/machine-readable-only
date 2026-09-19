@@ -43,6 +43,26 @@ module.exports = {
         "--no-network-family-autoselection",
         "--env-file=.env",
       ],
+      // AN EXPLICIT RESTART POLICY, stated rather than defaulted.
+      //
+      // The boot refuses to start on a configuration it cannot trust -- a
+      // treasury that is a placeholder on a real chain, a contract whose
+      // `viewOf` does not decode, a facilitator refusing our credentials. Those
+      // are deliberate exits, and PM2's default is to restart a process
+      // forever: a misconfigured deploy would spin, writing the same refusal to
+      // the log a few times a second, until somebody noticed.
+      //
+      // Ten tries with exponential backoff, then PM2 marks it `errored` and
+      // stops. The log then holds a handful of copies of the reason instead of
+      // thousands, and `pm2 list` says plainly that it is not running. A
+      // transient crash still recovers, which is the case this is for.
+      autorestart: true,
+      max_restarts: 10,
+      exp_backoff_restart_delay: 250,
+      // A process that stayed up this long counts as having started
+      // successfully, so an ordinary crash a week from now gets its full ten
+      // tries rather than inheriting the count from a bad afternoon.
+      min_uptime: "60s",
       // THE SHELL'S SECRETS ARE NOT THIS PROCESS'S BUSINESS. PM2 copies the whole
       // environment of whoever ran `pm2 start` into the app, and every session
       // shell on this box loads the operator's infra secrets file -- so the

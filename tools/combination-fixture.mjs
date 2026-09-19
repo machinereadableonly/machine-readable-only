@@ -18,7 +18,7 @@
 // out, and the honest rule turned out to be "nothing".
 //
 //   node tools/combination-fixture.mjs [tokenId] [domain]
-import { writeFileSync } from "node:fs";
+import { realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { keccak256, toBytes } from "viem";
@@ -178,12 +178,21 @@ ${lines}
 }
 
 const tokenId = Number(process.argv[2] ?? 1);
-const domain = process.argv[3] ?? "example.com";
-const here = dirname(fileURLToPath(import.meta.url));
-const all = fixtures(domain, tokenId);
-const out = join(here, "..", "contracts", "test", "CombinationFixture.sol");
-writeFileSync(out, render(all, domain, tokenId));
-console.log(
-  `${all.length} combinations, ${Math.min(...all.map(a => a.bytes))}-${Math.max(...all.map(a => a.bytes))} bytes`
-);
-console.log(`wrote ${out}`);
+// WRITES ONLY WHEN RUN, never on import.
+//
+// Everything below this line writes committed Solidity into contracts/test/.
+// Without the guard, a test that imported this module for one of its helpers
+// would OVERWRITE the fixture with output from the code under test -- the
+// fixture would then agree with any bug, and agree silently. Every sibling
+// generator has this guard; these two did not.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const domain = process.argv[3] ?? "example.com";
+  const here = dirname(fileURLToPath(import.meta.url));
+  const all = fixtures(domain, tokenId);
+  const out = join(here, "..", "contracts", "test", "CombinationFixture.sol");
+  writeFileSync(out, render(all, domain, tokenId));
+  console.log(
+    `${all.length} combinations, ${Math.min(...all.map(a => a.bytes))}-${Math.max(...all.map(a => a.bytes))} bytes`
+  );
+  console.log(`wrote ${out}`);
+}

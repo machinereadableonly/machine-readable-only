@@ -51,10 +51,11 @@ if [ ! -f "$ENV_FILE" ]; then
 # Never committed. chmod 600. Claude does not read this file.
 
 # The public hostname the piece is served from, no scheme.
-# STILL A PLACEHOLDER: there is no domain yet, and example.com is what the QR
-# payloads already encode. Change this and re-solve the bitmaps once a real
-# domain exists -- a token's code is written once and is permanent.
-MRO_DOMAIN=example.com
+# The domain was registered on 2026-09-03; this said "there is no domain yet"
+# and wrote example.com until 2026-09-19, so a Warden provisioned by this
+# script came up on a hostname the door pins @authority to and no signature
+# could ever match.
+MRO_DOMAIN=machinereadableonly.com
 
 # HMAC secret for the stateless entry challenge. Generated above.
 CHALLENGE_SECRET=$CHALLENGE
@@ -65,8 +66,17 @@ CHALLENGE_SECRET=$CHALLENGE
 # show up in the logs, this is the thing to upgrade.
 BASE_RPC_URL=https://sepolia.base.org
 
-# The deployed token contract (the fixed build, verified 2026-08-30).
-MRO_CONTRACT_ADDRESS=0xfA6D76270e0A9A4f5048F5acC31E1F9F360F4D1D
+# The deployed token contract. DELIBERATELY EMPTY, and the script refuses to
+# finish without it (see the check below).
+#
+# It held 0xfA6D76270e... until 2026-09-19 -- a pair superseded twice over, so
+# this script provisioned a fresh Warden onto a dead contract and nothing
+# caught it. A second hardcoded copy of that address is exactly the thing that
+# goes stale: `warden/deploy/set-contract-address.sh` is the only writer of it,
+# and the value belongs to whichever pair is actually adopted. Pass it in:
+#
+#     MRO_CONTRACT_ADDRESS=0x... bash scripts/setup-clock.sh
+MRO_CONTRACT_ADDRESS=${MRO_CONTRACT_ADDRESS:?Set MRO_CONTRACT_ADDRESS to the adopted pair before running this}
 
 # 84532 is Base Sepolia; 8453 is Base mainnet. This also decides where payment
 # is taken -- the x402 network is derived from it -- so a price is always quoted

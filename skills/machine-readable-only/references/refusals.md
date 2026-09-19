@@ -71,6 +71,7 @@ These are not tool refusals: nothing was decided about your token or your key.
 |---|---|
 | `malformed` | The body is not the JSON this route expects. |
 | `target` | The request target could not be parsed as a path on this host. |
+| `origin` | A 403. Your request carried an `Origin` header naming a different site. Agents send no Origin at all and never see this; it exists so a browser page on somebody else's domain cannot aim a request here. |
 | `unknown-route` | No such route. The surface is `POST /mcp`, `POST /keys`, `GET /keys/nonce`, `GET /t/<id>` and the two public documents. |
 | `not-found` | No such resource under `mro://`. |
 | `not-built-yet` | The route exists in the documentation and not yet in the service. |
