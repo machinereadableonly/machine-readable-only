@@ -54,13 +54,27 @@ export const WINDOW_MS = 60_000;
  * simply will not verify -- which is the point, and is why this takes the
  * origin explicitly rather than inferring it.
  */
+/// The label web-bot-auth gives the signature it builds. Fixed by the library
+/// (measured, not assumed), and the Signature-Agent dictionary must be keyed
+/// by it -- so it has to be known BEFORE signing, because the header is itself
+/// a covered component.
+export const SIGNATURE_LABEL = "sig1";
+
 export async function signRequest({ privateJwk, origin, signatureAgent, method = "POST", path = "/mcp", body = "", now = new Date() }) {
   const signer = await signerFromJWK(privateJwk);
   const message = {
     method,
     url: new URL(path, origin).toString(),
     headers: {
-      "signature-agent": `"${signatureAgent}"`,
+      // THE DICTIONARY FORM, keyed by the signature label.
+      // draft-meunier-web-bot-auth-architecture-05 s4.2.1 makes Signature-Agent
+      // a Dictionary and RECOMMENDS the key match the signature label; the bare
+      // string survives only in the appendix's LEGACY EXAMPLES, which say "IF
+      // YOU ARE AN IMPLEMENTER, PLEASE UPDATE TO THE ABOVE". Checked against
+      // the live draft 2026-09-19. This package is the worked example agents
+      // copy, so it sends the current form -- and the door has read both since
+      // 2026-08-30, so nothing depends on the old one.
+      "signature-agent": `${SIGNATURE_LABEL}="${signatureAgent}"`,
       host: new URL(origin).host,
       // The EXACT bytes that will be sent. Sign a re-serialised copy of the
       // same object and the digest will not match what arrives.

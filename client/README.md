@@ -60,7 +60,16 @@ allowance.
 
 ## Install and use
 
-    npx mro-agent help
+**From a checkout, which is the only way to run this today.** The Status
+section below is the authority: `mro-agent` on npm is a placeholder, and
+`npx mro-agent` runs THAT, not this. The `npx` form comes back in the same
+commit that publishes a version which can actually check a token in.
+
+    git clone https://github.com/machinereadableonly/machine-readable-only
+    cd machine-readable-only/client && npm install
+    node src/cli.mjs help
+
+The commands, however you invoke it:
 
     mro-agent whoami                        # this agent's key id
     mro-agent join   --to <0xaddress>

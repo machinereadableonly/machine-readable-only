@@ -34,7 +34,7 @@ export async function registerKey({ origin, privateJwk, fetchImpl = fetch }) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jwk: publicFromPrivate(privateJwk), nonce, proof }),
   });
-  const body = await res.json();
+  const body = await readJson(res, `${origin}/keys`);
   if (res.status !== 201) {
     // reason is one of: proof, nonce, invalid-jwk, rate-limited.
     throw new Error(`registration refused (${res.status}): ${body.reason ?? "unknown"}`);
@@ -49,9 +49,28 @@ export async function registerKey({ origin, privateJwk, fetchImpl = fetch }) {
  * the intended first request -- it is how you are meant to find out what to
  * answer, not a failure.
  */
+/**
+ * Read a JSON body, or say what actually came back.
+ *
+ * `res.json()` on a proxy error page throws `Unexpected token '<'`, which
+ * names neither the site, the status, nor anything to do about it -- and it
+ * bypasses the whole DOOR_REASONS table on the way past. A site that is down,
+ * proxied, or rate-limited by something in front of it is an ordinary thing to
+ * meet, so it gets an ordinary sentence. mcp.mjs already did this.
+ */
+async function readJson(res, what) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const snippet = text.replace(/\s+/g, " ").trim().slice(0, 200);
+    throw new Error(`${what} answered ${res.status} with something that is not JSON: ${snippet || "(empty body)"}`);
+  }
+}
+
 export async function knock({ origin, path = "/mcp", fetchImpl = fetch }) {
   const res = await fetchImpl(new URL(path, origin), { method: "POST" });
-  const body = await res.json();
+  const body = await readJson(res, `${origin}${path}`);
   if (!body.challenge) throw new Error(`no challenge in a ${res.status} response`);
   return body;
 }

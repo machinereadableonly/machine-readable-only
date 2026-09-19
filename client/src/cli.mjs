@@ -6,6 +6,7 @@
 // asked -- `join --cron` prints the crontab line for you to install rather
 // than editing your crontab, because a package that edits your scheduler
 // because you ran it once is not a package that deserved to be run.
+import { statSync, readFileSync } from "node:fs";
 import { ensureIdentity, loadIdentity, defaultKeyPath } from "./keys.mjs";
 import { registerKey } from "./door.mjs";
 import { listTools, callTool, structured } from "./mcp.mjs";
@@ -45,7 +46,11 @@ Options
   --expect-amount <n>  the amount in base units you were told to expect. REQUIRED to pay.
   --expect-asset <0x>  the token contract you were told to expect
   --expect-network <s> the chain you were told to expect, e.g. eip155:8453
-  --wallet-key <0x>    a wallet private key, for paying. Prefer MRO_WALLET_KEY.
+  --wallet-key-file <p> a file holding the wallet private key, for paying.
+                       Must not be readable by anyone else (mode 0600/0400).
+                       MRO_WALLET_KEY in the environment is preferred still.
+  --expect-chain <id>  the chain id you expect, e.g. 8453. Checked before anything is done
+  --expect-contract <0x> the contract you expect. Checked before anything is done
   --cron               print a crontab line instead of installing one
 `;
 
@@ -118,6 +123,11 @@ async function main() {
   const onTiming = (ms, allowed) => console.error(`answered the door's challenge in ${ms} ms (it allows ${allowed})`);
   const call = { origin, site, signatureAgent, privateJwk: identity.privateJwk, onTiming };
 
+  // BEFORE ANYTHING ELSE, including registration and any payment: a chain or
+  // contract that is not the one the operator expected must stop the run, not
+  // be adapted to. Costs one free `status` call, and only when asked for.
+  await assertChain(call, { chain: args["expect-chain"], contract: args["expect-contract"] });
+
   if (command === "join") {
     if (!args.to) throw new Error("--to <0xaddress> is required: it is who the token will belong to");
 
@@ -136,7 +146,7 @@ async function main() {
     let result = await callTool({ ...call, name: "mint", arguments: { to: args.to } });
 
     // The paid path. Nothing is signed unless an expected payTo was given.
-    const walletKey = process.env.MRO_WALLET_KEY ?? args["wallet-key"];
+    const walletKey = process.env.MRO_WALLET_KEY ?? readWalletKeyFile(args["wallet-key-file"]);
     const demand = readDemand(result);
 
     // The one step of the journey an agent cannot take alone. Say so in words
@@ -226,6 +236,57 @@ async function main() {
  * 2, not 1: a thrown error already exits 1, and "the site refused this" is a
  * different thing from "the client could not run".
  */
+/**
+ * Read a wallet private key from a file, refusing one anybody else can read.
+ *
+ * WHY THERE IS NO `--wallet-key <0x>` ANY MORE. Every argument a process is
+ * started with is world-readable in `/proc/<pid>/cmdline` and prints in `ps`
+ * for every user on the box -- and it lands in shell history besides. That is
+ * a funded wallet's private key, which cannot be rotated out of somebody
+ * else's screenshot. The environment variable and this file are both ordinary
+ * and neither is visible to a bystander.
+ */
+function readWalletKeyFile(path) {
+  if (!path) return undefined;
+  const mode = statSync(path).mode & 0o077;
+  if (mode !== 0) {
+    throw new Error(
+      `refusing to read ${path}: it is readable by others (mode ${(statSync(path).mode & 0o777).toString(8)}). ` +
+        `Run: chmod 600 ${path}`
+    );
+  }
+  const key = readFileSync(path, "utf8").trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) {
+    throw new Error(`refusing to use ${path}: it does not hold a 32-byte hex private key`);
+  }
+  return key;
+}
+
+/**
+ * Hard-fail on a chain or contract that is not the one you expected.
+ *
+ * llms.txt has always said "every tool answers with the chain id it is
+ * actually running on, and the client should hard-fail on any mismatch with
+ * what it expected rather than adapting to it" -- and the client had no way to
+ * express an expectation at all. `status` is free and unpaid, so this costs one
+ * round trip and runs BEFORE anything is minted or paid for.
+ */
+async function assertChain(call, { chain, contract }) {
+  if (!chain && !contract) return;
+  const view = structured(await callTool({ ...call, name: "status", arguments: {} }));
+  const actual = { chain: String(view?.chainId ?? ""), contract: String(view?.contract ?? "") };
+
+  if (chain && actual.chain !== String(chain)) {
+    throw new Error(`refusing to continue: the site is on chain ${actual.chain || "(not stated)"}, expected ${chain}`);
+  }
+  if (contract && actual.contract.toLowerCase() !== String(contract).toLowerCase()) {
+    throw new Error(
+      `refusing to continue: the site's contract is ${actual.contract || "(not stated)"}, expected ${contract}`
+    );
+  }
+  out("chain", actual);
+}
+
 function report(label, result) {
   const value = structured(result) ?? result;
   out(label, value);
