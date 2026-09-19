@@ -412,3 +412,20 @@ test("our own Origin is allowed through to the door", async () => {
     server.close();
   }
 });
+
+test("a Warden without the protocol document does not advertise it", async () => {
+  // THE STRUCTURAL HALF of the 404 above. This exact mistake happened while
+  // deploying the change that added /protocol: the document was passed to the
+  // wrong config object, so /protocol 404ed and every 401 advertised it
+  // anyway -- the `client.mjs` failure, repeated. A 401 can no longer name a
+  // url this Warden cannot serve.
+  const { server, base } = await start({ protocolMd: undefined });
+  try {
+    assert.equal((await fetch(`${base}/protocol`)).status, 404);
+    const body = await (await fetch(`${base}/mcp`, { method: "POST" })).json();
+    assert.equal(body.protocol, undefined, "it 404s, so it must not be advertised");
+    assert.ok(body.docs && body.challenge, "and the rest of the invitation is unchanged");
+  } finally {
+    server.close();
+  }
+});

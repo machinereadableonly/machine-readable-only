@@ -427,6 +427,8 @@ export function createServer(config) {
 
       const decision = await admit(req, {
         secret: config.challengeSecret, lookupKey, seen, spent, domain: config.domain, body: raw,
+        // Only advertise the protocol document if this Warden actually has it.
+        hasProtocol: typeof config.protocolMd === "string",
       });
       if (!decision.ok) return json(res, decision.status, decision.body);
 
