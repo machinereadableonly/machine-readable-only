@@ -212,6 +212,24 @@ export function createServer(config) {
         return res.end(body);
       }
 
+      // Case 1b-i-a2: THE RAW PROTOCOL, public and unsigned for the same reason
+      // as the documents above, and more sharply. Hand-signing is currently the
+      // only way in -- the client is not published -- and this is the only
+      // document that names the six header fields an agent has to send. It was
+      // neither served nor linked, so an agent that could not use the client
+      // had to guess the wire format or go and read a git repository. Every
+      // 401 now carries its url beside `docs`.
+      if (req.method === "GET" && path === "/protocol") {
+        if (typeof config.protocolMd !== "string") return json(res, 404, { ok: false, reason: "not-found" });
+        res.writeHead(200, {
+          // text/markdown, because that is what it is. Agents read either, and
+          // a browser shows text/markdown as text.
+          "content-type": "text/markdown; charset=utf-8",
+          "content-length": Buffer.byteLength(config.protocolMd),
+        });
+        return res.end(config.protocolMd);
+      }
+
       // Case 1b-i-b: robots.txt. PUBLIC for a reason specific to this file:
       // gating it does not restrict a crawler, it frees one. RFC 9309 section
       // 2.3.1.3 says an "unavailable" robots.txt -- any 4xx, our 401 included

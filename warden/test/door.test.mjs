@@ -69,6 +69,10 @@ test("a challenge body says what the piece is, not only how to answer it", () =>
     expires: "2026-01-01T00:00:00.000Z",
     mcp: "https://example.com/mcp",
     docs: "https://example.com/llms.txt",
+    // The wire format, added 2026-09-19. `docs` describes the journey; this
+    // names the six header fields, which is what an agent signing by hand
+    // needs -- and hand-signing is currently the only way in.
+    protocol: "https://example.com/protocol",
   });
   assert.equal("reason" in body, false);
 });
@@ -638,7 +642,7 @@ test("an unsigned POST /mcp gets a 401 challenge carrying about, challenge, expi
     const res = await fetch(`${base}/mcp`, { method: "POST" });
     assert.equal(res.status, 401);
     const body = await res.json();
-    assert.deepEqual(Object.keys(body).sort(), ["about", "challenge", "docs", "expires", "mcp"]);
+    assert.deepEqual(Object.keys(body).sort(), ["about", "challenge", "docs", "expires", "mcp", "protocol"]);
     assert.match(body.about, /only admits programs/, "the first thing the piece says must say what it is");
   } finally {
     server.close();

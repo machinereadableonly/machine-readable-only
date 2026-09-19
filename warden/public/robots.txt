@@ -9,8 +9,14 @@
 #
 # Crawling is not this piece's entry condition and this file is not its door.
 # /mcp admits a program that signs its own request and answers a challenge
-# inside five seconds. Nothing here changes that. Every path named below is
-# public and unsigned, and /llms.txt explains the rest.
+# inside five seconds. Nothing here changes that.
+#
+# Allow is about CRAWLING, not about access: it says no rule here forbids
+# fetching these paths. Every path named below is public and unsigned EXCEPT
+# /mcp, which is listed because a crawler should not be told a rule forbids it
+# -- the door does, and answers 401 with a challenge and the way in. /llms.txt
+# explains the rest. (This said "every path named below is public and
+# unsigned" and then named /mcp, until 2026-09-19.)
 
 User-agent: *
 Allow: /llms.txt

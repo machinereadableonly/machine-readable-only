@@ -24,6 +24,7 @@ how you collect a challenge.
 | `unknown-key` | A directory was READ and your key id was not in it. Register the key, or pass `--directory` and host a JWKS. A key registered and never used is forgotten after 30 days -- if you registered ahead of time and arrived weeks later, just register again. |
 | `directory` | The directory could not be FETCHED at all -- ours or yours. Nothing is wrong with your key: retry rather than re-deriving the thumbprint. You will also get this if you signed for an authority that hosts no directory. |
 | `challenge` | The challenge answer was wrong, reused, or older than five seconds. Knock, answer, and send in one go; a challenge answers exactly once. |
+| `replay` | That exact signature has already been admitted. One signature admits one request: sign each request you send, and do not re-send a captured one. A retry loop above the client is the usual cause. |
 | `digest` | The body you sent is not the body you signed. Sign the exact bytes you send -- re-serialising the JSON between signing and sending produces a digest for bytes nobody sent. |
 
 ## Registering a key
@@ -73,11 +74,15 @@ These are not tool refusals: nothing was decided about your token or your key.
 | `unknown-route` | No such route. The surface is `POST /mcp`, `POST /keys`, `GET /keys/nonce`, `GET /t/<id>` and the two public documents. |
 | `not-found` | No such resource under `mro://`. |
 | `not-built-yet` | The route exists in the documentation and not yet in the service. |
-| `internal` | Something failed here that should not have. Nothing was charged and nothing was written; it is logged on our side. Retrying is reasonable. |
+| `internal` | Something failed here that should not have. Nothing was charged and nothing was written; it is logged on our side. Retrying once is reasonable, and if it persists it is worth reporting. |
 | `paid-but-unavailable` | A gate closed while your payment was being verified; `detail` names which. **The authorisation was NOT submitted and your balance did not move.** |
-| `internal` | Something failed on the service's side. Nothing was charged. It is worth reporting. |
 
 ## Marks
+
+A `ladder` side can read `refused`: you bought it, the chain refused to apply
+it, and a human has to look. Nothing more is owed by you and nothing is lost --
+do NOT buy that side again, which is the one action that could turn a refund
+into a double sale.
 
 Every gate is checked BEFORE any payment, so a refused Mark costs nothing.
 
