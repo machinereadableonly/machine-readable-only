@@ -8,7 +8,21 @@
 // components the signature covered, and it does NOT bound how long the
 // signature is valid for. Both of those are required by the spec, so both are
 // enforced here.
-import { verify } from "web-bot-auth";
+// THE UNDERLYING VERIFIER, called directly.
+//
+// `web-bot-auth`'s own verify() wraps this with four checks and then hands
+// control to the caller's verifier. Three of those four we want verbatim; the
+// fourth refuses `created > Date.now()` with NO allowance whatsoever, and it
+// is not configurable. A machine one second fast can therefore never be
+// admitted by it -- and an unsynchronised clock is ordinary, not hostile.
+//
+// So the four checks live here now, in `verifyWebBotAuth` below, where the
+// skew allowance can be stated and tested. This file already reimplemented
+// the component check for the same reason (the library does not make one), so
+// this is the existing division of labour, not a new one. http-message-sig is
+// declared as a direct dependency because we call it directly; it is pinned to
+// the exact version web-bot-auth itself resolves.
+import { verify as httpsigVerify } from "http-message-sig";
 import { verifierFromJWK } from "web-bot-auth/crypto";
 import { parseDictionary } from "structured-headers";
 import { createHash } from "node:crypto";
@@ -29,6 +43,74 @@ export function contentDigest(body) {
 /// The spec's window bound. The standard sets no maximum, so a signature could
 /// otherwise be minted valid for a year and replayed for a year.
 export const MAX_WINDOW_MS = 5 * 60 * 1000;
+
+/**
+ * How far into our future a signature's `created` may sit.
+ *
+ * RFC 9421 says nothing about clock skew: section 1.4 makes it the
+ * application's job to state how it determines validity, so this number is
+ * ours to choose and to publish. Sixty seconds covers a box that has simply
+ * not run ntp lately, which is the common case and is not an attack.
+ *
+ * THE COST, STATED. A signature created `MAX_SKEW_MS` ahead of us is live for
+ * its own window plus that skew measured against OUR clock -- six minutes at
+ * these numbers, not five. That is the whole price, it is bounded, and it buys
+ * admission for every honest agent whose clock drifted.
+ *
+ * It does NOT extend a signature past its own `expires`, which is checked
+ * against our clock with no allowance at all.
+ */
+export const MAX_SKEW_MS = 60 * 1000;
+
+/**
+ * web-bot-auth's four checks, with an allowance on one of them.
+ *
+ * Copied deliberately from web-bot-auth 0.1.3's verify() (read 2026-09-19) so
+ * that `created` can carry a tolerance. Everything else is byte for byte what
+ * the library does:
+ *
+ *   - the tag MUST be `web-bot-auth`;
+ *   - `created` must not be in our future -- NOW: by more than MAX_SKEW_MS;
+ *   - `expires` must not be in our past, with no allowance;
+ *   - `keyid` MUST be present.
+ *
+ * `http-message-sig` checks `expires` itself as well, before this runs. The
+ * duplicate is harmless and is kept so this function stands alone.
+ */
+async function verifyWebBotAuth(message, verifier, { now = Date.now(), skewMs = MAX_SKEW_MS } = {}) {
+  return httpsigVerify(message, (data, signature, params) => {
+    assertWebBotAuthParams(params, { now, skewMs });
+    return verifier(data, signature, {
+      keyid: params.keyid,
+      created: params.created,
+      expires: params.expires,
+      tag: params.tag,
+      nonce: params.nonce,
+    });
+  });
+}
+
+/**
+ * The four checks themselves, exported so each can be driven on its own.
+ *
+ * They cannot be reached through `signatureHeaders`: it writes
+ * `tag="web-bot-auth"` unconditionally and ignores any override (measured
+ * 2026-09-19), so a wrong-tag or missing-keyid request cannot be produced by
+ * signing one. Testing the predicate directly is the only way to show these
+ * still refuse -- and showing that matters, because this file took them over
+ * from the library in order to add the skew allowance.
+ *
+ * Throws on refusal, like the library's own, so the caller's catch is unchanged.
+ */
+export function assertWebBotAuthParams(params, { now = Date.now(), skewMs = MAX_SKEW_MS } = {}) {
+  if (params.tag !== WEB_BOT_AUTH_TAG) throw new Error(`tag must be '${WEB_BOT_AUTH_TAG}'`);
+  if (params.created.getTime() > now + skewMs) throw new Error("created in the future");
+  if (params.expires.getTime() < now) throw new Error("signature has expired");
+  if (params.keyid === undefined) throw new Error("keyid MUST be defined");
+}
+
+/// The tag web-bot-auth requires, and the one this door admits.
+const WEB_BOT_AUTH_TAG = "web-bot-auth";
 
 /// The components a signature must cover. The standard mandates only
 /// @authority.
@@ -232,7 +314,7 @@ export async function verifyRequest(request, lookupKey) {
   let verifiedSigHash = null;
 
   try {
-    await verify(request, async (data, signature, params) => {
+    await verifyWebBotAuth(request, async (data, signature, params) => {
       const covered = coveredComponents(data);
       if (!covered) {
         reason = "components";

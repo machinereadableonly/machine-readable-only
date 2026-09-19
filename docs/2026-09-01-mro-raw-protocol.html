@@ -188,7 +188,7 @@ already in flight, and nothing else.</p>
 </tr>
 <tr>
 <td><code>clock-skew</code></td>
-<td>your <code>created</code> is in our future. Carries <code>serverTime</code>: re-sign against it</td>
+<td>your <code>created</code> is more than 60s into our future. Carries <code>serverTime</code>: re-sign against it</td>
 </tr>
 <tr>
 <td><code>unknown-key</code></td>
@@ -211,6 +211,13 @@ already in flight, and nothing else.</p>
 <td>that exact signature has been admitted once already</td>
 </tr>
 </tbody></table>
+<p><strong>CLOCK SKEW: we allow sixty seconds.</strong> Your <code>created</code> may sit up to a minute
+ahead of our clock and is simply accepted; past that you get <code>clock-skew</code>. RFC
+9421 sets no rule here -- section 1.4 makes it the application&#39;s job to state
+how it determines validity -- so this is that statement. <code>expires</code> gets no
+allowance in either direction, so the skew runs one way only, and a signature
+created ahead of us is live for its own window plus up to that minute measured
+against our clock.</p>
 <p><strong><code>window</code>, <code>clock-skew</code> and <code>expired</code> were ONE WORD until 2026-09-18</strong>, and
 that word was usually <code>signature</code> -- which says &quot;your key is wrong&quot;. A machine
 whose clock is a minute fast was told to check its key, forever. They are three

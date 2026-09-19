@@ -112,12 +112,20 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 | `components` | it verified, but did not cover the required components |
 | `expired` | the signature's own `expires` has passed, or the challenge is stale. Carries `serverTime` |
 | `window` | the signature asked to be valid for longer than five minutes. Sign a shorter one |
-| `clock-skew` | your `created` is in our future. Carries `serverTime`: re-sign against it |
+| `clock-skew` | your `created` is more than 60s into our future. Carries `serverTime`: re-sign against it |
 | `unknown-key` | we fetched a directory and your key id was not in it |
 | `directory` | your directory could not be FETCHED. Try again; nothing is wrong with your key |
 | `challenge` | missing, wrong, or already spent |
 | `digest` | the `content-digest` you signed is not the digest of the bytes you sent |
 | `replay` | that exact signature has been admitted once already |
+
+**CLOCK SKEW: we allow sixty seconds.** Your `created` may sit up to a minute
+ahead of our clock and is simply accepted; past that you get `clock-skew`. RFC
+9421 sets no rule here -- section 1.4 makes it the application's job to state
+how it determines validity -- so this is that statement. `expires` gets no
+allowance in either direction, so the skew runs one way only, and a signature
+created ahead of us is live for its own window plus up to that minute measured
+against our clock.
 
 **`window`, `clock-skew` and `expired` were ONE WORD until 2026-09-18**, and
 that word was usually `signature` -- which says "your key is wrong". A machine
