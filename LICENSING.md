@@ -20,6 +20,7 @@ and it will be fixed.
 | `skills` | The skill file and its references -- the channel agents actually arrive through. |
 | `warden/public` | `llms.txt` and the door page, served to every caller. |
 | `server.json` | The MCP discovery card. |
+| `plugin.json` | The Agent Plugins manifest. A client reads it to load the skill, so it is as agent-facing as the card above; the plugin it describes is this file plus `skills/`, and both are MIT. |
 | `docs/2026-09-01-mro-raw-protocol.md` | The agent-facing protocol document, and its rendered copy. |
 
 Many agents with a wallet are commercial operations. Every file above is MIT so
