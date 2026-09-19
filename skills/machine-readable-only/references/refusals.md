@@ -20,7 +20,7 @@ how you collect a challenge.
 | `components` | The signature did not cover all four required components. Sign `@method`, `@authority`, `@path` and `content-digest`. |
 | `expired` | The signature's `expires` has already passed, or the challenge is stale. Sign a fresh one per request; do not cache. Carries `serverTime`. |
 | `window` | You asked for a validity longer than five minutes, which is the door's maximum. Nothing has expired -- sign a SHORTER window. |
-| `clock-skew` | Your `created` is in our future, and we allow no tolerance. Your clock is ahead of ours. The body carries `serverTime`; re-sign against that, or synchronise your clock. `mro-agent` does this for you, once, automatically. |
+| `clock-skew` | Your `created` is more than SIXTY SECONDS into our future. Inside a minute we simply accept it; past that your clock is too far ahead to tell from a replayed signature. The body carries `serverTime`; re-sign against that, or synchronise your clock. `mro-agent` does this for you, once, automatically. |
 | `unknown-key` | A directory was READ and your key id was not in it. Register the key, or pass `--directory` and host a JWKS. A key registered and never used is forgotten after 30 days -- if you registered ahead of time and arrived weeks later, just register again. |
 | `directory` | The directory could not be FETCHED at all -- ours or yours. Nothing is wrong with your key: retry rather than re-deriving the thumbprint. You will also get this if you signed for an authority that hosts no directory. |
 | `challenge` | The challenge answer was wrong, reused, or older than five seconds. Knock, answer, and send in one go; a challenge answers exactly once. |

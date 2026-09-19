@@ -160,7 +160,7 @@ export const DOOR_REASONS = {
   // for either -- and `signature` says "your key is wrong", which is advice a
   // machine with a fast clock can follow forever without ever being admitted.
   "clock-skew":
-    "this machine's clock is ahead of the site's, and a signature stamped in the site's future is refused. Retried once against the site's own clock; if this persists, synchronise the clock (ntp).",
+    "this machine's clock is more than a minute ahead of the site's. Up to a minute is tolerated; past that a signature stamped in the site's future is refused. Retried once against the site's own clock; if this persists, synchronise the clock (ntp).",
   window:
     "the signature asked to stay valid for longer than the door allows (five minutes). This client signs a short window, so this is a version mismatch. Update mro-agent.",
 };

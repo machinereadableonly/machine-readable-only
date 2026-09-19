@@ -6,7 +6,7 @@ import { signerFromJWK } from "web-bot-auth/crypto";
 import { parseDictionary } from "structured-headers";
 import { verify } from "web-bot-auth";
 import { verifierFromJWK } from "web-bot-auth/crypto";
-import { verifyRequest, MAX_WINDOW_MS, coveredComponents, contentDigest, signatureAgentUrl, signatureLabel } from "../src/door/verify.mjs";
+import { verifyRequest, assertWebBotAuthParams, MAX_SKEW_MS, MAX_WINDOW_MS, coveredComponents, contentDigest, signatureAgentUrl, signatureLabel } from "../src/door/verify.mjs";
 
 const VECTORS = JSON.parse(
   readFileSync(new URL("./vectors/web_bot_auth_architecture_v1.json", import.meta.url), "utf8")
@@ -32,7 +32,7 @@ const EMPTY_DIGEST = contentDigest("");
 
 /// Build a signed request the way a real client will, so the test exercises the
 /// same code path an agent hits rather than a hand-rolled header.
-async function signedRequest({ windowMs = 60_000, components = CLIENT_COMPONENTS, createdAt = null } = {}) {
+async function signedRequest({ windowMs = 60_000, components = CLIENT_COMPONENTS, createdAt = null, tag = undefined } = {}) {
   const signer = await signerFromJWK(ED.key);
   const message = {
     method: "POST",
@@ -52,6 +52,7 @@ async function signedRequest({ windowMs = 60_000, components = CLIENT_COMPONENTS
     created,
     expires: new Date(created.getTime() + windowMs),
     components,
+    ...(tag === undefined ? {} : { tag }),
   });
   return { ...message, headers: { ...message.headers, ...headers } };
 }
@@ -544,4 +545,73 @@ test("CONTROL: the frozen clock is put back, so no later test inherits it", () =
     Date.now() > Math.max(...ED_VECTORS.map((v) => v.expires_ms)),
     "the clock is still frozen inside a vector's window",
   );
+});
+
+// -----------------------------------------------------------------------
+// CLOCK SKEW IS TOLERATED, NOT JUST DIAGNOSED
+//
+// web-bot-auth refuses `created > Date.now()` with no allowance at all, so a
+// machine one second fast could never be admitted. Since 2026-09-19 the door
+// allows a bounded amount of it. RFC 9421 says nothing about skew -- section
+// 1.4 makes it the application's job to state how it determines validity --
+// so the number is ours to choose and to publish, and it is MAX_SKEW_MS.
+//
+// The cost is stated plainly: a signature created `skew` ahead of us is live
+// for its own window plus up to that skew against our clock. With five
+// minutes and sixty seconds that is six minutes, bounded and documented.
+// -----------------------------------------------------------------------
+
+test("a clock inside the tolerance is ADMITTED, not refused", async () => {
+  const req = await signedRequest({ createdAt: new Date(Date.now() + MAX_SKEW_MS - 5_000) });
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, true, `a clock ${MAX_SKEW_MS / 1000}s fast must get in: ${JSON.stringify(r)}`);
+  assert.equal(typeof r.keyId, "string");
+});
+
+test("a clock beyond the tolerance is still refused, and still says why", async () => {
+  const req = await signedRequest({ createdAt: new Date(Date.now() + MAX_SKEW_MS + 30_000) });
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, false, "the allowance is bounded, or it is not an allowance");
+  assert.equal(r.reason, "clock-skew");
+  assert.ok(r.serverTime, "and it still hands back our clock to re-sign against");
+});
+
+test("the four checks taken over from web-bot-auth each still refuse", () => {
+  // DRIVEN DIRECTLY, because they cannot be reached by signing a request:
+  // `signatureHeaders` writes tag="web-bot-auth" unconditionally and ignores
+  // any override (measured 2026-09-19), so no signed message can carry a wrong
+  // tag or a missing keyid. Owning the tolerance means owning these four, and
+  // a check nothing drives is a check nobody knows still works.
+  const now = Date.now();
+  const ok = { tag: "web-bot-auth", keyid: "k", created: new Date(now), expires: new Date(now + 60_000) };
+
+  assert.doesNotThrow(() => assertWebBotAuthParams(ok, { now }), "the control must pass");
+
+  assert.throws(() => assertWebBotAuthParams({ ...ok, tag: "not-web-bot-auth" }, { now }), /tag must be/);
+  assert.throws(() => assertWebBotAuthParams({ ...ok, tag: undefined }, { now }), /tag must be/);
+  assert.throws(() => assertWebBotAuthParams({ ...ok, keyid: undefined }, { now }), /keyid MUST be defined/);
+  assert.throws(
+    () => assertWebBotAuthParams({ ...ok, expires: new Date(now - 1) }, { now }),
+    /expired/,
+    "a past `expires` gets NO allowance at all -- the skew runs one way only"
+  );
+  assert.throws(
+    () => assertWebBotAuthParams({ ...ok, created: new Date(now + MAX_SKEW_MS + 1) }, { now }),
+    /created in the future/,
+    "one millisecond past the allowance is past it"
+  );
+  assert.doesNotThrow(
+    () => assertWebBotAuthParams({ ...ok, created: new Date(now + MAX_SKEW_MS) }, { now }),
+    "and exactly at the allowance is inside it"
+  );
+});
+
+test("a signature that has genuinely expired gets no skew allowance", async () => {
+  const expired = await signedRequest({ createdAt: new Date(Date.now() - 10 * 60_000), windowMs: 60_000 });
+  assert.equal((await verifyRequest(expired, lookup)).reason, "expired");
+});
+
+test("CONTROL: an ordinary signature, no skew at all, is still admitted", async () => {
+  const r = await verifyRequest(await signedRequest(), lookup);
+  assert.equal(r.ok, true);
 });
