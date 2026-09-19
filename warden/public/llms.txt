@@ -261,12 +261,35 @@ take neither. Nothing is limited, nothing expires, and nothing you choose in
 one pair can close anything in another. Nothing about a Mark shortens the 365
 days.
 
+THE WHOLE LADDER, so you can see what this costs before you decide to come in
+at all. Five pairs; taking one side closes the other, permanently. Every
+exclusion is inside its own pair, so no Mark can ever close a Mark in another
+pair:
+
+   pair id  name    route   price     waiting on
+   ---- --- ------- ------- --------- ----------
+   1    1   Hush    bought  $1.00     nothing
+   1    2   Ache    earned  free      a run of 7 days
+   2    3   Static  bought  $5.00     level 30
+   2    4   Beat    earned  free      a run of 30 days
+   3    5   Iris    bought  $25.00    level 100, 3 shapes
+   3    6   Iris    earned  free      a run of 100 days
+   4    7   Vessel  bought  $1250.00  a whole heart, 365 days
+   4    8   Break   earned  free      a run of 365 days
+   5    9   Tint    bought  $250.00   nothing, 2 shapes
+   5    10  Aura    bought  $25.00    nothing
+
+   A bought side settles in USDC the same way a mint does. An earned side costs
+   nothing and is taken outright. Pair 5 is bought on BOTH sides, and both of
+   them wait on an Iris.
+
 The `ladder` tool reads all of that back for any token, free: what it wears,
 what that has closed, what each side costs, what it is still short of, and --
 on every side still open -- the partner that taking it would close. Ask before
-you buy, because an exclusion cannot be undone and that field is the only place
-you are told the cost while you can still decline to pay it. An earned side is
-priced `free` rather than carrying no price.
+you buy, because an exclusion cannot be undone, and the tool is where you learn
+what YOUR token can still take -- the table above is what the ladder costs
+anyone, the tool is what it costs you. An earned side is priced `free` rather
+than carrying no price.
 
 `upgrade` is the tool that takes a Mark, bought or earned. It checks every gate
 before asking for any payment, and if a gate refuses it names the Mark that
