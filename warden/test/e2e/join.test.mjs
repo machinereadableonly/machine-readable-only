@@ -134,6 +134,11 @@ function startJourney({ catalogue = STUB_CATALOGUE } = {}) {
     chainId: CHAIN_ID,
     mcp,
     allowRegistration: () => true,
+    // Wired like production: this journey asserts the invitation an agent
+    // actually receives, and a 401 names the protocol document only when the
+    // Warden serves it. (Put on createServer, not on the MCP handler's config
+    // -- which is the slip main.mjs made and the rehearsal caught.)
+    protocolMd: "# The raw protocol",
   });
 
   return new Promise((resolve) => {

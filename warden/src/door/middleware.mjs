@@ -54,18 +54,24 @@ export function pinnedUrl(target, domain) {
  * `challenge` tool agree; they disagreed before. Put it back when something is
  * served there, and not a moment earlier.
  */
-export function challengeBody(challenge, expires, domain, reason, extra = null) {
+export function challengeBody(challenge, expires, domain, reason, extra = null, hasProtocol = true) {
   const body = {
     about: "An artwork that only admits programs. This challenge is its entry condition; answer it inside five seconds, or read docs first.",
     challenge,
     expires,
     mcp: `https://${domain}/mcp`,
     docs: `https://${domain}/llms.txt`,
-    // THE WIRE FORMAT, not the invitation. `docs` describes the journey;
-    // this names the header fields, which is what an agent signing by hand
-    // needs and what no served document carried until 2026-09-19.
-    protocol: `https://${domain}/protocol`,
   };
+  // THE WIRE FORMAT, not the invitation. `docs` describes the journey; this
+  // names the header fields, which is what an agent signing by hand needs.
+  //
+  // ADVERTISED ONLY WHEN IT IS ACTUALLY SERVED. A Warden wired without the
+  // document 404s /protocol, and a 401 that names a url answering 404 is the
+  // `client.mjs` mistake exactly -- the first thing the piece ever says
+  // pointing at nothing. This happened during the deploy of this very change:
+  // the document was passed to the wrong config object, /protocol 404ed, and
+  // the 401 advertised it anyway. Now it cannot.
+  if (hasProtocol) body.protocol = `https://${domain}/protocol`;
   if (reason) body.reason = reason;
   // `extra` carries the one extra fact a particular refusal needs -- today only
   // `serverTime`, on the two refusals where the client's CLOCK is the problem.
@@ -82,7 +88,7 @@ export function challengeBody(challenge, expires, domain, reason, extra = null) 
  * per-day admitted set, so this function has no globals and tests can drive it.
  */
 export async function admit(req, deps) {
-  const { secret, lookupKey, seen, spent, domain, body = "", now = Date.now() } = deps;
+  const { secret, lookupKey, seen, spent, domain, body = "", now = Date.now(), hasProtocol = true } = deps;
 
   // A control a caller can lose by forgetting an argument is not a control.
   // There is no default here on purpose: an empty Map made per call would
@@ -93,7 +99,11 @@ export async function admit(req, deps) {
 
   const fail = (reason, extra = null) => {
     const { challenge, expires } = issueChallenge(secret, now);
-    return { ok: false, status: 401, body: challengeBody(challenge, expires, domain, reason, extra) };
+    return {
+      ok: false,
+      status: 401,
+      body: challengeBody(challenge, expires, domain, reason, extra, hasProtocol),
+    };
   };
 
   const like = toRequestLike(req, domain);

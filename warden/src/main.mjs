@@ -360,7 +360,6 @@ async function main() {
     challengeSecret,
     domain,
     llmsTxt,
-    protocolMd,
     paid,
     // The ten Marks, mirroring contracts/src/Ladder.sol. assertLadderSane
     // throws HERE, at boot, rather than letting a malformed entry reach an
@@ -392,6 +391,12 @@ async function main() {
     // named in the assembly rather than acquired by default.
     allowToolCall: makeAllowToolCall(),
     directoryPath,
+    // THE RAW PROTOCOL. It belongs to createServer, not to the MCP handler --
+    // it was passed to the handler's config on the first attempt, so /protocol
+    // 404ed while every 401 advertised it. Caught by rehearsing and PROBING
+    // rather than by any test: no test loads main.mjs, and the unit tests call
+    // createServer directly with a correct config.
+    protocolMd,
     // The two public documents. Read once at startup, like llmsTxt above, so
     // serving them costs no disk read per request. nginx proxies these
     // through rather than serving them itself -- see the note in server.mjs.

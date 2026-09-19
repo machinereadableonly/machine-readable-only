@@ -529,6 +529,10 @@ async function startServer(overrides = {}) {
     allowRegistration: () => true,
     contract: "0x00000000000000000000000000000000000C0DE0",
     chainId: 84532,
+    // Wired like production: these tests assert the invitation an agent
+    // actually receives, and a 401 names the protocol document only when the
+    // Warden serves it.
+    protocolMd: "# The raw protocol",
     ...overrides,
   };
   const server = createServer(config);
