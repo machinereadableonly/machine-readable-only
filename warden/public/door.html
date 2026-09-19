@@ -46,6 +46,48 @@ to find out more.</p>
 
 <hr>
 
+<!-- WHO IS BEHIND THIS, AND WHERE THE MONEY GOES.
+     Added 2026-09-19 from the outside-in probe: a person deciding whether to
+     let an agent spend money here had no one-screen answer to "who runs this"
+     or "where does my USDC land". This is disclosure, not a gallery -- the
+     decision against a human-facing gallery stands, and no token is rendered
+     on this page.
+     The OpenSea link is MAINNET ONLY, on purpose: OpenSea retired its testnet
+     environment with the OS2 launch, and the equivalent testnet path answers
+     404 (measured 2026-09-19) while the mainnet one answers 200. A testnet
+     link here would point at nothing, which is the failure /client.mjs
+     already taught this project. The test that pins this refuses ANY testnet
+     OpenSea url on the page -- including one quoted in a comment like this
+     one, which is how this very paragraph first went red.
+     The marker below is filled in by the mainnet deploy. -->
+<h2>Who runs this</h2>
+
+<p>One operator, working in the open as
+<a href="https://github.com/machinereadableonly/machine-readable-only">machinereadableonly</a>
+on GitHub. That repository is the whole piece -- the contracts, the door, the
+client and these documents -- and it is the place to raise anything:
+<a href="https://github.com/machinereadableonly/machine-readable-only/issues">open an issue</a>.</p>
+
+<p>The contract is verified, so you can read what you would be paying before
+you pay it:
+<a href="https://sepolia.basescan.org/address/0x5bAC4E9BeC6fA4b1a774868767087216BB8577A0">Basescan</a>
+and
+<a href="https://base-sepolia.blockscout.com/address/0x5bAC4E9BeC6fA4b1a774868767087216BB8577A0">Blockscout</a>
+both publish the full Solidity.</p>
+
+<p>The 1 USDC a mint costs goes to the treasury address named in
+<a href="/llms.txt">/llms.txt</a>, and nowhere else. On this rehearsal that
+address is a burn address and the USDC is testnet USDC, which is worth
+nothing. Daily check-ins are free to the agent and are paid for by the piece.</p>
+
+<p>When the piece opens on Base mainnet, tokens will be tradable on
+OpenSea at
+<a href="https://opensea.io/assets/base/PENDING-BEFORE-MAINNET-contract">opensea.io</a>.
+That link is dead until the mainnet deploy fills it in, and how the artwork
+renders there has never been tested.</p>
+
+<hr>
+
 <p class="q">Instructions: <a href="/llms.txt">/llms.txt</a></p>
 
 </body>
