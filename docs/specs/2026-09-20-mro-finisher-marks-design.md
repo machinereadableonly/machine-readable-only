@@ -131,9 +131,21 @@ leave them.
 ## 5. The ordinal
 
 A `uint32` finisher number, stored in the free bits of the existing `_marks`
-word. Bits 0 to 10 hold the Mark mask, bit 16 the Iris shape, bit 24 the Tint
-ink; **bits 32 to 63 are free**, so the ordinal costs no new storage slot and
-no extra SLOAD on the `tokenURI` path.
+word, at **bits 64 to 95**.
+
+**CORRECTED 2026-09-20, before any code was written.** This section first said
+bits 32 to 63 were free. They are not. `TokenView.sol` documents the packing in
+full: bits 1-10 the Mark mask, bits 16-23 the Iris shape, bits 24-31 the Tint
+ink, and **bits 32-63 the run the earned Iris was taken at**. An ordinal written
+there would have silently corrupted every earned Iris -- a value the contract
+reads from the token itself precisely so the Warden cannot forge it.
+
+The error came from reading the `MarkIdOutOfRange` comment, which names the
+shape and ink bits and stops there, and not reading `TokenView`, which names all
+four fields. **The packing has one authority and it is `TokenView.sol`.**
+
+Bits 64 and up are genuinely free -- 192 of them -- so the ordinal still costs no
+new storage slot and no extra SLOAD on the `tokenURI` path.
 
 A single `uint32 _finishersSoFar` counter in the contract increments on each
 first finisher claim. One new slot, written once per finisher.
@@ -332,6 +344,159 @@ stays true and is worth keeping verbatim.
 
 ---
 
+## 10b. The finished-token composition: explored and CLOSED
+
+Explored with the operator on 2026-09-20, after the spec above was written. The
+question was whether a finished token could be redrawn, superimposed on, or made
+machine-readable some other way. **Every branch was measured and every one is
+closed.** Recorded so none of it is re-opened.
+
+### The heart IS the code, so there is no middle setting
+
+`renderSvg` splits the code's modules into two sets by the heart mask: modules
+inside the heart take the heart ink, the rest take the noise ink. The heart is
+not drawn over the code, it is made OF the code.
+
+So "a bigger heart with a smaller code" is incoherent -- they are one knob. Any
+composition where the heart dominates must DECOUPLE them, and then the heart is
+a silhouette rather than a texture.
+
+### The decoupled compositions were rendered and rejected
+
+Three tiles were rendered at level 365, solved against the real domain, and
+decoded at nine sizes: the control, a true heart with the code inset at the
+lower right, and a true heart with the code centred.
+
+The operator's verdict: **"A looks best the others look amateur."** He is right.
+The control's sophistication is that the heart is made of the thing that makes
+it readable; a flat silhouette discards that and reads as a greetings card. The
+inset version was worse still -- the code punches a rectangular notch out of the
+lower lobe and the heart reads as bitten.
+
+Measured alongside: the centred version failed decode at 256px, and a solid
+heart emitted naively cost 603 KB of svg against a 20 KB limit (31 KB when
+emitted as run-length rows -- the emitter, not the idea, but the idea died on
+looks first).
+
+### Raising the QR version: measured, and DEAD ON GAS
+
+The real complaint about the control is that the heart is ragged, and the cause
+is measurable: only about a quarter of version 5's modules can be moved by the
+solver. A higher version raises both the control ratio and the drawing
+resolution. Measured, with capacity discovered from the encoder rather than a
+table:
+
+| ver | side | modules | free bytes | controlled | ctl% | heart body% | bitmap |
+|---|---|---|---|---|---|---|---|
+| 5 | 37 | 1,369 | 69 | 345 | 25.2 | 70.0 | 172 B |
+| 6 | 41 | 1,681 | 97 | 485 | 28.9 | 70.7 | 211 B |
+| 8 | 49 | 2,401 | 155 | 775 | 32.3 | 74.5 | 301 B |
+| 10 | 57 | 3,249 | 233 | 1,165 | 35.9 | 76.0 | 407 B |
+
+Version 10 draws a visibly better heart -- clean lobes, a real point, and the
+finder patterns fall from 19% of the width to 12% simply because the grid is
+finer. All versions decode at all nine sizes, and the solve stays under a
+second.
+
+**It is still dead, on two independent measurements.**
+
+1. **Gas.** Version 10 adds 8,927 bytes of path data. At the measured ~155 gas
+   per byte that is roughly +1.38M gas, against 109,979 of headroom. Even
+   spending every other saving available it lands near 2.7M against a 2M hard
+   limit. Version 6 would fit and is barely better than 5.
+2. **The frame.** Version 5 is LOAD-BEARING for the geometry. A 45-cell block
+   gives a two-ring frame of exactly 376 cells -- the 365 days plus the 11
+   surplus that light at completion. At version 10 the same two rings give 536
+   and one ring gives 264. Neither fits, so a version raise forces a frame
+   redesign (frame cells drawn in their own unit, about 1.44x a module).
+
+### Data Matrix and the other symbologies: DROPPED
+
+Data Matrix's control ratio plateaus at about 36% across its whole size range,
+computed from the ECC-200 symbol table in `@zxing/library`. QR reaches 35.9% by
+version 10 and 46.5% by version 40, and reaches higher resolution too (177x177
+against 132x132). Data Matrix loses on both axes that matter, and its real
+advantages -- a 1-module quiet zone instead of 4, and no corner eyes -- shrink as
+the grid gets finer.
+
+Aztec and MaxiCode both put a bullseye finder in the CENTRE, which is worse here
+than QR's corner eyes. A linear barcode cannot carry the url at all.
+
+**Do not re-propose a symbology change.** The bottleneck was never the
+symbology; it is the on-chain gas budget.
+
+---
+
+## 10c. Where the gas actually goes
+
+Measured 2026-09-20 by `test/GasProfile.t.sol`, which is new: nothing in the
+suite had ever broken the total into parts, so every proposal to buy headroom
+was guesswork.
+
+The dearest token, rendered from a view already in memory:
+
+| Component | Gas | Bytes |
+|---|---|---|
+| `tokenURI` total | 1,844,410 | 11,112 |
+| `svg()` alone | 1,292,621 | 7,656 |
+| code paths (via harness) | 701,750 | 4,519 |
+| frame paths (via harness) | 542,995 | 2,092 |
+| everything else in `svg()` | 47,876 | |
+
+The token contract's own overhead is 11,865 gas. **The cost is essentially all
+rendering.**
+
+### Base64 is the CHEAP option, which is the opposite of the hypothesis
+
+The image is embedded base64, which expands it by a third and is paid for twice
+-- in gas to encode and in bytes to carry. Replacing it with a percent-encoded
+utf-8 data URI looked like 22% of the budget for free.
+
+Measured, it is not:
+
+| | Gas | Bytes |
+|---|---|---|
+| `Base64.encode` | 420,598 | 10,208 |
+| naive per-byte percent-escape | 4,577,634 | 7,696 |
+| solady `LibString.replace` | 809,641 | 7,696 |
+
+**Both replacements cost MORE gas than the thing they replace**, the tuned one
+by 389,043. Solady's Base64 is optimised assembly and a substitution pass over
+the same 7,656 bytes is simply more work than encoding them. The only gain is
+2,512 bytes, and bytes are not the binding constraint: 7,451 spare against
+109,979 gas.
+
+On top of that, the svg holds 162 `"` characters, so a plain-text data URI would
+force single-quoted attributes through the renderer, its JS mirror and every
+fixture -- and would change the one thing every metadata consumer touches, on a
+consumer (OpenSea) that cannot be verified until the mainnet mint.
+
+**Keep base64. Do not re-open it.** The renderer is not carrying obvious waste;
+Phase 0 already took the available wins.
+
+---
+
+## 10d. The image is already its own record
+
+The frame is 376 cells in a fixed fill order, one per credited day, with 11
+surplus that light only when the heart is whole. **Counting lit frame cells
+recovers `level`.** The rings give years, the echo ring gives lineage, the
+heart's ink gives the streak tier, the eyes give the Marks.
+
+So the artwork already encodes most of the token's state. What is missing is
+only the PUBLISHED ENCODING.
+
+The argument for publishing it has nothing to do with agents, who read
+`tokenURI` JSON anyway. It is permanence: **if the Warden dies, the image on
+chain still carries the record, and a published encoding makes it readable
+forever with no server at all.** That sits with the rule that the piece must
+never depend on an indexer refreshing.
+
+Costs nothing on chain. It is a section in `llms.txt` plus a reference decoder
+in the client, and it is worth doing independently of the finisher Marks.
+
+---
+
 ## 11. Non-goals
 
 Stated so they are not re-litigated mid-build:
@@ -345,6 +510,10 @@ Stated so they are not re-litigated mid-build:
 - **No payment for a finisher Mark.** All five are earned. Payment stays USDC
   elsewhere on the ladder, unchanged.
 - **The ordinal is not drawn** in this design.
+- **The finished token is not redrawn.** The decoupled compositions were
+  rendered and rejected on looks; see 10b.
+- **The QR version is not raised**, and no other symbology replaces it; see 10b.
+- **Base64 stays**; see 10c.
 
 ---
 
