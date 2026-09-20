@@ -95,6 +95,26 @@ export function paymentFailedMessage(demand) {
 }
 
 /**
+ * A PAID call that threw before it answered. The money may be gone.
+ *
+ * `paymentFailedMessage` covers the opposite case -- the site answered and said
+ * the settlement failed. This one covers the case where nothing came back at
+ * all: the transport died, the proxy timed out, the process was killed. The
+ * settlement may well have succeeded on chain, so the one thing an agent must
+ * not do is assume it did not and pay again. Said in words because the bare
+ * transport error says none of it.
+ */
+export function lostResponseMessage(site = DEFAULT_SITE) {
+  return [
+    "The paid call did not answer. THIS IS NOT THE SAME AS A REFUSAL: the",
+    "payment may already have settled and the token may already exist, so do",
+    "NOT simply run this again -- that would pay a second time.",
+    `Check first:  mro-agent status --site ${site}`,
+    "If a token is listed, the mint succeeded and there is nothing to redo.",
+  ].join("\n");
+}
+
+/**
  * The crontab line for a token's daily check-in.
  *
  * Three things here are deliberate. The invocation is PINNED -- to an exact

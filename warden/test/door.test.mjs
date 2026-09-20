@@ -640,6 +640,40 @@ test("GET /.well-known/http-message-signatures-directory is public", async () =>
   }
 });
 
+// THE ROUTER USES THE HANDLE IT IS GIVEN, and does not open a second one.
+// main.mjs opens the mirror for the MCP tools, the solver and the payment
+// hooks; createServer used to open the same file again for its own queries,
+// and shutdown closed only main.mjs's -- so the router's WAL was never
+// checkpointed on a clean SIGTERM and boot paid for schema.sql plus migrate()
+// twice.
+//
+// The control is the point: the server is given a `q` on a DIFFERENT database
+// from its own `stateDbPath`, with a key already in it. If `config.q` were
+// ignored the router would open the empty `:memory:` path and answer
+// `{ keys: [] }`, which is exactly what this asserted before the fix.
+test("createServer serves from the mirror handle it is given, not a second connection", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mro-shared-q-"));
+  const shared = queries(openDb(join(dir, "state.db")));
+  shared.insertKey({
+    keyId: "given-handle-key",
+    // insertKey stringifies for us -- handing it a string would store a
+    // double-encoded one and renderDirectory would parse it back to a string.
+    jwk: { kty: "OKP", crv: "Ed25519", x: "JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs" },
+    directory: null,
+    registeredAt: 1000,
+  });
+  const { server, base } = await startServer({ stateDbPath: ":memory:", q: shared });
+  try {
+    const res = await fetch(`${base}/.well-known/http-message-signatures-directory`);
+    assert.equal(res.status, 200);
+    const parsed = JSON.parse(await res.text());
+    assert.equal(parsed.keys.length, 1, "the router read its own connection, not the handle it was given");
+    assert.equal(parsed.keys[0].crv, "Ed25519");
+  } finally {
+    server.close();
+  }
+});
+
 test("an unsigned POST /mcp gets a 401 challenge carrying about, challenge, expires, mcp and docs", async () => {
   const { server, base } = await startServer();
   try {

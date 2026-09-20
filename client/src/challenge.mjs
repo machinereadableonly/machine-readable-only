@@ -26,9 +26,15 @@ export function answerChallenge(challenge, keyId) {
  * How long is left on a challenge, in milliseconds.
  *
  * The challenge is `nonce.unix-ms.hmac`, so its issue time is readable without
- * asking anyone. Worth checking before you spend a round trip on a challenge
- * that has already expired -- five seconds is not long, and a slow DNS lookup
- * can eat it.
+ * asking anyone -- five seconds is not long, and a slow DNS lookup can eat it.
+ *
+ * A LIBRARY AFFORDANCE, NOT THIS CLIENT'S OWN PRE-FLIGHT. `admittedFetch`
+ * knocks and signs without consulting it, and recovers from a challenge that
+ * expired in flight by retrying once on `stale-challenge` (mcp.mjs), which
+ * costs the same round trip and also covers a challenge that expired after the
+ * check. It is exported for a caller driving the door itself. This comment
+ * used to read "worth checking before you spend a round trip", describing a
+ * step the client does not take.
  */
 export function msRemaining(challenge, lifetimeMs = 5000, now = Date.now()) {
   const issued = Number(String(challenge).split(".")[1]);

@@ -17,7 +17,8 @@
     "./signing": "./src/signing.mjs",
     "./challenge": "./src/challenge.mjs",
     "./door": "./src/door.mjs",
-    "./pay": "./src/pay.mjs"
+    "./pay": "./src/pay.mjs",
+    "./messages": "./src/messages.mjs"
   },
   "files": ["src", "README.md", "LICENSE"],
   "engines": { "node": ">=22" },

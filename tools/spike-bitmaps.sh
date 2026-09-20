@@ -3,7 +3,7 @@
 #
 #   bash tools/spike-bitmaps.sh [domain] [count]
 #
-# Why per-process: choosing a token's code now renders and decodes it in five
+# Why per-process: choosing a token's code now renders and decodes it in eight
 # states at ten raster sizes (tools/robust-solve.mjs). resvg's raster buffers are
 # NATIVE memory, so --max-old-space-size does not bound them -- measured
 # 2026-08-29, a 27-token run in one process sat at 2.0 GB and throttled against

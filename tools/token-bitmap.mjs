@@ -14,8 +14,8 @@ export const HEX_CHARS = BYTES * 2;                // 344
 const hex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 
 // Solving is deterministic, so a token's bitmap is worth computing once per
-// process. The robustness gate renders and decodes the candidate in five states
-// at ten raster sizes, which is far too much work to repeat for every fixture
+// process. The robustness gate renders and decodes the candidate in eight
+// states at ten raster sizes, which is far too much work to repeat for every fixture
 // that happens to want token 1.
 const memo = new Map();
 

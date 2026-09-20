@@ -1,5 +1,16 @@
 // Candidate treatments for the three Marks that do not earn their price.
 //
+// FROZEN ARTEFACT, C2.8. Every tile below is solved against `example.com` with
+// a hardcoded mask, which is NOT the heart that will mint: a bitmap encodes its
+// own url, so the real `machinereadableonly.com` token 1 is a different code
+// carrying a different mask. This sheet is kept as the record of a decision
+// already taken on it, and is deliberately NOT converted -- redrawing it would
+// make it describe a sheet nobody ever judged.
+//
+// DO NOT TAKE A NEW VISUAL DECISION ON THIS FILE. For that, import CODE,
+// TARGET and DEST from ./sheet-code.mjs, which derives both the domain and the
+// mask from the shipped selector.
+//
 // WHY. Measured 2026-08-31 across all five rungs: Bloom moves the image by
 // 88/255 at the bottom rung and 0/255 at the top -- its gradient runs from the
 // token's own tier colour to #c8102e, and at rung 4 the tier colour IS

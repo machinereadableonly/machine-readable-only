@@ -189,3 +189,40 @@ test("Signature-Agent is sent as a dictionary keyed by the signature label", asy
   assert.equal(dict.get(label)[0], "https://example.com");
   assert.ok(input.includes('"signature-agent"'), "and it is still a covered component");
 });
+
+
+// -- the library surface -----------------------------------------------------
+
+// A CONSUMER USING THIS AS A LIBRARY NEEDS THE SENTENCE TABLE. rpc and callTool
+// throw door refusals as bare reason strings; doorMessage and DOOR_REASONS are
+// what turn one into something an operator can read. They were exported from
+// messages.mjs and reachable through neither index.mjs nor a subpath, so a
+// consumer had to write its own table and let it drift from ours.
+test("index.mjs exposes the message helpers a library consumer needs", async () => {
+  const api = await import("../src/index.mjs");
+  for (const name of ["doorMessage", "DOOR_REASONS", "paymentFailedMessage", "lostResponseMessage"]) {
+    assert.equal(typeof api[name], name === "DOOR_REASONS" ? "object" : "function", `index.mjs must export ${name}`);
+  }
+  // The table and the function agree: every reason has a sentence.
+  for (const reason of Object.keys(api.DOOR_REASONS)) {
+    assert.equal(typeof api.doorMessage(reason), "string");
+  }
+});
+
+test('package.json exposes "./messages" so the table is reachable without the barrel', () => {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(pkg.exports["./messages"], "./src/messages.mjs");
+});
+
+// A SETTLED PAYMENT WHOSE ANSWER WAS LOST IS NOT A REFUSAL. paymentFailedMessage
+// covers the case where the site answered and said the settlement failed; that
+// one says NOTHING WAS MINTED, which would be a lie here. The money may be
+// gone and the token may exist, so the one thing this must never do is invite
+// paying again.
+test("the lost-response message says to check before paying a second time", async () => {
+  const { lostResponseMessage } = await import("../src/messages.mjs");
+  const text = lostResponseMessage("https://example.com");
+  assert.match(text, /mro-agent status --site https:\/\/example\.com/);
+  assert.match(text, /do\s+NOT simply run this again/);
+  assert.doesNotMatch(text, /NOTHING WAS MINTED/, "that is the other case, and asserting it here would be false");
+});

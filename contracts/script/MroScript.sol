@@ -67,11 +67,16 @@ abstract contract MroScript is Script {
         if (block.chainid == BASE_MAINNET) {
             key = vm.envUint("MAINNET_DEPLOYER_KEY");
             uint256 throwaway = vm.envOr("SPIKE_DEPLOYER_KEY", uint256(0));
+            // UNSET IS CHECKED FIRST, and the order is the whole point. With
+            // the throwaway comparison first, a zero MAINNET_DEPLOYER_KEY and
+            // an unset SPIKE_DEPLOYER_KEY (envOr returns 0) compared equal, so
+            // the gate before a permanent mainnet owner reported "it is the
+            // throwaway spike key" about a key that was simply never set.
+            require(key != 0, "MAINNET_DEPLOYER_KEY must be set");
             require(
                 key != throwaway,
                 "MAINNET_DEPLOYER_KEY is the throwaway spike key -- it would become the permanent owner"
             );
-            require(key != 0, "MAINNET_DEPLOYER_KEY must be set");
             console.log("signing with MAINNET_DEPLOYER_KEY", vm.addr(key));
         } else {
             key = vm.envUint("SPIKE_DEPLOYER_KEY");

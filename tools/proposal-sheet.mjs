@@ -1,4 +1,15 @@
 // The three proposed Mark treatments, shown the only way the small ones read:
+//
+// FROZEN ARTEFACT, C2.8. Every tile below is solved against `example.com` with
+// a hardcoded mask, which is NOT the heart that will mint: a bitmap encodes its
+// own url, so the real `machinereadableonly.com` token 1 is a different code
+// carrying a different mask. This sheet is kept as the record of a decision
+// already taken on it, and is deliberately NOT converted -- redrawing it would
+// make it describe a sheet nobody ever judged.
+//
+// DO NOT TAKE A NEW VISUAL DECISION ON THIS FILE. For that, import CODE,
+// TARGET and DEST from ./sheet-code.mjs, which derives both the domain and the
+// mask from the shipped selector.
 // two states meeting at a seam.
 //
 // Each Mark gets three panels.

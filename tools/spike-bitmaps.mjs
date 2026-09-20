@@ -10,7 +10,7 @@
 //   bash tools/spike-bitmaps.sh [domain] [count]
 //
 // RUN IT THROUGH THAT SCRIPT, not directly. Solving one token now renders and
-// decodes it in five states at ten raster sizes (see robust-solve.mjs), and
+// decodes it in eight states at ten raster sizes (see robust-solve.mjs), and
 // resvg's buffers are NATIVE -- they are not the JS heap, so capping
 // --max-old-space-size does nothing and a 27-token run in ONE process reached
 // 2.0 GB and throttled against the memory cap. Process exit is the only thing
@@ -31,7 +31,11 @@ import { payloadFor } from "./qart.mjs";
 export const SPIKE_TOKENS = [
   { id: 1, note: "day one" },
   { id: 2, note: "level 200, a part-filled frame" },
-  { id: 3, note: "whole, one year, every Mark but Singularity" },
+  // NOT a Mark name: Singularity was one of the seven tiers retired on
+  // 2026-09-02, and this note is interpolated straight into the generated
+  // Solidity, where a public reader would match it against Ladder.sol and find
+  // a Mark that does not exist.
+  { id: 3, note: "whole, one year, the maximal legal Mark set" },
   { id: 4, note: "level 364, the measured worst case" },
 ];
 

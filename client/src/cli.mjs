@@ -11,7 +11,7 @@ import { ensureIdentity, loadIdentity, defaultKeyPath } from "./keys.mjs";
 import { registerKey } from "./door.mjs";
 import { listTools, callTool, structured } from "./mcp.mjs";
 import { payFor, readDemand } from "./pay.mjs";
-import { DEFAULT_SITE, cronLine, unpayableMessage, paymentFailedMessage } from "./messages.mjs";
+import { DEFAULT_SITE, cronLine, unpayableMessage, paymentFailedMessage, lostResponseMessage } from "./messages.mjs";
 
 // The commands that exist. Checked BEFORE an identity key is created, because
 // creating a signing key as a side effect of a typo is not something a package
@@ -54,14 +54,41 @@ Options
   --cron               print a crontab line instead of installing one
 `;
 
+// EVERY FLAG THIS CLIENT ACCEPTS. A typo used to be swallowed: parseArgs
+// stored whatever it was given and nothing checked the set, so `--expct-amount
+// 1000000` silently removed the guard it was written to add. Most typos fail
+// closed -- a misspelt `--expect-payto` leaves expected.payTo undefined and the
+// client refuses to pay -- but the amount guard just disappeared, with no
+// output saying so, and that is the one flag where silence costs money.
+//
+// Unknown COMMANDS have always thrown (see COMMANDS above). This is the same
+// rule for flags.
+const FLAGS = [
+  "site", "endpoint", "directory", "key", "to", "token",
+  "expect-payto", "expect-amount", "expect-asset", "expect-network",
+  "expect-chain", "expect-contract", "wallet-key-file",
+];
+// `--help` takes no value and is the one flag that works with no command at
+// all; `help` as a bare command does the same thing (see main).
+const BOOLEAN_FLAGS = ["cron", "help"];
+
 function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (!a.startsWith("--")) { args._.push(a); continue; }
     const name = a.slice(2);
-    if (name === "cron") { args.cron = true; continue; }
-    args[name] = argv[++i];
+    if (BOOLEAN_FLAGS.includes(name)) { args[name] = true; continue; }
+    if (!FLAGS.includes(name)) {
+      throw new Error(`unknown option --${name}. Run mro-agent with no arguments for the list.`);
+    }
+    // A flag with nothing after it would otherwise store undefined and read as
+    // "not given", which is the silent failure again one step along.
+    const value = argv[++i];
+    if (value === undefined || value.startsWith("--")) {
+      throw new Error(`--${name} needs a value`);
+    }
+    args[name] = value;
   }
   return args;
 }
@@ -83,7 +110,7 @@ function printCron(site, tokenId) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._[0];
-  if (!command || command === "help") { console.log(USAGE); return; }
+  if (!command || command === "help" || args.help) { console.log(USAGE); return; }
   if (!COMMANDS.includes(command)) throw new Error(`unknown command: ${command}\n\n${USAGE}`);
 
   const keyPath = args.key ?? defaultKeyPath();
@@ -178,7 +205,19 @@ async function main() {
 
     if (meta) {
       out("paying", meta["x402/payment"].accepted);
-      result = await callTool({ ...call, name: "mint", arguments: { to: args.to }, _meta: meta });
+      // A LOST ANSWER IS NOT A REFUSAL. If this throws, the settlement may
+      // already have happened on chain and the token may already exist -- the
+      // response simply never arrived. Rethrowing into main().catch printed a
+      // bare transport error and exited 1, which reads as "it did not happen"
+      // and invites paying a second time. Say what to check instead.
+      try {
+        result = await callTool({ ...call, name: "mint", arguments: { to: args.to }, _meta: meta });
+      } catch (err) {
+        console.error(`mro-agent: ${err.message}`);
+        console.log(`\n${lostResponseMessage(site)}`);
+        process.exitCode = 2;
+        return;
+      }
 
       // A PAID call answered with a demand is a payment that did not complete.
       // @x402/mcp answers a failed settlement with the same payment-required

@@ -121,7 +121,13 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
     /// @dev Ten Marks in five pairs. Bit 0 is never a Mark.
     /// Ten are written by the deploy; the ceiling is 15 so the ladder can grow
-    /// without a redeploy, decided 2026-09-05. Fifteen is the TRUE ceiling and
+    /// without a redeploy, decided 2026-09-05. That growth is NARROWER than it
+    /// sounds, and the narrowing is in bytecode: a VARIANTLESS Mark carrying no
+    /// stored run can be added at ids 11-15 with setUpgrade alone, but one
+    /// carrying either cannot. _variantCount hardcodes 5 -> 3 and 9 -> 2, and
+    /// applyMark hardcodes the packing (id 5 -> variant << 16, id 9 ->
+    /// variant << 24, id 6 -> run << 32), so a new Mark needing a variant or a
+    /// run needs a redeploy. Fifteen is the TRUE ceiling and
     /// not a round number: `excludes` and `requiresAny` are uint16 so bit 15 is
     /// the last addressable Mark bit, and bit 16 is already the Iris shape.
     /// Nothing is served promising an eleventh, and nothing is served
@@ -802,8 +808,12 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         emit MetadataUpdate(id);
     }
 
-    /// @dev The lowest Mark id set in a mask. Only ever called on a non-zero
-    /// mask confined to bits 1..10, so the loop terminates.
+    /// @dev The lowest Mark id set in a mask. The loop runs 1..MAX_MARK_ID,
+    /// which is the range setUpgrade and applyMark both enforce, and bit 0 is
+    /// never set in _marks -- so on a non-zero held mask the loop always
+    /// returns and the trailing `return 0` is unreachable. (This said
+    /// "bits 1..10", the ten Marks the deploy writes rather than the bound the
+    /// code enforces, until 2026-09-20.)
     function _lowestMark(uint256 mask) private pure returns (uint8) {
         for (uint8 i = 1; i <= MAX_MARK_ID; ++i) {
             if (mask & (1 << i) != 0) return i;

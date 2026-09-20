@@ -25,7 +25,7 @@ library SpikeBitmaps {
                 hex"6e20bbfedfeb67beefeeb38cffddfcebffeff6ec89bfedfe664feefeeb7e27fddfe58b9eff6d184afedfef6d28efeefa0077dde443f90ff6ea905badf316bae2fcafa5d0751a9bee98994bcd05be53386fea0b055f80";
         }
 
-        // whole, one year, every Mark but Singularity -- https://example.com/t/3# (mask 1, heart match 64.5%)
+        // whole, one year, the maximal legal Mark set -- https://example.com/t/3# (mask 1, heart match 64.5%)
         if (id == 3) {
             return hex"fed67643fc15511d906e9ccc5cbb74dc95d5dbaff4ffaec14d91dd07faaaaaafe011dddd00e6ffffff99eeddddd9dfff777616fbdddddb3ffffffff5fefdddddbdfff777603fbdddddc0bffffffb5cefddddfbd2ff77"
                 hex"76c373ddddd381bffffff4b8fddddd2deff77762b13ddddde8c3ffffff080fddddf9f4bf7775fa7adddddf8c21fffffd0075ddd447f9d7756ab0515dd518ba3dffffd5d195d887aea153532f055111c08feb911c9880";

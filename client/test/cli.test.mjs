@@ -551,6 +551,37 @@ test("a file that does not hold a private key is refused", async () => {
   assert.match(out, /does not hold a 32-byte hex private key/);
 });
 
+// A MISTYPED FLAG IS REFUSED, not swallowed. parseArgs used to store any
+// `--name value` pair it was handed and nothing checked the set, so a typo
+// simply removed the guard it was meant to add. Most typos fail closed -- a
+// misspelt --expect-payto leaves payTo undefined and the client refuses to pay
+// -- but --expect-amount is the exception, and it is the one where silence
+// costs money.
+test("an unknown option is refused, and the amount guard cannot be lost to a typo", async () => {
+  const { code, out } = await cli("whoami", "--key", keyPath, "--expct-amount", "1000000");
+  assert.equal(code, 1);
+  assert.match(out, /unknown option --expct-amount/);
+});
+
+test("a known option with no value is refused rather than reading the next flag as its value", async () => {
+  const { code, out } = await cli("whoami", "--key", keyPath, "--expect-amount", "--site", "https://example.com");
+  assert.equal(code, 1);
+  assert.match(out, /--expect-amount needs a value/);
+});
+
+// The control for the two above: every flag the usage text offers must still
+// be accepted. A known-flag list is the kind of thing that goes stale the day
+// a flag is added, and a stale one refuses a documented option.
+test("every option the usage text offers is accepted", async () => {
+  const { out } = await cli("--help");
+  const offered = [...out.matchAll(/^ {2}(--[a-z-]+)/gm)].map((m) => m[1]);
+  assert.ok(offered.length >= 10, `the usage text listed only ${offered.length} options`);
+  for (const flag of offered) {
+    const { out: got } = await cli("whoami", "--key", keyPath, flag, "x");
+    assert.doesNotMatch(got, /unknown option/, `${flag} is offered in the usage text and refused by the parser`);
+  }
+});
+
 test("the help no longer advertises a key on the command line", async () => {
   const { out } = await cli("--help");
   assert.doesNotMatch(out, /--wallet-key </, "a flag that takes a key in argv must not be offered");

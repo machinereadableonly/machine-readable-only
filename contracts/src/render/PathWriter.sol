@@ -24,7 +24,10 @@ import {LibBit} from "solady/src/utils/LibBit.sol";
 ///   with one `mstore` into a buffer reserved up front.
 library PathWriter {
     /// @dev The longest a single run can be: "M<x> <y>h<w>v1h-<w>z" with three
-    /// digits in every position is 18 bytes, rounded up for headroom.
+    /// digits in every position. Counted out that is exactly 20 bytes
+    /// (1+3+1+3+1+3+4+3+1), which is why this constant is 20 and not less.
+    /// There is no slack: adding a character to the run format -- an L, a
+    /// decimal point -- overruns the per-run reservation and must raise this.
     uint256 internal constant MAX_RUN_BYTES = 20;
 
     /// @dev Each run is written as a full 32-byte word, so the last one reaches
@@ -32,8 +35,12 @@ library PathWriter {
     uint256 private constant SLACK = 32;
 
     /// @dev A run is composed in one word, so its text must fit in 32 bytes.
-    /// Holding every coordinate below 1000 is what guarantees that. The canvas is
-    /// 51 cells at year zero and grows by two a year, so nothing can reach it.
+    /// Holding every coordinate below 1000 is what guarantees that. The canvas
+    /// is 51 cells with no rings and canvas(r) = 49 + 4r from the first ring on
+    /// -- two cells for the first ring and four for every ring after it, since
+    /// ringSpan(r) = 2r - 1 -- so the widest canvas at MAX_RINGS is 89 and
+    /// nothing can reach the cap. (This said "grows by two a year", which is
+    /// the first ring's step mistaken for every ring's, until 2026-09-20.)
     uint256 private constant MAX_COORD = 1000;
 
     /// @notice A path under construction: the bytes, and how many are written.

@@ -312,7 +312,9 @@ export async function registerKey(q, jwk, now = Date.now(), directory = null) {
 }
 
 /// The JWKS this site serves at /.well-known/http-message-signatures-directory.
-/// Regenerated on each registration and written to disk for nginx to serve.
+/// Rendered from the keys table and answered by this process -- the vhost is a
+/// pure proxy and nothing serves it from disk. (This said "written to disk for
+/// nginx to serve", describing a file no route ever read, until 2026-09-20.)
 export function renderDirectory(q) {
   const rows = q.allKeys();
   return JSON.stringify({ keys: rows.map((r) => JSON.parse(r.jwk)) }, null, 2);

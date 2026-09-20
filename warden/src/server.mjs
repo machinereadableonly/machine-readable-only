@@ -3,7 +3,6 @@
 // This service holds NO private key. It reads the chain and writes a local
 // SQLite file; the chain writes belong to the Clock (Plan 3).
 import { createServer as createHttpServer } from "node:http";
-import { writeFileSync } from "node:fs";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
 import { admit, sweepSeen, sweepSpent, pinnedUrl } from "./door/middleware.mjs";
@@ -87,8 +86,8 @@ function readBody(req, cap) {
  * fail to load at all. `config.allowRegistration` is REQUIRED: it is the rate
  * limit on the one unsigned write path this service has (POST /keys), and a
  * default of always-allow would leave that path unlimited.
- * `config.directoryPath`, if given, is where the served JWKS is rewritten
- * after a successful key registration.
+ * `config.q`, if given, is an already-open mirror handle to use instead of
+ * opening a second connection to the same file.
  *
  * `config.contract` and `config.chainId` are REQUIRED, and they are here for
  * one reason: /t/<id> is the QR's destination and it must carry the handles a
@@ -107,8 +106,16 @@ export function createServer(config) {
   }
   const links = tokenLinks(config);
 
-  const db = openDb(config.stateDbPath);
-  const q = queries(db);
+  // ONE CONNECTION PER PROCESS, reused rather than reopened. This used to be
+  // an unconditional `openDb(config.stateDbPath)`, so the assembly in main.mjs
+  // held one handle for the MCP tools, the solver and the payment hooks while
+  // the router held a second to the same file for its own queries. Only the
+  // first was closed on SIGTERM, so the router's WAL was never checkpointed on
+  // a clean shutdown, and schema.sql plus migrate() ran twice at every boot.
+  // `config.q` is how the caller passes the handle it already has; the
+  // self-opening path stays for the tests, which build a server on its own
+  // `:memory:` database and have no other handle to give.
+  const q = config.q ?? queries(openDb(config.stateDbPath));
   // Spent DOOR challenges. Kept apart from the registration nonces below: the
   // two are the same string format under the same HMAC key, so one Set let
   // either be spent as the other. Nothing was gained by doing that -- the door
@@ -382,11 +389,12 @@ export function createServer(config) {
           }
         );
         if (result.ok) {
-          // The table changed, so the remembered copy is stale. Invalidate
-          // FIRST, then reuse the one re-render for the file on disk -- the
-          // old code rendered the whole directory again for that write.
+          // The table changed, so the remembered copy is stale. Nothing is
+          // written to disk: this route renders from the mirror, and the
+          // vhost is a pure proxy, so the file `config.directoryPath` used to
+          // be written to was read by nothing -- a synchronous write of up to
+          // a megabyte on the registration path, for no reader.
           directory.invalidate();
-          if (config.directoryPath) writeFileSync(config.directoryPath, directory.current().body);
         }
         // Only "rate-limited" is a 429. A bad or replayed nonce and an
         // invalid proof are the caller's own mistake, not a rate limit, so

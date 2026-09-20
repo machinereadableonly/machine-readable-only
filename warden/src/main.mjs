@@ -15,7 +15,7 @@
 // the test suite. (In practice it also can't be imported without a full set
 // of environment variables set, since requireEnv() below runs at module
 // load and throws on the first missing one.)
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getAddress } from "viem";
 import { createServer } from "./server.mjs";
@@ -317,18 +317,15 @@ async function main() {
     );
   });
 
-  // The static JWKS nginx serves from
-  // public/.well-known/http-message-signatures-directory is a file on disk,
-  // not proxied to this process (see nginx.conf.example). Passing
-  // directoryPath makes the router rewrite that file on every successful
-  // POST /keys, so a key registered through the easy path is actually
-  // servable. mkdirSync is idempotent -- a no-op if the directory already
-  // exists.
-  const wellKnownDir = fileURLToPath(new URL("../public/.well-known/", import.meta.url));
-  mkdirSync(wellKnownDir, { recursive: true });
-  const directoryPath = fileURLToPath(
-    new URL("../public/.well-known/http-message-signatures-directory", import.meta.url)
-  );
+  // THE KEY DIRECTORY IS SERVED FROM THE MIRROR, not from a file. The route
+  // in server.mjs renders it out of the keys table through makeDirectoryCache,
+  // and nginx.conf.example is the document that was right about this all
+  // along: the vhost is a PURE PROXY, every route including this one answered
+  // by this process. This block used to say the opposite -- "a file on disk,
+  // not proxied to this process" -- and pass a directoryPath the router wrote
+  // on every successful POST /keys. Nothing read that file: no route, no test,
+  // and it was never committed. It is gone, and with it a synchronous write of
+  // up to a megabyte on the registration path. (Corrected 2026-09-20.)
   const llmsTxt = readFileSync(fileURLToPath(new URL("../public/llms.txt", import.meta.url)), "utf8");
   const doorHtml = readFileSync(fileURLToPath(new URL("../public/door.html", import.meta.url)), "utf8");
   // The crawl rules. Read here with the other public documents rather than
@@ -390,7 +387,9 @@ async function main() {
     // is not load-bearing -- it is here so the policy this process runs is
     // named in the assembly rather than acquired by default.
     allowToolCall: makeAllowToolCall(),
-    directoryPath,
+    // The mirror handle this process already holds. Without it the router
+    // opens a SECOND connection to the same file, which shutdown never closes.
+    q,
     // THE RAW PROTOCOL. It belongs to createServer, not to the MCP handler --
     // it was passed to the handler's config on the first attempt, so /protocol
     // 404ed while every 401 advertised it. Caught by rehearsing and PROBING

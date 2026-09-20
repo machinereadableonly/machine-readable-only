@@ -17,15 +17,23 @@
 import { writeFileSync } from "node:fs";
 import { Resvg } from "@resvg/resvg-js";
 import QRCode from "qrcode";
-import { solve, payloadFor, VERSION, ECC } from "./qart.mjs";
+import { payloadFor, VERSION, ECC } from "./qart.mjs";
+import { robustSolveFor } from "./robust-solve.mjs";
 import { heartTarget } from "./heart-target.mjs";
 import { renderSvg, canvasFor, QUIET } from "./render-token.mjs";
 import { scanResult, renderModules } from "./test/helpers/decode.mjs";
+import { SHEET_DOMAIN, SHEET_TOKEN_ID } from "./sheet-code.mjs";
 
-const DOMAIN = process.argv[3] ?? "example.com";
+// THE REAL DOMAIN, AND THE SHIPPED MASK. This defaulted to `example.com` and
+// hardcoded `solve(PAYLOAD, 0)` -- creative C2.8: a bitmap encodes its own url,
+// so a sheet solved against a placeholder is a picture of a token nobody can
+// mint, and a hardcoded mask is a candidate the robustness gate never judged.
+// robustSolveFor is the shipped selector, so what is scanned here is what a
+// phone will meet. A domain can still be passed for a one-off comparison.
+const DOMAIN = process.argv[3] ?? SHEET_DOMAIN;
 const OUT = process.argv[2] ?? "../docs/scan-test.png";
-const PAYLOAD = payloadFor(DOMAIN, 1);
-const CODE = solve(PAYLOAD, 0);
+const PAYLOAD = payloadFor(DOMAIN, SHEET_TOKEN_ID);
+const CODE = robustSolveFor(DOMAIN, SHEET_TOKEN_ID);
 const TARGET = heartTarget(CODE.size);
 
 // A plain, ordinary QR of the same destination: the control.

@@ -89,3 +89,13 @@ step 3 if a launch without attribution should stay possible.
 The `base:app_id` tag stays PARKED (uncommitted in `warden/public/door.html`
 and `warden/test/door-page.test.mjs`) until a registration succeeds -- see the
 publish-readiness memory.
+
+**SUPERSEDED THE SAME DAY, noted 2026-09-20.** The paragraph above was overtaken
+by the work it was written beside and is kept only as the record of what was
+planned. Both files are COMMITTED: `warden/public/door.html:6` carries
+`<meta name="base:app_id" content="6a9f0b233fc122c236410831">`, the id the Base
+Dashboard issued on 2026-09-12, and `warden/test/door-page.test.mjs:26` asserts
+it appears exactly once. The id is a public identifier by design, not a secret
+in a public file. Nothing here is uncommitted and there is nothing to go looking
+for. What is still open is the BUILDER CODE itself, which waits on
+`base/docs#1950`.

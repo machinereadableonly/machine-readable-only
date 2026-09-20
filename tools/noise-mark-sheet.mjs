@@ -1,5 +1,16 @@
 // Candidates for the rung-2 Mark that replaces Pulse, rendered and decoded.
 //
+// FROZEN ARTEFACT, C2.8. Every tile below is solved against `example.com` with
+// a hardcoded mask, which is NOT the heart that will mint: a bitmap encodes its
+// own url, so the real `machinereadableonly.com` token 1 is a different code
+// carrying a different mask. This sheet is kept as the record of a decision
+// already taken on it, and is deliberately NOT converted -- redrawing it would
+// make it describe a sheet nobody ever judged.
+//
+// DO NOT TAKE A NEW VISUAL DECISION ON THIS FILE. For that, import CODE,
+// TARGET and DEST from ./sheet-code.mjs, which derives both the domain and the
+// mask from the shipped selector.
+//
 // WHY THE NOISE INK. The drawn image has seven surfaces and six are already
 // claimed -- field by Halo, quiet zone by Voice, ghost cells by Vein, frame and
 // year rings by Crown, heart modules by Bloom, and the QArt target itself by
@@ -31,8 +42,9 @@ import { scanResult } from "./test/helpers/decode.mjs";
 const DOMAIN = "example.com";
 const PAYLOAD = payloadFor(DOMAIN, 1);
 const DEST = PAYLOAD.slice(0, -1);
-// Mask 7 is the mask robust-solve chooses for token 1, so this is the shipped
-// bitmap rather than a fresh solve that might behave differently.
+// Mask 7 is what robust-solve chose for token 1 UNDER `example.com`. It is not
+// the shipped bitmap: under the real domain token 1 ships mask 0
+// (see sheet-code.mjs). This comment claimed it was, until 2026-09-20.
 const CODE = solve(PAYLOAD, 7);
 const TARGET = heartTarget(CODE.size);
 

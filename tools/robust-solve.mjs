@@ -25,7 +25,7 @@ import { heartMaskBytes } from "./heart-mask.mjs";
 import { renderSvg, canvasFor, ACHE, HUSH, BEAT, AURA, VESSEL } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
-/// The raster sizes a candidate must clear. The four a third party picks
+/// The raster sizes a candidate must clear. The two a third party picks
 /// (256 is Alchemy's thumbnail, 1080 is OpenSea's display size), plus sizes that
 /// caught every known failure: 350, 500, 700, 1000, 1150, 1300, 1550. Each case
 /// is additionally checked at its own exact multiple of the canvas, which is
@@ -70,7 +70,7 @@ export function gateStates() {
     //
     // MEASURED BEFORE THEY WERE ADDED, because a stricter gate can change
     // which mask a token ships and every committed fixture is generated from
-    // those bitmaps. Sixteen solves -- ids 1, 2, 3, 5, 8, 12, 13, 21, 34, 55,
+    // those bitmaps. Seventeen solves -- ids 1, 2, 3, 5, 8, 12, 13, 21, 34, 55,
     // 89, 144, 4242 and 2**32-1 on example.com, and 1, 12, 55 on
     // machinereadableonly.com -- all passed 30 of 30 against these states, so
     // no shipped mask moved and no fixture changed. Adding states can only
