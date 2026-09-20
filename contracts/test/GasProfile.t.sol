@@ -82,6 +82,21 @@ contract GasProfileTest is Test {
         v.code = _bitmap();
     }
 
+    /// @dev A whole FOUNDING token at `level`, so its own rings are not capped
+    /// by an echo ring's slot. Built fresh each call -- see the note above about
+    /// memory structs aliasing.
+    function _founding(uint32 level) internal pure returns (TokenView memory v) {
+        v.tokenId = 7;
+        v.level = level;
+        v.streak = 400;
+        // The clock has to be past the token's own age: level reaches 3,285 at
+        // nine years, so a fixed day 1000 underflowed mintDay.
+        v.mintDay = 1000;
+        v.lastDay = 1000 + level;
+        v.today = 1000 + level;
+        v.code = _bitmap();
+    }
+
     function _bitmap() internal pure returns (bytes memory) {
         return
         hex"fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff"
@@ -193,6 +208,64 @@ contract GasProfileTest is Test {
         console.log("solady replace bytes      ", bytes(viaLib).length);
         console.log("gas saved vs base64       ", b64Gas > libGas ? b64Gas - libGas : 0);
         console.log("or COSTS MORE by          ", libGas > b64Gas ? libGas - b64Gas : 0);
+    }
+
+    /// @notice CAN FIVE FINISHER MARKS AFFORD TO DRAW ANYTHING?
+    ///
+    /// @dev Two facts shape the answer before a single byte is measured.
+    ///
+    /// FIRST, the headroom that applies is NOT the dearest token's. A finisher
+    /// Mark needs `requiresWhole`, and the dearest token in the piece is a
+    /// day-364 child, which is not whole and can never wear one. The case that
+    /// binds is the LARGEST token -- a whole child at the ring cap wearing every
+    /// legal Mark -- which RealTokenGas.t.sol measures as the cheaper of the two
+    /// in gas. So the budget is that token's headroom, not the dearest's.
+    ///
+    /// SECOND, the five exclude each other, so a token can wear at most ONE.
+    /// Five Marks is not five drawings; it is one drawing with five
+    /// treatments. The cost to measure is the cost of ONE.
+    ///
+    /// This measures the dearest plausible form -- an extra drawn RING, the
+    /// shape a finisher's Mark would most naturally take, sitting outside the
+    /// code block where it cannot disturb the barcode. An ink-swap Mark is
+    /// already known to be free or better: GasBudget.t.sol measures Static as
+    /// 3,890 gas CHEAPER than no Static at all.
+    function test_whatAFinisherRingWouldCost() public {
+        // A FOUNDING token, not a child. Measured first on a child and the two
+        // cases came back byte-identical: `ringBudget` caps a child's OWN rings
+        // at nine once the echo ring claims a slot, so nine years and ten years
+        // both draw ten rings. A control that cannot fail looks exactly like a
+        // free feature -- the giveaway was two identical byte counts.
+        // TWO INDEPENDENT VIEWS, built separately. `TokenView memory b = a`
+        // copies the POINTER, not the struct, so writing b.level rewrote a.level
+        // and both calls rendered the identical token. That is the second way
+        // this measurement came back reading "a ring is free"; the first was a
+        // child's ring cap. Both were caught by the byte counts being equal.
+        TokenView memory nine = _founding(365 * 8);   // eight rings
+        TokenView memory ten = _founding(365 * 9);    // nine rings
+
+        uint256 g0 = gasleft();
+        string memory a = frame.paths(nine, HEART, GHOST);
+        uint256 gasNine = g0 - gasleft();
+
+        g0 = gasleft();
+        string memory b = frame.paths(ten, HEART, GHOST);
+        uint256 gasTen = g0 - gasleft();
+
+        console.log("frame at eight rings gas", gasNine);
+        console.log("frame at eight rings bytes", bytes(a).length);
+        console.log("frame at nine rings  gas", gasTen);
+        console.log("frame at nine rings  bytes", bytes(b).length);
+        console.log("");
+        console.log("ONE MORE DRAWN RING COSTS");
+        console.log("  gas  ", gasTen > gasNine ? gasTen - gasNine : 0);
+        console.log("  bytes", bytes(b).length > bytes(a).length ? bytes(b).length - bytes(a).length : 0);
+        console.log("");
+        assertGt(bytes(b).length, bytes(a).length,
+            "a ring that adds no bytes means the two views are the same geometry, not a free ring");
+        console.log("against the LARGEST token's headroom, measured in RealTokenGas:");
+        console.log("  gas   182700");
+        console.log("  bytes 7451");
     }
 
     /// @dev The only substitution a data URI actually requires of this svg:

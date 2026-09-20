@@ -497,6 +497,66 @@ in the client, and it is worth doing independently of the finisher Marks.
 
 ---
 
+## 10e. Can the five Marks afford to draw anything? YES (measured 2026-09-20)
+
+Step 1 of the build plan, run before any design was settled, because a negative
+answer would have reshaped the whole thing.
+
+### The headroom that applies is not the dearest token's
+
+A finisher Mark needs `requiresWhole`. **The dearest token in the piece is a
+day-364 child, which is not whole and can never wear one.** The case that binds
+is the LARGEST token -- a whole child at the ring cap wearing every legal Mark --
+and in gas that is the cheaper of the two. So the budget is **182,700 gas and
+7,451 bytes**, not the dearest token's 109,979.
+
+### Five Marks is one drawing, not five
+
+They exclude each other, so a token wears at most one. The cost to measure is
+the cost of ONE treatment, not five.
+
+### What one drawn ring costs
+
+Measured by `test/GasProfile.t.sol` against the frame renderer: **3,705 gas and
+62 bytes.** That is 2% of the gas headroom and under 1% of the bytes.
+
+For contrast, the DASHED echo ring costs 145,533 gas and 1,007 bytes, because a
+dash is 54 separate runs where a solid ring is four. **That 40x gap is the real
+design constraint on what the five treatments may be:** differing by ink is
+free, differing by solidity is affordable once, and five dashed variants would
+not be.
+
+### The decode question is already answered, a fortiori
+
+A finisher's ring would sit OUTSIDE the year rings, further from the code block
+than anything the piece draws today. The echo ring -- a dashed, high-frequency
+pattern at the INNERMOST ring slot, the closest any ring gets to the code -- is
+already gated by `tools/echo-decode-check.mjs` at nine pixel sizes at both
+extremes of its depth. Re-run 2026-09-20: **zero rejections.**
+
+A solid ring further out cannot be a harder case than a dashed ring nearer in.
+The gate still has to be re-run when the treatments exist, but there is no open
+question of principle.
+
+### Two broken measurements before the right one
+
+Worth recording, because both read as "a ring is FREE" and both were caught only
+by two byte counts being equal:
+
+1. **A child's rings cap at nine.** `ringBudget` gives a child's echo ring a
+   slot, so nine years and ten years both draw ten rings. The two views were
+   different tokens that render identically.
+2. **`TokenView memory b = a` copies the POINTER.** Writing `b.level` rewrote
+   `a.level`, so both calls rendered the same struct. A Solidity memory-aliasing
+   trap, invisible in the output.
+
+The test now asserts the delta is non-zero, so a future version of either
+mistake fails instead of reporting a free feature. See
+[[measure-the-mirror-image]]: a control that cannot fail looks exactly like one
+that works.
+
+---
+
 ## 11. Non-goals
 
 Stated so they are not re-litigated mid-build:

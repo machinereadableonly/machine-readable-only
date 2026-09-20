@@ -616,6 +616,51 @@ never depend on an indexer refreshing.</p>
 <p>Costs nothing on chain. It is a section in <code>llms.txt</code> plus a reference decoder
 in the client, and it is worth doing independently of the finisher Marks.</p>
 <hr>
+<h2>10e. Can the five Marks afford to draw anything? YES (measured 2026-09-20)</h2>
+<p>Step 1 of the build plan, run before any design was settled, because a negative
+answer would have reshaped the whole thing.</p>
+<h3>The headroom that applies is not the dearest token&#39;s</h3>
+<p>A finisher Mark needs <code>requiresWhole</code>. <strong>The dearest token in the piece is a
+day-364 child, which is not whole and can never wear one.</strong> The case that binds
+is the LARGEST token -- a whole child at the ring cap wearing every legal Mark --
+and in gas that is the cheaper of the two. So the budget is <strong>182,700 gas and
+7,451 bytes</strong>, not the dearest token&#39;s 109,979.</p>
+<h3>Five Marks is one drawing, not five</h3>
+<p>They exclude each other, so a token wears at most one. The cost to measure is
+the cost of ONE treatment, not five.</p>
+<h3>What one drawn ring costs</h3>
+<p>Measured by <code>test/GasProfile.t.sol</code> against the frame renderer: <strong>3,705 gas and
+62 bytes.</strong> That is 2% of the gas headroom and under 1% of the bytes.</p>
+<p>For contrast, the DASHED echo ring costs 145,533 gas and 1,007 bytes, because a
+dash is 54 separate runs where a solid ring is four. <strong>That 40x gap is the real
+design constraint on what the five treatments may be:</strong> differing by ink is
+free, differing by solidity is affordable once, and five dashed variants would
+not be.</p>
+<h3>The decode question is already answered, a fortiori</h3>
+<p>A finisher&#39;s ring would sit OUTSIDE the year rings, further from the code block
+than anything the piece draws today. The echo ring -- a dashed, high-frequency
+pattern at the INNERMOST ring slot, the closest any ring gets to the code -- is
+already gated by <code>tools/echo-decode-check.mjs</code> at nine pixel sizes at both
+extremes of its depth. Re-run 2026-09-20: <strong>zero rejections.</strong></p>
+<p>A solid ring further out cannot be a harder case than a dashed ring nearer in.
+The gate still has to be re-run when the treatments exist, but there is no open
+question of principle.</p>
+<h3>Two broken measurements before the right one</h3>
+<p>Worth recording, because both read as &quot;a ring is FREE&quot; and both were caught only
+by two byte counts being equal:</p>
+<ol>
+<li><strong>A child&#39;s rings cap at nine.</strong> <code>ringBudget</code> gives a child&#39;s echo ring a
+slot, so nine years and ten years both draw ten rings. The two views were
+different tokens that render identically.</li>
+<li><strong><code>TokenView memory b = a</code> copies the POINTER.</strong> Writing <code>b.level</code> rewrote
+<code>a.level</code>, so both calls rendered the same struct. A Solidity memory-aliasing
+trap, invisible in the output.</li>
+</ol>
+<p>The test now asserts the delta is non-zero, so a future version of either
+mistake fails instead of reporting a free feature. See
+[[measure-the-mirror-image]]: a control that cannot fail looks exactly like one
+that works.</p>
+<hr>
 <h2>11. Non-goals</h2>
 <p>Stated so they are not re-litigated mid-build:</p>
 <ul>
