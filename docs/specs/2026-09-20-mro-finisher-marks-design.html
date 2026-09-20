@@ -354,7 +354,11 @@ released finisher slot returns to the cap.</p>
 renderable combinations become roughly 2,800. The full five-size decode sweep
 is 103 minutes today and would become most of a day; the 848-only sweep is 21
 minutes and would become about two hours.</p>
-<p><strong>This must be settled before building, not after.</strong> Two candidate answers:</p>
+<p><strong>SETTLED 2026-09-20 -- see 10g.</strong> The five became one ring with five
+treatments, on a surface outside the code block, so the decode sweep does not
+multiply at all. The two candidates below are kept as the reasoning that led
+there; option 1 is what the ring amounts to.</p>
+<p>Two candidate answers were considered:</p>
 <ol>
 <li><strong>Give the five a shared drawing surface</strong> so they compose like a variant
 rather than like five independent Marks. Keeps the combinatorics near flat.
@@ -794,6 +798,97 @@ stay as they are; see the testnet-is-a-rehearsal rule.</li>
 <li>The finisher&#39;s ring and the token&#39;s own completion ring are candidates to be
 the SAME ring, drawn differently per finisher Mark. Not decided.</li>
 </ul>
+<hr>
+<h2>10g. One ring, five looks</h2>
+<p>Decided by the operator, 2026-09-20. <strong>The completion ring and the finisher&#39;s Mark are
+the SAME ring.</strong> A token that reaches 365 days draws one ring; which of five
+treatments it wears is what the finisher Mark decides.</p>
+<p>This is what settles section 9. The five are not five drawings and not five
+surfaces -- they are one shape with five treatments, on a surface outside the
+code block.</p>
+<h3>Six looks, not five</h3>
+<table>
+<thead>
+<tr>
+<th>Ring look</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>default</td>
+<td>whole, no finisher Mark claimed yet</td>
+</tr>
+<tr>
+<td>11</td>
+<td>the finisher&#39;s Mark, uncapped</td>
+</tr>
+<tr>
+<td>12-15</td>
+<td>the four capped ones</td>
+</tr>
+</tbody></table>
+<p>The default matters: a token is whole the moment it reaches 365, and claiming
+is a separate act that takes a day to reach the chain. <strong>There is always a
+window where a token is finished and unmarked</strong>, and it must draw something.</p>
+<h3>It forces a surface split, and Vessel is the reason</h3>
+<p><code>FrameRenderer.sol:206</code> builds ONE path from the day cells AND the ring bars,
+and fills it with <code>frameFill(marks, colour)</code> -- which returns <code>VESSEL_GOLD</code> when
+Vessel is held. <strong>The frame and the rings are the same surface today.</strong></p>
+<p>Vessel needs a whole heart, so every Vessel holder is a finisher. The two would
+fight for the ring&#39;s colour on exactly the tokens this design is about.</p>
+<p><strong>The fix: narrow Vessel to the FRAME, and give the ring its own path and its
+own fill.</strong> Vessel keeps the 365 day cells gold, which is the surface its name
+is about; the finisher Mark owns the ring. One extra <code>&lt;path&gt;</code> element costs
+about 30 bytes on top of the ring&#39;s own 62.</p>
+<p>This preserves <code>MarkRenderer</code>&#39;s stated invariant -- &quot;no two Marks in different
+pairs ever write the same surface&quot; -- which the naive version would have broken.
+It is a narrowing of a shipped Mark&#39;s surface, affordable only because nothing
+is on mainnet.</p>
+<h3>What the five treatments may be, priced</h3>
+<p>From the measurements in 10e:</p>
+<table>
+<thead>
+<tr>
+<th>Treatment</th>
+<th>Cost</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>a different ink</td>
+<td>free</td>
+<td><strong>use this for most of the five</strong></td>
+</tr>
+<tr>
+<td>a solid ring</td>
+<td>3,705 gas, 62 bytes</td>
+<td>the baseline</td>
+</tr>
+<tr>
+<td>a doubled ring</td>
+<td>about 7,400 gas</td>
+<td>affordable</td>
+</tr>
+<tr>
+<td>a DASHED ring</td>
+<td>145,533 gas, 1,007 bytes</td>
+<td>80% of the gas headroom -- at most ONE</td>
+</tr>
+</tbody></table>
+<p>A dash is 54 separate runs where a solid ring is four, and that 40x gap is the
+whole constraint. <strong>Five dashed treatments will not fit. Five inks will.</strong></p>
+<h3>The sweep question, resolved</h3>
+<p>The ring is outside the 45-cell code block, so it cannot move a QR module:</p>
+<ul>
+<li><code>CombinationMatrix.t.sol</code> (on chain, no rasterising) multiplies by six. It
+runs in about four seconds today, so this is irrelevant.</li>
+<li><strong>The decode sweep does NOT multiply.</strong> A surface that cannot touch the code
+cannot change a decode. The hazard case is already covered a fortiori by
+<code>echo-decode-check.mjs</code>, whose dashed ring sits nearer the code than this one
+ever will.</li>
+</ul>
+<p>Re-run that gate when the treatments exist. Do not expand the 469-combination
+sweep to 2,800.</p>
 <hr>
 <h2>11. Non-goals</h2>
 <p>Stated so they are not re-litigated mid-build:</p>
