@@ -723,6 +723,62 @@ sweep to 2,800.
 
 ---
 
+## 10h. The surface was tested, not assumed -- and ink is the open question
+
+Rendered 2026-09-20 on a real finished token, solved against the real domain,
+every tile decoding at nine sizes. `tools/finisher-ring-sheet.mjs` is the rig.
+
+### What failed, and why it is informative
+
+**The clasp.** The frame holds 376 cells and a year is 365; the surplus 11 sit
+at x 22-27, y 47-48 -- a 6x2 block at BOTTOM CENTRE, directly opposite (24,0)
+where the day walk starts, under the heart's point. They light only when the
+heart is whole, so they are finisher-only by construction, unclaimed by any
+Mark, and decode-neutral. Conceptually the best surface in the piece.
+
+**Coloured, they read as a chipped tile.** The same failure as a heart with a
+notch cut out of its lower lobe, at smaller scale.
+
+**The rule that explains both:** the border is a strong regular band, so
+anything small placed on or near it reads as DAMAGE, and anything matching its
+colour vanishes. **A Mark must change a property of a WHOLE element -- complete,
+regular, enclosing -- never decorate part of one.**
+
+### Which promotes the ring from obvious to tested
+
+| Surface | Whole element | Claimed by |
+|---|---|---|
+| the field | yes | Aura |
+| the frame's 376 cells | yes | Vessel |
+| the quiet zone | yes | Hush |
+| the 11 surplus cells | NO, an accent | free, and it looks broken |
+| **the ring** | **yes** | **free** |
+
+The ring is the only unclaimed whole element outside the code block.
+
+### Ink, not surface, was the first failure
+
+- **A ring in the token's OWN colour disappears into the frame**, which already
+  wears that colour. That was id 11, the Mark every finisher gets, and it was
+  the least visible of the six. **Drop it.**
+- A pale ring disappears into the field -- correct for the unclaimed default,
+  wrong for a claimed Mark.
+- Violet, gold and dashed gold all read instantly.
+- **The doubled ring barely registers** and costs a canvas slot that shrinks the
+  heart. Drop it; a fifth ink is worth more.
+
+### THE ONE STEP LEFT
+
+**Choose the five inks against ALL FIVE streak-tier frame colours.** The frame
+wears the token's tier colour and only the deepest tier has been rendered. A
+gold that sings against deep red may die against a pale early tier. This is the
+same discipline the piece already applies to the two inks inside the code block,
+applied to a surface outside it.
+
+Until that sheet exists, the five looks are unchosen.
+
+---
+
 ## 11. Non-goals
 
 Stated so they are not re-litigated mid-build:
