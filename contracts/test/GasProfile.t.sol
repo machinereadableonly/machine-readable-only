@@ -268,6 +268,41 @@ contract GasProfileTest is Test {
         console.log("  bytes 7451");
     }
 
+    /// @notice What capping a token's own rings at ONE would buy.
+    ///
+    /// @dev The operator's decision of 2026-09-20: a token stops accruing at 365
+    /// days and draws one ring of its own, rather than earning rings for a
+    /// decade. The rings grow the canvas -- 53 cells at one ring, 89 at ten --
+    /// and everything on that canvas is billed.
+    ///
+    /// Measured through the whole `tokenURI`, not the frame alone, because the
+    /// canvas width reaches the code's coordinates too.
+    function test_whatCappingRingsAtOneWouldSave() public {
+        TokenView memory one = _founding(365);          // one ring
+        TokenView memory ten = _founding(365 * 10);     // the current cap
+
+        uint256 g0 = gasleft();
+        string memory a = r.tokenURI(one);
+        uint256 gasOne = g0 - gasleft();
+
+        g0 = gasleft();
+        string memory b = r.tokenURI(ten);
+        uint256 gasTen = g0 - gasleft();
+
+        console.log("whole founding token, ONE ring");
+        console.log("  gas  ", gasOne);
+        console.log("  bytes", bytes(a).length);
+        console.log("whole founding token, TEN rings (today's cap)");
+        console.log("  gas  ", gasTen);
+        console.log("  bytes", bytes(b).length);
+        console.log("");
+        console.log("CAPPING AT ONE SAVES");
+        console.log("  gas  ", gasTen > gasOne ? gasTen - gasOne : 0);
+        console.log("  bytes", bytes(b).length > bytes(a).length ? bytes(b).length - bytes(a).length : 0);
+
+        assertGt(gasTen, gasOne, "ten rings must cost more than one, or the views are the same token");
+    }
+
     /// @dev The only substitution a data URI actually requires of this svg:
     /// `#` starts a fragment and would truncate the image at the first colour.
     /// Deliberately simple -- it is here to price the work, not to ship.

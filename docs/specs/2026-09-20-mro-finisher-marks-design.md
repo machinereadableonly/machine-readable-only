@@ -557,6 +557,96 @@ that works.
 
 ---
 
+## 10f. A token STOPS at 365, and keeps one ring
+
+Decided by the operator, 2026-09-20, from the question "do we need more than one
+ring if we stop at 365 days". The answer turned out to be bigger than the
+rings.
+
+### The decision
+
+**A token stops accruing at 365 credited days.** It draws ONE ring of its own,
+so a finished token is distinguishable at a glance from a running one. A child
+keeps one further slot for its echo ring. The ten-ring cap is retired.
+
+### Why it is worth doing
+
+Rings grow the canvas, and everything on that canvas is billed and drawn:
+
+| rings | canvas | the code block's share of the picture, by area |
+|---|---|---|
+| 1 | 53 | 72% |
+| 3 | 61 | 54% |
+| 10 | 89 | **26%** |
+
+**At the old cap the artwork was three-quarters empty border.** The complaint
+that started this whole exploration was that the heart is small and ragged;
+half of "small" was the rings, and this fixes that half for nothing.
+
+Measured on a whole founding token through the full `tokenURI`: capping at one
+ring saves **134,353 gas and 870 bytes**, and saves more on the worst case,
+which is a ring-cap child.
+
+### Completion is DERIVED, not stored
+
+No new storage and no new flag. **A token is complete when `level >= 365`** --
+exactly the condition `requiresWhole` already tests. The contract knows it
+today.
+
+### Completion is NOT resting, and the difference is load-bearing
+
+| | Complete | Resting |
+|---|---|---|
+| Set by | reaching 365 credited days | the owner, deliberately |
+| Reversible | n/a, it is an endpoint | no |
+| Image | frozen | frozen |
+| Can seed children | **YES** | no -- `seed` reverts with `Resting` |
+
+**Resting at 365 would kill lineage outright.** `seed()` refuses a resting
+parent, so a piece where every token rested on completion could never have a
+second generation. Completion must freeze the image WITHOUT setting `resting`.
+
+### The years move into the lineage
+
+This is the part that makes it a design rather than a saving. Under the old
+rule a decade of persistence was recorded as ten rings on one token. Under this
+one it is recorded as a LINE: the agent completes a year, seeds a child, and the
+child carries a sealed echo of how long the line had already run.
+
+`seedsAvailable` is keyed by the agent KEY and by elapsed time --
+`(today() - firstMintDay) / 365` -- not by the token's level, so a completed
+parent earns a seed every year exactly as before. **Nothing in lineage has to
+change.** The echo ring already carries the depth the year rings used to.
+
+### What this changes
+
+| Area | Change |
+|---|---|
+| `FrameRenderer.MAX_RINGS` and `ringBudget` | own rings cap at 1; the echo slot stays. Must move in lockstep with `tools/render-token.mjs`, which the differential test pins |
+| Check-ins | a token at `level >= 365` is no longer credited. The Clock stops including it, which is also a running cost saving |
+| The palette | a complete token must NOT pale with absence. Today `rungFor` pales from `lastDay`, so a finished token that stopped checking in would fade. Completion freezes the rung the way `resting` does |
+| The lapse machinery | `fellRun` / `fellDay` still matter DURING the year and stop mattering after it |
+| The `Years` metadata trait | caps at 1 |
+| Canvas | 51-53 cells for a founding token, 57 for a child with an echo ring. Never 89 again |
+
+### What it does NOT unblock
+
+**The QR version raise stays dead.** It needed roughly 8,927 bytes and +1.38M
+gas; this frees 870 bytes and 134,353 gas. Not close. See 10b, and do not
+re-open it on the strength of this saving.
+
+### Open
+
+- **This changes decided ground.** The ten-ring cap was chosen in August from a
+  rendered sheet, against a design where tokens ran for a decade. That premise
+  is what changed, not the sheet's finding.
+- **Every Base Sepolia token would render differently.** They are testnet and
+  stay as they are; see the testnet-is-a-rehearsal rule.
+- The finisher's ring and the token's own completion ring are candidates to be
+  the SAME ring, drawn differently per finisher Mark. Not decided.
+
+---
+
 ## 11. Non-goals
 
 Stated so they are not re-litigated mid-build:
