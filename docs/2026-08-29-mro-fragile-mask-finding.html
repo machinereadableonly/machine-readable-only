@@ -329,10 +329,11 @@ sizes a solve must clear before it is accepted. My suggestion is the nine sizes
 used above plus the exact multiple, which caught every known failure, but a
 wider net costs only solve time.</p>
 <h2>Evidence</h2>
-<p>Probes are in the session scratchpad and are throwaway:
-<code><scratchpad-path-removed></code>
--- <code>probe-aa.mjs</code> (antialiasing), <code>probe-spread.mjs</code> (31 sizes),
-<code>probe-masks.mjs</code> (all eight masks), <code>cross-sweep.log</code> (the 300 decodes).</p>
+<p>Probes were written to that session&#39;s scratchpad and are throwaway:
+<code>probe-aa.mjs</code> (antialiasing), <code>probe-spread.mjs</code> (31 sizes),
+<code>probe-masks.mjs</code> (all eight masks), <code>cross-sweep.log</code> (the 300 decodes).
+The absolute path is deliberately not recorded: a scratchpad path carries the
+operator&#39;s username, and this repository is public.</p>
 <p>Repo changes made so far in Phase 1, both committed-ready and green:</p>
 <ul>
 <li><code>tools/state-matrix.mjs</code> -- <code>DECODE_SIZES</code> extended to 1600px; the cross sweep

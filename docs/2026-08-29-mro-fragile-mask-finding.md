@@ -150,10 +150,11 @@ wider net costs only solve time.
 
 ## Evidence
 
-Probes are in the session scratchpad and are throwaway:
-`<scratchpad-path-removed>`
--- `probe-aa.mjs` (antialiasing), `probe-spread.mjs` (31 sizes),
+Probes were written to that session's scratchpad and are throwaway:
+`probe-aa.mjs` (antialiasing), `probe-spread.mjs` (31 sizes),
 `probe-masks.mjs` (all eight masks), `cross-sweep.log` (the 300 decodes).
+The absolute path is deliberately not recorded: a scratchpad path carries the
+operator's username, and this repository is public.
 
 Repo changes made so far in Phase 1, both committed-ready and green:
 - `tools/state-matrix.mjs` -- `DECODE_SIZES` extended to 1600px; the cross sweep
