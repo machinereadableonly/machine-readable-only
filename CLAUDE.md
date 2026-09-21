@@ -197,6 +197,17 @@ a leak:** a commit that DELETES a string still shows it in its diff, so check
   directory, every personal identifier token and the machine's Tailscale
   address. The working tree was UNCHANGED -- the HEAD tree hash is identical
   either side of it -- so only ids moved, never content.
+- **QR VERSION 10 AND A REDEPLOY (the operator, 2026-09-21).** The finisher's Mark needs
+  version 10, and that is NOT a renderer swap: `CODE_BYTES = 172` is a
+  `constant` in the token contract and both `mint` and `seed` reject any other
+  length, so a 407-byte version-10 code needs a NEW deployment of
+  MachineReadableOnly. The operator chose to redeploy rather than stay at version 5
+  ("lets redeploy we have time"). Two things follow and neither is optional.
+  **It must land before the mainnet mint of token #1** -- a token's code bytes
+  are written at mint and are immutable, so after token 1 exists the only
+  choices are never raising the version or carrying two geometries forever.
+  And **it raises the per-mint gas we pay ourselves**, since `mint` is
+  `onlyWarden` and the Clock wallet bears it; measure that, do not estimate it.
 - **Renderer** is swappable, split three ways.
 - **Voucher check-in path ships paused.**
 - **The reference client is the product.** Built-in MCP clients cannot sign,

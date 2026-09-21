@@ -1,8 +1,11 @@
 // Reference renderer: the exact SVG the Solidity Renderer must reproduce.
 // Kept in one place so Phase 0 can diff on-chain output against it byte for byte.
-import { frameCells, BLOCK, THICK, LOCAL, DAY_CELLS } from "./frame-geometry.mjs";
+import { frameCells, unitsFor, BLOCK, THICK, LOCAL, DAY_CELLS, QUIET } from "./frame-geometry.mjs";
 
-export const QUIET = 4;
+// Re-exported, not redeclared. The quiet zone is a fact about the geometry and
+// it is what turns a version's module count into the block the frame wraps, so
+// frame-geometry owns it; every sheet that imports QUIET from here still works.
+export { QUIET };
 export const GAP = 1;           // between the day frame and the year rings
 
 // Streak tiers, darkened from the spec palette so every one clears the 4.5:1
@@ -345,6 +348,21 @@ export function pathFor(set, canvas) {
   return d;
 }
 
+// The code block and the day frame no longer share a pitch. Above version 5 a
+// frame cell is 13 units and a QR module is 9, so each is drawn on its own
+// grid and placed inside a group that carries its scale. Coordinates therefore
+// stay one or two digits in both, which matters because PathWriter composes
+// every run in a single 32-byte word with no slack at three digits a
+// coordinate -- absolute units would reach 1,157 on a ten-ring canvas and
+// overrun the reservation.
+//
+// `grid` is the side of the set's own grid, in its own cells.
+export const scaleGroup = (scale, body) =>
+  body ? `<g transform="scale(${scale})">${body}</g>` : "";
+
+export const placeGroup = (x, y, scale, body) =>
+  body ? `<g transform="translate(${x} ${y}) scale(${scale})">${body}</g>` : "";
+
 // One outline ring per completed year, outermost first, drawn as four bars
 // rather than as cells.
 //
@@ -532,7 +550,16 @@ export function renderSvg(modules, want, size, state) {
   const canvas = canvasFor(rawYears, echo);
   const frameOff = ringSpan(total) + GAP;   // where the 49-grid frame starts
   const blockOff = frameOff + THICK;     // where the 45-cell block starts
-  const codeOff = blockOff + QUIET;      // where the modules start
+
+  // A frame cell and a QR module are the same size only at version 5. Above
+  // it they are not, so each is drawn on its own grid and placed by a group
+  // that carries its scale. `span` is the canvas in the common unit.
+  const U = unitsFor(size);
+  const CU = U.cell, MU = U.module;
+  const span = canvas * CU;
+  // Where the code's top-left module sits, in the common unit: past the rings
+  // and the frame in CELLS, then across the quiet zone in MODULES.
+  const codeOrigin = blockOff * CU + QUIET * MU;
 
   // A token that has stopped checking in pales, walking back down the tier
   // ladder. A sealed token does not: its image is final, so the stored streak
@@ -568,8 +595,8 @@ export function renderSvg(modules, want, size, state) {
   for (let j = 0; j < size; j++) {
     for (let i = 0; i < size; i++) {
       if (!modules[j * size + i]) continue;
-      const p = (codeOff + j) * canvas + (codeOff + i);
-      (want[j * size + i] ? heart : noiseCells).add(p);
+      const p = j * size + i;
+      (want[p] ? heart : noiseCells).add(p);
     }
   }
 
@@ -608,18 +635,24 @@ export function renderSvg(modules, want, size, state) {
       + `<stop offset="1" stop-color="${BEAT_TO}"/></linearGradient></defs>`
     : "";
 
-  const body = groups.map(([c, s]) => {
-    // The heart group carries the gradient reference rather than a raw colour.
-    const fill = (s === heart) ? heartFill : c;
-    const d = typeof s === "string" ? s : pathFor(s, canvas);
-    return `<path fill="${fill}" d="${d}"/>`;
-  }).join("");
+  // The frame's two paths are drawn in CELLS and the code's two in MODULES, so
+  // they are emitted into separate groups carrying separate scales. Within each
+  // group the draw order is unchanged, and the groups themselves keep the old
+  // order -- frame under code -- so no pixel moves for that reason either.
+  const asPath = (fill, d) => d ? `<path fill="${fill}" d="${d}"/>` : "";
+  const frameBody = groups
+    .filter(([, s]) => typeof s === "string")
+    .map(([c, d]) => asPath(c, d)).join("");
+  const codeBody = groups
+    .filter(([, s]) => typeof s !== "string")
+    .map(([c, set]) => asPath(set === heart ? heartFill : c, pathFor(set, size)))
+    .join("");
 
   // Hush tints the whole 45-cell block behind the code, which is one rect
   // rather than a path over the 656 quiet-zone cells. The modules are drawn on
   // top, so tinting the full square costs 46 bytes instead of about 1,140.
   const quiet = hush
-    ? `<rect x="${blockOff}" y="${blockOff}" width="${BLOCK}" height="${BLOCK}" fill="${HUSH_QUIET}"/>`
+    ? `<rect x="${blockOff * CU}" y="${blockOff * CU}" width="${BLOCK * CU}" height="${BLOCK * CU}" fill="${HUSH_QUIET}"/>`
     : "";
 
   // ` width="848" height="848"` when a size is declared, empty otherwise -- so
@@ -653,10 +686,18 @@ export function renderSvg(modules, want, size, state) {
     const ink = hasMark(marks, TINT) ? (tintVariant === 1 ? TINT_GOLD : TINT_VIOLET) : base;
     const ground = hush ? HUSH_QUIET : field;
     const eyeShape = earned ? 0 : irisVariant;
-    eyes = eyeOverlay(codeOff, eyeShape, ink, ground, size);
+    eyes = eyeOverlay(0, eyeShape, ink, ground, size);
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg"${intrinsic} viewBox="0 0 ${canvas} ${canvas}" shape-rendering="crispEdges">${defs}<rect width="${canvas}" height="${canvas}" fill="${field}"/>${quiet}${body}${eyes}</svg>`;
+  // The eyes ride inside the code group: they are drawn in modules, they sit
+  // on the finder patterns, and they must come after the code paths so the
+  // erase-to-ground step lands on top. They never reach the frame, which is
+  // outside the block entirely.
+  return `<svg xmlns="http://www.w3.org/2000/svg"${intrinsic} viewBox="0 0 ${span} ${span}" shape-rendering="crispEdges">`
+    + `${defs}<rect width="${span}" height="${span}" fill="${field}"/>${quiet}`
+    + scaleGroup(CU, frameBody)
+    + placeGroup(codeOrigin, codeOrigin, MU, codeBody + eyes)
+    + `</svg>`;
 }
 
 // ---------------------------------------------------------------------------

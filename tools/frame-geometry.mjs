@@ -6,11 +6,44 @@
 // adds the canvas offset.
 import { writeFileSync, mkdirSync } from "node:fs";
 
-export const BLOCK = 45;              // 37 code modules + a 4-cell quiet zone each side
+export const BLOCK = 45;              // the code block, measured in FRAME CELLS
 export const THICK = 2;               // frame rings
 export const LOCAL = BLOCK + 2 * THICK;   // 49
 export const DAY_CELLS = 365;
 export const TOTAL_CELLS = LOCAL * LOCAL - BLOCK * BLOCK;   // 376
+
+// A frame cell is not a QR module, and stops being one at any version above 5.
+//
+// The day frame holds exactly 376 cells because two rings around a 45-cell
+// block hold 8 * 45 + 16 of them -- the 365 days plus the 11 that light at
+// completion. That count is a property of the 45, so the 45 must survive a
+// version raise even though the block it surrounds does not: version 5 puts 45
+// modules inside it and version 10 puts 65. The frame cell therefore grows
+// instead, to 65/45 of a module.
+//
+// The ratio is exact and needs no fixed point. Reduce block-modules over
+// BLOCK and the canvas lands on a common integer unit: at version 10 that is
+// 13 units to a frame cell and 9 to a module, and 45 * 13 == 65 * 9 == 585. At
+// version 5 it reduces to 1/1 and every coordinate is what it always was.
+//
+// (Version 17 also lands on 376, with ONE ring around a 93-cell block. It is
+// noted because the record said no other version does. It is unreachable --
+// 85 modules, when version 10 already costs 675,863 gas.)
+export const QUIET = 4;               // quiet-zone modules on each side
+
+function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+
+/// The unit system for a QR version: how many units a frame cell and a module
+/// each span, in the smallest integer unit that measures both exactly.
+export function unitsFor(codeModules) {
+  const blockModules = codeModules + 2 * QUIET;
+  const g = gcd(blockModules, BLOCK);
+  return {
+    blockModules,
+    cell: blockModules / g,     // units per frame cell
+    module: BLOCK / g,          // units per QR module
+  };
+}
 
 // 365 is odd and two concentric rings always hold an even count, so an exact fit
 // is impossible. The surplus 11 cells sit at the bottom, where the ring stays
@@ -43,7 +76,7 @@ export function frameRows(cells) {
   return rows;
 }
 
-export function toSolidity(cells) {
+export function toSolidity(cells, units) {
   const hex = cells.map(([x, y]) =>
     x.toString(16).padStart(2, "0") + y.toString(16).padStart(2, "0")).join("");
   const rowsHex = frameRows(cells).map(r => r.toString(16).padStart(16, "0")).join("");
@@ -61,6 +94,15 @@ library FrameGeometry {
     uint256 constant DAY_CELLS = ${DAY_CELLS};
     uint256 constant CELL_COUNT = ${cells.length};
 
+    // A frame cell and a QR module are the same size only at version 5.
+    // Above it they are not, and the canvas is measured in the largest unit
+    // that divides both exactly: ${units.cell} to a frame cell, ${units.module} to a module, so the
+    // ${BLOCK}-cell block and its ${units.blockModules} modules are both ${BLOCK * units.cell} units wide.
+    // Generated from the solver's version -- raise that and these follow.
+    uint256 constant CELL_UNITS = ${units.cell};
+    uint256 constant MODULE_UNITS = ${units.module};
+    uint256 constant BLOCK_MODULES = ${units.blockModules};
+
     // Two bytes per cell: x then y, local coordinates.
     function cells() internal pure returns (bytes memory) {
         return hex"${hex}";
@@ -77,9 +119,15 @@ library FrameGeometry {
 }
 
 if (process.argv[1] && process.argv[1].endsWith("frame-geometry.mjs")) {
+  // The version lives in the solver, so the units are read from it rather
+  // than restated here. Raising qart.mjs's VERSION regenerates this file with
+  // the right ratio, and a stale FrameGeometry.sol shows up as a failing test
+  // rather than as a frame a fraction of a module out of true.
+  const { VERSION_SIZE } = await import("./qart.mjs");
   const cells = frameCells();
+  const units = unitsFor(VERSION_SIZE);
   mkdirSync("../contracts/src/render", { recursive: true });
-  writeFileSync("../contracts/src/render/FrameGeometry.sol", toSolidity(cells));
+  writeFileSync("../contracts/src/render/FrameGeometry.sol", toSolidity(cells, units));
   mkdirSync("out", { recursive: true });
   writeFileSync("out/frame.json", JSON.stringify(cells));
   console.log(`wrote FrameGeometry.sol with ${cells.length} cells (${DAY_CELLS} days + ${cells.length - DAY_CELLS} sealing)`);

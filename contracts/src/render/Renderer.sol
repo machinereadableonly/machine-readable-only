@@ -70,8 +70,7 @@ contract Renderer is IRenderer {
         return string(
             abi.encodePacked(
                 _head(v, heartInk),
-                _art(v, colour, heartInk, noiseInk),
-                _eyes(v, rung),
+                _art(v, colour, heartInk, noiseInk, _eyes(v, rung)),
                 "</svg>"
             )
         );
@@ -107,8 +106,9 @@ contract Renderer is IRenderer {
             ? Palette.tierIndex(MarkRenderer.irisRun(v.marks))
             : rung;
         (string memory base,) = MarkRenderer.inks(v.marks, eyeRung);
+        // Local to the code group, which carries the origin and the scale.
         return EyeRenderer.eyes(
-            _blockOff(v.level, v.echo) + QUIET,
+            0,
             MarkRenderer.irisShape(v.marks),
             MarkRenderer.eyeInk(v.marks, base),
             MarkRenderer.ground(v.marks, _absence(v))
@@ -222,7 +222,9 @@ contract Renderer is IRenderer {
     /// gradient near stop must move with the exchange too, so Break + Beat
     /// gives the noise ink rather than the token's own colour.
     function _head(TokenView memory v, string memory heartInk) private pure returns (string memory) {
-        string memory c = LibString.toString(FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)));
+        string memory c = LibString.toString(
+            FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)) * FrameGeometry.CELL_UNITS
+        );
         string memory open = string(
             abi.encodePacked(
                 '<svg xmlns="http://www.w3.org/2000/svg"', _intrinsic(v), ' viewBox="0 0 ', c, " ", c,
@@ -234,7 +236,7 @@ contract Renderer is IRenderer {
                 open,
                 MarkRenderer.defs(v.marks, heartInk),
                 '<rect width="', c, '" height="', c, '" fill="', MarkRenderer.field(v.marks, _absence(v)), '"/>',
-                _quiet(v.marks, _blockOff(v.level, v.echo))
+                _quiet(v.marks, _blockOff(v.level, v.echo) * FrameGeometry.CELL_UNITS)
             )
         );
     }
@@ -248,22 +250,68 @@ contract Renderer is IRenderer {
         TokenView memory v,
         string memory colour,
         string memory heartInk,
-        string memory noiseInk
+        string memory noiseInk,
+        string memory eyes
     ) private pure returns (string memory) {
-        return string(
+        string memory frame = FrameRenderer.paths(
+            v, MarkRenderer.frameFill(v.marks, colour), MarkRenderer.ghost(v.marks)
+        );
+        string memory code = string(
             abi.encodePacked(
-                FrameRenderer.paths(
-                    v, MarkRenderer.frameFill(v.marks, colour), MarkRenderer.ghost(v.marks)
-                ),
                 CodeRenderer.paths(
-                    v.code,
-                    HeartMask.bits(),
-                    _blockOff(v.level, v.echo) + QUIET,
-                    MarkRenderer.heartFill(v.marks, heartInk),
-                    noiseInk
-                )
+                    v.code, HeartMask.bits(), 0, MarkRenderer.heartFill(v.marks, heartInk), noiseInk
+                ),
+                eyes
             )
         );
+        return string(abi.encodePacked(_cellGroup(frame), _moduleGroup(v, code)));
+    }
+
+    /// @dev The day frame and the year rings, drawn in FRAME CELLS.
+    ///
+    /// A frame cell and a QR module are the same size only at version 5; above
+    /// it a cell is 13 units and a module is 9. Each is therefore drawn on its
+    /// own grid inside a group carrying its own scale, which keeps every
+    /// coordinate one or two digits. That is not cosmetic: `PathWriter`
+    /// composes each run in a single 32-byte word with no slack at three
+    /// digits a coordinate, and absolute units would reach 1,157 on a ten-ring
+    /// canvas and overrun the reservation.
+    function _cellGroup(string memory body) private pure returns (string memory) {
+        if (bytes(body).length == 0) return "";
+        return string(
+            abi.encodePacked(
+                '<g transform="scale(', LibString.toString(FrameGeometry.CELL_UNITS), ')">',
+                body,
+                "</g>"
+            )
+        );
+    }
+
+    /// @dev The code block and the eyes, drawn in QR MODULES at the block's
+    /// own origin. The eyes ride in here rather than at the top level because
+    /// they are module-sized and sit on the finder patterns; they never reach
+    /// the frame, which is outside the block entirely.
+    function _moduleGroup(TokenView memory v, string memory body)
+        private
+        pure
+        returns (string memory)
+    {
+        if (bytes(body).length == 0) return "";
+        string memory o = LibString.toString(_codeOrigin(v.level, v.echo));
+        return string(
+            abi.encodePacked(
+                '<g transform="translate(', o, " ", o, ') scale(',
+                LibString.toString(FrameGeometry.MODULE_UNITS), ')">',
+                body,
+                "</g>"
+            )
+        );
+    }
+
+    /// @dev Where the code's top-left module sits, in the common unit: past
+    /// the rings and the frame in CELLS, then across the quiet zone in MODULES.
+    function _codeOrigin(uint32 level, uint32 echo) private pure returns (uint256) {
+        return _blockOff(level, echo) * FrameGeometry.CELL_UNITS + QUIET * FrameGeometry.MODULE_UNITS;
     }
 
     /// @dev `width="848" height="848"` when a size is declared, and the empty
@@ -285,11 +333,12 @@ contract Renderer is IRenderer {
         string memory tint = MarkRenderer.quietTint(marks);
         if (bytes(tint).length == 0) return "";
         string memory o = LibString.toString(blockOff);
+        string memory w = LibString.toString(FrameGeometry.BLOCK * FrameGeometry.CELL_UNITS);
         return string(
             abi.encodePacked(
                 '<rect x="', o, '" y="', o,
-                '" width="', LibString.toString(FrameGeometry.BLOCK),
-                '" height="', LibString.toString(FrameGeometry.BLOCK),
+                '" width="', w,
+                '" height="', w,
                 '" fill="', tint, '"/>'
             )
         );
