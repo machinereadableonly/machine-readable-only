@@ -940,6 +940,89 @@ already does.
 
 ---
 
+## 10k. SETTLED: the finished token's design
+
+Decided by the operator, 2026-09-21, from rendered sheets at every step. This is the
+design; 10g, 10h and the first half of 10j are the path to it.
+
+### What a finished token looks like
+
+1. **The code is QR version 10**, 57 modules. The heart stops being a ragged
+   blob and becomes a heart -- clean lobes, a real point, fine texture instead
+   of chunky blocks. The finder patterns also fall from 19% of the width to 12%
+   purely because the grid is finer.
+2. **The border carries the finisher's own number in actual 1s and 0s.** Not a
+   colour, not a pattern of cells: the digits.
+3. **3x3 glyphs, all four edges, centred, UPRIGHT.**
+4. **One ring**, since a token stops at 365 (10f).
+
+### The rules that took four passes to find
+
+**NO SVG `<text>`.** Each digit is a 3x3 cell bitmap emitted as a path. A token
+drawn with a font depends on what the VIEWER has installed -- it would render
+differently in two browsers and might not render at all in ten years.
+
+**THE `1` NEEDS A FLAG AND A FOOT.** A first draft drew it as a plain vertical
+bar, and a row of them read as a dotted rule rather than as writing -- losing the
+one thing the idea was for. `110 / 010 / 111` fits a digit into three cells.
+
+**A SQUARE GLYPH IS WHY 3x3 WORKS.** A 3-wide, 5-tall glyph needs a step of 4
+one way and 6 the other, and using 4 for both is what made the side digits
+collide in the first render. At 3x3 one step serves every edge.
+
+**EVERY EDGE CENTRED.** Top and right were centred while bottom and left ran
+flush from the far corner, so the corners doubled up and the reading was
+ambiguous about where an edge began. Centring all four on the same margin fixed
+it.
+
+**UPRIGHT, NOT ROTATED.** Both were rendered. Rotating each edge a quarter turn
+gives a clockwise inscription with proper rotational symmetry -- correct for a
+coin or a seal, and wrong here: the bottom edge comes out upside down and reads
+as a printing error on a screen. Upright gives up the symmetry and is legible
+from one viewpoint, which is how this artwork is actually seen. **The operator called
+this one; the rotated version was Claude's instinct and it was worse.**
+
+### Why colour lost
+
+The five inks were rendered against all five streak tiers and all of them
+worked. The operator's verdict: **"the colours just look like more squares its
+boring"**. The image is already a field of squares and a coloured border adds
+another. The inks were also peers -- nothing about teal says it is rarer than
+violet -- so rank had to be read from metadata. A number IS the rank, and three
+finishers now render as three obviously different objects.
+
+### The cost, measured
+
+| | Gas | Bytes |
+|---|---|---|
+| worst case today | 1,641,055 | 11,209 |
+| version 10 | +675,863 | +4,285 |
+| digit band | +584,708 | +3,360 |
+| **finished** | **2,901,626** | **18,854** |
+
+Inside the 3,000,000 gas limit raised to pay for it, and inside the **unchanged**
+20,000 byte limit. The code block occupies **61%** of the picture -- against 75%
+with no digits, and 48% for digits on version 5. The digits cost about a sixth
+of the picture and the operator accepted that trade with the sheets in front of him.
+
+### Known and accepted
+
+- **The border reads as texture, not digits, at thumbnail size.** It resolves as
+  writing only on a closer look. Accepted deliberately: it rewards attention and
+  it is honest about a piece that is machine-first.
+- A `0` glyph carries more ink than a `1`, so an ordinal full of zeros costs
+  slightly more to draw than an alternating one.
+
+### Still to build
+
+Nothing here is in the shipping renderer. The frame must also move to cells
+drawn in their OWN unit -- about 1.44x a module -- so the day frame stays exactly
+376 cells around a 65-cell block (10b). The sheet that produced these pictures
+approximates that by scaling coordinates, which is faithful in the picture and
+NOT in the byte count.
+
+---
+
 ## 11. Non-goals
 
 Stated so they are not re-litigated mid-build:
@@ -957,6 +1040,10 @@ Stated so they are not re-litigated mid-build:
   rendered and rejected on looks; see 10b.
 - **The QR version is not raised**, and no other symbology replaces it; see 10b.
 - **Base64 stays**; see 10c.
+- **The ring is not a colour.** Five inks were rendered, tested at every tier,
+  and rejected; see 10k. Do not re-propose a coloured finisher ring.
+- **The border digits are not rotated.** Upright was chosen over a clockwise
+  inscription with both rendered; see 10k.
 
 ---
 
