@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { solve, bestOfAllMasks, packModules, unpackModules, payloadFor,
-         freeByteBudget, FREE_BITS } from "../qart.mjs";
+         freeByteBudget, FREE_BITS, VERSION_SIZE } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
 import { renderModules, scanResult } from "./helpers/decode.mjs";
 
@@ -19,12 +19,16 @@ test("the reshuffled code still sends a scanner to its own destination", () => {
 
 test("a useful share of modules land on the heart", () => {
   // 60% is the floor, not the target. The URL-safe alphabet gives 5 free bits
-  // per byte instead of 8, so the solver controls 400 of 1369 modules and the
-  // rest fall as chance leaves them -- about 50% right by luck. Measured 64.9%
-  // with the interior-first order; anything under 60% means something regressed.
+  // per byte instead of 8, so most modules fall as chance leaves them -- about
+  // 50% right by luck. Anything under 60% means something regressed.
+  //
+  // The share RISES with the version, because a longer payload buys more free
+  // bytes and so more controlled modules: measured 64.9% at version 5 and
+  // higher at version 10. The floor is deliberately left where it was, since
+  // it is a regression tripwire and not a target.
   const r = solve(PAYLOAD, 0);
   assert.ok(r.match > 0.60, `match too low: ${(r.match * 100).toFixed(1)}%`);
-  assert.equal(r.size, 37);
+  assert.equal(r.size, VERSION_SIZE);
 });
 
 test("every free bit becomes a usable pivot", () => {
@@ -51,10 +55,14 @@ test("different tokens produce different codes but comparable quality", () => {
 test("packing modules to bytes round-trips", () => {
   const r = solve(PAYLOAD, 0);
   const packed = packModules(r.modules, r.size);
-  assert.equal(packed.length, Math.ceil(37 * 37 / 8));
+  assert.equal(packed.length, Math.ceil(VERSION_SIZE * VERSION_SIZE / 8));
   assert.deepEqual(Array.from(unpackModules(packed, r.size)), Array.from(r.modules));
 });
 
 test("a payload too long for the version is rejected, not silently truncated", () => {
-  assert.throws(() => solve("https://example.com/" + "x".repeat(120) + "#", 0), /too long/);
+  // Long enough to beat the version's own capacity rather than a fixed 120:
+  // version 10 swallowed the old string whole and the test stopped testing
+  // anything. freeByteBudget asks the encoder, so this tracks any version.
+  const tooLong = "https://example.com/" + "x".repeat(VERSION_SIZE * VERSION_SIZE) + "#";
+  assert.throws(() => solve(tooLong, 0), /too long/);
 });

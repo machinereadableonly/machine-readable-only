@@ -31,7 +31,7 @@ contract FrameRendererTest is Test {
     /// @dev Only the fields the frame reads. Everything else stays at zero.
     function _view(uint32 level) internal pure returns (TokenView memory v) {
         v.level = level;
-        v.code = new bytes(172);
+        v.code = new bytes(407);
     }
 
     function _out(uint32 level) internal view returns (string memory) {

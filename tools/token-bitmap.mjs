@@ -8,8 +8,8 @@ import { robustSolve } from "./robust-solve.mjs";
 
 export { VERSION_SIZE } from "./qart.mjs";  // re-exported: callers already import it from here
 export const SIZE = VERSION_SIZE;
-export const BYTES = Math.ceil(SIZE * SIZE / 8);   // 172
-export const HEX_CHARS = BYTES * 2;                // 344
+export const BYTES = Math.ceil(SIZE * SIZE / 8);   // 407 at version 10
+export const HEX_CHARS = BYTES * 2;                // 814
 
 const hex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 

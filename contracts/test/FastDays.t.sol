@@ -43,9 +43,9 @@ contract FastDaysTest is Test {
     /// a mint records the fast day, and a check-in one fast day later is
     /// accepted where the real contract would call it FutureDay.
     function test_theContractReasonsOnTheFastDay() public {
-        // CODE_BYTES is internal; 172 is its value (MachineReadableOnly.sol),
+        // CODE_BYTES is internal; 407 is its value (MachineReadableOnly.sol),
         // and mint reverts BadCodeLength on anything else.
-        bytes memory code = new bytes(172);
+        bytes memory code = new bytes(407);
         vm.prank(WARDEN);
         fast.mint(1, address(0xA11), bytes32(uint256(1)), code, uint32(block.timestamp / 300));
         uint32 d = fast.today();

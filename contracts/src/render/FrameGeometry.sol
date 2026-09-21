@@ -14,12 +14,12 @@ library FrameGeometry {
 
     // A frame cell and a QR module are the same size only at version 5.
     // Above it they are not, and the canvas is measured in the largest unit
-    // that divides both exactly: 1 to a frame cell, 1 to a module, so the
-    // 45-cell block and its 45 modules are both 45 units wide.
+    // that divides both exactly: 13 to a frame cell, 9 to a module, so the
+    // 45-cell block and its 65 modules are both 585 units wide.
     // Generated from the solver's version -- raise that and these follow.
-    uint256 constant CELL_UNITS = 1;
-    uint256 constant MODULE_UNITS = 1;
-    uint256 constant BLOCK_MODULES = 45;
+    uint256 constant CELL_UNITS = 13;
+    uint256 constant MODULE_UNITS = 9;
+    uint256 constant BLOCK_MODULES = 65;
 
     // Two bytes per cell: x then y, local coordinates.
     function cells() internal pure returns (bytes memory) {

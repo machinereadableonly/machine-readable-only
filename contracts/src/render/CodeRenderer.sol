@@ -10,7 +10,7 @@ import {PathWriter} from "./PathWriter.sol";
 /// @dev Two things about this library are load-bearing, both measured.
 ///
 /// 1. **The heart and the noise are separated by the shared mask, not by anything
-///    stored per token.** `HeartMask` is one 172-byte constant, identical for
+///    stored per token.** `HeartMask` is one 407-byte constant, identical for
 ///    every token, so a mint carries only its own code. A module is a heart module
 ///    when the token's code and the mask both have that bit set.
 ///
@@ -24,7 +24,7 @@ import {PathWriter} from "./PathWriter.sol";
 /// either one alone, and it is what makes the assembly here and in `PathWriter`
 /// safe to write.
 library CodeRenderer {
-    /// @dev A row of 37 alternating modules is 19 separate runs, which is the most
+    /// @dev A row of 57 alternating modules is 29 separate runs, which is the most
     /// any row can produce. No real code looks like that, but the code is written
     /// at mint and this library must not corrupt memory if handed something
     /// degenerate.
@@ -43,7 +43,7 @@ library CodeRenderer {
     }
 
     /// @notice The code block as two `<path>` elements.
-    /// @param code   the token's packed modules, 172 bytes
+    /// @param code   the token's packed modules, 407 bytes
     /// @param mask   the shared heart target, same packing and size
     /// @param offset where the code's top-left module sits on the canvas
     /// @param heartFill colour for modules that landed on the heart

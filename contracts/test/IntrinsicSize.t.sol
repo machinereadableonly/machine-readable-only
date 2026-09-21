@@ -25,10 +25,16 @@ contract RendererSizedTest is Test {
     /// @dev Token 1 on example.com, the same bitmap the other render tests use.
     function _bitmap() internal pure returns (bytes memory) {
         return
-        hex"fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff"
-        hex"fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796"
-        hex"e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef"
-        hex"ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80";
+        hex"fe7f926bb8df3fc116bae8ac88906e9d1d71e35bcbb757fff47edfa5dbafffffe6f7d2ec13ebaf1bf3f107fa"
+        hex"aaaaaaaaaafe00faebc7bbfb00c77fffffddfd8c5efffffffffffcafff5c61df9df8afbfaebcfbfbf9efffff"
+        hex"fe7f9bb78beffffebbe9af7efff5c71df04ffefbfffffffffdff3fffffffddfddf3effffebbfbbfbfffeeefb"
+        hex"bbbbfbffbfaebffb8dbfe7fffffffdc75ff7effffffffbbdf3fffdc71dfd9e9cfbfeebffbbfbbc3fffffffff"
+        hex"ffff7effffebbfbbfb5fffdc6fdf9dfecf1ffffc7ffb51f7affffebddddad2c7ffff1bfba4727ffeeffbba37"
+        hex"fb7bfeeb6fbbfae62e7fffbfddfcc92e7fffffffff7722dfdc7ddf9dfbd68feeb6fb9dbcecbffffdbffefbee"
+        hex"0ffffffbfb727b7e7dc7ddfdfb48c93fff7ffffeb9737fffbfddfd6e4e4dffffbfbb336fadeeffbbbb6bef17"
+        hex"eeb6fbbef6efa6fffbfddb4cd34b6ffffffd73f69e01c7ddf8590bf11aeb6fbbfaa8032d1bbfffabfc806401"
+        hex"51beb0c7bfb0187ade0c2b905c377c5eecf11ba3096fe8120ff5d0c265706c9af2e9f2aedba037bf05c26b87"
+        hex"9ae9c0fede58a39525f100";
     }
 
     function setUp() public {
@@ -46,6 +52,14 @@ contract RendererSizedTest is Test {
         v.code = _bitmap();
     }
 
+    /// @dev The viewBox a canvas of `cells` produces, in the common unit.
+    /// Derived from CELL_UNITS so a version raise moves it instead of
+    /// leaving three assertions pinned to the old pitch.
+    function _viewBox(uint256 cells) internal pure returns (string memory) {
+        string memory u = vm.toString(cells * FrameGeometry.CELL_UNITS);
+        return string.concat('viewBox="0 0 ', u, " ", u, '"');
+    }
+
     function _has(string memory haystack, string memory needle) internal pure returns (bool) {
         return vm.indexOf(haystack, needle) != type(uint256).max;
     }
@@ -58,14 +72,16 @@ contract RendererSizedTest is Test {
     function test_theShippedRendererDeclaresCanvasTimesSixteen() public view {
         string memory s = shipped.svg(_view(365));
         assertTrue(_has(s, "width=\"848\" height=\"848\""), "expected 53 x 16 = 848");
-        assertTrue(_has(s, "viewBox=\"0 0 53 53\""), "the viewBox must be untouched");
+        // The viewBox is in UNITS, not cells: 53 cells x CELL_UNITS. The pixel
+        // size stays cells x 16, which is what a rasteriser is being told.
+        assertTrue(_has(s, _viewBox(53)), "the viewBox must be untouched");
     }
 
     /// The declared size has to track the canvas, which grows with year rings --
     /// a fixed number would stretch the art the moment a token completes a year.
     function test_theDeclaredSizeGrowsWithTheCanvas() public view {
         string memory s = shipped.svg(_view(uint32(FrameGeometry.DAY_CELLS) * 10));
-        assertTrue(_has(s, "viewBox=\"0 0 89 89\""), "ten rings should give an 89-cell canvas");
+        assertTrue(_has(s, _viewBox(89)), "ten rings should give an 89-cell canvas");
         assertTrue(_has(s, "width=\"1424\" height=\"1424\""), "expected 89 x 16 = 1424");
     }
 
@@ -75,7 +91,7 @@ contract RendererSizedTest is Test {
         string memory s = control.svg(_view(365));
         assertFalse(_has(s, "width=\"8"), "the control must not declare a width in pixels");
         assertTrue(
-            _has(s, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 53 53\""),
+            _has(s, string.concat("<svg xmlns=\"http://www.w3.org/2000/svg\" ", _viewBox(53))),
             "the control's open tag must be the pre-2026-08-29 bytes"
         );
     }

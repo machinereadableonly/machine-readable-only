@@ -164,7 +164,7 @@ contract MachineReadableOnlyTest is MroTestBase {
         assertEq(t.viewOf(1).lastDay, t.today());
         assertEq(t.viewOf(1).mintDay, t.today());
         assertEq(t.viewOf(1).agentKeyId, KEY);
-        assertEq(t.viewOf(1).code.length, 172);
+        assertEq(t.viewOf(1).code.length, 407);
         assertEq(t.totalMinted(), 1);
         assertEq(t.mintedTo(ALICE), 1);
     }

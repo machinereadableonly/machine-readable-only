@@ -10,15 +10,13 @@
 import QRCode from "qrcode";
 import { heartTarget } from "./heart-target.mjs";
 
-export const VERSION = 5;              // 37 x 37 modules
-export const VERSION_SIZE = 37;        // that version's side, in modules
+export const VERSION = 10;             // 57 x 57 modules
+export const VERSION_SIZE = 57;        // that version's side, in modules
                                        // Lives here, not in token-bitmap.mjs: heart-mask.mjs
                                        // needs it too, and importing it from the higher-level
                                        // bitmap module made a cycle once robust-solve.mjs
                                        // put a renderer in that path.
 export const ECC = "L";                // lowest correction leaves the most free bits
-const DATA_CODEWORDS = 108;            // version 5, level L, single block
-const DATA_BITS = DATA_CODEWORDS * 8;
 export const MASKS = [0, 1, 2, 3, 4, 5, 6, 7];
 
 // Free bytes ride in a second byte segment after a "#", so the scan destination
@@ -43,11 +41,41 @@ export const MASKS = [0, 1, 2, 3, 4, 5, 6, 7];
 export const FREE_BASE = 0x40;                 // "@"
 export const FREE_BITS = [0, 1, 2, 3, 4];      // the low five bits are ours
 
+// How many free bytes fit beside the payload, ASKED OF THE ENCODER rather than
+// computed from a capacity table.
+//
+// This used to be arithmetic over a hardcoded DATA_CODEWORDS for version 5,
+// and it was one byte short: measured against the encoder at version 5 it
+// returned 68 where 69 actually fits, because it always subtracts a
+// terminator the spec lets you truncate when the data fills the capacity. A
+// table would also have to be re-entered by hand at every version raise --
+// exactly the kind of constant that is wrong for a year before anyone notices.
+//
+// Binary search costs about a dozen encodes and the answer is memoised per
+// payload length. Capacity in byte mode depends on the length, not the bytes,
+// so a stand-in payload of the same length gives the same answer.
+const budgetMemo = new Map();
+
 export function freeByteBudget(payloadLength) {
-  const segment1 = 4 + 8 + payloadLength * 8;
-  const segment2Header = 4 + 8;
-  const terminator = 4;
-  return Math.floor((DATA_BITS - segment1 - segment2Header - terminator) / 8);
+  const hit = budgetMemo.get(payloadLength);
+  if (hit !== undefined) return hit;
+
+  const stand = "A".repeat(payloadLength);
+  const fits = n => {
+    try {
+      encode(stand, new Uint8Array(n).fill(FREE_BASE), 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  let lo = 0, hi = 3000;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (fits(mid)) lo = mid; else hi = mid - 1;
+  }
+  budgetMemo.set(payloadLength, lo);
+  return lo;
 }
 
 function encode(payload, freeBytes, mask) {

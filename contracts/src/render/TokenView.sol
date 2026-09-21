@@ -35,6 +35,6 @@ struct TokenView {
     // shift this word by hand.
     uint256 marks;
     bytes32 agentKeyId;  // which agent key minted it
-    bytes code;          // 172 bytes, the packed 37x37 code, written once at mint
+    bytes code;          // 407 bytes, the packed 57x57 code, written once at mint
     uint32 today;        // UTC day index now, supplied by the token contract
 }

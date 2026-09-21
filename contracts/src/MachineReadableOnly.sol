@@ -116,8 +116,13 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     bool public isSunset;
     bool public vouchersEnabled;
 
-    /// @dev The packed code bitmap is a fixed 172 bytes: 37 x 37 modules.
-    uint256 internal constant CODE_BYTES = 172;
+    /// @dev The packed code bitmap is a fixed 407 bytes: 57 x 57 modules,
+    /// QR version 10. Raised from 172 / 37 x 37 / version 5 on 2026-09-21,
+    /// which is why this contract had to be redeployed rather than swapped at
+    /// the renderer: the length is checked here, in `mint` and in `seed`, and
+    /// a token's code is written once and is immutable. A version raise after
+    /// token 1 exists would split the collection permanently.
+    uint256 internal constant CODE_BYTES = 407;
 
     /// @dev Ten Marks in five pairs. Bit 0 is never a Mark.
     /// Ten are written by the deploy; the ceiling is 15 so the ladder can grow

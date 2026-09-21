@@ -68,8 +68,14 @@ contract MROSpikeToken is ERC721, Ownable2Step, IERC4906 {
     /// @notice Whether the piece has closed. Irreversible.
     bool public isSunset;
 
-    /// @dev The packed code bitmap is a fixed 172 bytes: 37 x 37 modules.
-    uint256 private constant CODE_BYTES = 172;
+    /// @dev The packed code bitmap is a fixed 407 bytes: 57 x 57 modules.
+    ///
+    /// Raised with the real contract on 2026-09-21. This is not a relic kept at
+    /// the Phase 0 version: GasBudget, RealTokenGas and ContractSize all
+    /// measure against this shell, so a spike left at 37 x 37 would report the
+    /// gas, the bytes and the deployability of a token the piece no longer
+    /// mints.
+    uint256 private constant CODE_BYTES = 407;
 
     /// @dev ERC-4906's interface id. OpenZeppelin ships the interface but no
     /// mixin, so the id is declared here.

@@ -31,8 +31,16 @@ contract GasBudgetTest is Test {
     MROSpikeToken t;
     Renderer r;
 
-    /// @dev RAISED FROM 2,000,000 TO 3,000,000 on 2026-09-21, deliberately and
-    /// by the operator, after the old figure was measured rather than assumed.
+    /// @dev RAISED TO 4,000,000 on 2026-09-21, by the operator, and this is the
+    /// SECOND raise that day: 2,000,000 to 3,000,000 to pay for QR version 10
+    /// and the finisher's digit band, then to 4,000,000 once version 10 was
+    /// actually built and MEASURED at 2,867,756 -- leaving 132,244 against a
+    /// digit band measured at 584,708. The first raise was sized from a
+    /// component estimate; this one is sized from the built thing.
+    ///
+    /// The BYTE limit did not move with it. Bytes are what protect the decode
+    /// and what a marketplace actually fetches, so 20,000 stands until a
+    /// decode sweep says otherwise.
     ///
     /// The 2,000,000 was set on 2026-08-27 at roughly the Uniswap V3 line
     /// (1.98M), from a survey of on-chain NFTs: Loot 572k, OnChainMonkey 836k,
@@ -56,7 +64,7 @@ contract GasBudgetTest is Test {
     /// Anonymice already spends. THE BYTE LIMIT DOES NOT MOVE: at 20,000 it is
     /// never threatened by either change (18,854 with both), and bytes are what
     /// every viewer actually downloads.
-    uint256 constant GAS_LIMIT = 3_000_000;
+    uint256 constant GAS_LIMIT = 4_000_000;
     uint256 constant BYTE_LIMIT = 20_000;
     uint256 constant GAS_TARGET = 1_000_000;
     uint256 constant BYTE_TARGET = 5_000;
@@ -84,8 +92,18 @@ contract GasBudgetTest is Test {
     /// lineage. Each still sits well under its hard limit -- 60,000 gas and
     /// 7,100 bytes -- so a regression trips a band long before it trips the
     /// thing that actually breaks the piece.
-    uint256 constant GAS_BAND = 1_940_000;
-    uint256 constant BYTE_BAND = 12_900;
+    /// MOVED AGAIN 2026-09-21, for QR version 10. The dearest token measured
+    /// 2,867,756 gas and the largest 18,246 bytes, so both bands are set about
+    /// 2.8% above their new worst case, the same margin they have always
+    /// carried.
+    ///
+    /// The gas band still sits well inside its hard limit. THE BYTE BAND NO
+    /// LONGER DOES: 18,800 against 20,000 leaves 1,200, where it used to leave
+    /// 7,100. Bytes, not gas, are now the binding constraint on this artwork,
+    /// and the finisher's digit band was measured at +3,360 -- which does not
+    /// fit. That is a fact about the budget, not a failure of this file.
+    uint256 constant GAS_BAND = 2_945_000;
+    uint256 constant BYTE_BAND = 18_800;
 
     /// @dev The maximal LEGAL token under the ten-Mark ladder: at most one Mark
     /// per pair -- (1,2) (3,4) (5,6) (7,8) (9,10) -- so "every Mark" is no
@@ -140,10 +158,16 @@ contract GasBudgetTest is Test {
     /// @dev Token 1 on example.com, from tools/token-bitmap.mjs.
     function _code() internal pure returns (bytes memory) {
         return
-        hex"fe00810bfc16532d506ebd1a58bb74fffff5dbabfabfaec16ed7ed07faaaaaafe01fe9fe00d33eefebb3eeff"
-        hex"fff37fff66f70afbdfedf8b7feeeeea0fefdffdf85ffef66e727bfffff6abfeefeef296ffdfff5fbfe666796"
-        hex"e3fedfeb623feefee8d8ffffff86fff66f7362bdfedfd0b3eeeeea5bcfdffdda69bef66f8ac0fffff12f62ef"
-        hex"ecfa0057dfec67fa66642bf04b6df716ba7aed8f95d52ffa2d2e9306943305132d230fe84883cd80";
+        hex"fe7f926bb8df3fc116bae8ac88906e9d1d71e35bcbb757fff47edfa5dbafffffe6f7d2ec13ebaf1bf3f107fa"
+        hex"aaaaaaaaaafe00faebc7bbfb00c77fffffddfd8c5efffffffffffcafff5c61df9df8afbfaebcfbfbf9efffff"
+        hex"fe7f9bb78beffffebbe9af7efff5c71df04ffefbfffffffffdff3fffffffddfddf3effffebbfbbfbfffeeefb"
+        hex"bbbbfbffbfaebffb8dbfe7fffffffdc75ff7effffffffbbdf3fffdc71dfd9e9cfbfeebffbbfbbc3fffffffff"
+        hex"ffff7effffebbfbbfb5fffdc6fdf9dfecf1ffffc7ffb51f7affffebddddad2c7ffff1bfba4727ffeeffbba37"
+        hex"fb7bfeeb6fbbfae62e7fffbfddfcc92e7fffffffff7722dfdc7ddf9dfbd68feeb6fb9dbcecbffffdbffefbee"
+        hex"0ffffffbfb727b7e7dc7ddfdfb48c93fff7ffffeb9737fffbfddfd6e4e4dffffbfbb336fadeeffbbbb6bef17"
+        hex"eeb6fbbef6efa6fffbfddb4cd34b6ffffffd73f69e01c7ddf8590bf11aeb6fbbfaa8032d1bbfffabfc806401"
+        hex"51beb0c7bfb0187ade0c2b905c377c5eecf11ba3096fe8120ff5d0c265706c9af2e9f2aedba037bf05c26b87"
+        hex"9ae9c0fede58a39525f100";
     }
 
     function setUp() public {

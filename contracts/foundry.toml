@@ -1,4 +1,14 @@
 [profile.default]
+# The 469-combination differential builds every legal Mark combination's
+# tokenURI in one call. At QR version 5 that fitted the 128 MB default; at
+# version 10 each string is about 15 KB instead of 9 KB and the run hit
+# MemoryOOG. This is the test harness's memory, not anything a chain enforces.
+memory_limit = 536870912
+# The same test also exhausted the 2^30 default test gas limit -- memory
+# expansion is quadratic, so 469 fifteen-kilobyte strings in one call spend it
+# on memory rather than on work. Neither number is a chain limit; the piece's
+# own budget is GAS_LIMIT in GasBudget.t.sol, which did not move for this.
+gas_limit = 9223372036854775807
 src = "src"
 out = "out"
 libs = ["lib"]

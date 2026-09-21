@@ -56,11 +56,11 @@ contract TokenViewTest is Test {
 
     function test_theCodeIsExactlyTheWidthTheMaskExpects() public pure {
         // The bitmap and the shared heart mask are indexed by identical code, so
-        // a token's code must be the same 172 bytes the mask is.
+        // a token's code must be the same 407 bytes the mask is.
         TokenView memory v = _sample();
-        assertEq(v.code.length, HeartMask.BYTES, "code is not one packed 37x37 grid");
-        assertEq(HeartMask.BYTES, 172);
-        assertEq(HeartMask.SIZE, 37);
+        assertEq(v.code.length, HeartMask.BYTES, "code is not one packed 57x57 grid");
+        assertEq(HeartMask.BYTES, 407);
+        assertEq(HeartMask.SIZE, 57);
         assertEq(HeartMask.bits().length, HeartMask.BYTES);
     }
 

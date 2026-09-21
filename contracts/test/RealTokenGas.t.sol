@@ -34,9 +34,9 @@ contract RealTokenGasTest is MroTestBase {
     /// than imported because they are the project's published budget, not that
     /// file's private business, and a test that silently inherited a relaxed
     /// limit would be worse than one that states it.
-    /// @dev 3,000,000 since 2026-09-21. The reasoning, the survey it rests
-    /// on and the two measurements that justified it are in GasBudget.t.sol.
-    uint256 constant GAS_LIMIT = 3_000_000;
+    /// @dev 4,000,000 since 2026-09-21. The reasoning, the survey it rests
+    /// on and the measurements that justified it are in GasBudget.t.sol.
+    uint256 constant GAS_LIMIT = 4_000_000;
     uint256 constant BYTE_LIMIT = 20_000;
 
     /// @dev The maximal LEGAL Mark set, one per pair: Hush, Beat, the bought

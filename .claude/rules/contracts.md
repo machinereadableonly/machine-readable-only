@@ -40,11 +40,19 @@ trap -- prefer clone/proxy (EIP-1167).
 
 ## The gas and byte budget
 
-Hard limits **3,000,000 gas / 20,000 bytes**; the 1M / 5 KB target is MISSED and
+Hard limits **4,000,000 gas / 20,000 bytes**; the 1M / 5 KB target is MISSED and
 must always be reported as missed.
 
-**THE GAS LIMIT WAS RAISED FROM 2,000,000 ON 2026-09-21, by the operator, on
-measurement.** It was never a protocol rule: `tokenURI` is a READ that nobody
+**BYTES ARE THE BINDING CONSTRAINT SINCE QR VERSION 10 (2026-09-21).** Measured
+at version 10: the dearest token 2,867,756 gas, the largest 18,246 bytes. Gas
+has 1.1M of room and bytes have 1,754. The finisher's digit band was measured
+at +3,360 bytes, so it does not fit as designed -- that is an open decision,
+not a defect. The BYTE limit has never moved: it is what protects the decode
+and what a marketplace actually fetches.
+
+**THE GAS LIMIT WAS RAISED TWICE ON 2026-09-21, by the operator, on
+measurement: 2,000,000 to 3,000,000 from a component estimate, then to
+4,000,000 once version 10 was built and measured.** It was never a protocol rule: `tokenURI` is a READ that nobody
 pays for, and a node will execute around 50M for one `eth_call`. The 2,000,000
 was set at roughly the Uniswap V3 line from a survey where Anonymice runs at
 24M and Terraforms at 28M, and what it bought was compatibility with strict
