@@ -190,8 +190,13 @@ a leak:** a commit that DELETES a string still shows it in its diff, so check
   commercial and a noncommercial licence there would forbid what the door
   invites. Everything else is PolyForm Noncommercial 1.0.0. **Read
   `LICENSING.md` before licensing any NEW file.** History was rewritten before
-  publication and again on 2026-09-11, so **any commit id from before
-  2026-09-11 is dead.**
+  publication, again on 2026-09-11, and **completely on 2026-09-21 -- so EVERY
+  commit id older than that is dead, including ones quoted in memory, in specs
+  and in this file.** The 2026-09-21 rewrite touched all 362 commits: it removed
+  session scratchpad paths, the mangled `-home-<user>-` form, the home
+  directory, every personal identifier token and the machine's Tailscale
+  address. The working tree was UNCHANGED -- the HEAD tree hash is identical
+  either side of it -- so only ids moved, never content.
 - **Renderer** is swappable, split three ways.
 - **Voucher check-in path ships paused.**
 - **The reference client is the product.** Built-in MCP clients cannot sign,
