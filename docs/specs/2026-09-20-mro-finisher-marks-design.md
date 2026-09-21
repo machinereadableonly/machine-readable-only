@@ -403,7 +403,12 @@ finder patterns fall from 19% of the width to 12% simply because the grid is
 finer. All versions decode at all nine sizes, and the solve stays under a
 second.
 
-**It is still dead, on two independent measurements.**
+**SUPERSEDED 2026-09-21 -- see 10j. This section's gas verdict was WRONG.**
+Both figures below are estimates from a borrowed gas-per-unit constant, and the
+real cost measured at +675,863 gas and +4,285 bytes, about half. The version
+raise is affordable and has been adopted. The FRAME finding below stands.
+
+The reasoning as it was written:
 
 1. **Gas.** Version 10 adds 8,927 bytes of path data. At the measured ~155 gas
    per byte that is roughly +1.38M gas, against 109,979 of headroom. Even
@@ -828,6 +833,110 @@ ending.
 5. The copy -- llms.txt, SKILL.md, the raw protocol and its copy -- LAST, so no
    document describes something that does not yet answer.
 6. Cold-read the new copy before any of it is served (section 10).
+
+---
+
+## 10j. The ring is WRITING, and the gas limit moved to pay for it
+
+Decided by the operator, 2026-09-21. This supersedes the five-ink scheme in 10g and 10h
+for the ring's content; the surface finding there still stands.
+
+### Why colour lost
+
+The five inks were rendered against all five streak tiers and all of them
+worked. The operator's verdict killed them anyway: **"the colours just look like
+more squares its boring"**. He is right. The image is already a field of
+squares; a coloured border adds another one and says nothing. The inks were
+also PEERS -- nothing about teal says it is rarer than violet -- so rarity had to
+be read from metadata rather than seen.
+
+### What replaces it
+
+**The ring carries the finisher's own number, written in actual 1s and 0s.**
+
+A machine reads the rank off the artwork. A human reads it as writing. In a
+piece called Machine Readable Only that is the ring doing the work rather than
+decorating it, and it puts the piece in the line of concrete poetry and
+typewriter art, where the characters ARE the picture.
+
+**NO SVG `<text>`, EVER.** A token drawn with a font depends on what the VIEWER
+has installed: it renders differently in two browsers and may not render at all
+in ten years. Every digit is a 3x5 cell bitmap emitted as a path, so the token
+carries its own letterforms.
+
+**TOP AND BOTTOM ONLY.** On the first sheet the horizontal edges read as writing
+and the vertical ones collapsed into a dotted bar. The cause was a bug worth
+recording: a digit is 3 wide but 5 TALL, so the vertical step must be 6 where
+the horizontal one is 4, and the draft used 4 on all four edges. Top and bottom
+is also the better composition -- it reads as a printed plate rather than a
+frame.
+
+### Everything here was MEASURED, and every estimate was about twice too high
+
+`test/QrVersionCost.t.sol` and `test/DigitBandCost.t.sol` are new. The first
+carries a CONTROL that renders version 5 through the size-parameterised harness
+and asserts it is byte-identical to the shipped `CodeRenderer` -- without it the
+version 10 figure would measure the test rather than the renderer.
+
+| | Estimated | MEASURED |
+|---|---|---|
+| QR version 10, gas | +1,070,000 to +1,740,000 | **+675,863** |
+| QR version 10, bytes | +8,927 | **+4,285** |
+| Digit band, gas | ~1,000,000 | **+584,708** |
+| Digit band, bytes | -- | **+3,360** |
+
+**The lesson, again: price the RIGHT implementation.** Both estimates came from
+a gas-per-unit figure borrowed from the dashed echo ring, and both were roughly
+double. A borrowed constant is not a measurement, and two estimates that
+disagree by 60% are not a verdict -- yet one of them had already been recorded
+in this document as "DEAD ON GAS". See 10b, which is now WRONG on that point.
+
+### The totals, from today's worst case of 1,641,055 gas / 11,209 bytes
+
+| | Gas | Bytes |
+|---|---|---|
+| today | 1,641,055 | 11,209 |
+| + version 10 | 2,316,918 | 15,494 |
+| + digits | 2,225,763 | 14,569 |
+| **+ both** | **2,901,626** | **18,854** |
+
+**THE BYTE LIMIT IS NEVER THREATENED.** 18,854 against 20,000 with both changes.
+Bytes are what every viewer downloads, and they were the constraint that
+mattered most -- they fit.
+
+**The two changes help each other.** The digit band grows the canvas, which
+normally shrinks the heart; version 10's larger code block takes that space
+back. The code block is **48% of the picture with digits on version 5 and 58%
+with digits on version 10.**
+
+### The gas limit: 2,000,000 -> 3,000,000
+
+Raised deliberately, by the operator, on the measurements above.
+
+**It was never a protocol rule.** `tokenURI` is a READ -- nobody pays for it --
+and the real ceiling is what a node will execute for one `eth_call`, about 50M
+by default. The 2,000,000 was set on 2026-08-27 at roughly the Uniswap V3 line
+(1.98M) from a survey in which **Anonymice runs at 24M and Terraforms at 28M**,
+both live and working.
+
+What it bought was compatibility with unusually strict providers. The spec's own
+survey names the failure mode -- Nouns and Moonbirds could not be estimated on
+five public RPCs -- so the cost is real and unmeasurable, which is why the figure
+moves to 3M and no further. At 3M the piece spends an eighth of what Anonymice
+already does.
+
+**The byte limit does NOT move.** 20,000 stands.
+
+### Open
+
+- The digit band has not been drawn into the shipping renderer; only its cost
+  is measured. The vertical-step bug must not come back.
+- A `0` glyph carries more ink than a `1`, so a number full of zeros costs MORE
+  than an alternating one (584,708 against 501,542). Density still varies with
+  content, as it did for the dot version -- smaller in effect here, but the same
+  class of thing, and worth a look before it ships.
+- Whether the ring still needs a colour at all, now that it carries a number,
+  and if so whether the ink says WHICH Mark.
 
 ---
 

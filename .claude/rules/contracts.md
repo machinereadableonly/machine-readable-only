@@ -40,8 +40,17 @@ trap -- prefer clone/proxy (EIP-1167).
 
 ## The gas and byte budget
 
-Hard limits **2,000,000 gas / 20,000 bytes**; the 1M / 5 KB target is MISSED and
+Hard limits **3,000,000 gas / 20,000 bytes**; the 1M / 5 KB target is MISSED and
 must always be reported as missed.
+
+**THE GAS LIMIT WAS RAISED FROM 2,000,000 ON 2026-09-21, by the operator, on
+measurement.** It was never a protocol rule: `tokenURI` is a READ that nobody
+pays for, and a node will execute around 50M for one `eth_call`. The 2,000,000
+was set at roughly the Uniswap V3 line from a survey where Anonymice runs at
+24M and Terraforms at 28M, and what it bought was compatibility with strict
+providers -- real, unmeasurable, and the reason the new figure moves only to 3M.
+**THE BYTE LIMIT DID NOT MOVE**, because bytes are what every viewer downloads
+and 20,000 is never threatened. See `GasBudget.t.sol` for the full reasoning.
 
 **THERE IS NO SINGLE WORST CASE, and both worst cases are CHILDREN since Plan 7.**
 The dearest token and the largest token are DIFFERENT TOKENS, and pairing one's

@@ -303,6 +303,56 @@ contract GasProfileTest is Test {
         assertGt(gasTen, gasOne, "ten rings must cost more than one, or the views are the same token");
     }
 
+    /// @notice The worst case AFTER a token stops at 365 and rings cap at one.
+    ///
+    /// @dev The budget every finisher-Mark proposal is judged against. Today's
+    /// worst case is a child at the TEN-ring cap wearing every legal Mark;
+    /// under the 2026-09-20 decision no token ever reaches that, and the worst
+    /// a finisher can be is a whole child with its own single ring plus the
+    /// echo ring it was seeded with.
+    ///
+    /// This is the number that decides whether a PATTERNED ring is affordable
+    /// on every finisher, rather than on the single rarest token.
+    function test_theWorstCaseOnceRingsCapAtOne() public {
+        // Today: a child at the ring cap, every legal Mark.
+        TokenView memory old_ = _dearest();
+        old_.level = 365 * 10;
+        old_.streak = 400;
+        old_.echo = 3650;
+        old_.marks = (1 << 1) | (1 << 4) | (1 << 5) | (1 << 7) | (1 << 9);
+
+        // Under the new rule: whole, ONE own ring, plus the echo ring.
+        TokenView memory now_ = _dearest();
+        now_.level = 365;
+        now_.streak = 365;
+        now_.echo = 365;
+        now_.marks = (1 << 1) | (1 << 4) | (1 << 5) | (1 << 7) | (1 << 9);
+
+        uint256 g0 = gasleft();
+        string memory a = r.tokenURI(old_);
+        uint256 gasOld = g0 - gasleft();
+
+        g0 = gasleft();
+        string memory b = r.tokenURI(now_);
+        uint256 gasNow = g0 - gasleft();
+
+        console.log("TODAY  child at the ring cap, every legal Mark");
+        console.log("  gas  ", gasOld);
+        console.log("  bytes", bytes(a).length);
+        console.log("AFTER  whole child, one own ring + echo, every legal Mark");
+        console.log("  gas  ", gasNow);
+        console.log("  bytes", bytes(b).length);
+        console.log("");
+        console.log("HEADROOM under the 2,000,000 hard limit");
+        console.log("  today", gasOld < 2_000_000 ? 2_000_000 - gasOld : 0);
+        console.log("  after", gasNow < 2_000_000 ? 2_000_000 - gasNow : 0);
+        console.log("");
+        console.log("for scale: the DASHED echo ring costs 145,533 gas for 54 runs");
+        console.log("           a solid ring costs 3,705 for 4 runs");
+
+        assertLt(gasNow, gasOld, "capping the rings must be cheaper, or the views are wrong");
+    }
+
     /// @dev The only substitution a data URI actually requires of this svg:
     /// `#` starts a fragment and would truncate the image at the first colour.
     /// Deliberately simple -- it is here to price the work, not to ship.

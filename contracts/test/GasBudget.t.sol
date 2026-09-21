@@ -31,7 +31,32 @@ contract GasBudgetTest is Test {
     MROSpikeToken t;
     Renderer r;
 
-    uint256 constant GAS_LIMIT = 2_000_000;
+    /// @dev RAISED FROM 2,000,000 TO 3,000,000 on 2026-09-21, deliberately and
+    /// by the operator, after the old figure was measured rather than assumed.
+    ///
+    /// The 2,000,000 was set on 2026-08-27 at roughly the Uniswap V3 line
+    /// (1.98M), from a survey of on-chain NFTs: Loot 572k, OnChainMonkey 836k,
+    /// Anonymice 24M, Terraforms 28M. It was never a protocol rule. `tokenURI`
+    /// is a READ -- nobody pays it -- and the real ceiling is what a node will
+    /// execute for one eth_call, which is around 50M by default.
+    ///
+    /// What it bought was compatibility with unusually strict providers, and
+    /// the spec's own survey names the failure mode: Nouns and Moonbirds could
+    /// not be estimated on five public RPCs. That is a real cost and it is
+    /// unmeasurable, which is why the number moves deliberately and not far.
+    ///
+    /// What it cost was the artwork. Two changes the operator wanted were blocked by
+    /// it and by nothing else, and BOTH were measured at about half what the
+    /// estimates claimed:
+    ///
+    ///   a finer QR (version 10)   +675,863 gas  +4,285 bytes
+    ///   a border of real digits   +584,708 gas  +3,360 bytes
+    ///
+    /// Together they put the worst case near 2.9M -- an eighth of what
+    /// Anonymice already spends. THE BYTE LIMIT DOES NOT MOVE: at 20,000 it is
+    /// never threatened by either change (18,854 with both), and bytes are what
+    /// every viewer actually downloads.
+    uint256 constant GAS_LIMIT = 3_000_000;
     uint256 constant BYTE_LIMIT = 20_000;
     uint256 constant GAS_TARGET = 1_000_000;
     uint256 constant BYTE_TARGET = 5_000;
