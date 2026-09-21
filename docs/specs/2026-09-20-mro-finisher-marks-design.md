@@ -779,6 +779,58 @@ Until that sheet exists, the five looks are unchosen.
 
 ---
 
+## 10i. Every agent-facing surface, and what must change WHEN it ships
+
+Audited 2026-09-21. **Nothing was changed, and nothing should be.** Every
+surface is accurate about the piece as built; the finisher Marks are a draft.
+Advertising an unbuilt design is the failure already recorded for `/client.mjs`
+and `npx mro-agent`.
+
+**One claim is already on our side.** `llms.txt` line 40 tells agents "After a
+year the record is finished" -- more consistent with stopping at 365 than with
+the ten-ring design that actually ships today. No agent-facing copy promises
+multi-year ring accrual, so section 10f breaks no published promise.
+
+### A capped Mark will REFUSE TO START THE WARDEN
+
+`warden/src/mcp/ladder.mjs:109`:
+
+    if (m.supply !== Infinity) throw new Error(`mark ${id} is limited, and nothing is limited`);
+
+A boot-time assertion, failing closed, guarding the exact property this design
+reverses. **This is the first thing the build touches**, and finding it late
+would look like an unrelated production outage.
+
+### The checklist -- all of these move together or the suites go red
+
+| Surface | What changes | Pinned by |
+|---|---|---|
+| `contracts/src/Ladder.sol` | five entries, ids 11-15 | `Ladder.t.sol` hashes the WHOLE array with keccak; regenerate `tools/ladder-fixture.mjs` |
+| `warden/src/mcp/ladder.mjs` | the catalogue AND the line 109 assertion | `warden/test/ladder.test.mjs` |
+| `warden/public/llms.txt` | "Nothing is limited, nothing expires" (line 260) | the door and static tests |
+| `skills/.../SKILL.md` | the same sentence (line 243) | `tools/test/skill-doc.test.mjs` |
+| `docs/2026-09-01-mro-raw-protocol.md` | the ladder section | -- |
+| `skills/.../references/raw-protocol.md` | **BYTE-IDENTICAL COPY** of the above | `tools/test/skill-doc.test.mjs:103` |
+| `contracts/src/render/*` + `tools/render-token.mjs` | the ring surface, MAX_RINGS | `Renderer.t.sol` diffs the two languages byte for byte |
+
+**The raw-protocol pair is the trap.** Two byte-identical files, and the guard
+lives in `tools/` while the content lives in `docs/` and `skills/` -- which is
+exactly how a commit once left the tools suite red without noticing. **Fix it by
+RE-COPYING, never by hand-patching the copy**, or the drift moves instead of
+ending.
+
+### Order of work
+
+1. The boot assertion, or nothing starts.
+2. `Ladder.sol` plus the regenerated fixture, so the hash mirror agrees.
+3. The Warden catalogue and the reservation accounting (section 7).
+4. The renderer and its JS mirror.
+5. The copy -- llms.txt, SKILL.md, the raw protocol and its copy -- LAST, so no
+   document describes something that does not yet answer.
+6. Cold-read the new copy before any of it is served (section 10).
+
+---
+
 ## 11. Non-goals
 
 Stated so they are not re-litigated mid-build:

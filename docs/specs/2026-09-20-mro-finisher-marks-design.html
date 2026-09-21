@@ -960,6 +960,83 @@ same discipline the piece already applies to the two inks inside the code block,
 applied to a surface outside it.</p>
 <p>Until that sheet exists, the five looks are unchosen.</p>
 <hr>
+<h2>10i. Every agent-facing surface, and what must change WHEN it ships</h2>
+<p>Audited 2026-09-21. <strong>Nothing was changed, and nothing should be.</strong> Every
+surface is accurate about the piece as built; the finisher Marks are a draft.
+Advertising an unbuilt design is the failure already recorded for <code>/client.mjs</code>
+and <code>npx mro-agent</code>.</p>
+<p><strong>One claim is already on our side.</strong> <code>llms.txt</code> line 40 tells agents &quot;After a
+year the record is finished&quot; -- more consistent with stopping at 365 than with
+the ten-ring design that actually ships today. No agent-facing copy promises
+multi-year ring accrual, so section 10f breaks no published promise.</p>
+<h3>A capped Mark will REFUSE TO START THE WARDEN</h3>
+<p><code>warden/src/mcp/ladder.mjs:109</code>:</p>
+<pre><code>if (m.supply !== Infinity) throw new Error(`mark ${id} is limited, and nothing is limited`);
+</code></pre>
+<p>A boot-time assertion, failing closed, guarding the exact property this design
+reverses. <strong>This is the first thing the build touches</strong>, and finding it late
+would look like an unrelated production outage.</p>
+<h3>The checklist -- all of these move together or the suites go red</h3>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>What changes</th>
+<th>Pinned by</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>contracts/src/Ladder.sol</code></td>
+<td>five entries, ids 11-15</td>
+<td><code>Ladder.t.sol</code> hashes the WHOLE array with keccak; regenerate <code>tools/ladder-fixture.mjs</code></td>
+</tr>
+<tr>
+<td><code>warden/src/mcp/ladder.mjs</code></td>
+<td>the catalogue AND the line 109 assertion</td>
+<td><code>warden/test/ladder.test.mjs</code></td>
+</tr>
+<tr>
+<td><code>warden/public/llms.txt</code></td>
+<td>&quot;Nothing is limited, nothing expires&quot; (line 260)</td>
+<td>the door and static tests</td>
+</tr>
+<tr>
+<td><code>skills/.../SKILL.md</code></td>
+<td>the same sentence (line 243)</td>
+<td><code>tools/test/skill-doc.test.mjs</code></td>
+</tr>
+<tr>
+<td><code>docs/2026-09-01-mro-raw-protocol.md</code></td>
+<td>the ladder section</td>
+<td>--</td>
+</tr>
+<tr>
+<td><code>skills/.../references/raw-protocol.md</code></td>
+<td><strong>BYTE-IDENTICAL COPY</strong> of the above</td>
+<td><code>tools/test/skill-doc.test.mjs:103</code></td>
+</tr>
+<tr>
+<td><code>contracts/src/render/*</code> + <code>tools/render-token.mjs</code></td>
+<td>the ring surface, MAX_RINGS</td>
+<td><code>Renderer.t.sol</code> diffs the two languages byte for byte</td>
+</tr>
+</tbody></table>
+<p><strong>The raw-protocol pair is the trap.</strong> Two byte-identical files, and the guard
+lives in <code>tools/</code> while the content lives in <code>docs/</code> and <code>skills/</code> -- which is
+exactly how a commit once left the tools suite red without noticing. <strong>Fix it by
+RE-COPYING, never by hand-patching the copy</strong>, or the drift moves instead of
+ending.</p>
+<h3>Order of work</h3>
+<ol>
+<li>The boot assertion, or nothing starts.</li>
+<li><code>Ladder.sol</code> plus the regenerated fixture, so the hash mirror agrees.</li>
+<li>The Warden catalogue and the reservation accounting (section 7).</li>
+<li>The renderer and its JS mirror.</li>
+<li>The copy -- llms.txt, SKILL.md, the raw protocol and its copy -- LAST, so no
+document describes something that does not yet answer.</li>
+<li>Cold-read the new copy before any of it is served (section 10).</li>
+</ol>
+<hr>
 <h2>11. Non-goals</h2>
 <p>Stated so they are not re-litigated mid-build:</p>
 <ul>
