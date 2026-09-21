@@ -98,6 +98,45 @@ return visits, so the artwork is the agent's own history of coming back.
   project-isolation hook compares write targets against it. After a `cd`
   into a subdirectory, `cd` back to the repo root before editing root files.
 
+## What may go public -- THIS REPOSITORY IS PUBLIC
+
+Added 2026-09-21, after a session scratchpad path reached the public history.
+
+**Never in a tracked file, in any form:**
+
+- **An absolute local path.** Both shapes: `/home/<user>/...` AND the mangled
+  form a scratchpad directory uses, `-home-<user>-<project>`. The second
+  carries the username just as plainly and is the one that got through.
+- **A session or task id**, or any `claude.ai/code` link.
+- **A real environment value.** The `.env.example` schema only.
+- **AI attribution** in a commit message, a PR body, or file content.
+- **A personal identifier.** See `~/.claude/rules/identifiers.md`.
+
+**Where exploratory output goes:** `tools/out/`, which is gitignored. A tool may
+be committed; the paths inside it may not. Read the directory from an
+environment variable with a relative default -- `process.env.MRO_SHEET_OUT ??
+"out"` -- never a literal.
+
+**Two guards, deliberately in different places, and BOTH run automatically from
+`.githooks/pre-push`:**
+
+| | Holds | Lives |
+|---|---|---|
+| `tools/prepublish-check.mjs` | PATTERNS only | in this repo, published |
+| `~/scripts/id-scan.mjs` | the real identifier VALUES | outside every repo |
+
+The second reads `~/.claude/identifiers.local.txt` and prints only indices and
+counts. **A guard holding personal values can never itself be published**, which
+is why the split exists rather than one combined checker.
+
+**Run `bash scripts/install-hooks.sh` once per clone.** `core.hooksPath` is
+local config and does not travel; without it the hook sits there doing nothing.
+
+`--no-verify` bypasses the hook on purpose -- a gate nobody can override gets
+routed around. Overriding is a decision made out loud. **A finding is not always
+a leak:** a commit that DELETES a string still shows it in its diff, so check
+`git grep <string> origin/main` before treating it as new.
+
 ## Key Decisions (locked 2026-08-27 unless dated otherwise)
 
 - **Domain:** `machinereadableonly.com`, REGISTERED 2026-09-03 at Cloudflare,

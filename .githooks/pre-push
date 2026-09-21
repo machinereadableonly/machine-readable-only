@@ -1,0 +1,81 @@
+#!/bin/bash
+# Refuse a push that would publish a personal identifier or an AI artifact.
+#
+# WHY THIS EXISTS. On 2026-09-20 a session scratchpad path -- which carries the
+# operator's username in mangled form -- reached this PUBLIC repository. Two
+# guards existed and neither stopped it: `tools/prepublish-check.mjs` matched
+# only the literal `/home/<user>/` shape, and the identifier scanner that did
+# catch it was rebuilt from memory each session. A guard that depends on
+# somebody remembering to run it is not a guard.
+#
+# This runs on every push from this clone, whoever makes it -- Claude, or the
+# operator at the `!` prompt.
+#
+# TWO HALVES, deliberately in different places:
+#
+#   tools/prepublish-check.mjs   PATTERNS only. Lives in the repo, is public,
+#                                and must never contain a real identifier.
+#   ~/scripts/id-scan.mjs        The real VALUES, read from
+#                                ~/.claude/identifiers.local.txt. Lives outside
+#                                every repository for that reason, and prints
+#                                only indices and counts, never a value.
+#
+# Wired up with:  git config core.hooksPath .githooks
+# That is local config and does NOT travel with a clone -- re-run it after
+# cloning. `scripts/install-hooks.sh` does it for you.
+#
+# `--no-verify` bypasses this, and that is deliberate: a gate nobody can
+# override is a gate people route around. Overriding it is a decision to be
+# made out loud, not a habit.
+set -u
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root" || exit 1
+fail=0
+
+# The exit code is the whole signal, so nothing here is piped into a formatter.
+# A pipeline's status is the LAST command's, which let a real finding through
+# on 2026-09-09.
+echo "pre-push: pattern guard (tools/prepublish-check.mjs)"
+if command -v node >/dev/null 2>&1; then
+  node tools/prepublish-check.mjs
+  if [ $? -ne 0 ]; then
+    echo "pre-push: REFUSED -- the pattern guard found something. Read it above."
+    fail=1
+  fi
+else
+  echo "pre-push: REFUSED -- node is not on PATH, so the guard could not run."
+  echo "          A guard that silently does not run is worse than no guard."
+  fail=1
+fi
+
+# The identity scanner is machine-level and may legitimately be absent on
+# another machine. Absent is reported, never skipped silently.
+scanner="$HOME/scripts/id-scan.mjs"
+echo "pre-push: identity scan ($scanner)"
+if [ -f "$scanner" ]; then
+  # Compare against the upstream this push is actually updating, not a
+  # hardcoded branch.
+  upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)"
+  range="${upstream:-origin/main}..HEAD"
+  node "$scanner" "$range"
+  if [ $? -ne 0 ]; then
+    echo "pre-push: REFUSED -- the identity scan found something."
+    echo "          A finding is not always a leak: a commit that DELETES a"
+    echo "          string still shows it in its diff. Check with"
+    echo "          'git grep <string> $upstream' before overriding."
+    fail=1
+  fi
+else
+  echo "pre-push: WARNING -- the identity scanner is not installed on this"
+  echo "          machine, so personal VALUES were not checked. Patterns were."
+fi
+
+if [ "$fail" -ne 0 ]; then
+  echo
+  echo "pre-push: nothing was pushed."
+  exit 1
+fi
+
+echo "pre-push: clean"
+exit 0

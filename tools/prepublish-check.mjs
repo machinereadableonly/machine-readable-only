@@ -84,6 +84,35 @@ const RULES = [
     // in tracked content either.
     re: /co-authored-by:.*(anthropic|claude)|generated with \[?claude/i,
   },
+  {
+    name: "session scratchpad path",
+    // ADDED 2026-09-21, after one reached the public repository. A scratchpad
+    // path is <scratchpad-path-removed><uid>/-home-<user>-<project>/<session>/scratchpad --
+    // it carries the username MANGLED, so the "absolute home path" rule above
+    // cannot see it. Two separate shapes, two separate rules.
+    //
+    // Nothing tracked should ever name one: exploratory output belongs in the
+    // gitignored tools/out, and a tool that writes there reads the directory
+    // from MRO_SHEET_OUT or defaults to "out".
+    re: /\/tmp\/claude-[A-Za-z0-9._-]*\//,
+  },
+  {
+    name: "mangled home path",
+    // The same username in the form a path-mangled directory uses, wherever it
+    // appears -- not only under /tmp.
+    re: /-home-[a-z0-9_]+-[a-z0-9-]+/i,
+  },
+  {
+    name: "session or task id",
+    // A bare uuid is fine; one sitting next to a session or scratchpad word is
+    // a transcript artifact that identifies a machine and a moment.
+    re: /(?:session|task|scratchpad)[^\n]{0,40}[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+  },
+  {
+    name: "AI session link",
+    // Distinct from the attribution trailer: a link to a conversation.
+    re: /claude\.ai\/(?:code|chat)\/|noreply@anthropic\.com/i,
+  },
 ];
 
 const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
