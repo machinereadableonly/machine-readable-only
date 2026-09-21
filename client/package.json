@@ -10,7 +10,7 @@
     "directory": "client"
   },
   "homepage": "https://machinereadableonly.com/llms.txt",
-  "bin": { "mro-agent": "./src/cli.mjs" },
+  "bin": { "mro-agent": "src/cli.mjs" },
   "exports": {
     ".": "./src/index.mjs",
     "./keys": "./src/keys.mjs",

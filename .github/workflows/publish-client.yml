@@ -1,0 +1,108 @@
+# Publishes the reference client, mro-agent, to npm.
+#
+# WHY THIS EXISTS: the client is the product -- built-in MCP clients cannot
+# sign, so `npx mro-agent` is how an agent actually arrives. Publishing it from
+# CI rather than a laptop does two things. It keeps a personal handle off the
+# package, which is the reason an npm organisation was considered and then
+# dropped as unnecessary. And it produces a provenance attestation, which is
+# npm's cryptographic record of which workflow, in which repository, at which
+# commit, built the tarball an agent is about to run.
+#
+# HOW IT AUTHENTICATES: npm trusted publishing, over OIDC. There is no npm
+# token anywhere -- not in the repository, not in Actions secrets, not on the
+# runner. GitHub mints a short-lived credential scoped to this one workflow,
+# and npm accepts it only if the package's Trusted Publisher settings name this
+# repository and this filename. Renaming this file breaks publishing until the
+# setting on npmjs.com is updated to match.
+#
+# HOW IT RUNS: manually, and it dry-runs by default. A real publish takes a
+# deliberate second action -- untick the dry-run box. Nothing about pushing a
+# commit, merging, or tagging can publish this package.
+
+name: publish-client
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: build and check, publish nothing. Untick to publish for real."
+        type: boolean
+        default: true
+
+# id-token: write is what lets GitHub mint the OIDC credential npm exchanges
+# for publish rights. Without it the publish step fails as unauthenticated.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Never publish from a fork. A fork's OIDC claims would not match the
+    # trusted publisher anyway, but failing here says why in one line.
+    if: github.repository == 'machinereadableonly/machine-readable-only'
+
+    steps:
+      - name: Check out the full history
+        uses: actions/checkout@v7
+        with:
+          # The identity guard reads `git log --all`, so a shallow clone would
+          # let it pass without having seen most of the history.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          # npm's own guidance for release builds: a restored cache can put a
+          # stale dependency into the tarball that no commit accounts for.
+          package-manager-cache: false
+
+      - name: Use an npm new enough to authenticate over OIDC
+        # Trusted publishing needs npm 11.5.1 or later. The runner's bundled
+        # npm is usually newer, but pinning the floor here means a runner image
+        # change cannot quietly break publishing.
+        run: |
+          npm install -g npm@latest
+          node --version
+          npm --version
+
+      - name: Check the tracked tree for identity leaks
+        # The same guard the pre-push hook runs. A published tarball is
+        # permanent in a way a pushed commit is not.
+        run: node tools/prepublish-check.mjs
+
+      - name: Install the client's dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Run the client's tests
+        working-directory: client
+        run: npm test
+
+      - name: Refuse a version that is already published
+        working-directory: client
+        # npm would reject a duplicate anyway, but only after the tarball had
+        # been built and uploaded. This says so in one readable line instead.
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "About to publish mro-agent@${version}"
+          if npm view "mro-agent@${version}" version > /dev/null 2>&1; then
+            echo "mro-agent@${version} is already on the registry."
+            echo "Bump the version in client/package.json first."
+            exit 1
+          fi
+          echo "Version ${version} is free."
+
+      - name: Publish (dry run -- nothing leaves the runner)
+        if: ${{ inputs.dry_run }}
+        working-directory: client
+        run: npm publish --dry-run
+
+      - name: Publish to npm
+        if: ${{ !inputs.dry_run }}
+        working-directory: client
+        # No --provenance flag: trusted publishing attaches the attestation on
+        # its own, and passing the flag with no token is an error.
+        run: npm publish

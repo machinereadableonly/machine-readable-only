@@ -31,9 +31,9 @@ an invitation.
 
 ## PolyForm Noncommercial 1.0.0 -- the implementation
 
-`tools`, the rest of `warden`, and the remaining documents: the QR solver and
-the heart pipeline, the server implementation behind the door, the specs, plans
-and reviews. Read them, learn from them, run them for study or a hobby.
+`tools`, `.github`, the rest of `warden`, and the remaining documents: the QR
+solver and the heart pipeline, the server implementation behind the door, the
+release workflow that publishes the client, the specs, plans and reviews. Read them, learn from them, run them for study or a hobby.
 Standing up a commercial copy needs permission.
 
 `contracts/lib` is vendored third-party code (forge-std, OpenZeppelin, Solady)
