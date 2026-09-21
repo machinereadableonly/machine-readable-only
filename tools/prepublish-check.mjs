@@ -87,9 +87,14 @@ const RULES = [
   {
     name: "session scratchpad path",
     // ADDED 2026-09-21, after one reached the public repository. A scratchpad
-    // path is <scratchpad-path-removed><uid>/-home-<user>-<project>/<session>/scratchpad --
-    // it carries the username MANGLED, so the "absolute home path" rule above
-    // cannot see it. Two separate shapes, two separate rules.
+    // path lives under the per-user claude directory in tmp and continues
+    // `-home-<user>-<project>/<session>/scratchpad`, so it carries the
+    // username MANGLED and the "absolute home path" rule above cannot see it.
+    // Two separate shapes, two separate rules.
+    //
+    // The shape is DESCRIBED rather than written out: a literal example here
+    // would be matched and mangled by the history scrub that removes real
+    // ones, which is exactly what happened to the first draft of this comment.
     //
     // Nothing tracked should ever name one: exploratory output belongs in the
     // gitignored tools/out, and a tool that writes there reads the directory
