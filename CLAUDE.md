@@ -237,8 +237,10 @@ a leak:** a commit that DELETES a string still shows it in its diff, so check
   reported as missed. **THE ONE REAL EXTERNAL CEILING IS 30,000 BYTES** --
   Alchemy's documented content-length cap, and Alchemy is the only
   third-party metadata consumer this piece has ever had working. Whether it
-  applies to a `data:` URI is DOCUMENTED BUT UNTESTED: **run
-  `tools/alchemy-nft.mjs` against a real token before the mainnet mint.** **Do not quote a figure from memory -- run
+  applies to a `data:` URI is **TESTED AND CLOSED (2026-09-22)**: a throwaway
+  spike on Sepolia served a 22,492-character tokenURI and Alchemy ingested it,
+  rasterised it, and the QR decoded from ten of their renders. See
+  `.claude/rules/contracts.md`. **Do not quote a figure from memory -- run
   `GasBudget.t.sol` and read it.** See `.claude/rules/contracts.md` and the
   `gas-budget` memory.
 - **EVERY QR BITMAP MUST BE RE-SOLVED against `machinereadableonly.com` before

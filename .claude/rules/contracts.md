@@ -56,11 +56,25 @@ design question.
 ever had working -- Basescan ingests none on Base Sepolia, OpenSea is untested.
 24,000 fits version 10 plus the digit band and leaves 6,000 under that ceiling.
 
-**UNTESTED, AND IT MUST BE SAID THAT WAY.** Alchemy's sentence sits among
-reasons an HTTP-hosted metadata URL fails to FETCH; this tokenURI is a data URI
-and nothing is fetched. **GATE BEFORE THE MAINNET MINT: run
-`tools/alchemy-nft.mjs` against a real Sepolia token and confirm a ~22,000-byte
-data URI ingests.** Never state the cap applies, or does not, until that runs.
+**TESTED AND CLOSED 2026-09-22.** Alchemy's sentence sits among reasons an
+HTTP-hosted metadata URL fails to FETCH, and this tokenURI is a data URI, so it
+was documented-but-untested until this ran. It now has:
+
+A throwaway `MROSpikeToken` on Base Sepolia carrying the real byte worst case
+-- a child at the ring cap, every Mark, and a finisher's digit band -- served a
+**22,492-character tokenURI** with a **21,594-byte SVG**. Alchemy parsed it,
+took all sixteen attributes, flattened the SVG on its own CDN, and **the QR
+decoded from TEN of their renders, 250px to 1600px, every one to its own url.**
+
+The spike was used because the worst case needs an ORDINAL and nothing writes
+those bits until the finisher Marks ship; `setMarks` takes an arbitrary word.
+Re-run with `tools/alchemy-byte-check.mjs <contract> <id>` and
+`tools/third-party-check.mjs <contract> --ids <id> --domain <domain>`.
+
+**What it does NOT show:** 24,000. It shows 22,492, which is the real worst case
+for THIS token -- and a bitmap encodes its own url, so the worst case varies by
+token id. The Foundry figure of 23,046 is the same state on the `example.com`
+bitmap; the real domain came out 554 bytes smaller.
 
 Gas is not the constraint: Base's own guidance puts the practical `tokenURI`
 ceiling near 300M read gas, and this token spends 2.87M.

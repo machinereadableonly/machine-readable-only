@@ -41,11 +41,46 @@ if (!rpc || !rpc.includes("alchemy")) {
 }
 
 const base = nftApiBase(rpc);
-// refreshCache, so this reads what Alchemy makes of the token NOW rather than
-// whatever it cached before the redeploy.
-const res = await getNftMetadata({ base, contract, tokenId, refreshCache: true });
+
+// TWO DEFECTS FIXED 2026-09-22, both of which reported NOT INGESTED against a
+// token Alchemy had ingested perfectly.
+//
+// 1. IT ASKED FOR A REFRESH AND THEN JUDGED THE ANSWER IMMEDIATELY. Media
+//    processing is ASYNCHRONOUS: refreshCache restarts it, and the very next
+//    response carries the metadata with the media fields empty, because the CDN
+//    has not finished. Measured on the byte-gate token -- one call with
+//    refreshCache reported no contentType, no size and no pngUrl; a plain read
+//    a minute later reported image/svg+xml, 21,594 bytes and both CDN urls. So
+//    the read comes FIRST, and a refresh is a fallback that is then POLLED.
+//
+// 2. IT ASSERTED AN EXACT NAME. `Renderer._suffix` appends the token's state --
+//    " (Whole)" and so on -- so the exact match failed for every token past day
+//    one. The suffix is itself proof the document was parsed; a PREFIX match
+//    keeps the assertion (Basescan's synthesised title could never produce the
+//    `%23`) without failing on a token that has lived.
+//
+// The two questions are now reported SEPARATELY, because they have different
+// answers and different consequences: a size refusal would show as metadata
+// parsed and media absent, which the old single verdict could not express.
+const WAIT_MS = 15_000;
+const TRIES = 8;
+
+const read = () => getNftMetadata({ base, contract, tokenId, refreshCache: false });
+const mediaDone = m =>
+  m?.image?.contentType === "image/svg+xml" && typeof m?.image?.size === "number" && m.image.size > 0;
 
 console.log(`contract ${contract} token ${tokenId}`);
+
+let res = await read();
+if (!mediaDone(res)) {
+  console.log("no media yet -- forcing a refresh and polling, because the CDN is asynchronous");
+  await getNftMetadata({ base, contract, tokenId, refreshCache: true });
+  for (let i = 0; i < TRIES && !mediaDone(res); i++) {
+    await new Promise(r => setTimeout(r, WAIT_MS));
+    res = await read();
+    console.log(`  try ${i + 1}/${TRIES}: contentType=${res?.image?.contentType ?? "none"} size=${res?.image?.size ?? "none"}`);
+  }
+}
 
 // The response IS the metadata object -- getJson returns Alchemy's body, not a
 // wrapper. The first version of this read res.json and res.httpStatus and
@@ -71,21 +106,38 @@ console.log(`attrs    ${Array.isArray(attrs) ? attrs.length : "none"}`);
 // none was ingested; the same trap applies to any field a consumer could have
 // synthesised without reading the document. The hash is written %23 by the
 // renderer, so that is what a parser that actually read it reports.
+// A PREFIX, not an exact match: Renderer._suffix appends the token's state.
+// The `%23` is what makes this assertion mean something -- a consumer that
+// synthesised a title from the contract's name() could never produce it.
 const NAME = "Machine Readable Only %231";
-const ingested = meta.name === NAME
-  && image.contentType === "image/svg+xml"
-  && typeof image.size === "number" && image.size > 0;
+const parsed = typeof meta.name === "string" && meta.name.startsWith(NAME)
+  && Array.isArray(attrs) && attrs.length > 0;
+const rasterised = mediaDone(meta);
 
-if (ingested) {
-  console.log(`\nINGESTED. A third-party parser read this tokenURI, extracted a`);
-  console.log(`${image.size}-byte SVG from it and rasterised it on its own CDN.`);
+console.log("");
+console.log(`metadata  ${parsed ? "PARSED" : "NOT PARSED"} -- name read from the JSON, ${Array.isArray(attrs) ? attrs.length : 0} attributes`);
+console.log(`media     ${rasterised ? `RASTERISED -- ${image.size}-byte SVG flattened on their CDN` : "ABSENT"}`);
+
+if (parsed && rasterised) {
+  console.log(`\nINGESTED at this size. A third-party parser read this tokenURI,`);
+  console.log(`extracted a ${image.size}-byte SVG from it and rasterised it itself.`);
   console.log(`\nWHAT THIS DOES AND DOES NOT SHOW. It shows ingestion at THIS`);
-  console.log(`token's size. It does not exercise the 24,000-byte limit, nor the`);
-  console.log(`worst case a maximal-Mark child reaches. Read the tokenURI length`);
-  console.log(`alongside this number before calling the byte question settled.`);
+  console.log(`token's size, and says nothing about a larger one. Read the`);
+  console.log(`tokenURI length alongside it, and run tools/third-party-check.mjs`);
+  console.log(`to ask the harder question -- whether the QR still decodes from`);
+  console.log(`THEIR rasters rather than ours.`);
   process.exit(0);
 }
+
+if (parsed && !rasterised) {
+  console.log(`\nMETADATA INGESTED, MEDIA NOT. This is the shape a SIZE refusal`);
+  console.log(`would take, and it is also the shape of a CDN that is merely slow.`);
+  console.log(`The poll above ran ${TRIES} times over ${(TRIES * WAIT_MS) / 1000}s, so slowness is`);
+  console.log(`less likely than it looks -- but re-run before recording a refusal.`);
+  process.exit(1);
+}
+
 console.log("\nNOT INGESTED: the metadata came back empty or errored.");
 console.log("Before recording that as a size refusal, check the SHAPE of the");
-console.log("response above -- this probe has been wrong about that once.");
+console.log("response above -- this probe has been wrong about that twice.");
 process.exit(1);
