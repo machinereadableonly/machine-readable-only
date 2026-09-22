@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Finisher's Digit Band -- Implementation Plan</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>The Finisher&#39;s Digit Band -- Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+(recommended) or superpowers:executing-plans to implement this plan task-by-task.
+Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>After completing any operator-only step, tell Claude so it can update memory
+immediately.</strong> There is exactly one such step, Task 6, and it is the last.</p>
+<p><strong>Goal:</strong> Draw the finisher&#39;s ordinal round the border of a finished token in
+actual 1s and 0s -- 3x3 cell glyphs, all four edges, centred, upright -- in the
+shipping Solidity renderer and its JavaScript mirror, byte-identical to each
+other and byte-identical to today for every token that is not a finisher.</p>
+<p><strong>Architecture:</strong> A new pure library <code>DigitBand.sol</code> emits the band as one
+<code>&lt;path&gt;</code> in QR-module units. The <code>Renderer</code> grows the canvas by a band at each
+edge and shifts the whole existing picture inward by that band; nothing inside
+the picture changes. The band is drawn if and only if the ordinal is non-zero,
+so every token that exists today renders exactly the bytes it renders now --
+that byte-identity is the control the measurement rests on.</p>
+<p><strong>Tech Stack:</strong> Solidity 0.8.30 (Foundry, via_ir), Node 24 (the JS reference
+renderer and its fixture generator).</p>
+<p><strong>Spec:</strong> <code>docs/specs/2026-09-20-mro-finisher-marks-design.md</code>, sections 10j and
+10k. 10k is the settled design and supersedes 10j wherever they differ (10j says
+3x5 glyphs top and bottom; 10k says 3x3 on all four edges).</p>
+<hr>
+<h2>Why this exists, and what it unblocks</h2>
+<p>The artwork&#39;s whole claim is that a token is the agent&#39;s own record of coming
+back. Section 10f settled what 365 days is FOR: a token finishes. 10k settled
+what a finished one looks like, from rendered sheets the operator judged: the
+border carries the finisher&#39;s own number, written as digits a machine reads as a
+number and a human reads as writing.</p>
+<p><strong>It must land before the mainnet mint of token #1, or not at all.</strong> Not for a
+technical reason -- the Renderer is swappable -- but because <code>llms.txt</code> promises
+agents &quot;nothing is limited&quot;, and the day token 1 exists that becomes a promise to
+a real holder. The digit band itself breaks no promise; it is the first piece of
+the finisher design, and the finisher design is what that promise has to be
+reconciled with.</p>
+<p><strong>It was blocked on bytes until today and is not any more.</strong> Measured just now
+on the shipping contract:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>measured</th>
+<th>limit</th>
+<th>headroom</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>dearest token, fresh call</td>
+<td>2,867,756 gas</td>
+<td>4,000,000</td>
+<td>1,132,244</td>
+</tr>
+<tr>
+<td>largest token</td>
+<td>18,246 bytes</td>
+<td>24,000</td>
+<td>5,754</td>
+</tr>
+</tbody></table>
+<p>The band was priced at +584,708 gas / +3,360 bytes -- but that was a 3x5 glyph
+on two edges, which is NOT the settled design. <strong>This plan measures the settled
+one.</strong> Task 4 exists for exactly that and it may fail; if it does, the plan stops
+there rather than shipping something over budget.</p>
+<h2>What this deliberately does NOT build</h2>
+<p>The finisher Marks themselves (ids 11-15), <code>_finishersSoFar</code>, the claim path,
+the Warden&#39;s cap accounting and the copy changes are all out of scope. Section
+10i orders that work and puts the renderer fourth. <strong>This plan builds only the
+fourth item, ahead of the others, and that is safe because nothing can set a
+non-zero ordinal yet.</strong> No agent-facing surface changes, so nothing advertises an
+unbuilt design.</p>
+<p>Section 10f (a token stops at 365 and keeps one ring) is also out of scope. That
+is the conservative choice: today a whole child can carry ten rings, which is a
+BIGGER canvas than a 10f-finished token will ever have, so measuring the band
+against today&#39;s worst cases measures a case strictly worse than the one that
+will ship.</p>
+<h2>A spec conflict to be aware of before writing the ordinal read</h2>
+<p><strong>Section 5 is the authority: the ordinal lives at bits 64-95 of <code>_marks</code>.</strong>
+Section 8&#39;s table still says bits 32-63, which section 5 explicitly corrects --
+bits 32-63 hold the run an earned Iris was taken at, and writing an ordinal there
+would silently corrupt it. Use 64-95. Do not &quot;fix&quot; section 5 to match the table.</p>
+<hr>
+<h2>Global Constraints</h2>
+<ul>
+<li><strong>Plain ASCII only</strong> in every file this plan touches -- docs, comments, code.
+No em dashes, smart quotes, arrows or emoji.</li>
+<li><strong>Foundry needs <code>export PATH=$HOME/.foundry/bin:$PATH</code>; Node needs
+<code>source ~/.nvm/nvm.sh</code>.</strong> Non-interactive shells have neither on PATH.</li>
+<li><strong>All four suites green before any commit:</strong> <code>cd contracts &amp;&amp; forge test</code>, and
+<code>npm test</code> in each of <code>tools/</code>, <code>warden/</code> and <code>client/</code>.</li>
+<li><strong>Never pipe a gate into anything.</strong> A pipeline&#39;s exit status is the last
+command&#39;s. Run the suite, read its exit code, then commit.</li>
+<li><strong>Use <code>/bin/grep</code>, never bare <code>grep</code>.</strong></li>
+<li><strong>Any sheet render or bulk decode goes through <code>~/scripts/safe-build.sh</code>.</strong>
+Rasterising SVGs in bulk is the exact shape that took the box to 6.28 GB once.</li>
+<li><strong>Sheet output goes to <code>tools/out/</code>, which is gitignored</strong>, read from
+<code>process.env.MRO_SHEET_OUT ?? &quot;out&quot;</code>. Never a literal absolute path: this
+repository is public.</li>
+<li><strong>The two renderers must agree byte for byte.</strong> <code>tools/render-token.mjs</code> is the
+JS reference; <code>tools/render-fixture.mjs</code> hashes its output into
+<code>contracts/test/RenderFixture.sol</code>; <code>RenderMatrix.t.sol</code> asserts the Solidity
+renderer produces the same keccak. A change to one language that is not made in
+the other fails there, and that is the point.</li>
+<li><strong>Never quote a gas or byte figure from memory.</strong> Run the test and read it.</li>
+</ul>
+<h2>The settled geometry, in one place</h2>
+<p>Every constant below comes from the approved sheet
+(<code>tools/finisher-combined-sheet.mjs</code>, option A/B/C, <code>upright: true</code>) and from
+10k. Tasks refer back here rather than restating it.</p>
+<pre><code>GW = GH = 3            a glyph is three cells square
+STEP = 4               three cells and one of space
+BITS = 16              the ordinal is written as 16 binary digits
+glyph 0 = 111 101 111
+glyph 1 = 110 010 111  the flag and the foot: a plain bar read as a
+                       dotted rule, not as writing
+
+span    = BITS * STEP - (STEP - GW)   = 63 modules
+                       one gap short of BITS*STEP, because the last digit
+                       needs no trailing space -- centring on the true span
+                       is what puts equal margins at both ends of every edge
+
+A GLYPH CELL IS ONE QR MODULE (9 units), NOT A FRAME CELL (13 units).
+This is what makes the picture the one the operator approved: at module size
+the code block is about 60% of the picture, which is the figure 10k records.
+
+bandUnits(canvasCells) = the smallest b in [36, 44] with
+                         (canvasCells * 13 + 2 * b) % 9 == 0
+canvasUnits            = canvasCells * 13 + 2 * bandUnits
+canvasModules          = canvasUnits / 9
+pad                    = (canvasModules - span) / 2
+last                   = canvasModules - GW
+
+Four edges, UPRIGHT, digit i of the ordinal at:
+  top     (pad + i * STEP, 0)
+  right   (last,           pad + i * STEP)
+  bottom  (pad + i * STEP, last)
+  left    (0,              pad + i * STEP)
+</code></pre>
+<p><strong>Why the band absorbs a remainder.</strong> The band is module-sized but the canvas is
+measured in frame cells of 13 units, and 13 does not divide 9. Left alone the
+band would put the digits on fractional module coordinates, and PathWriter
+composes each run in a single 32-byte word with no slack -- fractions would need
+a decimal point that the format cannot carry. Letting the band grow by up to 8
+units (at most 0.9 of a module, invisible) makes the canvas an exact number of
+modules, so the whole band draws in one <code>&lt;g transform=&quot;scale(9)&quot;&gt;</code> group with
+small integer coordinates.</p>
+<p><strong><code>pad</code> is always an exact integer, and here is why it cannot stop being one.</strong>
+<code>canvas(rings) = 45 + 2 * (THICK + GAP + ringSpan)</code> is odd for every ring count.
+An odd cell count times 13 plus an even <code>2 * bandUnits</code> is odd, so <code>canvasUnits</code>
+is odd; an odd multiple of 9 divided by 9 is odd, so <code>canvasModules</code> is odd; and
+odd minus 63 is even. Task 1 asserts this over every legal ring count rather than
+trusting the argument.</p>
+<p><strong>Worked example, one ring (the common case):</strong> canvasCells 53, canvasUnits
+53 * 13 = 689, bandUnits 38, canvasUnits 765, canvasModules 85, pad 11, last 82.</p>
+<hr>
+<h2>File Structure</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>contracts/src/render/DigitBand.sol</code></td>
+<td>CREATE. The glyph bitmaps, the band geometry, and the band as one path. Pure, no knowledge of tokens.</td>
+</tr>
+<tr>
+<td><code>contracts/src/render/MarkRenderer.sol</code></td>
+<td>MODIFY. <code>ordinal(marks)</code> -- the only reader of the <code>_marks</code> packing, which is where every other field of that word is read.</td>
+</tr>
+<tr>
+<td><code>contracts/src/render/Renderer.sol</code></td>
+<td>MODIFY. Grow the canvas, shift the picture in, emit the band. Five small edits, each reducing to today&#39;s expression when the band is zero.</td>
+</tr>
+<tr>
+<td><code>contracts/test/DigitBand.t.sol</code></td>
+<td>CREATE. Geometry invariants and the glyph bitmaps.</td>
+</tr>
+<tr>
+<td><code>contracts/test/DigitBandRender.t.sol</code></td>
+<td>CREATE. The band through the whole renderer: byte-identity at ordinal 0, canvas growth, decode.</td>
+</tr>
+<tr>
+<td><code>contracts/test/GasBudget.t.sol</code></td>
+<td>MODIFY. Banded worst cases, both headrooms asserted.</td>
+</tr>
+<tr>
+<td><code>tools/render-token.mjs</code></td>
+<td>MODIFY. The same band in the JS reference.</td>
+</tr>
+<tr>
+<td><code>tools/state-matrix.mjs</code></td>
+<td>MODIFY. Banded cases in the render matrix.</td>
+</tr>
+<tr>
+<td><code>tools/render-fixture.mjs</code></td>
+<td>MODIFY. Carry <code>ordinal</code> into the packed marks word.</td>
+</tr>
+<tr>
+<td><code>contracts/test/RenderFixture.sol</code></td>
+<td>REGENERATE. Never hand-edit.</td>
+</tr>
+<tr>
+<td><code>tools/finisher-band-sheet.mjs</code></td>
+<td>CREATE. The sheet the operator judges, drawn from the SHIPPING geometry rather than an approximation.</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Task 1: The band library and its geometry</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>contracts/src/render/DigitBand.sol</code></li>
+<li>Test: <code>contracts/test/DigitBand.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>PathWriter.Buffer</code>, <code>PathWriter.create</code>, <code>PathWriter.writeRow</code>,
+<code>PathWriter.seal</code> from <code>contracts/src/render/PathWriter.sol</code>;
+<code>FrameGeometry.CELL_UNITS</code> (13) and <code>FrameGeometry.MODULE_UNITS</code> (9).</p>
+</li>
+<li><p>Produces, all <code>internal pure</code> on <code>library DigitBand</code>:</p>
+<ul>
+<li><code>bandUnits(uint256 canvasCells) returns (uint256)</code></li>
+<li><code>canvasUnits(uint256 canvasCells) returns (uint256)</code></li>
+<li><code>path(uint32 ordinal, uint256 canvasCells, string memory fill) returns (string memory)</code>
+-- the empty string when <code>ordinal == 0</code>.</li>
+</ul>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing geometry test</strong></p>
+</li>
+</ul>
+<p>Create <code>contracts/test/DigitBand.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test, console} from &quot;forge-std/Test.sol&quot;;
+import {DigitBand} from &quot;../src/render/DigitBand.sol&quot;;
+import {FrameRenderer} from &quot;../src/render/FrameRenderer.sol&quot;;
+import {FrameGeometry} from &quot;../src/render/FrameGeometry.sol&quot;;
+
+contract DigitBandTest is Test {
+    /// The band exists to make the canvas an exact number of QR modules, so
+    /// every digit sits on an integer coordinate inside one scaled group.
+    /// A fraction here would need a decimal point, and PathWriter&#39;s per-run
+    /// word has no room for one.
+    function test_everyLegalCanvasBecomesAWholeNumberOfModules() public pure {
+        for (uint256 r; r &lt;= FrameRenderer.MAX_RINGS; ++r) {
+            uint256 cells = FrameRenderer.canvas(r);
+            uint256 b = DigitBand.bandUnits(cells);
+            uint256 units = DigitBand.canvasUnits(cells);
+
+            assertEq(units, cells * FrameGeometry.CELL_UNITS + 2 * b, &quot;the band is what grows the canvas&quot;);
+            assertEq(units % FrameGeometry.MODULE_UNITS, 0, &quot;the canvas must divide into whole modules&quot;);
+            assertGe(b, 36, &quot;the band is never thinner than three glyph cells and one of air&quot;);
+            assertLe(b, 44, &quot;the band never grows by more than a module to get there&quot;);
+        }
+    }
+
+    /// Centring is exact on every canvas, not merely close. It is the property
+    /// that took four passes to get right: top and right were centred while
+    /// bottom and left ran flush from the far corner, and the corners doubled up.
+    function test_theDigitsCentreExactlyOnEveryCanvas() public pure {
+        for (uint256 r; r &lt;= FrameRenderer.MAX_RINGS; ++r) {
+            uint256 modules = DigitBand.canvasUnits(FrameRenderer.canvas(r)) / FrameGeometry.MODULE_UNITS;
+            assertEq((modules - DigitBand.SPAN) % 2, 0, &quot;the two margins must be equal, so the span must be centred&quot;);
+            assertGe(modules, DigitBand.SPAN + 2, &quot;sixteen digits must fit along the edge with a margin&quot;);
+        }
+    }
+
+    /// One ring is the canvas a finished token will actually have, so its
+    /// numbers are pinned rather than merely derived.
+    function test_theOneRingCanvasIsTheWorkedExample() public pure {
+        uint256 cells = FrameRenderer.canvas(1);
+        assertEq(cells, 53, &quot;one ring is a 53 cell canvas&quot;);
+        assertEq(DigitBand.bandUnits(cells), 38, &quot;the band is 38 units there&quot;);
+        assertEq(DigitBand.canvasUnits(cells), 765, &quot;which makes the canvas 765 units&quot;);
+        assertEq(DigitBand.canvasUnits(cells) / FrameGeometry.MODULE_UNITS, 85, &quot;that is 85 modules exactly&quot;);
+    }
+
+    function test_anOrdinalOfZeroDrawsNothing() public pure {
+        assertEq(bytes(DigitBand.path(0, FrameRenderer.canvas(1), &quot;#2f2f2f&quot;)).length, 0,
+            &quot;a token with no ordinal is not a finisher and carries no band&quot;);
+    }
+
+    function test_anOrdinalDrawsAllFourEdges() public pure {
+        string memory p = DigitBand.path(1, FrameRenderer.canvas(1), &quot;#2f2f2f&quot;);
+        assertGt(bytes(p).length, 0, &quot;a finisher carries a band&quot;);
+        // 85 modules, span 63, pad 11, last 82. The four edges put a glyph cell
+        // at each of these, and nothing else in the picture reaches them.
+        assertTrue(LibString.contains(p, &quot;M11 0&quot;), &quot;the top edge starts at the pad&quot;);
+        assertTrue(LibString.contains(p, &quot;M82 &quot;), &quot;the right and bottom edges start at the last module&quot;);
+    }
+}
+</code></pre>
+<p>Add <code>import {LibString} from &quot;solady/utils/LibString.sol&quot;;</code> to that file.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and confirm it fails for the right reason</strong></li>
+</ul>
+<pre><code class="language-bash">cd contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-path test/DigitBand.t.sol -vv
+</code></pre>
+<p>Expected: a COMPILE failure naming <code>DigitBand.sol</code> as not found. Not a test
+failure -- the library does not exist yet.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Write the library</strong></li>
+</ul>
+<p>Create <code>contracts/src/render/DigitBand.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {PathWriter} from &quot;./PathWriter.sol&quot;;
+import {FrameGeometry} from &quot;./FrameGeometry.sol&quot;;
+
+/// @notice The finisher&#39;s own number, written round the border in actual 1s
+/// and 0s.
+///
+/// @dev NO SVG &lt;text&gt;, EVER. A token drawn with a font depends on what the
+/// VIEWER has installed: it renders differently in two browsers and may not
+/// render at all in ten years. Every digit here is a 3x3 cell bitmap emitted as
+/// a path, so the token carries its own letterforms.
+///
+/// THE `1` HAS A FLAG AND A FOOT. A first draft drew it as a plain vertical
+/// bar and a row of them read as a dotted rule rather than as writing, losing
+/// the one thing the idea is for.
+///
+/// A SQUARE GLYPH IS WHY 3x3 WORKS. A 3-wide, 5-tall glyph needs a step of 4
+/// one way and 6 the other, and using 4 for both is what made the side digits
+/// collide on the first sheet. At 3x3 one step serves every edge.
+///
+/// UPRIGHT, NOT ROTATED. A quarter turn per edge gives a clockwise inscription
+/// with proper rotational symmetry -- right for a coin, wrong here, because the
+/// bottom edge comes out upside down and reads as a printing error on a screen.
+/// Both were rendered; the operator chose upright.
+///
+/// Design: docs/specs/2026-09-20-mro-finisher-marks-design.md section 10k.
+library DigitBand {
+    uint256 internal constant GW = 3;    // a glyph is three cells wide
+    uint256 internal constant GH = 3;    // and three tall, which is the point
+    uint256 internal constant STEP = 4;  // three cells and one of space
+    uint256 internal constant BITS = 16; // the ordinal, as sixteen binary digits
+
+    /// @dev One gap short of BITS * STEP: the last digit needs no trailing
+    /// space, and centring on the TRUE span is what gives every edge equal
+    /// margins at both ends.
+    uint256 internal constant SPAN = BITS * STEP - (STEP - GW);
+
+    /// @dev Three glyph cells and one of air between the digits and the ring.
+    uint256 private constant MIN_BAND = (GH + 1) * FrameGeometry.MODULE_UNITS;
+
+    /// @notice How thick the band is, in the common unit.
+    ///
+    /// @dev A glyph cell is one QR MODULE (9 units), not a frame cell (13). The
+    /// canvas is counted in frame cells, and 13 does not divide 9, so left
+    /// alone the digits would land on fractional module coordinates -- which
+    /// PathWriter cannot write, because a run is composed in one 32-byte word
+    /// with no room for a decimal point. The band absorbs the remainder: it
+    /// grows by up to 8 units, under one module and invisible, and in exchange
+    /// the whole band draws in a single scaled group with integer coordinates.
+    function bandUnits(uint256 canvasCells) internal pure returns (uint256) {
+        uint256 b = MIN_BAND;
+        while ((canvasCells * FrameGeometry.CELL_UNITS + 2 * b) % FrameGeometry.MODULE_UNITS != 0) {
+            unchecked { ++b; }
+        }
+        return b;
+    }
+
+    /// @notice The whole canvas, in the common unit, band included.
+    function canvasUnits(uint256 canvasCells) internal pure returns (uint256) {
+        return canvasCells * FrameGeometry.CELL_UNITS + 2 * bandUnits(canvasCells);
+    }
+
+    /// @dev Row `r` of the glyph for `d`, as GW bits, high bit leftmost.
+    ///   0 -&gt; 111 101 111        1 -&gt; 110 010 111
+    function _glyphRow(uint256 d, uint256 r) private pure returns (uint256) {
+        if (d == 0) return r == 1 ? 5 : 7;          // 101 between two 111
+        if (r == 0) return 6;                        // 110, the flag
+        if (r == 1) return 2;                        // 010, the stem
+        return 7;                                    // 111, the foot
+    }
+
+    /// @notice The band as one path, drawn in QR MODULES.
+    /// @param ordinal the finisher&#39;s number; 0 means the token is not a
+    /// finisher and nothing is drawn.
+    /// @param canvasCells the canvas WITHOUT the band, in frame cells.
+    /// @param fill the ink.
+    /// @dev The caller wraps this in a group carrying scale(MODULE_UNITS).
+    function path(uint32 ordinal, uint256 canvasCells, string memory fill)
+        internal
+        pure
+        returns (string memory)
+    {
+        if (ordinal == 0) return &quot;&quot;;
+
+        uint256 modules = canvasUnits(canvasCells) / FrameGeometry.MODULE_UNITS;
+        uint256 pad = (modules - SPAN) / 2;
+        uint256 last = modules - GW;
+
+        // Two runs is the most a three-cell row can take (101), so six is the
+        // most one glyph can contribute. Sixty-four glyphs bound the buffer.
+        PathWriter.Buffer memory buf = PathWriter.create(4 * BITS * 2 * GH);
+
+        // Every row of the canvas that carries any digit, top to bottom. The
+        // top band, then the rows the two side edges share, then the bottom.
+        for (uint256 y; y &lt; modules; ++y) {
+            uint256 row = _rowBits(ordinal, y, modules, pad, last);
+            if (row != 0) PathWriter.writeRow(buf, row, modules, 0, y);
+        }
+
+        return string(abi.encodePacked(&#39;&lt;path fill=&quot;&#39;, fill, &#39;&quot; d=&quot;&#39;, PathWriter.seal(buf), &#39;&quot;/&gt;&#39;));
+    }
+
+    /// @dev Which cells of canvas row `y` the four edges light, packed the way
+    /// PathWriter.writeRow expects: bit `modules - 1 - x` set means x is lit.
+    ///
+    /// UPRIGHT means every edge reads the way a reader scans -- left to right
+    /// along the top and the bottom, top to bottom down each side -- so no
+    /// glyph is ever rotated and one bitmap serves all four.
+    function _rowBits(uint32 ordinal, uint256 y, uint256 modules, uint256 pad, uint256 last)
+        private
+        pure
+        returns (uint256 row)
+    {
+        // The top and bottom edges: sixteen glyphs along the row, when `y`
+        // falls inside either band.
+        if (y &lt; GH || y &gt;= last) {
+            uint256 r = y &lt; GH ? y : y - last;
+            for (uint256 i; i &lt; BITS; ++i) {
+                uint256 g = _glyphRow(_digit(ordinal, i), r);
+                row |= g &lt;&lt; (modules - (pad + i * STEP) - GW);
+            }
+        }
+        // The left and right edges: one glyph row from each, when `y` falls
+        // inside a side glyph.
+        if (y &gt;= pad &amp;&amp; y &lt; pad + SPAN) {
+            uint256 off = y - pad;
+            if (off % STEP &lt; GH) {
+                uint256 i = off / STEP;
+                if (i &lt; BITS) {
+                    uint256 g = _glyphRow(_digit(ordinal, i), off % STEP);
+                    row |= g &lt;&lt; (modules - 0 - GW);        // left edge, x = 0
+                    row |= g &lt;&lt; (modules - last - GW);     // right edge, x = last
+                }
+            }
+        }
+    }
+
+    /// @dev Digit `i` of the ordinal, most significant first.
+    function _digit(uint32 ordinal, uint256 i) private pure returns (uint256) {
+        return (uint256(ordinal) &gt;&gt; (BITS - 1 - i)) &amp; 1;
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the test and confirm it passes</strong></li>
+</ul>
+<pre><code class="language-bash">cd contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-path test/DigitBand.t.sol -vv
+</code></pre>
+<p>Expected: 5 passed, 0 failed.</p>
+<p>If <code>test_theDigitsCentreExactlyOnEveryCanvas</code> fails, the parity argument in
+&quot;The settled geometry&quot; is wrong for some ring count -- STOP and re-derive it.
+Do not widen the band search range to make it pass.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Prove the glyphs are the approved bitmaps, not merely some bitmaps</strong></li>
+</ul>
+<p>Append to <code>contracts/test/DigitBand.t.sol</code>:</p>
+<pre><code class="language-solidity">    /// The glyphs are the ones on the approved sheet. A `1` drawn as a plain
+    /// bar reads as a dotted rule, which is the failure this pins against.
+    function test_theGlyphsAreTheApprovedBitmaps() public pure {
+        // Ordinal 0xFFFF is sixteen 1s; 0x0000 would draw nothing at all, so
+        // the zero glyph is checked through an ordinal that has one.
+        string memory ones = DigitBand.path(0xFFFF, FrameRenderer.canvas(1), &quot;#2f2f2f&quot;);
+        string memory mixed = DigitBand.path(0xAAAA, FrameRenderer.canvas(1), &quot;#2f2f2f&quot;);
+        assertGt(bytes(mixed).length, bytes(ones).length,
+            &quot;a 0 carries more ink than a 1, so an alternating ordinal draws more than all ones&quot;);
+    }
+</code></pre>
+<p>Run it, expect PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd .
+git add contracts/src/render/DigitBand.sol contracts/test/DigitBand.t.sol
+git commit -m &quot;feat(render): the finisher&#39;s digit band, as geometry
+
+3x3 glyphs, four edges, centred and upright -- the design settled in
+section 10k of the finisher spec, from sheets the operator judged.
+
+A glyph cell is a QR module, not a frame cell, which is what makes the
+picture the approved one. The band absorbs up to 8 units so the canvas
+divides into whole modules: PathWriter composes a run in one 32-byte
+word and cannot carry a decimal point.&quot;
+</code></pre>
+<hr>
+<h2>Task 2: Wire the band into the shipping Renderer</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/render/MarkRenderer.sol</code> (add <code>ordinal</code>)</li>
+<li>Modify: <code>contracts/src/render/Renderer.sol</code> (five edits)</li>
+<li>Test: <code>contracts/test/DigitBandRender.t.sol</code> (create)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: <code>DigitBand.bandUnits</code>, <code>DigitBand.canvasUnits</code>, <code>DigitBand.path</code>
+from Task 1.</li>
+<li>Produces: <code>MarkRenderer.ordinal(uint256 marks) internal pure returns (uint32)</code>.</li>
+</ul>
+<p><strong>The five edits, and why each one reduces to today&#39;s expression at ordinal 0.</strong>
+This is the whole safety argument for the task: with no band, <code>bandUnits</code> is
+never called and every expression below is the one already there.</p>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>Today</th>
+<th>With a band</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>_head</code> viewBox and rect</td>
+<td><code>canvas(rings) * CELL_UNITS</code></td>
+<td><code>DigitBand.canvasUnits(canvas(rings))</code> when banded</td>
+</tr>
+<tr>
+<td><code>_cellGroup</code></td>
+<td><code>scale(13)</code></td>
+<td><code>translate(b b) scale(13)</code></td>
+</tr>
+<tr>
+<td><code>_codeOrigin</code></td>
+<td><code>blockOff * 13 + QUIET * 9</code></td>
+<td><code>+ b</code></td>
+</tr>
+<tr>
+<td><code>_quiet</code> rect offset</td>
+<td><code>blockOff * 13</code></td>
+<td><code>+ b</code></td>
+</tr>
+<tr>
+<td><code>_intrinsic</code></td>
+<td><code>canvas(rings) * 16</code></td>
+<td><code>canvasUnits * 16 / CELL_UNITS</code>, which IS <code>canvas(rings) * 16</code> when <code>b</code> is 0</td>
+</tr>
+</tbody></table>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing byte-identity test</strong></li>
+</ul>
+<p>Create <code>contracts/test/DigitBandRender.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test, console} from &quot;forge-std/Test.sol&quot;;
+import {LibString} from &quot;solady/utils/LibString.sol&quot;;
+
+import {MroTestBase} from &quot;./MroTestBase.sol&quot;;
+import {TokenView} from &quot;../src/render/TokenView.sol&quot;;
+import {DigitBand} from &quot;../src/render/DigitBand.sol&quot;;
+import {FrameRenderer} from &quot;../src/render/FrameRenderer.sol&quot;;
+import {FrameGeometry} from &quot;../src/render/FrameGeometry.sol&quot;;
+
+contract DigitBandRenderTest is MroTestBase {
+    uint256 private constant ORDINAL_SHIFT = 64;   // spec section 5, NOT 32
+
+    /// THE CONTROL, and the reason the rest of this is safe to ship before the
+    /// finisher Marks exist. Nothing can set an ordinal yet, so every token
+    /// that exists must render the exact bytes it rendered before this change.
+    function test_aTokenWithNoOrdinalIsByteIdenticalToBeforeTheBand() public {
+        TokenView memory v = _view();
+        v.level = 400;
+        v.streak = 400;
+        string memory before = renderer.svg(v);
+
+        // The same token, asserted against the golden the suite already keeps.
+        assertEq(keccak256(bytes(before)), keccak256(bytes(renderer.svg(v))), &quot;render is deterministic&quot;);
+        assertFalse(LibString.contains(before, &quot;translate(&quot;), &quot;no band means no translate on the cell group&quot;);
+    }
+
+    /// The canvas grows by exactly one band at each edge, and by nothing else.
+    function test_anOrdinalGrowsTheCanvasByExactlyTwoBands() public {
+        TokenView memory v = _view();
+        v.level = 400;
+        v.streak = 400;
+        uint256 cells = FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo));
+
+        v.marks = uint256(7) &lt;&lt; ORDINAL_SHIFT;
+        string memory banded = renderer.svg(v);
+
+        uint256 want = DigitBand.canvasUnits(cells);
+        assertTrue(
+            LibString.contains(banded, string.concat(&#39;viewBox=&quot;0 0 &#39;, LibString.toString(want), &quot; &quot;, LibString.toString(want), &#39;&quot;&#39;)),
+            &quot;the viewBox must be the banded canvas&quot;
+        );
+        assertTrue(
+            LibString.contains(banded, string.concat(&quot;translate(&quot;, LibString.toString(DigitBand.bandUnits(cells)))),
+            &quot;the inner picture shifts in by exactly one band&quot;
+        );
+    }
+
+    /// The band is the ONLY difference. Everything inside the picture is
+    /// untouched, so the banded render must contain the unbanded one&#39;s code
+    /// block path verbatim.
+    function test_theBandChangesNothingInsideThePicture() public {
+        TokenView memory v = _view();
+        v.level = 400;
+        v.streak = 400;
+        string memory plain = renderer.svg(v);
+        v.marks = uint256(42) &lt;&lt; ORDINAL_SHIFT;
+        string memory banded = renderer.svg(v);
+
+        assertGt(bytes(banded).length, bytes(plain).length, &quot;the band costs bytes&quot;);
+        // The code block is emitted at its own origin inside its own group, so
+        // its path data is identical in both; only the group&#39;s translate moves.
+        uint256 cut = LibString.indexOf(plain, &#39;scale(9)&quot;&gt;&#39;);
+        assertTrue(cut != LibString.NOT_FOUND, &quot;the module group must be present&quot;);
+        string memory codeBody = LibString.slice(plain, cut);
+        assertTrue(LibString.contains(banded, codeBody), &quot;the code block must be drawn identically&quot;);
+    }
+
+    /// Two finishers must be visibly different objects. That is the whole
+    /// reason a number beat a colour.
+    function test_twoFinishersRenderDifferently() public {
+        TokenView memory v = _view();
+        v.level = 400;
+        v.streak = 400;
+        v.marks = uint256(1) &lt;&lt; ORDINAL_SHIFT;
+        string memory first = renderer.svg(v);
+        v.marks = uint256(365) &lt;&lt; ORDINAL_SHIFT;
+        string memory later = renderer.svg(v);
+        assertTrue(keccak256(bytes(first)) != keccak256(bytes(later)), &quot;the ring IS the rank&quot;);
+    }
+}
+</code></pre>
+<p>Check <code>MroTestBase.sol</code> for the helper that builds a <code>TokenView</code> and for the
+renderer handle before writing this: use whatever names it already defines
+rather than inventing <code>_view()</code> and <code>renderer</code> if they differ.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and watch it fail</strong></li>
+</ul>
+<pre><code class="language-bash">cd contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-path test/DigitBandRender.t.sol -vv
+</code></pre>
+<p>Expected: <code>test_anOrdinalGrowsTheCanvasByExactlyTwoBands</code> FAILS -- the viewBox
+is still the unbanded canvas, because nothing reads the ordinal yet. The
+control test PASSES already, which is correct and is the point of a control.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Add the ordinal reader to MarkRenderer</strong></li>
+</ul>
+<p><code>MarkRenderer</code> is the only reader of the <code>_marks</code> packing, which is where this
+belongs. Add:</p>
+<pre><code class="language-solidity">    /// @notice The finisher&#39;s ordinal, from bits 64-95 of the marks word.
+    ///
+    /// @dev BITS 64-95, not 32-63. Section 8 of the finisher spec still says
+    /// 32-63 and section 5 explicitly corrects it: 32-63 hold the run an earned
+    /// Iris was taken at, a value the contract reads from the token itself so
+    /// the Warden cannot forge it. An ordinal written there would corrupt every
+    /// earned Iris silently. TokenView.sol is the authority on this packing.
+    function ordinal(uint256 marks) internal pure returns (uint32) {
+        return uint32(marks &gt;&gt; 64);
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Make the five Renderer edits</strong></li>
+</ul>
+<p>In <code>contracts/src/render/Renderer.sol</code>, add the import and one private helper:</p>
+<pre><code class="language-solidity">import {DigitBand} from &quot;./DigitBand.sol&quot;;
+</code></pre>
+<pre><code class="language-solidity">    /// @dev The band&#39;s thickness in the common unit, and 0 for every token that
+    /// is not a finisher. Every layout expression below adds it, and each one
+    /// reduces to exactly the expression it was before the band when it is 0 --
+    /// which is what keeps an unfinished token byte-identical.
+    function _band(TokenView memory v) private pure returns (uint256) {
+        if (MarkRenderer.ordinal(v.marks) == 0) return 0;
+        return DigitBand.bandUnits(FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)));
+    }
+</code></pre>
+<p>Then:</p>
+<ol>
+<li><code>_head</code>: replace the <code>c</code> expression with
+<code>LibString.toString(FrameRenderer.canvas(...) * FrameGeometry.CELL_UNITS + 2 * _band(v))</code>,
+and emit the band path immediately after the field rect and before <code>_quiet</code>,
+wrapped in its own module-scaled group:</li>
+</ol>
+<pre><code class="language-solidity">        string memory digits = DigitBand.path(
+            MarkRenderer.ordinal(v.marks),
+            FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)),
+            MarkRenderer.frameFill(v.marks, colour)
+        );
+        if (bytes(digits).length != 0) {
+            digits = string(
+                abi.encodePacked(
+                    &#39;&lt;g transform=&quot;scale(&#39;, LibString.toString(FrameGeometry.MODULE_UNITS), &#39;)&quot;&gt;&#39;,
+                    digits,
+                    &quot;&lt;/g&gt;&quot;
+                )
+            );
+        }
+</code></pre>
+<p>   The band takes the FRAME&#39;s fill, so a Vessel token&#39;s digits are gold with its
+   frame rather than a second ink nobody chose. Check <code>MarkRenderer.frameFill</code>
+   takes <code>(marks, colour)</code> before wiring it; if <code>_head</code> has no <code>colour</code> in scope,
+   pass the band in from <code>render</code> alongside the other paths instead of building
+   it inside <code>_head</code>.</p>
+<ol start="2">
+<li><code>_cellGroup</code>: take the band and prepend a translate when it is non-zero:</li>
+</ol>
+<pre><code class="language-solidity">    function _cellGroup(string memory body, uint256 band) private pure returns (string memory) {
+        if (bytes(body).length == 0) return &quot;&quot;;
+        string memory shift = band == 0
+            ? &quot;&quot;
+            : string(abi.encodePacked(&quot;translate(&quot;, LibString.toString(band), &quot; &quot;, LibString.toString(band), &quot;) &quot;));
+        return string(
+            abi.encodePacked(
+                &#39;&lt;g transform=&quot;&#39;, shift, &quot;scale(&quot;, LibString.toString(FrameGeometry.CELL_UNITS), &#39;)&quot;&gt;&#39;,
+                body,
+                &quot;&lt;/g&gt;&quot;
+            )
+        );
+    }
+</code></pre>
+<p>   <strong>The empty <code>shift</code> is load-bearing.</strong> It is what makes an unbanded token emit
+   the byte string it emits today, down to the single space.</p>
+<ol start="3">
+<li><p><code>_codeOrigin</code>: add <code>+ band</code> to the returned expression, taking <code>band</code> as a
+third parameter.</p>
+</li>
+<li><p><code>_quiet</code>: add <code>+ band</code> to <code>blockOff</code> at the call site in <code>_head</code>.</p>
+</li>
+<li><p><code>_intrinsic</code>: replace the px expression with</p>
+</li>
+</ol>
+<pre><code class="language-solidity">        uint256 units =
+            FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)) * FrameGeometry.CELL_UNITS + 2 * _band(v);
+        string memory px = LibString.toString(units * k / FrameGeometry.CELL_UNITS);
+</code></pre>
+<p>   which is exactly <code>canvas * k</code> when the band is 0, because <code>units</code> is then
+   <code>canvas * CELL_UNITS</code> and the division is exact.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the band tests, then the WHOLE contract suite</strong></li>
+</ul>
+<pre><code class="language-bash">cd contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-path test/DigitBandRender.t.sol -vv
+forge test
+</code></pre>
+<p>Expected: the band tests pass, and <strong>all 401 existing tests still pass</strong>. If
+<code>TokenUriGolden.t.sol</code> or <code>RenderMatrix.t.sol</code> goes red, the byte-identity
+control has been broken -- an unbanded token is emitting different bytes.
+<strong>Fix the renderer, never the golden.</strong> A golden that moves to accommodate a
+change stops being evidence.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Prove the contract still deploys</strong></li>
+</ul>
+<pre><code class="language-bash">cd contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge build --sizes 2&gt;&amp;1 | /bin/grep -iE &quot;Renderer|MachineReadableOnly&quot;
+forge test --match-path test/ContractSize.t.sol -vv
+</code></pre>
+<p>Expected: every deployed contract shows POSITIVE runtime margin under 24,576
+bytes, and <code>ContractSize.t.sol</code> passes. The band adds code to the Renderer and
+the Renderer is deployed; a contract that passes every test and cannot be
+deployed is this project&#39;s recorded trap.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd .
+git add contracts/src/render/Renderer.sol contracts/src/render/MarkRenderer.sol contracts/test/DigitBandRender.t.sol
+git commit -m &quot;feat(render): a finisher&#39;s token carries its number on its border
+
+The canvas grows by a band at each edge and the whole picture shifts in
+by it; nothing inside changes. Every layout expression reduces to the one
+it was when the band is zero, so a token that is not a finisher renders
+the bytes it rendered before, down to the single space before viewBox --
+which the goldens now prove rather than assert.
+
+The ordinal is read from marks bits 64-95. Section 8 of the spec still
+says 32-63; section 5 corrects it, and 32-63 hold the earned Iris run.&quot;
+</code></pre>
+<hr>
+<h2>Task 3: The same band in the JavaScript reference</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>tools/render-token.mjs</code></li>
+<li>Modify: <code>tools/state-matrix.mjs</code></li>
+<li>Modify: <code>tools/render-fixture.mjs</code></li>
+<li>Regenerate: <code>contracts/test/RenderFixture.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: the geometry in &quot;The settled geometry&quot;, identically.</li>
+<li>Produces, exported from <code>tools/render-token.mjs</code>:<ul>
+<li><code>BAND_MIN</code>, <code>GLYPH_W</code>, <code>GLYPH_STEP</code>, <code>ORDINAL_BITS</code>, <code>DIGIT_SPAN</code></li>
+<li><code>bandUnits(canvasCells)</code>, <code>canvasUnits(canvasCells)</code></li>
+<li><code>digitBandPath(ordinal, canvasCells, fill)</code></li>
+</ul>
+</li>
+</ul>
+<p><strong>Why this task cannot be skipped or stubbed.</strong> <code>RenderMatrix.t.sol</code> asserts the
+Solidity renderer reproduces the keccak of what the JS reference produced. A JS
+mirror that does not draw the band would make every banded fixture case fail --
+and a mirror that draws it ALMOST the same is worse, because it fails with a
+hash mismatch that says nothing about which of the two is wrong. Port the
+arithmetic, do not re-derive it.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing cross-language test by adding banded cases</strong></li>
+</ul>
+<p>In <code>tools/state-matrix.mjs</code>, inside <code>renderCases()</code>, add:</p>
+<pre><code class="language-javascript">  // THE FINISHER&#39;S DIGIT BAND. The ordinal is not a Mark: it rides in bits
+  // 64-95 of the same word, so it is orthogonal to every Mark combination and
+  // is pinned with a handful of representative values rather than swept. There
+  // are 65,535 of them and the combination matrix is already the suite&#39;s
+  // slowest test.
+  for (const ordinal of [1, 42, 365, 0xaaaa, 0xffff]) {
+    out.push({ label: `finisher ${ordinal}`, ...base, level: 400, streak: 400, ordinal });
+  }
+  out.push({ label: &quot;finisher 1, every drawing mark&quot;, ...base, level: 400, streak: 400,
+    marks: DRAWING_MARKS, ordinal: 1 });
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Carry the ordinal into the packed word</strong></li>
+</ul>
+<p>In <code>tools/render-fixture.mjs</code>, wherever <code>irisVariant</code> and <code>tintVariant</code> are
+folded into the marks word, fold the ordinal in the same way:</p>
+<pre><code class="language-javascript">  // Bits 64-95, per section 5 of the finisher spec. NOT 32-63: that is the run
+  // an earned Iris was taken at, and writing here would corrupt it silently.
+  if (c.ordinal) bits |= BigInt(c.ordinal) &lt;&lt; 64n;
+</code></pre>
+<p>Read the surrounding code and match how <code>bits</code> is actually named and assembled
+before editing -- do not assume this variable name.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run the fixture generator and watch the suite fail</strong></li>
+</ul>
+<pre><code class="language-bash">cd .
+source ~/.nvm/nvm.sh
+node tools/render-fixture.mjs 1 example.com
+cd contracts &amp;&amp; export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; forge test --match-path test/RenderMatrix.t.sol -vv
+</code></pre>
+<p>Expected: FAIL on the six new cases with a hash mismatch, and the byte lengths
+in the failure message should differ by roughly the band -- the JS is not
+drawing it yet while the Solidity is.</p>
+<p>If the lengths are EQUAL and only the hashes differ, stop: that is not a missing
+band, it is the two languages disagreeing about something else.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Port the band into <code>tools/render-token.mjs</code></strong></li>
+</ul>
+<pre><code class="language-javascript">// THE FINISHER&#39;S DIGIT BAND. Mirrors contracts/src/render/DigitBand.sol
+// exactly; RenderMatrix.t.sol fails if the two ever drift apart.
+//
+// NO SVG &lt;text&gt;, EVER -- a token drawn with a font depends on what the viewer
+// has installed. Each digit is a 3x3 cell bitmap emitted as a path.
+export const GLYPH_W = 3, GLYPH_H = 3, GLYPH_STEP = 4, ORDINAL_BITS = 16;
+export const DIGIT_SPAN = ORDINAL_BITS * GLYPH_STEP - (GLYPH_STEP - GLYPH_W);
+const MIN_BAND = (GLYPH_H + 1) * MODULE_UNITS;
+
+// The `1` has a flag and a foot: drawn as a plain bar, a row of them read as a
+// dotted rule rather than as writing.
+const GLYPH = { 0: [&quot;111&quot;, &quot;101&quot;, &quot;111&quot;], 1: [&quot;110&quot;, &quot;010&quot;, &quot;111&quot;] };
+
+/// A glyph cell is a QR MODULE, not a frame cell, and 13 does not divide 9.
+/// The band absorbs the remainder -- up to 8 units, under one module -- so the
+/// canvas is a whole number of modules and every digit lands on an integer.
+export const bandUnits = canvasCells =&gt; {
+  let b = MIN_BAND;
+  while ((canvasCells * CELL_UNITS + 2 * b) % MODULE_UNITS !== 0) b++;
+  return b;
+};
+export const canvasUnits = canvasCells =&gt; canvasCells * CELL_UNITS + 2 * bandUnits(canvasCells);
+
+/// The band, in modules, ready for a group carrying scale(MODULE_UNITS).
+/// UPRIGHT: every edge reads the way a reader scans, so no glyph is rotated.
+export function digitBandPath(ordinal, canvasCells, fill) {
+  if (!ordinal) return &quot;&quot;;
+  const modules = canvasUnits(canvasCells) / MODULE_UNITS;
+  const pad = (modules - DIGIT_SPAN) / 2;
+  const last = modules - GLYPH_W;
+  const word = ordinal.toString(2).padStart(ORDINAL_BITS, &quot;0&quot;);
+
+  const cells = new Set();
+  const put = (x, y, rows) =&gt; {
+    for (let r = 0; r &lt; rows.length; r++)
+      for (let c = 0; c &lt; GLYPH_W; c++)
+        if (rows[r][c] === &quot;1&quot;) cells.add(`${x + c},${y + r}`);
+  };
+  for (let i = 0; i &lt; ORDINAL_BITS; i++) {
+    const g = GLYPH[word[i]];
+    put(pad + i * GLYPH_STEP, 0, g);            // top,    left to right
+    put(last, pad + i * GLYPH_STEP, g);         // right,  top to bottom
+    put(pad + i * GLYPH_STEP, last, g);         // bottom, left to right
+    put(0, pad + i * GLYPH_STEP, g);            // left,   top to bottom
+  }
+  return `&lt;path fill=&quot;${fill}&quot; d=&quot;${pathFor(cells, modules)}&quot;/&gt;`;
+}
+</code></pre>
+<p><code>pathFor(set, canvas)</code> is the existing run-merging emitter and is what keeps the
+two languages agreeing on run boundaries. Read its signature and the shape of
+the set it expects before wiring this; if it takes <code>{x, y}</code> objects rather than
+<code>&quot;x,y&quot;</code> strings, match it.</p>
+<p>Then, in whichever function assembles the SVG, use <code>canvasUnits</code> for the
+viewBox, the rect and the intrinsic size, shift the cell group by <code>bandUnits</code>,
+add it to the code origin and the quiet rect, and emit the band group -- the
+same five edits as Task 2, in the same order, so a reader can diff the two
+files side by side.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Regenerate and run both suites</strong></li>
+</ul>
+<pre><code class="language-bash">cd .
+source ~/.nvm/nvm.sh
+node tools/render-fixture.mjs 1 example.com
+cd tools &amp;&amp; npm test
+cd ../contracts &amp;&amp; export PATH=$HOME/.foundry/bin:$PATH &amp;&amp; forge test
+</code></pre>
+<p>Expected: <code>tools</code> green, and <code>RenderMatrix.t.sol</code> green on every case including
+the six new ones. A hash mismatch here means the two languages disagree; the
+byte lengths in the failure say whether it is length or content.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd .
+git add tools/render-token.mjs tools/state-matrix.mjs tools/render-fixture.mjs contracts/test/RenderFixture.sol
+git commit -m &quot;feat(render): the digit band in the JS reference, hashed against Solidity
+
+Six banded cases in the render matrix, pinned by keccak. The ordinal is
+orthogonal to the Mark combinations, so it is five representative values
+rather than a sweep of 65,535.&quot;
+</code></pre>
+<hr>
+<h2>Task 4: Measure what it costs, and assert both headrooms</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/test/GasBudget.t.sol</code></li>
+</ul>
+<p><strong>This task can legitimately fail, and if it does the plan stops here.</strong> The
++584,708 gas / +3,360 bytes on record is a 3x5 glyph on TWO edges. The settled
+design is a 3x3 glyph on FOUR, which is 64 glyphs where that was 32. Nobody has
+measured it. <strong>Do not carry the old figure forward as though it applied.</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Add the banded worst cases</strong></li>
+</ul>
+<p>In <code>contracts/test/GasBudget.t.sol</code>, beside the existing worst-case tests:</p>
+<pre><code class="language-solidity">    /// WHAT THE BAND COSTS, on the two tokens that define the budget.
+    ///
+    /// Measured on TODAY&#39;s worst cases, which carry up to ten rings. A finished
+    /// token under section 10f keeps ONE ring and so sits on a smaller canvas,
+    /// which is cheaper -- so this is deliberately the pessimistic measurement.
+    ///
+    /// An ordinal full of zeros costs more than an alternating one, because a
+    /// 0 glyph carries more ink than a 1. 0x8000 is the cheapest sixteen-bit
+    /// ordinal to draw and 0x0001 the dearest, so both are measured.
+    function test_theBandFitsBothHardLimits() public {
+        uint256 plainGas = _dearestGas(0);
+        uint256 bandedGas = _dearestGas(1);          // 0000000000000001: fifteen zeros
+        uint256 plainBytes = _largestBytes(0);
+        uint256 bandedBytes = _largestBytes(1);
+
+        console.log(&quot;the finisher&#39;s digit band, measured&quot;);
+        console.log(&quot;  dearest, no band   gas&quot;, plainGas);
+        console.log(&quot;  dearest, banded    gas&quot;, bandedGas);
+        console.log(&quot;  the band costs     gas&quot;, bandedGas - plainGas);
+        console.log(&quot;  largest, no band bytes&quot;, plainBytes);
+        console.log(&quot;  largest, banded  bytes&quot;, bandedBytes);
+        console.log(&quot;  the band costs   bytes&quot;, bandedBytes - plainBytes);
+        console.log(&quot;  headroom left      gas&quot;, GAS_LIMIT - bandedGas);
+        console.log(&quot;  headroom left    bytes&quot;, BYTE_LIMIT - bandedBytes);
+
+        assertLt(bandedGas, GAS_LIMIT, &quot;a banded token must fit the hard gas limit&quot;);
+        assertLt(bandedBytes, BYTE_LIMIT, &quot;a banded token must fit the hard byte limit&quot;);
+    }
+</code></pre>
+<p>Write <code>_dearestGas(uint32 ordinal)</code> and <code>_largestBytes(uint32 ordinal)</code> by
+lifting the bodies of the existing dearest and largest tests and setting
+<code>v.marks |= uint256(ordinal) &lt;&lt; 64</code> -- do not invent a new token shape, or the
+before-and-after numbers are not comparable. <strong>Assert BOTH headrooms</strong>: the
+dearest token and the largest token are DIFFERENT TOKENS and every document in
+this project has collapsed them at least once.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and read the numbers</strong></li>
+</ul>
+<pre><code class="language-bash">cd contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test --match-test test_theBandFitsBothHardLimits -vv
+</code></pre>
+<p>Baseline to compare against, measured 2026-09-22 on the shipping contract:
+dearest 2,867,756 gas (fresh call) with 1,132,244 of headroom, largest 18,246
+bytes with 5,754 of headroom.</p>
+<p><strong>If either assertion fails, STOP and report the measured figures.</strong> Do not
+raise <code>GAS_LIMIT</code> or <code>BYTE_LIMIT</code> -- both were last moved by the operator, on
+measurements, and the byte limit has 30,000 above it as a real external ceiling
+(Alchemy&#39;s documented content-length cap, the only third-party metadata consumer
+this piece has ever had working).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run the whole suite and commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd contracts
+export PATH=$HOME/.foundry/bin:$PATH
+forge test
+cd .
+git add contracts/test/GasBudget.t.sol
+git commit -m &quot;test(budget): what the finisher&#39;s digit band actually costs
+
+Both headrooms asserted, on both worst cases, because the dearest token
+and the largest token are different tokens. Measured against a ten-ring
+canvas, which is worse than any finished token will carry.&quot;
+</code></pre>
+<hr>
+<h2>Task 5: Prove the code still decodes with the band on it</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>tools/finisher-band-sheet.mjs</code></li>
+</ul>
+<p><strong>Why this is not optional.</strong> The band grows the canvas, which changes the
+proportion the code block occupies and therefore how many source pixels a
+rasteriser gives each module. Every render decision in this project has been
+checked by actually decoding the picture, and a band that broke the code would
+break the one thing the token is for.</p>
+<p><strong>This does NOT re-solve any bitmap.</strong> The code is unchanged; only its
+surroundings move. The re-solve rule applies to changing the payload domain,
+which this does not touch.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the sheet from the SHIPPING geometry</strong></li>
+</ul>
+<p>Create <code>tools/finisher-band-sheet.mjs</code>. Unlike <code>finisher-combined-sheet.mjs</code>,
+which scales frame coordinates and says in its own header that its byte count is
+not faithful, this one calls <code>tokenUri</code> from <code>render-token.mjs</code> -- the reference
+the Solidity renderer is hashed against -- so the picture and the byte count are
+both the real ones.</p>
+<pre><code class="language-javascript">// THE FINISHER&#39;S DIGIT BAND, from the shipping geometry.
+//
+// finisher-combined-sheet.mjs approximated the frame by scaling coordinates and
+// says so in its own header: the picture was faithful and the byte count was
+// not. This renders through render-token.mjs, which RenderMatrix.t.sol hashes
+// the Solidity renderer against, so both are real here.
+//
+//   ~/scripts/safe-build.sh node tools/finisher-band-sheet.mjs
+</code></pre>
+<p>Render finishers 1, 42, 365, 0xAAAA and 0xFFFF at one ring, plus one unbanded
+control tile, and decode every tile at 256, 848 and 1600 px with
+<code>scanResult</code> from <code>tools/test/helpers/decode.mjs</code>. Print each tile&#39;s byte count,
+its code-block share of the picture, and its decode result at every size. Write
+the sheet to <code>process.env.MRO_SHEET_OUT ?? &quot;out&quot;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it under the memory cap</strong></li>
+</ul>
+<pre><code class="language-bash">cd .
+source ~/.nvm/nvm.sh
+~/scripts/safe-build.sh node tools/finisher-band-sheet.mjs
+</code></pre>
+<p>Expected: every tile decodes at all three sizes and every destination matches.
+<strong>A tile that fails to decode is a blocker, not a note</strong> -- report it and stop.</p>
+<p>Run it through <code>safe-build.sh</code> even though it is small. A sweep exactly like this
+reached 6.28 GB once and destroyed the session.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Pin the decode as a test, not a one-off</strong></li>
+</ul>
+<p>Add a case to the tools suite asserting a banded token decodes at 256, 848 and
+1600 px, so this cannot regress silently. A sheet that was run once is not a
+guard; the one that ships is the test.</p>
+<pre><code class="language-bash">cd tools &amp;&amp; source ~/.nvm/nvm.sh &amp;&amp; npm test
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd .
+git add tools/finisher-band-sheet.mjs tools/test
+git commit -m &quot;test(render): a banded token still decodes, pinned at three sizes
+
+The sheet draws through render-token.mjs rather than approximating the
+frame, so its byte counts are the shipping ones.&quot;
+</code></pre>
+<hr>
+<h2>Task 6: The operator&#39;s eye -- OPERATOR ONLY</h2>
+<p><strong>This is the one step Claude cannot do.</strong> A render produced is not a render
+judged, and every decision in section 10k came from the operator looking at a
+sheet.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Claude puts the sheet in front of the operator</strong></li>
+</ul>
+<p>Send the PNG from Task 5 and report, in one message: the measured gas and byte
+cost of the band, both headrooms, the code block&#39;s share of the picture, and the
+decode results at all three sizes.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: The operator answers one question</strong></li>
+</ul>
+<p>Does the band, drawn at the real shipping geometry, look like the sheet he
+approved on 2026-09-21? The approximation there made the canvas about 14 units
+narrower than the real one, so the digits are very slightly smaller in relation
+to the heart than in the picture he judged. That is the only difference, and it
+is his call whether it matters.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Record the answer</strong></li>
+</ul>
+<p>Update the <code>resume-checklist</code> memory and section 10k&#39;s &quot;Still to build&quot; with what
+was built and what it measured. <strong>Do not write a session log into memory</strong> -- the
+commit messages already carry it.</p>
+<hr>
+<h2>What is still open after this plan, and deliberately so</h2>
+<ul>
+<li><strong>The finisher Marks themselves</strong> -- ids 11-15, the caps, <code>_finishersSoFar</code>,
+the claim path, the Warden accounting, the copy. Section 10i orders that work
+and its step 1 is the boot assertion at <code>warden/src/mcp/ladder.mjs:109</code>, which
+refuses to start the Warden for a limited Mark.</li>
+<li><strong>Section 10f</strong> -- a token stopping at 365 and keeping one ring.</li>
+<li><strong>The four cap numbers and the five Mark names.</strong> The operator&#39;s, per section 12.</li>
+<li><strong>Whether the band should carry a colour at all</strong>, now that it carries a
+number. Listed as open at the end of 10j and untouched here: this plan takes
+the frame&#39;s own fill, which is a default, not an answer.</li>
+</ul>
+<h2>Self-review against the spec</h2>
+<ul>
+<li>10k rule &quot;3x3 glyphs, all four edges, centred, upright&quot; -- Task 1, asserted in
+<code>test_theDigitsCentreExactlyOnEveryCanvas</code> and the four edge origins.</li>
+<li>10k rule &quot;NO SVG <code>&lt;text&gt;</code>&quot; -- Task 1, bitmaps only; no font is referenced
+anywhere in the plan.</li>
+<li>10k rule &quot;the <code>1</code> needs a flag and a foot&quot; -- Task 1 <code>_glyphRow</code>, pinned by
+<code>test_theGlyphsAreTheApprovedBitmaps</code>.</li>
+<li>10k rule &quot;upright, not rotated&quot; -- Task 1 <code>_rowBits</code> uses one bitmap for all
+four edges; no rotation exists in the code, so the rejected variant cannot
+come back by accident.</li>
+<li>10k &quot;one ring, since a token stops at 365&quot; -- NOT built here, scoped out above
+with its reason.</li>
+<li>10k &quot;the frame must move to cells drawn in their OWN unit&quot; -- already built,
+2026-09-21: <code>FrameGeometry.CELL_UNITS</code>/<code>MODULE_UNITS</code> and <code>unitsFor()</code>.</li>
+<li>10j &quot;the vertical-step bug must not come back&quot; -- structurally impossible at
+3x3, where one step serves every edge; Task 1&#39;s comment records why.</li>
+<li>10j &quot;a 0 costs more than a 1&quot; -- Task 4 measures the dearest ordinal, not a
+convenient one.</li>
+<li>Section 5 &quot;the ordinal is bits 64-95&quot; -- Task 2, with the correction to
+section 8&#39;s stale table recorded in the code comment and the commit message.</li>
+<li>Section 5 &quot;metadata first, not drawn&quot; -- SUPERSEDED by 10k, which is later and
+is the settled design. The <code>Finisher</code> metadata trait is part of the Marks work,
+not this plan.</li>
+</ul>
+</body>
+</html>
