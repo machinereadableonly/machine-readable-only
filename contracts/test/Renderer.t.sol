@@ -359,7 +359,7 @@ contract RendererTest is Test {
 
     function test_theWorstCaseStaysInsideTheHardLimit() public view {
         // Ten rings and every Mark: the largest image a token can reach. The
-        // spike's hard limit is 2,000,000 gas and 20,000 bytes.
+        // spike's hard limit is 4,000,000 gas and 24,000 bytes.
         // Logged whether or not they pass, so the results table can be filled
         // from a test run rather than from a one-off probe. Run with -vv.
         string[4] memory labels =
@@ -381,7 +381,7 @@ contract RendererTest is Test {
                 // 3M since 2026-09-21 -- see TokenUriGolden.t.sol.
                 assertLt(used, 4_000_000, "the worst case overruns the gas limit");
             }
-            assertLt(bytes(uri).length, 20_000, "the worst case overruns the byte limit");
+            assertLt(bytes(uri).length, 24_000, "the worst case overruns the byte limit");
         }
     }
 

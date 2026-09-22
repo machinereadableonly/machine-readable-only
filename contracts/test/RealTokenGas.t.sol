@@ -37,7 +37,9 @@ contract RealTokenGasTest is MroTestBase {
     /// @dev 4,000,000 since 2026-09-21. The reasoning, the survey it rests
     /// on and the measurements that justified it are in GasBudget.t.sol.
     uint256 constant GAS_LIMIT = 4_000_000;
-    uint256 constant BYTE_LIMIT = 20_000;
+    /// @dev 24,000 since 2026-09-22. The reasoning and the one real external
+    /// ceiling it sits under (Alchemy's documented 30,000) are in GasBudget.t.sol.
+    uint256 constant BYTE_LIMIT = 24_000;
 
     /// @dev The maximal LEGAL Mark set, one per pair: Hush, Beat, the bought
     /// Iris in its dearest shape (leaf, packed at bits 16-23), Vessel and Tint.

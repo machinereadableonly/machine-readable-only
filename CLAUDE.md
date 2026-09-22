@@ -231,12 +231,14 @@ a leak:** a commit that DELETES a string still shows it in its diff, so check
   in the `phase0-status` memory.
 - **tokenURI gas is settled but has NO single worst case.** The dearest token
   and the largest token are DIFFERENT TOKENS, and both are CHILDREN since Plan 7.
-  Hard limits 4M gas / 20 KB pass (gas raised 2M -> 3M -> 4M on 2026-09-21,
-  twice, on measurement -- see `.claude/rules/contracts.md`); the 1M / 5 KB
-  target is MISSED and must be reported as missed. **BYTES ARE NOW THE BINDING
-  CONSTRAINT, not gas:** at QR version 10 the largest token measured 18,246 of
-  20,000 bytes, and the finisher's digit band was measured at +3,360, which
-  does not fit. **Do not quote a figure from memory -- run
+  Hard limits 4M gas / 24 KB pass (gas 2M -> 3M -> 4M on 2026-09-21, bytes
+  20K -> 24K on 2026-09-22, all by the operator and on measurement -- see
+  `.claude/rules/contracts.md`); the 1M / 5 KB target is MISSED and must be
+  reported as missed. **THE ONE REAL EXTERNAL CEILING IS 30,000 BYTES** --
+  Alchemy's documented content-length cap, and Alchemy is the only
+  third-party metadata consumer this piece has ever had working. Whether it
+  applies to a `data:` URI is DOCUMENTED BUT UNTESTED: **run
+  `tools/alchemy-nft.mjs` against a real token before the mainnet mint.** **Do not quote a figure from memory -- run
   `GasBudget.t.sol` and read it.** See `.claude/rules/contracts.md` and the
   `gas-budget` memory.
 - **EVERY QR BITMAP MUST BE RE-SOLVED against `machinereadableonly.com` before

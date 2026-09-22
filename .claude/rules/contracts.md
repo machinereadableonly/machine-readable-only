@@ -40,15 +40,30 @@ trap -- prefer clone/proxy (EIP-1167).
 
 ## The gas and byte budget
 
-Hard limits **4,000,000 gas / 20,000 bytes**; the 1M / 5 KB target is MISSED and
+Hard limits **4,000,000 gas / 24,000 bytes**; the 1M / 5 KB target is MISSED and
 must always be reported as missed.
 
-**BYTES ARE THE BINDING CONSTRAINT SINCE QR VERSION 10 (2026-09-21).** Measured
-at version 10: the dearest token 2,867,756 gas, the largest 18,246 bytes. Gas
-has 1.1M of room and bytes have 1,754. The finisher's digit band was measured
-at +3,360 bytes, so it does not fit as designed -- that is an open decision,
-not a defect. The BYTE limit has never moved: it is what protects the decode
-and what a marketplace actually fetches.
+**THE BYTE LIMIT WAS RAISED FROM 20,000 ON 2026-09-22, by the operator.** The
+20,000 was CHOSEN, not derived -- a Phase 0 pass criterion justified as "bytes
+are what every viewer downloads". Measured at QR version 10: the dearest token
+2,867,756 gas, the largest 18,246 bytes, leaving 1,754 against a finisher's
+digit band measured at 3,360. A number nobody derived was about to decide a
+design question.
+
+**THE ONE REAL EXTERNAL CEILING IS 30,000 BYTES.** Alchemy's NFT API docs:
+"This can also happen if the content length of the response is larger than
+30 000 bytes." Alchemy is the ONLY third-party metadata consumer this piece has
+ever had working -- Basescan ingests none on Base Sepolia, OpenSea is untested.
+24,000 fits version 10 plus the digit band and leaves 6,000 under that ceiling.
+
+**UNTESTED, AND IT MUST BE SAID THAT WAY.** Alchemy's sentence sits among
+reasons an HTTP-hosted metadata URL fails to FETCH; this tokenURI is a data URI
+and nothing is fetched. **GATE BEFORE THE MAINNET MINT: run
+`tools/alchemy-nft.mjs` against a real Sepolia token and confirm a ~22,000-byte
+data URI ingests.** Never state the cap applies, or does not, until that runs.
+
+Gas is not the constraint: Base's own guidance puts the practical `tokenURI`
+ceiling near 300M read gas, and this token spends 2.87M.
 
 **THE GAS LIMIT WAS RAISED TWICE ON 2026-09-21, by the operator, on
 measurement: 2,000,000 to 3,000,000 from a component estimate, then to

@@ -61,11 +61,40 @@ contract GasBudgetTest is Test {
     ///   a border of real digits   +584,708 gas  +3,360 bytes
     ///
     /// Together they put the worst case near 2.9M -- an eighth of what
-    /// Anonymice already spends. THE BYTE LIMIT DOES NOT MOVE: at 20,000 it is
-    /// never threatened by either change (18,854 with both), and bytes are what
-    /// every viewer actually downloads.
+    /// Anonymice already spends.
+    ///
+    /// This paragraph used to end "THE BYTE LIMIT DOES NOT MOVE: at 20,000 it
+    /// is never threatened by either change (18,854 with both)". That was an
+    /// ESTIMATE and it was wrong. Version 10 alone measured 18,246 at the byte
+    /// worst case, so both changes together do not fit 20,000 and the limit
+    /// moved to 24,000 on 2026-09-22. See BYTE_LIMIT below.
     uint256 constant GAS_LIMIT = 4_000_000;
-    uint256 constant BYTE_LIMIT = 20_000;
+    /// @dev 24,000 SINCE 2026-09-22, raised from 20,000 by the operator.
+    ///
+    /// THE 20,000 WAS CHOSEN, NOT DERIVED. It was a Phase 0 pass criterion in
+    /// the spec and this file justified it as "bytes are what every viewer
+    /// actually downloads" -- a quality argument, not a limit anyone imposes.
+    /// QR version 10 measured 18,246 at the byte worst case and the finisher's
+    /// digit band needs another 3,360, so the chosen number was about to
+    /// decide a design question it was never derived to answer.
+    ///
+    /// THERE IS ONE REAL EXTERNAL CEILING AND IT IS 30,000. Alchemy's NFT API
+    /// docs: "This can also happen if the content length of the response is
+    /// larger than 30 000 bytes." That matters here more than it would
+    /// elsewhere, because Alchemy is the ONLY third-party metadata consumer
+    /// this piece has ever had working -- Basescan ingests none on Base
+    /// Sepolia and OpenSea is untested. 24,000 fits version 10 plus the digit
+    /// band with room and leaves 6,000 under that ceiling.
+    ///
+    /// UNTESTED, AND SAY SO: Alchemy's sentence sits among reasons an
+    /// HTTP-hosted metadata URL fails to FETCH. This tokenURI is a data URI
+    /// and nothing is fetched, so whether the cap applies to inline metadata
+    /// has never been measured. tools/alchemy-nft.mjs exists to measure it and
+    /// MUST be run against a real token before the mainnet mint.
+    ///
+    /// Gas is not the constraint: Base's own guidance puts the practical
+    /// tokenURI ceiling near 300M read gas and this token spends 2.87M.
+    uint256 constant BYTE_LIMIT = 24_000;
     uint256 constant GAS_TARGET = 1_000_000;
     uint256 constant BYTE_TARGET = 5_000;
 

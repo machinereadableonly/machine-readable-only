@@ -122,7 +122,7 @@ contract TokenUriGoldenTest is MroTestBase {
         // when GasBudget.t.sol moved, and only stayed green because version 5
         // was under the old limit anyway.
         assertLt(used, 4_000_000, "the 4M hard gas limit");
-        assertLt(bytes(uri).length, 20_000, "the 20,000 byte hard limit");
+        assertLt(bytes(uri).length, 24_000, "the 24,000 byte hard limit");
 
         assertTrue(
             _contains(uri, string.concat('"trait_type":"Level","value":', vm.toString(uint256(364)), "}")),

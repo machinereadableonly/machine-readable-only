@@ -154,7 +154,7 @@ contract RenderMatrixTest is Test {
         uint256 widest;
         string memory widestLabel;
         for (uint256 i; i < cases.length; ++i) {
-            assertLt(cases[i].bytesLen, 20_000, string.concat(cases[i].label, ": over the byte limit"));
+            assertLt(cases[i].bytesLen, 24_000, string.concat(cases[i].label, ": over the byte limit"));
             if (cases[i].bytesLen > widest) {
                 widest = cases[i].bytesLen;
                 widestLabel = cases[i].label;
