@@ -1057,6 +1057,11 @@ Vessel. **This closes the last open question in 10j.**
 **The decode is proven, not assumed:** five ordinals at five pixel sizes, every
 one reading the right destination, pinned in the tools suite.
 
+**SIGNED OFF BY THE OPERATOR, 2026-09-22**, from the rendered sheet: the band as
+built is the design he approved, the near-black ink stands, and 954 bytes of
+margin is accepted. The ink question from 10j is CLOSED -- do not re-open it,
+and do not re-propose the frame's fill.
+
 **The code block is 58% of the picture, not the 61% recorded above.** The
 difference is `finisher-combined-sheet.mjs`'s approximation, which made its
 canvas 14 units narrower than the shipping one. `tools/finisher-band-sheet.mjs`
