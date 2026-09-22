@@ -142,18 +142,28 @@ contract DigitBandRenderTest is Test {
         assertTrue(first != later, "the border IS the rank");
     }
 
-    /// The band takes the frame's fill, so a Vessel token writes its number in
-    /// the gold its frame already carries rather than in a second colour.
-    function test_theBandTakesTheFramesOwnInk() public view {
+    /// The band is written in its own near-black and nothing the token's state
+    /// does moves it. A Vessel token's frame turns gold and a lapsed token's
+    /// frame walks down the tier ladder; the number stays the number.
+    function test_theBandsInkIsFixedAgainstEverythingElseMoving() public view {
         TokenView memory v = _finished();
-        v.marks = MarkRenderer.VESSEL | (uint256(1) << ORDINAL_SHIFT);
-        string memory banded = r.svg(v);
+        string memory want = string.concat('<g transform="scale(9)"><path fill="', DigitBand.INK);
 
-        string memory gold = MarkRenderer.frameFill(v.marks, "#000000");
+        v.marks = uint256(1) << ORDINAL_SHIFT;
+        assertTrue(LibString.contains(r.svg(v), want), "plain: the band is in its own ink");
+
+        // Vessel turns the frame and the rings gold.
+        v.marks = MarkRenderer.VESSEL | (uint256(1) << ORDINAL_SHIFT);
+        assertTrue(LibString.contains(r.svg(v), want), "Vessel: still its own ink");
         assertTrue(
-            LibString.contains(banded, string.concat('<g transform="scale(9)"><path fill="', gold)),
-            "the digit group is emitted in the frame's ink"
+            LibString.contains(r.svg(v), MarkRenderer.frameFill(v.marks, "#000000")),
+            "and the frame really did go gold, so this is not a vacuous check"
         );
+
+        // A deep lapse walks the frame back down the tier ladder.
+        v.marks = uint256(1) << ORDINAL_SHIFT;
+        v.today = 1400;
+        assertTrue(LibString.contains(r.svg(v), want), "lapsed: still its own ink");
     }
 
     /// The whole ordinal range draws, and the dearest ordinal is the one full

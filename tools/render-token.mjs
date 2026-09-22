@@ -356,6 +356,16 @@ export const DIGIT_SPAN = ORDINAL_BITS * GLYPH_STEP - (GLYPH_STEP - GLYPH_W);
 // collide on the first sheet.
 const GLYPH = { 0: ["111", "101", "111"], 1: ["110", "010", "111"] };
 
+// The ink the number is written in: a NEAR-BLACK, not the token's colour and
+// not the frame's. It is the ink on every sheet the operator judged, and the
+// reason is the reason colour lost at all -- the number is WRITING, and writing
+// is read rather than coloured. It also keeps the band still while the rest of
+// the picture moves: the frame walks down the tier ladder as a streak lapses
+// and turns gold under Vessel, and a finisher's number should not change colour
+// because its holder missed a week.
+// MUST stay identical to DigitBand.INK in Solidity.
+export const DIGIT_INK = "#2f2f2f";
+
 // A glyph cell is one QR MODULE, not a frame cell. That is what makes the
 // picture the approved one: at module size the code block keeps about three
 // fifths of the image.
@@ -785,13 +795,11 @@ export function renderSvg(modules, want, size, state) {
   // erase-to-ground step lands on top. They never reach the frame, which is
   // outside the block entirely.
   // The finisher's number round the border, drawn in MODULES in its own group,
-  // outside everything else on the canvas. It takes the FRAME's fill, so a
-  // token wearing Vessel writes its number in the gold its frame already
-  // carries rather than in a second colour nobody chose. Mirrors
-  // Renderer._digitGroup in Solidity.
+  // outside everything else on the canvas, in DIGIT_INK rather than any fill
+  // the token's state can move. Mirrors Renderer._digitGroup in Solidity.
   const digits = digitBandCells(ordinal, canvas, size);
   const digitBody = digits.cells.size
-    ? asPath(frameColour, pathFor(digits.cells, digits.modules))
+    ? asPath(DIGIT_INK, pathFor(digits.cells, digits.modules))
     : "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg"${intrinsic} viewBox="0 0 ${span} ${span}" shape-rendering="crispEdges">`

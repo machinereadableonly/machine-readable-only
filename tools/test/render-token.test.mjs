@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
+import { canvasUnits, DIGIT_INK } from "../render-token.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
          rungOf, colourAt, noiseAt, staticAt, inks, BEAT_TO, MAX_RINGS, ringsFor, ringSpan,
          HUSH_QUIET, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
@@ -501,4 +502,50 @@ test("the cooled page still scans at every step and every size", () => {
       }
     }
   }
+});
+
+test("a finisher's digit band does not stop the code decoding", () => {
+  // The band grows the canvas, which changes how many source pixels a
+  // rasteriser gives each module -- the mechanism behind the third-party
+  // decode finding, where an undeclared size took failures to 54%. It sits
+  // entirely outside the quiet zone and should cost the scanner nothing, but
+  // this project checks a render by decoding it rather than by reasoning
+  // about it, and that rule is what found every earlier surprise.
+  //
+  // Five ordinals across the range. Finisher 1 is the densest band -- a 0
+  // glyph carries more ink than a 1 -- and 65535 the sparsest, so both ends
+  // of the ink range are here.
+  const SIZES = [256, 500, 848, 1080, 1600];
+  const ORDINALS = [1, 42, 365, 0xaaaa, 0xffff];
+
+  for (const ordinal of ORDINALS) {
+    const svg = render({ level: 365, streak: 365, years: 1,
+                         lastDay: 1000, today: 1000, ordinal });
+    for (const px of SIZES) {
+      const got = scanResult(svg, px);
+      assert.ok(got.ok,
+        `finisher ${ordinal} failed to decode at ${px}px: ${got.why}`);
+      assert.equal(got.destination, DESTINATION,
+        `finisher ${ordinal} decoded to the wrong url at ${px}px`);
+    }
+  }
+});
+
+test("the band is drawn only for a finisher, and grows the canvas when it is", () => {
+  // The control the whole change rests on: an ordinal of 0 is every token that
+  // exists, and it must render the bytes it rendered before the band was
+  // written. Asserted here as well as in Solidity because the two renderers
+  // are diffed against each other, so a drift in THIS one would move both.
+  const base = { level: 365, streak: 365, years: 1, lastDay: 1000, today: 1000 };
+  const plain = render(base);
+  assert.equal(plain, render({ ...base, ordinal: 0 }),
+    "an explicit zero ordinal must render identically to none at all");
+  assert.ok(!plain.includes(DIGIT_INK),
+    "a token that is not a finisher carries no digit ink");
+
+  const banded = render({ ...base, ordinal: 1 });
+  assert.ok(banded.includes(DIGIT_INK), "a finisher does");
+  assert.ok(banded.includes(`viewBox="0 0 ${canvasUnits(canvasFor(1), CODE.size)}`),
+    "and its canvas is the banded one");
+  assert.ok(banded.length > plain.length, "which costs bytes");
 });

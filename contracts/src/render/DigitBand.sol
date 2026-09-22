@@ -48,6 +48,28 @@ library DigitBand {
     /// margins at both ends.
     uint256 internal constant SPAN = BITS * STEP - (STEP - GW);
 
+    /// @notice The ink the number is written in.
+    ///
+    /// @dev A NEAR-BLACK, not the token's own colour and not the frame's. This
+    /// is the ink on every sheet the operator judged, and the reason is the
+    /// reason colour lost in the first place: the number is WRITING, and
+    /// writing is read, not coloured. Taking the frame's fill was tried and
+    /// rendered -- at a deep streak the border comes out in the heart's red and
+    /// reads as another band of ornament rather than as a caption.
+    ///
+    /// It also keeps the band still while everything else moves: the frame
+    /// walks down the tier ladder as a streak lapses and turns gold under
+    /// Vessel, and a finisher's number should not change colour because its
+    /// holder missed a week.
+    ///
+    /// Whether the band should EVER carry an ink of its own is the one question
+    /// section 10j left open. This is an answer to it, not a placeholder, and
+    /// it is the one the rendered sheets support.
+    ///
+    /// Seven characters, like every other ink in the picture, so the byte count
+    /// does not depend on which one is chosen.
+    string internal constant INK = "#2f2f2f";
+
     /// @dev Three glyph cells and one of air between the digits and the ring.
     uint256 private constant MIN_BAND = (GH + 1) * FrameGeometry.MODULE_UNITS;
 

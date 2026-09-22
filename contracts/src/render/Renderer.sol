@@ -290,7 +290,7 @@ contract Renderer is IRenderer {
         );
         return string(
             abi.encodePacked(
-                _digitGroup(v, frameFill), _cellGroup(frame, band), _moduleGroup(v, code, band)
+                _digitGroup(v), _cellGroup(frame, band), _moduleGroup(v, code, band)
             )
         );
     }
@@ -298,20 +298,14 @@ contract Renderer is IRenderer {
     /// @dev The finisher's number round the border, drawn in QR MODULES in its
     /// own group, outside everything else on the canvas.
     ///
-    /// It takes the FRAME's fill rather than an ink of its own, so a token
-    /// wearing Vessel writes its number in the same gold its frame already
-    /// carries instead of introducing a second colour nobody chose. Whether the
-    /// band should ever carry an ink of its own is open in section 10j; this is
-    /// a default, not an answer to it.
-    function _digitGroup(TokenView memory v, string memory fill)
-        private
-        pure
-        returns (string memory)
-    {
+    /// It is written in DigitBand's own near-black, not in the frame's fill and
+    /// not in the token's colour -- see that constant for why. The band is the
+    /// one part of the picture that does not move with the streak.
+    function _digitGroup(TokenView memory v) private pure returns (string memory) {
         string memory digits = DigitBand.path(
             MarkRenderer.ordinal(v.marks),
             FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)),
-            fill
+            DigitBand.INK
         );
         if (bytes(digits).length == 0) return "";
         return string(
