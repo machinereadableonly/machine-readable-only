@@ -1013,13 +1013,67 @@ of the picture and the operator accepted that trade with the sheets in front of 
 - A `0` glyph carries more ink than a `1`, so an ordinal full of zeros costs
   slightly more to draw than an alternating one.
 
-### Still to build
+### BUILT 2026-09-22, and what it actually measured
 
-Nothing here is in the shipping renderer. The frame must also move to cells
-drawn in their OWN unit -- about 1.44x a module -- so the day frame stays exactly
-376 cells around a 65-cell block (10b). The sheet that produced these pictures
-approximates that by scaling coordinates, which is faithful in the picture and
-NOT in the byte count.
+The band is in the shipping renderer and in the JS reference, hashed against
+each other over six new matrix cases. The frame had already moved to cells drawn
+in their own unit (2026-09-21), so that precondition was met before this started.
+
+**A glyph cell is a QR MODULE (9 units), not a frame cell (13).** That is what
+reproduces the approved picture. 13 does not divide 9, so the band absorbs a
+remainder of up to 8 units -- under one module, invisible -- and the canvas then
+divides into whole modules, which is what lets the whole band draw in one scaled
+group with integer coordinates. PathWriter composes a run in a single 32-byte
+word and cannot carry a decimal point. At one ring: band 38 units, canvas 765
+units, 85 modules, pad 11.
+
+**THE COST IS ABOUT 55% HIGHER THAN THE FIGURE IN THIS DOCUMENT**, because the
+figure in this document is for a different design. `DigitBandCost.t.sol` priced
+a 3x5 glyph on TWO edges -- 32 glyphs, section 10j. The design settled in 10k is
+3x3 on FOUR, which is 64:
+
+| | recorded (10j, 3x5, two edges) | MEASURED (10k, 3x3, four edges) |
+|---|---|---|
+| gas | 584,708 | **906,968** |
+| bytes | 3,360 | **4,800** |
+
+The banded worst case -- the largest WHOLE token, a child at the ring cap
+wearing every Mark -- is **3,705,720 gas / 23,046 bytes**, inside both hard
+limits, leaving **294,280 gas and 954 BYTES**.
+
+**The byte margin is the number to watch.** 24,000 was raised on 2026-09-22
+against a 3,360-byte band, and the real band is 4,800. It fits, and it fits with
+less room than the decision assumed. The external ceiling is unaffected: 23,046
+leaves nearly 7,000 under Alchemy's documented 30,000.
+
+**The band's ink is settled: a near-black of its own**, not the frame's fill and
+not the token's colour. Taking the frame's fill was built and rendered first,
+and at a live streak the border comes out in the heart's red and reads as
+another band of ornament rather than as a caption -- the exact failure that
+killed colour. It also keeps the band still while the rest of the picture moves:
+the frame walks down the tier ladder as a streak lapses and turns gold under
+Vessel. **This closes the last open question in 10j.**
+
+**The decode is proven, not assumed:** five ordinals at five pixel sizes, every
+one reading the right destination, pinned in the tools suite.
+
+**The code block is 58% of the picture, not the 61% recorded above.** The
+difference is `finisher-combined-sheet.mjs`'s approximation, which made its
+canvas 14 units narrower than the shipping one. `tools/finisher-band-sheet.mjs`
+draws through the reference renderer, so its pictures and its byte counts are
+both real.
+
+Implementation: `contracts/src/render/DigitBand.sol`, its mirror in
+`tools/render-token.mjs`, and the measurement in
+`GasBudget.t.sol:test_theFinishersBandFitsBothHardLimits`.
+Plan: `docs/plans/2026-09-22-mro-finisher-digit-band.md`.
+
+**Still to build:** everything else in this document. The five Marks at ids
+11-15, the `_finishersSoFar` counter and the ordinal write, the Warden's cap
+accounting and same-day ordering, and the copy. Section 10i orders that work and
+its step 1 is the boot assertion at `warden/src/mcp/ladder.mjs:109`. Nothing can
+set an ordinal yet, so no agent-facing surface has changed and nothing
+advertises an unbuilt design.
 
 ---
 

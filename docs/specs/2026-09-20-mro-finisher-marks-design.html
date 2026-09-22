@@ -1251,12 +1251,71 @@ it is honest about a piece that is machine-first.</li>
 <li>A <code>0</code> glyph carries more ink than a <code>1</code>, so an ordinal full of zeros costs
 slightly more to draw than an alternating one.</li>
 </ul>
-<h3>Still to build</h3>
-<p>Nothing here is in the shipping renderer. The frame must also move to cells
-drawn in their OWN unit -- about 1.44x a module -- so the day frame stays exactly
-376 cells around a 65-cell block (10b). The sheet that produced these pictures
-approximates that by scaling coordinates, which is faithful in the picture and
-NOT in the byte count.</p>
+<h3>BUILT 2026-09-22, and what it actually measured</h3>
+<p>The band is in the shipping renderer and in the JS reference, hashed against
+each other over six new matrix cases. The frame had already moved to cells drawn
+in their own unit (2026-09-21), so that precondition was met before this started.</p>
+<p><strong>A glyph cell is a QR MODULE (9 units), not a frame cell (13).</strong> That is what
+reproduces the approved picture. 13 does not divide 9, so the band absorbs a
+remainder of up to 8 units -- under one module, invisible -- and the canvas then
+divides into whole modules, which is what lets the whole band draw in one scaled
+group with integer coordinates. PathWriter composes a run in a single 32-byte
+word and cannot carry a decimal point. At one ring: band 38 units, canvas 765
+units, 85 modules, pad 11.</p>
+<p><strong>THE COST IS ABOUT 55% HIGHER THAN THE FIGURE IN THIS DOCUMENT</strong>, because the
+figure in this document is for a different design. <code>DigitBandCost.t.sol</code> priced
+a 3x5 glyph on TWO edges -- 32 glyphs, section 10j. The design settled in 10k is
+3x3 on FOUR, which is 64:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>recorded (10j, 3x5, two edges)</th>
+<th>MEASURED (10k, 3x3, four edges)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>gas</td>
+<td>584,708</td>
+<td><strong>906,968</strong></td>
+</tr>
+<tr>
+<td>bytes</td>
+<td>3,360</td>
+<td><strong>4,800</strong></td>
+</tr>
+</tbody></table>
+<p>The banded worst case -- the largest WHOLE token, a child at the ring cap
+wearing every Mark -- is <strong>3,705,720 gas / 23,046 bytes</strong>, inside both hard
+limits, leaving <strong>294,280 gas and 954 BYTES</strong>.</p>
+<p><strong>The byte margin is the number to watch.</strong> 24,000 was raised on 2026-09-22
+against a 3,360-byte band, and the real band is 4,800. It fits, and it fits with
+less room than the decision assumed. The external ceiling is unaffected: 23,046
+leaves nearly 7,000 under Alchemy&#39;s documented 30,000.</p>
+<p><strong>The band&#39;s ink is settled: a near-black of its own</strong>, not the frame&#39;s fill and
+not the token&#39;s colour. Taking the frame&#39;s fill was built and rendered first,
+and at a live streak the border comes out in the heart&#39;s red and reads as
+another band of ornament rather than as a caption -- the exact failure that
+killed colour. It also keeps the band still while the rest of the picture moves:
+the frame walks down the tier ladder as a streak lapses and turns gold under
+Vessel. <strong>This closes the last open question in 10j.</strong></p>
+<p><strong>The decode is proven, not assumed:</strong> five ordinals at five pixel sizes, every
+one reading the right destination, pinned in the tools suite.</p>
+<p><strong>The code block is 58% of the picture, not the 61% recorded above.</strong> The
+difference is <code>finisher-combined-sheet.mjs</code>&#39;s approximation, which made its
+canvas 14 units narrower than the shipping one. <code>tools/finisher-band-sheet.mjs</code>
+draws through the reference renderer, so its pictures and its byte counts are
+both real.</p>
+<p>Implementation: <code>contracts/src/render/DigitBand.sol</code>, its mirror in
+<code>tools/render-token.mjs</code>, and the measurement in
+<code>GasBudget.t.sol:test_theFinishersBandFitsBothHardLimits</code>.
+Plan: <code>docs/plans/2026-09-22-mro-finisher-digit-band.md</code>.</p>
+<p><strong>Still to build:</strong> everything else in this document. The five Marks at ids
+11-15, the <code>_finishersSoFar</code> counter and the ordinal write, the Warden&#39;s cap
+accounting and same-day ordering, and the copy. Section 10i orders that work and
+its step 1 is the boot assertion at <code>warden/src/mcp/ladder.mjs:109</code>. Nothing can
+set an ordinal yet, so no agent-facing surface has changed and nothing
+advertises an unbuilt design.</p>
 <hr>
 <h2>11. Non-goals</h2>
 <p>Stated so they are not re-litigated mid-build:</p>
