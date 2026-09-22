@@ -110,6 +110,21 @@ jobs:
         working-directory: client
         run: npm ci
 
+      - name: Install the Warden's dependencies too
+        # THE CLIENT'S TESTS ARE NOT SELF-CONTAINED, and that is deliberate.
+        # cli.test.mjs and journey.test.mjs stand the REAL Warden up in-process
+        # and assert, among other things, that the client's content-digest is
+        # byte-identical to the door's. A pair of implementations that must
+        # agree is worth far more than either tested alone.
+        #
+        # The cost is that running them needs the Warden's dependencies, not
+        # just the client's. On a developer's box both are always installed, so
+        # this was invisible until CI ran the client's tests on their own and
+        # they failed on a missing `http-message-sig` -- a Warden dependency
+        # the client does not declare and should not.
+        working-directory: warden
+        run: npm ci
+
       - name: Run the client's tests
         working-directory: client
         run: npm test
