@@ -15,9 +15,23 @@
 # repository and this filename. Renaming this file breaks publishing until the
 # setting on npmjs.com is updated to match.
 #
-# HOW IT RUNS: manually, and it dry-runs by default. A real publish takes a
-# deliberate second action -- untick the dry-run box. Nothing about pushing a
-# commit, merging, or tagging can publish this package.
+# HOW IT RUNS: manually, and it STAGES rather than publishes. The trusted
+# publisher on npm is configured stage-only, so a direct `npm publish` from
+# here would be REFUSED by the registry -- that is deliberate, and it is the
+# real guard. Nothing this workflow can do makes a version public.
+#
+# A staged version sits in npm's queue until a maintainer approves it with
+# `npm stage approve <stage-id>`, or on npmjs.com, and that approval demands
+# two-factor authentication. So the thing that makes `mro-agent` public is a
+# person holding a second factor, not a checkbox in a CI file.
+#
+# An earlier draft of this workflow ran `npm publish` and defaulted a
+# `dry_run` input to true. That is a convention: it protects the package only
+# while everyone remembers to leave a box ticked. Staging protects it
+# structurally.
+#
+# Discard a staged version with `npm stage reject <stage-id>`; list them with
+# `npm stage list mro-agent`.
 
 name: publish-client
 
@@ -25,7 +39,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Dry run: build and check, publish nothing. Untick to publish for real."
+        description: "Dry run: build and check, stage nothing. Untick to stage for approval."
         type: boolean
         default: true
 
@@ -59,14 +73,33 @@ jobs:
           # stale dependency into the tarball that no commit accounts for.
           package-manager-cache: false
 
-      - name: Use an npm new enough to authenticate over OIDC
-        # Trusted publishing needs npm 11.5.1 or later. The runner's bundled
-        # npm is usually newer, but pinning the floor here means a runner image
-        # change cannot quietly break publishing.
+      - name: Use an npm new enough to stage over OIDC
+        # Trusted publishing needs npm 11.5.1 or later and STAGED publishing
+        # needs 11.15.0 or later, with Node 22.14 or higher. The runner is on
+        # Node 24 and this installs the current npm, but the floors are
+        # ASSERTED rather than assumed: a runner image change that quietly
+        # moved npm backwards would otherwise surface as an unexplained
+        # registry refusal.
         run: |
           npm install -g npm@latest
           node --version
           npm --version
+          node -e '
+            const [maj, min] = process.versions.node.split(".").map(Number);
+            if (maj < 22 || (maj === 22 && min < 14)) {
+              console.error(`FAIL: staged publishing needs Node 22.14+, got ${process.versions.node}`);
+              process.exit(1);
+            }
+          '
+          npm --version | node -e '
+            const v = require("fs").readFileSync(0, "utf8").trim();
+            const [maj, min] = v.split(".").map(Number);
+            if (maj < 11 || (maj === 11 && min < 15)) {
+              console.error(`FAIL: staged publishing needs npm 11.15.0+, got ${v}`);
+              process.exit(1);
+            }
+            console.log(`npm ${v} is new enough to stage`);
+          '
 
       - name: Check the tracked tree for identity leaks
         # The same guard the pre-push hook runs. A published tarball is
@@ -95,14 +128,32 @@ jobs:
           fi
           echo "Version ${version} is free."
 
-      - name: Publish (dry run -- nothing leaves the runner)
+      - name: Stage (dry run -- nothing leaves the runner)
         if: ${{ inputs.dry_run }}
         working-directory: client
-        run: npm publish --dry-run
+        run: npm stage publish --dry-run
 
-      - name: Publish to npm
+      - name: Stage for approval
         if: ${{ !inputs.dry_run }}
         working-directory: client
         # No --provenance flag: trusted publishing attaches the attestation on
         # its own, and passing the flag with no token is an error.
-        run: npm publish
+        #
+        # This does NOT make the version public. It puts it in npm's staging
+        # queue, where it waits for `npm stage approve <stage-id>` and a second
+        # factor.
+        run: npm stage publish
+
+      - name: Say what is waiting, and how to discard it
+        if: ${{ !inputs.dry_run && success() }}
+        working-directory: client
+        # The run log is where someone looks after triggering this, so the next
+        # two commands belong there rather than in a document they would have
+        # to go and find.
+        run: |
+          echo "Staged, NOT published. Nothing is public yet."
+          echo
+          npm stage list mro-agent || true
+          echo
+          echo "To make it public:  npm stage approve <stage-id>   (asks for 2FA)"
+          echo "To discard it:      npm stage reject  <stage-id>"
