@@ -329,6 +329,84 @@ export const ringSpan = rings => (rings === 0 ? 0 : 2 * rings - 1);
 export const canvasFor = (years, echoDays = 0) =>
   BLOCK + 2 * (THICK + GAP + ringSpan(ringsFor(years, echoDays)));
 
+// ---------------------------------------------------------------------------
+// THE FINISHER'S DIGIT BAND. Mirrors contracts/src/render/DigitBand.sol
+// exactly; RenderMatrix.t.sol fails if the two ever drift apart.
+//
+// The finisher's own number, written round the border in actual 1s and 0s: a
+// machine reads the rank off the artwork and a human reads it as writing.
+// Colour was the alternative and lost -- five inks are PEERS, so rank had to be
+// read from metadata, where a number IS the rank.
+//
+// NO SVG <text>, EVER. A token drawn with a font depends on what the viewer has
+// installed: it renders differently in two browsers and may not render at all
+// in ten years. Every digit is a 3x3 cell bitmap emitted as a path.
+//
+// MUST stay identical to DigitBand.sol in Solidity.
+export const GLYPH_W = 3, GLYPH_H = 3, GLYPH_STEP = 4, ORDINAL_BITS = 16;
+
+// One gap short of ORDINAL_BITS * GLYPH_STEP: the last digit needs no trailing
+// space, and centring on the TRUE span is what gives every edge equal margins.
+export const DIGIT_SPAN = ORDINAL_BITS * GLYPH_STEP - (GLYPH_STEP - GLYPH_W);
+
+// The `1` has a flag and a foot. Drawn as a plain vertical bar, a row of them
+// read as a dotted rule rather than as writing -- losing the one thing the idea
+// was for. A SQUARE glyph is why 3x3 works at all: a 3-wide, 5-tall glyph needs
+// a step of 4 one way and 6 the other, which is what made the side digits
+// collide on the first sheet.
+const GLYPH = { 0: ["111", "101", "111"], 1: ["110", "010", "111"] };
+
+// A glyph cell is one QR MODULE, not a frame cell. That is what makes the
+// picture the approved one: at module size the code block keeps about three
+// fifths of the image.
+//
+// The canvas is counted in frame cells and 13 does not divide 9, so left alone
+// the digits would land on fractional module coordinates -- which PathWriter
+// cannot write, because a run is composed in a single 32-byte word with no room
+// for a decimal point. The band absorbs the remainder: up to 8 units, under one
+// module and invisible, and in exchange the whole band draws in one scaled group
+// with small integer coordinates.
+export function bandUnits(canvasCells, size) {
+  const U = unitsFor(size);
+  let band = (GLYPH_H + 1) * U.module;
+  while ((canvasCells * U.cell + 2 * band) % U.module !== 0) band++;
+  return band;
+}
+
+export const canvasUnits = (canvasCells, size) =>
+  canvasCells * unitsFor(size).cell + 2 * bandUnits(canvasCells, size);
+
+// The band, in modules, ready for a group carrying scale(module).
+//
+// UPRIGHT: every edge reads the way a reader scans -- left to right along the
+// top and the bottom, top to bottom down each side -- so no glyph is ever
+// turned and one bitmap serves all four. The rotated variant was rendered and
+// rejected: the bottom edge comes out upside down and reads as a printing
+// error on a screen.
+export function digitBandCells(ordinal, canvasCells, size) {
+  const cells = new Set();
+  if (!ordinal) return { cells, modules: 0 };
+
+  const modules = canvasUnits(canvasCells, size) / unitsFor(size).module;
+  const pad = (modules - DIGIT_SPAN) / 2;
+  const last = modules - GLYPH_W;
+  const word = ordinal.toString(2).padStart(ORDINAL_BITS, "0");
+
+  const put = (x, y, rows) => {
+    for (let r = 0; r < rows.length; r++)
+      for (let c = 0; c < GLYPH_W; c++)
+        if (rows[r][c] === "1") cells.add((y + r) * modules + (x + c));
+  };
+  for (let i = 0; i < ORDINAL_BITS; i++) {
+    const g = GLYPH[word[i]];
+    put(pad + i * GLYPH_STEP, 0, g);              // top,    left to right
+    put(last, pad + i * GLYPH_STEP, g);           // right,  top to bottom
+    put(pad + i * GLYPH_STEP, last, g);           // bottom, left to right
+    put(0, pad + i * GLYPH_STEP, g);              // left,   top to bottom
+  }
+  return { cells, modules };
+}
+
 const FRAME = frameCells();
 
 // Same-colour horizontal runs merged into one path each. This is what keeps the
@@ -542,6 +620,10 @@ export function renderSvg(modules, want, size, state) {
     // The bits _marks packs on chain for the eyes: the BOUGHT Iris's shape,
     // Tint's ink, and the streak the EARNED Iris stored when it was applied.
     irisVariant = 0, tintVariant = 0, irisRun = 0,
+    // The finisher's ordinal, from bits 64-95 of the same word. 0 means the
+    // token is not a finisher and carries no band -- which is every token that
+    // exists, so this defaults to the picture as it has always been drawn.
+    ordinal = 0,
   } = state;
   // `years` is the token's OWN rings, capped at nine once a child spends a slot
   // on its echo ring; `total` is what the canvas is sized from.
@@ -556,10 +638,16 @@ export function renderSvg(modules, want, size, state) {
   // that carries its scale. `span` is the canvas in the common unit.
   const U = unitsFor(size);
   const CU = U.cell, MU = U.module;
-  const span = canvas * CU;
-  // Where the code's top-left module sits, in the common unit: past the rings
-  // and the frame in CELLS, then across the quiet zone in MODULES.
-  const codeOrigin = blockOff * CU + QUIET * MU;
+  // The finisher's digit band, and 0 for every token that is not a finisher.
+  // Every layout expression below adds it and each reduces to the one it was
+  // before the band existed when it is 0 -- which is what keeps an unbanded
+  // token byte-identical, down to the single space before viewBox. Mirrors
+  // Renderer._band in Solidity.
+  const band = ordinal ? bandUnits(canvas, size) : 0;
+  const span = canvas * CU + 2 * band;
+  // Where the code's top-left module sits, in the common unit: past the band,
+  // then the rings and the frame in CELLS, then the quiet zone in MODULES.
+  const codeOrigin = blockOff * CU + QUIET * MU + band;
 
   // A token that has stopped checking in pales, walking back down the tier
   // ladder. A sealed token does not: its image is final, so the stored streak
@@ -651,14 +739,17 @@ export function renderSvg(modules, want, size, state) {
   // Hush tints the whole 45-cell block behind the code, which is one rect
   // rather than a path over the 656 quiet-zone cells. The modules are drawn on
   // top, so tinting the full square costs 46 bytes instead of about 1,140.
+  const quietOff = blockOff * CU + band;
   const quiet = hush
-    ? `<rect x="${blockOff * CU}" y="${blockOff * CU}" width="${BLOCK * CU}" height="${BLOCK * CU}" fill="${HUSH_QUIET}"/>`
+    ? `<rect x="${quietOff}" y="${quietOff}" width="${BLOCK * CU}" height="${BLOCK * CU}" fill="${HUSH_QUIET}"/>`
     : "";
 
   // ` width="848" height="848"` when a size is declared, empty otherwise -- so
   // the unsized build emits the exact bytes it always has, down to the single
-  // space before viewBox.
-  const px = pxPerCell ? canvas * pxPerCell : 0;
+  // space before viewBox. The expression is exactly `canvas * pxPerCell` when
+  // there is no band, because `span` is then `canvas * CU` and the division is
+  // exact. Mirrors Renderer._intrinsic in Solidity.
+  const px = pxPerCell ? Math.floor(span * pxPerCell / CU) : 0;
   const intrinsic = px ? ` width="${px}" height="${px}"` : "";
 
   // The reshaped eyes, drawn LAST -- over the noise, the frame and the heart --
@@ -693,9 +784,20 @@ export function renderSvg(modules, want, size, state) {
   // on the finder patterns, and they must come after the code paths so the
   // erase-to-ground step lands on top. They never reach the frame, which is
   // outside the block entirely.
+  // The finisher's number round the border, drawn in MODULES in its own group,
+  // outside everything else on the canvas. It takes the FRAME's fill, so a
+  // token wearing Vessel writes its number in the gold its frame already
+  // carries rather than in a second colour nobody chose. Mirrors
+  // Renderer._digitGroup in Solidity.
+  const digits = digitBandCells(ordinal, canvas, size);
+  const digitBody = digits.cells.size
+    ? asPath(frameColour, pathFor(digits.cells, digits.modules))
+    : "";
+
   return `<svg xmlns="http://www.w3.org/2000/svg"${intrinsic} viewBox="0 0 ${span} ${span}" shape-rendering="crispEdges">`
     + `${defs}<rect width="${span}" height="${span}" fill="${field}"/>${quiet}`
-    + scaleGroup(CU, frameBody)
+    + scaleGroup(MU, digitBody)
+    + (band ? placeGroup(band, band, CU, frameBody) : scaleGroup(CU, frameBody))
     + placeGroup(codeOrigin, codeOrigin, MU, codeBody + eyes)
     + `</svg>`;
 }
@@ -766,6 +868,12 @@ export function tokenUri(modules, want, size, state) {
     resting = false, sunset = false, sunsetDay = 0, fellRun = 0, fellDay = 0,
     marks = [],
     irisVariant = 0, tintVariant = 0, irisRun = 0,
+    // The finisher's ordinal, bits 64-95 of the same word. Listed here as well
+    // as in renderSvg because this function forwards an EXPLICIT field list
+    // rather than the state object: a field missing from that list renders as
+    // its default and nothing says so. RenderMatrix.t.sol caught exactly that
+    // when this line was absent.
+    ordinal = 0,
   } = state;
 
   const years = Math.floor(level / DAY_CELLS);
@@ -779,7 +887,7 @@ export function tokenUri(modules, want, size, state) {
   const keyHex = `0x${BigInt(agentKeyId).toString(16).padStart(64, "0")}`;
   const svg = renderSvg(modules, want, size,
     { level, streak, years, echo, marks, lastDay, today, resting, sunset,
-      sunsetDay, fellRun, fellDay, irisVariant, tintVariant, irisRun });
+      sunsetDay, fellRun, fellDay, irisVariant, tintVariant, irisRun, ordinal });
   const image = Buffer.from(svg, "utf8").toString("base64");
 
   // "Iris Shape" is emitted for BOTH routes -- the earned Iris does have a

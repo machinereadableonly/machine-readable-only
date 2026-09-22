@@ -17,7 +17,7 @@ library SoakStates {
         string label;
     }
 
-    uint256 internal constant COUNT = 48;
+    uint256 internal constant COUNT = 54;
 
     function all() internal pure returns (State[] memory s) {
         s = new State[](COUNT);
@@ -63,11 +63,17 @@ library SoakStates {
         s[39] = State(1, 1, 1095, 0, false, "never returned, three years");
         s[40] = State(1, 1, 365, 4, false, "ache, never returned, a year");
         s[41] = State(1, 1, 365, 1024, false, "aura, never returned, a year");
-        s[42] = State(365, 400, 8999, 0, true, "resting");
-        s[43] = State(365, 1, 0, 0, false, "slipped, day of return");
-        s[44] = State(365, 4, 0, 0, false, "slipped, 3 days on");
-        s[45] = State(365, 8, 0, 0, false, "slipped, 7 days on");
-        s[46] = State(365, 31, 0, 0, false, "slipped, 30 days on");
-        s[47] = State(365, 100, 0, 0, false, "slipped, new run overtakes the fall");
+        s[42] = State(365, 400, 0, 18446744073709551616, false, "finisher 1");
+        s[43] = State(365, 400, 0, 774763251095801167872, false, "finisher 42");
+        s[44] = State(365, 400, 0, 6733061586903986339840, false, "finisher 365");
+        s[45] = State(365, 400, 0, 805938248580370310103040, false, "finisher 43690");
+        s[46] = State(365, 400, 0, 1208907372870555465154560, false, "finisher 65535");
+        s[47] = State(365, 400, 0, 18446744073709552790, false, "finisher 1, every drawing mark");
+        s[48] = State(365, 400, 8999, 0, true, "resting");
+        s[49] = State(365, 1, 0, 0, false, "slipped, day of return");
+        s[50] = State(365, 4, 0, 0, false, "slipped, 3 days on");
+        s[51] = State(365, 8, 0, 0, false, "slipped, 7 days on");
+        s[52] = State(365, 31, 0, 0, false, "slipped, 30 days on");
+        s[53] = State(365, 100, 0, 0, false, "slipped, new run overtakes the fall");
     }
 }

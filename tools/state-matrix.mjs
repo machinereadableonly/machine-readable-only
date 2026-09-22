@@ -159,6 +159,23 @@ export function renderCases() {
   out.push({ label: "ache, never returned, a year", ...base, ...never, today: 1365, marks: [ACHE] });
   out.push({ label: "aura, never returned, a year", ...base, ...never, today: 1365, marks: [AURA] });
 
+  // THE FINISHER'S DIGIT BAND. The ordinal is not a Mark: it rides in bits
+  // 64-95 of the same word, so it is orthogonal to every Mark combination and
+  // is pinned with a handful of representative values rather than swept. There
+  // are 65,535 of them, and the combination matrix is already the slowest test
+  // in the suite.
+  //
+  // The five chosen: the first finisher, an ordinary one, one that is also a
+  // day count, the alternating worst case for run merging, and every bit set.
+  // A 0 glyph carries more ink than a 1, so 1 draws MORE than 0xFFFF -- both
+  // ends are here deliberately.
+  for (const ordinal of [1, 42, 365, 0xaaaa, 0xffff]) {
+    out.push({ label: `finisher ${ordinal}`, ...base, ordinal });
+  }
+  // The band takes the frame's fill, so a Vessel token writes its number in
+  // gold. That crossing is where the two languages could most easily disagree.
+  out.push({ label: "finisher 1, every drawing mark", ...base, marks: DRAWING_MARKS, ordinal: 1 });
+
   // Frozen lifecycles. Both must hold their colour against a far-future clock.
   out.push({ label: "resting", ...base, today: 9999, resting: true });
   out.push({ label: "sunset", ...base, today: 9999, sunset: true });

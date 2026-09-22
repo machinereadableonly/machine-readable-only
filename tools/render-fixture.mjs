@@ -38,6 +38,10 @@ export const packMarks = c => {
   if (c.irisVariant) bits |= BigInt(c.irisVariant) << 16n;
   if (c.tintVariant) bits |= BigInt(c.tintVariant) << 24n;
   if (c.irisRun) bits |= BigInt(c.irisRun) << 32n;
+  // Bits 64-95, per section 5 of the finisher spec. NOT 32-63: that is the run
+  // an earned Iris was taken at, on the line above, and an ordinal written
+  // there would corrupt it silently.
+  if (c.ordinal) bits |= BigInt(c.ordinal) << 64n;
   return bits;
 };
 
