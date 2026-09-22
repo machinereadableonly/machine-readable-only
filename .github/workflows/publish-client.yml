@@ -143,6 +143,41 @@ jobs:
           fi
           echo "Version ${version} is free."
 
+      - name: What npm has to authenticate with
+        # A DIAGNOSTIC, not a guard. `npm stage publish` failed E401 on the
+        # first real run -- "your authentication token seems to be invalid" --
+        # and that one message covers two completely different faults: the
+        # runner never minted an OIDC token, or it minted one and npm refused
+        # the exchange because no trusted publisher matched. Those need
+        # opposite fixes, so the run log should say which rather than leaving
+        # it to be guessed at.
+        #
+        # PRESENCE ONLY, NEVER THE VALUE. ACTIONS_ID_TOKEN_REQUEST_URL and its
+        # companion token are credentials: the url carries a run-scoped
+        # identifier and the token mints JWTs. Printing either into a public
+        # repository's run log would be a real leak, and an earlier draft of
+        # this step did exactly that before a hook refused it.
+        #
+        # npm does NOT validate a trusted publisher when it is saved -- its own
+        # docs say so -- so a mismatch can only ever surface here. That is why
+        # the repository and workflow ref are printed: they are precisely the
+        # values npm matches against, and both are public facts about this run.
+        run: |
+          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "OIDC: the runner CAN mint an id token (id-token: write is in effect)"
+          else
+            echo "OIDC: NO id token available -- permissions are wrong, not npm"
+          fi
+          echo "repository:   $GITHUB_REPOSITORY"
+          echo "workflow ref: $GITHUB_WORKFLOW_REF"
+          echo "npm version:  $(npm --version)"
+          echo
+          echo "npm must have a trusted publisher matching, exactly:"
+          echo "  org/user:  ${GITHUB_REPOSITORY%%/*}"
+          echo "  repo:      ${GITHUB_REPOSITORY##*/}"
+          echo "  workflow:  publish-client.yml"
+          echo "  environment: (blank)"
+
       - name: Stage (dry run -- nothing leaves the runner)
         if: ${{ inputs.dry_run }}
         working-directory: client
