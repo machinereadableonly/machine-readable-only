@@ -217,6 +217,19 @@ library MarkRenderer {
         return uint32((marks >> 32) & 0xFFFFFFFF);
     }
 
+    /// @notice The finisher's ordinal, from bits 64-95 of the marks word.
+    /// 0 means the token is not a finisher.
+    ///
+    /// @dev BITS 64-95, NOT 32-63. Section 8 of the finisher spec still says
+    /// 32-63 and section 5 explicitly corrects it: 32-63 are `irisRun` above,
+    /// the run an earned Iris was taken at, which the contract reads from the
+    /// token itself precisely so the Warden cannot forge it. An ordinal written
+    /// there would corrupt every earned Iris silently. TokenView.sol is the one
+    /// authority on this packing.
+    function ordinal(uint256 marks) internal pure returns (uint32) {
+        return uint32((marks >> 64) & 0xFFFFFFFF);
+    }
+
     /// @notice Beat's gradient definition, or nothing.
     /// @param colour the token's own streak colour, which the gradient runs from.
     function defs(uint256 marks, string memory colour) internal pure returns (string memory) {

@@ -31,8 +31,12 @@ struct TokenView {
     //   bits 16-23  the Iris shape  (0 target, 1 squircle, 2 leaf)
     //   bits 24-31  the Tint ink    (0 violet, 1 gold)
     //   bits 32-63  the run the earned Iris was taken at
+    //   bits 64-95  the finisher's ordinal; 0 while the token is not a finisher
     // MarkRenderer is the only reader of the packing; nothing else should
-    // shift this word by hand.
+    // shift this word by hand. THIS COMMENT IS THE AUTHORITY on the packing:
+    // section 8 of the finisher spec puts the ordinal at 32-63, which section 5
+    // of that spec corrects, and writing it there would silently corrupt every
+    // earned Iris.
     uint256 marks;
     bytes32 agentKeyId;  // which agent key minted it
     bytes code;          // 407 bytes, the packed 57x57 code, written once at mint

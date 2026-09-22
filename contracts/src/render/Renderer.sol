@@ -5,6 +5,7 @@ import {Base64} from "solady/src/utils/Base64.sol";
 import {LibString} from "solady/src/utils/LibString.sol";
 
 import {CodeRenderer} from "./CodeRenderer.sol";
+import {DigitBand} from "./DigitBand.sol";
 import {EyeRenderer} from "./EyeRenderer.sol";
 import {FrameGeometry} from "./FrameGeometry.sol";
 import {FrameRenderer} from "./FrameRenderer.sol";
@@ -67,13 +68,31 @@ contract Renderer is IRenderer {
         uint256 rung = _rung(v);
         string memory colour = Palette.colourAt(rung);
         (string memory heartInk, string memory noiseInk) = MarkRenderer.inks(v.marks, rung);
+        uint256 band = _band(v);
         return string(
             abi.encodePacked(
-                _head(v, heartInk),
-                _art(v, colour, heartInk, noiseInk, _eyes(v, rung)),
+                _head(v, heartInk, band),
+                _art(v, colour, heartInk, noiseInk, _eyes(v, rung), band),
                 "</svg>"
             )
         );
+    }
+
+    /// @dev The finisher's digit band, in the common unit, and 0 for every
+    /// token that is not a finisher.
+    ///
+    /// Every layout expression that follows adds this, and each one reduces to
+    /// exactly the expression it was before the band existed when it is 0 --
+    /// which is what keeps a token that is not a finisher byte-identical, down
+    /// to the single space before `viewBox`. That identity is the control the
+    /// whole change rests on, and `TokenUriGolden` and `RenderMatrix` prove it.
+    ///
+    /// Computed once here rather than at each of the four places that need it:
+    /// the band search is a short loop, but four of them on the `tokenURI` path
+    /// is four too many.
+    function _band(TokenView memory v) private pure returns (uint256) {
+        if (MarkRenderer.ordinal(v.marks) == 0) return 0;
+        return DigitBand.bandUnits(FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)));
     }
 
     /// @dev The three reshaped finder patterns, drawn LAST -- over the noise,
@@ -221,13 +240,18 @@ contract Renderer is IRenderer {
     /// @param heartInk the heart ink, AFTER Break's exchange -- `defs`'s
     /// gradient near stop must move with the exchange too, so Break + Beat
     /// gives the noise ink rather than the token's own colour.
-    function _head(TokenView memory v, string memory heartInk) private pure returns (string memory) {
+    function _head(TokenView memory v, string memory heartInk, uint256 band)
+        private
+        pure
+        returns (string memory)
+    {
         string memory c = LibString.toString(
             FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)) * FrameGeometry.CELL_UNITS
+                + 2 * band
         );
         string memory open = string(
             abi.encodePacked(
-                '<svg xmlns="http://www.w3.org/2000/svg"', _intrinsic(v), ' viewBox="0 0 ', c, " ", c,
+                '<svg xmlns="http://www.w3.org/2000/svg"', _intrinsic(v, band), ' viewBox="0 0 ', c, " ", c,
                 '" shape-rendering="crispEdges">'
             )
         );
@@ -236,7 +260,7 @@ contract Renderer is IRenderer {
                 open,
                 MarkRenderer.defs(v.marks, heartInk),
                 '<rect width="', c, '" height="', c, '" fill="', MarkRenderer.field(v.marks, _absence(v)), '"/>',
-                _quiet(v.marks, _blockOff(v.level, v.echo) * FrameGeometry.CELL_UNITS)
+                _quiet(v.marks, _blockOff(v.level, v.echo) * FrameGeometry.CELL_UNITS + band)
             )
         );
     }
@@ -251,11 +275,11 @@ contract Renderer is IRenderer {
         string memory colour,
         string memory heartInk,
         string memory noiseInk,
-        string memory eyes
+        string memory eyes,
+        uint256 band
     ) private pure returns (string memory) {
-        string memory frame = FrameRenderer.paths(
-            v, MarkRenderer.frameFill(v.marks, colour), MarkRenderer.ghost(v.marks)
-        );
+        string memory frameFill = MarkRenderer.frameFill(v.marks, colour);
+        string memory frame = FrameRenderer.paths(v, frameFill, MarkRenderer.ghost(v.marks));
         string memory code = string(
             abi.encodePacked(
                 CodeRenderer.paths(
@@ -264,7 +288,39 @@ contract Renderer is IRenderer {
                 eyes
             )
         );
-        return string(abi.encodePacked(_cellGroup(frame), _moduleGroup(v, code)));
+        return string(
+            abi.encodePacked(
+                _digitGroup(v, frameFill), _cellGroup(frame, band), _moduleGroup(v, code, band)
+            )
+        );
+    }
+
+    /// @dev The finisher's number round the border, drawn in QR MODULES in its
+    /// own group, outside everything else on the canvas.
+    ///
+    /// It takes the FRAME's fill rather than an ink of its own, so a token
+    /// wearing Vessel writes its number in the same gold its frame already
+    /// carries instead of introducing a second colour nobody chose. Whether the
+    /// band should ever carry an ink of its own is open in section 10j; this is
+    /// a default, not an answer to it.
+    function _digitGroup(TokenView memory v, string memory fill)
+        private
+        pure
+        returns (string memory)
+    {
+        string memory digits = DigitBand.path(
+            MarkRenderer.ordinal(v.marks),
+            FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)),
+            fill
+        );
+        if (bytes(digits).length == 0) return "";
+        return string(
+            abi.encodePacked(
+                '<g transform="scale(', LibString.toString(FrameGeometry.MODULE_UNITS), ')">',
+                digits,
+                "</g>"
+            )
+        );
     }
 
     /// @dev The day frame and the year rings, drawn in FRAME CELLS.
@@ -276,11 +332,23 @@ contract Renderer is IRenderer {
     /// composes each run in a single 32-byte word with no slack at three
     /// digits a coordinate, and absolute units would reach 1,157 on a ten-ring
     /// canvas and overrun the reservation.
-    function _cellGroup(string memory body) private pure returns (string memory) {
+    /// @param band the finisher's digit band, which the whole inner picture
+    /// shifts in by. The empty string when there is none is LOAD-BEARING: it is
+    /// what makes an unbanded token emit the exact bytes it emitted before the
+    /// band existed.
+    function _cellGroup(string memory body, uint256 band) private pure returns (string memory) {
         if (bytes(body).length == 0) return "";
+        string memory shift = band == 0
+            ? ""
+            : string(
+                abi.encodePacked(
+                    "translate(", LibString.toString(band), " ", LibString.toString(band), ") "
+                )
+            );
         return string(
             abi.encodePacked(
-                '<g transform="scale(', LibString.toString(FrameGeometry.CELL_UNITS), ')">',
+                '<g transform="', shift, "scale(",
+                LibString.toString(FrameGeometry.CELL_UNITS), ')">',
                 body,
                 "</g>"
             )
@@ -291,13 +359,13 @@ contract Renderer is IRenderer {
     /// own origin. The eyes ride in here rather than at the top level because
     /// they are module-sized and sit on the finder patterns; they never reach
     /// the frame, which is outside the block entirely.
-    function _moduleGroup(TokenView memory v, string memory body)
+    function _moduleGroup(TokenView memory v, string memory body, uint256 band)
         private
         pure
         returns (string memory)
     {
         if (bytes(body).length == 0) return "";
-        string memory o = LibString.toString(_codeOrigin(v.level, v.echo));
+        string memory o = LibString.toString(_codeOrigin(v.level, v.echo) + band);
         return string(
             abi.encodePacked(
                 '<g transform="translate(', o, " ", o, ') scale(',
@@ -317,11 +385,16 @@ contract Renderer is IRenderer {
     /// @dev `width="848" height="848"` when a size is declared, and the empty
     /// string when it is not -- so the unsized build emits the exact bytes it
     /// always has, down to the single space before `viewBox`.
-    function _intrinsic(TokenView memory v) private pure returns (string memory) {
+    /// @param band the finisher's digit band. The expression below is exactly
+    /// `canvas * k` when it is 0, because `units` is then `canvas * CELL_UNITS`
+    /// and the division is exact -- so an unbanded token declares the size it
+    /// always has.
+    function _intrinsic(TokenView memory v, uint256 band) private pure returns (string memory) {
         uint256 k = pxPerCell();
         if (k == 0) return "";
-        string memory px =
-            LibString.toString(FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)) * k);
+        uint256 units = FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo))
+            * FrameGeometry.CELL_UNITS + 2 * band;
+        string memory px = LibString.toString(units * k / FrameGeometry.CELL_UNITS);
         return string(abi.encodePacked(' width="', px, '" height="', px, '"'));
     }
 
