@@ -79,6 +79,16 @@ test("a token with a fragile candidate ships a code that scans where it used to 
 // is expensive (each candidate is a solve plus eighty renders and decodes) and
 // has not been run. Asserting rejected > 0 on an id that does not have it
 // would be worse than saying so here.
+//
+// TO CLOSE IT, in small batches, and through the wrapper -- an unbounded sweep
+// was the memory pressure that killed a background task on 2026-09-21:
+//
+//   ~/scripts/safe-build.sh node tools/fragile-sweep.mjs sweep 4,5,6
+//   ~/scripts/safe-build.sh node tools/fragile-sweep.mjs detail <id>:<mask>
+//
+// Look for an id whose `detail` line reports a non-zero `rejected`. That is a
+// token where the gate overrode the match ranking; pin it here and restore the
+// assertion.
 test("a token whose BEST-matching mask the gate rejects", { todo: "needs a version 10 sweep; see the note above" }, () => {});
 
 test("the gate covers the sizes and states the failures were found at", () => {
