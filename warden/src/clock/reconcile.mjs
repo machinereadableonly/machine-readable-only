@@ -40,7 +40,7 @@ export const MAX_LOG_SPAN = 10_000n;
 /// the 2026-09-06 pair), and the script, which rewrites only the value, left
 /// it describing a superseded deployment (found 2026-09-12). The value is the
 /// fact.
-export const DEPLOY_BLOCK = { 84532: 46_686_660n };
+export const DEPLOY_BLOCK = { 84532: 47_161_021n };
 
 /// The highest Mark id the CONTRACT will accept, from MachineReadableOnly.sol's
 /// own `MAX_MARK_ID`. Ids 11-15 are unwritten today (Plan 6 reserved them), so

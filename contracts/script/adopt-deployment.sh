@@ -172,6 +172,38 @@ done
 # (warden/test/set-deploy-block.test.mjs).
 bash contracts/script/set-deploy-block.sh "$CHAIN" "$NEW_BLOCK" warden/src/clock/reconcile.mjs
 
+# AND THE TEST THAT PINS IT. clock-reconcile.test.mjs asserts the Base Sepolia
+# block as a LITERAL on purpose -- it is the thing that fails when a redeploy
+# happens and nobody updates the floor, which would otherwise read as a quiet
+# chain rather than a misconfiguration. But this script claims to change the
+# deployment "everywhere at once", and on 2026-09-22 it left that pin behind:
+# an otherwise clean adoption ended with the warden suite red.
+#
+# THE GROUPED LITERAL IS READ BACK FROM THE FILE set-deploy-block.sh JUST
+# WROTE, not re-derived here. The first attempt formatted the digits with
+# `sed ':a;s/\B[0-9]\{3\}\>/_&/;ta'` and HUNG: an underscore is a word
+# character, so \B still matches after the first insertion and the loop never
+# terminates. One source for the formatting means there is no second place for
+# it to be wrong.
+#
+# Only the Base Sepolia pin moves, and only on a Base Sepolia adoption. The
+# literals in set-deploy-block.test.mjs are scratch INPUTS to the rewriter, not
+# records of a deployment, and must not move.
+if [ "$CHAIN" = "84532" ]; then
+  PIN=warden/test/clock-reconcile.test.mjs
+  GROUPED="$(sed -n 's|.*84532: \([0-9_]*\)n.*|\1|p' warden/src/clock/reconcile.mjs | head -1)"
+  if [ -z "$GROUPED" ]; then
+    echo "FAIL: could not read the grouped block back from reconcile.mjs" >&2
+    exit 1
+  fi
+  sed -i "s|assert.equal(DEPLOY_BLOCK\[84532\], [0-9_]*n);|assert.equal(DEPLOY_BLOCK[84532], ${GROUPED}n);|" "$PIN"
+  if ! /bin/grep -q "assert.equal(DEPLOY_BLOCK\[84532\], ${GROUPED}n);" "$PIN"; then
+    echo "FAIL: could not rewrite the deploy-block pin in $PIN" >&2
+    exit 1
+  fi
+  echo "  $PIN: deploy-block pin updated to ${GROUPED}"
+fi
+
 # THE SKILL'S COPY IS A COPY, byte for byte. It is the same document reaching
 # agents by a second route, and a skill that quotes a different address from the
 # served document is worse than a skill with no address at all.

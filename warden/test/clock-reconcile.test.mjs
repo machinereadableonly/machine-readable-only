@@ -109,8 +109,15 @@ test("the Base Sepolia deploy block is recorded, so reconcile floors instead of 
   // empty blocks and finds nothing, which reads as a quiet chain rather than as
   // a misconfiguration. Updated 2026-09-11 for the first-day pair (mint and
   // seed take the day the agent paid), taken from the broadcast receipt: all
-  // twelve transactions of that deploy landed in block 46,686,660.
-  assert.equal(DEPLOY_BLOCK[84532], 46_686_660n);
+  // twelve transactions of that deploy landed in block 46,686,660. Updated
+  // again 2026-09-22 for the QR version 10 pair, whose twelve transactions all
+  // landed in block 47,161,021.
+  //
+  // adopt-deployment.sh did NOT update this the first time and the suite went
+  // red after an otherwise clean adoption. That is the pin doing its job, but
+  // the script claims to change the address "everywhere at once", so it now
+  // rewrites this line too.
+  assert.equal(DEPLOY_BLOCK[84532], 47_161_021n);
 });
 
 // --- applying what the chain said ------------------------------------------
