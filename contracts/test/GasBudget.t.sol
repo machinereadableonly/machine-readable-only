@@ -638,4 +638,84 @@ contract GasBudgetTest is Test {
         assertEq(lenOn - lenOff, 9, "the only byte cost may be the Mark's name");
         assertLt(gasOn, GAS_LIMIT, "Static must stay inside the hard limit");
     }
+
+    // -----------------------------------------------------------------------
+    // THE FINISHER'S DIGIT BAND
+    // -----------------------------------------------------------------------
+
+    /// @dev The dearest ordinal to DRAW is the one with the most zeros, because
+    /// a 0 glyph carries more ink than a 1 -- 111/101/111 against 110/010/111.
+    /// Sixteen bits with a single 1 is therefore the worst case, and it is also
+    /// the first finisher, which is the one token certain to exist.
+    uint256 constant WORST_ORDINAL = uint256(1) << 64;
+
+    /// @notice What the finisher's digit band costs, on the token that will
+    /// actually carry one and on a bound that no ladder can produce.
+    ///
+    /// @dev THE FIGURE ON RECORD BEFORE THIS TEST WAS FOR A DIFFERENT DESIGN.
+    /// `DigitBandCost.t.sol` priced a 3x5 glyph on TWO edges, 32 glyphs; the
+    /// design the operator settled in section 10k is a 3x3 glyph on FOUR, which
+    /// is 64. Neither the gas nor the byte figure carries over, and this file
+    /// measures the shipped one.
+    ///
+    /// A FINISHER IS WHOLE, so the band's real worst case is the largest WHOLE
+    /// token -- the child at the ring cap wearing every Mark -- and not the
+    /// day-364 child the unbanded budget rests on. Both are measured anyway:
+    /// the renderer draws the band on the ordinal alone and does not ask
+    /// whether the heart is whole, so the day-364 figure is the bound if that
+    /// ever stopped being true. It is a bound, not a case: the ladder cannot
+    /// produce it, because an ordinal is only written when a finisher Mark is
+    /// claimed and a finisher Mark needs 365 days.
+    function test_theFinishersBandFitsBothHardLimits() public {
+        // The two whole children, at the ring cap with every Mark, with and
+        // without the band. Nothing else differs between them.
+        _placeChild(50, 365 * 10, 400, 1000, 3650, MAX_MARKS);
+        _placeChild(51, 365 * 10, 400, 1000, 3650, MAX_MARKS | WORST_ORDINAL);
+        // The bound: the day before whole, which cannot be a finisher.
+        _placeChild(52, 364, 364, 1000, 3650, MAX_MARKS_UNSEALED);
+        _placeChild(53, 364, 364, 1000, 3650, MAX_MARKS_UNSEALED | WORST_ORDINAL);
+
+        (uint256 wholeGas, uint256 wholeBytes) = _measure("whole child, cap, max marks", 50);
+        (uint256 bandGas, uint256 bandBytes) = _measure("the same token, finisher 1", 51);
+        (uint256 boundOffGas, uint256 boundOffBytes) = _measure("day 364 child (a bound)", 52);
+        (uint256 boundGas, uint256 boundBytes) = _measure("day 364 child, banded (a bound)", 53);
+
+        console.log("the finisher's digit band costs");
+        console.log("  on a whole child   gas", bandGas - wholeGas);
+        console.log("                   bytes", bandBytes - wholeBytes);
+        console.log("  on the bound       gas", boundGas - boundOffGas);
+        console.log("                   bytes", boundBytes - boundOffBytes);
+        console.log("headroom left, banded");
+        if (bandGas < GAS_LIMIT) console.log("  gas  ", GAS_LIMIT - bandGas);
+        else console.log("  OVER THE HARD GAS LIMIT BY", bandGas - GAS_LIMIT);
+        if (bandBytes < BYTE_LIMIT) console.log("  bytes", BYTE_LIMIT - bandBytes);
+        else console.log("  OVER THE HARD BYTE LIMIT BY", bandBytes - BYTE_LIMIT);
+
+        // BOTH limits, on BOTH tokens. The dearest token and the largest token
+        // are different tokens and every document in this project has collapsed
+        // them at least once; a band asserted against one of them would be the
+        // same mistake in a new place.
+        assertLt(bandBytes, BYTE_LIMIT, "a finisher must fit the hard byte limit");
+        assertLt(boundBytes, BYTE_LIMIT, "so must the bound");
+        if (_gasIsMeaningful()) {
+            assertLt(bandGas, GAS_LIMIT, "a finisher must fit the hard gas limit");
+            assertLt(boundGas, GAS_LIMIT, "so must the bound");
+        }
+    }
+
+    /// @notice The band's cost varies with the NUMBER, which is unusual enough
+    /// to pin: a reader who takes one gas figure for "the band" will be wrong
+    /// for every other finisher.
+    function test_theOrdinalFullOfZerosIsTheDearestBand() public {
+        _placeChild(60, 365 * 10, 400, 1000, 3650, MAX_MARKS | WORST_ORDINAL);
+        _placeChild(61, 365 * 10, 400, 1000, 3650, MAX_MARKS | (uint256(0xFFFF) << 64));
+
+        (uint256 zerosGas, uint256 zerosBytes) = _measure("finisher 1 (fifteen zeros)", 60);
+        (uint256 onesGas, uint256 onesBytes) = _measure("finisher 65535 (all ones)", 61);
+
+        assertGt(zerosBytes, onesBytes, "a 0 glyph carries more ink than a 1");
+        if (_gasIsMeaningful()) {
+            assertGt(zerosGas, onesGas, "and therefore costs more to draw");
+        }
+    }
 }

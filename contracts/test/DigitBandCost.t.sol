@@ -5,7 +5,20 @@ import {Test, console} from "forge-std/Test.sol";
 
 import {PathWriter} from "../src/render/PathWriter.sol";
 
-/// @notice WHAT A BORDER OF ACTUAL 1s AND 0s COSTS, measured.
+/// @notice WHAT A BORDER OF ACTUAL 1s AND 0s COSTS, measured -- FOR A DESIGN
+/// THAT WAS NOT THE ONE ADOPTED.
+///
+/// SUPERSEDED 2026-09-22. This file prices a 3x5 glyph on TWO edges, 32 glyphs,
+/// which is what section 10j of the finisher spec described. The design the
+/// operator settled in 10k is a 3x3 glyph on FOUR edges, 64 glyphs, and it
+/// measures 906,968 gas / 4,800 bytes on the real worst case -- against the
+/// 584,708 / 3,360 below. Neither figure carries over.
+///
+/// The shipped band is `contracts/src/render/DigitBand.sol` and the measurement
+/// that governs is `GasBudget.t.sol:test_theFinishersBandFitsBothHardLimits`.
+/// This file is kept because the harness and the note on ink density still
+/// teach, and because a superseded measurement with its successor named beside
+/// it is worth more than a deleted one. DO NOT QUOTE ITS NUMBERS.
 ///
 /// @dev The operator asked for the real digits rather than a pattern of cells, and
 /// the first answer was an ESTIMATE: run count times a gas-per-run figure
