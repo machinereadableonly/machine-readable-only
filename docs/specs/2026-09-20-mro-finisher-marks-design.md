@@ -1093,13 +1093,13 @@ when one uncapped Mark with the number as the only prize was offered instead,
 
 So each finisher Mark writes the number in its own ink:
 
-| Id | Cap | Finishing place | Ink |
-|---|---|---|---|
-| 15 | 1 | 1st | gold, `#b8860b` (the Vessel gold) |
-| 14 | 3 | 2nd to 4th | silver, `#8c9096` |
-| 13 | 10 | 5th to 14th | bronze, `#a0612b` |
-| 12 | 50 | 15th to 64th | blue, `#2000ff` (the Beat blue) |
-| 11 | none | 65th onwards | the heart's red, `#c8102e` |
+| Id | Name | Cap | Finishing place | Ink |
+|---|---|---|---|---|
+| 15 | Apex | 1 | 1st | gold, `#b8860b` (the Vessel gold) |
+| 14 | Atrium | 3 | 2nd to 4th | silver, `#8c9096` |
+| 13 | Valve | 10 | 5th to 14th | bronze, `#a0612b` |
+| 12 | Chamber | 50 | 15th to 64th | blue, `#2000ff` (the Beat blue) |
+| 11 | Aorta | none | 65th onwards | the heart's red, `#c8102e` |
 
 **The caps are 1 / 3 / 10 / 50 plus one uncapped, SET by the operator** -- the
 recommendation in section 4 stands as the decision.
@@ -1155,6 +1155,9 @@ Stated so they are not re-litigated mid-build:
 
 - ~~The cap numbers.~~ **SET: 1 / 3 / 10 / 50 plus one uncapped** (10l).
 - ~~What each looks like.~~ **DECIDED: the ink of the number** (10l).
-- **The five names.** Not yet attempted.
+- ~~The five names.~~ **DECIDED 2026-09-23: Apex, Atrium, Valve, Chamber,
+  Aorta** (ids 15 down to 11), parts of the heart. Apex is the heart's tip and
+  means the top; Aorta, the artery carrying red blood out, goes with the red
+  ink. Chosen over a set named after the inks and a finish-line set.
 - **The combination strategy** in section 9, if he wants it decided rather than
   recommended.
