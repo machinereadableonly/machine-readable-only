@@ -39,6 +39,11 @@ export function registerResources(server, { q, contract, chainId, llmsTxt, domai
           address: contract,
           chainId,
           abi: MRO_ABI,
+          // ALL FIFTEEN, finisher rows included and deliberately so: they exist
+          // on chain, `upgradeOf` answers for them, and an agent deciding
+          // whether to come back every day should be able to read that the
+          // first year finished is an Apex. They carry no price and `upgrade`
+          // refuses their ids, which resources.test.mjs pins.
           catalogue,
           rendererIsReadOnChain: "call renderer() on the address above; it is swappable, so this service does not cache it",
         }),

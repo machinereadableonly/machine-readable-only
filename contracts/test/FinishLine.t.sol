@@ -107,6 +107,47 @@ contract FinishLineTest is MroTestBase {
         assertEq(u[11].maxSupply, 0);
     }
 
+    /// @dev THE DEPLOY'S OWN LOOP, run against the real contract.
+    ///
+    /// `DeployPlan5.s.sol` and `fast/DeployFast.s.sol` both write ids 1..15 with
+    /// exactly this call, and nothing else in the suite makes it. That matters
+    /// because `setUpgrade` has two refusals a finisher record could trip on its
+    /// own -- a Mark that excludes itself and one that requires itself -- and a
+    /// group mask is built by a loop rather than written out, which is precisely
+    /// the shape that gets a bit wrong. A deploy script that reverts is found on
+    /// the day of the deploy, with the gas already spent.
+    ///
+    /// Read back off the chain rather than off `Ladder.all()`, so this also
+    /// proves `setUpgrade` stored what it was given.
+    function test_theDeployLoopWritesEveryRecordIncludingTheFinishers() public {
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
+        for (uint8 i = 1; i <= 15; i++) t.setUpgrade(i, u[i]);
+
+        assertEq(t.upgradeOf(15).maxSupply, 1, "one Apex");
+        assertEq(t.upgradeOf(14).maxSupply, 3, "three Atrium");
+        assertEq(t.upgradeOf(13).maxSupply, 10, "ten Valve");
+        assertEq(t.upgradeOf(12).maxSupply, 50, "fifty Chamber");
+        assertEq(t.upgradeOf(11).maxSupply, 0, "and Aorta is never refused");
+
+        // The group mask, one literal per id, so a mistake in the loop that
+        // builds it cannot be shared with the expectation. Bits 11-15 are
+        // 0xF800; each Mark carries that minus its own bit.
+        uint16[5] memory excludes = [
+            uint16(0xF000),   // 11 aorta   excludes 12, 13, 14, 15
+            uint16(0xE800),   // 12 chamber excludes 11, 13, 14, 15
+            uint16(0xD800),   // 13 valve   excludes 11, 12, 14, 15
+            uint16(0xB800),   // 14 atrium  excludes 11, 12, 13, 15
+            uint16(0x7800)    // 15 apex    excludes 11, 12, 13, 14
+        ];
+        for (uint8 i = 11; i <= 15; i++) {
+            assertEq(t.upgradeOf(i).excludes, excludes[i - 11], "a finisher exclusion mask is wrong");
+            assertEq(t.upgradeOf(i).excludes & uint16(1 << i), 0, "a Mark that excludes itself is unreachable");
+            assertTrue(t.upgradeOf(i).active, "a finisher Mark ships inactive");
+            assertEq(t.upgradeOf(i).priceUsdc6, 0, "a place is not for sale");
+            assertTrue(t.upgradeOf(i).requiresWhole, "a place is only given at a whole heart");
+        }
+    }
+
     /// @dev Bits 32-63 are the earned Iris's run. Finishing must not touch them.
     ///
     /// @dev The earned Iris is WIRED IN HERE, unlike the brief's draft of this

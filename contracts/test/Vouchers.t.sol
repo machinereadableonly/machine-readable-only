@@ -141,6 +141,44 @@ contract VouchersTest is MroTestBase {
         t.checkInWithVoucher(1, d, sig);
     }
 
+    /// @dev THE STOP AT 365 IS ON THE PATH THAT SHIPS PAUSED TOO.
+    ///
+    /// `_credit` refuses a finished token, and both check-in paths go through
+    /// it, which is the whole reason the refusal lives there rather than in
+    /// `batchCheckIn`. But the voucher path is the one that is off at launch and
+    /// therefore gets read least, so "both paths share a function" is asserted
+    /// here rather than reasoned about: anyone may submit a voucher, so a gap
+    /// here would be a way for a STRANGER to write past the end of a token's
+    /// year, on the one path the operator is not watching.
+    function test_aVoucherCannotCreditAFinishedToken() public {
+        t.setVouchersEnabled(true);
+        _fillTheYear();
+        assertEq(t.viewOf(1).level, 365, "the year is complete");
+
+        uint32 d = t.viewOf(1).lastDay + 1;
+        _warpToDay(d);
+        bytes memory sig = _sign(1, d);
+        vm.prank(MALLORY);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.AlreadyFinished.selector, uint256(1)));
+        t.checkInWithVoucher(1, d, sig);
+    }
+
+    /// @dev `MroTestBase._makeWhole` cannot be used here: it pranks the base's
+    /// WARDEN constant, and this suite's Warden is an address it holds the key
+    /// for. Same 364 consecutive days, same one call.
+    function _fillTheYear() internal {
+        uint32 d = t.today();
+        uint32[] memory ids = new uint32[](364);
+        uint32[] memory ds = new uint32[](364);
+        for (uint32 i = 0; i < 364; i++) {
+            ids[i] = 1;
+            ds[i] = d + 1 + i;
+        }
+        _warpToDay(d + 364);
+        vm.prank(wardenAddr);
+        t.batchCheckIn(_packed(ids), ds);
+    }
+
     function test_vouchersAreBlockedBySunset() public {
         t.setVouchersEnabled(true);
         t.sunset();

@@ -198,7 +198,7 @@ contract RealTokenGasTest is MroTestBase {
         _applyMaxMarks(child, true);
 
         assertEq(t.viewOf(child).level, 365, "a whole heart, which is now the ceiling");
-        assertGt(t.viewOf(child).marks >> 64, 0, "and it wears a finishing place, which is drawn");
+        assertGt(t.viewOf(child).marks >> 64, 0, "and it carries a finishing place in its marks word");
         (uint256 gasUsed, uint256 len) = _measure("REAL child, whole year, every legal mark", child);
         console.log("  headroom, gas  ", GAS_LIMIT - gasUsed);
         console.log("  headroom, bytes", BYTE_LIMIT - len);

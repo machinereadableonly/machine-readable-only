@@ -89,6 +89,23 @@ contract LadderTest is MroTestBase {
         for (uint8 a = 1; a <= 10; a++) {
             assertEq(u[a].excludes, expected[a], "an exclusion mask is not the number it must be");
         }
+
+        // And the five finisher Marks, which exclude as a GROUP rather than in
+        // pairs -- a token finishes once. Bits 11-15 are 0xF800; each Mark
+        // carries that minus its own bit. Written out for the same reason as
+        // above: Ladder.sol builds these with `group & ~uint16(1 << i)` in a
+        // loop, and an expectation derived the same way would cancel the same
+        // mistake out.
+        uint16[5] memory finishers = [
+            uint16(0xF000),   // 11 aorta   -> 12, 13, 14, 15
+            uint16(0xE800),   // 12 chamber -> 11, 13, 14, 15
+            uint16(0xD800),   // 13 valve   -> 11, 12, 14, 15
+            uint16(0xB800),   // 14 atrium  -> 11, 12, 13, 15
+            uint16(0x7800)    // 15 apex    -> 11, 12, 13, 14
+        ];
+        for (uint8 a = 11; a <= 15; a++) {
+            assertEq(u[a].excludes, finishers[a - 11], "a finisher exclusion mask is not the number it must be");
+        }
     }
 
     function test_eachMarkExcludesExactlyItsPartner() public pure {

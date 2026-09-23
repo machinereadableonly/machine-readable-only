@@ -332,6 +332,26 @@ test("the served schemas name what their arguments are, and the ladder is genera
   assert.match(upgradeId.description, /1 hush bought \$1\.00/);
   assert.match(upgradeId.description, /closes the other permanently/);
 
+  // THE LITERAL TEXT, because the line above compares a generated string with
+  // the same generated string and would pass on any sentence at all. These two
+  // are the ones that matter to an agent reading `tools/list` and nothing else.
+  //
+  // The finisher Marks must be NAMED as unavailable rather than merely left
+  // out: this argument accepts 1-10, so an agent that has seen a token wearing
+  // Apex needs to be told why it cannot ask for one, not left to guess that the
+  // list is stale. And they must not appear in the list of what CAN be asked
+  // for, which is what the second assertion forbids.
+  assert.ok(
+    upgradeId.description.includes("Marks 11-15 are given by finishing and cannot be requested."),
+    "tools/list must say a place cannot be requested",
+  );
+  assert.doesNotMatch(
+    upgradeId.description,
+    /\b1[1-5] (aorta|chamber|valve|atrium|apex)\b/,
+    "a finisher Mark is listed as though it could be bought",
+  );
+  assert.equal(upgradeId.maximum, 10, "and the schema itself refuses one");
+
   assert.match(byName.mint.inputSchema.properties.to.description, /will OWN the token/);
   assert.match(byName.rest.inputSchema.properties.tokenId.description, /seals it forever/);
   assert.match(byName.ladder.inputSchema.properties.tokenId.description, /not only your own/);

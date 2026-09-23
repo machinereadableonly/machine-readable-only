@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseMoney } from "@x402/core/utils";
-import { LADDER, VARIANT_NAMES, FINISHER_IDS, FINISHER_MASK, assertLadderSane } from "../src/mcp/ladder.mjs";
+import { LADDER, VARIANT_NAMES, FINISHER_IDS, FINISHER_MASK, requestable, assertLadderSane } from "../src/mcp/ladder.mjs";
 
 // IDS 1-10. A finisher Mark is a THIRD route -- given for a place, never bought
 // and never earned by a run -- so it is neither side of this rule by design.
@@ -136,11 +136,32 @@ test("only the bought Iris and Tint accept a variant, and the names match the co
 // Iris by either route -- so the choice between loud-and-expensive and
 // quiet-and-cheap is informed. Aura was ungated once, and being buyable on day
 // one silently forfeited Tint, which needs 100 days.
-test("each finisher Mark excludes the other four, because a token finishes once", () => {
+// The masks as LITERALS. The loop below derives them with the same expression
+// ladder.mjs builds them with, so any shared mistake cancels out -- the trap
+// Ladder.t.sol documents at test_theExclusionMasksAreTheseExactNumbers and the
+// reason that file writes its numbers out too. Bits 11-15 are 0xF800; each Mark
+// carries that minus its own bit.
+test("each finisher Mark excludes the other four, and these are the numbers", () => {
+  assert.deepEqual(FINISHER_IDS.map((id) => LADDER[id].excludes), [
+    0xF000,   // 11 aorta   -> 12, 13, 14, 15
+    0xE800,   // 12 chamber -> 11, 13, 14, 15
+    0xD800,   // 13 valve   -> 11, 12, 14, 15
+    0xB800,   // 14 atrium  -> 11, 12, 13, 15
+    0x7800,   // 15 apex    -> 11, 12, 13, 14
+  ]);
+  assert.equal(FINISHER_MASK, 0xF800, "the group is bits 11-15");
   for (const id of FINISHER_IDS) {
-    assert.equal(LADDER[id].excludes, FINISHER_MASK & ~(1 << id), `mark ${id}`);
     assert.equal(LADDER[id].excludes & (1 << id), 0, `mark ${id} excludes itself`);
   }
+});
+
+// ONE DEFINITION of "what an agent may ask for", because three surfaces read it
+// -- the `ladder` tool's pairs, the published price table and `upgradeId`'s
+// description -- and a fourth hand-rolled filter is how one of them quietly
+// starts offering a Mark that cannot be bought.
+test("requestable() is exactly the five pairs", () => {
+  assert.deepEqual(requestable().map((m) => m.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  for (const m of requestable()) assert.notEqual(m.route, "finisher");
 });
 
 test("both sides of pair five wait on an Iris", () => {
