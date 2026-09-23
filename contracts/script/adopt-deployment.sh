@@ -23,7 +23,9 @@
 # THE OLD ADDRESSES ARE READ FROM WHAT IS CURRENTLY PUBLISHED, not hardcoded
 # here, so this script cannot itself go stale.
 #
-# It edits files. It sends nothing, restarts nothing and touches no chain.
+# It edits files. It sends nothing and restarts nothing. Its only chain access
+# is one READ, on a Base Sepolia adoption: the deploy block's timestamp, for the
+# date in CLAUDE.md.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
@@ -202,6 +204,23 @@ if [ "$CHAIN" = "84532" ]; then
     exit 1
   fi
   echo "  $PIN: deploy-block pin updated to ${GROUPED}"
+
+  # AND THE BLOCK AND DATE IN CLAUDE.md. The address pass above rewrote the
+  # addresses there but never the line under them, so the 2026-09-22 redeploy
+  # left the old pair's block beside the new address (found 2026-09-23).
+  # The date is the deploy block's own timestamp, read from the chain, not
+  # today's date: adoption can run days after the deploy.
+  TS="$(cast block "$NEW_BLOCK" -f timestamp --rpc-url https://sepolia.base.org)"
+  if [ -z "$TS" ]; then
+    echo "FAIL: could not read block $NEW_BLOCK's timestamp from Base Sepolia" >&2
+    exit 1
+  fi
+  bash contracts/script/set-record-block.sh "$NEW_BLOCK" "$(date -u -d "@$TS" +%F)" CLAUDE.md
+else
+  # CLAUDE.md's live-deployment paragraph is written about Base Sepolia. A
+  # mainnet adoption changes what that paragraph is ABOUT, which a rewrite of
+  # one line cannot do honestly.
+  echo "  NOTE: CLAUDE.md's live-deployment paragraph describes Base Sepolia -- rewrite it by hand for mainnet"
 fi
 
 # THE SKILL'S COPY IS A COPY, byte for byte. It is the same document reaching
