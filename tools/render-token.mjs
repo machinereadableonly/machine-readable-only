@@ -454,8 +454,8 @@ export function pathFor(set, canvas) {
 // grid and placed inside a group that carries its scale. Coordinates therefore
 // stay one or two digits in both, which matters because PathWriter composes
 // every run in a single 32-byte word with no slack at three digits a
-// coordinate -- absolute units would reach 1,157 on a ten-ring canvas and
-// overrun the reservation.
+// coordinate -- absolute units would reach 1,157 on the ten-ring canvas the
+// piece used to allow, and 741 on today's widest, and overrun the reservation.
 //
 // `grid` is the side of the set's own grid, in its own cells.
 export const scaleGroup = (scale, body) =>
@@ -649,8 +649,9 @@ export function renderSvg(modules, want, size, state) {
     // exists, so this defaults to the picture as it has always been drawn.
     ordinal = 0,
   } = state;
-  // `years` is the token's OWN rings, capped at nine once a child spends a slot
-  // on its echo ring; `total` is what the canvas is sized from.
+  // `years` is the token's OWN rings, which Spec 10f caps at ONE: the ring that
+  // says the year is finished. A child's echo ring is a SECOND ring beside it,
+  // not a share of it. `total` is what the canvas is sized from.
   const { own: years, echoRings } = ringBudget(rawYears, echo);
   const total = years + echoRings;
   const canvas = canvasFor(rawYears, echo);

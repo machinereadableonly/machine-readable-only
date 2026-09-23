@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {MroTestBase} from "./MroTestBase.sol";
+import {FrameGeometry} from "../src/render/FrameGeometry.sol";
 import {Palette} from "../src/render/Palette.sol";
 import {TokenView} from "../src/render/TokenView.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
@@ -101,11 +102,27 @@ contract RunHistoryTest is MroTestBase {
     // -----------------------------------------------------------------
     // The colour -- the defect, and the fix, at every boundary
     // -----------------------------------------------------------------
+    //
+    // EVERY TEST BELOW GROWS A 200-DAY RUN, NOT A 364-DAY ONE, and the
+    // difference is Spec 10f. A token that runs 364 days, misses one and
+    // returns is credited to 365 by that return -- so it FINISHES, and a
+    // finished token's colour is read on its last credited day for ever. At 364
+    // these tests were driving `today` forward against a frozen picture: three
+    // of the four broke outright when the freeze landed, and the fourth passed
+    // only because it asserts on the day of the return, where a stopped clock
+    // and a live one give the same answer.
+    //
+    // The fade ladder is a MID-LIFE rule now. 200 is the smallest round run
+    // that still sits on the top tier (the ladder's last threshold is 100), so
+    // every `tierIndex(fellRun)` below is the same rung it always was, and the
+    // token stays under 365 through the whole scenario. That the fade stops at
+    // the finish is asserted where it belongs, in
+    // `Renderer.t.sol::test_aFinishedTokenDoesNotFade`.
 
     /// @dev The whole finding in one assertion. A token that missed ONE day and
     /// came back must not render paler than one that has been gone a month.
     function test_theTokenThatCameBackIsNotPalerThanTheOneThatDidNot() public {
-        _growTo(1, 364);                     // a 364-day run
+        _growTo(1, 200);                     // a 200-day run
         uint32 fell = t.today();
 
         // It misses one day and returns.
@@ -139,7 +156,7 @@ contract RunHistoryTest is MroTestBase {
     /// slip invisible for three days and contradicted that sentence. What was
     /// unacceptable was the twenty-nine day version, and that is gone.
     function test_theFirstTwoDaysAreTheKnownPriceOfMakingASlipVisible() public {
-        _growTo(1, 364);
+        _growTo(1, 200);
         uint32 fell = t.today();
 
         _warpToDay(fell + 2);
@@ -162,7 +179,7 @@ contract RunHistoryTest is MroTestBase {
     /// served copy says "miss a day and ... the colour goes". Uncapped, a
     /// returning token was indistinguishable from one that never slipped.
     function test_theDayOfTheReturnIsOneRungBelowAnUnbrokenRun() public {
-        _growTo(1, 364);
+        _growTo(1, 200);
         uint32 fell = t.today();
         TokenView memory unbroken = t.viewOf(1);
 
@@ -179,7 +196,7 @@ contract RunHistoryTest is MroTestBase {
     /// 3 days, another at 7, the floor at 30. No new colour is introduced,
     /// which is why no decode sweep is owed beyond the existing suite.
     function test_theFallFadesOnTheUsualLadderAndTheNewRunOvertakesIt() public {
-        _growTo(1, 364);
+        _growTo(1, 200);
         uint32 fell = t.today();
         _warpToDay(fell + 2);
         vm.prank(WARDEN);
@@ -303,19 +320,27 @@ contract RunHistoryTest is MroTestBase {
     /// This file tests the RULE: that the numbers come out where the decision
     /// says they should. `RenderMatrix.t.sol` tests the WIRING: that the real
     /// `Renderer` produces byte-identical output to the independently written
-    /// JS reference across all 49 states, six of which are the slip and sunset
+    /// JS reference across all 64 states, six of which are the slip and sunset
     /// states added with this change. So a mistake shared between this helper
     /// and `Renderer._rung` would still have to appear a third time, in
     /// `tools/render-token.mjs`, to go unnoticed.
+    ///
+    /// BEING A SECOND IMPLEMENTATION IS THE POINT, and it is also the cost: it
+    /// has to be brought in line by hand every time the shipped rule moves, and
+    /// nothing fails if it is not. It gained the `whole` branch with Spec 10f.
     ///
     /// The alternative -- asserting on a colour inside a base64 SVG inside a
     /// data URI -- would test string decoding, not the ladder.
     function _rungOf(TokenView memory v) internal pure returns (uint256) {
         if (v.resting) return Palette.tierIndex(v.streak);
-        if (v.sunset) return Palette.lapsedIndex(v.streak, v.lastDay, v.sunsetDay);
-        uint256 live = Palette.lapsedIndex(v.streak, v.lastDay, v.today);
+        // A token that reached 365 is FINISHED: the clock stops at its last
+        // credited day, and a sunset after that point has nothing left to seal.
+        bool whole = v.level >= FrameGeometry.DAY_CELLS;
+        if (v.sunset && !whole) return Palette.lapsedIndex(v.streak, v.lastDay, v.sunsetDay);
+        uint32 at = whole ? v.lastDay : v.today;
+        uint256 live = Palette.lapsedIndex(v.streak, v.lastDay, at);
         if (v.fellRun == 0) return live;
-        uint256 fell = Palette.lapsedIndex(v.fellRun, v.fellDay, v.today);
+        uint256 fell = Palette.lapsedIndex(v.fellRun, v.fellDay, at);
         uint256 cap = Palette.tierIndex(v.fellRun);
         cap = cap == 0 ? 0 : cap - 1;
         if (fell > cap) fell = cap;

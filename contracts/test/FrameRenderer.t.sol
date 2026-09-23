@@ -264,15 +264,29 @@ contract FrameRendererTest is Test {
     }
 
     function test_theWidestCanvasStillRendersAndStaysInBudget() public view {
-        // A finished FOUNDING token: one ring, the widest canvas that carries no
-        // echo. This used to be the ten-ring case, which Spec 10f retired.
-        string memory out = harness.paths(_view(365), COLOUR, GHOST);
-        assertEq(bytes(_pathFor(out, GHOST)).length, 0, "a whole frame has no ghost left");
+        // A FINISHED CHILD: its own ring plus the echo ring, which is the widest
+        // canvas the piece can produce. This used to be the ten-ring case, which
+        // Spec 10f retired -- and a founding token at one ring is NOT the
+        // replacement, because a child is two cells wider on every side.
+        TokenView memory v = _view(365);
+        v.echo = 3650;
+        string memory out = harness.paths(v, COLOUR, GHOST);
+
+        // A whole frame has no unearned day left, so the ghost element survives
+        // only to carry the dashed echo ring -- at depth 2, one slot inside the
+        // token's own ring.
+        assertEq(
+            _pathFor(out, GHOST),
+            string(FrameRenderer.echoRingBars(2, 53)),
+            "the ghost must hold the echo ring and nothing else"
+        );
 
         uint256 cells = PathParser.countCells(_pathFor(out, COLOUR));
         assertEq(
             cells,
-            FrameGeometry.CELL_COUNT + _ringCells(1),
+            // The frame, plus the ONE solid ring: the echo ring is drawn in the
+            // ghost fill, so it is not in this path at all.
+            FrameGeometry.CELL_COUNT + 4 * (FrameRenderer.canvas(2) - 1),
             "every frame cell and every ring cell is drawn"
         );
         // The frame's own share has to leave room for the code block, the JSON

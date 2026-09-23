@@ -184,7 +184,7 @@ test("the frame seals only when the heart is whole", () => {
   assert.ok(!sealed.includes("#f4eef0"), "a whole heart should have no ghost cells left");
 });
 
-test("canvas grows one ring per completed year, with a gap between rings", () => {
+test("canvas grows four cells per ring, with a gap between rings", () => {
   // Two cells per side per year: the ring, and the blank that separates it from
   // the next one in. Without the blank the rings merge into a single slab and
   // the year count cannot be read off the image.

@@ -167,7 +167,10 @@ library FrameRenderer {
     /// nest, so those edge cells are adjacent and merge: any row deep enough to
     /// sit inside every ring has exactly one block of them on each side. Deriving
     /// that per row is O(canvas); drawing each ring separately would be O(rings x
-    /// canvas), which at the cap is 16,880 iterations instead of 211.
+    /// canvas). Measured back when a token could carry ten rings, that was
+    /// 16,880 iterations instead of 211. Spec 10f caps the rings at two, so the
+    /// saving is now small -- the row derivation stays because it is also what
+    /// keeps the runs merged, which the byte budget cares about more.
     function _emit(
         uint256[] memory litRows,
         uint256[] memory ghostRows,

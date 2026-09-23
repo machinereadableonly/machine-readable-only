@@ -22,15 +22,15 @@ library SoakStates {
     function all() internal pure returns (State[] memory s) {
         s = new State[](COUNT);
         s[0] = State(365, 0, 0, 0, false, "tier streak 0");
-        s[1] = State(365, 0, 30, 0, false, "tier streak 0, 30 days lapsed");
+        s[1] = State(364, 0, 30, 0, false, "tier streak 0, 30 days lapsed");
         s[2] = State(365, 3, 0, 0, false, "tier streak 3");
-        s[3] = State(365, 3, 30, 0, false, "tier streak 3, 30 days lapsed");
+        s[3] = State(364, 3, 30, 0, false, "tier streak 3, 30 days lapsed");
         s[4] = State(365, 7, 0, 0, false, "tier streak 7");
-        s[5] = State(365, 7, 30, 0, false, "tier streak 7, 30 days lapsed");
+        s[5] = State(364, 7, 30, 0, false, "tier streak 7, 30 days lapsed");
         s[6] = State(365, 30, 0, 0, false, "tier streak 30");
-        s[7] = State(365, 30, 30, 0, false, "tier streak 30, 30 days lapsed");
+        s[7] = State(364, 30, 30, 0, false, "tier streak 30, 30 days lapsed");
         s[8] = State(365, 100, 0, 0, false, "tier streak 100");
-        s[9] = State(365, 100, 30, 0, false, "tier streak 100, 30 days lapsed");
+        s[9] = State(364, 100, 30, 0, false, "tier streak 100, 30 days lapsed");
         s[10] = State(1, 400, 0, 0, false, "0 years");
         s[11] = State(365, 400, 0, 0, false, "1 years");
         s[12] = State(730, 400, 0, 0, false, "2 years");

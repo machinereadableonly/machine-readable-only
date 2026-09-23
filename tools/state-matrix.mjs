@@ -59,10 +59,16 @@ export function renderCases() {
   const out = [];
   const base = { lastDay: 1000, today: 1000, level: 365, streak: 400 };
 
-  // One per tier, live, then the same tier fully lapsed.
+  // One per tier, live, then the same tier fully lapsed. THE LAPSED HALF IS ONE
+  // DAY SHORT OF WHOLE: since Spec 10f a finished token holds the colour it
+  // finished with, so at the base level of 365 each lapsed row rendered exactly
+  // its live partner and five of the matrix's cases were testing nothing.
   for (const streak of [0, 3, 7, 30, 100]) {
     out.push({ label: `tier streak ${streak}`, ...base, streak });
-    out.push({ label: `tier streak ${streak}, 30 days lapsed`, ...base, streak, today: 1030 });
+    out.push({
+      label: `tier streak ${streak}, 30 days lapsed`,
+      ...base, streak, level: DAY_CELLS - 1, today: 1030,
+    });
   }
 
   // Ring counts, including one past the end of the year.
@@ -182,14 +188,22 @@ export function renderCases() {
   out.push({ label: "resting", ...base, today: 9999, resting: true });
   out.push({ label: "sunset", ...base, today: 9999, sunset: true });
 
-  // A sunset that closed while this token had ALREADY lapsed. The freeze is
-  // taken at the day the piece closed, so the token keeps the paled colour it
-  // had earned rather than snapping back to its last live run. Without a
-  // `sunsetDay` in the view this state could not be drawn at all, and every
-  // abandoned token would have looked kept at the moment the record sealed.
+  // A sunset that closed while this token had ALREADY lapsed, ONE DAY SHORT OF
+  // WHOLE. The freeze is taken at the day the piece closed, so the token keeps
+  // the paled colour it had earned rather than snapping back to its last live
+  // run. Without a `sunsetDay` in the view this state could not be drawn at
+  // all, and every abandoned token would have looked kept at the moment the
+  // record sealed.
+  //
+  // THE LEVEL IS LOAD-BEARING. Spec 10f freezes a FINISHED token on its own, so
+  // `_rung` takes the sunset branch only below 365 -- and at the base level of
+  // 365 this row hashed identically to the plain "sunset" row above, which left
+  // `lapsedIndex(streak, lastDay, sunsetDay)` with no end-to-end pin in either
+  // language. The state is still reachable: a piece can close on any day of a
+  // token's year.
   out.push({
     label: "sunset after this token lapsed",
-    ...base, today: 9999, sunset: true, sunsetDay: 1040,
+    ...base, level: DAY_CELLS - 1, today: 9999, sunset: true, sunsetDay: 1040,
   });
 
   // The slip, at each boundary of the ladder it now fades down. A token on a
