@@ -60,8 +60,17 @@ contract GasBudgetTest is Test {
     ///   a finer QR (version 10)   +675,863 gas  +4,285 bytes
     ///   a border of real digits   +584,708 gas  +3,360 bytes
     ///
-    /// Together they put the worst case near 2.9M -- an eighth of what
-    /// Anonymice already spends.
+    /// THE DIGIT BAND LINE ABOVE IS A RECORD OF A DESIGN THAT WAS NOT BUILT,
+    /// and it is kept only because the 4,000,000 was sized against it.
+    /// `DigitBandCost.t.sol` priced a 3x5 glyph on TWO edges, 32 glyphs; what
+    /// shipped is a 3x3 glyph on FOUR, which is 64. Re-measured 2026-09-23 by
+    /// `test_theFinishersBandFitsBothHardLimits` below, on the real thing:
+    ///
+    ///   a border of real digits   +871,911 gas  +4,636 bytes
+    ///
+    /// Half as much again in gas and a third more in bytes than the figure the
+    /// limit was set from. It still fits -- see the headroom that test prints --
+    /// and the limit has not moved for it.
     ///
     /// This paragraph used to end "THE BYTE LIMIT DOES NOT MOVE: at 20,000 it
     /// is never threatened by either change (18,854 with both)". That was an
@@ -75,8 +84,10 @@ contract GasBudgetTest is Test {
     /// the spec and this file justified it as "bytes are what every viewer
     /// actually downloads" -- a quality argument, not a limit anyone imposes.
     /// QR version 10 measured 18,246 at the byte worst case and the finisher's
-    /// digit band needs another 3,360, so the chosen number was about to
-    /// decide a design question it was never derived to answer.
+    /// digit band was then thought to need another 3,360, so the chosen number
+    /// was about to decide a design question it was never derived to answer.
+    /// The band as built needs 4,636 (measured 2026-09-23, below), which is
+    /// more than the raise was argued from and still inside it.
     ///
     /// THERE IS ONE REAL EXTERNAL CEILING AND IT IS 30,000. Alchemy's NFT API
     /// docs: "This can also happen if the content length of the response is
@@ -84,7 +95,9 @@ contract GasBudgetTest is Test {
     /// elsewhere, because Alchemy is the ONLY third-party metadata consumer
     /// this piece has ever had working -- Basescan ingests none on Base
     /// Sepolia and OpenSea is untested. 24,000 fits version 10 plus the digit
-    /// band with room and leaves 6,000 under that ceiling.
+    /// band: measured 2026-09-23, the largest token the shipping contract can
+    /// produce is 22,162 bytes (`RealTokenGas.t.sol`), which leaves 1,838 under
+    /// this limit and 7,838 under Alchemy's 30,000.
     ///
     /// UNTESTED, AND SAY SO: Alchemy's sentence sits among reasons an
     /// HTTP-hosted metadata URL fails to FETCH. This tokenURI is a data URI
@@ -93,7 +106,7 @@ contract GasBudgetTest is Test {
     /// MUST be run against a real token before the mainnet mint.
     ///
     /// Gas is not the constraint: Base's own guidance puts the practical
-    /// tokenURI ceiling near 300M read gas and this token spends 2.87M.
+    /// tokenURI ceiling near 300M read gas and this token spends 3.54M.
     uint256 constant BYTE_LIMIT = 24_000;
     uint256 constant GAS_TARGET = 1_000_000;
     uint256 constant BYTE_TARGET = 5_000;
@@ -126,11 +139,28 @@ contract GasBudgetTest is Test {
     /// 2.8% above their new worst case, the same margin they have always
     /// carried.
     ///
-    /// The gas band still sits well inside its hard limit. THE BYTE BAND NO
-    /// LONGER DOES: 18,800 against 20,000 leaves 1,200, where it used to leave
-    /// 7,100. Bytes, not gas, are now the binding constraint on this artwork,
-    /// and the finisher's digit band was measured at +3,360 -- which does not
-    /// fit. That is a fact about the budget, not a failure of this file.
+    /// WHAT THESE TWO BANDS COVER, SINCE 2026-09-23, AND WHAT THEY DO NOT.
+    /// They are checked against `test_theWholeLadderStaysInsideTheHardLimit`,
+    /// and every stage in that ladder is UNBANDED. Re-measured on this branch,
+    /// the ladder's worst cases are 2,868,412 gas and 17,516 bytes, so the
+    /// bands still sit about 2.7% and 7% above what they watch and either can
+    /// still fail.
+    ///
+    /// THE PIECE'S ACTUAL WORST CASE IS BIGGER THAN BOTH BANDS AND IS NOT
+    /// WATCHED BY THEM. A real token that reaches 365 is given a place in the
+    /// same credit, so every finished token carries the digit band, and the
+    /// largest one measures 3,540,467 gas / 22,162 bytes
+    /// (`RealTokenGas.t.sol`). Those are governed by the HARD LIMITS alone --
+    /// by `test_theFinishersBandFitsBothHardLimits` here and by
+    /// `RealTokenGas.t.sol` there. A band round the banded worst case is worth
+    /// having and is a deliberate decision with a number in it, which is the
+    /// operator's to make, not this file's to assume.
+    ///
+    /// The old paragraph here said the byte band left 1,200 under a 20,000
+    /// limit and that the digit band "does not fit". The limit moved to 24,000
+    /// on 2026-09-22 and the band does fit: measured, it costs 4,636 bytes and
+    /// the largest token lands 1,838 under. Both halves of that sentence were
+    /// superseded within a day of being written.
     uint256 constant GAS_BAND = 2_945_000;
     uint256 constant BYTE_BAND = 18_800;
 
@@ -295,6 +325,18 @@ contract GasBudgetTest is Test {
 
     /// @dev The whole ladder in one test so the numbers appear together and can
     /// be copied straight into the results table. Run with -vv.
+    ///
+    /// EVERY STAGE HERE IS UNBANDED, and since 2026-09-23 three of them are
+    /// therefore states the chain cannot produce: tokens 3, 7, 8 and 11 stand
+    /// at level 365, and a real token reaching 365 is given a PLACE by the same
+    /// credit, so it carries the finisher's digit band from that moment. They
+    /// are kept, and kept unbanded, because this ladder's job is to compare
+    /// STAGES with each other -- day one against day 200 against the day before
+    /// the heart seals -- and a band would add a constant 4,636 bytes to the
+    /// tail of the list and tell nobody anything. Read them as the picture
+    /// WITHOUT the band. What a finished token really costs is measured in
+    /// `test_theFinishersBandFitsBothHardLimits` below, and on the shipping
+    /// contract in `RealTokenGas.t.sol`.
     function test_theWholeLadderStaysInsideTheHardLimit() public {
         _place(1, 1, 1, 1000, false, 0);
         _place(2, 200, 45, 1000, false, 0);
@@ -384,7 +426,7 @@ contract GasBudgetTest is Test {
         if (_gasIsMeaningful()) {
             console.log("  gas, from a child at day 364 with max marks", GAS_LIMIT - worstGas);
         }
-        console.log("  bytes, from a child at the ring cap with max marks", BYTE_LIMIT - maxBytes);
+        console.log("  bytes, from a finished child with max marks", BYTE_LIMIT - maxBytes);
     }
 
     function _max(uint256 a, uint256 c) private pure returns (uint256) {

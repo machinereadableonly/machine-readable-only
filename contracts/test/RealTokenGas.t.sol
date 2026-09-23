@@ -30,15 +30,21 @@ import {TokenView} from "../src/render/TokenView.sol";
 /// It is deliberately small: the sweep stays where it is, and this answers the
 /// one question the sweep cannot, which is what the shipping contract costs.
 ///
-/// @dev THE WORST CASE MOVED ON 2026-09-23 AND WILL MOVE AGAIN. A year now
-/// stops at 365 credited days, and `FrameRenderer.ringBudget` counts a token's
-/// own rings as `level / 365` -- so no real token can wear more than one ring of
-/// its own, and the ten-ring canvas these tests used to measure is unreachable.
-/// Every state below is the deepest the SHIPPING CONTRACT can now produce, and
-/// the figures are correspondingly smaller. They are not the final answer: the
-/// ring cap is being re-decided against the finished year, and when it is these
-/// measurements have to be taken again. Nothing here should be quoted as the
-/// piece's worst case until that lands.
+/// @dev THE WORST CASE MOVED ON 2026-09-23, AND THESE ARE NOW THE FIGURES TO
+/// QUOTE. A year stops at 365 credited days, and `FrameRenderer.ringBudget`
+/// gives a token one ring of its own -- so no real token can wear more than one
+/// ring plus a child's echo, and the ten-ring canvas these tests used to
+/// measure is unreachable. The credit that reaches 365 also gives the token a
+/// PLACE, so every finished token carries the finisher's digit band.
+///
+/// Both of those landed together, and they pull in opposite directions: the
+/// rings that went made the picture smaller, the band made it larger, and the
+/// band wins. The dearest token and the largest token, which have been
+/// different tokens for as long as this file has existed, are now THE SAME
+/// TOKEN -- a finished child wearing every legal Mark and its place. Measured
+/// 2026-09-23: 3,540,467 gas and 22,162 bytes, against 3,705,720 / 23,046 for
+/// the ring-cap child that used to hold both records. Every state below is the
+/// deepest the SHIPPING CONTRACT can produce.
 contract RealTokenGasTest is MroTestBase {
     /// @dev The same hard limits `GasBudget.t.sol` asserts. Repeated rather
     /// than imported because they are the project's published budget, not that
@@ -156,14 +162,21 @@ contract RealTokenGasTest is MroTestBase {
     // The measurements
     // -----------------------------------------------------------------------
 
-    /// @notice The case the hard limit rests on, built for real: a CHILD one
-    /// day short of a whole heart, wearing every Mark its level allows.
+    /// @notice The dearest UNFINISHED token, built for real: a CHILD one day
+    /// short of a whole heart, wearing every Mark its level allows.
     ///
     /// @dev A child at day 364 carries a fragmented frame AND the echo ring,
     /// which is why it is dearer than a sealed token: the frame is filled to
     /// `min(level, 365)`, so a partial frame and a founding token's rings are
     /// mutually exclusive -- but an echo ring is drawn at any level.
-    function test_theDearestRealTokenFitsTheHardLimit() public {
+    ///
+    /// @dev IT IS NO LONGER THE DEAREST TOKEN IN THE PIECE, and the test was
+    /// renamed on 2026-09-23 rather than left to say so wrongly. This token
+    /// cannot wear the finisher's digit band -- an ordinal is written by the
+    /// credit that reaches 365 and this token is at 364 -- and the band costs
+    /// more than the fragmented frame saves. The dearest and the largest are
+    /// now the same token, measured in the test below.
+    function test_theDeepestUnfinishedTokenFitsTheHardLimit() public {
         // A parent that has finished its year, which is as far as any token can
         // now go. The echo is that one year: `_echo` sums whole finished lines,
         // so a deeper number needs more GENERATIONS, not a longer parent.
@@ -182,16 +195,25 @@ contract RealTokenGasTest is MroTestBase {
         console.log("  headroom, bytes", BYTE_LIMIT - len);
     }
 
-    /// @notice The largest token the shipping contract can now produce: a child
-    /// whose own year is complete, wearing the whole sealed set, carrying the
-    /// echo ring and the finisher's digit band.
+    /// @notice THE WORST CASE, on both limits at once: a child whose own year
+    /// is complete, wearing the whole sealed set, carrying the echo ring and
+    /// the finisher's digit band.
     ///
     /// @dev IT USED TO BE A CHILD AT THE RING CAP, ten years deep. A year now
-    /// stops at 365 credited days, so `FrameRenderer.ringBudget` -- which counts
-    /// `level / 365` -- can never give a token more than ONE ring of its own,
-    /// and the ten-ring canvas is unreachable from a token's own history. See
-    /// the note at the head of this file.
-    function test_theLargestRealTokenFitsTheHardLimit() public {
+    /// stops at 365 credited days, so `FrameRenderer.ringBudget` can never give
+    /// a token more than ONE ring of its own, and the ten-ring canvas is
+    /// unreachable from a token's own history. See the note at the head of this
+    /// file.
+    ///
+    /// @dev IT IS ALSO THE DEAREST, which is new on 2026-09-23 and is the first
+    /// time in this project's history that one token has held both records. The
+    /// two had been split since lineage: a fragmented day-364 frame cost the
+    /// most gas and a deep ring stack cost the most bytes. The finisher's band
+    /// is drawn only on a token that has reached 365, and it costs more than
+    /// the fragmented frame ever did, so both records moved to the same place.
+    /// Every document that says "the dearest token and the largest token are
+    /// different tokens" is describing the piece before this branch.
+    function test_theWorstCaseRealTokenFitsBothHardLimits() public {
         _creditRun(1, 364);
         uint256 child = _seedFrom(1);
         _creditRun(uint32(child), 364);

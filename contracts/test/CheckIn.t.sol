@@ -207,6 +207,114 @@ contract CheckInTest is MroTestBase {
         assertLe(padded, MAX_TX_GAS - CHUNK_MARGIN, "a full chunk, padded, must leave CHUNK_MARGIN under the Clock's guard");
     }
 
+    /// @notice What the credit that ENDS a year costs over an ordinary one.
+    ///
+    /// @dev `_credit` writes the same packed token slot either way. What a
+    /// finishing credit adds is `_finish`: the `finishers` counter, the marks
+    /// word (the finisher bit and the ordinal together), `_upgrades[markId].
+    /// sold`, and the `Finished` log. Three storage slots and an event, once in
+    /// a token's life -- and the Clock pays all of it, because check-ins are
+    /// free to the agent.
+    ///
+    /// MEASURED IN ISOLATION, for the reason the chunk test above gives at
+    /// length: without it the whole function is ONE transaction, the setup
+    /// credits leave every slot warm, and the figure reads a fraction of what
+    /// the chain charges. The calldata is ABI-encoded before `gasleft()` for
+    /// the same reason. Each measured call is a one-token batch, so each pays
+    /// the 21,000 base and its own calldata; those cancel in the DIFFERENCE,
+    /// which is the quantity this test exists to give.
+    ///
+    /// THE FIRST FINISHER IS NOT THE DEAR ONE, which is the opposite of what
+    /// the storage rules suggest and was worth measuring rather than reasoning
+    /// about. `finishers` going from zero looks like a 20,000-gas set, but it
+    /// shares slot 23 with `lastWardenDay` -- which EVERY `batchCheckIn`
+    /// already stamps -- so the slot is neither cold nor zero by the time
+    /// `_finish` reaches it. Measured, the first and the second finisher are
+    /// within a few dozen gas of each other, and the second is the dearer of
+    /// the two by the one extra comparison `finisherMark` makes for an ordinal
+    /// above 1. Both are measured because the packing is what makes that true,
+    /// and packing is exactly the kind of thing a later edit moves.
+    /// forge-config: default.isolate = true
+    function test_theFinishingCreditCostsMoreThanAnOrdinaryOne() public {
+        vm.startPrank(WARDEN);
+        t.mint(2, address(0x2222), bytes32(uint256(2)), _code(), _today());
+        t.mint(3, address(0x3333), bytes32(uint256(3)), _code(), _today());
+        t.mint(4, address(0x4444), bytes32(uint256(4)), _code(), _today());
+        vm.stopPrank();
+
+        // One day apart in level, so the only difference between the measured
+        // calls is whether the credit lands on the finish line. Token 2's takes
+        // it to 364 and nothing else happens; 3 and 4 both seal.
+        _growTo(2, 363);
+        _growTo(3, 364);
+        _growTo(4, 364);
+
+        // Each token's next consecutive day. Read BEFORE the clock moves, and
+        // credited as a late write where it has fallen behind -- legal, and it
+        // keeps all three on the run-continues branch of `_credit`.
+        uint32 next2 = t.viewOf(2).lastDay + 1;
+        uint32 next3 = t.viewOf(3).lastDay + 1;
+        uint32 next4 = t.viewOf(4).lastDay + 1;
+        _warpToDay(_today() + 1);
+
+        bytes memory ordinaryCall =
+            abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(2), _days(next2)));
+        bytes memory firstCall =
+            abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(3), _days(next3)));
+        bytes memory laterCall =
+            abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(4), _days(next4)));
+
+        vm.prank(WARDEN);
+        uint256 before = gasleft();
+        (bool ok,) = address(t).call(ordinaryCall);
+        uint256 ordinaryGas = before - gasleft();
+        assertTrue(ok, "the ordinary credit must not revert");
+
+        vm.prank(WARDEN);
+        before = gasleft();
+        (ok,) = address(t).call(firstCall);
+        uint256 firstGas = before - gasleft();
+        assertTrue(ok, "the finishing credit must not revert");
+
+        vm.prank(WARDEN);
+        before = gasleft();
+        (ok,) = address(t).call(laterCall);
+        uint256 laterGas = before - gasleft();
+        assertTrue(ok, "the second finishing credit must not revert");
+
+        // The states the three numbers describe, asserted rather than assumed:
+        // a measurement of the wrong branch is worse than no measurement.
+        assertEq(t.viewOf(2).level, 364, "the ordinary credit must not have finished anything");
+        assertEq(t.viewOf(2).marks, 0, "and it must not have written a place");
+        assertEq(t.viewOf(3).marks >> 64, 1, "token 3 took the first place");
+        assertEq(t.viewOf(4).marks >> 64, 2, "token 4 took the second");
+
+        emit log_named_uint("one ordinary credit, alone in a transaction", ordinaryGas);
+        emit log_named_uint("the FIRST finishing credit                 ", firstGas);
+        emit log_named_uint("a later finishing credit                   ", laterGas);
+        emit log_named_uint("what finishing costs, first                ", firstGas - ordinaryGas);
+        emit log_named_uint("what finishing costs, thereafter           ", laterGas - ordinaryGas);
+
+        assertGt(firstGas, ordinaryGas, "finishing must cost something, or _finish is not running");
+        // The two finishers must stay close TOGETHER. If `finishers` is ever
+        // moved out of a slot `batchCheckIn` already writes, the first one
+        // jumps by about 17,000 gas and this is what says so.
+        assertApproxEqAbs(
+            firstGas, laterGas, 1_000, "the counter's first write must not be a cold zero-to-nonzero set"
+        );
+
+        // WHAT A CHUNK FULL OF FINISHERS WOULD COST, printed rather than
+        // asserted. `test_aFullChunkFitsTheGasGuard` above measures 1,400
+        // ORDINARY credits against MAX_TX_GAS; a finisher is dearer, so a night
+        // on which many tokens seal is a dearer night. The Clock does not send
+        // blind -- `warden/src/clock/write.mjs` estimates, pads by 12.5% and
+        // refuses over MAX_TX_GAS -- so this is a figure for sizing the chunk,
+        // not a hole. It is left as a log because the number that matters is
+        // how many tokens can actually finish on one day, which is a property
+        // of the mint history and not of this contract.
+        emit log_named_uint("a full chunk of finishers would add", (laterGas - ordinaryGas) * CHECKIN_CHUNK);
+    }
+
     // -----------------------------------------------------------------
     // ALL-OR-NOTHING IS THE DESIGN, not an oversight
     //

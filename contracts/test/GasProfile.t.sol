@@ -13,10 +13,11 @@ import {LibString} from "solady/src/utils/LibString.sol";
 
 /// @notice WHERE the dearest token's gas actually goes.
 ///
-/// @dev `RealTokenGas.t.sol` says the dearest token costs about 1.89M against a
-/// 2M hard limit, which is 5.5% headroom. That number says the budget is nearly
-/// spent; it does not say what spent it. Nothing in the suite broke the total
-/// into parts, so every proposal to buy headroom was guesswork.
+/// @dev `RealTokenGas.t.sol` says the dearest token costs 3,540,467 against a
+/// 4,000,000 hard limit (re-measured 2026-09-23), which is 11.5% headroom. That
+/// number says how much of the budget is spent; it does not say what spent it.
+/// Nothing in the suite broke the total into parts, so every proposal to buy
+/// headroom was guesswork.
 ///
 /// This is a MEASUREMENT, not a gate. It asserts only that the parts do not
 /// exceed the whole, because a profile whose parts outweigh the total is
@@ -223,9 +224,12 @@ contract GasProfileTest is Test {
     /// FIRST, the headroom that applies is NOT the dearest token's. A finisher
     /// Mark needs `requiresWhole`, and the dearest token in the piece is a
     /// day-364 child, which is not whole and can never wear one. The case that
-    /// binds is the LARGEST token -- a whole child at the ring cap wearing every
-    /// legal Mark -- which RealTokenGas.t.sol measures as the cheaper of the two
-    /// in gas. So the budget is that token's headroom, not the dearest's.
+    /// binds is the LARGEST token -- a whole child wearing every legal Mark --
+    /// which `RealTokenGas.t.sol` measures. IT IS NO LONGER THE CHEAPER OF THE
+    /// TWO IN GAS, and that flipped on 2026-09-23: a finished token now carries
+    /// the finisher's digit band, which the day-364 child cannot, so the
+    /// largest token is also the dearest. So the budget is that token's
+    /// headroom, not the day-364 child's.
     ///
     /// SECOND, the five exclude each other, so a token can wear at most ONE.
     /// Five Marks is not five drawings; it is one drawing with five
@@ -235,7 +239,7 @@ contract GasProfileTest is Test {
     /// shape a finisher's Mark would most naturally take, sitting outside the
     /// code block where it cannot disturb the barcode. An ink-swap Mark is
     /// already known to be free or better: GasBudget.t.sol measures Static as
-    /// 3,890 gas CHEAPER than no Static at all.
+    /// 3,773 gas CHEAPER than no Static at all (re-measured 2026-09-23).
     function test_whatAFinisherRingWouldCost() public {
         // ONE RING AGAINST TWO, which is the whole range the piece still has:
         // Spec 10f ended the year at 365, so a finished founding token wears one
@@ -272,9 +276,13 @@ contract GasProfileTest is Test {
         console.log("");
         assertGt(bytes(b).length, bytes(a).length,
             "a ring that adds no bytes means the two views are the same geometry, not a free ring");
+        // The LARGEST token's headroom, from RealTokenGas.t.sol, re-measured
+        // 2026-09-23 with the finisher's band in the picture. It was 182,700
+        // gas / 7,451 bytes when a finished token carried no band and could be
+        // ten rings deep; both numbers moved, and in opposite directions.
         console.log("against the LARGEST token's headroom, measured in RealTokenGas:");
-        console.log("  gas   182700");
-        console.log("  bytes 7451");
+        console.log("  gas   459533");
+        console.log("  bytes 1838");
     }
 
     /// @dev The only substitution a data URI actually requires of this svg:

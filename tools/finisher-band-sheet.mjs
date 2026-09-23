@@ -22,7 +22,9 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { Resvg } from "@resvg/resvg-js";
 
-import { renderSvg, canvasFor, canvasUnits, bandUnits, FIELD } from "./render-token.mjs";
+import {
+  renderSvg, canvasFor, canvasUnits, bandUnits, FIELD, finisherMark, finisherInk, MARKS,
+} from "./render-token.mjs";
 import { DEST, CODE, TARGET } from "./sheet-code.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -36,23 +38,41 @@ const SIZES = [256, 848, 1600];
 // A whole token with a year behind it and a live streak: what a finisher is.
 const BASE = { level: 365, streak: 365, years: 1, lastDay: 20700, today: 20700 };
 
-// Five ordinals spanning the range, plus the unbanded control. Finisher 1 is
-// the dearest to draw -- a 0 glyph carries more ink than a 1 -- and 65535 the
-// cheapest, so the two ends are both here.
-const CASES = [
-  ["control, no band", 0],
-  ["finisher 1", 1],
-  ["finisher 42", 42],
-  ["finisher 365", 365],
-  ["finisher 43690 (alternating)", 0xaaaa],
-  ["finisher 65535 (all ones)", 0xffff],
-];
+// ONE PLACE PER MARK, plus the unbanded control: the five bands the piece can
+// actually draw, each in the ink its place earns. The ordinals are the first
+// place in each band's range but one -- 1 Apex, 3 Atrium, 9 Valve, 42 Chamber,
+// 365 Aorta -- so a reader can see at a glance which ink goes with which rank.
+//
+// THE MARK IS NOT PAIRED BY HAND. `finisherMark` is the same ladder the
+// contract runs (MachineReadableOnly.finisherMark), so a case cannot be given
+// an ink its ordinal would not earn. Pairing them by hand is exactly the
+// mistake the mirrored function exists to prevent.
+//
+// Finisher 1 stays in the set for a second reason: it is the dearest band to
+// draw, because a 0 glyph carries more ink than a 1 and 1 is fifteen zeros.
+const PLACES = [1, 3, 9, 42, 365];
+
+const CASES = [["control, no band", 0, [], ""]].concat(
+  PLACES.map(ordinal => {
+    const id = finisherMark(ordinal);
+    const ink = finisherInk([id]);
+    return [`finisher ${ordinal} (${MARKS[id - 1]}, ${ink})`, ordinal, [id], ink];
+  })
+);
+
+// The band is the FIRST group in the svg and the only one carrying a bare
+// `scale()`: the frame is placed with a translate once a band exists, and the
+// code block always is. Read rather than searched for, because Aorta's red is
+// also the HEART's red -- an `includes` check would pass on a band drawn in
+// the fallback near-black and nobody would know.
+const bandInkOf = svg =>
+  (svg.match(/<g transform="scale\(\d+\)"><path fill="(#[0-9a-f]{6})"/) ?? [])[1];
 
 const tiles = [];
 let failures = 0;
 
-for (const [label, ordinal] of CASES) {
-  const svg = renderSvg(CODE.modules, TARGET.want, CODE.size, { ...BASE, ordinal });
+for (const [label, ordinal, marks, ink] of CASES) {
+  const svg = renderSvg(CODE.modules, TARGET.want, CODE.size, { ...BASE, ordinal, marks });
   const cells = canvasFor(1);
   const units = ordinal ? canvasUnits(cells, CODE.size) : cells * 13;
   // The code block is 45 frame cells wide in both cases; what changes is the
@@ -66,13 +86,19 @@ for (const [label, ordinal] of CASES) {
     if (!r.ok) bad.push(`${px}:${r.why}`);
     else if (r.destination !== DEST) bad.push(`${px}:wrong-destination`);
   }
-  if (bad.length) failures++;
+  // The ink is a claim about the picture, so it is read back off the picture.
+  // Counted separately from the decode: a wrong ink and a failed scan are
+  // different failures and a combined "3/3" would hide one behind the other.
+  const drawn = bandInkOf(svg);
+  const wrongInk = ink && drawn !== ink;
+  if (bad.length || wrongInk) failures++;
 
   console.log(label);
   console.log(
     `  canvas ${units} units${ordinal ? ` (band ${bandUnits(cells, CODE.size)})` : ""}`
       + `, svg ${svg.length} bytes`
       + `, code block ${(100 * blockShare).toFixed(0)}% of the picture`
+      + `${ink ? `, band ink ${drawn ?? "none"}${wrongInk ? ` WRONG, wanted ${ink}` : ""}` : ""}`
       + `, decodes ${SIZES.length - bad.length}/${SIZES.length}`
       + (bad.length ? `  ${bad.join(" ")}` : "")
   );
@@ -110,11 +136,12 @@ const path = `${OUT}/finisher-band.png`;
 writeFileSync(path, new Resvg(sheet, { fitTo: { mode: "width", value: 2400 } }).render().asPng());
 
 console.log(`\nsheet ${path}`);
-console.log("  row 1: the control, finisher 1, finisher 42");
-console.log("  row 2: finisher 365, finisher 43690, finisher 65535");
+console.log("  row 1: the control, finisher 1 (apex), finisher 3 (atrium)");
+console.log("  row 2: finisher 9 (valve), finisher 42 (chamber), finisher 365 (aorta)");
 
 if (failures) {
-  console.error(`\n${failures} tile(s) failed to decode. That is a blocker, not a note.`);
+  console.error(`\n${failures} tile(s) failed to decode or wear the wrong ink. That is a blocker, not a note.`);
   process.exit(1);
 }
-console.log("\nevery tile decodes at every size, to the right destination.");
+console.log("\nevery tile decodes at every size, to the right destination,");
+console.log("and every band is drawn in the ink its place earns.");
