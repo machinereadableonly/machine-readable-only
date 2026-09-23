@@ -14,7 +14,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { unpackModules } from "./qart.mjs";
 import { tokenBitmap, SIZE } from "./token-bitmap.mjs";
 import { heartTarget } from "./heart-target.mjs";
-import { renderSvg, MARKS, AORTA } from "./render-token.mjs";
+import { renderSvg, MARKS, AORTA, finisherMark } from "./render-token.mjs";
 
 const DOMAIN = process.env.MRO_DOMAIN ?? "example.com";
 const PX = 560;
@@ -55,7 +55,25 @@ const variants = [
 // ordinal is 0 -- so without this every finisher row would render the bare
 // token and report `+0 B`, which is exactly the bug the comment above records
 // this tool already having had once.
-const ordinalFor = marks => marks.some(id => id >= AORTA) ? 42 : 0;
+//
+// THE ORDINAL MUST BE ONE THAT EARNS THE MARK BEING PREVIEWED. A single value
+// for all five would put four of the rows in a state the chain cannot produce
+// -- ordinal 42 wearing Apex is not a token, it is a picture of one -- and this
+// tool's whole rule is that a state reviewed must be a state that can mint.
+// So each row is given the smallest place inside its own band, checked against
+// `finisherMark` rather than asserted, and the all-illegal row keeps 1 because
+// it wears every Mark at once and no ordinal can be right for that.
+const FIRST_OF_BAND = [1, 2, 5, 15, 65];
+const ordinalOf = id => {
+  const place = FIRST_OF_BAND.find(p => finisherMark(p) === id);
+  if (place === undefined) throw new Error(`no place earns mark ${id}`);
+  return place;
+};
+const ordinalFor = marks => {
+  const finishers = marks.filter(id => id >= AORTA);
+  if (!finishers.length) return 0;
+  return finishers.length === 1 ? ordinalOf(finishers[0]) : 1;
+};
 
 const rows = [];
 for (const [tag, marks] of variants) {
@@ -66,8 +84,17 @@ for (const [tag, marks] of variants) {
   rows.push({ tag, bytes: svg.length });
 }
 
-// The byte cost of each Mark, measured rather than quoted. Singularity's zero
-// is the point of the exercise: it draws nothing.
+// The byte cost of each Mark, measured rather than quoted. The zeros are the
+// point of the exercise: a Mark that only SUBSTITUTES one seven-character ink
+// for another -- Ache, Static, Vessel, Aura -- costs nothing at all, and Break
+// and Tint cost nothing here because their work happens in `inks` and in the
+// eyes rather than on any surface this row draws.
+//
+// THE FIVE FINISHER ROWS DIFFER, AND NOT BECAUSE OF THEIR INKS. Every ink is
+// seven characters, so the colour is free; what varies is the NUMBER, because
+// a 0 glyph carries more ink than a 1. Each row is at the first place of its
+// own band (1, 2, 5, 15, 65), so the deltas below compare five different
+// numbers, not five different colours.
 const base = rows.find(r => r.tag === "base").bytes;
 console.log(`token ${id} on ${DOMAIN}: mask ${bitmap.mask}, heart ${(bitmap.match * 100).toFixed(1)}%`);
 for (const r of rows) {

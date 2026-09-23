@@ -6,14 +6,18 @@ import {DigitBand} from "../src/render/DigitBand.sol";
 import {MarkRenderer} from "../src/render/MarkRenderer.sol";
 import {Palette} from "../src/render/Palette.sol";
 
-/// @notice The ten Marks, and which surface each one claims.
-/// @dev Nine of the ten change the image. Iris Bought, Iris Earned and Tint
-/// claim the eyes -- selection tested here (eyeInk, ground, irisShape, irisRun),
-/// drawing tested in EyeRenderer.t.sol and end to end in Renderer.t.sol. Break
-/// is the inversion, tested below (`inks`) -- it claims no surface of its own,
-/// only which rung colour the heart and the noise take. Every colour here must
-/// match the constant of the same name in tools/render-token.mjs, which the
-/// Renderer differential test then checks end to end.
+/// @notice The fifteen Marks, and which surface each one claims.
+/// @dev All ten paid Marks change the image, and so do the five finisher Marks.
+/// Iris Bought, Iris Earned and Tint claim the eyes -- selection tested here
+/// (eyeInk, ground, irisShape, irisRun), drawing tested in EyeRenderer.t.sol
+/// and end to end in Renderer.t.sol. Break is the inversion, tested below
+/// (`inks`) -- it claims no surface of its own, only which rung colour the
+/// heart and the noise take. The five finisher Marks, ids 11 to 15, SHARE one
+/// surface, the digit band: each writes the finisher's number in its own ink,
+/// selected here by `finisherInk` and drawn end to end in
+/// DigitBandRender.t.sol. Every colour here must match the constant of the
+/// same name in tools/render-token.mjs, which the Renderer differential test
+/// then checks end to end.
 contract MarkRendererTest is Test {
     uint256 constant NONE = 0;
     string constant STREAK = "#c8102e";

@@ -390,14 +390,30 @@ export const DIGIT_SPAN = ORDINAL_BITS * GLYPH_STEP - (GLYPH_STEP - GLYPH_W);
 // collide on the first sheet.
 const GLYPH = { 0: ["111", "101", "111"], 1: ["110", "010", "111"] };
 
-// The ink the number is written in: a NEAR-BLACK, not the token's colour and
-// not the frame's. It is the ink on every sheet the operator judged, and the
-// reason is the reason colour lost at all -- the number is WRITING, and writing
-// is read rather than coloured. It also keeps the band still while the rest of
-// the picture moves: the frame walks down the tier ladder as a streak lapses
-// and turns gold under Vessel, and a finisher's number should not change colour
-// because its holder missed a week.
-// MUST stay identical to DigitBand.INK in Solidity.
+// The fallback ink: what the band is written in when the token holds an ordinal
+// but no finisher Mark.
+//
+// THE BAND HAS FIVE INKS, and this is not one of them. The number is written in
+// the ink of the finisher Mark the token was given -- gold, silver, bronze,
+// blue or the heart's red, selected by `finisherInk` below. The five ARE the
+// rank, which is why they can be colours at all: colour lost to a number in
+// section 10k because five inks with nothing ranking them are peers, and a
+// place ranks them.
+//
+// What is still true is what the ink must NOT be. It is not the frame's fill
+// and not the token's own colour: the frame walks down the tier ladder as a
+// streak lapses and turns gold under Vessel, and a finisher's number must not
+// change colour because its holder missed a week. The Mark is fixed on the day
+// the place is earned, so the band is the one part of the picture that never
+// moves again.
+//
+// `_finish` writes the Mark bit and the ordinal in a single word, so a token
+// with an ordinal and no Mark cannot exist on chain. This near-black is what
+// the renderer does when it is handed one anyway, and it is the ink every
+// pre-Mark sheet already carries.
+//
+// MUST stay identical to DigitBand.INK in Solidity, which carries the same
+// reasoning at greater length.
 export const DIGIT_INK = "#2f2f2f";
 
 // A glyph cell is one QR MODULE, not a frame cell. That is what makes the

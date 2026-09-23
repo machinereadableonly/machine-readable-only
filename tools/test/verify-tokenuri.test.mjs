@@ -13,7 +13,7 @@ import { tokenBitmap, SIZE } from "../token-bitmap.mjs";
 import { heartMaskBytes } from "../heart-mask.mjs";
 import { unpackModules } from "../qart.mjs";
 import { tokenUri, ACHE, STATIC, HUSH, BEAT, AURA, VESSEL,
-         AORTA, CHAMBER, VALVE, ATRIUM, APEX } from "../render-token.mjs";
+         finisherMark } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
 const DOMAIN = "example.com";
@@ -122,7 +122,9 @@ test("the Years attribute is read from the level, not from the ring", () => {
 test("the finisher's place and Mark reach the metadata", () => {
   const a = attributesOf(decodeTokenUri(uriFor({
     level: 365, streak: 365, lastDay: 1000, today: 1000,
-    marks: [CHAMBER], ordinal: 42,
+    // 42nd place, which is inside Chamber's band (15th-64th) -- derived from
+    // `finisherMark` so the pair cannot drift out of the band by hand.
+    marks: [finisherMark(42)], ordinal: 42,
   })).json);
   assert.equal(a.Finisher, 42);
   assert.deepEqual(a.Marks, ["chamber"]);
@@ -136,14 +138,22 @@ test("the finisher's place and Mark reach the metadata", () => {
   assert.deepEqual(none.Marks, []);
 
   // All five names, lower case, in ladder order after the ten paid Marks.
-  for (const [id, name] of [
-    [AORTA, "aorta"], [CHAMBER, "chamber"], [VALVE, "valve"],
-    [ATRIUM, "atrium"], [APEX, "apex"],
+  //
+  // THE ORDINAL EARNS THE MARK IT IS PAIRED WITH, taken from `finisherMark`
+  // rather than held at one value for all five. A single ordinal would put
+  // four of these five in a state the chain cannot produce -- `_finish` writes
+  // the place and its Mark in one word -- and a fixture that states something
+  // untrue is worse than one that breaks. The places below are the first of
+  // each band, and the assertion on `Finisher` is what proves the pairing.
+  for (const [place, name] of [
+    [65, "aorta"], [15, "chamber"], [5, "valve"], [2, "atrium"], [1, "apex"],
   ]) {
     const one = attributesOf(decodeTokenUri(uriFor({
-      level: 365, streak: 365, lastDay: 1000, today: 1000, marks: [VESSEL, id], ordinal: 7,
+      level: 365, streak: 365, lastDay: 1000, today: 1000,
+      marks: [VESSEL, finisherMark(place)], ordinal: place,
     })).json);
     assert.deepEqual(one.Marks, ["vessel", name]);
+    assert.equal(one.Finisher, place);
   }
 });
 

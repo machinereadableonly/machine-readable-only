@@ -94,8 +94,8 @@ library RenderFixture {
         c[i++] = Case(365, 400, 1000, 1000, 0, false, false, 0, 0, 0, 1, 7, 1, 15733, 0xe6d3517a2d4a61716e65fb85781a8c49b8ac82f739f275c12b81e19dc47e605a, "child, echo of one day");
         c[i++] = Case(1, 1, 1000, 1365, 0, false, false, 0, 0, 0, 365, 7, 1, 15668, 0xc02491b25cc9357f1449fb6e91255c2c50c6e0fab8ed330fcfa8b200b0f4dbfe, "child, never returned, a year");
         c[i++] = Case(364, 400, 1000, 1030, 0, false, false, 0, 0, 0, 365, 7, 1, 15718, 0x3e2410e6bb3addb435a2e47d5ef97adcf736035015bb783d73ee3a72d55cfe73, "child, 30 days lapsed");
-        c[i++] = Case(365, 400, 1000, 9999, 0, true, false, 0, 0, 0, 365, 7, 1, 15738, 0x5b069ac9fdc8c44384b09090edb06f9addfd1c94a6430bc54884f1c3df8457a5, "child, resting");
-        c[i++] = Case(365, 400, 1000, 9999, 0, false, true, 0, 0, 0, 365, 7, 1, 15738, 0xef951cdb39041903a869882b4ccc14017b9e477f3ff8b27f4ef03c23dfb7574c, "child, sunset");
+        c[i++] = Case(364, 400, 1000, 9999, 0, true, false, 0, 0, 0, 365, 7, 1, 15729, 0xcf711c09e2c7a098a602a410c48587aa6561d60a59fdd0caf4adbb95f6ef7fa2, "child, resting");
+        c[i++] = Case(364, 400, 1000, 9999, 0, false, true, 0, 0, 0, 365, 7, 1, 15729, 0x5bf4d2e4b0408a9b9ada63921a6274afff9a5c74be9436eaea4bf4c606f909c2, "child, sunset");
         c[i++] = Case(365, 400, 1000, 1000, 0, false, false, 0, 0, 0, 3650, 4242, 3, 15739, 0x6df7c2e30886b829cb730241a4a93d438b3cbedb5c4d64a6068674759d692bbd, "child, deep line and a wide parent");
     }
 }

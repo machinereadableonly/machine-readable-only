@@ -188,10 +188,18 @@ export function renderCases() {
   for (const ordinal of [1, 3, 9, 42, 365, 0xaaaa, 0xffff]) {
     out.push({ label: `finisher ${ordinal}`, ...base, ordinal, marks: [finisherMark(ordinal)] });
   }
-  // Vessel gilds the frame and the rings while the number keeps the colour its
-  // PLACE earned -- and Apex's gold is the same string as Vessel's, so this is
-  // also the case where writing the band from the wrong source would look
-  // right. That crossing is where the two languages could most easily disagree.
+  // A finisher wearing every drawing Mark: the band beside the surfaces that
+  // move, so the two languages have a case where the whole picture is busy.
+  //
+  // IT IS THE WEAKEST CROSSING FOR THE ONE CONFUSION THAT MATTERS, deliberately
+  // said here rather than left to be rediscovered. Apex's gold is the SAME
+  // STRING as Vessel's, so a renderer that wrote the band from the frame's
+  // fill instead of from the finisher Mark would render this case byte for
+  // byte correctly. The guard against that lives in
+  // DigitBandRender.t.sol::test_theBandsInkIsFixedAgainstEverythingElseMoving,
+  // which pairs Vessel with VALVE -- gold frame, bronze number -- and in the
+  // JS twin, `the band is drawn in the ink of the Mark the token holds`. Both
+  // also pin Beat, whose far stop is the same string as Chamber's blue.
   out.push({
     label: "finisher 1, every drawing mark",
     ...base, marks: [...DRAWING_MARKS, finisherMark(1)], ordinal: 1,
@@ -296,8 +304,21 @@ export function renderCases() {
   // Both frozen lifecycles, carrying an echo. `sunset` is dropped from the soak
   // generator separately, by `!c.sunset`; `resting` is not, which is one more
   // reason the echo exclusion cannot be left to either of them.
-  out.push({ label: "child, resting", ...base, ...child, today: 9999, resting: true, echo: 365 });
-  out.push({ label: "child, sunset", ...base, ...child, today: 9999, sunset: true, echo: 365 });
+  //
+  // ONE DAY SHORT OF WHOLE, for the same reason the founding "resting" and
+  // "sunset" rows are: Spec 10f freezes a FINISHED token on its own, so at the
+  // base level of 365 neither of these could fail if resting and sunset did
+  // nothing at all. At 364 the seal each row is named after is the one being
+  // measured, and the echo ring is still drawn -- it is a second slot, taken by
+  // any non-zero echo, and does not depend on the token's own year being done.
+  out.push({
+    label: "child, resting",
+    ...base, ...child, ...nearlyWhole, today: 9999, resting: true, echo: 365,
+  });
+  out.push({
+    label: "child, sunset",
+    ...base, ...child, ...nearlyWhole, today: 9999, sunset: true, echo: 365,
+  });
 
   // A deeper line, with a wide parent id. Generation, Parent and Echo are all
   // rendered as NUMBERS into the metadata, so their digit widths are part of
