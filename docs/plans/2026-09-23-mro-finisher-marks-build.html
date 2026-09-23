@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Finisher's Marks and the Year That Ends -- Implementation Plan</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>The Finisher&#39;s Marks and the Year That Ends -- Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+(recommended) or superpowers:executing-plans to implement this plan task-by-task.
+Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>After completing any operator-only step, tell Claude so it can update memory
+immediately.</strong> There are two: the sheet in Task 7 and the deploy approval in
+Task 14.</p>
+<p><strong>Goal:</strong> A token stops at 365 credited days. The credit that takes it there
+gives it a finishing PLACE and, by that place, one of five Marks -- Apex (1st),
+Atrium (2nd-4th), Valve (5th-14th), Chamber (15th-64th), Aorta (65th on) --
+and its number is written round the border in that Mark&#39;s ink.</p>
+<p><strong>Architecture:</strong> Everything that decides a place happens ON CHAIN, inside the
+same <code>batchCheckIn</code> transaction that credits the 365th day: a counter, a fixed
+place-to-Mark table, one write into the existing <code>_marks</code> word. No agent asks
+for a finisher Mark and the Warden reserves nothing, so the cap-reservation
+machinery the spec&#39;s section 7 feared is not needed at all. The renderer picks
+the band&#39;s ink from the Mark held, freezes a finished token&#39;s colour, and caps
+its own rings at one. The Warden stops accepting check-ins for a finished
+token, orders each day&#39;s batch by token id, and records the place from a new
+event.</p>
+<p><strong>Tech Stack:</strong> Solidity 0.8.30 (Foundry 1.7.1, via_ir), Node 24 (Warden,
+Clock, the JS reference renderer and its fixture generators).</p>
+<p><strong>Spec:</strong> <code>docs/specs/2026-09-20-mro-finisher-marks-design.md</code>. Section <strong>10l</strong>
+is the latest decision and wins wherever an older section disagrees. Section
+<strong>10f</strong> (stop at 365, one ring) is built here too. The design choices made on
+2026-09-23 that the spec does not yet carry are listed below and must be
+written into it in Task 13.</p>
+<hr>
+<h2>Why this exists, and what it unblocks</h2>
+<p>The piece promises agents a year. Until now nothing happened at the end of it:
+a token kept counting, kept growing rings, and nothing marked who got there
+first. The operator decided on 2026-09-23 that the year is a RACE with a visible
+prize for being first, and chose the look (the finisher&#39;s number, coloured by
+place) and the names. This build is the last piece of contract work before the
+mainnet mint of token #1, and it has to land before that mint: the contract is
+permanent, and &quot;nothing is limited&quot; becomes a promise to a real holder the day
+token 1 exists.</p>
+<p>It ends in a new Base Sepolia deployment, because the contract changes.</p>
+<h2>Decided on 2026-09-23, and NOT yet in the spec</h2>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>What it replaces</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>The Mark is ASSIGNED at 365, not claimed.</strong> The credit that takes <code>level</code> to 365 increments a counter; the counter value is the place; the place picks the Mark.</td>
+<td>Spec sections 4, 6 and 7: an agent claiming a Mark over MCP, with the Warden reserving caps (<code>sold + reserved</code>). None of that is built.</td>
+</tr>
+<tr>
+<td><strong>Place is FINISHING order, ties within a day by lowest token id.</strong> The Clock sorts each batch by <code>(day, tokenId)</code>.</td>
+<td>Spec section 5&#39;s &quot;claim order&quot; -- there is no separate claim any more, so the two orders cannot disagree.</td>
+</tr>
+<tr>
+<td><strong>Stop-at-365 (10f) is in this build.</strong> A credit to a token already at 365 reverts.</td>
+<td>10f was decided on 2026-09-20 and never built.</td>
+</tr>
+<tr>
+<td><strong>The tier boundaries are CONSTANTS in the token contract</strong>, not dials.</td>
+<td>Section 4&#39;s &quot;they are dials (<code>setUpgrade</code>)&quot;. A place-to-Mark table the owner could edit after finishers exist is a promise that can be broken; the constants cannot be. The <code>Upgrade</code> records for 11-15 still carry the caps, for readers, and a test pins them to the constants.</td>
+</tr>
+<tr>
+<td><strong><code>applyMark</code> refuses ids 11-15 outright.</strong></td>
+<td>Nothing -- today <code>applyMark</code> would accept them once <code>setUpgrade</code> activates them.</td>
+</tr>
+</tbody></table>
+<h2>What this deliberately does NOT build</h2>
+<ul>
+<li><strong>Nothing about the digit band&#39;s GEOMETRY.</strong> It is built and signed off
+(2026-09-22). Only its ink changes.</li>
+<li><strong>No change to pairs 1-5.</strong> No finisher Mark excludes anything in them and
+nothing in them excludes a finisher Mark.</li>
+<li><strong>No drawn Mark other than the ink.</strong> Colour on the ring and five ring styles
+were both rejected; the number in its ink IS the Mark.</li>
+<li><strong>The OpenSea check, the treasury, the mainnet mint.</strong> Operator items,
+unchanged.</li>
+</ul>
+<h2>Global Constraints</h2>
+<ul>
+<li>Plain ASCII only in every doc and code comment. No em dashes, smart quotes,
+arrows or emoji.</li>
+<li><code>/bin/grep</code>, never bare <code>grep</code>.</li>
+<li>Foundry needs <code>export PATH=$HOME/.foundry/bin:$PATH</code>; Node needs
+<code>source ~/.nvm/nvm.sh</code>.</li>
+<li>Any sweep that renders or decodes images runs through
+<code>~/scripts/safe-build.sh</code>.</li>
+<li><strong>All four suites green before EVERY commit:</strong> <code>cd contracts &amp;&amp; forge test</code>,
+and <code>npm test</code> in <code>tools/</code>, <code>warden/</code> and <code>client/</code>. Never pipe a gate.</li>
+<li><strong>The Solidity renderer and <code>tools/render-token.mjs</code> move together.</strong>
+<code>RenderMatrix.t.sol</code> diffs them byte for byte. A change to one without the
+other is a red suite, not a follow-up.</li>
+<li><strong><code>Ladder.sol</code> and <code>warden/src/mcp/ladder.mjs</code> move together.</strong> The hash in
+<code>Ladder.t.sol</code> is regenerated with <code>node tools/ladder-fixture.mjs</code>, never
+hand-typed.</li>
+<li><strong><code>docs/2026-09-01-mro-raw-protocol.md</code> and
+<code>skills/machine-readable-only/references/raw-protocol.md</code> are byte-identical.</strong>
+Edit the first, then <code>cp</code> it over the second. Never hand-patch the copy.</li>
+<li>Every contract must be proven deployable: <code>forge build --sizes</code> with positive
+runtime margin under 24,576 bytes AND a strict-limit anvil deploy
+(<code>bash contracts/script/anvil-size-check.sh</code>) with non-empty <code>cast code</code>.</li>
+<li><strong>Measure, never estimate.</strong> Gas and byte figures come from running
+<code>RealTokenGas.t.sol</code> and <code>GasBudget.t.sol -vv</code> and reading the output. The
+limits are 4,000,000 gas and 24,000 bytes; the real external ceiling is
+30,000 bytes (Alchemy).</li>
+<li>The repository is PUBLIC. No absolute local path, session id or personal
+identifier in any tracked file.</li>
+<li>Commit messages carry no AI attribution.</li>
+</ul>
+<h2>The inks and names, in one place</h2>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Name</th>
+<th>Places</th>
+<th>Cap</th>
+<th>Ink</th>
+<th>Constant</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>15</td>
+<td>apex</td>
+<td>1st</td>
+<td>1</td>
+<td><code>#b8860b</code></td>
+<td><code>APEX_GOLD</code> (same value as <code>VESSEL_GOLD</code>)</td>
+</tr>
+<tr>
+<td>14</td>
+<td>atrium</td>
+<td>2nd-4th</td>
+<td>3</td>
+<td><code>#8c9096</code></td>
+<td><code>ATRIUM_SILVER</code></td>
+</tr>
+<tr>
+<td>13</td>
+<td>valve</td>
+<td>5th-14th</td>
+<td>10</td>
+<td><code>#a0612b</code></td>
+<td><code>VALVE_BRONZE</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td>chamber</td>
+<td>15th-64th</td>
+<td>50</td>
+<td><code>#2000ff</code></td>
+<td><code>CHAMBER_BLUE</code> (same value as <code>BEAT_TO</code>)</td>
+</tr>
+<tr>
+<td>11</td>
+<td>aorta</td>
+<td>65th on</td>
+<td>none</td>
+<td><code>#c8102e</code></td>
+<td><code>AORTA_RED</code> (the heart&#39;s red, the top tier colour)</td>
+</tr>
+</tbody></table>
+<p>Names are lower case in the metadata, matching the existing ten. Every ink is
+seven characters, so which one a token wears never changes its byte count.</p>
+<h2>File Structure</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>contracts/src/MachineReadableOnly.sol</code></td>
+<td><code>AlreadyFinished</code>, <code>FINISH_LEVEL</code>, <code>finishers</code> counter, <code>_finish</code>, <code>finisherMark</code>, the <code>Finished</code> event, <code>applyMark</code> refusing 11-15, <code>_credit</code> taking the id</td>
+</tr>
+<tr>
+<td><code>contracts/src/Ladder.sol</code></td>
+<td><code>Upgrade[16]</code>; entries 11-15 via a new <code>_finisher(cap)</code> helper</td>
+</tr>
+<tr>
+<td><code>contracts/script/DeployPlan5.s.sol</code>, <code>contracts/script/fast/DeployFast.s.sol</code></td>
+<td>write ids 1-15</td>
+</tr>
+<tr>
+<td><code>contracts/src/render/MarkRenderer.sol</code></td>
+<td>five bit constants, five inks, <code>finisherInk</code>, names to 15</td>
+</tr>
+<tr>
+<td><code>contracts/src/render/Renderer.sol</code></td>
+<td>band ink from <code>finisherInk</code>; <code>Finisher</code> trait; finished token&#39;s colour frozen</td>
+</tr>
+<tr>
+<td><code>contracts/src/render/FrameRenderer.sol</code></td>
+<td>own rings cap at one</td>
+</tr>
+<tr>
+<td><code>tools/render-token.mjs</code></td>
+<td>the same four renderer changes, mirrored</td>
+</tr>
+<tr>
+<td><code>tools/ladder-fixture.mjs</code></td>
+<td>tuple <code>[16]</code>, loop to 15</td>
+</tr>
+<tr>
+<td><code>warden/src/mcp/ladder.mjs</code></td>
+<td>entries 11-15 with <code>route: &quot;finisher&quot;</code>; boot check allows exactly those caps</td>
+</tr>
+<tr>
+<td><code>warden/src/mcp/tools/upgrade.mjs</code>, <code>warden/src/mcp/tools/ladder.mjs</code></td>
+<td>never offer 11-15 for sale</td>
+</tr>
+<tr>
+<td><code>warden/src/mcp/tools/checkin.mjs</code>, <code>warden/src/mcp/gates.mjs</code></td>
+<td>refuse a finished token, <code>year-complete</code></td>
+</tr>
+<tr>
+<td><code>warden/src/mcp/nextSteps.mjs</code>, <code>skills/machine-readable-only/references/refusals.md</code></td>
+<td>answer <code>year-complete</code></td>
+</tr>
+<tr>
+<td><code>warden/src/clock/batch.mjs</code></td>
+<td>sort each chunk by <code>(day, tokenId)</code>; <code>AlreadyFinished</code> is an entry error</td>
+</tr>
+<tr>
+<td><code>warden/src/clock/reconcile.mjs</code>, <code>warden/src/mirror/db.mjs</code>, <code>warden/src/mirror/schema.sql</code>, <code>warden/src/mirror/queries.mjs</code></td>
+<td><code>Finished</code> event -&gt; <code>tokens.finisher</code> column plus the Mark bit</td>
+</tr>
+<tr>
+<td><code>warden/src/clock/abi.mjs</code></td>
+<td>the new error and event (regenerate from the build)</td>
+</tr>
+<tr>
+<td><code>warden/src/mcp/tokenView.mjs</code></td>
+<td><code>finisher: { place, mark }</code>; <code>years</code> gone</td>
+</tr>
+<tr>
+<td><code>warden/tools/read-ladder.mjs</code></td>
+<td>verify ids 1-15</td>
+</tr>
+<tr>
+<td><code>warden/public/llms.txt</code>, <code>skills/machine-readable-only/SKILL.md</code>, the raw protocol and its copy, <code>warden/public/door.html</code></td>
+<td>the year ends; the race; the five Marks; &quot;nothing is limited&quot; rewritten</td>
+</tr>
+<tr>
+<td><code>docs/specs/2026-09-20-mro-finisher-marks-design.md</code></td>
+<td>a section 10m recording the 2026-09-23 build decisions</td>
+</tr>
+</tbody></table>
+<hr>
+<h1>PHASE A -- THE CONTRACT</h1>
+<h2>Task 1: A token stops at 365</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code> (<code>_credit</code> at about line 479, its two callers at about 566 and 653)</li>
+<li>Test: <code>contracts/test/FinishLine.t.sol</code> (new)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>error AlreadyFinished(uint256 id)</code>; <code>uint32 internal constant FINISH_LEVEL = 365</code>; <code>_credit(uint256 id, Token storage s, uint32 day)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+import {MroTestBase} from &quot;./MroTestBase.sol&quot;;
+
+/// @notice A token&#39;s year ends at 365 credited days, and the credit that ends
+/// it gives the token its finishing place. Spec sections 10f and 10l.
+contract FinishLineTest is MroTestBase {
+    function setUp() public {
+        r = new Renderer();
+        t = new MachineReadableOnly(address(r), WARDEN);
+        vm.warp(86_400 * 1000 + 1);
+        vm.prank(WARDEN);
+        t.mint(1, ALICE, KEY, _code(), _today());
+    }
+
+    function test_aCreditPast365Reverts() public {
+        _makeWhole(1);
+        uint32 next = t.viewOf(1).lastDay + 1;
+        _warpToDay(next);
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.AlreadyFinished.selector, uint256(1)));
+        t.batchCheckIn(_one(1), _days(next));
+    }
+
+    function test_level364StillCredits() public {
+        _growTo(1, 364);
+        assertEq(t.viewOf(1).level, 364);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and watch it fail</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path test/FinishLine.t.sol -vv</code>
+Expected: FAIL -- <code>AlreadyFinished</code> is not a member of <code>MachineReadableOnly</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></li>
+</ul>
+<p>Add beside the other check-in errors (<code>DayNotAdvanced</code>, <code>FutureDay</code>):</p>
+<pre><code class="language-solidity">    /// A credit to a token whose year is already complete. The piece records a
+    /// year, and a finished token&#39;s record is final -- the same freeze `rest`
+    /// gives, reached by completion rather than by the owner. Spec 10f.
+    error AlreadyFinished(uint256 id);
+
+    /// @dev The day a token&#39;s year is complete. Equal to FrameGeometry.DAY_CELLS
+    /// in the renderer; a test pins the two together.
+    uint32 internal constant FINISH_LEVEL = 365;
+</code></pre>
+<p>Change <code>_credit</code> to take the id and refuse a finished token first:</p>
+<pre><code class="language-solidity">    function _credit(uint256 id, Token storage s, uint32 day) private {
+        // THE YEAR ENDS. Refused here, in the one function both check-in paths
+        // share, so the voucher path cannot become a way round it.
+        if (s.level &gt;= FINISH_LEVEL) revert AlreadyFinished(id);
+        uint32 run;
+        // ... the existing body, unchanged ...
+    }
+</code></pre>
+<p>Update both call sites to <code>_credit(id, s, day);</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run it and watch it pass</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path test/FinishLine.t.sol -vv</code>
+Expected: PASS, 2 tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Do NOT commit yet.</strong> The full suite is red until Task 3 fixes the tests that credit past 365. Tasks 1-3 commit together.</li>
+</ul>
+<h2>Task 2: The credit that reaches 365 assigns the place and the Mark</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code>, <code>contracts/src/Ladder.sol</code>, <code>contracts/script/DeployPlan5.s.sol:31-32</code>, <code>contracts/script/fast/DeployFast.s.sol:25-26</code></li>
+<li>Test: <code>contracts/test/FinishLine.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>_credit(uint256, Token storage, uint32)</code> from Task 1.</p>
+</li>
+<li><p>Produces: <code>uint32 public finishers</code>; <code>event Finished(uint256 indexed id, uint32 ordinal, uint8 indexed markId)</code>; <code>error MarkNotRequestable(uint8 upgradeId)</code>; <code>function finisherMark(uint32 ordinal) public pure returns (uint8)</code>; <code>Ladder.all()</code> returning <code>Upgrade[16]</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong> (append to <code>FinishLineTest</code>)</p>
+</li>
+</ul>
+<pre><code class="language-solidity">    uint256 internal constant ORDINAL_SHIFT = 64;
+
+    /// @dev Mint `n` more tokens (ids 2..n+1) under fresh keys, all on today.
+    function _mintMore(uint32 n) internal {
+        for (uint32 i = 2; i &lt;= n + 1; i++) {
+            vm.prank(WARDEN);
+            t.mint(i, ALICE, keccak256(abi.encode(&quot;key&quot;, i)), _code(), _today());
+        }
+    }
+
+    function test_theFirstFinisherIsApexAndNumberOne() public {
+        _makeWhole(1);
+        uint256 m = t.marksOf(1);
+        assertTrue(m &amp; (1 &lt;&lt; 15) != 0, &quot;apex bit&quot;);
+        assertEq(uint32(m &gt;&gt; ORDINAL_SHIFT), 1, &quot;place 1&quot;);
+        assertEq(t.finishers(), 1);
+        assertEq(t.upgradeOf(15).sold, 1);
+    }
+
+    /// @dev The table, at every boundary, written out as literals so it cannot
+    /// share a mistake with the function it checks.
+    function test_placeToMarkBoundaries() public view {
+        uint32[10] memory place = [uint32(1), 2, 4, 5, 14, 15, 64, 65, 1000, 65535];
+        uint8[10] memory mark = [uint8(15), 14, 14, 13, 13, 12, 12, 11, 11, 11];
+        for (uint256 i; i &lt; 10; i++) assertEq(t.finisherMark(place[i]), mark[i]);
+    }
+
+    /// @dev Same-day finishers take places in the order the batch lists them.
+    /// The Warden sorts by token id; the contract only has to honour order.
+    function test_sameBatchPlacesFollowBatchOrder() public {
+        _mintMore(1);
+        _growTo(1, 364);
+        _growTo(2, 364);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        uint32[] memory ids = new uint32[](2);
+        ids[0] = 1; ids[1] = 2;
+        uint32[] memory ds = new uint32[](2);
+        ds[0] = d; ds[1] = d;
+        vm.prank(WARDEN);
+        t.batchCheckIn(_packed(ids), ds);
+        assertEq(uint32(t.marksOf(1) &gt;&gt; ORDINAL_SHIFT), 1);
+        assertEq(uint32(t.marksOf(2) &gt;&gt; ORDINAL_SHIFT), 2);
+        assertTrue(t.marksOf(2) &amp; (1 &lt;&lt; 14) != 0, &quot;second place is atrium&quot;);
+    }
+
+    function test_finishingEmitsFinished() public {
+        _growTo(1, 364);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        vm.expectEmit(true, true, false, true);
+        emit MachineReadableOnly.Finished(1, 1, 15);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d));
+    }
+
+    function test_applyMarkRefusesEveryFinisherId() public {
+        _makeWhole(1);
+        for (uint8 id = 11; id &lt;= 15; id++) {
+            vm.prank(WARDEN);
+            vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkNotRequestable.selector, id));
+            t.applyMark(1, id, 0);
+        }
+    }
+
+    /// @dev The Upgrade records are for readers; the constants decide. They
+    /// must agree, or an agent reading `upgradeOf` is told a cap that is false.
+    function test_ladderCapsMatchThePlaceTable() public pure {
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
+        assertEq(u[15].maxSupply, 1);
+        assertEq(u[14].maxSupply, 3);
+        assertEq(u[13].maxSupply, 10);
+        assertEq(u[12].maxSupply, 50);
+        assertEq(u[11].maxSupply, 0);
+    }
+
+    /// @dev Bits 32-63 are the earned Iris&#39;s run. Finishing must not touch them.
+    function test_finishingLeavesTheIrisRunAlone() public {
+        _growTo(1, 364);
+        vm.prank(WARDEN);
+        t.applyMark(1, 6, 0); // earned Iris at run 364 -- _growTo credits consecutive days
+        uint256 before = t.marksOf(1);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d));
+        assertEq((t.marksOf(1) &gt;&gt; 32) &amp; 0xFFFFFFFF, (before &gt;&gt; 32) &amp; 0xFFFFFFFF);
+    }
+</code></pre>
+<p>(Import <code>Ladder</code> at the top of the file.)</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path test/FinishLine.t.sol -vv</code>
+Expected: FAIL to compile -- <code>finishers</code>, <code>Finished</code>, <code>MarkNotRequestable</code>, <code>finisherMark</code>, <code>Upgrade[16]</code> do not exist.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement in <code>MachineReadableOnly.sol</code></strong></li>
+</ul>
+<p>State, beside <code>lastWardenDay</code>:</p>
+<pre><code class="language-solidity">    /// @notice How many tokens have finished their year. The next finisher&#39;s
+    /// place is this plus one.
+    uint32 public finishers;
+</code></pre>
+<p>Events and errors, beside <code>MarkApplied</code>:</p>
+<pre><code class="language-solidity">    /// @dev The one record of a place. Not MarkApplied: nobody applied this,
+    /// the year&#39;s end did, and the Clock reads the place from here.
+    event Finished(uint256 indexed id, uint32 ordinal, uint8 indexed markId);
+    /// Ids 11-15 are given by finishing and can never be asked for.
+    error MarkNotRequestable(uint8 upgradeId);
+</code></pre>
+<p>In <code>applyMark</code>, directly after the <code>MarkIdOutOfRange</code> check:</p>
+<pre><code class="language-solidity">        if (upgradeId &gt;= FIRST_FINISHER_MARK) revert MarkNotRequestable(upgradeId);
+</code></pre>
+<p>with <code>uint8 internal constant FIRST_FINISHER_MARK = 11;</code> beside <code>MAX_MARK_ID</code>.</p>
+<p>The table and the write:</p>
+<pre><code class="language-solidity">    /// @notice Which Mark a finishing place earns.
+    /// @dev CONSTANTS, deliberately not dials. The operator set these caps on
+    /// 2026-09-23 as a race with a prize for being first; a table the owner
+    /// could edit after finishers exist is a promise that can be broken. The
+    /// Upgrade records for 11-15 repeat the caps for readers, and
+    /// FinishLine.t.sol pins the two together.
+    ///   1st          15 apex
+    ///   2nd-4th      14 atrium
+    ///   5th-14th     13 valve
+    ///   15th-64th    12 chamber
+    ///   65th on      11 aorta, never refused
+    function finisherMark(uint32 ordinal) public pure returns (uint8) {
+        if (ordinal &lt;= 1) return 15;
+        if (ordinal &lt;= 4) return 14;
+        if (ordinal &lt;= 14) return 13;
+        if (ordinal &lt;= 64) return 12;
+        return 11;
+    }
+
+    /// @dev Called once in a token&#39;s life, by the credit that makes it whole.
+    /// The place is the ORDER finishes are credited in: across days by day, and
+    /// within one batch by the order the Warden listed them -- which it sorts
+    /// by token id (warden/src/clock/batch.mjs). The ordinal lands in bits
+    /// 64-95 of the marks word, the slot TokenView.sol reserves for it; bits
+    /// 32-63 are the earned Iris&#39;s run and are never touched here.
+    function _finish(uint256 id) private {
+        uint32 ordinal;
+        unchecked { ordinal = ++finishers; }
+        uint8 markId = finisherMark(ordinal);
+        _marks[id] |= (uint256(1) &lt;&lt; markId) | (uint256(ordinal) &lt;&lt; 64);
+        unchecked { _upgrades[markId].sold += 1; }
+        emit Finished(id, ordinal, markId);
+    }
+</code></pre>
+<p>At the end of <code>_credit</code>, after <code>s.lastDay = day;</code>:</p>
+<pre><code class="language-solidity">        if (s.level == FINISH_LEVEL) _finish(id);
+</code></pre>
+<p>Update the <code>MAX_MARK_ID</code> comment: ids 11-15 are now the five finisher Marks,
+written by the deploy and given only by <code>_finish</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Implement in <code>Ladder.sol</code></strong></li>
+</ul>
+<p>Return <code>MachineReadableOnly.Upgrade[16] memory u</code>, add after <code>u[10]</code>:</p>
+<pre><code class="language-solidity">        // The five finisher Marks. GIVEN at 365 by the token contract&#39;s own
+        // place table, never applied -- applyMark refuses these ids. The caps
+        // here are for readers of upgradeOf and are pinned to that table.
+        u[11] = _finisher(0);   // Aorta,   65th on, never refused
+        u[12] = _finisher(50);  // Chamber, 15th-64th
+        u[13] = _finisher(10);  // Valve,   5th-14th
+        u[14] = _finisher(3);   // Atrium,  2nd-4th
+        u[15] = _finisher(1);   // Apex,    1st
+</code></pre>
+<p>and the helper:</p>
+<pre><code class="language-solidity">    /// @dev A finisher Mark: free, whole-only, and excluding the other four,
+    /// because a token finishes once. The mask is built from the group, minus
+    /// the Mark&#39;s own bit, which setUpgrade refuses.
+    function _finisher(uint32 cap) private pure returns (MachineReadableOnly.Upgrade memory) {
+        return MachineReadableOnly.Upgrade({
+            priceUsdc6: 0, maxSupply: cap, sold: 0,
+            minLevel: 0, minStreak: 0, requiresWhole: true,
+            active: true, excludes: 0, requiresAny: 0
+        });
+    }
+</code></pre>
+<p>then, after the five assignments, set each one&#39;s exclusion to the other four:</p>
+<pre><code class="language-solidity">        uint16 group = uint16((1 &lt;&lt; 11) | (1 &lt;&lt; 12) | (1 &lt;&lt; 13) | (1 &lt;&lt; 14) | (1 &lt;&lt; 15));
+        for (uint8 i = 11; i &lt;= 15; i++) u[i].excludes = group &amp; ~uint16(1 &lt;&lt; i);
+</code></pre>
+<p>Update the library header: &quot;Nothing is limited&quot; is no longer true of 11-15;
+say what is.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: The deploy writes 15 entries</strong></li>
+</ul>
+<p>In <code>DeployPlan5.s.sol</code> and <code>fast/DeployFast.s.sol</code>:</p>
+<pre><code class="language-solidity">        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
+        for (uint8 i = 1; i &lt;= 15; i++) t.setUpgrade(i, u[i]);
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Run the new tests</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path test/FinishLine.t.sol -vv</code>
+Expected: PASS, 9 tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Break the wiring and watch it fail.</strong> Copy the contract to the
+scratchpad, delete the <code>if (s.level == FINISH_LEVEL) _finish(id);</code> line, run
+the file: <code>test_theFirstFinisherIsApexAndNumberOne</code> and three others must go
+red. Restore from the COPY, never <code>git checkout --</code>, and re-run to green.</li>
+</ul>
+<h2>Task 3: The tests that assumed a token could go past 365</h2>
+<p><strong>Files:</strong> the ones the survey found. Each is either REWRITTEN to reach its
+state without crediting past 365, or its assertion is widened to allow the
+finisher bits it now legitimately carries. None is deleted without saying
+which property it protected and where that property is now tested.</p>
+<ul>
+<li><p><code>contracts/test/Lineage.t.sol:65,77</code> -- <code>_growTo(1, 500)</code>. The seed budget is
+keyed by ELAPSED time, not level, so replace with <code>_makeWhole(1)</code> then
+<code>_warpToDay(...)</code> to the day the test needs.</p>
+</li>
+<li><p><code>contracts/test/Ladder.t.sol</code>: every <code>Upgrade[11]</code> becomes <code>Upgrade[16]</code>;
+the pair loops stay <code>1..10</code> and say so; <code>test_nothingIsLimited</code> and <code>_row</code>
+assert <code>maxSupply == 0</code> for 1-10 only; <code>test_everyMarkIsPricedOrEarnedAndNeverBoth</code>
+counts 1-10; the assertions at 141/150/162/171 mask <code>0x07FE</code> (bits 1-10)
+instead of <code>0xFFFE</code>; the &quot;five Marks at once&quot; test at 262-274 adds the one
+finisher Mark the token now holds. Regenerate the pinned hash in Task 4.</p>
+</li>
+<li><p><code>contracts/test/MroTestBase.sol</code>: <code>_makeWhole</code> now also gives place 1 to the
+first token made whole in a test. Add a one-line comment saying so.</p>
+</li>
+<li><p><code>contracts/test/FrameRenderer.t.sol:146-158,230</code>, <code>GasBudget.t.sol:302-338</code>,
+<code>GasProfile.t.sol:250-251</code>, <code>CodeRenderer.t.sol:410</code>,
+<code>IntrinsicSize.t.sol:80</code>: these build a <code>TokenView</code> directly and are fixed in
+Task 5, where the ring cap changes.</p>
+</li>
+<li><p><code>contracts/test/BuilderCodeSuffix.t.sol:80</code>: check it does not credit past
+365; it only warps.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1:</strong> <code>cd contracts &amp;&amp; forge test 2&gt;&amp;1 | tail -40</code> and list every failure.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2:</strong> fix each as above. For anything not on the list, work out why before changing it.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3:</strong> <code>forge test</code> -- everything green except tests whose expectations depend on Task 4&#39;s hash or Task 5&#39;s rings. List those by name in the commit message.</p>
+</li>
+</ul>
+<p>(No commit here: Task 4 finishes the ladder mirror and the three commit together.)</p>
+<h2>Task 4: The Warden&#39;s ladder mirror, so the hash agrees</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/mcp/ladder.mjs</code>, <code>tools/ladder-fixture.mjs:18-20,34</code>, <code>contracts/test/Ladder.t.sol:224</code> (the regenerated literal), <code>warden/tools/read-ladder.mjs:39-52</code></li>
+<li>Test: <code>warden/test/ladder.test.mjs</code>, <code>tools/test/ladder-fixture.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>LADDER[11..15]</code> with <code>route: &quot;finisher&quot;</code>, <code>supply</code> 0-cap mapped as <code>Infinity</code> for 11 and the numbers for 12-15; <code>FINISHER_IDS = [11, 12, 13, 14, 15]</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong> in <code>warden/test/ladder.test.mjs</code></p>
+</li>
+</ul>
+<pre><code class="language-js">test(&quot;the five finisher Marks are given, never sold&quot;, () =&gt; {
+  for (const id of [11, 12, 13, 14, 15]) {
+    assert.equal(LADDER[id].route, &quot;finisher&quot;);
+    assert.equal(LADDER[id].priceUsdc6, 0);
+    assert.equal(LADDER[id].needsWhole, true);
+  }
+  assert.deepEqual([11, 12, 13, 14, 15].map(id =&gt; LADDER[id].name),
+    [&quot;aorta&quot;, &quot;chamber&quot;, &quot;valve&quot;, &quot;atrium&quot;, &quot;apex&quot;]);
+  assert.deepEqual([11, 12, 13, 14, 15].map(id =&gt; LADDER[id].supply),
+    [Infinity, 50, 10, 3, 1]);
+});
+
+test(&quot;a cap on anything but a finisher Mark is still a startup error&quot;, () =&gt; {
+  const bad = structuredClone(LADDER);
+  bad[3] = { ...bad[3], supply: 5 };
+  assert.throws(() =&gt; assertLadderSane(bad), /limited/);
+});
+</code></pre>
+<p>Replace <code>test(&quot;nothing is limited&quot;)</code> with the same assertion over ids 1-10 only.</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail</strong> -- <code>cd warden &amp;&amp; node --test test/ladder.test.mjs</code>. Expected: FAIL, <code>LADDER[11]</code> undefined.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></p>
+</li>
+</ul>
+<p>In <code>ladder.mjs</code>, a third factory and five entries:</p>
+<pre><code class="language-js">// A finisher Mark: given by the token contract at 365, in finishing order,
+// and never sold or requested. The cap is the size of the place band --
+// MachineReadableOnly.finisherMark() is the authority, and Ladder.sol repeats
+// it. The other four finisher Marks are excluded, because a token finishes once.
+const FINISHERS = (1 &lt;&lt; 11) | (1 &lt;&lt; 12) | (1 &lt;&lt; 13) | (1 &lt;&lt; 14) | (1 &lt;&lt; 15);
+const finisher = (id, name, supply) =&gt; ({
+  id, name, pair: 0, route: &quot;finisher&quot;, price: undefined, priceUsdc6: 0,
+  minLevel: 0, minStreak: 0, needsWhole: true, variants: 1,
+  excludes: FINISHERS &amp; ~(1 &lt;&lt; id), requiresAny: 0, supply,
+});
+export const FINISHER_IDS = [11, 12, 13, 14, 15];
+</code></pre>
+<p>Match the existing factories&#39; exact field set (read <code>bought</code>/<code>earned</code> first; if
+they carry a field not listed here, add it with the value a free Mark has).
+Add to <code>LADDER</code>:</p>
+<pre><code class="language-js">  11: finisher(11, &quot;aorta&quot;, Infinity),
+  12: finisher(12, &quot;chamber&quot;, 50),
+  13: finisher(13, &quot;valve&quot;, 10),
+  14: finisher(14, &quot;atrium&quot;, 3),
+  15: finisher(15, &quot;apex&quot;, 1),
+</code></pre>
+<p>In <code>assertLadderSane</code>, let a finisher Mark through the price/earned check and
+the supply check, and keep both checks exactly as they are for everything else:</p>
+<pre><code class="language-js">    if (m.route === &quot;finisher&quot;) {
+      if (m.priceUsdc6 !== 0 || m.price !== undefined) throw new Error(`mark ${id} is a finisher Mark and priced`);
+      continue;
+    }
+</code></pre>
+<p>(as the first statement in the loop body). Update the header comment: nothing
+in pairs 1-5 is limited; the finisher Marks are, by place.</p>
+<p><code>ladderSentence</code> ends &quot;Pairs are 1-2, 3-4, 5-6, 7-8, 9-10&quot;; add &quot; Marks 11-15
+are given by finishing and cannot be requested.&quot; and update the pinned string
+in <code>warden/test/mcp.test.mjs:316-334</code>.</p>
+<p>In <code>tools/ladder-fixture.mjs</code>: the tuple becomes <code>[16]</code> and the loop runs to 15.
+A finisher&#39;s <code>supply === Infinity ? 0 : supply</code> already maps Aorta to 0.</p>
+<p>In <code>warden/tools/read-ladder.mjs</code>: loop to 15, and add the five expected rows.</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4: Regenerate the pinned hash</strong>: <code>node tools/ladder-fixture.mjs</code>, paste the printed literal into <code>Ladder.t.sol</code> in place of the old one (there must still be exactly one 64-hex literal in that file).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 5: All four suites</strong> -- expect green apart from any renderer-fixture tests listed in Task 3. If anything else is red, fix it before committing.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 6: Commit Tasks 1-4 together</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">git add contracts/ tools/ladder-fixture.mjs warden/src/mcp/ladder.mjs warden/test/ warden/tools/read-ladder.mjs
+git commit -m &quot;feat(contract): a token finishes at 365 and is given its place&quot;
+</code></pre>
+<p><strong>PHASE A CHECK-IN with the operator:</strong> what was built, the test count, and any
+test whose meaning changed.</p>
+<hr>
+<h1>PHASE B -- THE PICTURE</h1>
+<h2>Task 5: A finished token keeps one ring and stops fading</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/render/FrameRenderer.sol:40-80</code>, <code>contracts/src/render/Renderer.sol</code> (<code>_rung</code>, <code>_absence</code>), <code>tools/render-token.mjs</code> (<code>ringBudget</code>, <code>rungFor</code>, <code>absenceOf</code>, and the calls that pass them state)</li>
+<li>Test: <code>contracts/test/FrameRenderer.t.sol</code>, <code>contracts/test/Renderer.t.sol</code>, <code>tools/test/render-token.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>ringBudget(level, echo)</code> returning <code>own &lt;= 1</code>; <code>rungFor({..., whole})</code>, <code>absenceOf({..., whole})</code> in JS.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<p>In <code>FrameRenderer.t.sol</code>, replace the <code>MAX_RINGS</code> block at 146-158 with:</p>
+<pre><code class="language-solidity">    /// @dev Spec 10f: a token finishes at 365 and keeps ONE ring of its own.
+    function test_ownRingsCapAtOne() public pure {
+        assertEq(FrameRenderer.rings(364, 0), 0);
+        assertEq(FrameRenderer.rings(365, 0), 1);
+        assertEq(FrameRenderer.rings(365 * 10, 0), 1, &quot;a level the chain can no longer reach still draws one&quot;);
+        assertEq(FrameRenderer.rings(365, 1), 2, &quot;own ring plus the echo ring&quot;);
+        assertEq(FrameRenderer.rings(1, 400), 1, &quot;a young child: the echo ring only&quot;);
+    }
+</code></pre>
+<p>In <code>Renderer.t.sol</code> (use whatever state-building helper that file already uses):</p>
+<pre><code class="language-solidity">    /// @dev A finished token&#39;s colour is the one it finished with, however long
+    /// the calendar runs. Without this, a token that finished and then stopped
+    /// checking in -- which is now the ONLY thing it can do -- would fade.
+    function test_aFinishedTokenDoesNotFade() public pure {
+        TokenView memory v = _state(); // existing helper; set the fields below
+        v.level = 365; v.streak = 365; v.lastDay = 20_000; v.today = 20_000;
+        string memory atFinish = renderer.svg(v);
+        v.today = 20_400;
+        assertEq(renderer.svg(v), atFinish);
+    }
+</code></pre>
+<p>In <code>tools/test/render-token.test.mjs</code>, the same two properties against the JS
+functions (<code>ringBudget(10, 0).own === 1</code>; <code>rungFor</code> and <code>absenceOf</code> unchanged
+by <code>today</code> when <code>whole: true</code>).</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail.</strong></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement, both languages</strong></p>
+</li>
+</ul>
+<p><code>FrameRenderer.ringBudget</code>:</p>
+<pre><code class="language-solidity">        echoRings = echo &gt; 0 ? 1 : 0;
+        // Spec 10f: a year ends at 365, so a token has at most ONE ring of its
+        // own. The chain can no longer produce a level past 365; the cap is
+        // here as well so a swapped renderer can never draw what cannot exist.
+        own = level &gt;= FrameGeometry.DAY_CELLS ? 1 : 0;
+</code></pre>
+<p>Delete <code>MAX_RINGS</code> and rewrite the comments that explain the ten-ring cap to
+say what replaced it. Same in <code>tools/render-token.mjs</code>
+(<code>ringBudget = (years, echoDays = 0) =&gt; ({ own: Math.min(years, 1), echoRings: echoDays &gt; 0 ? 1 : 0 })</code>).</p>
+<p><code>Renderer._absence</code> and <code>_rung</code>:</p>
+<pre><code class="language-solidity">    function _absence(TokenView memory v) private pure returns (uint256) {
+        // A finished token&#39;s record is final: nothing it does not do can count
+        // against it. Spec 10f.
+        if (v.resting || v.level &gt;= FrameGeometry.DAY_CELLS) return 0;
+        // ... unchanged ...
+    }
+
+    function _rung(TokenView memory v) private pure returns (uint256) {
+        if (v.resting) return Palette.tierIndex(v.streak);
+        bool whole = v.level &gt;= FrameGeometry.DAY_CELLS;
+        // A sunset before the year ended seals it at the piece&#39;s last day.
+        if (v.sunset &amp;&amp; !whole) return Palette.lapsedIndex(v.streak, v.lastDay, v.sunsetDay);
+        // A FINISHED token is read on the day it finished, forever: the same
+        // rules as a live one, with the clock stopped at its last credited day.
+        uint32 at = whole ? v.lastDay : v.today;
+        uint256 live = Palette.lapsedIndex(v.streak, v.lastDay, at);
+        if (v.fellRun == 0) return live;
+        uint256 fell = Palette.lapsedIndex(v.fellRun, v.fellDay, at);
+        // ... the existing cap, unchanged ...
+    }
+</code></pre>
+<p>JS: <code>absenceOf</code> and <code>rungFor</code> take <code>whole = false</code> and apply the same two
+rules; <code>renderSvg</code> passes <code>whole: level &gt;= DAY_CELLS</code>.</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4: Fix the tests that built multi-year tokens</strong>: <code>GasBudget.t.sol:302-338</code>, <code>GasProfile.t.sol:250-251</code>, <code>CodeRenderer.t.sol:410</code>, <code>IntrinsicSize.t.sol:80</code>, <code>tools/state-matrix.mjs:30,58-68,243,250</code>, <code>tools/echo-ring-fixture.mjs:32</code>. A stage that no longer exists (&quot;ten years, at the cap&quot;) is REMOVED from the sweep and the removal named in the commit; the byte and gas worst cases are re-measured in Task 7, not carried over.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 5: Regenerate every golden and fixture whose test now fails</strong> by running its generator (<code>node tools/&lt;name&gt;-fixture.mjs</code>), never by hand-editing a hash. The generators are <code>render-fixture</code>, <code>token-uri-fixture</code>, <code>combination-fixture</code>, <code>echo-ring-fixture</code>, <code>frame-path-fixture</code>, <code>colour-fixture</code>. Run each generator&#39;s own test afterwards.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 6: All four suites green, then commit</strong>: <code>feat(render): a finished token keeps one ring and stops fading</code>.</p>
+</li>
+</ul>
+<h2>Task 6: The number is written in its Mark&#39;s ink, and the place is a trait</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/render/MarkRenderer.sol</code>, <code>contracts/src/render/Renderer.sol</code> (<code>_digitGroup</code> at 304-308, <code>_attrsA</code> at 430-441), <code>contracts/src/render/DigitBand.sol</code> (the <code>INK</code> comment), <code>tools/render-token.mjs</code></li>
+<li>Test: <code>contracts/test/MarkRenderer.t.sol</code>, <code>contracts/test/DigitBandRender.t.sol</code>, <code>tools/test/render-token.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>MarkRenderer.finisherInk(uint256 marks) returns (string memory)</code>; <code>MarkRenderer.names</code> covering ids 1-15; JS <code>finisherInk(ids)</code>, <code>MARKS</code> of length 15.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-solidity">    function test_eachFinisherMarkHasItsInk() public pure {
+        assertEq(MarkRenderer.finisherInk(1 &lt;&lt; 15), &quot;#b8860b&quot;);
+        assertEq(MarkRenderer.finisherInk(1 &lt;&lt; 14), &quot;#8c9096&quot;);
+        assertEq(MarkRenderer.finisherInk(1 &lt;&lt; 13), &quot;#a0612b&quot;);
+        assertEq(MarkRenderer.finisherInk(1 &lt;&lt; 12), &quot;#2000ff&quot;);
+        assertEq(MarkRenderer.finisherInk(1 &lt;&lt; 11), &quot;#c8102e&quot;);
+        // An ordinal with no finisher bit cannot exist on chain; the spike&#39;s
+        // setMarks can write one, and it keeps the near-black it always had.
+        assertEq(MarkRenderer.finisherInk(0), &quot;#2f2f2f&quot;);
+    }
+
+    function test_finisherNamesReachTheMetadata() public pure {
+        assertEq(MarkRenderer.names((1 &lt;&lt; 7) | (1 &lt;&lt; 15)), &#39;[&quot;vessel&quot;,&quot;apex&quot;]&#39;);
+        assertEq(MarkRenderer.names(1 &lt;&lt; 11), &#39;[&quot;aorta&quot;]&#39;);
+    }
+</code></pre>
+<p>and a <code>tokenURI</code> test that a token with ordinal 42 carries
+<code>{&quot;trait_type&quot;:&quot;Finisher&quot;,&quot;value&quot;:42}</code> and a token with none carries value 0.</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail.</strong></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement, both languages</strong></p>
+</li>
+</ul>
+<p><code>MarkRenderer</code>: constants <code>AORTA = 1 &lt;&lt; 11</code> ... <code>APEX = 1 &lt;&lt; 15</code>, the five ink
+strings from the table at the top of this plan, and:</p>
+<pre><code class="language-solidity">    /// @notice The ink the finisher&#39;s number is written in: the Mark IS the ink.
+    /// @dev Decided by the operator 2026-09-23 (spec 10l). Gold, silver, bronze
+    /// are a ranking every viewer already reads; blue and the heart&#39;s red finish
+    /// the five. Seven characters each, so the byte count never depends on
+    /// which. Checked highest place first, though a token only ever holds one.
+    function finisherInk(uint256 marks) internal pure returns (string memory) {
+        if (has(marks, APEX)) return APEX_GOLD;
+        if (has(marks, ATRIUM)) return ATRIUM_SILVER;
+        if (has(marks, VALVE)) return VALVE_BRONZE;
+        if (has(marks, CHAMBER)) return CHAMBER_BLUE;
+        if (has(marks, AORTA)) return AORTA_RED;
+        return DigitBand.INK;
+    }
+</code></pre>
+<p><code>names</code>: <code>string[15]</code> with <code>&quot;apex&quot;</code> last, loop <code>i &lt; 15</code>. Update its comment:
+bits outside 1-15 are ignored.</p>
+<p><code>Renderer._digitGroup</code>: pass <code>MarkRenderer.finisherInk(v.marks)</code> instead of
+<code>DigitBand.INK</code>. Rewrite <code>DigitBand.INK</code>&#39;s comment: it is now only the ink of a
+state the chain cannot produce, and the reason the band has five inks.</p>
+<p><code>Renderer._attrsA</code>: add <code>_num(&quot;Finisher&quot;, MarkRenderer.ordinal(v.marks)),</code>
+immediately after the <code>Whole</code> line. It goes in <code>_attrsA</code>, not <code>_attrsB</code>,
+because <code>_attrsB</code> is already at the stack limit under the coverage profile.</p>
+<p>JS: <code>MARKS</code> gains <code>&quot;aorta&quot;,&quot;chamber&quot;,&quot;valve&quot;,&quot;atrium&quot;,&quot;apex&quot;</code>; <code>finisherInk(ids)</code>
+with the same order; <code>renderSvg</code> uses it for the band; <code>tokenUri</code> emits
+<code>Finisher</code> in the same position. Export the five ink constants with the same
+names and a <code>MUST match MarkRenderer</code> comment.</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4: Regenerate fixtures</strong> as in Task 5 Step 5. <code>tools/state-matrix.mjs:172</code> already iterates ordinals <code>[1, 42, 365, 0xaaaa, 0xffff]</code>; give each of those states the Mark its place earns (<code>finisherMark</code> mirrored in JS as a five-line function beside <code>finisherInk</code>), so the matrix exercises all five inks.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 5: All four suites green, then commit</strong>: <code>feat(render): the finisher&#39;s number is written in its Mark&#39;s ink</code>.</p>
+</li>
+</ul>
+<h2>Task 7: Measure it, prove it deploys, prove it decodes, and show the operator</h2>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Gas and bytes.</strong> <code>cd contracts &amp;&amp; forge test --match-path test/RealTokenGas.t.sol -vv</code> and <code>forge test --match-path test/GasBudget.t.sol -vv</code>. Record the dearest token&#39;s gas and the largest token&#39;s bytes, and both headrooms against 4,000,000 / 24,000. The 1M / 5 KB target is reported as MISSED. Expect both worst cases to FALL (no ring-cap children any more); if either rises, stop and find out why.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Check-in gas.</strong> The finishing credit writes three extra slots. Read the per-token cost of an ordinary credit and of a finishing credit from <code>GasProfile.t.sol</code>; add a case for the finishing credit if none exists. Report both.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Deployability.</strong> <code>forge build --sizes</code> (positive margin for both contracts), then <code>bash contracts/script/anvil-size-check.sh</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Decode.</strong> Extend <code>tools/finisher-band-sheet.mjs</code> so its cases are one per Mark (places 1, 3, 9, 42, 365 with their Marks) plus the unbanded control, and run it through <code>~/scripts/safe-build.sh</code>. Every tile must decode at 256, 848 and 1600 px to its own url. A failure is a blocker.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 5: The operator&#39;s sheet -- OPERATOR ONLY.</strong> Send ONE image: the five finished tokens in a row, labelled with place, Mark name and ink, and say what to look at (the colour of the number). The operator confirms it before Phase C.</li>
+</ul>
+<p><strong>PHASE B CHECK-IN with the operator:</strong> the measured figures and the sheet.</p>
+<hr>
+<h1>PHASE C -- THE WARDEN AND THE CLOCK</h1>
+<h2>Task 8: The door refuses a finished token</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/mcp/tools/checkin.mjs</code> (beside the <code>already-credited-today</code> guard at about line 98), <code>warden/src/mcp/gates.mjs</code>, <code>warden/src/mcp/nextSteps.mjs</code>, <code>skills/machine-readable-only/references/refusals.md</code>, <code>warden/test/chain-stub.mjs:73</code>, <code>warden/test/gates.test.mjs:269</code></li>
+<li>Test: <code>warden/test/checkin.test.mjs</code> (or whichever file holds the <code>already-credited-today</code> test -- put it beside that one)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: reason string <code>&quot;year-complete&quot;</code>; <code>yearCompleteBlock(chain, tokenId)</code> in <code>gates.mjs</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-js">test(&quot;a finished token is told its year is complete, and nothing is queued&quot;, async () =&gt; {
+  const { tool, q } = await setupWithToken({ level: 365 }); // use the file&#39;s existing fixture helper
+  const res = await tool.call({ tokenId: 1 });
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, &quot;year-complete&quot;);
+  assert.equal(q.pendingCredits(99_999).length, 0);
+});
+
+test(&quot;the credit that makes 365 is still accepted&quot;, async () =&gt; {
+  const { tool } = await setupWithToken({ level: 364 });
+  const res = await tool.call({ tokenId: 1 });
+  assert.equal(res.ok, true);
+});
+</code></pre>
+<p>and in <code>gates.test.mjs</code>, <code>yearCompleteBlock</code> blocks at chain level 365 and not at 364.</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail.</strong></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></p>
+</li>
+</ul>
+<p>In <code>checkin.mjs</code>, immediately before the <code>already-credited-today</code> check:</p>
+<pre><code class="language-js">  // THE YEAR IS OVER. The mirror&#39;s level already counts the credit that made
+  // it 365 (it is incremented when a check-in is queued), so `&gt;= 365` here is
+  // exactly &quot;a 365th credit already exists&quot; -- the one this refuses is the
+  // 366th, which the chain would revert with AlreadyFinished.
+  if (token.level &gt;= 365) {
+    return { ok: false, accepted: false, reason: &quot;year-complete&quot;,
+             tokenId, heart: &quot;365/365&quot; };
+  }
+</code></pre>
+<p>In <code>gates.mjs</code>, a gate that mirrors the contract&#39;s <code>AlreadyFinished</code>, read from
+<code>chain.lifecycleOf()</code> (which already returns <code>level</code>), in the same shape as the
+file&#39;s existing gates, and wire it into <code>checkin.mjs</code>&#39;s chain-gate call beside
+the others. The file&#39;s header says gates must mirror the contract; this is
+that rule applied to the new revert.</p>
+<p><code>nextSteps.mjs</code>: <code>&quot;year-complete&quot;</code> -&gt; &quot;Your year is complete. The record is
+final and its place is written round the border; <code>status</code> shows it. A whole
+token can seed a child once its key has a seed available.&quot; Add the same reason
+to <code>refusals.md</code> in that file&#39;s format.</p>
+<p>Set the stubs&#39; <code>level: 400</code> to <code>level: 200</code> (a level the chain can still hold)
+unless the test is ABOUT a finished token.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run, then all four suites, then commit</strong>: <code>feat(warden): a finished token&#39;s check-in is refused as year-complete</code>.</li>
+</ul>
+<h2>Task 9: The Clock orders finishers by token id, and survives a stray one</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Modify: <code>warden/src/clock/batch.mjs</code> (<code>writeCheckInChunk</code> at about 144; <code>ENTRY_ERRORS</code>)</p>
+</li>
+<li><p>Test: <code>warden/test/clock-batch.test.mjs</code> (or the file that tests <code>writeCheckInChunk</code>)</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-js">test(&quot;a chunk is sent in (day, tokenId) order, whatever order it arrived in&quot;, async () =&gt; {
+  const sent = [];
+  const writer = fakeWriter({ onSend: (args) =&gt; sent.push(args) }); // the file&#39;s existing fake
+  await writeCheckInChunk(writer, [
+    { tokenId: 9, day: 100 }, { tokenId: 2, day: 101 }, { tokenId: 3, day: 100 },
+  ], deps);
+  assert.deepEqual(unpackIds(sent[0][0]), [3, 9, 2]);
+  assert.deepEqual(sent[0][1], [100, 100, 101]);
+});
+
+test(&quot;AlreadyFinished drops the named token&#39;s entries and writes the rest&quot;, async () =&gt; {
+  const sent = [];
+  let first = true;
+  const writer = fakeWriter({
+    onSend: (args) =&gt; {
+      sent.push(args);
+      if (first) { first = false; throw revertWith(&quot;AlreadyFinished&quot;, [7n]); } // the file&#39;s existing revert helper
+    },
+  });
+  const out = await writeCheckInChunk(writer, [
+    { tokenId: 7, day: 100 }, { tokenId: 8, day: 100 },
+  ], deps);
+  assert.deepEqual(unpackIds(sent[1][0]), [8]);
+  assert.deepEqual(out.dropped.map(d =&gt; [d.entry.tokenId, d.reason]), [[7, &quot;AlreadyFinished&quot;]]);
+});
+</code></pre>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail.</strong></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></p>
+</li>
+</ul>
+<p>At the top of <code>writeCheckInChunk</code>, and again immediately before each <code>send</code>
+(the heal path appends to the end; <code>writeInHalves</code> splits):</p>
+<pre><code class="language-js">  // FINISHING PLACE IS DECIDED BY THIS ORDER. The contract gives places in the
+  // order credits arrive, and the published rule is lowest token id first
+  // within a day. The SQL already selects in this order; the heal and bisect
+  // paths below reorder, so the order is re-imposed at the last moment rather
+  // than trusted from upstream.
+  const byDayThenId = (a, b) =&gt; a.day - b.day || a.tokenId - b.tokenId;
+</code></pre>
+<p><code>ENTRY_ERRORS.AlreadyFinished = { by: &quot;id&quot; }</code>, with a comment: the door refuses
+these, so one reaching the chain is a mirror that fell behind, and dropping it
+loses nothing -- the token&#39;s year is already complete on chain.</p>
+<p><strong><code>writeInHalves</code> splits a day across two transactions.</strong> That keeps order
+(first half first), so places are still assigned in <code>(day, tokenId)</code> order.
+Write a test proving the first half is sent before the second.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run, then all four suites, then commit</strong>: <code>feat(clock): a day&#39;s batch is ordered by token id, which sets finishing place</code>.</li>
+</ul>
+<h2>Task 10: The mirror records the place</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/mirror/schema.sql</code>, <code>warden/src/mirror/db.mjs</code> (<code>migrate</code>), <code>warden/src/mirror/queries.mjs</code>, <code>warden/src/clock/reconcile.mjs</code> (the event switch at about 190-220), <code>warden/src/clock/abi.mjs</code>, <code>warden/src/mcp/tokenView.mjs:38-41</code></li>
+<li>Test: <code>warden/test/clock-reconcile.test.mjs</code>, <code>warden/test/mirror.test.mjs</code> (or equivalents), <code>warden/test/token-view.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>tokens.finisher INTEGER NOT NULL DEFAULT 0</code>; <code>q.setFinished(tokenId, ordinal, markId)</code>; <code>tokenView</code> field <code>finisher: { place, mark } | null</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-js">test(&quot;a Finished event writes the place and the Mark bit&quot;, () =&gt; {
+  const q = freshMirrorWithToken(5);
+  applyEvents(q, [{ eventName: &quot;Finished&quot;, args: { id: 5n, ordinal: 3, markId: 14 } }]);
+  const t = q.token(5);
+  assert.equal(t.finisher, 3);
+  assert.equal(t.marks &amp; (1 &lt;&lt; 14), 1 &lt;&lt; 14);
+});
+
+test(&quot;the migration adds finisher to an existing mirror&quot;, () =&gt; {
+  // open a db built from the PREVIOUS schema, run migrate(), read the column
+});
+
+test(&quot;status shows the place and the Mark, and no years field&quot;, () =&gt; {
+  const v = tokenView({ ...baseToken, level: 365, finisher: 1, marks: 1 &lt;&lt; 15 });
+  assert.deepEqual(v.finisher, { place: 1, mark: &quot;apex&quot; });
+  assert.equal(&quot;years&quot; in v, false);
+});
+</code></pre>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail.</strong></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></p>
+</li>
+</ul>
+<p>Regenerate <code>abi.mjs</code> from the build the way it was generated before (read its
+header for the command) so it carries <code>Finished</code> and <code>AlreadyFinished</code>.</p>
+<p><code>schema.sql</code>: add <code>finisher INTEGER NOT NULL DEFAULT 0, -- finishing place, 0 until the year is complete</code>
+to <code>tokens</code>. <code>db.mjs</code> <code>migrate</code>: the same <code>ALTER TABLE ... ADD COLUMN</code> guarded
+the way the existing ones are. <strong>Read the <code>the-index-that-blocked-lineage</code>
+lesson first: <code>schema.sql</code> runs on every open, so anything that depends on the
+new column belongs in <code>migrate()</code>.</strong></p>
+<p><code>queries.mjs</code>: <code>setFinished</code> updates <code>finisher</code> AND ORs the Mark bit into
+<code>marks</code>, in one statement or one transaction.</p>
+<p><code>reconcile.mjs</code>: a <code>case &quot;Finished&quot;:</code> that validates <code>markId</code> is 11-15 and
+<code>ordinal &gt;= 1</code> exactly the way the <code>MarkApplied</code> case validates its id (a bad
+decode is counted as skipped and logged, never written), then calls
+<code>q.setFinished</code>.</p>
+<p><code>tokenView.mjs</code>: drop <code>years</code>; add
+<code>finisher: t.finisher ? { place: t.finisher, mark: markNameIn(t.marks &amp; FINISHER_MASK) } : null</code>,
+using <code>markNameIn</code> from <code>ladder.mjs</code> (it names the FIRST Mark in a mask, which
+is why the mask is narrowed to the five finisher bits first). Export
+<code>FINISHER_MASK</code> from <code>ladder.mjs</code> as the <code>FINISHERS</code> constant Task 4 defines.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run, then all four suites, then commit</strong>: <code>feat(mirror): the finishing place is recorded from the Finished event</code>.</li>
+</ul>
+<h2>Task 11: The ladder tool shows the finisher Marks and never sells them</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Modify: <code>warden/src/mcp/tools/upgrade.mjs:67,103</code>, <code>warden/src/mcp/tools/ladder.mjs:133</code>, <code>warden/src/mcp/nextSteps.mjs:84-85</code></p>
+</li>
+<li><p>Test: <code>warden/test/ladder-tool.test.mjs</code>, <code>warden/test/pay.test.mjs:715,1001</code></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong>: the <code>ladder</code> tool lists 11-15 as &quot;given at 365 by finishing place&quot; with their caps and how many are taken, never with a price or a way to ask; <code>upgrade</code> with <code>upgradeId: 11</code> still fails schema validation (<code>pay.test.mjs:1001</code> already pins this -- keep it); a hand-built call past the schema with id 12 returns <code>mark-not-requestable</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail.</strong></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement.</strong> Keep the schema&#39;s <code>.max(10)</code>. In <code>upgrade.mjs</code>, directly after the catalogue lookup:</p>
+</li>
+</ul>
+<pre><code class="language-js">  // Given at 365 by finishing place (MachineReadableOnly.finisherMark), never
+  // asked for. The schema already stops 11-15; this is the second wall, for a
+  // caller that reaches the handler some other way.
+  if (mark.route === &quot;finisher&quot;) {
+    return { ok: false, reason: &quot;mark-not-requestable&quot;, upgradeId };
+  }
+</code></pre>
+<p>In <code>tools/ladder.mjs</code> at the <code>Object.values(catalogue)</code> listing, split the rows:</p>
+<pre><code class="language-js">  const offered = Object.values(catalogue).filter(m =&gt; m.route !== &quot;finisher&quot;);
+  const finishers = Object.values(catalogue).filter(m =&gt; m.route === &quot;finisher&quot;);
+</code></pre>
+<p>render <code>offered</code> exactly as today, and <code>finishers</code> as their own group, each row
+<code>{ id, name, places, cap, taken }</code> where <code>taken</code> is the count of mirror tokens
+holding that bit and <code>places</code> is the band (&quot;1st&quot;, &quot;2nd-4th&quot;, ...), with no
+price and no call to action. <code>nextSteps.mjs</code>: add <code>&quot;mark-not-requestable&quot;</code> -&gt;
+&quot;Marks 11-15 are given by finishing your year, in the order tokens finish; they
+cannot be asked for.&quot; and change <code>mark-inactive</code>&#39;s &quot;the ten that exist&quot; to &quot;the
+Marks that exist&quot;. Add <code>mark-not-requestable</code> to <code>refusals.md</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run, then all four suites, then commit</strong>: <code>feat(warden): the ladder shows the finisher Marks and refuses to sell them</code>.</li>
+</ul>
+<p><strong>PHASE C CHECK-IN with the operator.</strong></p>
+<hr>
+<h1>PHASE D -- THE WORDS, AND THE DEPLOY</h1>
+<h2>Task 12: The agent-facing copy, cold-read before it is served</h2>
+<p><strong>Files:</strong> <code>warden/public/llms.txt</code> (8-13, 40, 250-281), <code>skills/machine-readable-only/SKILL.md</code> (37, 53-55, 232, 243), <code>docs/2026-09-01-mro-raw-protocol.md</code> (429, 469, 482, 521-524) and its copy, <code>warden/public/door.html:36</code>, <code>tools/ladder-table.mjs</code> and <code>tools/test/ladder-table.test.mjs</code>.</p>
+<p>What must be said, in the piece&#39;s own register:</p>
+<ol>
+<li><strong>The year ends.</strong> At 365 credited days the frame closes, the heart is
+whole, and the record is final. Lines 8-13&#39;s &quot;Each further 365 days adds a
+ring&quot; is removed. Seeding a child is how a line goes on.</li>
+<li><strong>The race.</strong> Finishing place is the order tokens complete their year;
+tokens finishing on the same day are placed by lowest token id. The first
+finisher&#39;s number is written in gold; the table of five with caps.</li>
+<li><strong>&quot;Nothing is limited&quot; is rewritten, not softened</strong> (spec section 9): nothing
+in the five pairs is limited; the finisher Marks are limited by place and
+given, never bought or asked for; nothing already held can be taken away --
+that last clause stays verbatim.</li>
+</ol>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1:</strong> Regenerate the ladder table (<code>tools/ladder-table.mjs</code>) to include 11-15 as given, with no price column value.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2:</strong> Edit the four files. Re-copy the raw protocol with <code>cp</code>, then re-render every edited <code>.md</code> to <code>.html</code> with <code>node ~/scripts/render-md-to-html.js &lt;file&gt;</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Cold read (spec section 10).</strong> Three <code>Explore</code> agents per variant, each told only that the operator fetched the file from the project&#39;s site, asked what the piece asks of them and whether anything reads as a sales funnel. Two &quot;sales funnel&quot; verdicts out of three send the copy back.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 4:</strong> All four suites, then commit: <code>docs(agents): the year ends, and the first to finish is written in gold</code>.</li>
+</ul>
+<h2>Task 13: Record the 2026-09-23 decisions in the spec</h2>
+<ul>
+<li><input disabled="" type="checkbox"> Add section 10m to <code>docs/specs/2026-09-20-mro-finisher-marks-design.md</code> carrying the &quot;Decided on 2026-09-23, and NOT yet in the spec&quot; table above, and mark sections 6-7&#39;s claim and reservation design SUPERSEDED by it. Update 11 (Non-goals): &quot;The ordinal is not drawn&quot; and &quot;The QR version is not raised&quot; are stale -- both happened. Re-render the HTML. Commit: <code>docs(finisher): the Mark is given at 365, and 10f is built</code>.</li>
+</ul>
+<h2>Task 14: Redeploy on Base Sepolia -- needs the operator&#39;s go-ahead</h2>
+<p><strong>This spends testnet ETH only and sends nothing real, but it replaces the live
+testnet contract and clears the mirror&#39;s chain rows. Ask before starting.</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1:</strong> <code>bash contracts/script/deployer-balance.sh</code>; stop if short.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2:</strong> <code>bash contracts/script/deploy-plan7.sh</code> (runs <code>DeployPlan5.s.sol</code>, now writing 15 Marks), then <code>bash contracts/script/verify-plan7.sh &lt;renderer&gt; &lt;token&gt; &lt;warden&gt;</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3:</strong> <code>cd warden &amp;&amp; node tools/read-ladder.mjs &lt;token&gt;</code> -- all 15 rows match.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 4:</strong> <code>bash contracts/script/adopt-deployment.sh &lt;renderer&gt; &lt;token&gt; &lt;deploy-block&gt;</code>, then follow its printed steps in order: rehearse, set the contract address, snapshot the mirror, reset its chain rows, <code>pm2 restart mro-warden</code>, verify through Cloudflare.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Prove the new rules on the live chain</strong> with <code>cast</code>: <code>applyMark(&lt;id&gt;, 11, 0)</code> from the Clock reverts <code>MarkNotRequestable</code> (a <code>cast call</code>, no transaction); <code>finishers()</code> is 0; <code>upgradeOf(15)</code> shows cap 1.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 6:</strong> Mint one token through the real paid path, as after the last redeploy, and confirm <code>/t/&lt;id&gt;</code> serves it.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 7:</strong> All four suites, commit the adopted addresses, and ask before pushing.</li>
+</ul>
+<p><strong>Finishing on the live testnet cannot be shown in real time -- it takes a
+year.</strong> The fast-days copy (<code>contracts/script/fast/</code>, a five-minute day) can
+show it in about 30 hours. That is OPTIONAL and the operator&#39;s call; the
+Foundry tests prove the same rules against the same contract.</p>
+<hr>
+<h2>Self-review against the spec</h2>
+<ul>
+<li>10l the inks, caps and names -- Tasks 2, 4, 6.</li>
+<li>10f stop at 365, one ring, no fading, the Clock stops including a finished token -- Tasks 1, 5, 8, 9.</li>
+<li>Section 5 ordinal in bits 64-95, never 32-63 -- Task 2 writes 64; <code>test_finishingLeavesTheIrisRunAlone</code> guards 32-63.</li>
+<li>Section 6 same-day ordering by token id, published -- Tasks 9 and 12.</li>
+<li>Section 7 reservation accounting -- NOT NEEDED: nothing is reserved when the chain assigns. Recorded in Task 13.</li>
+<li>Section 9 the published promise rewritten, not softened -- Task 12.</li>
+<li>Section 10 validation: cold read (12), break the wiring (2), decode sweep (7), gas measured (7), all four suites before every commit.</li>
+<li>10i order of work: boot assertion before anything starts (Task 4 lands with the contract, so the Warden never boots against a ladder it rejects); copy last (Task 12).</li>
+</ul>
+</body>
+</html>
