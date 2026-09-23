@@ -1082,6 +1082,51 @@ advertises an unbuilt design.
 
 ---
 
+## 10l. DECIDED: the Mark is the INK of the number (2026-09-23)
+
+Decided by the operator, 2026-09-23, from a rendered ladder. The question was
+put plainly: in 10k every finisher's number is drawn in the same near-black, so
+a Mark 15 holder and a Mark 11 holder look identical apart from the digits. His
+answer: **"What's the point of getting a rare mark if you can't see it"** -- and,
+when one uncapped Mark with the number as the only prize was offered instead,
+**"We want a race to the finish and a prize for being first."**
+
+So each finisher Mark writes the number in its own ink:
+
+| Id | Cap | Finishing place | Ink |
+|---|---|---|---|
+| 15 | 1 | 1st | gold, `#b8860b` (the Vessel gold) |
+| 14 | 3 | 2nd to 4th | silver, `#8c9096` |
+| 13 | 10 | 5th to 14th | bronze, `#a0612b` |
+| 12 | 50 | 15th to 64th | blue, `#2000ff` (the Beat blue) |
+| 11 | none | 65th onwards | the heart's red, `#c8102e` |
+
+**The caps are 1 / 3 / 10 / 50 plus one uncapped, SET by the operator** -- the
+recommendation in section 4 stands as the decision.
+
+**Why this is not the colour 10k rejected.** 10k rejected colouring the RING, a
+band of colour round the frame: it read as "more squares", and five inks were
+peers, so rank had to be read from metadata. Here the colour is on the WRITING,
+and gold / silver / bronze is a ranking every viewer already knows. The frame is
+unchanged.
+
+**Measured on the rendered sheet:** every ink decodes (ZXing, 848 px); the ink
+is one colour literal, so it costs no bytes against the 954 left. Grey was
+tried for the uncapped Mark and dropped -- it is nearly indistinguishable from
+silver. Blue is the loudest ink on the ladder and louder than gold; the operator
+chose it for 15th-64th with that shown to him.
+
+**What it supersedes:** 10k's single `DIGIT_INK` near-black is no longer the
+ink of any finisher. In the build it becomes a lookup by the finisher Mark held.
+The Solidity `DigitBand.INK` and its JS mirror move together, as ever.
+
+**What a finished token that has NOT yet claimed a Mark draws** is still open
+(10g's "default look"): the band needs an ordinal, and the ordinal is written by
+the claim, so the likely answer is no band until the claim lands. Confirm in
+the build.
+
+---
+
 ## 11. Non-goals
 
 Stated so they are not re-litigated mid-build:
@@ -1108,9 +1153,8 @@ Stated so they are not re-litigated mid-build:
 
 ## 12. Decisions the operator still owns
 
-- **The cap numbers.** 50 / 10 / 3 / 1 is a recommendation built on comparable
-  project scale, not a measurement.
-- **The five names**, and what each looks like. Naming and visual design have
-  not been attempted here.
+- ~~The cap numbers.~~ **SET: 1 / 3 / 10 / 50 plus one uncapped** (10l).
+- ~~What each looks like.~~ **DECIDED: the ink of the number** (10l).
+- **The five names.** Not yet attempted.
 - **The combination strategy** in section 9, if he wants it decided rather than
   recommended.
