@@ -326,7 +326,7 @@ contract GasBudgetTest is Test {
     /// @dev The whole ladder in one test so the numbers appear together and can
     /// be copied straight into the results table. Run with -vv.
     ///
-    /// EVERY STAGE HERE IS UNBANDED, and since 2026-09-23 three of them are
+    /// EVERY STAGE HERE IS UNBANDED, and since 2026-09-23 four of them are
     /// therefore states the chain cannot produce: tokens 3, 7, 8 and 11 stand
     /// at level 365, and a real token reaching 365 is given a PLACE by the same
     /// credit, so it carries the finisher's digit band from that moment. They
@@ -412,9 +412,11 @@ contract GasBudgetTest is Test {
         assertGt(maxBytes, BYTE_TARGET, "the byte target now passes: update the results table");
 
         // The regression band. Each worst case is checked against its OWN
-        // band: the dearest token and the largest token are different tokens,
-        // and pairing one's gas with the other's bytes is the mistake this
-        // file's own comments warn about.
+        // band: WITHIN THIS LADDER the dearest token and the largest token are
+        // still different tokens -- the day-364 child costs the most gas and
+        // the finished child the most bytes -- and pairing one's gas with the
+        // other's bytes is the mistake this file's own comments warn about.
+        // (Add the band and they become one token; see the finisher test.)
         if (_gasIsMeaningful()) {
             assertLt(worstGas, GAS_BAND, "gas grew past the band: see GAS_BAND before moving it");
         }
@@ -731,10 +733,15 @@ contract GasBudgetTest is Test {
         if (bandBytes < BYTE_LIMIT) console.log("  bytes", BYTE_LIMIT - bandBytes);
         else console.log("  OVER THE HARD BYTE LIMIT BY", bandBytes - BYTE_LIMIT);
 
-        // BOTH limits, on BOTH tokens. The dearest token and the largest token
-        // are different tokens and every document in this project has collapsed
-        // them at least once; a band asserted against one of them would be the
-        // same mistake in a new place.
+        // BOTH limits, on BOTH tokens, and the habit is kept even though the
+        // reason for it changed on 2026-09-23. The dearest token and the
+        // largest token WERE different tokens, and every document in this
+        // project collapsed them at least once; since the finisher's band they
+        // are the SAME token, because only a token past 365 carries a band and
+        // the band costs more than a fragmented day-364 frame saves. Asserting
+        // both anyway is what would notice them coming apart again -- a Mark
+        // that buys bytes without gas, or the reverse, would do it -- and
+        // costs nothing while they agree.
         assertLt(bandBytes, BYTE_LIMIT, "a finisher must fit the hard byte limit");
         assertLt(boundBytes, BYTE_LIMIT, "so must the bound");
         if (_gasIsMeaningful()) {

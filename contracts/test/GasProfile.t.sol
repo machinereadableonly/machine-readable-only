@@ -13,8 +13,9 @@ import {LibString} from "solady/src/utils/LibString.sol";
 
 /// @notice WHERE the dearest token's gas actually goes.
 ///
-/// @dev `RealTokenGas.t.sol` says the dearest token costs 3,540,467 against a
-/// 4,000,000 hard limit (re-measured 2026-09-23), which is 11.5% headroom. That
+/// @dev `RealTokenGas.t.sol` says the dearest token costs LARGEST_TOKEN_GAS
+/// against a 4,000,000 hard limit (re-measured 2026-09-23), which is 11.5%
+/// headroom -- the dearest and the largest are now one token. That
 /// number says how much of the budget is spent; it does not say what spent it.
 /// Nothing in the suite broke the total into parts, so every proposal to buy
 /// headroom was guesswork.
@@ -56,6 +57,26 @@ contract GasProfileTest is Test {
     string constant HEART = "#c8102e";
     string constant NOISE = "#767676";
     string constant GHOST = "#f4eef0";
+
+    /// @dev The two hard limits, repeated from `GasBudget.t.sol` for the same
+    /// reason that file repeats them from nowhere: they are the project's
+    /// published budget, not one file's private business.
+    uint256 constant GAS_LIMIT = 4_000_000;
+    uint256 constant BYTE_LIMIT = 24_000;
+
+    /// @dev The largest token the shipping contract can produce -- a finished
+    /// child wearing every legal Mark and its place -- as
+    /// `RealTokenGas.t.sol` measures it. Named constants rather than two
+    /// subtracted literals in a `console.log`, so the headroom this file prints
+    /// is computed from the figure it names and one number has to be updated
+    /// rather than three kept in agreement.
+    ///
+    /// This file cannot measure it: it profiles the RENDERER from a view
+    /// already in memory and deploys no token. Re-measured 2026-09-23; it was
+    /// 2,799,616 / 18,249 while a finished token carried no band and could be
+    /// ten rings deep.
+    uint256 constant LARGEST_TOKEN_GAS = 3_540_467;
+    uint256 constant LARGEST_TOKEN_BYTES = 22_162;
 
     function setUp() public {
         r = new Renderer();
@@ -276,13 +297,13 @@ contract GasProfileTest is Test {
         console.log("");
         assertGt(bytes(b).length, bytes(a).length,
             "a ring that adds no bytes means the two views are the same geometry, not a free ring");
-        // The LARGEST token's headroom, from RealTokenGas.t.sol, re-measured
-        // 2026-09-23 with the finisher's band in the picture. It was 182,700
-        // gas / 7,451 bytes when a finished token carried no band and could be
-        // ten rings deep; both numbers moved, and in opposite directions.
+        // The LARGEST token's headroom, computed from the named constants at
+        // the head of this file rather than typed in twice. It was 182,700 gas
+        // / 7,451 bytes when a finished token carried no band and could be ten
+        // rings deep; both numbers moved, and in opposite directions.
         console.log("against the LARGEST token's headroom, measured in RealTokenGas:");
-        console.log("  gas   459533");
-        console.log("  bytes 1838");
+        console.log("  gas  ", GAS_LIMIT - LARGEST_TOKEN_GAS);
+        console.log("  bytes", BYTE_LIMIT - LARGEST_TOKEN_BYTES);
     }
 
     /// @dev The only substitution a data URI actually requires of this svg:

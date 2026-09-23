@@ -41,10 +41,27 @@ import {TokenView} from "../src/render/TokenView.sol";
 /// rings that went made the picture smaller, the band made it larger, and the
 /// band wins. The dearest token and the largest token, which have been
 /// different tokens for as long as this file has existed, are now THE SAME
-/// TOKEN -- a finished child wearing every legal Mark and its place. Measured
-/// 2026-09-23: 3,540,467 gas and 22,162 bytes, against 3,705,720 / 23,046 for
-/// the ring-cap child that used to hold both records. Every state below is the
-/// deepest the SHIPPING CONTRACT can produce.
+/// TOKEN -- a finished child wearing every legal Mark and its place, measured
+/// 2026-09-23 at 3,540,467 gas and 22,162 bytes.
+///
+/// BOTH SHIPPING WORST CASES ROSE, and the comparison has to be made WITHIN
+/// this harness to say so honestly. Before this branch the two records sat on
+/// two different tokens here: the day-364 child cost the most gas at 2,870,177
+/// and the ring-cap child the most bytes at 18,249. So, like for like:
+///
+///   dearest   2,870,177 -> 3,540,467 gas    +670,290
+///   largest      18,249 -> 22,162 bytes      +3,913
+///
+/// Nothing regressed. A shipping token simply could not be a finisher before,
+/// so the band was a cost this harness had no way to measure; it could only be
+/// projected on the spike, where the equivalent figure FELL (3,705,772 ->
+/// 3,534,616 gas, 23,046 -> 22,152 bytes, `GasBudget.t.sol`) because the
+/// ring-cap canvas the projection used no longer exists. A rise here and a fall
+/// there are the same fact seen from two harnesses, and quoting one against the
+/// other is the mistake this paragraph exists to stop. Headroom after the rise:
+/// 459,533 gas and 1,838 bytes.
+///
+/// Every state below is the deepest the SHIPPING CONTRACT can produce.
 contract RealTokenGasTest is MroTestBase {
     /// @dev The same hard limits `GasBudget.t.sol` asserts. Repeated rather
     /// than imported because they are the project's published budget, not that

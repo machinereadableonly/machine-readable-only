@@ -38,9 +38,13 @@ const SIZES = [256, 848, 1600];
 // A whole token with the year behind it: what every finisher is.
 const BASE = { level: 365, streak: 365, years: 1, lastDay: 20700, today: 20700 };
 
-// One place per Mark, left to right, best first. The ordinal drawn is the
-// FIRST place in each band's range, except Aorta, where 365 is chosen over 65
-// to show a four-figure-looking number in the run-of-the-mill ink.
+// One place per Mark, left to right, best first. The ordinal drawn is one from
+// somewhere INSIDE each Mark's range rather than its first place: 1 is Apex's
+// only place, 3 sits in Atrium's 2-4, 9 in Valve's 5-14, 42 in Chamber's
+// 15-64, and 365 well inside Aorta's 65-and-up. The boundaries themselves are
+// pinned in FinishLine.t.sol, which is where an off-by-one belongs; here the
+// point is that the operator sees a typical number in each ink rather than an
+// edge case.
 const ROWS = [
   { places: "1st", ordinal: 1, colour: "gold" },
   { places: "2nd-4th", ordinal: 3, colour: "silver" },
@@ -51,6 +55,19 @@ const ROWS = [
 
 const cells = canvasFor(1);
 const units = canvasUnits(cells, CODE.size);
+
+// The band's ink, read off the drawing rather than searched for in the string,
+// because Aorta's red is also the HEART's red -- an `includes` check would pass
+// on a band drawn in the fallback near-black and the tile would still be
+// labelled "gold". The same read-back finisher-band-sheet.mjs does, with the
+// same reasoning at greater length: a band offsets the frame, so a banded token
+// has TWO translated groups and the digits own the only bare `scale()`, while
+// an unbanded one has one translated group and the bare `scale()` is the frame.
+const bandInkOf = svg => {
+  const translated = svg.match(/<g transform="translate\(/g) ?? [];
+  if (translated.length < 2) return undefined;
+  return (svg.match(/<g transform="scale\(\d+\)"><path fill="(#[0-9a-f]{6})"/) ?? [])[1];
+};
 
 const tiles = [];
 let failures = 0;
@@ -69,7 +86,12 @@ for (const row of ROWS) {
     if (!r.ok) bad.push(`${px}:${r.why}`);
     else if (r.destination !== DEST) bad.push(`${px}:wrong-destination`);
   }
-  if (bad.length) failures++;
+  // A label is a claim, so the ink is read back off the drawing before the
+  // label is written under it. A tile drawn in the fallback near-black must
+  // never go out labelled "gold".
+  const drawn = bandInkOf(svg);
+  const wrongInk = drawn !== ink;
+  if (bad.length || wrongInk) failures++;
 
   // Title case for the sheet only. The metadata name stays lower case, which
   // is what MarkRenderer emits and what the ladder tests assert.
@@ -77,6 +99,7 @@ for (const row of ROWS) {
   console.log(
     `${row.places.padEnd(10)} ${shown.padEnd(8)} ${row.colour.padEnd(7)} ${ink}`
       + `  place ${String(row.ordinal).padStart(3)}`
+      + `  drawn ${drawn ?? "none"}${wrongInk ? " WRONG" : ""}`
       + `  decodes ${SIZES.length - bad.length}/${SIZES.length}`
       + (bad.length ? `  ${bad.join(" ")}` : "")
   );
@@ -118,6 +141,6 @@ writeFileSync(path, new Resvg(sheet, { fitTo: { mode: "width", value: WIDTH } })
 console.log(`\nsheet ${path}`);
 
 if (failures) {
-  console.error(`\n${failures} tile(s) failed to decode. That is a blocker, not a note.`);
+  console.error(`\n${failures} tile(s) failed to decode or wear the wrong ink. That is a blocker, not a note.`);
   process.exit(1);
 }

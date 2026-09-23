@@ -23,7 +23,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { Resvg } from "@resvg/resvg-js";
 
 import {
-  renderSvg, canvasFor, canvasUnits, bandUnits, FIELD, finisherMark, finisherInk, MARKS,
+  renderSvg, canvasFor, canvasUnits, bandUnits, finisherMark, finisherInk, MARKS,
 } from "./render-token.mjs";
 import { DEST, CODE, TARGET } from "./sheet-code.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
@@ -39,9 +39,14 @@ const SIZES = [256, 848, 1600];
 const BASE = { level: 365, streak: 365, years: 1, lastDay: 20700, today: 20700 };
 
 // ONE PLACE PER MARK, plus the unbanded control: the five bands the piece can
-// actually draw, each in the ink its place earns. The ordinals are the first
-// place in each band's range but one -- 1 Apex, 3 Atrium, 9 Valve, 42 Chamber,
-// 365 Aorta -- so a reader can see at a glance which ink goes with which rank.
+// actually draw, each in the ink its place earns. The ordinals are one from
+// somewhere INSIDE each Mark's range, not its first place -- 1 Apex (whose
+// range is one place, so it is also the only one), 3 Atrium (of 2-4), 9 Valve
+// (of 5-14), 42 Chamber (of 15-64), 365 Aorta (of 65 on) -- so a reader can
+// see at a glance which ink goes with which rank. Middles rather than
+// boundaries on purpose: a boundary ordinal would pass even if `finisherMark`
+// were off by one, and the boundaries themselves are pinned in FinishLine.t.sol
+// where an off-by-one is what the test is looking for.
 //
 // THE MARK IS NOT PAIRED BY HAND. `finisherMark` is the same ladder the
 // contract runs (MachineReadableOnly.finisherMark), so a case cannot be given
@@ -60,13 +65,27 @@ const CASES = [["control, no band", 0, [], ""]].concat(
   })
 );
 
-// The band is the FIRST group in the svg and the only one carrying a bare
-// `scale()`: the frame is placed with a translate once a band exists, and the
-// code block always is. Read rather than searched for, because Aorta's red is
-// also the HEART's red -- an `includes` check would pass on a band drawn in
-// the fallback near-black and nobody would know.
-const bandInkOf = svg =>
-  (svg.match(/<g transform="scale\(\d+\)"><path fill="(#[0-9a-f]{6})"/) ?? [])[1];
+// The band's ink, read off the drawing rather than searched for in the string,
+// because Aorta's red is also the HEART's red -- an `includes` check would pass
+// on a band drawn in the fallback near-black and nobody would know.
+//
+// `renderSvg` emits exactly three groups: the digits under a bare `scale()`,
+// the frame, and the code block. A band offsets the frame, so with one the
+// frame is TRANSLATED and the digits own the only bare `scale()`; without one
+// the frame takes that bare `scale()` itself. Position cannot tell them apart,
+// and neither can the scale factor -- at version 5 a frame cell and a QR module
+// are both 13 units. The count of translated groups can: two (frame and code)
+// means there is a band, one (code alone) means the bare `scale()` is the
+// frame.
+//
+// THE CONTROL ASSERTION BELOW IS WHAT FOUND THIS. The first version of this
+// helper took the first bare `scale()` unconditionally and duly reported the
+// unbanded control's FRAME fill -- the heart's red -- as a band ink.
+const bandInkOf = svg => {
+  const translated = svg.match(/<g transform="translate\(/g) ?? [];
+  if (translated.length < 2) return undefined;
+  return (svg.match(/<g transform="scale\(\d+\)"><path fill="(#[0-9a-f]{6})"/) ?? [])[1];
+};
 
 const tiles = [];
 let failures = 0;
@@ -89,8 +108,13 @@ for (const [label, ordinal, marks, ink] of CASES) {
   // The ink is a claim about the picture, so it is read back off the picture.
   // Counted separately from the decode: a wrong ink and a failed scan are
   // different failures and a combined "3/3" would hide one behind the other.
+  //
+  // THE CONTROL IS CHECKED TOO, and in the opposite direction: it must carry
+  // NO band at all. Without that this read-back is a test that can only ever
+  // pass one way -- it would not notice a renderer that drew a band on every
+  // token, because the five cases it looks at all want one.
   const drawn = bandInkOf(svg);
-  const wrongInk = ink && drawn !== ink;
+  const wrongInk = ink ? drawn !== ink : drawn !== undefined;
   if (bad.length || wrongInk) failures++;
 
   console.log(label);
@@ -98,7 +122,7 @@ for (const [label, ordinal, marks, ink] of CASES) {
     `  canvas ${units} units${ordinal ? ` (band ${bandUnits(cells, CODE.size)})` : ""}`
       + `, svg ${svg.length} bytes`
       + `, code block ${(100 * blockShare).toFixed(0)}% of the picture`
-      + `${ink ? `, band ink ${drawn ?? "none"}${wrongInk ? ` WRONG, wanted ${ink}` : ""}` : ""}`
+      + `, band ink ${drawn ?? "none"}${wrongInk ? ` WRONG, wanted ${ink || "none"}` : ""}`
       + `, decodes ${SIZES.length - bad.length}/${SIZES.length}`
       + (bad.length ? `  ${bad.join(" ")}` : "")
   );
