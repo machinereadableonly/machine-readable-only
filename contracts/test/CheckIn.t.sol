@@ -338,12 +338,23 @@ contract CheckInTest is MroTestBase {
         // WHAT A CHUNK FULL OF FINISHERS WOULD COST, printed rather than
         // asserted. `test_aFullChunkFitsTheGasGuard` above measures 1,400
         // ORDINARY credits against MAX_TX_GAS; a finisher is dearer, so a night
-        // on which many tokens seal is a dearer night. The Clock does not send
-        // blind -- `warden/src/clock/write.mjs` estimates, pads by 12.5% and
-        // REFUSES over MAX_TX_GAS rather than re-chunking -- so this is a figure
-        // for sizing the chunk. It is left as a log because the number that
-        // matters is how many tokens can actually finish on one day, which is a
-        // property of the mint history and not of this contract.
+        // on which many tokens seal is a dearer night.
+        //
+        // IT IS NOT A STALL, AND AN EARLIER VERSION OF THIS COMMENT SAID IT WAS.
+        // `warden/src/clock/write.mjs` estimates, pads by 12.5% and returns
+        // `gas-estimate-too-large` rather than sending -- but that is a reason
+        // code, not the end of the night. `batch.mjs` catches it and writes the
+        // chunk in two halves, recursively, bounded by `maxAttempts` (12); only
+        // a SINGLE entry that still will not estimate is condemned, by name.
+        // Nothing has been sent when the estimate fails, so halving costs no
+        // nonce and no gas -- what a heavy night actually costs is extra
+        // estimate round-trips and more, smaller transactions, each paying its
+        // own 21,000 base.
+        //
+        // So this figure sizes the chunk rather than warning of a hole. It is
+        // left as a log because the number that matters is how many tokens can
+        // actually finish on one day, which is a property of the mint history
+        // and not of this contract.
         emit log_named_uint("a full chunk of finishers would add", (laterGas - ordinaryGas) * CHECKIN_CHUNK);
     }
 
