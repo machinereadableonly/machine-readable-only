@@ -18,39 +18,52 @@ import { heartMaskBytes } from "./heart-mask.mjs";
 import { unpackModules } from "./qart.mjs";
 import { tokenUri, HUSH, BEAT, IRIS_BOUGHT, VESSEL, AURA, TINT } from "./render-token.mjs";
 
-/// The six life stages the differential test covers, plus the Marks case.
+/// The life stages the differential test covers, plus the Marks case.
 export const STAGES = [
   ["day one",          { level: 1,        streak: 1,   lastDay: 1000, today: 1000 }],
   ["day 200",          { level: 200,      streak: 45,  lastDay: 1000, today: 1000,
                          agentKeyId: 0xa9en }],
   ["whole, one ring",  { level: 365,      streak: 140, lastDay: 1000, today: 1000,
                          generation: 1, parent: 7, seedsGiven: 2 }],
-  ["whole and lapsed", { level: 365,      streak: 140, lastDay: 1000, today: 1040 }],
-  ["ten years, capped",{ level: 365 * 10, streak: 400, lastDay: 1000, today: 1000 }],
+  // LAPSED, AND NOT YET WHOLE. It was level 365 until Spec 10f, which is now a
+  // token that cannot lapse at all -- a finished token's colour is the one it
+  // finished with. At 364 the lapse is the thing being measured again.
+  ["lapsed, one day short", { level: 364, streak: 140, lastDay: 1000, today: 1040 }],
+  // FINISHED AFTER A SLIP. The finish freezes the token on its last credited
+  // day, and this is the case that says the freeze runs the ordinary lapse
+  // rules with the clock stopped rather than short-circuiting to the stored
+  // run: a token that slipped during its year must not be un-paled by
+  // finishing it. Replaces "ten years, capped", which the chain can no longer
+  // produce.
+  ["finished after a slip", { level: 365, streak: 5, lastDay: 1000, today: 1400,
+                         fellRun: 200, fellDay: 900 }],
   // One Mark per pair -- the legal maximum a real token can hold, since
   // MachineReadableOnly.applyMark excludes pair partners. Hush over Ache and
   // Beat over Static draw the larger amount of image (Hush adds a rect, Beat
   // adds a gradient defs block), which makes this also the byte-worst-case
   // fixture. Iris Bought is included, and it draws, so the
   // fixture reflects a token that took every pair rather than four of five.
-  ["every drawn mark", { level: 365 * 10, streak: 400, lastDay: 1000, today: 1000,
+  ["every drawn mark", { level: 365,      streak: 400, lastDay: 1000, today: 1000,
                          marks: [HUSH, BEAT, IRIS_BOUGHT, VESSEL, AURA] }],
-  ["sealed at rest",   { level: 365 * 3,  streak: 200, lastDay: 1000, today: 9999, resting: true }],
+  // AT REST, AND NOT WHOLE. Level 300 rather than 365 * 3: a finished token
+  // freezes on its own, so resting a whole one proves nothing about `resting`.
+  ["sealed at rest",   { level: 300,      streak: 200, lastDay: 1000, today: 9999, resting: true }],
   // The two echo-bearing extremes. Nothing else in either fixture family sets
   // `echo`: the render matrix does not carry the field, and RenderFixture is
   // generated from it, so without these two cases the dashed ring is never
   // compared between the two renderers on a whole tokenURI at all.
   //
-  // A newborn child draws the ring at depth 0 on a 53-cell canvas, where it is
-  // 717 bytes; a child at the cap draws the same 54 runs at depth 18, where
-  // every coordinate is two digits and it is 756. Those are the shortest and
-  // longest the ring can be, and THESE PINS MOVE WHENEVER THE RING'S RULE DOES
+  // A newborn child draws the ring at depth 0 on a 53-cell canvas; a FINISHED
+  // child draws the same 54 runs at depth 2, one slot inside its own ring.
+  // Those are the shortest and longest the ring can now be -- it used to reach
+  // depth 18 on a nine-ring child, which Spec 10f retired -- and THESE PINS
+  // MOVE WHENEVER THE RING'S RULE DOES
   // -- this file is the generator for the three child references in
   // contracts/test/Renderer.t.sol, so it has to be re-read when they change,
   // not only re-run.
   ["a newborn child",  { level: 1,        streak: 1,   lastDay: 1000, today: 1000,
                          generation: 1, parent: 7, echo: 365 }],
-  ["a child at the cap", { level: 365 * 10, streak: 400, lastDay: 1000, today: 1000,
+  ["a finished child", { level: 365,      streak: 400, lastDay: 1000, today: 1000,
                          generation: 2, parent: 7, echo: 3650 }],
   // A child wearing the maximal LEGAL Mark set. Fix round 1: without this,
   // TWO of the six _blockOff call sites were never reached with a non-zero
@@ -66,13 +79,13 @@ export const STAGES = [
   // variants are deliberate -- they put the shape and ink bits at 16-23 and
   // 24-31 to work rather than reading 0 by default.
   //
-  // Level 365 * 5, not the cap, because the cap CANNOT discriminate: with ten
-  // or more own years ringBudget caps `own` at nine and rings(3650, 3650)
-  // equals rings(3650, 0), so passing 0 for echo yields the same offset. Five
-  // years gives 6 rings against 5. Its heart is also WHOLE, so its dim set is
+  // Level 365 -- finished -- because that is where the echo ring still
+  // discriminates: rings(365, 1825) is 2 against rings(365, 0)'s 1, so a
+  // broken `_blockOff` site computes a different offset. Its heart is also
+  // WHOLE, so its dim set is
   // empty and the ghost element exists ONLY to carry the echo ring -- which
   // pins the `if (ghostPath)` guard that replaced `if (dim.size)`.
-  ["a child with every drawn mark", { level: 365 * 5, streak: 400, lastDay: 1000,
+  ["a child with every drawn mark", { level: 365, streak: 400, lastDay: 1000,
                          today: 1000, generation: 2, parent: 7, echo: 1825,
                          marks: [HUSH, BEAT, IRIS_BOUGHT, VESSEL, TINT],
                          irisVariant: 2, tintVariant: 1 }],

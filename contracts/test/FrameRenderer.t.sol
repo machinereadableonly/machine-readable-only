@@ -121,14 +121,15 @@ contract FrameRendererTest is Test {
     // Canvas and rings
     // ---------------------------------------------------------------------
 
-    function test_theCanvasGrowsFourCellsPerCompletedYear() public pure {
+    function test_theCanvasGrowsFourCellsPerRing() public pure {
         // Two cells per side: the ring itself, and the blank cell that separates
-        // it from the next ring in. The first year costs only two, because the
-        // outermost ring needs nothing outside it.
+        // it from the next ring in. The first ring costs only two, because the
+        // outermost ring needs nothing outside it. Two rings is the most a token
+        // can wear since Spec 10f -- its own and its echo -- so 57 is the widest
+        // canvas the piece can produce.
         assertEq(FrameRenderer.canvas(0), 51, "year zero");
         assertEq(FrameRenderer.canvas(1), 53, "one completed year");
-        assertEq(FrameRenderer.canvas(3), 61, "three completed years");
-        assertEq(FrameRenderer.canvas(10), 89, "the cap");
+        assertEq(FrameRenderer.canvas(2), 57, "a finished child: its own ring and its echo");
     }
 
     function test_ringsAreSeparatedSoTheyCanBeCounted() public pure {
@@ -137,28 +138,24 @@ contract FrameRendererTest is Test {
         assertEq(FrameRenderer.ringSpan(0), 0, "no years, no rings");
         assertEq(FrameRenderer.ringSpan(1), 1, "one ring is one cell");
         assertEq(FrameRenderer.ringSpan(2), 3, "ring, gap, ring");
-        assertEq(FrameRenderer.ringSpan(10), 19, "ten rings and nine gaps");
     }
 
-    function test_ringsCountCompletedYears() public pure {
+    function test_ringsCountTheFinishedYear() public pure {
         assertEq(FrameRenderer.rings(0, 0), 0, "day one");
         assertEq(FrameRenderer.rings(364, 0), 0, "a year is not complete at 364 days");
         assertEq(FrameRenderer.rings(365, 0), 1, "one completed year");
-        assertEq(FrameRenderer.rings(729, 0), 1, "still one");
-        assertEq(FrameRenderer.rings(1095, 0), 3, "three completed years");
     }
 
-    function test_ringsStopGrowingAtTheReadableCeiling() public pure {
-        // Ten, decided 2026-08-29 on the rendered evidence in docs/year-rings.png
-        // rather than on what fits: past ten years the heart is under half the
-        // canvas and the rings are no longer countable. Lineage carries a token
-        // on from there, and the Years attribute keeps counting regardless.
-        assertEq(FrameRenderer.MAX_RINGS, 10, "the cap is 10 years");
-        assertEq(FrameRenderer.rings(365 * 10, 0), 10, "ten years still counts");
-        assertEq(FrameRenderer.rings(365 * 200, 0), 10, "beyond the cap it stops");
-        assertEq(FrameRenderer.rings(type(uint32).max, 0), 10, "a runaway clock cannot grow it");
-        assertLt(FrameRenderer.canvas(FrameRenderer.MAX_RINGS), 256, "a row still fits one word");
-        assertEq(FrameRenderer.canvas(FrameRenderer.MAX_RINGS), 89, "the widest canvas");
+    /// @dev Spec 10f: a token finishes at 365 and keeps ONE ring of its own.
+    function test_ownRingsCapAtOne() public pure {
+        assertEq(FrameRenderer.rings(364, 0), 0);
+        assertEq(FrameRenderer.rings(365, 0), 1);
+        assertEq(FrameRenderer.rings(365 * 10, 0), 1, "a level the chain can no longer reach still draws one");
+        assertEq(FrameRenderer.rings(type(uint32).max, 0), 1, "a runaway clock cannot grow it");
+        assertEq(FrameRenderer.rings(365, 1), 2, "own ring plus the echo ring");
+        assertEq(FrameRenderer.rings(1, 400), 1, "a young child: the echo ring only");
+        assertLt(FrameRenderer.canvas(2), 256, "a row still fits one word");
+        assertEq(FrameRenderer.canvas(2), 57, "the widest canvas: a finished child");
     }
 
 
@@ -227,45 +224,55 @@ contract FrameRendererTest is Test {
         // A ring that overlapped the day frame would make a day unreadable, and
         // one that reached the block would break the scan. The GAP between them
         // is what keeps both safe.
-        uint32 level = 365 * 3;
-        uint256 canvas = FrameRenderer.canvas(3);
-        uint256 span = FrameRenderer.ringSpan(3);
+        // A FINISHED CHILD: its own ring and its echo, the only two-ring token
+        // the piece can produce since Spec 10f ended the year at 365. Both paths
+        // are walked, because the echo ring is drawn in the GHOST fill -- read
+        // off the lit path alone this would see one ring and the gap assertion
+        // would have nothing to bite on.
+        TokenView memory v = _view(365);
+        v.echo = 3650;
+        string memory out = harness.paths(v, COLOUR, GHOST);
+        uint256 canvas = FrameRenderer.canvas(2);
+        uint256 span = FrameRenderer.ringSpan(2);
         uint256 frameStart = span + FrameRenderer.GAP;
-        PathParser.Run[] memory runs = PathParser.parse(_pathFor(_out(level), COLOUR));
 
+        string[2] memory ds = [_pathFor(out, COLOUR), _pathFor(out, GHOST)];
         uint256 ringCells;
-        for (uint256 i; i < runs.length; ++i) {
-            for (uint256 k; k < runs[i].w; ++k) {
-                uint256 x = runs[i].x + k;
-                uint256 y = runs[i].y;
-                uint256 depth = x;
-                if (y < depth) depth = y;
-                if (canvas - 1 - x < depth) depth = canvas - 1 - x;
-                if (canvas - 1 - y < depth) depth = canvas - 1 - y;
-                if (depth < span) {
-                    // A ring cell. Rings sit at even depths, so an odd depth
-                    // inside the span is a gap and must stay empty.
-                    assertEq(depth % 2, 0, "a lit cell fell in a gap between rings");
-                    ++ringCells;
-                } else {
-                    assertGe(depth, frameStart, "a lit cell fell in the gap");
-                    assertLt(depth, frameStart + FrameGeometry.THICK, "a lit cell fell inside the block");
+        for (uint256 d; d < ds.length; ++d) {
+            PathParser.Run[] memory runs = PathParser.parse(ds[d]);
+            for (uint256 i; i < runs.length; ++i) {
+                for (uint256 k; k < runs[i].w; ++k) {
+                    uint256 x = runs[i].x + k;
+                    uint256 y = runs[i].y;
+                    uint256 depth = x;
+                    if (y < depth) depth = y;
+                    if (canvas - 1 - x < depth) depth = canvas - 1 - x;
+                    if (canvas - 1 - y < depth) depth = canvas - 1 - y;
+                    if (depth < span) {
+                        // A ring cell. Rings sit at even depths, so an odd depth
+                        // inside the span is a gap and must stay empty.
+                        assertEq(depth % 2, 0, "a lit cell fell in a gap between rings");
+                        ++ringCells;
+                    } else {
+                        assertGe(depth, frameStart, "a lit cell fell in the gap");
+                        assertLt(depth, frameStart + FrameGeometry.THICK, "a lit cell fell inside the block");
+                    }
                 }
             }
         }
-        assertGt(ringCells, 0, "three completed years should draw rings");
+        assertGt(ringCells, 0, "a finished child should draw rings");
     }
 
     function test_theWidestCanvasStillRendersAndStaysInBudget() public view {
-        // The capped case, 10 completed years. This is the largest image the
-        // piece can ever produce, so it is the one that has to stay renderable.
-        string memory out = harness.paths(_view(uint32(365 * FrameRenderer.MAX_RINGS)), COLOUR, GHOST);
+        // A finished FOUNDING token: one ring, the widest canvas that carries no
+        // echo. This used to be the ten-ring case, which Spec 10f retired.
+        string memory out = harness.paths(_view(365), COLOUR, GHOST);
         assertEq(bytes(_pathFor(out, GHOST)).length, 0, "a whole frame has no ghost left");
 
         uint256 cells = PathParser.countCells(_pathFor(out, COLOUR));
         assertEq(
             cells,
-            FrameGeometry.CELL_COUNT + _ringCells(FrameRenderer.MAX_RINGS),
+            FrameGeometry.CELL_COUNT + _ringCells(1),
             "every frame cell and every ring cell is drawn"
         );
         // The frame's own share has to leave room for the code block, the JSON

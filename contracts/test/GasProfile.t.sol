@@ -82,15 +82,15 @@ contract GasProfileTest is Test {
         v.code = _bitmap();
     }
 
-    /// @dev A whole FOUNDING token at `level`, so its own rings are not capped
-    /// by an echo ring's slot. Built fresh each call -- see the note above about
+    /// @dev A whole FOUNDING token at `level`, so it carries no echo ring unless
+    /// the caller sets one. Built fresh each call -- see the note above about
     /// memory structs aliasing.
     function _founding(uint32 level) internal pure returns (TokenView memory v) {
         v.tokenId = 7;
         v.level = level;
         v.streak = 400;
-        // The clock has to be past the token's own age: level reaches 3,285 at
-        // nine years, so a fixed day 1000 underflowed mintDay.
+        // The clock has to be past the token's own age: a fixed day 1000
+        // underflowed mintDay back when a level could run to nine years.
         v.mintDay = 1000;
         v.lastDay = 1000 + level;
         v.today = 1000 + level;
@@ -237,34 +237,37 @@ contract GasProfileTest is Test {
     /// already known to be free or better: GasBudget.t.sol measures Static as
     /// 3,890 gas CHEAPER than no Static at all.
     function test_whatAFinisherRingWouldCost() public {
-        // A FOUNDING token, not a child. Measured first on a child and the two
-        // cases came back byte-identical: `ringBudget` caps a child's OWN rings
-        // at nine once the echo ring claims a slot, so nine years and ten years
-        // both draw ten rings. A control that cannot fail looks exactly like a
-        // free feature -- the giveaway was two identical byte counts.
-        // TWO INDEPENDENT VIEWS, built separately. `TokenView memory b = a`
-        // copies the POINTER, not the struct, so writing b.level rewrote a.level
-        // and both calls rendered the identical token. That is the second way
-        // this measurement came back reading "a ring is free"; the first was a
-        // child's ring cap. Both were caught by the byte counts being equal.
-        TokenView memory nine = _founding(365 * 8);   // eight rings
-        TokenView memory ten = _founding(365 * 9);    // nine rings
+        // ONE RING AGAINST TWO, which is the whole range the piece still has:
+        // Spec 10f ended the year at 365, so a finished founding token wears one
+        // ring and a finished child wears two. This used to compare eight rings
+        // with nine.
+        //
+        // The two views MUST be built separately. `TokenView memory b = a`
+        // copies the POINTER, not the struct, so writing b.echo rewrote a.echo
+        // and both calls rendered the identical token. That is one of two ways
+        // this measurement has come back reading "a ring is free"; the other was
+        // a child's ring cap making eight years and nine years the same picture.
+        // Both were caught by the byte counts being equal, which is why the
+        // assertion below is on bytes.
+        TokenView memory one = _founding(365);        // one ring
+        TokenView memory two = _founding(365);        // one ring plus the echo
+        two.echo = 3650;
 
         uint256 g0 = gasleft();
-        string memory a = frame.paths(nine, HEART, GHOST);
-        uint256 gasNine = g0 - gasleft();
+        string memory a = frame.paths(one, HEART, GHOST);
+        uint256 gasOne = g0 - gasleft();
 
         g0 = gasleft();
-        string memory b = frame.paths(ten, HEART, GHOST);
-        uint256 gasTen = g0 - gasleft();
+        string memory b = frame.paths(two, HEART, GHOST);
+        uint256 gasTwo = g0 - gasleft();
 
-        console.log("frame at eight rings gas", gasNine);
-        console.log("frame at eight rings bytes", bytes(a).length);
-        console.log("frame at nine rings  gas", gasTen);
-        console.log("frame at nine rings  bytes", bytes(b).length);
+        console.log("frame at one ring  gas", gasOne);
+        console.log("frame at one ring  bytes", bytes(a).length);
+        console.log("frame at two rings gas", gasTwo);
+        console.log("frame at two rings bytes", bytes(b).length);
         console.log("");
         console.log("ONE MORE DRAWN RING COSTS");
-        console.log("  gas  ", gasTen > gasNine ? gasTen - gasNine : 0);
+        console.log("  gas  ", gasTwo > gasOne ? gasTwo - gasOne : 0);
         console.log("  bytes", bytes(b).length > bytes(a).length ? bytes(b).length - bytes(a).length : 0);
         console.log("");
         assertGt(bytes(b).length, bytes(a).length,
@@ -272,91 +275,6 @@ contract GasProfileTest is Test {
         console.log("against the LARGEST token's headroom, measured in RealTokenGas:");
         console.log("  gas   182700");
         console.log("  bytes 7451");
-    }
-
-    /// @notice What capping a token's own rings at ONE would buy.
-    ///
-    /// @dev The operator's decision of 2026-09-20: a token stops accruing at 365
-    /// days and draws one ring of its own, rather than earning rings for a
-    /// decade. The rings grow the canvas -- 53 cells at one ring, 89 at ten --
-    /// and everything on that canvas is billed.
-    ///
-    /// Measured through the whole `tokenURI`, not the frame alone, because the
-    /// canvas width reaches the code's coordinates too.
-    function test_whatCappingRingsAtOneWouldSave() public {
-        TokenView memory one = _founding(365);          // one ring
-        TokenView memory ten = _founding(365 * 10);     // the current cap
-
-        uint256 g0 = gasleft();
-        string memory a = r.tokenURI(one);
-        uint256 gasOne = g0 - gasleft();
-
-        g0 = gasleft();
-        string memory b = r.tokenURI(ten);
-        uint256 gasTen = g0 - gasleft();
-
-        console.log("whole founding token, ONE ring");
-        console.log("  gas  ", gasOne);
-        console.log("  bytes", bytes(a).length);
-        console.log("whole founding token, TEN rings (today's cap)");
-        console.log("  gas  ", gasTen);
-        console.log("  bytes", bytes(b).length);
-        console.log("");
-        console.log("CAPPING AT ONE SAVES");
-        console.log("  gas  ", gasTen > gasOne ? gasTen - gasOne : 0);
-        console.log("  bytes", bytes(b).length > bytes(a).length ? bytes(b).length - bytes(a).length : 0);
-
-        assertGt(gasTen, gasOne, "ten rings must cost more than one, or the views are the same token");
-    }
-
-    /// @notice The worst case AFTER a token stops at 365 and rings cap at one.
-    ///
-    /// @dev The budget every finisher-Mark proposal is judged against. Today's
-    /// worst case is a child at the TEN-ring cap wearing every legal Mark;
-    /// under the 2026-09-20 decision no token ever reaches that, and the worst
-    /// a finisher can be is a whole child with its own single ring plus the
-    /// echo ring it was seeded with.
-    ///
-    /// This is the number that decides whether a PATTERNED ring is affordable
-    /// on every finisher, rather than on the single rarest token.
-    function test_theWorstCaseOnceRingsCapAtOne() public {
-        // Today: a child at the ring cap, every legal Mark.
-        TokenView memory old_ = _dearest();
-        old_.level = 365 * 10;
-        old_.streak = 400;
-        old_.echo = 3650;
-        old_.marks = (1 << 1) | (1 << 4) | (1 << 5) | (1 << 7) | (1 << 9);
-
-        // Under the new rule: whole, ONE own ring, plus the echo ring.
-        TokenView memory now_ = _dearest();
-        now_.level = 365;
-        now_.streak = 365;
-        now_.echo = 365;
-        now_.marks = (1 << 1) | (1 << 4) | (1 << 5) | (1 << 7) | (1 << 9);
-
-        uint256 g0 = gasleft();
-        string memory a = r.tokenURI(old_);
-        uint256 gasOld = g0 - gasleft();
-
-        g0 = gasleft();
-        string memory b = r.tokenURI(now_);
-        uint256 gasNow = g0 - gasleft();
-
-        console.log("TODAY  child at the ring cap, every legal Mark");
-        console.log("  gas  ", gasOld);
-        console.log("  bytes", bytes(a).length);
-        console.log("AFTER  whole child, one own ring + echo, every legal Mark");
-        console.log("  gas  ", gasNow);
-        console.log("  bytes", bytes(b).length);
-        console.log("");
-        console.log("HEADROOM under the 2,000,000 hard limit");
-        console.log("  today", gasOld < 2_000_000 ? 2_000_000 - gasOld : 0);
-        console.log("  after", gasNow < 2_000_000 ? 2_000_000 - gasNow : 0);
-        console.log("");
-        console.log("for scale: the DASHED echo ring costs 145,533 gas for 54 runs");
-        console.log("           a solid ring costs 3,705 for 4 runs");
-
-        assertLt(gasNow, gasOld, "capping the rings must be cheaper, or the views are wrong");
     }
 
     /// @dev The only substitution a data URI actually requires of this svg:

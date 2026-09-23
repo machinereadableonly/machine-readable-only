@@ -17,13 +17,18 @@ import {FrameGeometry} from "../src/render/FrameGeometry.sol";
 contract DigitBandTest is Test {
     string constant INK = "#2f2f2f";
 
+    /// @dev Every ring count a token can wear: its own finished-year ring and,
+    /// for a child, the echo ring. Spec 10f retired the ten-ring cap this used
+    /// to sweep to, so the sweep stops where the piece does.
+    uint256 constant MAX_RINGS_DRAWN = 2;
+
     /// The band exists to make the canvas an exact number of QR modules, so
     /// every digit sits on an integer coordinate inside one scaled group. A
     /// fraction here would need a decimal point, and PathWriter's per-run word
     /// has no room for one -- MAX_RUN_BYTES is 20 and its own comment says
     /// there is no slack.
     function test_everyLegalCanvasBecomesAWholeNumberOfModules() public pure {
-        for (uint256 ringCount; ringCount <= FrameRenderer.MAX_RINGS; ++ringCount) {
+        for (uint256 ringCount; ringCount <= MAX_RINGS_DRAWN; ++ringCount) {
             uint256 cells = FrameRenderer.canvas(ringCount);
             uint256 band = DigitBand.bandUnits(cells);
             uint256 units = DigitBand.canvasUnits(cells);
@@ -44,7 +49,7 @@ contract DigitBandTest is Test {
     /// and left ran flush from the far corner, so the corners doubled up and
     /// the reading was ambiguous about where an edge began.
     function test_theDigitsCentreExactlyOnEveryCanvas() public pure {
-        for (uint256 ringCount; ringCount <= FrameRenderer.MAX_RINGS; ++ringCount) {
+        for (uint256 ringCount; ringCount <= MAX_RINGS_DRAWN; ++ringCount) {
             uint256 modules =
                 DigitBand.canvasUnits(FrameRenderer.canvas(ringCount)) / FrameGeometry.MODULE_UNITS;
 

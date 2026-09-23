@@ -252,68 +252,81 @@ export function mixHex(a, b) {
  *
  * THE BRANCHES MIRROR rungFor DELIBERATELY. Rest seals the image at the moment
  * the owner chose, so a rested token's page is final however long the calendar
- * runs on; a sunset ages every token only to the day the PIECE closed. A gap
- * rule that disagreed with the rung rule about when a token stopped would draw
- * one token whose heart says kept and whose page says gone.
+ * runs on; a FINISHED token's page is final for the same reason; a sunset ages
+ * every token only to the day the PIECE closed. A gap rule that disagreed with
+ * the rung rule about when a token stopped would draw one token whose heart
+ * says kept and whose page says gone.
+ *
+ * @param whole the token reached 365 credited days. Its record is final, so
+ * nothing it does not do can count against it -- and it cannot check in again,
+ * because the contract stops crediting there. Spec 10f. MUST mirror
+ * Renderer._absence in Solidity.
  */
-export function absenceOf({ lastDay, today, resting = false, sunset = false, sunsetDay = 0 }) {
-  if (resting) return 0;
+export function absenceOf({
+  lastDay, today, resting = false, sunset = false, sunsetDay = 0, whole = false,
+}) {
+  if (resting || whole) return 0;
   const end = sunset ? sunsetDay : today;
   return end > lastDay ? end - lastDay : 0;   // a backwards clock is not an absence
 }
 
+/**
+ * @param whole the token reached 365 credited days, so it is FINISHED. Not the
+ * same thing as resting, and the difference is load-bearing: resting blocks
+ * `seed`, so a piece that rested every token on completion could never have a
+ * second generation. Spec 10f. MUST mirror Renderer._rung in Solidity.
+ */
 export function rungFor({
   streak, lastDay, today,
-  resting = false, sunset = false, sunsetDay = 0, fellRun = 0, fellDay = 0,
+  resting = false, sunset = false, sunsetDay = 0, fellRun = 0, fellDay = 0, whole = false,
 }) {
   if (resting) return rungOf(streak);
-  if (sunset) return lapsedRung(streak, lastDay, sunsetDay);
+  // A sunset BEFORE the year ended seals the token at the piece's last day;
+  // after it, the finish already did.
+  if (sunset && !whole) return lapsedRung(streak, lastDay, sunsetDay);
 
-  const live = lapsedRung(streak, lastDay, today);
+  // A FINISHED token is read on the day it finished, forever: the same rules as
+  // a live one, with the clock stopped at its last credited day. Running the
+  // lapse rules with a stopped clock rather than short-circuiting to rungOf is
+  // what keeps a token that slipped during its year from being un-paled by
+  // finishing it.
+  const at = whole ? lastDay : today;
+  const live = lapsedRung(streak, lastDay, at);
   if (!fellRun) return live;
 
   const cap = Math.max(0, rungOf(fellRun) - 1);
-  const fell = Math.min(lapsedRung(fellRun, fellDay, today), cap);
+  const fell = Math.min(lapsedRung(fellRun, fellDay, at), cap);
   return Math.max(fell, live);
 }
-// Completed-year rings stop growing the canvas at MAX_RINGS.
+// The ring a token earns for finishing its year, and the ring a child carries
+// for the line it came from.
 //
-// Ten, decided 2026-08-29 after rendering the same token at every ring count
-// (docs/year-rings.png). The old cap of 80 was set by what still fits the gas
-// and byte limits, which turned out to be the wrong question: the rings stop
-// being readable long before they stop fitting. At 20 rings the heart is under
-// half the canvas and at 80 it is a fifth, a red field with a stamp in it -- and
-// the 80-ring token does not decode at a 300px thumbnail at all.
+// Spec 10f, decided 2026-09-20. A token stops accruing at 365 credited days, so
+// it has at most ONE ring of its own -- the ring that says the year is
+// finished. The ten-ring cap that used to live here is retired with the decade
+// it was drawn for: a decade of persistence is now recorded as a LINE, not as
+// ten rings on one token, because the finished token seeds a child and the
+// child's echo ring carries the depth. The cap is written as a cap rather than
+// as arithmetic so a swapped renderer can never draw a ring count the chain can
+// no longer produce.
 //
-// Ten years is also the point where the piece has a better answer than a
-// eleventh ring: the token seeds a child, and Lineage carries the record on.
-// The Years attribute in the JSON keeps counting past the cap regardless, so
-// nothing is lost from the record -- only the ring stops being added.
-//
-// MUST stay identical to FrameRenderer.MAX_RINGS in Solidity.
-export const MAX_RINGS = 10;
-
-// How the ten ring slots are shared between the years a token inherited and the
-// years it earned itself. A seeded child spends one slot on its echo ring, so
-// its own rings cap at nine.
-//
-// The echo ring takes one of the TEN rather than adding an eleventh. That is
-// forced: canvas(r) = 49 + 4r, so an eleventh ring grows the artwork to 93 cells
-// and creates a second byte worst case to measure and defend.
+// The echo ring is a second slot rather than a share of one: at one own ring
+// there is nothing to share. canvas(r) = 49 + 4r, so the widest canvas the
+// piece can now produce is a finished child's 57 cells, where it used to be 89.
 //
 // The slot is taken by ANY non-zero echo, not by a whole year of it: the ring
 // says the token came from somewhere, and one day of inheritance is as true as
 // a thousand.
 //
 // MUST stay identical to FrameRenderer.ringBudget in Solidity.
-export const ringBudget = (years, echoDays = 0) => {
-  const echoRings = echoDays > 0 ? 1 : 0;
-  return { own: Math.min(years, MAX_RINGS - echoRings), echoRings };
-};
+export const ringBudget = (years, echoDays = 0) => ({
+  own: Math.min(years, 1),
+  echoRings: echoDays > 0 ? 1 : 0,
+});
 
-// Completed years plus the echo ring: the total rings drawn, which is what sets
-// the canvas size. `echo` defaults to 0, so every founding-token caller keeps
-// the answer it always had.
+// The finished-year ring plus the echo ring: the total rings drawn, which is
+// what sets the canvas size. `echo` defaults to 0, so every founding-token
+// caller keeps the answer it always had.
 //
 // MUST stay identical to FrameRenderer.rings in Solidity.
 export const ringsFor = (years, echoDays = 0) => {
@@ -451,15 +464,16 @@ export const scaleGroup = (scale, body) =>
 export const placeGroup = (x, y, scale, body) =>
   body ? `<g transform="translate(${x} ${y}) scale(${scale})">${body}</g>` : "";
 
-// One outline ring per completed year, outermost first, drawn as four bars
-// rather than as cells.
+// One outline ring per drawn ring, outermost first, drawn as four bars rather
+// than as cells.
 //
 // The gap that makes rings countable also makes them ruinous to draw row by row:
 // away from a ring's own top or bottom edge, a row crosses every ring separately,
-// so ten rings put twenty one-cell runs on every row of the canvas. Measured at
-// the cap, that came to 20,531 bytes for the frame alone, over the 20,000 limit
-// for the whole tokenURI. As bars it is four runs per ring regardless of canvas
-// size.
+// so each ring puts two one-cell runs on every row of the canvas. Measured back
+// when a token could carry ten, that came to 20,531 bytes for the frame alone,
+// over the 20,000 limit for the whole tokenURI. As bars it is four runs per ring
+// regardless of canvas size, and it stays the right shape now the most a token
+// can wear is two.
 //
 // Rings never touch the day frame -- GAP keeps a blank cell between them -- so no
 // run here could have merged with a frame run anyway, and pulling them out of the
@@ -659,12 +673,16 @@ export function renderSvg(modules, want, size, state) {
   // then the rings and the frame in CELLS, then the quiet zone in MODULES.
   const codeOrigin = blockOff * CU + QUIET * MU + band;
 
+  // A token that reached 365 is FINISHED: it can no longer be credited, so its
+  // colour, its page and its frame are all read on the day it finished. Spec 10f.
+  const whole = level >= DAY_CELLS;
+
   // A token that has stopped checking in pales, walking back down the tier
   // ladder. A sealed token does not: its image is final, so the stored streak
   // colours it forever. A sunset token pales only up to the day the PIECE
   // closed. A token that slipped keeps fading from the run it lost, capped one
   // rung below it. Every branch must mirror Renderer._rung in Solidity exactly.
-  const rung = rungFor({ streak, lastDay, today, resting, sunset, sunsetDay, fellRun, fellDay });
+  const rung = rungFor({ streak, lastDay, today, resting, sunset, sunsetDay, fellRun, fellDay, whole });
   const colour = colourAt(rung);
   // Static claims the noise ink -- the one surface no other Mark touches.
   // Selected by RUNG, not by colour, so the heart and the noise can never be
@@ -676,14 +694,13 @@ export function renderSvg(modules, want, size, state) {
   const ghost = hasMark(marks, ACHE) ? ACHE_GHOST : GHOST;
   // C4.10: the page cools with absence, so a token that never returned stops
   // looking like one minted this morning. absenceOf mirrors rungFor's branches.
-  const field = fieldFor({ marks, gap: absenceOf({ lastDay, today, resting, sunset, sunsetDay }) });
+  const field = fieldFor({ marks, gap: absenceOf({ lastDay, today, resting, sunset, sunsetDay, whole }) });
   const hush = hasMark(marks, HUSH);
   const beat = hasMark(marks, BEAT);
 
   const lit = new Set(), dim = new Set(), noiseCells = new Set();
 
   // Day frame. The 11 surplus cells light only when the heart is whole.
-  const whole = level >= DAY_CELLS;
   FRAME.forEach(([x, y], i) => {
     const p = (y + frameOff) * canvas + (x + frameOff);
     ((whole || i < level) ? lit : dim).add(p);

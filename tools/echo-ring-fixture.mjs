@@ -13,7 +13,7 @@
 //
 //   node tools/echo-ring-fixture.mjs
 import { keccak256, toBytes } from "viem";
-import { echoRingBars, ringBudget, MAX_RINGS } from "./render-token.mjs";
+import { echoRingBars, ringBudget } from "./render-token.mjs";
 
 const runs = d => d.split("M").length - 1;
 
@@ -25,12 +25,14 @@ const show = (label, o, len) => {
 
 // A newborn child: its echo ring is the outermost thing on a 53-cell canvas.
 show("newborn child   ", 0, 53);
-// A child at the cap: nine of its own rings, so the echo ring sits at depth 18
-// and every coordinate is two digits. This is the byte worst case for the ring.
+// A FINISHED child: one ring of its own, so the echo ring sits at depth 2. That
+// is the deepest the echo ring can now sit -- Spec 10f ended the year at 365,
+// so a child has one own ring at most, where it used to have nine and the echo
+// sat at depth 18. This is the byte worst case for the ring.
 // The ring is a DASH since 2026-09-07 -- two cells on, two off, consecutive ink
 // emitted as ONE run -- so the run count is 54 where the dotted rule gave 104.
-const { own } = ringBudget(MAX_RINGS, 365);
-show("child at the cap", 2 * own, 53);
+const { own } = ringBudget(1, 365);
+show("finished child  ", 2 * own, 53);
 
 // The short ring, printed in full because it is the readable pin.
 console.log("\nthe short ring, in full:");

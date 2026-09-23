@@ -299,16 +299,16 @@ contract GasBudgetTest is Test {
         _place(1, 1, 1, 1000, false, 0);
         _place(2, 200, 45, 1000, false, 0);
         _place(3, 365, 140, 1000, false, 0);
-        _place(4, 365, 140, 960, false, 0);              // forty days lapsed
-        _place(5, 365 * 3, 200, 1000, false, 0);
-        _place(6, 365 * 10, 400, 1000, false, 0);        // at the ring cap
-        _place(7, 365 * 10, 400, 1000, false, MAX_MARKS);
-        _place(8, 365 * 3, 200, 1000, true, 0);          // sealed
+        // Forty days lapsed, ONE DAY SHORT of whole: a finished token's colour
+        // is the one it finished with, so at 365 there would be no lapse to bill.
+        _place(4, 364, 140, 960, false, 0);
+        _place(7, 365, 400, 1000, false, MAX_MARKS);
+        _place(8, 365, 200, 1000, true, 0);              // sealed
         _place(9, 364, 400, 1000, false, MAX_MARKS);     // the day before whole
-        // The two children. A child spends one of its ten ring slots on the
-        // dashed echo ring, so 11 is at NINE own rings plus the echo, and 12
-        // has zero own rings and the echo alone.
-        _placeChild(11, 365 * 10, 400, 1000, 3650, MAX_MARKS);
+        // The two children. A child draws its own finished-year ring and one
+        // more for the line it came from, so 11 is at TWO rings and 12 has the
+        // echo alone.
+        _placeChild(11, 365, 400, 1000, 3650, MAX_MARKS);
         // 12 wears the UNSEALED set: at level 364 the ladder shuts both sides
         // of pair 4, so Vessel is not a Mark this token could be wearing. Its
         // run is 364 rather than the 400 the founding cases carry, for the same
@@ -327,15 +327,13 @@ contract GasBudgetTest is Test {
         (, b) = _measure("day one", 1);                     maxBytes = _max(maxBytes, b);
         (, b) = _measure("day 200", 2);                     maxBytes = _max(maxBytes, b);
         (, b) = _measure("whole, one ring", 3);             maxBytes = _max(maxBytes, b);
-        (, b) = _measure("whole and lapsed", 4);            maxBytes = _max(maxBytes, b);
-        (, b) = _measure("three years", 5);                 maxBytes = _max(maxBytes, b);
-        (, b) = _measure("ten years, at the cap", 6);       maxBytes = _max(maxBytes, b);
-        (uint256 capAndMarks, uint256 capBytes) = _measure("cap and max marks", 7);
+        (, b) = _measure("lapsed, one day short", 4);       maxBytes = _max(maxBytes, b);
+        (uint256 capAndMarks, uint256 capBytes) = _measure("finished, max marks", 7);
         maxBytes = _max(maxBytes, capBytes);
         (uint256 sealedGas,) = _measure("sealed at rest", 8);
         (uint256 foundingWorstGas, uint256 lastBytes) = _measure("day 364, max marks", 9);
         maxBytes = _max(maxBytes, lastBytes);
-        (, b) = _measure("ten years, a child at the cap", 11);
+        (, b) = _measure("a finished child, max marks", 11);
         maxBytes = _max(maxBytes, b);
         // Token 12's byte count is FED IN as well, though it is not today's
         // largest. This file's discipline is that each limit tracks its own
@@ -349,7 +347,7 @@ contract GasBudgetTest is Test {
         assertLt(sealedGas, capAndMarks, "sealing must not cost more than wearing the max marks");
 
         // The worst case is NOT the oldest token. See the test below.
-        assertGt(foundingWorstGas, capAndMarks, "day 364 is the expensive case, not the ring cap");
+        assertGt(foundingWorstGas, capAndMarks, "day 364 is the expensive case, not the finished token");
 
         // LINEAGE BROKE THE OLD MUTUAL EXCLUSION. Until the echo ring existed,
         // an unsealed frame implied level < 365 which implied zero rings, so
@@ -441,7 +439,7 @@ contract GasBudgetTest is Test {
     /// measured alone at Task 7; the difference is the storage read, and it is
     /// the one quantity this whole task exists to find.
     function test_theTokenContractsOwnOverheadIsSmall() public {
-        _place(7, 365 * 10, 400, 1000, false, MAX_MARKS);
+        _place(7, 365, 400, 1000, false, MAX_MARKS);
 
         uint256 before = gasleft();
         t.tokenURI(7);
@@ -501,8 +499,8 @@ contract GasBudgetTest is Test {
     ///
     /// @dev THE LADDER TEST ABOVE IS NOT THAT NUMBER, and the gap is bigger
     /// than anything the echo ring did. `test_theWholeLadderStaysInsideTheHard
-    /// Limit` measures eleven tokens in ONE function; every returned tokenURI
-    /// stays in that function's memory, so the eleventh call pays memory
+    /// Limit` measures every stage in ONE function; every returned tokenURI
+    /// stays in that function's memory, so the last call pays memory
     /// expansion for roughly 130 KB it did not allocate. Memory is priced
     /// quadratically, so the inflation grows with position in the list, and
     /// the same child measured there and here differs by about 19,000 gas.
@@ -659,23 +657,23 @@ contract GasBudgetTest is Test {
     /// measures the shipped one.
     ///
     /// A FINISHER IS WHOLE, so the band's real worst case is the largest WHOLE
-    /// token -- the child at the ring cap wearing every Mark -- and not the
-    /// day-364 child the unbanded budget rests on. Both are measured anyway:
+    /// token -- a finished child wearing every Mark -- and not the day-364
+    /// child the unbanded budget rests on. Both are measured anyway:
     /// the renderer draws the band on the ordinal alone and does not ask
     /// whether the heart is whole, so the day-364 figure is the bound if that
     /// ever stopped being true. It is a bound, not a case: the ladder cannot
     /// produce it, because an ordinal is only written when a finisher Mark is
     /// claimed and a finisher Mark needs 365 days.
     function test_theFinishersBandFitsBothHardLimits() public {
-        // The two whole children, at the ring cap with every Mark, with and
+        // The two whole children, finished and wearing every Mark, with and
         // without the band. Nothing else differs between them.
-        _placeChild(50, 365 * 10, 400, 1000, 3650, MAX_MARKS);
-        _placeChild(51, 365 * 10, 400, 1000, 3650, MAX_MARKS | WORST_ORDINAL);
+        _placeChild(50, 365, 400, 1000, 3650, MAX_MARKS);
+        _placeChild(51, 365, 400, 1000, 3650, MAX_MARKS | WORST_ORDINAL);
         // The bound: the day before whole, which cannot be a finisher.
         _placeChild(52, 364, 364, 1000, 3650, MAX_MARKS_UNSEALED);
         _placeChild(53, 364, 364, 1000, 3650, MAX_MARKS_UNSEALED | WORST_ORDINAL);
 
-        (uint256 wholeGas, uint256 wholeBytes) = _measure("whole child, cap, max marks", 50);
+        (uint256 wholeGas, uint256 wholeBytes) = _measure("finished child, max marks", 50);
         (uint256 bandGas, uint256 bandBytes) = _measure("the same token, finisher 1", 51);
         (uint256 boundOffGas, uint256 boundOffBytes) = _measure("day 364 child (a bound)", 52);
         (uint256 boundGas, uint256 boundBytes) = _measure("day 364 child, banded (a bound)", 53);
@@ -707,8 +705,8 @@ contract GasBudgetTest is Test {
     /// to pin: a reader who takes one gas figure for "the band" will be wrong
     /// for every other finisher.
     function test_theOrdinalFullOfZerosIsTheDearestBand() public {
-        _placeChild(60, 365 * 10, 400, 1000, 3650, MAX_MARKS | WORST_ORDINAL);
-        _placeChild(61, 365 * 10, 400, 1000, 3650, MAX_MARKS | (uint256(0xFFFF) << 64));
+        _placeChild(60, 365, 400, 1000, 3650, MAX_MARKS | WORST_ORDINAL);
+        _placeChild(61, 365, 400, 1000, 3650, MAX_MARKS | (uint256(0xFFFF) << 64));
 
         (uint256 zerosGas, uint256 zerosBytes) = _measure("finisher 1 (fifteen zeros)", 60);
         (uint256 onesGas, uint256 onesBytes) = _measure("finisher 65535 (all ones)", 61);

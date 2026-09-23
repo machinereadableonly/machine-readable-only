@@ -49,15 +49,26 @@ export function gateStates() {
     { label: "mid, marked",     ...base, level: 200,  streak: 45,  marks: [ACHE, BEAT] },
     { label: "day 364 worst",   ...base, level: 364,  streak: 100, marks },
     { label: "whole, 1 year",   ...base, level: 365,  streak: 400, marks: [] },
+    // LEVEL 3650 IS NOT A TOKEN ANY MORE -- Spec 10f stops the chain crediting
+    // at 365, so this now renders as a ONE-ring token at a low streak wearing
+    // every drawing Mark, and the label reads as history. Both the state and
+    // the label are kept anyway, deliberately, for two separate reasons.
+    //
+    // The state, because removing a gate state can only ADD survivors, never
+    // remove one: a trim could move the mask a committed bitmap ships with, and
+    // the level here is an input to a renderer rather than a claim about the
+    // chain. The label, because robust-solve.test.mjs pins it -- a real decode
+    // failure was found at this state, and a rename is how a guard like that
+    // gets defeated by tidying.
     { label: "whole, 10 years", ...base, level: 3650, streak: 30,  marks },
 
     // SEEDED CHILDREN, added 2026-09-07. Until then every gate state was a
     // FOUNDING token, so the mask shipped for a child had been judged against
     // pictures that child will never be.
     //
-    // What is new is not the canvas: `ringBudget` spends one of the ten slots
-    // on the echo rather than adding an eleventh, so a child's canvas never
-    // exceeds a founding token's. It is the INK. The echo ring is dashed --
+    // What is new is not the canvas: a child's echo ring adds at most one ring
+    // to the one its finished year draws, so its canvas reaches 57 cells. It is
+    // the INK. The echo ring is dashed --
     // two cells on, two off -- where every other ring is solid, and this
     // file's own reason for having states at all is that "the drawn frame,
     // ghost cells and rings surround the code and change what the binarizer's
@@ -65,8 +76,10 @@ export function gateStates() {
     // exactly that, and nothing else in the gate produces one.
     //
     // These three are the extremes of it: the ring alone on the smallest
-    // canvas the piece draws, the ring against one solid year, and the ring at
-    // the cap where nine solid rings sit outside it.
+    // canvas the piece draws, the ring against one solid year, and the same
+    // against a low streak. The third was "the ring at the cap, nine solid
+    // rings outside it" until Spec 10f capped a token's own rings at one; its
+    // label is kept for the reason given above.
     //
     // MEASURED BEFORE THEY WERE ADDED, because a stricter gate can change
     // which mask a token ships and every committed fixture is generated from

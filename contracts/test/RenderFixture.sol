@@ -26,28 +26,24 @@ library RenderFixture {
         string label;
     }
 
-    uint256 internal constant COUNT = 69;
+    uint256 internal constant COUNT = 64;
 
     function cases() internal pure returns (Case[] memory c) {
         c = new Case[](COUNT);
         uint256 i;
         c[i++] = Case(365, 0, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14687, 0x6ef4219574e8ee6cbe35c641831f960decfa3fcad6695cd9382bff6b4d77062e, "tier streak 0");
-        c[i++] = Case(365, 0, 1000, 1030, 0, false, false, 0, 0, 0, 0, 0, 0, 14687, 0x19e1225691236a6f43a82debe1f498154165c316a50b55e607d4a54059888730, "tier streak 0, 30 days lapsed");
+        c[i++] = Case(365, 0, 1000, 1030, 0, false, false, 0, 0, 0, 0, 0, 0, 14687, 0x6ef4219574e8ee6cbe35c641831f960decfa3fcad6695cd9382bff6b4d77062e, "tier streak 0, 30 days lapsed");
         c[i++] = Case(365, 3, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14687, 0x692bfc4804fd51daff37f32f414671dacdce15086d4c781017381b6cdf890d1a, "tier streak 3");
-        c[i++] = Case(365, 3, 1000, 1030, 0, false, false, 0, 0, 0, 0, 0, 0, 14687, 0x2c5cfa288eae88be225d94c47ad06dbd2898fd303b5ec17190dc2810ed16f43e, "tier streak 3, 30 days lapsed");
+        c[i++] = Case(365, 3, 1000, 1030, 0, false, false, 0, 0, 0, 0, 0, 0, 14687, 0x692bfc4804fd51daff37f32f414671dacdce15086d4c781017381b6cdf890d1a, "tier streak 3, 30 days lapsed");
         c[i++] = Case(365, 7, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14687, 0x23124d7bd61db0c8efedfd9205541f94780d5455f2967f3f89a6973902a02437, "tier streak 7");
-        c[i++] = Case(365, 7, 1000, 1030, 0, false, false, 0, 0, 0, 0, 0, 0, 14687, 0xb4301d0f1554d1fd6543c5d445ca3abc6963e151ceab6fc0873d00661f66d60f, "tier streak 7, 30 days lapsed");
+        c[i++] = Case(365, 7, 1000, 1030, 0, false, false, 0, 0, 0, 0, 0, 0, 14687, 0x23124d7bd61db0c8efedfd9205541f94780d5455f2967f3f89a6973902a02437, "tier streak 7, 30 days lapsed");
         c[i++] = Case(365, 30, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14688, 0xc7b9b2ef43797d3e1cb36cbffbd58802cd707425eca8f094fba76a50dea445f1, "tier streak 30");
-        c[i++] = Case(365, 30, 1000, 1030, 0, false, false, 0, 0, 0, 0, 0, 0, 14688, 0xb06204ada7ae8f6b7730365a49149611dc076223c9cb9d5d4c30a9c28044b158, "tier streak 30, 30 days lapsed");
+        c[i++] = Case(365, 30, 1000, 1030, 0, false, false, 0, 0, 0, 0, 0, 0, 14688, 0xc7b9b2ef43797d3e1cb36cbffbd58802cd707425eca8f094fba76a50dea445f1, "tier streak 30, 30 days lapsed");
         c[i++] = Case(365, 100, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14689, 0x844cc4de4e2f3c76575997aeee320020c46dc1ad07731f7ee59fe112fae639f7, "tier streak 100");
-        c[i++] = Case(365, 100, 1000, 1030, 0, false, false, 0, 0, 0, 0, 0, 0, 14689, 0x81dfb5286c21831d179c430c841b655aaba6d982bec2d5317fb5864550558196, "tier streak 100, 30 days lapsed");
+        c[i++] = Case(365, 100, 1000, 1030, 0, false, false, 0, 0, 0, 0, 0, 0, 14689, 0x844cc4de4e2f3c76575997aeee320020c46dc1ad07731f7ee59fe112fae639f7, "tier streak 100, 30 days lapsed");
         c[i++] = Case(1, 400, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14672, 0xdfd2ae56c9097291506a343bf4ba99c0282bb7c4800a89bd3b936bb920dbd67e, "0 years");
         c[i++] = Case(365, 400, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14689, 0x450a6a62480d8ea3c20447db8b55d33e791fa53f727252c0d28e5937d0007470, "1 years");
-        c[i++] = Case(730, 400, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14773, 0x7039455e973982aab9d46ebfc46f0ade6c22964311f8a9feb267809f61c67ed3, "2 years");
-        c[i++] = Case(1825, 400, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 15078, 0x2b6c3b0f1c58f30990cfd62650259577e0c51cc32b078491e8332fcc7bedbee6, "5 years");
-        c[i++] = Case(3285, 400, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 15414, 0xbf36e1a3d544dcdbc1e693ca6102ed5c0d5d513aa556084a3c022e3519903fda, "9 years");
-        c[i++] = Case(3650, 400, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 15499, 0x3578cf33caf266e703ad0936e0407ba727305fa0c6e44fc794d369cf01a39d42, "10 years");
-        c[i++] = Case(4015, 400, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 15499, 0x2276a49b741ddbe00f07cbb2ad7ac2a3965f5efe65443aabfe3dfdd070666e35, "11 years");
+        c[i++] = Case(730, 400, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14689, 0x20453015d7518c27cb283c1a6340709829f29edace28fa0e20eca7c7f9e81967, "2 years");
         c[i++] = Case(1, 400, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14672, 0xdfd2ae56c9097291506a343bf4ba99c0282bb7c4800a89bd3b936bb920dbd67e, "fill 1");
         c[i++] = Case(12, 400, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14714, 0x24de8fa8ca5a3a8649ce89853dfd9e0cab96f41d557e39d519b253c6547d355b, "fill 12");
         c[i++] = Case(200, 400, 1000, 1000, 0, false, false, 0, 0, 0, 0, 0, 0, 14676, 0xf0e55daa7eca216c04dc266a62c79b3de8588464c059ee400f8c592fce226c9f, "fill 200");
@@ -65,14 +61,14 @@ library RenderFixture {
         c[i++] = Case(365, 400, 1000, 1000, 131104, false, false, 0, 0, 0, 0, 0, 0, 16146, 0x21791ebec6e2a17ad5976aaeb872fde8a1d7eb4df3a1546aead28299d7c8e4a4, "iris leaf");
         c[i++] = Case(365, 400, 1000, 1000, 544, false, false, 0, 0, 0, 0, 0, 0, 15579, 0xa5cf28abc48019491f5ecbc37dc78a0a8755c352da6dd33e7bc72c643612dcac, "tint violet");
         c[i++] = Case(365, 400, 1000, 1000, 16777760, false, false, 0, 0, 0, 0, 0, 0, 15579, 0x8bdf499670b90eb5f7f6020f47400266598cf1741e43fe603947e983cf00c542, "tint gold");
-        c[i++] = Case(365, 100, 1000, 1030, 429496729664, false, false, 0, 0, 0, 0, 0, 0, 15610, 0x258bfe3c20f1f4aec8cbd78ae05032be23ffe9f60abd8e16277be269d886258f, "earned iris, lapsed to the start tier");
+        c[i++] = Case(365, 100, 1000, 1030, 429496729664, false, false, 0, 0, 0, 0, 0, 0, 15610, 0x26a614bd458e8c3099137e3041258008e96e186b5500783d80ee38a61e2e7207, "earned iris, lapsed to the start tier");
         c[i++] = Case(365, 400, 1000, 1000, 1056, false, false, 0, 0, 0, 0, 0, 0, 15579, 0x5486b0fb25d93ae4b1d547b865222e0c7604a5b849aa0eed6afc62b0908d2f7f, "iris on aura, no hush");
         c[i++] = Case(365, 100, 1000, 1000, 429513507392, false, false, 0, 0, 0, 0, 0, 0, 15617, 0x7c34144e747af0eb30ab1ce2080db3cc502ed3da55862f4cf205339c02862745, "tint on earned iris");
         c[i++] = Case(365, 400, 1000, 1000, 256, false, false, 0, 0, 0, 0, 0, 0, 14696, 0xdaf1492284fdcad06a3c91e2f652f1e6696ac44c9162ce86030875b59911d028, "break alone");
         c[i++] = Case(365, 400, 1000, 1000, 264, false, false, 0, 0, 0, 0, 0, 0, 14705, 0x8a7d01249c33a12fff2d8a77723bc298d7293848d5ccc1c2b4287e57e999231b, "break with static");
         c[i++] = Case(365, 400, 1000, 1000, 272, false, false, 0, 0, 0, 0, 0, 0, 14915, 0xbc22215ecbaeda5e8b3f926f3e659aa2b6ad33a6a59cfc11cf35d3bf015f88d9, "break with beat");
         c[i++] = Case(365, 400, 1000, 1000, 8, false, false, 0, 0, 0, 0, 0, 0, 14697, 0xfbbc804d743e1d3c7ca8d659ce36275ba104423e45302531a49e31005282c23e, "mark static");
-        c[i++] = Case(365, 100, 1000, 1030, 429496729920, false, false, 0, 0, 0, 0, 0, 0, 15618, 0xa758017f21b512ace8ff2115b75c68a354747f25a6f4f87092bf7dcada76526d, "break on earned iris, lapsed to the start tier");
+        c[i++] = Case(365, 100, 1000, 1030, 429496729920, false, false, 0, 0, 0, 0, 0, 0, 15618, 0x3f6cb0141baa63b9c28a7375c2922fcf89b737be34f41a796c623172bdf2794f, "break on earned iris, lapsed to the start tier");
         c[i++] = Case(1, 1, 1000, 1029, 0, false, false, 0, 0, 0, 0, 0, 0, 14670, 0xdda657b6808df00afe4f75e45fefd1cb0cd121343a3adc0522c65e7f38a8576e, "never returned, 29 days");
         c[i++] = Case(1, 1, 1000, 1030, 0, false, false, 0, 0, 0, 0, 0, 0, 14670, 0x9d755f34545968a1b4641cfee465aadccb865668c0e8069d28372152ee635f6f, "never returned, 30 days");
         c[i++] = Case(1, 1, 1000, 1365, 0, false, false, 0, 0, 0, 0, 0, 0, 14670, 0xe2ac3d19b0a3823b180b3737d3731dd00bd5f2e7d26ca6e2993fde4399dfa4c0, "never returned, a year");
@@ -87,16 +83,15 @@ library RenderFixture {
         c[i++] = Case(365, 400, 1000, 1000, 18446744073709552790, false, false, 0, 0, 0, 0, 0, 0, 19653, 0x9487a5037198bd21427daf4d0445a9560ae7a72fc7963d25330e31af8f471b6a, "finisher 1, every drawing mark");
         c[i++] = Case(365, 400, 1000, 9999, 0, true, false, 0, 0, 0, 0, 0, 0, 14692, 0x0728fc6cb6d30293b5dae08ae884af1fd37fd4e07948eb2dc0b37af7faff1fed, "resting");
         c[i++] = Case(365, 400, 1000, 9999, 0, false, true, 0, 0, 0, 0, 0, 0, 14692, 0xf7a06bec11c4dd17fbc32349bbc18332ed511dc1557911a8bb3fbdef89b47fed, "sunset");
-        c[i++] = Case(365, 400, 1000, 9999, 0, false, true, 1040, 0, 0, 0, 0, 0, 14692, 0x7a9e6081e9b3af5b9e44cac6b8a040665157749fc98832926c220097d98d152d, "sunset after this token lapsed");
+        c[i++] = Case(365, 400, 1000, 9999, 0, false, true, 1040, 0, 0, 0, 0, 0, 14692, 0xf7a06bec11c4dd17fbc32349bbc18332ed511dc1557911a8bb3fbdef89b47fed, "sunset after this token lapsed");
         c[i++] = Case(365, 1, 1002, 1002, 0, false, false, 0, 400, 1000, 0, 0, 0, 14687, 0xf04ef84eccab09832200e45782dda06d4348291aab2a4a575f685dd47ef6e386, "slipped, day of return");
         c[i++] = Case(365, 4, 1005, 1005, 0, false, false, 0, 400, 1000, 0, 0, 0, 14687, 0x736d465a70bfcaec1d66158d55126f54fb09afdc493495d525462ff919a4323a, "slipped, 3 days on");
         c[i++] = Case(365, 8, 1009, 1009, 0, false, false, 0, 400, 1000, 0, 0, 0, 14687, 0x37a817d71285e5cdc77254dba39a750d72f8d87d32e4a1ce3388f0eb08a56358, "slipped, 7 days on");
         c[i++] = Case(365, 31, 1032, 1032, 0, false, false, 0, 400, 1000, 0, 0, 0, 14688, 0x99fb7cc94bc901f4eb67f492a91766e3769bf630aca14e75a77feec172894895, "slipped, 30 days on");
         c[i++] = Case(365, 100, 1100, 1100, 0, false, false, 0, 400, 1000, 0, 0, 0, 14689, 0x394e0f1169f80018795663f5bc049333204336fe63a483e89974b3bd5c9eb41b, "slipped, new run overtakes the fall");
         c[i++] = Case(365, 400, 1000, 1000, 0, false, false, 0, 0, 0, 1, 7, 1, 15697, 0x63535c9fa3401afa30a2b9e7c672c52f9011d597ea1b14b15cc964cdee7e5b36, "child, echo of one day");
-        c[i++] = Case(730, 400, 1000, 1000, 0, false, false, 0, 0, 0, 1000, 7, 1, 15780, 0x59e1d4205c56c9e1dbc9bd5a8cd6107f6ef9d2112834099cd67693fb8879961c, "child, two years and an echo");
         c[i++] = Case(1, 1, 1000, 1365, 0, false, false, 0, 0, 0, 365, 7, 1, 15632, 0xea07cad522faf437a042b3070972953f3b1b6436b3329f26f4ef41737cbb5dd9, "child, never returned, a year");
-        c[i++] = Case(365, 400, 1000, 1030, 0, false, false, 0, 0, 0, 365, 7, 1, 15699, 0xcd2e9a61bd5327fb638bd9144fe5d5938625fce43720f65320e2bdfe139a1225, "child, 30 days lapsed");
+        c[i++] = Case(365, 400, 1000, 1030, 0, false, false, 0, 0, 0, 365, 7, 1, 15699, 0xd53ac80d7f28e332b07ca6da092050a8edb0aba267e70218d940c548fb990362, "child, 30 days lapsed");
         c[i++] = Case(365, 400, 1000, 9999, 0, true, false, 0, 0, 0, 365, 7, 1, 15702, 0xea12ab676eb8865375e090ea3c81e3a6e1d8903cda16fd18ac700b7dd702bc43, "child, resting");
         c[i++] = Case(365, 400, 1000, 9999, 0, false, true, 0, 0, 0, 365, 7, 1, 15702, 0x7e8a54b6d819991388ac615e1cbe3754b2c953fd86206c49e85b09b605293807, "child, sunset");
         c[i++] = Case(365, 400, 1000, 1000, 0, false, false, 0, 0, 0, 3650, 4242, 3, 15703, 0xfb3016efa762dd1c5f9a10b57640cac130abf2b5826d5fb485ebfb69e3923636, "child, deep line and a wide parent");

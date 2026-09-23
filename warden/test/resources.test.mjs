@@ -66,7 +66,7 @@ test("mro://contract serves the five finisher Marks, and serves them as given", 
     assert.equal(row.needsWhole, true, `mark ${id} must be served as whole-only`);
   }
   assert.deepEqual(FINISHER_IDS.map((id) => catalogue[id].name),
-    ["aorta", "chamber", "valve", "atrium", "apex"]);
+    ["Aorta", "Chamber", "Valve", "Atrium", "Apex"]);
   assert.deepEqual(FINISHER_IDS.map((id) => catalogue[id].supply),
     [null, 50, 10, 3, 1], "Aorta's Infinity serialises to null; the four caps survive JSON");
 });

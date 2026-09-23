@@ -141,7 +141,7 @@ contract FinishLineTest is MroTestBase {
         ];
         for (uint8 i = 11; i <= 15; i++) {
             assertEq(t.upgradeOf(i).excludes, excludes[i - 11], "a finisher exclusion mask is wrong");
-            assertEq(t.upgradeOf(i).excludes & uint16(1 << i), 0, "a Mark that excludes itself is unreachable");
+            assertEq(t.upgradeOf(i).excludes & (uint16(1) << i), 0, "a Mark that excludes itself is unreachable");
             assertTrue(t.upgradeOf(i).active, "a finisher Mark ships inactive");
             assertEq(t.upgradeOf(i).priceUsdc6, 0, "a place is not for sale");
             assertTrue(t.upgradeOf(i).requiresWhole, "a place is only given at a whole heart");

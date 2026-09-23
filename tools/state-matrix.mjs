@@ -6,7 +6,7 @@
 // useful. What follows covers every axis independently at its boundaries, plus
 // the handful of places where two axes actually interact.
 import {
-  MAX_RINGS, MARKS, HUSH, ACHE, STATIC, BEAT, VESSEL, BREAK, AURA,
+  MARKS, HUSH, ACHE, STATIC, BEAT, VESSEL, BREAK, AURA,
   IRIS_BOUGHT, IRIS_EARNED, TINT,
 } from "./render-token.mjs";
 import { DAY_CELLS } from "./frame-geometry.mjs";
@@ -27,8 +27,10 @@ export const STREAKS = [0, 1, 2, 3, 6, 7, 29, 30, 99, 100, 400];
 /// Days since the last check-in, either side of every lapse step (3, 7, 30).
 export const GAPS = [0, 2, 3, 6, 7, 29, 30, 60];
 
-/// Completed years. 11 is past the cap of 10 and must render as 10.
-export const RING_YEARS = [0, 1, 2, 5, 9, 10, 11];
+/// Completed years. Spec 10f ended the year at 365, so a token has one ring of
+/// its own or none -- and those are the only two states the chain can reach.
+/// 2 is kept as the proof that a year count past the end still draws one ring.
+export const RING_YEARS = [0, 1, 2];
 
 /// Heart fills that change the frame's shape rather than just its length.
 /// 12 is the art-direction case: a stalled heart must still look finished.
@@ -63,7 +65,7 @@ export function renderCases() {
     out.push({ label: `tier streak ${streak}, 30 days lapsed`, ...base, streak, today: 1030 });
   }
 
-  // Ring counts, including one past the cap.
+  // Ring counts, including one past the end of the year.
   for (const y of RING_YEARS) {
     out.push({ label: `${y} years`, ...base, level: Math.max(1, y * DAY_CELLS) });
   }
@@ -220,8 +222,8 @@ export function renderCases() {
   // cross-language coverage was three cases written by hand. The two
   // `echoRingBars` implementations could have drifted with every suite green.
   //
-  // These do NOT repeat those three (a newborn, a child at the ring cap, and a
-  // child in the maximal legal Mark set). They cover what those leave out.
+  // These do NOT repeat those three (a newborn, a finished child, and a child
+  // in the maximal legal Mark set). They cover what those leave out.
   //
   // `parent` and `generation` travel with `echo` on purpose. All three reach
   // the metadata as attributes, so a case carrying an echo while claiming
@@ -232,15 +234,14 @@ export function renderCases() {
   // oversight: see the comment there.
   const child = { parent: 7, generation: 1 };
 
-  // THE RING-BUDGET BOUNDARY, which nothing tested. `ringBudget` spends a slot
-  // on ANY non-zero echo rather than on a whole year of it, so one single
-  // inherited day costs a ring. This case and "1 years" differ by exactly that
-  // one day of echo, and must therefore differ in ring count.
+  // THE RING-BUDGET BOUNDARY, which nothing tested. `ringBudget` draws the echo
+  // ring for ANY non-zero echo rather than for a whole year of it, so one
+  // single inherited day costs a ring. This case and "1 years" differ by
+  // exactly that one day of echo, and must therefore differ in ring count --
+  // and since Spec 10f that boundary is the ONLY place the ring count can
+  // still move, which is why it carries the coverage the old multi-year cases
+  // used to.
   out.push({ label: "child, echo of one day", ...base, ...child, echo: 1 });
-
-  // Own years AND an echo, where the slot arithmetic actually bites rather than
-  // only at the cap: two years earned, nine slots left, ten drawn.
-  out.push({ label: "child, two years and an echo", ...base, ...child, level: 730, echo: 1000 });
 
   // The ghost fill and the echo ring meet on the same cells. A child that never
   // came back is the shape a line most often ends in, and the absence steps
@@ -275,7 +276,7 @@ export function renderCases() {
 export function decodeCases() {
   const out = [];
   for (const streak of [0, 3, 7, 30, 100]) {
-    for (const y of [0, 1, 5, 10]) {
+    for (const y of [0, 1]) {
       for (const marks of [[], DRAWING_MARKS]) {
         out.push({
           label: `streak ${streak}, ${y}y, ${marks.length ? "marked" : "bare"}`,
@@ -300,7 +301,7 @@ export const DECODE_SIZES = [250, 350, 500, 700, 900, 1100, 1200, 1400, 1600];
 export function decodeExtremes() {
   return decodeCases().filter(c =>
     (c.streak === 0 || c.streak === 100) &&
-    (c.level === 1 || c.level === MAX_RINGS * DAY_CELLS));
+    (c.level === 1 || c.level === DAY_CELLS));
 }
 
 /// The subset driven through the live contract on Sepolia.
@@ -346,6 +347,12 @@ export const CROSS_TOKEN_IDS = [1, 2, 3, 5, 8, 12, 13, 21, 34, 55, 89, 144];
 /// Five states spanning the frame shapes and the ink ladder. Deliberately small:
 /// the point of this sweep is breadth across BITMAPS, and the state axis is
 /// already covered to its boundaries by sweeps A, B and C.
+///
+/// "whole, 10 years" is a level the chain no longer reaches -- Spec 10f stops
+/// crediting at 365 -- and it stays because it is still a distinct PICTURE: a
+/// one-ring token at a low streak wearing every drawing Mark, which no other
+/// state here draws. The label reads as history and is left alone rather than
+/// renamed, matching robust-solve.mjs's gate states.
 export function crossStates() {
   const base = { lastDay: 1000, today: 1000 };
   return [

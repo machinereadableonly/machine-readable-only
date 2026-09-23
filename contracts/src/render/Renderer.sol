@@ -146,12 +146,16 @@ contract Renderer is IRenderer {
     ///
     /// THE BRANCHES MIRROR `_rung` DELIBERATELY. Rest seals the image at the
     /// moment the owner chose, so a rested token's frame is final however long
-    /// the calendar runs on; a sunset ages every token only to the day the
-    /// PIECE closed, for the same reason the rung does. A gap rule that
+    /// the calendar runs on; a FINISHED token's frame is final for the same
+    /// reason; a sunset ages every token only to the day the PIECE closed, for
+    /// the same reason the rung does. A gap rule that
     /// disagreed with the rung rule about when a token stopped would draw one
     /// token whose heart says kept and whose frame says gone.
     function _absence(TokenView memory v) private pure returns (uint256) {
-        if (v.resting) return 0;
+        // A finished token's record is final: nothing it does not do can count
+        // against it. It cannot check in again -- `_credit` refuses a token at
+        // 365 -- so left on the live rule it would cool for ever. Spec 10f.
+        if (v.resting || v.level >= FrameGeometry.DAY_CELLS) return 0;
         uint32 end = v.sunset ? v.sunsetDay : v.today;
         // A clock that runs backwards is not an absence. Guard the subtraction
         // rather than letting it wrap into a gap of four billion days.
@@ -163,14 +167,27 @@ contract Renderer is IRenderer {
         // stored run IS that moment. Unchanged.
         if (v.resting) return Palette.tierIndex(v.streak);
 
+        // A token that reached 365 is FINISHED, and its image is final. Not the
+        // same thing as resting, and the difference is load-bearing: resting
+        // blocks `seed`, so a piece that rested every token on completion could
+        // never have a second generation. Spec 10f.
+        bool whole = v.level >= FrameGeometry.DAY_CELLS;
+
         // A sunset seals every token at the day the PIECE closed, not at today.
         // Reading it as `today` would keep paling tokens after the record was
         // final; reading it as the stored run would un-pale a two-year-old
         // lapse and make every abandoned token look kept at the exact moment
-        // the record is sealed forever.
-        if (v.sunset) return Palette.lapsedIndex(v.streak, v.lastDay, v.sunsetDay);
+        // the record is sealed forever. A sunset BEFORE the year ended seals it
+        // there; after it, the finish already did.
+        if (v.sunset && !whole) return Palette.lapsedIndex(v.streak, v.lastDay, v.sunsetDay);
 
-        uint256 live = Palette.lapsedIndex(v.streak, v.lastDay, v.today);
+        // A FINISHED token is read on the day it finished, forever: the same
+        // rules as a live one, with the clock stopped at its last credited day.
+        // Running the lapse rules with a stopped clock rather than short-
+        // circuiting to `tierIndex` is what keeps a token that slipped during
+        // its year from being un-paled by finishing it.
+        uint32 at = whole ? v.lastDay : v.today;
+        uint256 live = Palette.lapsedIndex(v.streak, v.lastDay, at);
         if (v.fellRun == 0) return live;
 
         // THE RUN THAT FELL STILL COLOURS THE TOKEN AS IT FADES. Without this a
@@ -182,7 +199,7 @@ contract Renderer is IRenderer {
         // cost something the day it happens: uncapped, a token that missed a
         // day was indistinguishable from one that never had, and the served
         // copy says the colour goes.
-        uint256 fell = Palette.lapsedIndex(v.fellRun, v.fellDay, v.today);
+        uint256 fell = Palette.lapsedIndex(v.fellRun, v.fellDay, at);
         uint256 cap = Palette.tierIndex(v.fellRun);
         cap = cap == 0 ? 0 : cap - 1;
         if (fell > cap) fell = cap;
@@ -190,8 +207,8 @@ contract Renderer is IRenderer {
     }
 
     /// @dev Where the 45-cell block sits on the canvas, in cells.
-    /// @dev Takes `echo` as well as `level` because a seeded child spends one
-    /// of its ten ring slots on the echo ring, so two tokens at the same level
+    /// @dev Takes `echo` as well as `level` because a seeded child draws a
+    /// second ring for the line it came from, so two tokens at the same level
     /// can sit on different canvases.
     function _blockOff(uint32 level, uint32 echo) private pure returns (uint256) {
         uint256 rim = FrameRenderer.ringSpan(FrameRenderer.rings(level, echo)) + FrameRenderer.GAP;
@@ -218,7 +235,7 @@ contract Renderer is IRenderer {
     ///
     /// Sixteen because it is the multiple this project already uses as its
     /// "exact multiple" control everywhere else, and because it puts a
-    /// one-ring token at 848px and a ten-ring token at 1,424px -- above the
+    /// one-ring token at 848px and a two-ring token at 912px -- above the
     /// sizes third parties ask for, so their scaling is a downscale.
     ///
     /// Full write-up: docs/2026-08-29-mro-third-party-raster-finding.md
@@ -324,8 +341,9 @@ contract Renderer is IRenderer {
     /// own grid inside a group carrying its own scale, which keeps every
     /// coordinate one or two digits. That is not cosmetic: `PathWriter`
     /// composes each run in a single 32-byte word with no slack at three
-    /// digits a coordinate, and absolute units would reach 1,157 on a ten-ring
-    /// canvas and overrun the reservation.
+    /// digits a coordinate, and absolute units would reach 1,157 on the
+    /// ten-ring canvas the piece used to allow -- and 741 on today's widest --
+    /// and overrun the reservation.
     /// @param band the finisher's digit band, which the whole inner picture
     /// shifts in by. The empty string when there is none is LOAD-BEARING: it is
     /// what makes an unbanded token emit the exact bytes it emitted before the

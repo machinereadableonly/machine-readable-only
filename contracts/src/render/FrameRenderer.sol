@@ -12,7 +12,7 @@ import {TokenView} from "./TokenView.sol";
 /// @dev This is the part of the image that carries the piece's subject. The code
 /// block is fixed at mint and never changes; the frame is the token's history --
 /// one cell per credited day, filling from the top so the ring closes as the year
-/// goes on, plus one outline ring for every completed year.
+/// goes on, plus one outline ring once the year is finished.
 ///
 /// Two cells matter more than the rest. The frame holds 376 cells but a year is
 /// 365 days, because two concentric rings always hold an even count and 365 is
@@ -27,22 +27,6 @@ library FrameRenderer {
     /// can never be mistaken for a day.
     uint256 internal constant GAP = 1;
 
-    /// @dev Year rings stop growing the canvas here.
-    ///
-    /// Ten, decided 2026-08-29 after rendering the same token at every ring count
-    /// (docs/year-rings.png). The previous cap of 80 was set by what still fits
-    /// the gas and byte limits, which was the wrong question: the rings stop
-    /// being readable long before they stop fitting. At 20 rings the heart is
-    /// under half the canvas and at 80 it is a fifth, and an 80-ring token does
-    /// not decode at a 300px thumbnail at all.
-    ///
-    /// Ten years is also where the piece has a better answer than an eleventh
-    /// ring: the token seeds a child and Lineage carries the record on. The
-    /// Years attribute keeps counting past the cap, so only the ring stops.
-    ///
-    /// MUST stay identical to MAX_RINGS in tools/render-token.mjs.
-    uint256 internal constant MAX_RINGS = 10;
-
     /// @dev How many cells the rings occupy on each side: one cell per ring with
     /// one cell of field between them, so they can be counted. Contiguous rings
     /// merged into a single slab of colour, which defeats the point of drawing
@@ -53,13 +37,22 @@ library FrameRenderer {
         return ringCount == 0 ? 0 : 2 * ringCount - 1;
     }
 
-    /// @notice How the ten ring slots are shared between the years this token
-    /// inherited and the years it earned itself.
+    /// @notice The ring a token earns for finishing its year, and the ring a
+    /// child carries for the line it came from.
     ///
-    /// @dev The echo ring takes one of the TEN rather than adding an eleventh.
-    /// That is forced: canvas(r) = 49 + 4r, so an eleventh ring grows the
-    /// artwork to 93 cells and creates a second byte worst case to measure and
-    /// defend. A child's own rings therefore cap at nine.
+    /// @dev Spec 10f, decided 2026-09-20. A token stops accruing at 365
+    /// credited days, so it has at most ONE ring of its own -- the ring that
+    /// says the year is finished. The ten-ring cap that used to live here is
+    /// retired with the decade it was drawn for: a decade of persistence is now
+    /// recorded as a LINE, not as ten rings on one token, because the finished
+    /// token seeds a child and the child's echo ring carries the depth. The
+    /// cap is written as a cap rather than as arithmetic so a swapped renderer
+    /// can never draw a ring count the chain can no longer produce.
+    ///
+    /// The echo ring is a second slot rather than a share of one: at one own
+    /// ring there is nothing to share. canvas(r) = 49 + 4r, so the widest
+    /// canvas the piece can now produce is a finished child's 57 cells, where
+    /// it used to be 89.
     ///
     /// The slot is taken by ANY non-zero echo, not by a whole year of it: the
     /// ring says the token came from somewhere, and one day of inheritance is
@@ -74,13 +67,11 @@ library FrameRenderer {
         returns (uint256 own, uint256 echoRings)
     {
         echoRings = echo > 0 ? 1 : 0;
-        own = level / FrameGeometry.DAY_CELLS;
-        uint256 room = MAX_RINGS - echoRings;
-        if (own > room) own = room;
+        own = level >= FrameGeometry.DAY_CELLS ? 1 : 0;
     }
 
-    /// @notice Completed years plus the echo ring: the total rings drawn, which
-    /// is what sets the canvas size.
+    /// @notice The finished-year ring plus the echo ring: the total rings
+    /// drawn, which is what sets the canvas size.
     function rings(uint32 level, uint32 echo) internal pure returns (uint256) {
         (uint256 own, uint256 echoRings) = ringBudget(level, echo);
         return own + echoRings;
@@ -211,14 +202,15 @@ library FrameRenderer {
         return string(out);
     }
 
-    /// @dev One outline ring per completed year, outermost first, as four bars.
+    /// @dev One outline ring per drawn ring, outermost first, as four bars.
     ///
     /// The gap that makes rings countable also makes them ruinous to draw row by
     /// row: away from a ring's own top or bottom edge a row crosses every ring
-    /// separately, so ten rings put twenty one-cell runs on every row. Measured
-    /// at the cap that came to 20,531 bytes for the frame alone, over the 20,000
-    /// limit for the whole tokenURI. As bars it is four runs per ring whatever
-    /// the canvas size.
+    /// separately, so each ring puts two one-cell runs on every row. Measured
+    /// back when a token could carry ten, that came to 20,531 bytes for the
+    /// frame alone, over the 20,000 limit for the whole tokenURI. As bars it is
+    /// four runs per ring whatever the canvas size, and it stays the right shape
+    /// now the most a token can wear is two.
     ///
     /// GAP keeps a blank cell between the innermost ring and the day frame, so no
     /// run here could ever have merged with a frame run. Emitting them separately

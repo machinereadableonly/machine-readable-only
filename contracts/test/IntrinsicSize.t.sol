@@ -77,12 +77,16 @@ contract RendererSizedTest is Test {
         assertTrue(_has(s, _viewBox(53)), "the viewBox must be untouched");
     }
 
-    /// The declared size has to track the canvas, which grows with year rings --
-    /// a fixed number would stretch the art the moment a token completes a year.
+    /// The declared size has to track the canvas, which grows with the rings --
+    /// a fixed number would stretch the art the moment a token finishes its
+    /// year. The widest canvas is a finished CHILD's two rings, since Spec 10f;
+    /// it used to be a ten-ring token at 89 cells.
     function test_theDeclaredSizeGrowsWithTheCanvas() public view {
-        string memory s = shipped.svg(_view(uint32(FrameGeometry.DAY_CELLS) * 10));
-        assertTrue(_has(s, _viewBox(89)), "ten rings should give an 89-cell canvas");
-        assertTrue(_has(s, "width=\"1424\" height=\"1424\""), "expected 89 x 16 = 1424");
+        TokenView memory v = _view(uint32(FrameGeometry.DAY_CELLS));
+        v.echo = 3650;
+        string memory s = shipped.svg(v);
+        assertTrue(_has(s, _viewBox(57)), "two rings should give a 57-cell canvas");
+        assertTrue(_has(s, "width=\"912\" height=\"912\""), "expected 57 x 16 = 912");
     }
 
     /// The control must stay what shipped before, or re-running the A/B measures

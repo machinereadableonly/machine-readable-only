@@ -38,9 +38,10 @@ library PathWriter {
     /// Holding every coordinate below 1000 is what guarantees that. The canvas
     /// is 51 cells with no rings and canvas(r) = 49 + 4r from the first ring on
     /// -- two cells for the first ring and four for every ring after it, since
-    /// ringSpan(r) = 2r - 1 -- so the widest canvas at MAX_RINGS is 89 and
-    /// nothing can reach the cap. (This said "grows by two a year", which is
-    /// the first ring's step mistaken for every ring's, until 2026-09-20.)
+    /// ringSpan(r) = 2r - 1 -- so the widest canvas a token can wear is a
+    /// finished child's two rings, 57 cells, and nothing can reach the cap.
+    /// (This said "grows by two a year", which is the first ring's step
+    /// mistaken for every ring's, until 2026-09-20.)
     uint256 private constant MAX_COORD = 1000;
 
     /// @notice A path under construction: the bytes, and how many are written.

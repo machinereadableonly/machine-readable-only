@@ -347,7 +347,7 @@ test("the served schemas name what their arguments are, and the ladder is genera
   );
   assert.doesNotMatch(
     upgradeId.description,
-    /\b1[1-5] (aorta|chamber|valve|atrium|apex)\b/,
+    /\b1[1-5] (aorta|chamber|valve|atrium|apex)\b/i,
     "a finisher Mark is listed as though it could be bought",
   );
   assert.equal(upgradeId.maximum, 10, "and the schema itself refuses one");

@@ -11,21 +11,23 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { keccak256, toBytes } from "viem";
 
-import { ringBudget, ringsFor, canvasFor, echoRingBars, MAX_RINGS } from "../render-token.mjs";
+import { ringBudget, ringsFor, canvasFor, echoRingBars } from "../render-token.mjs";
 
-test("a founding token keeps all ten of its own rings", () => {
-  assert.deepEqual(ringBudget(10, 0), { own: 10, echoRings: 0 });
-  assert.equal(ringsFor(10, 0), 10);
-  assert.equal(ringsFor(10), 10, "and the one-argument form still means founding");
+test("a founding token draws its finished-year ring and nothing else", () => {
+  assert.deepEqual(ringBudget(1, 0), { own: 1, echoRings: 0 });
+  assert.equal(ringsFor(1, 0), 1);
+  assert.equal(ringsFor(1), 1, "and the one-argument form still means founding");
 });
 
-test("a child gives up one slot", () => {
-  assert.deepEqual(ringBudget(10, 365), { own: 9, echoRings: 1 });
-  assert.equal(ringsFor(10, 365), 10);
+test("a finished child draws two rings", () => {
+  // Spec 10f: there is only ever one own ring, so the echo adds a ring rather
+  // than taking a share of one.
+  assert.deepEqual(ringBudget(1, 365), { own: 1, echoRings: 1 });
+  assert.equal(ringsFor(1, 365), 2);
 });
 
-test("one echo day is enough to take the slot", () => {
-  assert.deepEqual(ringBudget(10, 1), { own: 9, echoRings: 1 });
+test("one echo day is enough to draw the ring", () => {
+  assert.deepEqual(ringBudget(1, 1), { own: 1, echoRings: 1 });
 });
 
 test("a newborn child is one ring, not zero", () => {
@@ -34,7 +36,9 @@ test("a newborn child is one ring, not zero", () => {
 });
 
 test("the echo ring is always 53 cells on a side", () => {
-  for (let y = 1; y <= MAX_RINGS; y++) {
+  // Both ring counts a child can have: the echo alone, and the echo inside its
+  // own finished ring.
+  for (const y of [0, 1]) {
     const total = ringsFor(y, 365);
     const size = canvasFor(y, 365);
     const o = 2 * (total - 1);
@@ -73,14 +77,15 @@ test("the echo ring matches the Solidity byte for byte", () => {
     "0x72ad6bd54c11077cd08247296099dfa08ba0cd6c2ebc366e0895d97c6dcf1fe4",
   );
 
-  // And at the other extreme: a child at the cap draws the same 54 runs one
-  // slot deeper, where every coordinate is two digits.
-  const deep = echoRingBars(2 * 9, 53);
+  // And at the other extreme: a FINISHED child draws the same 54 runs one slot
+  // deeper, inside its own ring. Spec 10f made that depth 2 rather than the 18
+  // a nine-ring child used to reach.
+  const deep = echoRingBars(2 * 1, 53);
   assert.equal(deep.split("M").length - 1, 54);
-  assert.equal(deep.length, 756, "the deepest echo ring, all two-digit");
+  assert.equal(deep.length, 721, "the deepest echo ring");
   assert.equal(
     keccak256(toBytes(deep)),
-    "0xf9c9a5d28305a0e04d3c25f29d1d273e31c5cb27997535d8b0ef4d2e50f2c85b",
+    "0x224bf74265fd2922b70cb1567538e4ef019b87b8260e5ba371fccbf01068b5c8",
   );
 });
 

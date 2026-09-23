@@ -105,30 +105,42 @@ contract RendererTest is Test {
     }
 
     function test_aLapsedTokenMatchesTheJavascriptReference() public view {
-        // Forty days without a check-in. This is the case that caught a real
-        // divergence: the JS renderer had a lapse function it never called, so
-        // the image never paled while this renderer's did.
-        _diff("whole and lapsed", _view(365, 140, 1000, 1040), 14689,
-            0xfaff8e2cde6a6f46d9ac9c24d6b21ba3cf4f603f74d6526a7330f2ca5cb5cec2);
+        // Forty days without a check-in, ONE DAY SHORT OF WHOLE. This is the
+        // case that caught a real divergence: the JS renderer had a lapse
+        // function it never called, so the image never paled while this
+        // renderer's did. It was level 365 until Spec 10f, which is now a token
+        // that cannot lapse at all -- at 364 the lapse is measured again.
+        _diff("lapsed, one day short", _view(364, 140, 1000, 1040), 14720,
+            0x4b52953a6dc4788ca92362c2fe3f3715eacb830d3b594f924e3a6401f142d0e2);
     }
 
-    function test_theRingCapMatchesTheJavascriptReference() public view {
-        _diff("ten years, capped", _view(365 * 10, 400, 1000, 1000), 15499,
-            0x3578cf33caf266e703ad0936e0407ba727305fa0c6e44fc794d369cf01a39d42);
+    /// The finish freezes the token on its last credited day, and this is the
+    /// case that says the freeze runs the ordinary lapse rules with the clock
+    /// stopped rather than short-circuiting to the stored run: a token that
+    /// slipped during its year must not be un-paled by finishing it. Replaces
+    /// the ten-year ring-cap case, which the chain can no longer produce.
+    function test_aFinishedTokenAfterASlipMatchesTheJavascriptReference() public view {
+        TokenView memory v = _view(365, 5, 1000, 1400);
+        v.fellRun = 200;
+        v.fellDay = 900;
+        _diff("finished after a slip", v, 14687,
+            0x7a7baa3ebf274214b969cecce589b5080f5a15cad2c5fc06354b0cabe1fde3d5);
     }
 
     function test_everyMarkAtOnceMatchesTheJavascriptReference() public view {
-        TokenView memory v = _view(365 * 10, 400, 1000, 1000);
+        TokenView memory v = _view(365, 400, 1000, 1000);
         v.marks = ALL_MARKS;
-        _diff("every drawn mark", v, 16708,
-            0x601c86903d3b3f08a06c8e3ead7bc4ca37d065557213c77b2f99172e734cadb0);
+        _diff("every drawn mark", v, 15894,
+            0x335657e09aa3af96425a1ea913c9e7e580ab0ce30fd25ccd2db7d7ebd13853bf);
     }
 
     function test_aSealedTokenMatchesTheJavascriptReference() public view {
-        TokenView memory v = _view(365 * 3, 200, 1000, 9999);
+        // Level 300, not whole: a finished token freezes on its own, so resting
+        // a whole one would prove nothing about `resting`.
+        TokenView memory v = _view(300, 200, 1000, 9999);
         v.resting = true;
-        _diff("sealed at rest", v, 14857,
-            0x3c52d9924452e07774aa7ece56d7de4c2328d0f7582f74ebebfda40a6b0bfbc7);
+        _diff("sealed at rest", v, 14723,
+            0xf8b7b28d2a8510ba25465c67b8dab451b296726417b52daf36d0c93f78fd4a0a);
     }
 
     /// A seeded child, at both extremes of the echo ring.
@@ -156,16 +168,17 @@ contract RendererTest is Test {
             0x36d0c5e8973e7fdab3097de83680ebf404b8e2e508db50d41730c0b7c3992486);
     }
 
-    function test_aChildAtTheRingCapMatchesTheJavascriptReference() public view {
-        // Ten years of its own, but only NINE rings are drawn: the tenth slot
-        // is the echo ring, at depth 18, where every coordinate is two digits
-        // and the dash costs 756 bytes against 717 at depth 0.
-        TokenView memory v = _view(365 * 10, 400, 1000, 1000);
+    function test_aFinishedChildMatchesTheJavascriptReference() public view {
+        // Its own finishing ring plus the echo ring, so the dash sits at depth
+        // 2 -- one slot inside its own ring, and the deepest it can now go.
+        // Before Spec 10f this case was a nine-ring child with the echo at
+        // depth 18.
+        TokenView memory v = _view(365, 400, 1000, 1000);
         v.generation = 2;
         v.parent = 7;
         v.echo = 3650;
-        _diff("a child at the cap", v, 16462,
-            0xa89bc484465004c11a71e1a71d0f26b7c6bfbd39a5c906c8a1c587d389eca46f);
+        _diff("a finished child", v, 15700,
+            0x7da5c8fe918edf764901555bda3e672c0a40533730bf5a8acd4da4c7ec5057c3);
     }
 
     /// A child wearing the maximal LEGAL Mark set.
@@ -178,13 +191,13 @@ contract RendererTest is Test {
     /// the code and kills the decode.
     ///
     /// Five Marks is the legal maximum -- the exclusive pairs make six
-    /// unreachable. Level 365 * 5 rather than the cap, because the cap cannot
-    /// discriminate: `rings(3650, 3650)` equals `rings(3650, 0)`, so a broken
-    /// site would compute the same offset either way. At five years it is 6
-    /// rings against 5. The heart is also whole, so the ghost element exists
-    /// ONLY to carry the echo ring.
+    /// unreachable. Level 365 -- finished -- because that is where the echo
+    /// ring still discriminates: `rings(365, 1825)` is 2 against
+    /// `rings(365, 0)`'s 1, so a broken site computes a different offset. The
+    /// heart is also whole, so the ghost element exists ONLY to carry the echo
+    /// ring.
     function test_aChildWithEveryDrawnMarkMatchesTheJavascriptReference() public view {
-        TokenView memory v = _view(365 * 5, 400, 1000, 1000);
+        TokenView memory v = _view(365, 400, 1000, 1000);
         v.generation = 2;
         v.parent = 7;
         v.echo = 365 * 5;
@@ -192,8 +205,8 @@ contract RendererTest is Test {
         // non-default on purpose, so the shape and ink bits are read rather
         // than defaulting to 0. Mirrors the packing applyMark writes.
         v.marks = ALL_MARKS_TINTED | (uint256(2) << 16) | (uint256(1) << 24);
-        _diff("a child with every drawn mark", v, 17908,
-            0x231dffcef1cf7ccc7f235e5642d73244ca06d03f914c5d8b0f25a928b372db17);
+        _diff("a child with every drawn mark", v, 17479,
+            0x66df65092e730166d6e71a4ec91a40c821ed41e516454b7d2052ee98d2461635);
     }
 
     function test_theEyesAreDrawnLastOverTheNoise() public view {
@@ -331,10 +344,14 @@ contract RendererTest is Test {
     function test_aRestingTokenNeverPales() public view {
         // A sealed token keeps the colour it stopped at, however long ago that
         // was. A live one with the same clock does not.
-        TokenView memory sealed_ = _view(365, 140, 1000, 9999);
+        //
+        // Level 200, not 365: since Spec 10f a FINISHED token does not pale
+        // either, so at 365 the control could not fail and this test would have
+        // passed with `resting` doing nothing at all.
+        TokenView memory sealed_ = _view(200, 140, 1000, 9999);
         sealed_.resting = true;
-        TokenView memory live = _view(365, 140, 1000, 9999);
-        TokenView memory fresh = _view(365, 140, 1000, 1000);
+        TokenView memory live = _view(200, 140, 1000, 9999);
+        TokenView memory fresh = _view(200, 140, 1000, 1000);
 
         assertEq(r.svg(sealed_), r.svg(fresh), "a sealed token holds its colour");
         assertTrue(
@@ -343,10 +360,23 @@ contract RendererTest is Test {
         );
     }
 
+    /// A finished token's colour is the one it finished with, however long the
+    /// calendar runs. Without this, a token that finished and then stopped
+    /// checking in -- which is now the ONLY thing it can do, since `_credit`
+    /// refuses a token at 365 -- would fade. Spec 10f.
+    function test_aFinishedTokenDoesNotFade() public view {
+        TokenView memory v = _view(365, 365, 20_000, 20_000);
+        string memory atFinish = r.svg(v);
+        v.today = 20_400;
+        assertEq(r.svg(v), atFinish, "a finished token must hold the colour it finished with");
+    }
+
     function test_sunsetFreezesTheSameWayRestingDoes() public view {
-        TokenView memory sunset = _view(365, 140, 1000, 9999);
+        // Level 200 for the same reason as the resting test above: at 365 the
+        // finish would freeze the image whether `sunset` worked or not.
+        TokenView memory sunset = _view(200, 140, 1000, 9999);
         sunset.sunset = true;
-        TokenView memory fresh = _view(365, 140, 1000, 1000);
+        TokenView memory fresh = _view(200, 140, 1000, 1000);
         assertEq(r.svg(sunset), r.svg(fresh), "sunset freezes the image too");
     }
 
@@ -358,18 +388,21 @@ contract RendererTest is Test {
     }
 
     function test_theWorstCaseStaysInsideTheHardLimit() public view {
-        // Ten rings and every Mark: the largest image a token can reach. The
-        // spike's hard limit is 4,000,000 gas and 24,000 bytes.
+        // A finished child wearing every Mark: the largest image a token can
+        // reach now the year ends at 365 and the rings stop at two. The spike's
+        // hard limit is 4,000,000 gas and 24,000 bytes.
         // Logged whether or not they pass, so the results table can be filled
         // from a test run rather than from a one-off probe. Run with -vv.
         string[4] memory labels =
-            ["day one          ", "whole, one ring  ", "ten years, capped", "cap + all Marks  "];
+            ["day one          ", "whole, one ring  ", "finished child   ", "child + all Marks"];
         TokenView[4] memory vs = [
             _view(1, 1, 1000, 1000),
             _view(365, 140, 1000, 1000),
-            _view(365 * 10, 400, 1000, 1000),
-            _view(365 * 10, 400, 1000, 1000)
+            _view(365, 400, 1000, 1000),
+            _view(365, 400, 1000, 1000)
         ];
+        vs[2].echo = 3650;
+        vs[3].echo = 3650;
         vs[3].marks = ALL_MARKS;
 
         for (uint256 i; i < 4; ++i) {
@@ -392,24 +425,24 @@ contract RendererTest is Test {
     /// build measures the coverage profile, not the contract, so the ceiling is
     /// skipped there. The numbers are still logged, and byte lengths, which the
     /// optimiser does not touch, are still asserted.
-    /// @dev 2.M1. The Years ATTRIBUTE keeps counting; only the RING stops at
-    /// ten. It was fed `FrameRenderer.rings()`, so a token in its eleventh year
-    /// reported ten -- while three comments beside the code (including
-    /// FrameRenderer's own "the Years attribute keeps counting regardless") and
-    /// the Warden's tokenView all described the uncapped reading. Both
-    /// renderers agreed with each other, so the JS/Solidity differential could
-    /// not see it, and past ten years `Level` was the only record of a token's
-    /// age. Asserted on the rendered TEXT, not on a recomputed number.
-    function test_theYearsAttributeCountsPastTheRingCap() public view {
+    /// @dev 2.M1. The Years ATTRIBUTE is computed from `level`, not from the
+    /// ring budget. It was fed `FrameRenderer.rings()`, so a token in its
+    /// eleventh year reported ten, and `Level` was the only surviving record of
+    /// its age. The chain can no longer reach an eleventh year -- Spec 10f
+    /// stops crediting at 365 -- so this is now a robustness assertion rather
+    /// than a lifecycle one: the renderer is handed a `TokenView` by whatever
+    /// calls it, and it must report what it was given rather than what the ring
+    /// rule can draw. Asserted on the rendered TEXT, not on a recomputed number.
+    function test_theYearsAttributeIsReadFromTheLevelNotTheRing() public view {
         string memory eleven = r.tokenURI(_view(365 * 11, 5, 1000, 1000));
         assertTrue(vm.contains(eleven, '{"trait_type":"Years","value":11}'), "eleven years must say eleven");
         assertTrue(vm.contains(eleven, '{"trait_type":"Level","value":4015}'));
 
-        // The control at the cap itself, so this is not an off-by-one dressed
-        // as a fix -- and the ring count still stops where it always did.
-        string memory ten = r.tokenURI(_view(365 * 10, 5, 1000, 1000));
-        assertTrue(vm.contains(ten, '{"trait_type":"Years","value":10}'));
-        assertEq(FrameRenderer.rings(365 * 11, 0), 10, "the drawn ring still stops at ten");
+        // The reachable control, so this is not an off-by-one dressed as a fix
+        // -- and the drawn ring stops at one either way.
+        string memory finished = r.tokenURI(_view(365, 5, 1000, 1000));
+        assertTrue(vm.contains(finished, '{"trait_type":"Years","value":1}'));
+        assertEq(FrameRenderer.rings(365 * 11, 0), 1, "the drawn ring still stops at one");
     }
 
     function _gasIsMeaningful() internal view returns (bool) {

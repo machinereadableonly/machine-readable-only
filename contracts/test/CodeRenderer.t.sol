@@ -407,9 +407,12 @@ contract CodeRendererTest is Test {
     }
 
     function test_threeDigitCoordinatesAreWrittenInFull() public view {
-        // A token with many year rings pushes the code further down the canvas.
-        // Each run is composed in one 32-byte word, so wider numbers are the case
-        // most likely to overflow it -- "M103 100h1v1h-1z" is 16 of the 32 bytes.
+        // A large offset pushes the code further down the canvas. Each run is
+        // composed in one 32-byte word, so wider numbers are the case most
+        // likely to overflow it -- "M103 100h1v1h-1z" is 16 of the 32 bytes.
+        // The offset here is larger than any canvas can now produce, and
+        // deliberately: it is PathWriter's word budget being tested, not the
+        // ring rule.
         bytes memory code = new bytes(BYTES);
         code[0] = bytes1(uint8(0x10));   // one module at (3,0)
         bytes memory mask = new bytes(BYTES);

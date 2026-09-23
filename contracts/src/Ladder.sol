@@ -59,7 +59,7 @@ library Ladder {
         // Each one excludes the other four, because a token finishes once. Built
         // from the group minus the Mark's own bit, which setUpgrade refuses.
         uint16 group = uint16((1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15));
-        for (uint8 i = 11; i <= 15; i++) u[i].excludes = group & ~uint16(1 << i);
+        for (uint8 i = 11; i <= 15; i++) u[i].excludes = group & ~(uint16(1) << i);
     }
 
     function _mark(uint64 price, uint32 minLevel, uint32 minStreak, bool whole, uint8 excludes)

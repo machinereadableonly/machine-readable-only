@@ -4,9 +4,9 @@ import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
 import { canvasUnits, DIGIT_INK } from "../render-token.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
-         rungOf, colourAt, noiseAt, staticAt, inks, BEAT_TO, MAX_RINGS, ringsFor, ringSpan,
+         rungOf, colourAt, noiseAt, staticAt, inks, BEAT_TO, ringBudget, ringsFor, ringSpan,
          HUSH_QUIET, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
-         fieldFor, absenceOf,
+         fieldFor, absenceOf, rungFor,
        } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
@@ -190,22 +190,58 @@ test("canvas grows one ring per completed year, with a gap between rings", () =>
   // the year count cannot be read off the image.
   assert.equal(canvasFor(0), 51);
   assert.equal(canvasFor(1), 53);
-  assert.equal(canvasFor(3), 61);
-  assert.equal(canvasFor(10), 89, "the cap");
-  assert.equal(canvasFor(99), 89, "past the cap it stops growing");
+  assert.equal(canvasFor(1, 365), 57, "a finished child: its own ring and the echo");
+  assert.equal(canvasFor(10), 53, "a year count past the end still draws one ring");
 });
 
-test("the ring cap is ten years and matches the contract", () => {
-  // Decided 2026-08-29 on rendered evidence (docs/year-rings.png): past ten
-  // years the heart is under half the canvas and the rings stop being
-  // countable. MUST equal FrameRenderer.MAX_RINGS, asserted there too.
-  assert.equal(MAX_RINGS, 10);
-  assert.equal(ringsFor(10), 10);
-  assert.equal(ringsFor(400), 10);
+test("a finished token keeps one ring of its own, and a child one more", () => {
+  // Spec 10f: the year ends at 365, so a token has at most ONE ring of its own.
+  // MUST equal FrameRenderer.ringBudget, asserted there too.
+  assert.deepEqual(ringBudget(1, 0), { own: 1, echoRings: 0 });
+  assert.deepEqual(ringBudget(10, 0), { own: 1, echoRings: 0 },
+    "a year count the chain can no longer reach still draws one");
+  assert.deepEqual(ringBudget(1, 400), { own: 1, echoRings: 1 }, "own ring plus the echo ring");
+  assert.deepEqual(ringBudget(0, 400), { own: 0, echoRings: 1 }, "a young child: the echo ring only");
+  assert.equal(ringsFor(400), 1);
   assert.equal(ringSpan(0), 0, "no years, no rings");
   assert.equal(ringSpan(1), 1, "one ring is one cell");
   assert.equal(ringSpan(2), 3, "ring, gap, ring");
-  assert.equal(ringSpan(10), 19, "ten rings and nine gaps");
+});
+
+test("a finished token's colour and page stop moving with the clock", () => {
+  // Spec 10f. A finished token cannot check in again, so left to the live rule
+  // it would fade for ever. `whole` freezes it the way `resting` does, but
+  // WITHOUT setting resting -- a resting token cannot seed, and lineage is the
+  // whole point of ending the year.
+  const live = { streak: 365, lastDay: 20_000, today: 20_000 };
+  assert.equal(rungFor({ ...live, whole: true }), rungFor({ ...live, today: 20_400, whole: true }),
+    "a finished token holds the rung it finished on");
+  assert.notEqual(rungFor({ ...live }), rungFor({ ...live, today: 20_400 }),
+    "CONTROL: an unfinished token in the same state still pales");
+  assert.equal(absenceOf({ ...live, today: 20_400, whole: true }), 0,
+    "nothing a finished token does not do can count against it");
+  assert.equal(absenceOf({ ...live, today: 20_400 }), 400, "CONTROL: an unfinished one is away");
+});
+
+test("a finished token's whole picture does not move with the clock", () => {
+  // THE WIRING, not the helpers. `renderSvg` reads `whole` for the rung AND for
+  // the page, and a call site that stopped passing it would leave both helpers
+  // correct and the picture wrong. The cross-language differential cannot see
+  // that on its own: its hashes are GENERATED from this file, so a JS-only
+  // regression would simply regenerate.
+  const done = { level: 365, streak: 365, years: 1, marks: [], lastDay: 20_000 };
+  assert.equal(
+    render({ ...done, today: 20_400 }),
+    render({ ...done, today: 20_000 }),
+    "a finished token must hold the picture it finished with",
+  );
+
+  const open = { ...done, level: 200, years: 0 };
+  assert.notEqual(
+    render({ ...open, today: 20_400 }),
+    render({ ...open, today: 20_000 }),
+    "CONTROL: an unfinished token in the same state still pales and cools",
+  );
 });
 
 test("streak tiers map to the right colours", () => {

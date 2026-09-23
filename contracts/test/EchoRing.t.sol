@@ -14,20 +14,21 @@ import {FrameRenderer} from "../src/render/FrameRenderer.sol";
 /// has no echo-bearing case in it. Regenerate both pins together with
 /// `node tools/echo-ring-fixture.mjs` if the path format ever changes.
 contract EchoRingTest is MroTestBase {
-    /// The property that protects every existing token.
-    function test_aFoundingTokenIsDrawnExactlyAsBefore() public pure {
-        (uint256 own, uint256 echo) = FrameRenderer.ringBudget(3650, 0);
-        assertEq(own, 10, "ten own rings, unchanged");
+    /// A founding token draws its own ring and nothing else.
+    function test_aFoundingTokenDrawsNoEchoRing() public pure {
+        (uint256 own, uint256 echo) = FrameRenderer.ringBudget(365, 0);
+        assertEq(own, 1, "the ring for the year it finished");
         assertEq(echo, 0, "and no echo ring");
-        assertEq(FrameRenderer.rings(3650, 0), 10);
+        assertEq(FrameRenderer.rings(365, 0), 1);
     }
 
-    /// A child gives up one slot, permanently.
-    function test_aChildsOwnRingsCapAtNine() public pure {
-        (uint256 own, uint256 echo) = FrameRenderer.ringBudget(3650, 365);
-        assertEq(own, 9, "nine of its own");
+    /// A child adds a ring rather than sharing one: since Spec 10f there is
+    /// only ever one own ring, so there is nothing to share.
+    function test_aFinishedChildDrawsTwoRings() public pure {
+        (uint256 own, uint256 echo) = FrameRenderer.ringBudget(365, 365);
+        assertEq(own, 1, "its own finished year");
         assertEq(echo, 1, "plus the echo ring");
-        assertEq(FrameRenderer.rings(3650, 365), 10, "never more than ten");
+        assertEq(FrameRenderer.rings(365, 365), 2, "never more than two");
     }
 
     /// A newborn child is one ring, not zero.
@@ -40,16 +41,18 @@ contract EchoRingTest is MroTestBase {
 
     /// One echo day is as much an echo as a thousand: the ring is a fact about
     /// the line existing, not a measure of how long it ran.
-    function test_oneEchoDayIsEnoughToTakeTheSlot() public pure {
-        (uint256 own, uint256 echo) = FrameRenderer.ringBudget(3650, 1);
-        assertEq(own, 9);
+    function test_oneEchoDayIsEnoughToDrawTheRing() public pure {
+        (uint256 own, uint256 echo) = FrameRenderer.ringBudget(365, 1);
+        assertEq(own, 1);
         assertEq(echo, 1);
     }
 
     /// The constant that makes the cost predictable.
     function test_theEchoRingIsAlways53CellsOnASide() public pure {
-        for (uint32 y = 1; y <= 10; y++) {
-            uint256 total = FrameRenderer.rings(y * 365, 365);
+        // Both ring counts a child can have: the echo alone, and the echo
+        // inside its own finished ring.
+        for (uint32 level = 1; level <= 365; level += 364) {
+            uint256 total = FrameRenderer.rings(level, 365);
             uint256 size = FrameRenderer.canvas(total);
             uint256 o = 2 * (total - 1);
             assertEq(size - 2 * o, 53, "the depth cancels at every ring count");
@@ -94,23 +97,24 @@ contract EchoRingTest is MroTestBase {
             "byte for byte with the JavaScript"
         );
 
-        // And at the other extreme: a child at the cap draws the same 54 runs
-        // one slot deeper, where every coordinate is two digits.
-        bytes memory deep = FrameRenderer.echoRingBars(2 * 9, 53);
+        // And at the other extreme: a FINISHED child draws the same 54 runs one
+        // slot deeper, inside its own ring. Spec 10f made that depth 2 rather
+        // than the 18 a nine-ring child used to reach.
+        bytes memory deep = FrameRenderer.echoRingBars(2 * 1, 53);
         assertEq(_countRuns(deep), 54);
-        assertEq(deep.length, 756, "the deepest echo ring, all two-digit");
+        assertEq(deep.length, 721, "the deepest echo ring");
         assertEq(
             keccak256(deep),
-            0xf9c9a5d28305a0e04d3c25f29d1d273e31c5cb27997535d8b0ef4d2e50f2c85b,
-            "byte for byte at the cap too"
+            0x224bf74265fd2922b70cb1567538e4ef019b87b8260e5ba371fccbf01068b5c8,
+            "byte for byte on a finished child too"
         );
     }
 
     /// The ring is drawn at the depth the innermost slot sits at, whatever the
     /// token's own ring count, and it never overlaps a solid ring.
     function test_theEchoRingSitsInsideEveryEarnedRing() public pure {
-        (uint256 own,) = FrameRenderer.ringBudget(3650, 365);
-        uint256 size = FrameRenderer.canvas(FrameRenderer.rings(3650, 365));
+        (uint256 own,) = FrameRenderer.ringBudget(365, 365);
+        uint256 size = FrameRenderer.canvas(FrameRenderer.rings(365, 365));
         // The innermost SOLID ring is at depth 2 * (own - 1), so the echo ring
         // at depth 2 * own is one slot further in with the usual one-cell gap.
         // Only the side length is worth asserting: the depth relation is

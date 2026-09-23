@@ -102,7 +102,7 @@ test("the five finisher Marks are given, never sold", () => {
     assert.equal(LADDER[id].needsWhole, true);
   }
   assert.deepEqual([11, 12, 13, 14, 15].map(id => LADDER[id].name),
-    ["aorta", "chamber", "valve", "atrium", "apex"]);
+    ["Aorta", "Chamber", "Valve", "Atrium", "Apex"]);
   assert.deepEqual([11, 12, 13, 14, 15].map(id => LADDER[id].supply),
     [Infinity, 50, 10, 3, 1]);
 });

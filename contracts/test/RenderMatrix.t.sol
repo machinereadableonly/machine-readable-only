@@ -49,10 +49,13 @@ contract RenderMatrixTest is Test {
         // children were added so the echo ring stopped being invisible here,
         // then 69 with the finisher's digit band: five ordinals spanning the
         // range and one crossing the band with the Marks that change its ink.
-        // The count is asserted so a fixture that silently regenerates SMALLER
-        // -- a matrix case dropped by an edit -- fails here rather than passing
-        // with less coverage.
-        assertEq(cases.length, 69, "the fixture is not the size it should be");
+        // 64 since Spec 10f ended the year at 365: the ring sweep lost four of
+        // its seven year counts and the two-years-plus-echo child lost its
+        // premise, because no token can reach either state. The count is
+        // asserted so a fixture that silently regenerates SMALLER -- a matrix
+        // case dropped by an edit -- fails here rather than passing with less
+        // coverage.
+        assertEq(cases.length, 64, "the fixture is not the size it should be");
 
         for (uint256 i; i < cases.length; ++i) {
             RenderFixture.Case memory c = cases[i];

@@ -105,11 +105,11 @@ export const LADDER = {
   8:  earned(8,  "Break",  365),
   9:  bought(9,  "Tint",   250_000_000,   { requiresAny: ANY_IRIS, variants: 2 }),
   10: bought(10, "Aura",   25_000_000,    { requiresAny: ANY_IRIS }),
-  11: finisher(11, "aorta",   Infinity),
-  12: finisher(12, "chamber", 50),
-  13: finisher(13, "valve",   10),
-  14: finisher(14, "atrium",  3),
-  15: finisher(15, "apex",    1),
+  11: finisher(11, "Aorta",   Infinity),
+  12: finisher(12, "Chamber", 50),
+  13: finisher(13, "Valve",   10),
+  14: finisher(14, "Atrium",  3),
+  15: finisher(15, "Apex",    1),
 };
 
 /// The names of the three Iris shapes and the two Tint inks, by variant index.
