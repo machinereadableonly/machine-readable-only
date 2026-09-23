@@ -5,8 +5,11 @@ import { heartTarget } from "../heart-target.mjs";
 import { canvasUnits, DIGIT_INK } from "../render-token.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
          rungOf, colourAt, noiseAt, staticAt, inks, BEAT_TO, ringBudget, ringsFor, ringSpan,
-         HUSH_QUIET, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
+         HUSH_QUIET, VESSEL_GOLD, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
          fieldFor, absenceOf, rungFor,
+         MARKS, markNames, finisherInk, finisherMark,
+         AORTA, CHAMBER, VALVE, ATRIUM, APEX,
+         AORTA_RED, CHAMBER_BLUE, VALVE_BRONZE, ATRIUM_SILVER, APEX_GOLD,
        } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
@@ -185,9 +188,11 @@ test("the frame seals only when the heart is whole", () => {
 });
 
 test("canvas grows four cells per ring, with a gap between rings", () => {
-  // Two cells per side per year: the ring, and the blank that separates it from
-  // the next one in. Without the blank the rings merge into a single slab and
-  // the year count cannot be read off the image.
+  // Two cells per side per RING: the ring itself, and the blank that separates
+  // it from the next one in. Without the blank two rings merge into a single
+  // slab and cannot be told apart. Since Spec 10f a token has at most two --
+  // its own finished year and, for a child, its echo -- so the widest canvas
+  // the piece can produce is 57 cells.
   assert.equal(canvasFor(0), 51);
   assert.equal(canvasFor(1), 53);
   assert.equal(canvasFor(1, 365), 57, "a finished child: its own ring and the echo");
@@ -196,7 +201,13 @@ test("canvas grows four cells per ring, with a gap between rings", () => {
 
 test("a finished token keeps one ring of its own, and a child one more", () => {
   // Spec 10f: the year ends at 365, so a token has at most ONE ring of its own.
-  // MUST equal FrameRenderer.ringBudget, asserted there too.
+  //
+  // MUST AGREE WITH FrameRenderer.ringBudget, which is asserted there. Not
+  // byte-identical to it: this one takes YEARS (level / 365, already floored
+  // by the caller) where Solidity takes the LEVEL and compares it with
+  // DAY_CELLS. The two answers are the same for every level, and the
+  // cross-language differential is what proves it -- so the mirror to keep in
+  // step is the ANSWER, not the argument.
   assert.deepEqual(ringBudget(1, 0), { own: 1, echoRings: 0 });
   assert.deepEqual(ringBudget(10, 0), { own: 1, echoRings: 0 },
     "a year count the chain can no longer reach still draws one");
@@ -552,11 +563,14 @@ test("a finisher's digit band does not stop the code decoding", () => {
   // glyph carries more ink than a 1 -- and 65535 the sparsest, so both ends
   // of the ink range are here.
   const SIZES = [256, 500, 848, 1080, 1600];
-  const ORDINALS = [1, 42, 365, 0xaaaa, 0xffff];
+  const ORDINALS = [1, 3, 9, 42, 365, 0xaaaa, 0xffff];
 
   for (const ordinal of ORDINALS) {
-    const svg = render({ level: 365, streak: 365, years: 1,
-                         lastDay: 1000, today: 1000, ordinal });
+    // Wearing the Mark the place earns, so what decodes here is what ships:
+    // the band is drawn in that Mark's ink, and silver and bronze are the two
+    // furthest from the near-black every earlier sweep used.
+    const svg = render({ level: 365, streak: 365, years: 1, lastDay: 1000,
+                         today: 1000, ordinal, marks: [finisherMark(ordinal)] });
     for (const px of SIZES) {
       const got = scanResult(svg, px);
       assert.ok(got.ok,
@@ -584,4 +598,77 @@ test("the band is drawn only for a finisher, and grows the canvas when it is", (
   assert.ok(banded.includes(`viewBox="0 0 ${canvasUnits(canvasFor(1), CODE.size)}`),
     "and its canvas is the banded one");
   assert.ok(banded.length > plain.length, "which costs bytes");
+});
+
+// ---------------------------------------------------------------------------
+// The five finisher Marks, and the ink the number is written in.
+// ---------------------------------------------------------------------------
+
+test("a finishing place earns exactly one Mark, at every boundary of the ladder", () => {
+  // MUST equal MachineReadableOnly.finisherMark. Every boundary and one step
+  // either side of it, because the caps are a promise the operator made and an
+  // off-by-one here would hand the wrong Mark to a real finisher.
+  for (const [ordinal, id] of [
+    [1, APEX],
+    [2, ATRIUM], [4, ATRIUM],
+    [5, VALVE], [14, VALVE],
+    [15, CHAMBER], [64, CHAMBER],
+    [65, AORTA], [0xffff, AORTA],
+  ]) {
+    assert.equal(finisherMark(ordinal), id, `place ${ordinal}`);
+  }
+});
+
+test("the Mark IS the ink the finisher's number is written in", () => {
+  // MUST equal MarkRenderer.finisherInk. Gold, silver and bronze are a ranking
+  // every viewer already reads; blue and the heart's red finish the five.
+  assert.equal(finisherInk([APEX]), APEX_GOLD);
+  assert.equal(finisherInk([ATRIUM]), ATRIUM_SILVER);
+  assert.equal(finisherInk([VALVE]), VALVE_BRONZE);
+  assert.equal(finisherInk([CHAMBER]), CHAMBER_BLUE);
+  assert.equal(finisherInk([AORTA]), AORTA_RED);
+
+  // Every ink is seven characters, so which one a token wears never changes
+  // its byte count -- which is what lets one gas figure stand for all five.
+  for (const ink of [APEX_GOLD, ATRIUM_SILVER, VALVE_BRONZE, CHAMBER_BLUE, AORTA_RED, DIGIT_INK])
+    assert.equal(ink.length, 7, `${ink} is not seven characters`);
+
+  // No paid Mark moves it, and a state the chain cannot produce -- an ordinal
+  // with no finisher Mark -- keeps the near-black the band always had.
+  assert.equal(finisherInk([VESSEL, AURA, BEAT, BREAK]), DIGIT_INK);
+  assert.equal(finisherInk([]), DIGIT_INK);
+  // The deepest place wins. Unreachable on chain, pinned so the order cannot
+  // drift away from Solidity's, which checks Apex first for the same reason.
+  assert.equal(finisherInk([AORTA, APEX]), APEX_GOLD);
+});
+
+test("the band is drawn in the ink of the Mark the token holds", () => {
+  const base = { level: 365, streak: 365, years: 1, lastDay: 1000, today: 1000, ordinal: 42 };
+  for (const [id, ink] of [
+    [APEX, APEX_GOLD], [ATRIUM, ATRIUM_SILVER], [VALVE, VALVE_BRONZE],
+    [CHAMBER, CHAMBER_BLUE], [AORTA, AORTA_RED],
+  ]) {
+    const svg = render({ ...base, marks: [id] });
+    assert.ok(svg.includes(`<g transform="scale(9)"><path fill="${ink}"`),
+      `mark ${id} should write the band in ${ink}`);
+  }
+
+  // Vessel gilds the frame and the rings; the number keeps the colour its
+  // PLACE earned. Beat's far stop is the same string as Chamber's blue, so a
+  // token wearing Beat and no finisher Mark must still write a near-black
+  // band -- sharing a string is not sharing the right to colour the number.
+  const gilded = render({ ...base, marks: [VESSEL, VALVE] });
+  assert.ok(gilded.includes(`<g transform="scale(9)"><path fill="${VALVE_BRONZE}"`));
+  assert.ok(gilded.includes(`fill="${VESSEL_GOLD}"`), "and the frame really did go gold");
+  assert.ok(render({ ...base, marks: [BEAT] })
+    .includes(`<g transform="scale(9)"><path fill="${DIGIT_INK}"`));
+});
+
+test("the five finisher names reach the metadata in ladder order", () => {
+  assert.equal(MARKS.length, 15, "ten paid Marks and five finisher Marks");
+  assert.equal(markNames([VESSEL, APEX]), '["vessel","apex"]');
+  assert.equal(markNames([AORTA]), '["aorta"]');
+  // Lower case, matching the existing ten. The Warden's ladder capitalises
+  // them for its own listing; the on-chain metadata does not.
+  for (const name of MARKS) assert.equal(name, name.toLowerCase());
 });

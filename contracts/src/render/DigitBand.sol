@@ -14,6 +14,12 @@ import {FrameGeometry} from "./FrameGeometry.sol";
 /// anyway, because inks are PEERS -- nothing about teal says it is rarer than
 /// violet -- so rank had to be read from metadata. A number IS the rank.
 ///
+/// Colour then came back on top of the number rather than instead of it: the
+/// five finisher Marks write the digits in gold, silver, bronze, blue and the
+/// heart's red. That is not the rejected design returning. The number already
+/// carries the rank, so the ink no longer has to, and gold over silver over
+/// bronze is a ranking a viewer reads at a glance before reading the digits.
+///
 /// NO SVG <text>, EVER. A token drawn with a font depends on what the VIEWER
 /// has installed: it renders differently in two browsers and may not render at
 /// all in ten years. Every digit here is a 3x3 cell bitmap emitted as a path,
@@ -48,26 +54,32 @@ library DigitBand {
     /// margins at both ends.
     uint256 internal constant SPAN = BITS * STEP - (STEP - GW);
 
-    /// @notice The ink the number is written in.
+    /// @notice The fallback ink: what the band is written in when the token
+    /// holds an ordinal but no finisher Mark.
     ///
-    /// @dev A NEAR-BLACK, not the token's own colour and not the frame's. This
-    /// is the ink on every sheet the operator judged, and the reason is the
-    /// reason colour lost in the first place: the number is WRITING, and
-    /// writing is read, not coloured. Taking the frame's fill was tried and
-    /// rendered -- at a deep streak the border comes out in the heart's red and
-    /// reads as another band of ornament rather than as a caption.
+    /// @dev THE BAND HAS FIVE INKS, and this is not one of them. The number is
+    /// written in the ink of the finisher Mark the token was given -- gold,
+    /// silver, bronze, blue or the heart's red, chosen by the operator
+    /// 2026-09-23 and selected by `MarkRenderer.finisherInk`. The five ARE the
+    /// rank, which is why they can be colours at all: colour lost to a number
+    /// in section 10k because five inks with nothing ranking them are peers,
+    /// and a place ranks them.
     ///
-    /// It also keeps the band still while everything else moves: the frame
-    /// walks down the tier ladder as a streak lapses and turns gold under
-    /// Vessel, and a finisher's number should not change colour because its
-    /// holder missed a week.
+    /// What is still true is what the ink must NOT be. It is not the frame's
+    /// fill and not the token's own colour: the frame walks down the tier
+    /// ladder as a streak lapses and turns gold under Vessel, and a finisher's
+    /// number must not change colour because its holder missed a week. The
+    /// Mark is fixed on the day the place is earned, so the band is the one
+    /// part of the picture that never moves again.
     ///
-    /// Whether the band should EVER carry an ink of its own is the one question
-    /// section 10j left open. This is an answer to it, not a placeholder, and
-    /// it is the one the rendered sheets support.
+    /// `_finish` writes the Mark bit and the ordinal in a single word, so a
+    /// token with an ordinal and no Mark cannot exist on chain. This near-black
+    /// is what the renderer does when it is handed one anyway -- the spike's
+    /// `setMarks` can write it -- and it is the ink every pre-Mark sheet and
+    /// every Sepolia token minted before this change already carries.
     ///
-    /// Seven characters, like every other ink in the picture, so the byte count
-    /// does not depend on which one is chosen.
+    /// Seven characters, like all five of the real inks, so the byte count does
+    /// not depend on which one is chosen.
     string internal constant INK = "#2f2f2f";
 
     /// @dev Three glyph cells and one of air between the digits and the ring.

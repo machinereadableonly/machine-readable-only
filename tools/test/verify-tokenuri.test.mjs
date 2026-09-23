@@ -12,7 +12,8 @@ import { decodeTokenUri, attributesOf, verifyUriString } from "../verify-tokenur
 import { tokenBitmap, SIZE } from "../token-bitmap.mjs";
 import { heartMaskBytes } from "../heart-mask.mjs";
 import { unpackModules } from "../qart.mjs";
-import { tokenUri, ACHE, STATIC, HUSH, BEAT, AURA, VESSEL } from "../render-token.mjs";
+import { tokenUri, ACHE, STATIC, HUSH, BEAT, AURA, VESSEL,
+         AORTA, CHAMBER, VALVE, ATRIUM, APEX } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 
 const DOMAIN = "example.com";
@@ -53,7 +54,7 @@ test("the attributes carry the spec's full list", () => {
   // carry the full list has to actually carry it.
   for (const key of ["Level", "Streak", "Heart", "Years", "Whole", "Mint Day",
                      "Last Day", "Agent Key", "Generation", "Parent", "Children",
-                     "Echo", "Resting", "Sunset", "Marks"]) {
+                     "Echo", "Resting", "Sunset", "Finisher", "Marks"]) {
     assert.ok(key in a, `attribute ${key} is missing`);
   }
   assert.equal(a.Heart, "364/365");
@@ -90,24 +91,60 @@ test("a raw hash in the JSON would break the parse, which is why none is emitted
   assert.ok(!ours.json.name.includes("#"), "a raw hash reached the name");
 });
 
-// 2.M1. The Years ATTRIBUTE keeps counting; only the RING stops at ten. Both
-// renderers capped the attribute, while three comments beside them and the
-// Warden's own tokenView described the uncapped reading -- and because both
-// renderers agreed, the JS/Solidity differential could not see it. Past ten
-// years `Level` was the only surviving record of a token's age.
-test("the Years attribute counts past the ten-ring cap", () => {
+// 2.M1. The Years ATTRIBUTE is read from the LEVEL, not from the ring. Both
+// renderers used to derive it from the ring count, while three comments beside
+// them and the Warden's own tokenView described the uncapped reading -- and
+// because both renderers agreed, the JS/Solidity differential could not see
+// it. `Level` was the only surviving record of a token's age.
+//
+// Spec 10f then stopped the chain at 365 credited days, so the levels below
+// are no longer reachable: this is now a robustness assertion about what the
+// renderer does with a level it is HANDED, which is the one thing a swapped
+// renderer or a future seeding rule could still change. Its Solidity twin is
+// Renderer.t.sol::test_theYearsAttributeIsReadFromTheLevelNotTheRing.
+test("the Years attribute is read from the level, not from the ring", () => {
   const eleven = attributesOf(decodeTokenUri(uriFor({
     level: 4_015, streak: 5, lastDay: 20_700, today: 20_700,
   })).json);
-  assert.equal(eleven.Years, 11, "a token in its eleventh year must say so");
+  assert.equal(eleven.Years, 11, "a token handed an eleventh year must say so");
   assert.equal(eleven.Level, 4_015);
 
-  // The control, at the cap itself: ten is still ten, so this is not an
-  // off-by-one dressed as a fix.
-  const ten = attributesOf(decodeTokenUri(uriFor({
-    level: 3_650, streak: 5, lastDay: 20_700, today: 20_700,
+  // The control, at the level the chain can actually reach: one ring, one
+  // year, so this is not an off-by-one dressed as a fix.
+  const one = attributesOf(decodeTokenUri(uriFor({
+    level: 365, streak: 5, lastDay: 20_700, today: 20_700,
   })).json);
-  assert.equal(ten.Years, 10);
+  assert.equal(one.Years, 1);
+});
+
+// The finisher's place, and the Mark it earned. Both reach the metadata so an
+// agent can read the rank without rasterising the image and decoding a border.
+test("the finisher's place and Mark reach the metadata", () => {
+  const a = attributesOf(decodeTokenUri(uriFor({
+    level: 365, streak: 365, lastDay: 1000, today: 1000,
+    marks: [CHAMBER], ordinal: 42,
+  })).json);
+  assert.equal(a.Finisher, 42);
+  assert.deepEqual(a.Marks, ["chamber"]);
+
+  // Emitted ALWAYS, 0 included, so a reader can filter on it rather than
+  // special-casing absence -- the same rule `Echo` follows.
+  const none = attributesOf(decodeTokenUri(uriFor({
+    level: 364, streak: 100, lastDay: 1000, today: 1000,
+  })).json);
+  assert.equal(none.Finisher, 0);
+  assert.deepEqual(none.Marks, []);
+
+  // All five names, lower case, in ladder order after the ten paid Marks.
+  for (const [id, name] of [
+    [AORTA, "aorta"], [CHAMBER, "chamber"], [VALVE, "valve"],
+    [ATRIUM, "atrium"], [APEX, "apex"],
+  ]) {
+    const one = attributesOf(decodeTokenUri(uriFor({
+      level: 365, streak: 365, lastDay: 1000, today: 1000, marks: [VESSEL, id], ordinal: 7,
+    })).json);
+    assert.deepEqual(one.Marks, ["vessel", name]);
+  }
 });
 
 // -- the destination check ---------------------------------------------------

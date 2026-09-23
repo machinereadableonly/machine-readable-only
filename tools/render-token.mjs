@@ -94,6 +94,22 @@ export const BEAT_TO = "#2000ff";
 export const TINT_VIOLET = "#9800fc";
 export const TINT_GOLD = "#b8860b";
 
+// The five finisher inks, chosen by the operator 2026-09-23 from rendered sheets
+// (spec 10l). Gold, silver and bronze are a ranking every viewer already reads
+// without being told; blue and the heart's red finish the five below them. Two
+// of the strings are shared with a paid Mark -- Apex's gold is Vessel's, and
+// Chamber's blue is Beat's far stop -- and that is a coincidence of value, not
+// a link: finisherInk reads the finisher ids only, so wearing Vessel can never
+// colour the number. Seven characters each, so which Mark a token wears never
+// changes its byte count.
+// MUST match MarkRenderer.AORTA_RED / CHAMBER_BLUE / VALVE_BRONZE /
+// ATRIUM_SILVER / APEX_GOLD in Solidity.
+export const AORTA_RED = "#c8102e";
+export const CHAMBER_BLUE = "#2000ff";
+export const VALVE_BRONZE = "#a0612b";
+export const ATRIUM_SILVER = "#8c9096";
+export const APEX_GOLD = "#b8860b";
+
 // Re-measured 2026-08-29, correcting an earlier note in this file that claimed
 // #f9eaef was the deepest tint that still decodes. It is not: #f9eaef fails at
 // 900 px, and #f7e3e8 fails at 900, 700 and 500. The shipped #fdf3e3 decodes at
@@ -104,12 +120,17 @@ export const TINT_GOLD = "#b8860b";
 // than as a slightly deeper pink that would vanish when both Marks are worn at
 // once.
 
-// Ten Mark ids in five pairs, nine distinct names, eight surfaces. Index n here
-// is mark id n + 1. Both Iris ids emit "iris": same surface, two routes, and the
-// route is visible in the image rather than in the JSON.
+// Fifteen Mark ids: ten paid ones in five pairs, then the five finisher Marks
+// a place earns. Fourteen distinct names, nine surfaces. Index n here is mark
+// id n + 1. Both Iris ids emit "iris": same surface, two routes, and the route
+// is visible in the image rather than in the JSON. The five finisher names are
+// LOWER CASE here, matching the ten -- the Warden's ladder capitalises them for
+// its own listing, and the on-chain metadata does not.
+// MUST stay identical to MarkRenderer.names' ladder in Solidity.
 export const MARKS = [
   "hush", "ache", "static", "beat", "iris",
   "iris", "vessel", "break", "tint", "aura",
+  "aorta", "chamber", "valve", "atrium", "apex",
 ];
 
 // TIERS is written top-down (100+ first) while Solidity indexes the ladder
@@ -813,11 +834,12 @@ export function renderSvg(modules, want, size, state) {
   // erase-to-ground step lands on top. They never reach the frame, which is
   // outside the block entirely.
   // The finisher's number round the border, drawn in MODULES in its own group,
-  // outside everything else on the canvas, in DIGIT_INK rather than any fill
-  // the token's state can move. Mirrors Renderer._digitGroup in Solidity.
+  // outside everything else on the canvas. It is written in the ink of the
+  // finisher Mark the token holds -- the token's PLACE, fixed for ever -- and
+  // not in any fill the streak can move. Mirrors Renderer._digitGroup.
   const digits = digitBandCells(ordinal, canvas, size);
   const digitBody = digits.cells.size
-    ? asPath(DIGIT_INK, pathFor(digits.cells, digits.modules))
+    ? asPath(finisherInk(marks), pathFor(digits.cells, digits.modules))
     : "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg"${intrinsic} viewBox="0 0 ${span} ${span}" shape-rendering="crispEdges">`
@@ -866,6 +888,13 @@ export const VESSEL = 7;
 export const BREAK = 8;
 export const TINT = 9;
 export const AURA = 10;
+// The five finisher Marks, ids 11 to 15, deepest place last. Given rather than
+// bought: a place earns exactly one of them, so a token holds one or none.
+export const AORTA = 11;
+export const CHAMBER = 12;
+export const VALVE = 13;
+export const ATRIUM = 14;
+export const APEX = 15;
 
 /** The marks this token wears, in ladder order, as a JSON array. */
 export function markNames(ids) {
@@ -877,6 +906,42 @@ export function markNames(ids) {
 
 /** Does this token wear mark `id`? The one predicate every selector uses. */
 export const hasMark = (ids, id) => ids.includes(id);
+
+/**
+ * The ink the finisher's number is written in: the Mark IS the ink.
+ *
+ * Decided by the operator 2026-09-23 (spec 10l). Checked highest place first,
+ * though a token only ever holds one. A token with an ordinal and no finisher
+ * Mark cannot exist on chain -- `_finish` writes both in one word -- so the
+ * fallback is only what the renderer does when it is handed a state the chain
+ * cannot produce.
+ * MUST stay identical to MarkRenderer.finisherInk in Solidity.
+ */
+export function finisherInk(ids) {
+  if (hasMark(ids, APEX)) return APEX_GOLD;
+  if (hasMark(ids, ATRIUM)) return ATRIUM_SILVER;
+  if (hasMark(ids, VALVE)) return VALVE_BRONZE;
+  if (hasMark(ids, CHAMBER)) return CHAMBER_BLUE;
+  if (hasMark(ids, AORTA)) return AORTA_RED;
+  return DIGIT_INK;
+}
+
+/**
+ * Which Mark a finishing place earns. The caps are the operator's, set
+ * 2026-09-23 as a race with a prize for being first.
+ *   1st 15 apex, 2nd-4th 14 atrium, 5th-14th 13 valve, 15th-64th 12 chamber,
+ *   65th on 11 aorta, never refused.
+ * MUST stay identical to MachineReadableOnly.finisherMark in Solidity. Mirrored
+ * here so a sweep can give a state the Mark its ordinal actually earns rather
+ * than pairing the two by hand and getting it wrong.
+ */
+export function finisherMark(ordinal) {
+  if (ordinal <= 1) return APEX;
+  if (ordinal <= 4) return ATRIUM;
+  if (ordinal <= 14) return VALVE;
+  if (ordinal <= 64) return CHAMBER;
+  return AORTA;
+}
 
 /**
  * @param state { tokenId, level, streak, lastDay, mintDay, today, generation,
@@ -958,6 +1023,13 @@ export function tokenUri(modules, want, size, state) {
         // surviving record of a token's age.
         num("Years", years),
         str("Whole", level >= DAY_CELLS ? "yes" : "no"),
+        // The finisher's PLACE, so an agent can read the rank without
+        // rasterising the image and decoding a border. Emitted ALWAYS, 0
+        // included, the same rule `Echo` follows. It sits here rather than
+        // beside the other lifecycle attributes because Solidity splits the
+        // list in two and `_attrsB` is already at the stack limit under the
+        // coverage profile -- the position is part of the byte-for-byte diff.
+        num("Finisher", ordinal),
         num("Mint Day", mintDay),
         num("Last Day", lastDay),
         str("Agent Key", keyHex),

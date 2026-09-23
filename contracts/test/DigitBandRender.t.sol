@@ -142,28 +142,99 @@ contract DigitBandRenderTest is Test {
         assertTrue(first != later, "the border IS the rank");
     }
 
-    /// The band is written in its own near-black and nothing the token's state
-    /// does moves it. A Vessel token's frame turns gold and a lapsed token's
-    /// frame walks down the tier ladder; the number stays the number.
+    /// @dev The band group, with the ink it is expected to be written in.
+    function _bandIn(string memory ink) internal pure returns (string memory) {
+        return string.concat('<g transform="scale(9)"><path fill="', ink);
+    }
+
+    /// The Mark IS the ink: each of the five finisher Marks writes the number
+    /// in its own colour, end to end through the renderer rather than only in
+    /// MarkRenderer's selector.
+    function test_eachFinisherMarkWritesTheNumberInItsOwnInk() public view {
+        TokenView memory v = _finished();
+        uint256 ordinal = uint256(42) << ORDINAL_SHIFT;
+
+        v.marks = MarkRenderer.APEX | ordinal;
+        assertTrue(LibString.contains(r.svg(v), _bandIn(MarkRenderer.APEX_GOLD)), "apex: gold");
+        v.marks = MarkRenderer.ATRIUM | ordinal;
+        assertTrue(
+            LibString.contains(r.svg(v), _bandIn(MarkRenderer.ATRIUM_SILVER)), "atrium: silver"
+        );
+        v.marks = MarkRenderer.VALVE | ordinal;
+        assertTrue(
+            LibString.contains(r.svg(v), _bandIn(MarkRenderer.VALVE_BRONZE)), "valve: bronze"
+        );
+        v.marks = MarkRenderer.CHAMBER | ordinal;
+        assertTrue(
+            LibString.contains(r.svg(v), _bandIn(MarkRenderer.CHAMBER_BLUE)), "chamber: blue"
+        );
+        v.marks = MarkRenderer.AORTA | ordinal;
+        assertTrue(LibString.contains(r.svg(v), _bandIn(MarkRenderer.AORTA_RED)), "aorta: red");
+    }
+
+    /// The band is written in its Mark's ink and nothing else the token's state
+    /// does moves it. A Vessel token's frame turns gold; the number keeps the
+    /// colour its PLACE earned, which is the one thing about it that is fixed
+    /// for ever.
     function test_theBandsInkIsFixedAgainstEverythingElseMoving() public view {
         TokenView memory v = _finished();
-        string memory want = string.concat('<g transform="scale(9)"><path fill="', DigitBand.INK);
+        string memory want = _bandIn(MarkRenderer.VALVE_BRONZE);
 
-        v.marks = uint256(1) << ORDINAL_SHIFT;
-        assertTrue(LibString.contains(r.svg(v), want), "plain: the band is in its own ink");
+        v.marks = MarkRenderer.VALVE | (uint256(9) << ORDINAL_SHIFT);
+        assertTrue(LibString.contains(r.svg(v), want), "plain: the band is in its Mark's ink");
 
         // Vessel turns the frame and the rings gold.
-        v.marks = MarkRenderer.VESSEL | (uint256(1) << ORDINAL_SHIFT);
-        assertTrue(LibString.contains(r.svg(v), want), "Vessel: still its own ink");
+        v.marks = MarkRenderer.VESSEL | MarkRenderer.VALVE | (uint256(9) << ORDINAL_SHIFT);
+        assertTrue(LibString.contains(r.svg(v), want), "Vessel: still the Mark's ink");
         assertTrue(
             LibString.contains(r.svg(v), MarkRenderer.frameFill(v.marks, "#000000")),
             "and the frame really did go gold, so this is not a vacuous check"
         );
 
-        // A deep lapse walks the frame back down the tier ladder.
+        // Beat's far stop is the same string as Chamber's blue, and Vessel's
+        // gold the same as Apex's. A Mark that shares an ink must not be able
+        // to write the band, because only the PLACE may choose that colour.
+        v.marks = MarkRenderer.BEAT | (uint256(9) << ORDINAL_SHIFT);
+        assertTrue(
+            LibString.contains(r.svg(v), _bandIn(DigitBand.INK)),
+            "Beat shares Chamber's string and still does not colour the number"
+        );
+    }
+
+    /// An ordinal with no finisher Mark cannot be reached on chain -- `_finish`
+    /// writes both in one word -- so this is what the renderer does when it is
+    /// handed a state the chain cannot produce: the near-black it always had.
+    function test_anOrdinalWithNoFinisherMarkKeepsTheNearBlack() public view {
+        TokenView memory v = _finished();
         v.marks = uint256(1) << ORDINAL_SHIFT;
-        v.today = 1400;
-        assertTrue(LibString.contains(r.svg(v), want), "lapsed: still its own ink");
+        assertTrue(LibString.contains(r.svg(v), _bandIn(DigitBand.INK)));
+    }
+
+    // ---------------------------------------------------------------------
+    // THE METADATA
+    // ---------------------------------------------------------------------
+
+    /// The place is a trait, so an agent can read the rank without rasterising
+    /// the image and decoding a border. `Finisher` is emitted ALWAYS, 0
+    /// included, so a reader can filter on it rather than special-casing
+    /// absence -- the same rule `Echo` follows.
+    function test_theFinishersPlaceIsATrait() public view {
+        TokenView memory v = _finished();
+        v.marks = MarkRenderer.CHAMBER | (uint256(42) << ORDINAL_SHIFT);
+        assertTrue(
+            LibString.contains(r.tokenURI(v), '{"trait_type":"Finisher","value":42}'),
+            "the ordinal must reach the metadata"
+        );
+        assertTrue(
+            LibString.contains(r.tokenURI(v), '"chamber"'),
+            "and so must the Mark the place earned"
+        );
+
+        v.marks = 0;
+        assertTrue(
+            LibString.contains(r.tokenURI(v), '{"trait_type":"Finisher","value":0}'),
+            "a token that has not finished says so with a 0"
+        );
     }
 
     /// The whole ordinal range draws, and the dearest ordinal is the one full

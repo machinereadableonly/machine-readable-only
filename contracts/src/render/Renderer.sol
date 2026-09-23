@@ -315,14 +315,16 @@ contract Renderer is IRenderer {
     /// @dev The finisher's number round the border, drawn in QR MODULES in its
     /// own group, outside everything else on the canvas.
     ///
-    /// It is written in DigitBand's own near-black, not in the frame's fill and
-    /// not in the token's colour -- see that constant for why. The band is the
-    /// one part of the picture that does not move with the streak.
+    /// It is written in the ink of the finisher Mark the token holds -- the
+    /// Mark IS the ink, see `MarkRenderer.finisherInk`. That is the token's
+    /// PLACE, which is fixed for ever, and not the frame's fill or the token's
+    /// colour, both of which move with the streak. The band is the one part of
+    /// the picture that never moves after the day it is written.
     function _digitGroup(TokenView memory v) private pure returns (string memory) {
         string memory digits = DigitBand.path(
             MarkRenderer.ordinal(v.marks),
             FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)),
-            DigitBand.INK
+            MarkRenderer.finisherInk(v.marks)
         );
         if (bytes(digits).length == 0) return "";
         return string(
@@ -453,6 +455,13 @@ contract Renderer is IRenderer {
                 _str("Heart", _heart(v.level)),
                 _num("Years", v.level / FrameGeometry.DAY_CELLS),
                 _str("Whole", v.level >= FrameGeometry.DAY_CELLS ? "yes" : "no"),
+                // The finisher's PLACE, so an agent can read the rank without
+                // rasterising the image and decoding a border. Emitted ALWAYS,
+                // 0 included, the same rule `Echo` follows. It sits in
+                // `_attrsA` rather than beside the other lifecycle attributes
+                // because `_attrsB` is already at the stack limit under the
+                // coverage profile, which cannot use the IR pipeline.
+                _num("Finisher", MarkRenderer.ordinal(v.marks)),
                 _num("Mint Day", v.mintDay),
                 _num("Last Day", v.lastDay)
             )

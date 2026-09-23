@@ -7,7 +7,7 @@
 // the handful of places where two axes actually interact.
 import {
   MARKS, HUSH, ACHE, STATIC, BEAT, VESSEL, BREAK, AURA,
-  IRIS_BOUGHT, IRIS_EARNED, TINT,
+  IRIS_BOUGHT, IRIS_EARNED, TINT, finisherMark,
 } from "./render-token.mjs";
 import { DAY_CELLS } from "./frame-geometry.mjs";
 
@@ -168,25 +168,45 @@ export function renderCases() {
   out.push({ label: "aura, never returned, a year", ...base, ...never, today: 1365, marks: [AURA] });
 
   // THE FINISHER'S DIGIT BAND. The ordinal is not a Mark: it rides in bits
-  // 64-95 of the same word, so it is orthogonal to every Mark combination and
-  // is pinned with a handful of representative values rather than swept. There
-  // are 65,535 of them, and the combination matrix is already the slowest test
-  // in the suite.
+  // 64-95 of the same word, so it is orthogonal to every paid Mark combination
+  // and is pinned with a handful of representative values rather than swept.
+  // There are 65,535 of them, and the combination matrix is already the
+  // slowest test in the suite.
   //
-  // The five chosen: the first finisher, an ordinary one, one that is also a
-  // day count, the alternating worst case for run merging, and every bit set.
-  // A 0 glyph carries more ink than a 1, so 1 draws MORE than 0xFFFF -- both
-  // ends are here deliberately.
-  for (const ordinal of [1, 42, 365, 0xaaaa, 0xffff]) {
-    out.push({ label: `finisher ${ordinal}`, ...base, ordinal });
+  // EVERY ROW CARRIES THE MARK ITS PLACE EARNS, from `finisherMark` rather
+  // than by hand, because the number is written in that Mark's ink: an ordinal
+  // paired with the wrong Mark would be a state the chain cannot produce, and
+  // pairing them by hand is how it would happen.
+  //
+  // The seven chosen: the first finisher, an ordinary one, one that is also a
+  // day count, the alternating worst case for run merging, and every bit set,
+  // plus 3 and 9. A 0 glyph carries more ink than a 1, so 1 draws MORE than
+  // 0xFFFF -- both ends are here deliberately. 3 and 9 earn Atrium and Valve,
+  // and they are here only for that: the other five ordinals earn Apex,
+  // Chamber and Aorta between them, which would leave silver and bronze with
+  // no cross-language case at all.
+  for (const ordinal of [1, 3, 9, 42, 365, 0xaaaa, 0xffff]) {
+    out.push({ label: `finisher ${ordinal}`, ...base, ordinal, marks: [finisherMark(ordinal)] });
   }
-  // The band takes the frame's fill, so a Vessel token writes its number in
-  // gold. That crossing is where the two languages could most easily disagree.
-  out.push({ label: "finisher 1, every drawing mark", ...base, marks: DRAWING_MARKS, ordinal: 1 });
+  // Vessel gilds the frame and the rings while the number keeps the colour its
+  // PLACE earned -- and Apex's gold is the same string as Vessel's, so this is
+  // also the case where writing the band from the wrong source would look
+  // right. That crossing is where the two languages could most easily disagree.
+  out.push({
+    label: "finisher 1, every drawing mark",
+    ...base, marks: [...DRAWING_MARKS, finisherMark(1)], ordinal: 1,
+  });
 
   // Frozen lifecycles. Both must hold their colour against a far-future clock.
-  out.push({ label: "resting", ...base, today: 9999, resting: true });
-  out.push({ label: "sunset", ...base, today: 9999, sunset: true });
+  //
+  // ONE DAY SHORT OF WHOLE, for the same reason the lapsed tier rows are. Spec
+  // 10f freezes a FINISHED token on its own, so at the base level of 365 these
+  // two would have held their colour whether resting and sunset did anything
+  // or not, and neither could fail for the reason it is here. At 364 the seal
+  // being tested is the one the row is named after.
+  const nearlyWhole = { level: DAY_CELLS - 1 };
+  out.push({ label: "resting", ...base, ...nearlyWhole, today: 9999, resting: true });
+  out.push({ label: "sunset", ...base, ...nearlyWhole, today: 9999, sunset: true });
 
   // A sunset that closed while this token had ALREADY lapsed, ONE DAY SHORT OF
   // WHOLE. The freeze is taken at the day the piece closed, so the token keeps
@@ -266,7 +286,12 @@ export function renderCases() {
   });
 
   // A lapse pales the heart; the echo is inherited and must not pale with it.
-  out.push({ label: "child, 30 days lapsed", ...base, ...child, today: 1030, echo: 365 });
+  // ONE DAY SHORT OF WHOLE: a finished token does not pale at all, so at the
+  // base level of 365 there was no lapse left for this row to measure.
+  out.push({
+    label: "child, 30 days lapsed",
+    ...base, ...child, level: DAY_CELLS - 1, today: 1030, echo: 365,
+  });
 
   // Both frozen lifecycles, carrying an echo. `sunset` is dropped from the soak
   // generator separately, by `!c.sunset`; `resting` is not, which is one more

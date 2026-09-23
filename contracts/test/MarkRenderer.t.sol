@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from "forge-std/Test.sol";
+import {DigitBand} from "../src/render/DigitBand.sol";
 import {MarkRenderer} from "../src/render/MarkRenderer.sol";
 import {Palette} from "../src/render/Palette.sol";
 
@@ -202,9 +203,10 @@ contract MarkRendererTest is Test {
     }
 
     /// @dev A variant in the high bits must not reach the metadata as a phantom
-    /// Mark name. The range moved from bits 1-7 to bits 1-10, so the property has
-    /// to be re-asserted rather than assumed.
-    function test_namesIgnoresEverythingAboveBitTen() public pure {
+    /// Mark name. The range moved from bits 1-7 to bits 1-10 and again to bits
+    /// 1-15 when the five finisher Marks landed, so the property has to be
+    /// re-asserted rather than assumed.
+    function test_namesIgnoresEverythingAboveBitFifteen() public pure {
         uint256 withVariants = MarkRenderer.IRIS_EARNED
             | (uint256(2) << 16) | (uint256(1) << 24) | (uint256(365) << 32);
         assertEq(MarkRenderer.names(withVariants), '["iris"]');
@@ -218,6 +220,72 @@ contract MarkRendererTest is Test {
 
     function test_beatsFarStopIsViolet() public pure {
         assertEq(MarkRenderer.BEAT_TO, "#2000ff");
+    }
+
+    // ---------------------------------------------------------------------
+    // The five finisher Marks
+    // ---------------------------------------------------------------------
+
+    function test_finisherMarkIdsFollowThePlaces() public pure {
+        // Ids 11 to 15, deepest place last, so bit n is still mark n.
+        assertEq(MarkRenderer.AORTA, 1 << 11, "Aorta is mark 11");
+        assertEq(MarkRenderer.CHAMBER, 1 << 12, "Chamber is mark 12");
+        assertEq(MarkRenderer.VALVE, 1 << 13, "Valve is mark 13");
+        assertEq(MarkRenderer.ATRIUM, 1 << 14, "Atrium is mark 14");
+        assertEq(MarkRenderer.APEX, 1 << 15, "Apex is mark 15");
+    }
+
+    function test_eachFinisherMarkHasItsInk() public pure {
+        assertEq(MarkRenderer.finisherInk(1 << 15), "#b8860b");
+        assertEq(MarkRenderer.finisherInk(1 << 14), "#8c9096");
+        assertEq(MarkRenderer.finisherInk(1 << 13), "#a0612b");
+        assertEq(MarkRenderer.finisherInk(1 << 12), "#2000ff");
+        assertEq(MarkRenderer.finisherInk(1 << 11), "#c8102e");
+        // An ordinal with no finisher bit cannot exist on chain; the spike's
+        // setMarks can write one, and it keeps the near-black it always had.
+        assertEq(MarkRenderer.finisherInk(0), "#2f2f2f");
+    }
+
+    /// @dev Every ink is seven characters, so which one a token wears never
+    /// changes its byte count. That is what lets one gas figure stand for all
+    /// five, and it is easy to break by choosing a named colour later.
+    function test_everyFinisherInkIsSevenCharacters() public pure {
+        assertEq(bytes(MarkRenderer.APEX_GOLD).length, 7);
+        assertEq(bytes(MarkRenderer.ATRIUM_SILVER).length, 7);
+        assertEq(bytes(MarkRenderer.VALVE_BRONZE).length, 7);
+        assertEq(bytes(MarkRenderer.CHAMBER_BLUE).length, 7);
+        assertEq(bytes(MarkRenderer.AORTA_RED).length, 7);
+        assertEq(bytes(DigitBand.INK).length, 7);
+    }
+
+    /// @dev A token holds exactly one finisher Mark, so the order below is
+    /// never exercised on chain. It is pinned anyway: the spike's setMarks can
+    /// write two, and an order that silently changed would be a renderer the
+    /// differential could not see disagreeing with itself.
+    function test_theDeepestPlaceWinsWhenTwoFinisherBitsAreSet() public pure {
+        uint256 both = MarkRenderer.APEX | MarkRenderer.AORTA;
+        assertEq(MarkRenderer.finisherInk(both), MarkRenderer.APEX_GOLD);
+    }
+
+    /// @dev The ten paid Marks move the picture; none of them moves the number.
+    function test_noPaidMarkChangesTheFinishersInk() public pure {
+        assertEq(MarkRenderer.finisherInk(_all() | MarkRenderer.VALVE), MarkRenderer.VALVE_BRONZE);
+        assertEq(MarkRenderer.finisherInk(_all()), DigitBand.INK);
+    }
+
+    function test_finisherNamesReachTheMetadata() public pure {
+        assertEq(MarkRenderer.names((1 << 7) | (1 << 15)), '["vessel","apex"]');
+        assertEq(MarkRenderer.names(1 << 11), '["aorta"]');
+    }
+
+    function test_namesEmitsAllFifteenLiteralsInLadderOrder() public pure {
+        uint256 all = _all() | MarkRenderer.AORTA | MarkRenderer.CHAMBER
+            | MarkRenderer.VALVE | MarkRenderer.ATRIUM | MarkRenderer.APEX;
+        assertEq(
+            MarkRenderer.names(all),
+            '["hush","ache","static","beat","iris","vessel","break","tint","aura",'
+            '"aorta","chamber","valve","atrium","apex"]'
+        );
     }
 
     // ---------------------------------------------------------------------

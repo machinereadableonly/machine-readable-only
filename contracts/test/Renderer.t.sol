@@ -84,15 +84,15 @@ contract RendererTest is Test {
     }
 
     function test_dayOneMatchesTheJavascriptReference() public view {
-        _diff("day one", _view(1, 1, 1000, 1000), 14670,
-            0xdda657b6808df00afe4f75e45fefd1cb0cd121343a3adc0522c65e7f38a8576e);
+        _diff("day one", _view(1, 1, 1000, 1000), 14706,
+            0xf120dcc8abb64a7af7962becc7c0a3e4545cb371498a8230ae627c8316a5e6c5);
     }
 
     function test_aPartYearMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(200, 45, 1000, 1000);
         v.agentKeyId = bytes32(uint256(0xa9e));
-        _diff("day 200", v, 14675,
-            0x3f02494383b04ac68c5e4407e6c641214bf14eb7c4e159160e3143c54053fd6a);
+        _diff("day 200", v, 14711,
+            0x60fd404af2edaf50ac137ac314adac319a30a93a44603e825043ca5f42228b97);
     }
 
     function test_aWholeHeartMatchesTheJavascriptReference() public view {
@@ -100,8 +100,8 @@ contract RendererTest is Test {
         v.generation = 1;
         v.parent = 7;
         v.seedsGiven = 2;
-        _diff("whole, one ring", v, 14689,
-            0x396ccef15f227768c5dd78d6df14abd837146b10d40cd1c53b1e6fb235d884b8);
+        _diff("whole, one ring", v, 14725,
+            0xbb9cd57f6b70e2411c693879e662613cf369af219a53f37c04553b3945014a9f);
     }
 
     function test_aLapsedTokenMatchesTheJavascriptReference() public view {
@@ -110,8 +110,8 @@ contract RendererTest is Test {
         // function it never called, so the image never paled while this
         // renderer's did. It was level 365 until Spec 10f, which is now a token
         // that cannot lapse at all -- at 364 the lapse is measured again.
-        _diff("lapsed, one day short", _view(364, 140, 1000, 1040), 14720,
-            0x4b52953a6dc4788ca92362c2fe3f3715eacb830d3b594f924e3a6401f142d0e2);
+        _diff("lapsed, one day short", _view(364, 140, 1000, 1040), 14756,
+            0xfaff44e9c318b366447298b89f442bbf9d367eaddaf612e70a85374826e06221);
     }
 
     /// The finish freezes the token on its last credited day, and this is the
@@ -123,15 +123,15 @@ contract RendererTest is Test {
         TokenView memory v = _view(365, 5, 1000, 1400);
         v.fellRun = 200;
         v.fellDay = 900;
-        _diff("finished after a slip", v, 14687,
-            0x7a7baa3ebf274214b969cecce589b5080f5a15cad2c5fc06354b0cabe1fde3d5);
+        _diff("finished after a slip", v, 14723,
+            0x313b3e448c2ecd4dc00f4cf77d8ead93bcd3a5203011cc344500f00cccf8d8b6);
     }
 
     function test_everyMarkAtOnceMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(365, 400, 1000, 1000);
         v.marks = ALL_MARKS;
-        _diff("every drawn mark", v, 15894,
-            0x335657e09aa3af96425a1ea913c9e7e580ab0ce30fd25ccd2db7d7ebd13853bf);
+        _diff("every drawn mark", v, 15930,
+            0x890c5bfd06ea786fa30c51ecd257f56a0fccdb2913f3439c806474a8af688cd3);
     }
 
     function test_aSealedTokenMatchesTheJavascriptReference() public view {
@@ -139,8 +139,8 @@ contract RendererTest is Test {
         // a whole one would prove nothing about `resting`.
         TokenView memory v = _view(300, 200, 1000, 9999);
         v.resting = true;
-        _diff("sealed at rest", v, 14723,
-            0xf8b7b28d2a8510ba25465c67b8dab451b296726417b52daf36d0c93f78fd4a0a);
+        _diff("sealed at rest", v, 14759,
+            0x274040460cb491e8166c7113a366a73f2e93b96e8258f98311235065de3cadb4);
     }
 
     /// A seeded child, at both extremes of the echo ring.
@@ -164,8 +164,8 @@ contract RendererTest is Test {
         v.generation = 1;
         v.parent = 7;
         v.echo = 365;
-        _diff("a newborn child", v, 15632,
-            0x36d0c5e8973e7fdab3097de83680ebf404b8e2e508db50d41730c0b7c3992486);
+        _diff("a newborn child", v, 15668,
+            0x40471f087b61ae465d12014e759ae09e374abf3fbc15a0332c4e1cfa14c79e60);
     }
 
     function test_aFinishedChildMatchesTheJavascriptReference() public view {
@@ -177,8 +177,8 @@ contract RendererTest is Test {
         v.generation = 2;
         v.parent = 7;
         v.echo = 3650;
-        _diff("a finished child", v, 15700,
-            0x7da5c8fe918edf764901555bda3e672c0a40533730bf5a8acd4da4c7ec5057c3);
+        _diff("a finished child", v, 15736,
+            0x45f05fa99bbdec4787b7fedb0fff3fdaa8f1fb0aac49db560301ab4b3d27109c);
     }
 
     /// A child wearing the maximal LEGAL Mark set.
@@ -205,8 +205,8 @@ contract RendererTest is Test {
         // non-default on purpose, so the shape and ink bits are read rather
         // than defaulting to 0. Mirrors the packing applyMark writes.
         v.marks = ALL_MARKS_TINTED | (uint256(2) << 16) | (uint256(1) << 24);
-        _diff("a child with every drawn mark", v, 17479,
-            0x66df65092e730166d6e71a4ec91a40c821ed41e516454b7d2052ee98d2461635);
+        _diff("a child with every drawn mark", v, 17515,
+            0xa10dbcc000939fa6ef20f14d978a3e174b2ef6a0e92d51bd4787ef5ac317f109);
     }
 
     function test_theEyesAreDrawnLastOverTheNoise() public view {

@@ -14,7 +14,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { unpackModules } from "./qart.mjs";
 import { tokenBitmap, SIZE } from "./token-bitmap.mjs";
 import { heartTarget } from "./heart-target.mjs";
-import { renderSvg, MARKS } from "./render-token.mjs";
+import { renderSvg, MARKS, AORTA } from "./render-token.mjs";
 
 const DOMAIN = process.env.MRO_DOMAIN ?? "example.com";
 const PX = 560;
@@ -44,14 +44,22 @@ const variants = [
   ["base", []],
   ...MARKS.map((name, i) => [name, [i + 1]]),
   // Every Mark at once. NO TOKEN CAN LEGALLY WEAR THIS -- the ladder is five
-  // exclusive pairs -- and it is here as an upper bound on the drawing, not as
-  // a state to review. `GasBudget.t.sol` holds the maximal LEGAL set.
+  // exclusive pairs, and the five finisher Marks are one place each -- and it
+  // is here as an upper bound on the drawing, not as a state to review.
+  // `GasBudget.t.sol` holds the maximal LEGAL set.
   ["all-illegal", ids],
 ];
 
+// A FINISHER MARK DRAWS NOTHING WITHOUT AN ORDINAL. The five write the
+// finisher's number in their own ink, and `DigitBand.path` returns "" when the
+// ordinal is 0 -- so without this every finisher row would render the bare
+// token and report `+0 B`, which is exactly the bug the comment above records
+// this tool already having had once.
+const ordinalFor = marks => marks.some(id => id >= AORTA) ? 42 : 0;
+
 const rows = [];
 for (const [tag, marks] of variants) {
-  const svg = renderSvg(modules, want, SIZE, { ...BASE, marks });
+  const svg = renderSvg(modules, want, SIZE, { ...BASE, marks, ordinal: ordinalFor(marks) });
   writeFileSync(`${OUT}/${tag}.png`,
     new Resvg(svg, { fitTo: { mode: "width", value: PX } }).render().asPng());
   writeFileSync(`${OUT}/${tag}.svg`, svg);

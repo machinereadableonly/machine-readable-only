@@ -103,7 +103,7 @@ contract RunHistoryTest is MroTestBase {
     // The colour -- the defect, and the fix, at every boundary
     // -----------------------------------------------------------------
     //
-    // EVERY TEST BELOW GROWS A 200-DAY RUN, NOT A 364-DAY ONE, and the
+    // EVERY TEST IN THIS SECTION GROWS A 200-DAY RUN, NOT A 364-DAY ONE, and the
     // difference is Spec 10f. A token that runs 364 days, misses one and
     // returns is credited to 365 by that return -- so it FINISHES, and a
     // finished token's colour is read on its last credited day for ever. At 364

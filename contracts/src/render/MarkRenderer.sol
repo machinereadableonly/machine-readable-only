@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
+import {DigitBand} from "./DigitBand.sol";
 import {Palette} from "./Palette.sol";
 
-/// @notice The ten Marks, and which surface of the image each one claims.
+/// @notice The fifteen Marks, and which surface of the image each one claims.
 ///
 /// @dev A Mark is a paid tier, bought or earned in one of five exclusive pairs.
 /// `Ladder.sol` and `MachineReadableOnly.applyMark` enforce that exclusion, not
 /// this library -- a mask handed in here could in principle hold both sides of
 /// a pair, and this library still has to behave, which it does because no two
 /// Marks in different pairs ever write the same surface.
+///
+/// The five finisher Marks, ids 11 to 15, are not bought at all: a token is
+/// GIVEN one by the place it finished its year in, and each writes the
+/// finisher's number round the border in its own ink. They pair with nothing
+/// and exclude nothing, so the exclusion sentence above concerns the ten only.
 ///
 /// All ten draw at this point. Hush, Ache, Static, Beat, Vessel and Aura each
 /// claim one surface below. Iris Bought, Iris Earned and Tint claim the eyes --
@@ -40,6 +46,17 @@ library MarkRenderer {
     uint256 internal constant TINT = 1 << 9;
     uint256 internal constant AURA = 1 << 10;
 
+    /// @dev The five finisher Marks, ids 11 to 15, deepest place last. Given
+    /// rather than bought: `MachineReadableOnly.finisherMark` maps a finishing
+    /// place to exactly one of these, so a token holds one of the five or none
+    /// of them. Bits 11-15 sit below the Iris shape at 16, so nothing packed
+    /// in the high bits of the marks word moves into this range.
+    uint256 internal constant AORTA = 1 << 11;
+    uint256 internal constant CHAMBER = 1 << 12;
+    uint256 internal constant VALVE = 1 << 13;
+    uint256 internal constant ATRIUM = 1 << 14;
+    uint256 internal constant APEX = 1 << 15;
+
     /// @dev Either route to the eyes. Tint requires one of these, and the eye
     /// drawing is the same code for both.
     uint256 internal constant ANY_IRIS = IRIS_BOUGHT | IRIS_EARNED;
@@ -68,6 +85,24 @@ library MarkRenderer {
     /// eyes; near-black is out because it is what an ORDINARY QR eye looks like.
     string internal constant TINT_VIOLET = "#9800fc";
     string internal constant TINT_GOLD = "#b8860b";
+
+    /// @notice The five finisher inks, chosen by the operator 2026-09-23 from
+    /// rendered sheets (spec 10l).
+    ///
+    /// @dev Gold, silver and bronze are a ranking every viewer already reads
+    /// without being told; blue and the heart's red finish the five below them.
+    /// Two of the strings are shared with a paid Mark -- Apex's gold is
+    /// Vessel's and Chamber's blue is Beat's far stop -- and that is a
+    /// coincidence of value, not a link: `finisherInk` reads the finisher bits
+    /// only, so wearing Vessel can never colour the number.
+    ///
+    /// Seven characters each, like every other ink in the picture, so which
+    /// Mark a token wears never changes its byte count.
+    string internal constant AORTA_RED = "#c8102e";
+    string internal constant CHAMBER_BLUE = "#2000ff";
+    string internal constant VALVE_BRONZE = "#a0612b";
+    string internal constant ATRIUM_SILVER = "#8c9096";
+    string internal constant APEX_GOLD = "#b8860b";
 
     function has(uint256 marks, uint256 bit) internal pure returns (bool) {
         return marks & bit != 0;
@@ -230,6 +265,20 @@ library MarkRenderer {
         return uint32((marks >> 64) & 0xFFFFFFFF);
     }
 
+    /// @notice The ink the finisher's number is written in: the Mark IS the ink.
+    /// @dev Decided by the operator 2026-09-23 (spec 10l). Gold, silver, bronze
+    /// are a ranking every viewer already reads; blue and the heart's red finish
+    /// the five. Seven characters each, so the byte count never depends on
+    /// which. Checked highest place first, though a token only ever holds one.
+    function finisherInk(uint256 marks) internal pure returns (string memory) {
+        if (has(marks, APEX)) return APEX_GOLD;
+        if (has(marks, ATRIUM)) return ATRIUM_SILVER;
+        if (has(marks, VALVE)) return VALVE_BRONZE;
+        if (has(marks, CHAMBER)) return CHAMBER_BLUE;
+        if (has(marks, AORTA)) return AORTA_RED;
+        return DigitBand.INK;
+    }
+
     /// @notice Beat's gradient definition, or nothing.
     /// @param colour the token's own streak colour, which the gradient runs from.
     function defs(uint256 marks, string memory colour) internal pure returns (string memory) {
@@ -245,21 +294,28 @@ library MarkRenderer {
 
     /// @notice The Marks this token wears, in ladder order, as a JSON array.
     /// @dev Ladder order, not the order the bits happened to be set in. Bits
-    /// outside 1 to 10 are ignored: `_marks` packs the Iris shape at bit 16, the
-    /// Tint ink at bit 24 and the earned run at bit 32, and none of that may
-    /// reach the metadata as a phantom Mark name. Only these ten literals can
-    /// ever reach the JSON, so no token state can inject text through this field.
+    /// outside 1 to 15 are ignored: `_marks` packs the Iris shape at bit 16, the
+    /// Tint ink at bit 24, the earned run at bit 32 and the finisher's ordinal
+    /// at bit 64, and none of that may reach the metadata as a phantom Mark
+    /// name. Only these fifteen literals can ever reach the JSON, so no token
+    /// state can inject text through this field.
+    ///
+    /// The five finisher names come last, after the ten paid Marks, because
+    /// that is the ladder order: they are ids 11 to 15. They are LOWER CASE
+    /// here, matching the existing ten -- the Warden's ladder capitalises them
+    /// for its own listing, and the on-chain metadata does not.
     ///
     /// Both Iris ids emit "iris": they claim the same surface by two routes, and
     /// the route is visible in the image rather than in the JSON.
     function names(uint256 marks) internal pure returns (string memory out) {
-        string[10] memory ladder = [
+        string[15] memory ladder = [
             "hush", "ache", "static", "beat", "iris",
-            "iris", "vessel", "break", "tint", "aura"
+            "iris", "vessel", "break", "tint", "aura",
+            "aorta", "chamber", "valve", "atrium", "apex"
         ];
         bytes memory acc = "[";
         bool first = true;
-        for (uint256 i; i < 10; ++i) {
+        for (uint256 i; i < 15; ++i) {
             if (!has(marks, 1 << (i + 1))) continue;
             acc = abi.encodePacked(acc, first ? '"' : ',"', ladder[i], '"');
             first = false;
