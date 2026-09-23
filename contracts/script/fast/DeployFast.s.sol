@@ -22,8 +22,8 @@ contract DeployFast is MroScript {
         vm.startBroadcast(key);
         Renderer r = new Renderer();
         MachineReadableOnlyFast t = new MachineReadableOnlyFast(address(r), warden);
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
-        for (uint8 i = 1; i <= 10; i++) t.setUpgrade(i, u[i]);
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
+        for (uint8 i = 1; i <= 15; i++) t.setUpgrade(i, u[i]);
         vm.stopBroadcast();
         console.log("renderer", address(r));
         console.log("token   ", address(t));

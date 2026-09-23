@@ -12,7 +12,17 @@
 // days; pair five is BOUGHT ON BOTH SIDES and both sides are gated on holding an
 // Iris, which is what stops a cheap day-one Aura forfeiting a Tint that needs
 // 100 days. Taking either side closes the other permanently; a token may take
-// neither. EVERY EXCLUSION IS PAIR-INTERNAL. Nothing is limited.
+// neither. WITHIN THE PAIRS EVERY EXCLUSION IS PAIR-INTERNAL, and nothing is
+// limited.
+//
+// AND FIVE MORE, ids 11-15, which are not pairs and are not for sale. A token
+// that reaches 365 credited days is given a place and the Mark that goes with
+// it, by the token contract, in finishing order. They are capped -- one Apex,
+// three Atrium, ten Valve, fifty Chamber, Aorta never refused -- because a place
+// band has a size; that is not the sales-funnel scarcity removed from the pairs
+// on 2026-09-01, because no amount of money reaches one. They exclude each other
+// as a group, since a token finishes once, and they never appear in `upgrade`'s
+// argument (`upgradeId` is 1-10) or in the `ladder` tool's pairs.
 //
 // TWO FIELDS HOLD THE PRICE, deliberately. `price` is the x402 demand string an
 // agent is charged; `priceUsdc6` is what the contract publishes and what the
@@ -38,6 +48,30 @@ const earned = (id, name, minStreak, { needsWhole = false, variants = 1 } = {}) 
   minLevel: 0, minStreak, needsWhole, supply: Infinity,
   excludes: 1 << partnerOf(id), requiresAny: 0, variants,
 });
+
+// A finisher Mark: given by the token contract at 365, in finishing order, and
+// never sold or requested. The cap is the size of the place band --
+// MachineReadableOnly.finisherMark() is the authority, and Ladder.sol repeats
+// it. The other four finisher Marks are excluded, because a token finishes once.
+//
+// `pair: 0` is not a sixth pair. It is the absence of one, which is why every
+// consumer that walks pairs -- the `ladder` tool, the llms.txt table -- filters
+// this route out rather than grouping on it.
+export const FINISHER_MASK = (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15);
+export const FINISHER_IDS = [11, 12, 13, 14, 15];
+
+const finisher = (id, name, supply) => ({
+  id, name, pair: 0, route: "finisher", price: undefined, priceUsdc6: 0,
+  minLevel: 0, minStreak: 0, needsWhole: true, supply,
+  excludes: FINISHER_MASK & ~(1 << id), requiresAny: 0, variants: 1,
+});
+
+/// The Marks an agent can ask for: the five pairs, and nothing given for a
+/// place. ONE definition, because three surfaces need the same answer and a
+/// fourth hand-rolled filter is how one of them quietly starts offering a Mark
+/// that cannot be bought.
+export const requestable = (ladder = LADDER) =>
+  Object.values(ladder).filter((m) => m.route !== "finisher");
 
 /**
  * The run an earned Mark is measured against: the LONGEST this token has ever
@@ -71,6 +105,11 @@ export const LADDER = {
   8:  earned(8,  "Break",  365),
   9:  bought(9,  "Tint",   250_000_000,   { requiresAny: ANY_IRIS, variants: 2 }),
   10: bought(10, "Aura",   25_000_000,    { requiresAny: ANY_IRIS }),
+  11: finisher(11, "aorta",   Infinity),
+  12: finisher(12, "chamber", 50),
+  13: finisher(13, "valve",   10),
+  14: finisher(14, "atrium",  3),
+  15: finisher(15, "apex",    1),
 };
 
 /// The names of the three Iris shapes and the two Tint inks, by variant index.
@@ -94,6 +133,15 @@ export const VARIANT_NAMES = {
  */
 export function assertLadderSane(ladder = LADDER) {
   for (const [id, m] of Object.entries(ladder)) {
+    // A FINISHER MARK IS A THIRD ROUTE. It is neither priced nor earned by a
+    // run, so both rules below would refuse it by design, and its cap is the
+    // size of a place band rather than the scarcity the supply rule forbids.
+    // What it must never be is PRICED: that is the one way this route could
+    // start selling something the chain gives away.
+    if (m.route === "finisher") {
+      if (m.priceUsdc6 !== 0 || m.price !== undefined) throw new Error(`mark ${id} is a finisher Mark and priced`);
+      continue;
+    }
     const priced = typeof m.price === "string" && /^\$\d/.test(m.price);
     const isEarned = m.route === "earned";
     if (priced && isEarned) throw new Error(`mark ${id} is both priced and earned`);
@@ -167,8 +215,12 @@ export function ladderSentence(ladder = LADDER) {
     if (m.variants > 1) conditions.push(m.id === 5 ? "choose a shape" : "choose an ink");
     return `bought ${m.price}${conditions.length ? `, ${conditions.join(", ")}` : ""}`;
   };
-  const marks = Object.values(ladder)
+  // The REQUESTABLE Marks only. This sentence is an argument's description, and
+  // `upgradeId` accepts 1-10 -- listing a Mark the schema rejects would describe
+  // a door that is not there. The finisher Marks get one sentence saying so.
+  const marks = requestable(ladder)
     .map((m) => `${m.id} ${m.name.toLowerCase()} ${gate(m)}`)
     .join("; ");
-  return `${marks}. Pairs are 1-2, 3-4, 5-6, 7-8, 9-10; taking either side closes the other permanently. Read \`ladder\` first.`;
+  return `${marks}. Pairs are 1-2, 3-4, 5-6, 7-8, 9-10; taking either side closes the other permanently.`
+    + ` Marks 11-15 are given by finishing and cannot be requested. Read \`ladder\` first.`;
 }

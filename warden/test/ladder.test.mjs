@@ -7,10 +7,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseMoney } from "@x402/core/utils";
-import { LADDER, VARIANT_NAMES, assertLadderSane } from "../src/mcp/ladder.mjs";
+import { LADDER, VARIANT_NAMES, FINISHER_IDS, FINISHER_MASK, assertLadderSane } from "../src/mcp/ladder.mjs";
 
-test("every Mark is priced XOR earned, and never both", () => {
+// IDS 1-10. A finisher Mark is a THIRD route -- given for a place, never bought
+// and never earned by a run -- so it is neither side of this rule by design.
+test("every Mark in the five pairs is priced XOR earned, and never both", () => {
   for (const [id, m] of Object.entries(LADDER)) {
+    if (m.route === "finisher") continue;
     const priced = typeof m.price === "string";
     const earned = m.route === "earned";
     assert.equal(priced, !earned, `mark ${id} is neither priced nor earned, or both`);
@@ -34,7 +37,7 @@ test("a priced entry with no price is a startup error", () => {
 // holding one fact is how they drift, so they are checked against each other.
 test("the display price and priceUsdc6 are the same number", () => {
   for (const m of Object.values(LADDER)) {
-    if (m.route === "earned") {
+    if (m.route === "earned" || m.route === "finisher") {
       assert.equal(m.priceUsdc6, 0, `${m.name} is earned and must cost nothing`);
       continue;
     }
@@ -53,14 +56,18 @@ test("a display price that disagrees with the chain's integer is a startup error
 // would not fail until an agent's first payment attempt, so it fails here.
 test("every price survives x402's own parser, not a regex of ours", () => {
   for (const m of Object.values(LADDER)) {
-    if (m.route === "earned") continue;
+    if (m.route !== "bought") continue;
     assert.doesNotThrow(() => parseMoney(m.price), `${m.name}: x402 rejects ${m.price}`);
   }
 });
 
+// IDS 1-10 again. The five finisher Marks exclude each other as a GROUP rather
+// than in pairs -- a token finishes once -- so they are symmetric but not
+// pair-internal, and that group is asserted on its own below.
 test("exclusions are symmetric and pair-internal", () => {
-  for (const a of Object.keys(LADDER).map(Number)) {
-    for (const b of Object.keys(LADDER).map(Number)) {
+  const pairs = Object.values(LADDER).filter((m) => m.route !== "finisher").map((m) => m.id);
+  for (const a of pairs) {
+    for (const b of pairs) {
       const aExB = (LADDER[a].excludes & (1 << b)) !== 0;
       const bExA = (LADDER[b].excludes & (1 << a)) !== 0;
       assert.equal(aExB, bExA, `${a}/${b} exclusion is not symmetric`);
@@ -71,14 +78,39 @@ test("exclusions are symmetric and pair-internal", () => {
   }
 });
 
-test("nothing is limited", () => {
-  for (const m of Object.values(LADDER)) assert.equal(m.supply, Infinity);
+// NOTHING IN THE PAIRS is limited, which is narrower than the old claim.
+// Ids 11-15 are the finisher Marks and they ARE capped, at the size of the place
+// band each one covers -- a cap on something that cannot be bought at all, which
+// is not the sales funnel caps were removed for on 2026-09-01.
+test("nothing in the five pairs is limited", () => {
+  for (const m of Object.values(LADDER)) {
+    if (m.route === "finisher") continue;
+    assert.equal(m.supply, Infinity, `${m.name} is limited`);
+  }
 });
 
 test("a reintroduced cap is a startup error, not a silent sales funnel", () => {
   const broken = structuredClone(LADDER);
   broken[1].supply = 100;
   assert.throws(() => assertLadderSane(broken), /limited/);
+});
+
+test("the five finisher Marks are given, never sold", () => {
+  for (const id of [11, 12, 13, 14, 15]) {
+    assert.equal(LADDER[id].route, "finisher");
+    assert.equal(LADDER[id].priceUsdc6, 0);
+    assert.equal(LADDER[id].needsWhole, true);
+  }
+  assert.deepEqual([11, 12, 13, 14, 15].map(id => LADDER[id].name),
+    ["aorta", "chamber", "valve", "atrium", "apex"]);
+  assert.deepEqual([11, 12, 13, 14, 15].map(id => LADDER[id].supply),
+    [Infinity, 50, 10, 3, 1]);
+});
+
+test("a cap on anything but a finisher Mark is still a startup error", () => {
+  const bad = structuredClone(LADDER);
+  bad[3] = { ...bad[3], supply: 5 };
+  assert.throws(() => assertLadderSane(bad), /limited/);
 });
 
 test("the four earned Marks are exactly Ache, Beat, the earned Iris and Break", () => {
@@ -104,6 +136,13 @@ test("only the bought Iris and Tint accept a variant, and the names match the co
 // Iris by either route -- so the choice between loud-and-expensive and
 // quiet-and-cheap is informed. Aura was ungated once, and being buyable on day
 // one silently forfeited Tint, which needs 100 days.
+test("each finisher Mark excludes the other four, because a token finishes once", () => {
+  for (const id of FINISHER_IDS) {
+    assert.equal(LADDER[id].excludes, FINISHER_MASK & ~(1 << id), `mark ${id}`);
+    assert.equal(LADDER[id].excludes & (1 << id), 0, `mark ${id} excludes itself`);
+  }
+});
+
 test("both sides of pair five wait on an Iris", () => {
   const anIris = (1 << 5) | (1 << 6);
   assert.equal(LADDER[9].requiresAny, anIris, "Tint must need an Iris");

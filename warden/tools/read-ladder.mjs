@@ -30,6 +30,18 @@ const abi = [{
 // The ladder as the design document fixes it: five pairs, one bought and one
 // earned in four of them, pair five bought on both sides and gated on an Iris.
 // Price in USDC 6dp; the earned sides are free and gated on a RUN.
+//
+// Then ids 11-15, the finisher Marks. They are free, whole-only and capped at
+// the size of the place band they cover, and each one excludes the other four
+// rather than a single partner -- so `excludes` is a MASK here, not a partner
+// id, and `cap` is the field that actually distinguishes them. A deploy that
+// wrote these as unlimited would hand out an unlimited Apex.
+const FINISHER_MASK = (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15);
+const finisher = (id, name, cap) => ({
+  name, price: 0n, minLevel: 0, minStreak: 0, cap,
+  excludesMask: FINISHER_MASK & ~(1 << id),
+});
+
 const EXPECT = [
   null,
   { name: "hush",        price: 1_000_000n,     minLevel: 0,   minStreak: 0,   excludes: 2 },
@@ -42,22 +54,31 @@ const EXPECT = [
   { name: "break",       price: 0n,             minLevel: 0,   minStreak: 365, excludes: 7 },
   { name: "tint",        price: 250_000_000n,   minLevel: 0,   minStreak: 0,   excludes: 10 },
   { name: "aura",        price: 25_000_000n,    minLevel: 0,   minStreak: 0,   excludes: 9 },
+  finisher(11, "aorta",   0),
+  finisher(12, "chamber", 50),
+  finisher(13, "valve",   10),
+  finisher(14, "atrium",  3),
+  finisher(15, "apex",    1),
 ];
 
 const client = createPublicClient({ chain: baseSepolia, transport: http(rpc) });
 let bad = 0;
 
 console.log("id  name          price USDC     minLevel  minStreak  excludes  requiresAny  active");
-for (let id = 1; id <= 10; id += 1) {
+for (let id = 1; id <= 15; id += 1) {
   const u = await client.readContract({ address, abi, functionName: "upgradeOf", args: [id] });
   const want = EXPECT[id];
   const usd = (Number(u.priceUsdc6) / 1e6).toFixed(2);
-  const excludesId = Math.log2(Number(u.excludes));
+  // A pair Mark names one partner, so its id reads better than its mask; a
+  // finisher Mark names four, and log2 of that is meaningless.
+  const wantMask = want.excludesMask ?? (1 << want.excludes);
+  const excludesId = want.excludesMask === undefined ? Math.log2(Number(u.excludes)) : Number(u.excludes);
   const problems = [];
   if (u.priceUsdc6 !== want.price) problems.push(`price ${u.priceUsdc6} != ${want.price}`);
   if (u.minLevel !== want.minLevel) problems.push(`minLevel ${u.minLevel} != ${want.minLevel}`);
   if (u.minStreak !== want.minStreak) problems.push(`minStreak ${u.minStreak} != ${want.minStreak}`);
-  if (excludesId !== want.excludes) problems.push(`excludes bit ${excludesId} != ${want.excludes}`);
+  if (Number(u.excludes) !== wantMask) problems.push(`excludes ${u.excludes} != ${wantMask}`);
+  if (Number(u.maxSupply) !== (want.cap ?? 0)) problems.push(`maxSupply ${u.maxSupply} != ${want.cap ?? 0}`);
   if (!u.active) problems.push("NOT ACTIVE");
   if (problems.length) bad += 1;
 
@@ -70,6 +91,6 @@ for (let id = 1; id <= 10; id += 1) {
 
 console.log("");
 console.log(bad === 0
-  ? "All ten Marks match the design document."
+  ? "All fifteen Marks match the design document."
   : `${bad} Mark(s) DO NOT match -- do not use this deployment.`);
 process.exit(bad === 0 ? 0 : 1);

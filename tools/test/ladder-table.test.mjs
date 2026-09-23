@@ -29,9 +29,12 @@ test("llms.txt publishes the ladder exactly as the ladder defines it", () => {
 test("every Mark's price appears in the published document", () => {
   // The belt to the table's braces: if the block above were ever reformatted
   // by hand, this still catches a price that is not on the page at all.
+  // The BOUGHT Marks. An earned Mark has no price, and neither does a finisher
+  // Mark -- it is given for a place and is not in the table at all, which is why
+  // this asks for the route rather than for "not earned".
   for (const id of Object.keys(LADDER)) {
     const m = LADDER[id];
-    if (m.route === "earned") continue;
+    if (m.route !== "bought") continue;
     assert.ok(llms.includes(m.price), `${m.name} costs ${m.price} and llms.txt does not say so`);
   }
 });

@@ -81,7 +81,7 @@ contract DialEventsTest is MroTestBase {
     }
 
     function test_setUpgradeEmitsTheMarkIdItWrote() public {
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
 
         vm.expectEmit(true, true, true, true);
         emit MachineReadableOnly.UpgradeSet(3);

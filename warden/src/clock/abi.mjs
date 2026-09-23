@@ -207,6 +207,38 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "finisherMark",
+    "inputs": [
+      {
+        "name": "ordinal",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "finishers",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getApproved",
     "inputs": [
       {
@@ -1234,6 +1266,31 @@ export const MRO_ABI = [
   },
   {
     "type": "event",
+    "name": "Finished",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "ordinal",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      },
+      {
+        "name": "markId",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "MarkApplied",
     "inputs": [
       {
@@ -1546,6 +1603,17 @@ export const MRO_ABI = [
   },
   {
     "type": "error",
+    "name": "AlreadyFinished",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "AlreadyMinted",
     "inputs": []
   },
@@ -1789,6 +1857,17 @@ export const MRO_ABI = [
     "type": "error",
     "name": "MarkInactive",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "MarkNotRequestable",
+    "inputs": [
+      {
+        "name": "upgradeId",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
   },
   {
     "type": "error",

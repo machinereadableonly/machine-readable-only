@@ -241,11 +241,13 @@ contract BoundsTest is MroTestBase {
     }
 
     /// @dev The boundary, provoked from both sides: 15 is in range and fails
-    /// later on `MarkInactive`, which is the guard AFTER the bound. Without
-    /// this the test above would pass on a bound that was off by one.
+    /// later on `MarkNotRequestable`, which is the guard immediately AFTER the
+    /// bound. Without this the test above would pass on a bound that was off by
+    /// one. (It read `MarkInactive` until 2026-09-23, when 11-15 became the
+    /// finisher Marks and grew a refusal of their own in front of that one.)
     function test_theMarkIdBoundIsExactlyMaxMarkId() public {
         vm.prank(WARDEN);
-        vm.expectRevert(MachineReadableOnly.MarkInactive.selector);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkNotRequestable.selector, uint8(15)));
         t.applyMark(1, 15, 0);
     }
 

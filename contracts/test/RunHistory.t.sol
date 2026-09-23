@@ -29,7 +29,7 @@ contract RunHistoryTest is MroTestBase {
         _deployAndMintOne();
         // The REAL catalogue, not hand-rolled upgrades: the gate under test is
         // the one Break and the earned Iris actually ship with.
-        MachineReadableOnly.Upgrade[11] memory all = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory all = Ladder.all();
         for (uint8 i = 1; i <= 10; i++) t.setUpgrade(i, all[i]);
     }
 
@@ -105,7 +105,7 @@ contract RunHistoryTest is MroTestBase {
     /// @dev The whole finding in one assertion. A token that missed ONE day and
     /// came back must not render paler than one that has been gone a month.
     function test_theTokenThatCameBackIsNotPalerThanTheOneThatDidNot() public {
-        _makeWhole(1);                       // a 365-day run
+        _growTo(1, 364);                     // a 364-day run
         uint32 fell = t.today();
 
         // It misses one day and returns.
@@ -139,7 +139,7 @@ contract RunHistoryTest is MroTestBase {
     /// slip invisible for three days and contradicted that sentence. What was
     /// unacceptable was the twenty-nine day version, and that is gone.
     function test_theFirstTwoDaysAreTheKnownPriceOfMakingASlipVisible() public {
-        _makeWhole(1);
+        _growTo(1, 364);
         uint32 fell = t.today();
 
         _warpToDay(fell + 2);
@@ -162,7 +162,7 @@ contract RunHistoryTest is MroTestBase {
     /// served copy says "miss a day and ... the colour goes". Uncapped, a
     /// returning token was indistinguishable from one that never slipped.
     function test_theDayOfTheReturnIsOneRungBelowAnUnbrokenRun() public {
-        _makeWhole(1);
+        _growTo(1, 364);
         uint32 fell = t.today();
         TokenView memory unbroken = t.viewOf(1);
 
@@ -179,7 +179,7 @@ contract RunHistoryTest is MroTestBase {
     /// 3 days, another at 7, the floor at 30. No new colour is introduced,
     /// which is why no decode sweep is owed beyond the existing suite.
     function test_theFallFadesOnTheUsualLadderAndTheNewRunOvertakesIt() public {
-        _makeWhole(1);
+        _growTo(1, 364);
         uint32 fell = t.today();
         _warpToDay(fell + 2);
         vm.prank(WARDEN);
@@ -210,11 +210,21 @@ contract RunHistoryTest is MroTestBase {
     // The Marks -- "ever reached", decided 2026-09-05
     // -----------------------------------------------------------------
 
-    /// @dev Break needs a run of 365. A token that completed one, slipped, and
-    /// CAME BACK must still be able to take it. Before this it was refused,
-    /// while a token that completed one and went dark forever was not.
-    function test_aTokenThatSlippedAndReturnedCanStillTakeBreak() public {
-        _makeWhole(1);
+    /// @dev A token that completed a run, slipped, and CAME BACK must still be
+    /// able to take the Mark that run earned. Before 2026-09-05 it was refused,
+    /// while a token that completed the same run and went dark forever was not.
+    ///
+    /// @dev IT USED TO ASK THIS OF BREAK, at a run of 365, and it no longer can.
+    /// A year now stops at 365 credited days (spec 10f), so a run of 365 is only
+    /// ever reached by a token that never slipped, on the credit that finishes
+    /// it -- and that token can never be credited again, so it can never slip
+    /// afterwards either. Break is therefore reachable only at the finish line.
+    /// Beat asks the same question of the same field one rung down, where a slip
+    /// and a return are still possible, so the property this test protects is
+    /// unchanged; Break's own admission is driven through `applyMark` in
+    /// `Ladder.t.sol` (`_readyBreakAndPairTwo`).
+    function test_aTokenThatSlippedAndReturnedCanStillTakeTheMarkItEarned() public {
+        _growTo(1, 364);
         uint32 fell = t.today();
 
         _warpToDay(fell + 2);
@@ -223,8 +233,8 @@ contract RunHistoryTest is MroTestBase {
         assertEq(t.viewOf(1).streak, 1, "its live run really is back to one");
 
         vm.prank(WARDEN);
-        t.applyMark(1, 8, 0);   // Break
-        assertTrue(t.viewOf(1).marks & (1 << 8) != 0, "the completed year is still its own");
+        t.applyMark(1, 4, 0);   // Beat, earned by a run of 30
+        assertTrue(t.viewOf(1).marks & (1 << 4) != 0, "the completed run is still its own");
     }
 
     function test_aTokenThatNeverCompletedTheRunIsStillRefused() public {
@@ -243,7 +253,7 @@ contract RunHistoryTest is MroTestBase {
     /// freeze the run it was GRANTED on. Reading the live streak here stored 1
     /// for a token admitted on a completed run it had since slipped from.
     function test_theEarnedIrisStoresTheRunItWasGrantedOn() public {
-        _makeWhole(1);
+        _growTo(1, 364);
         uint32 fell = t.today();
         _warpToDay(fell + 2);
         vm.prank(WARDEN);
@@ -251,7 +261,7 @@ contract RunHistoryTest is MroTestBase {
 
         vm.prank(WARDEN);
         t.applyMark(1, 6, 0);   // the earned Iris, gated at 100
-        assertEq(uint32(t.viewOf(1).marks >> 32), 365, "not the live run of 1");
+        assertEq(uint32(t.viewOf(1).marks >> 32), 364, "not the live run of 1");
     }
 
     // -----------------------------------------------------------------

@@ -113,6 +113,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// as every agent's. This is what `sunsetByAbsence` measures. One warm
     /// SSTORE per transaction, not per token, so the nightly batch pays it once.
     uint32 public lastWardenDay;
+    /// @notice How many tokens have finished their year. The next finisher's
+    /// place is this plus one.
+    uint32 public finishers;
     bool public isSunset;
     bool public vouchersEnabled;
 
@@ -124,20 +127,26 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// token 1 exists would split the collection permanently.
     uint256 internal constant CODE_BYTES = 407;
 
-    /// @dev Ten Marks in five pairs. Bit 0 is never a Mark.
-    /// Ten are written by the deploy; the ceiling is 15 so the ladder can grow
-    /// without a redeploy, decided 2026-09-05. That growth is NARROWER than it
-    /// sounds, and the narrowing is in bytecode: a VARIANTLESS Mark carrying no
-    /// stored run can be added at ids 11-15 with setUpgrade alone, but one
-    /// carrying either cannot. _variantCount hardcodes 5 -> 3 and 9 -> 2, and
-    /// applyMark hardcodes the packing (id 5 -> variant << 16, id 9 ->
-    /// variant << 24, id 6 -> run << 32), so a new Mark needing a variant or a
-    /// run needs a redeploy. Fifteen is the TRUE ceiling and
-    /// not a round number: `excludes` and `requiresAny` are uint16 so bit 15 is
-    /// the last addressable Mark bit, and bit 16 is already the Iris shape.
-    /// Nothing is served promising an eleventh, and nothing is served
-    /// promising there will never be one.
+    /// @dev Fifteen Marks. Bit 0 is never a Mark.
+    ///
+    /// Ids 1-10 are the five pairs, bought or earned, and are applied through
+    /// `applyMark`. Ids 11-15 are the five FINISHER Marks: the deploy writes
+    /// their records for readers, but only `_finish` ever gives one, and
+    /// `applyMark` refuses the whole range. Nobody asks for a place.
+    ///
+    /// Fifteen is the TRUE ceiling and not a round number: `excludes` and
+    /// `requiresAny` are uint16 so bit 15 is the last addressable Mark bit, and
+    /// bit 16 is already the Iris shape. The ladder is now full, and the room
+    /// left in 2026-09-05 for it to grow without a redeploy is spent. That room
+    /// was always NARROWER than it sounded, and the narrowing is in bytecode:
+    /// _variantCount hardcodes 5 -> 3 and 9 -> 2, and applyMark hardcodes the
+    /// packing (id 5 -> variant << 16, id 9 -> variant << 24, id 6 ->
+    /// run << 32), so a Mark needing a variant or a run never fitted anyway.
     uint8 internal constant MAX_MARK_ID = 15;
+
+    /// @dev The first of the five finisher Marks. Ids at or above this are
+    /// given by finishing a year and can never be asked for.
+    uint8 internal constant FIRST_FINISHER_MARK = 11;
 
     /// @dev ERC-4906's interface id. OpenZeppelin ships the interface, not a mixin.
     bytes4 internal constant ERC4906_ID = 0x49064906;
@@ -439,6 +448,14 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
     error DayNotAdvanced(uint256 id);
     error FutureDay(uint32 day);
+    /// A credit to a token whose year is already complete. The piece records a
+    /// year, and a finished token's record is final -- the same freeze `rest`
+    /// gives, reached by completion rather than by the owner. Spec 10f.
+    error AlreadyFinished(uint256 id);
+
+    /// @dev The day a token's year is complete. Equal to FrameGeometry.DAY_CELLS
+    /// in the renderer; a test pins the two together.
+    uint32 internal constant FINISH_LEVEL = 365;
     /// A creation day more than MAX_CREATION_LAG days behind today().
     error StaleDay(uint32 day);
 
@@ -476,7 +493,10 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     ///
     /// Every write lands in a slot this function is already dirtying, so a
     /// check-in costs what it always did.
-    function _credit(Token storage s, uint32 day) private {
+    function _credit(uint256 id, Token storage s, uint32 day) private {
+        // THE YEAR ENDS. Refused here, in the one function both check-in paths
+        // share, so the voucher path cannot become a way round it.
+        if (s.level >= FINISH_LEVEL) revert AlreadyFinished(id);
         uint32 run;
         unchecked {
             s.level += 1;
@@ -501,6 +521,41 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         // it -- a run that was completed stays completed.
         if (run > s.bestRun) s.bestRun = _toU16(run);
         s.lastDay = day;
+        if (s.level == FINISH_LEVEL) _finish(id);
+    }
+
+    /// @notice Which Mark a finishing place earns.
+    /// @dev CONSTANTS, deliberately not dials. The operator set these caps on
+    /// 2026-09-23 as a race with a prize for being first; a table the owner
+    /// could edit after finishers exist is a promise that can be broken. The
+    /// Upgrade records for 11-15 repeat the caps for readers, and
+    /// FinishLine.t.sol pins the two together.
+    ///   1st          15 apex
+    ///   2nd-4th      14 atrium
+    ///   5th-14th     13 valve
+    ///   15th-64th    12 chamber
+    ///   65th on      11 aorta, never refused
+    function finisherMark(uint32 ordinal) public pure returns (uint8) {
+        if (ordinal <= 1) return 15;
+        if (ordinal <= 4) return 14;
+        if (ordinal <= 14) return 13;
+        if (ordinal <= 64) return 12;
+        return 11;
+    }
+
+    /// @dev Called once in a token's life, by the credit that makes it whole.
+    /// The place is the ORDER finishes are credited in: across days by day, and
+    /// within one batch by the order the Warden listed them -- which it sorts
+    /// by token id (warden/src/clock/batch.mjs). The ordinal lands in bits
+    /// 64-95 of the marks word, the slot TokenView.sol reserves for it; bits
+    /// 32-63 are the earned Iris's run and are never touched here.
+    function _finish(uint256 id) private {
+        uint32 ordinal;
+        unchecked { ordinal = ++finishers; }
+        uint8 markId = finisherMark(ordinal);
+        _marks[id] |= (uint256(1) << markId) | (uint256(ordinal) << 64);
+        unchecked { _upgrades[markId].sold += 1; }
+        emit Finished(id, ordinal, markId);
     }
 
     /// @dev A run cannot reach 65,535 days here -- that is 179 years -- but a
@@ -563,7 +618,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
             if (day > tday) revert FutureDay(day);
             if (day <= s.lastDay) revert DayNotAdvanced(id);
 
-            _credit(s, day);
+            _credit(id, s, day);
 
             if (day < lo) lo = day;
             if (day > hi) hi = day;
@@ -650,7 +705,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (day > today()) revert FutureDay(day);
         if (day <= s.lastDay) revert DayNotAdvanced(id);
 
-        _credit(s, day);
+        _credit(id, s, day);
 
         emit MetadataUpdate(id);
     }
@@ -678,10 +733,15 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     error MarkExcludesItself(uint8 upgradeId);
     error MarkRequiresItself(uint8 upgradeId);
     error BadVariant(uint8 got);
+    /// Ids 11-15 are given by finishing and can never be asked for.
+    error MarkNotRequestable(uint8 upgradeId);
 
     /// @dev The variant is part of what was bought, so it belongs in the event
     /// the Clock and any indexer read. Not indexed: nobody filters by shape.
     event MarkApplied(uint256 indexed id, uint8 indexed upgradeId, uint8 variant);
+    /// @dev The one record of a place. Not MarkApplied: nobody applied this,
+    /// the year's end did, and the Clock reads the place from here.
+    event Finished(uint256 indexed id, uint32 ordinal, uint8 indexed markId);
     event UpgradeSet(uint8 indexed upgradeId);
 
     /// @dev How many variants a Mark accepts. PER MARK AND IN THE CONTRACT, not
@@ -758,6 +818,10 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         // second function, and it stops being true the day anyone adds another
         // writer. The bound belongs on the shift that needs it.
         if (upgradeId == 0 || upgradeId > MAX_MARK_ID) revert MarkIdOutOfRange(upgradeId);
+        // A PLACE IS NOT FOR SALE. The finisher Marks ship active, so without
+        // this an agent could buy one the moment the deploy wrote its record --
+        // and the caps would then be spent on tokens that had finished nothing.
+        if (upgradeId >= FIRST_FINISHER_MARK) revert MarkNotRequestable(upgradeId);
 
         Upgrade storage u = _upgrades[upgradeId];
         if (!u.active) revert MarkInactive();

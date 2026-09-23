@@ -29,6 +29,16 @@ import {TokenView} from "../src/render/TokenView.sol";
 /// check in, apply Marks, seed -- and measures the same cold external call.
 /// It is deliberately small: the sweep stays where it is, and this answers the
 /// one question the sweep cannot, which is what the shipping contract costs.
+///
+/// @dev THE WORST CASE MOVED ON 2026-09-23 AND WILL MOVE AGAIN. A year now
+/// stops at 365 credited days, and `FrameRenderer.ringBudget` counts a token's
+/// own rings as `level / 365` -- so no real token can wear more than one ring of
+/// its own, and the ten-ring canvas these tests used to measure is unreachable.
+/// Every state below is the deepest the SHIPPING CONTRACT can now produce, and
+/// the figures are correspondingly smaller. They are not the final answer: the
+/// ring cap is being re-decided against the finished year, and when it is these
+/// measurements have to be taken again. Nothing here should be quoted as the
+/// piece's worst case until that lands.
 contract RealTokenGasTest is MroTestBase {
     /// @dev The same hard limits `GasBudget.t.sol` asserts. Repeated rather
     /// than imported because they are the project's published budget, not that
@@ -68,7 +78,7 @@ contract RealTokenGasTest is MroTestBase {
         // THE REAL LADDER, not a stand-in: `applyMark` refuses an inactive
         // record with MarkInactive, and a test that hand-rolled its own entries
         // would be measuring a token the shipping ladder cannot produce.
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         for (uint8 i = 1; i <= 10; i++) t.setUpgrade(i, u[i]);
     }
 
@@ -154,9 +164,10 @@ contract RealTokenGasTest is MroTestBase {
     /// `min(level, 365)`, so a partial frame and a founding token's rings are
     /// mutually exclusive -- but an echo ring is drawn at any level.
     function test_theDearestRealTokenFitsTheHardLimit() public {
-        // A parent with a decade behind it, so the child's sealed echo is the
-        // largest number that can be drawn.
-        _creditRun(1, 365 * 10);
+        // A parent that has finished its year, which is as far as any token can
+        // now go. The echo is that one year: `_echo` sums whole finished lines,
+        // so a deeper number needs more GENERATIONS, not a longer parent.
+        _creditRun(1, 364);
         uint256 child = _seedFrom(1);
         _creditRun(uint32(child), 363);   // the child mints at level 1
 
@@ -171,16 +182,24 @@ contract RealTokenGasTest is MroTestBase {
         console.log("  headroom, bytes", BYTE_LIMIT - len);
     }
 
-    /// @notice The largest token: a child at the ring cap wearing the whole
-    /// sealed set.
+    /// @notice The largest token the shipping contract can now produce: a child
+    /// whose own year is complete, wearing the whole sealed set, carrying the
+    /// echo ring and the finisher's digit band.
+    ///
+    /// @dev IT USED TO BE A CHILD AT THE RING CAP, ten years deep. A year now
+    /// stops at 365 credited days, so `FrameRenderer.ringBudget` -- which counts
+    /// `level / 365` -- can never give a token more than ONE ring of its own,
+    /// and the ten-ring canvas is unreachable from a token's own history. See
+    /// the note at the head of this file.
     function test_theLargestRealTokenFitsTheHardLimit() public {
-        _creditRun(1, 365 * 10);
+        _creditRun(1, 364);
         uint256 child = _seedFrom(1);
-        _creditRun(uint32(child), 365 * 10);
+        _creditRun(uint32(child), 364);
         _applyMaxMarks(child, true);
 
-        assertGe(t.viewOf(child).level, 3650, "at the ring cap");
-        (uint256 gasUsed, uint256 len) = _measure("REAL child, ring cap, every legal mark", child);
+        assertEq(t.viewOf(child).level, 365, "a whole heart, which is now the ceiling");
+        assertGt(t.viewOf(child).marks >> 64, 0, "and it wears a finishing place, which is drawn");
+        (uint256 gasUsed, uint256 len) = _measure("REAL child, whole year, every legal mark", child);
         console.log("  headroom, gas  ", GAS_LIMIT - gasUsed);
         console.log("  headroom, bytes", BYTE_LIMIT - len);
     }
@@ -192,9 +211,13 @@ contract RealTokenGasTest is MroTestBase {
     /// figure was measured with both pinned at zero, so this is the first
     /// measurement of a token that stopped coming back. It is not expected to
     /// be the worst case; it is measured because nothing had ever measured it.
+    /// @dev SEALED MARKS ARE GONE FROM THIS CASE and cannot come back: Vessel
+    /// needs a whole heart, a whole heart is 365 credited days, and a token at
+    /// 365 can never be credited again -- so it can never lapse. A lapsed token
+    /// therefore wears the unsealed set, which is the most it could ever wear.
     function test_aLapsedRealTokenFitsTheHardLimit() public {
-        _creditRun(1, 365 * 3);
-        _applyMaxMarks(1, true);
+        _creditRun(1, 300);
+        _applyMaxMarks(1, false);
 
         // Miss a year, then come back for a single day: the run falls, and
         // `fellRun` records what was lost.
@@ -211,7 +234,7 @@ contract RealTokenGasTest is MroTestBase {
         assertGt(v.fellRun, 0, "the fallen run must be recorded, or this measures nothing new");
         assertEq(v.streak, 1, "and the run starts again at one");
 
-        (uint256 gasUsed,) = _measure("REAL founding token, lapsed after three years", 1);
+        (uint256 gasUsed,) = _measure("REAL founding token, lapsed after a 300-day run", 1);
         console.log("  headroom, gas  ", GAS_LIMIT - gasUsed);
     }
 
@@ -224,10 +247,10 @@ contract RealTokenGasTest is MroTestBase {
     /// experiment. It is worth stating because the published headroom is the
     /// spike's, and a reader should know which way the error runs.
     function test_theShippingContractIsNotCheaperThanTheSpike() public {
-        _creditRun(1, 365 * 3);
+        _creditRun(1, 364);
         _applyMaxMarks(1, true);
 
-        (uint256 real,) = _measure("REAL founding token, three years, every legal mark", 1);
+        (uint256 real,) = _measure("REAL founding token, a whole year, every legal mark", 1);
         // The spike's comparable stage, from GasBudget.t.sol's ladder: a
         // founding token at three years with no marks measured 1,550,307 gas on
         // 2026-09-07. Printed rather than asserted against, because that figure
@@ -239,13 +262,23 @@ contract RealTokenGasTest is MroTestBase {
     /// @notice The Mark constants above describe what `applyMark` actually
     /// writes, rather than being a second copy that can drift from the first.
     function test_theMarkSetMatchesWhatTheLadderWillActuallyApply() public {
-        _creditRun(1, 364);
+        _creditRun(1, 363);
         _applyMaxMarks(1, false);
         assertEq(t.viewOf(1).marks, MAX_MARKS_UNSEALED, "the unsealed set is what the ladder applied");
 
+        // The credit that seals the heart also FINISHES the token, so from here
+        // the word carries a finisher Mark and its ordinal as well. Named here
+        // rather than folded into MAX_MARKS: that constant describes what
+        // `applyMark` writes, and nothing applied these -- this token is the
+        // first to finish, so the bit is Apex.
         _creditRun(1, 1);
         vm.prank(WARDEN);
         t.applyMark(1, VESSEL_ID, 0);
-        assertEq(t.viewOf(1).marks, MAX_MARKS, "and pair four opens the day the heart seals");
+        assertEq(
+            t.viewOf(1).marks & 0xFFFFFFFF,
+            MAX_MARKS | (uint256(1) << 15),
+            "and pair four opens the day the heart seals"
+        );
+        assertEq(t.viewOf(1).marks >> 64, 1, "the place it finished in, given by the same credit");
     }
 }

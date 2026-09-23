@@ -21,7 +21,7 @@ contract LineageTest is MroTestBase {
         // has to fail on the gate it names rather than on an inactive record,
         // and `vm.expectRevert(MarkGate.selector)` is what tells those two
         // apart.
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         for (uint8 i = 1; i <= 10; i++) t.setUpgrade(i, u[i]);
     }
 
@@ -56,29 +56,44 @@ contract LineageTest is MroTestBase {
     }
 
     /// It is SEALED: nothing after the seed moves it.
+    ///
+    /// @dev The parent used to be grown to 500 here, to prove that a line
+    /// lengthening under a sealed child still did not move the seal. A year now
+    /// stops at 365 credited days (spec 10f), so a parent that has seeded has by
+    /// definition finished and cannot be credited again. What can still move
+    /// afterwards is the CHILD's own count and the clock, so those are what move.
     function test_theEchoNeverMovesAfterTheSeed() public {
         _makeWhole(1);
         uint256 child = _seedFrom(1);
         uint32 atBirth = t.echoOf(child);
         assertEq(atBirth, 365);
 
-        _growTo(1, 500); // the parent keeps going
-        _growTo(child, 30); // so does the child
+        _growTo(child, 30);           // the child runs on
+        _warpToDay(t.today() + 400);  // and a year of clock passes over both
 
         assertEq(t.echoOf(child), atBirth, "a sealed number does not move");
         assertEq(t.viewOf(child).echo, atBirth);
     }
 
-    /// A second child, seeded later, is sealed with MORE than the first. The
-    /// seal is taken at the moment of the seed, not once per line.
-    function test_aLaterSiblingIsSealedWithTheLongerLine() public {
+    /// Two children of the same parent are sealed with the SAME line.
+    ///
+    /// @dev This asserted the opposite until 2026-09-23: a later sibling was
+    /// sealed with MORE, because the parent could keep counting between the two
+    /// seeds. It cannot now -- a parent that has seeded has finished its year at
+    /// 365 and will never be credited again -- so every child of one parent
+    /// inherits one fixed number, and that is what is pinned here.
+    ///
+    /// The property the old test protected, that the seal is taken at the moment
+    /// of the seed rather than once per line, is still live one generation down,
+    /// where a line CAN lengthen: `test_theEchoAccumulatesAcrossGenerations`
+    /// seeds from a child that earned its own year and gets 730, not 365.
+    function test_everySiblingIsSealedWithTheSameFinishedLine() public {
         _makeWhole(1);
         uint256 first = _seedFrom(1);
-        _growTo(1, 500);
         uint256 second = _seedFrom(1);
 
         assertEq(t.echoOf(first), 365);
-        assertEq(t.echoOf(second), 500, "the line was longer by the time this one was made");
+        assertEq(t.echoOf(second), 365, "the parent's line cannot lengthen after its year ends");
     }
 
     // -----------------------------------------------------------------

@@ -565,7 +565,7 @@ contract GasBudgetTest is Test {
     /// same-length hex substitution, so it buys almost no bytes. The four-Mark
     /// set is used because it is the legal one, not because it is the cheap one.
     function test_theLadderShutsBothSidesOfPairFourBelowAWholeHeart() public {
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         assertTrue(u[7].requiresWhole, "Vessel must still require a whole heart");
         assertEq(u[8].minStreak, 365, "Break must still require a run of 365");
 

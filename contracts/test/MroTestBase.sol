@@ -119,6 +119,10 @@ abstract contract MroTestBase is Test {
     /// exactly 1, which holds at 364 (729 days of tenure) and would flip to 2
     /// at 366 (731). Changing this count changes those tests' arithmetic -- they
     /// will fail loudly rather than drift, but they will fail.
+    /// @dev IT ALSO FINISHES THE TOKEN, since 2026-09-23: the credit that
+    /// reaches 365 gives it a place and one of the five finisher Marks, so the
+    /// first token a test makes whole comes back wearing bit 15 and ordinal 1,
+    /// and it can never be credited again.
     function _makeWhole(uint256 id) internal {
         uint32 d = t.today();
         uint32[] memory ids = new uint32[](364);

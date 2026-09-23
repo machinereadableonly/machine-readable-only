@@ -17,11 +17,15 @@ import { keccak256, encodeAbiParameters, parseAbiParameters } from "viem";
 import { LADDER } from "../warden/src/mcp/ladder.mjs";
 
 const TUPLE = parseAbiParameters(
-  "(uint64,uint32,uint32,uint32,uint32,bool,bool,uint16,uint16)[11]"
+  "(uint64,uint32,uint32,uint32,uint32,bool,bool,uint16,uint16)[16]"
 );
 
 /**
- * The eleven Upgrade records, in the contract's own field order.
+ * The sixteen Upgrade records, in the contract's own field order.
+ *
+ * A finisher Mark's `supply` is Infinity for Aorta, which the same
+ * `Infinity ? 0 : supply` mapping below turns into the contract's own 0 for
+ * unlimited. Nothing special is needed for the route.
  *
  * maxSupply and active are DERIVED, not hardcoded. Hardcoding them left a JS
  * cap or an inactive Mark invisible to the hash, which is the one field pair
@@ -31,7 +35,7 @@ const TUPLE = parseAbiParameters(
  */
 export function ladderRecords(ladder = LADDER) {
   const records = [];
-  for (let id = 0; id <= 10; id++) {
+  for (let id = 0; id <= 15; id++) {
     const m = ladder[id];
     records.push(m
       ? [BigInt(m.priceUsdc6), m.supply === Infinity ? 0 : m.supply, 0,

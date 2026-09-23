@@ -9,7 +9,7 @@
 // Free, unsigned-in-effect and ownerless on purpose. It reads nothing but the
 // mirror row and the catalogue: no payment wrapper, no chain read, no write.
 import * as z from "zod";
-import { VARIANT_NAMES, effectiveRun, markNameIn } from "../ladder.mjs";
+import { VARIANT_NAMES, effectiveRun, markNameIn, requestable } from "../ladder.mjs";
 
 /**
  * What a side is still short of, or undefined when nothing stands in its way.
@@ -129,8 +129,13 @@ export function makeLadderTool({ q, catalogue }) {
       // thing from holding them.
       const refused = q.failedMask?.(tokenId) ?? 0;
 
+      // THE FIVE PAIRS, not the whole catalogue. A finisher Mark is in no pair
+      // and cannot be chosen, so it has no side, no gate an agent can walk
+      // towards and nothing it forfeits -- everything this tool exists to
+      // report. Grouping it on its `pair: 0` would invent a sixth pair whose
+      // five members all close each other, which is a puzzle, not an answer.
       const pairs = [];
-      for (const mark of Object.values(catalogue).sort((a, b) => a.id - b.id)) {
+      for (const mark of requestable(catalogue).sort((a, b) => a.id - b.id)) {
         const side = sideOf(mark, token, catalogue, mask, refused);
         let entry = pairs.find((p) => p.pair === mark.pair);
         if (!entry) pairs.push((entry = { pair: mark.pair, sides: [] }));

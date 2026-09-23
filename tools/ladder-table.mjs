@@ -11,7 +11,7 @@
 // regenerated.
 //
 //   node tools/ladder-table.mjs          # print it
-import { LADDER } from "../warden/src/mcp/ladder.mjs";
+import { LADDER, requestable } from "../warden/src/mcp/ladder.mjs";
 
 /// What a side is waiting for, in the words llms.txt already uses.
 function gateOf(m) {
@@ -23,8 +23,11 @@ function gateOf(m) {
 
 export function ladderTable() {
   const rows = [];
-  for (const id of Object.keys(LADDER).map(Number).sort((a, b) => a - b)) {
-    const m = LADDER[id];
+  // THE REQUESTABLE MARKS ONLY. This block is a price list -- the reason it
+  // exists is that an agent could not see a $1,250 ceiling before being admitted
+  // -- and a Mark that is given for finishing has no price to publish. What the
+  // finisher Marks are belongs in the page's prose, not in a table of costs.
+  for (const m of requestable(LADDER).sort((a, b) => a.id - b.id)) {
     const price = m.route === "earned" ? "free" : m.price;
     const shapes = m.variants > 1 ? `, ${m.variants} shapes` : "";
     rows.push(

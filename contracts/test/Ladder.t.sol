@@ -20,14 +20,24 @@ contract LadderTest is MroTestBase {
         t.mint(1, ALICE, KEY, _code(), _today());
     }
 
+    /// @dev Bits 1-10: the five pairs, and nothing else. The assertions below
+    /// mask with this rather than with 0xFFFE because a token made whole now
+    /// also wears a finisher Mark at bits 11-15, given by the credit that ended
+    /// its year -- which is not something the pairs have anything to say about.
+    /// `FinishLine.t.sol` is where that bit is asserted.
+    uint256 internal constant PAIR_BITS = 0x07FE;
+
     /// @dev Which pair each Mark belongs to. Pairs are (1,2) (3,4) (5,6) (7,8)
     /// (9,10), so the pair of id n is (n + 1) / 2.
     function _pairOf(uint8 id) internal pure returns (uint8) {
         return (id + 1) / 2;
     }
 
+    /// @dev The five pairs, ids 1-10. The finisher Marks exclude each other as
+    /// a group of five rather than in pairs, so they are symmetric but not
+    /// pair-internal, and `Ladder.sol` builds that mask in one place.
     function test_everyExclusionIsSymmetric() public pure {
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         for (uint8 a = 1; a <= 10; a++) {
             for (uint8 b = 1; b <= 10; b++) {
                 bool aExcludesB = u[a].excludes & uint16(1 << b) != 0;
@@ -43,7 +53,7 @@ contract LadderTest is MroTestBase {
     /// is a dead tier. This is what stops it coming back through an edit to one
     /// row.
     function test_noExclusionCrossesAPairBoundary() public pure {
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         for (uint8 a = 1; a <= 10; a++) {
             for (uint8 b = 1; b <= 10; b++) {
                 if (u[a].excludes & uint16(1 << b) == 0) continue;
@@ -62,7 +72,7 @@ contract LadderTest is MroTestBase {
     /// with the code it checks, and it is the only test here that fails when
     /// the masks are simply absent.
     function test_theExclusionMasksAreTheseExactNumbers() public pure {
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         uint16[11] memory expected = [
             uint16(0),      // 0 is not a Mark
             uint16(4),      // 1 hush   excludes 2 ache      -> 1 << 2
@@ -82,7 +92,7 @@ contract LadderTest is MroTestBase {
     }
 
     function test_eachMarkExcludesExactlyItsPartner() public pure {
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         for (uint8 a = 1; a <= 10; a++) {
             uint8 partner = a % 2 == 1 ? a + 1 : a - 1;
             assertEq(u[a].excludes, uint16(1 << partner), "wrong exclusion mask");
@@ -93,24 +103,38 @@ contract LadderTest is MroTestBase {
     /// day one and silently forfeited Tint, which needs an Iris and therefore
     /// 100 days. A pair is fair when both sides open at the same time.
     function test_bothSidesOfPairFiveWaitOnAnIris() public pure {
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         uint16 anIris = uint16((1 << 5) | (1 << 6));
         assertEq(u[9].requiresAny, anIris, "Tint must need an Iris");
         assertEq(u[10].requiresAny, anIris, "Aura must need an Iris too");
     }
 
-    function test_nothingIsLimited() public pure {
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+    /// @dev NOTHING IN THE PAIRS is limited, which is a narrower claim than it
+    /// was. Ids 11-15 are the finisher Marks and they ARE capped, at the size of
+    /// the place band each one covers -- a cap on something no amount of money
+    /// can reach, which is not the sales funnel caps were removed for on
+    /// 2026-09-01. Their caps are pinned in `FinishLine.t.sol`, against the
+    /// contract's own place table.
+    function test_nothingInThePairsIsLimited() public pure {
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         for (uint8 a = 1; a <= 10; a++) {
             assertEq(u[a].maxSupply, 0, "a cap was reintroduced");
             assertTrue(u[a].active, "a Mark ships inactive");
+        }
+        for (uint8 a = 11; a <= 15; a++) {
+            assertTrue(u[a].active, "a finisher Mark ships inactive");
         }
     }
 
     /// @dev Priced XOR earned. Four Marks are free; the other six carry a price.
     /// A record that is neither, or both, is a wiring error.
-    function test_everyMarkIsPricedOrEarnedAndNeverBoth() public pure {
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+    ///
+    /// @dev IDS 1-10 ONLY, and that bound is the point rather than an oversight:
+    /// a finisher Mark is neither priced nor earned by a run, so it would fail
+    /// this rule by design. It is given for a PLACE, which is a third route and
+    /// has its own tests.
+    function test_everyMarkInThePairsIsPricedOrEarnedAndNeverBoth() public pure {
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         uint8 free;
         for (uint8 a = 1; a <= 10; a++) {
             bool priced = u[a].priceUsdc6 > 0;
@@ -136,14 +160,14 @@ contract LadderTest is MroTestBase {
         t.applyMark(1, 3, 0);   // Static first
         t.applyMark(1, 8, 0);   // then Break
         vm.stopPrank();
-        assertEq(t.marksOf(1) & 0xFFFE, (1 << 3) | (1 << 8));
+        assertEq(t.marksOf(1) & PAIR_BITS, (1 << 3) | (1 << 8));
 
         _readyBreakAndPairTwo();   // a second token, the other way round
         vm.startPrank(WARDEN);
         t.applyMark(2, 8, 0);   // Break first
         t.applyMark(2, 3, 0);   // then Static
         vm.stopPrank();
-        assertEq(t.marksOf(2) & 0xFFFE, (1 << 3) | (1 << 8));
+        assertEq(t.marksOf(2) & PAIR_BITS, (1 << 3) | (1 << 8));
     }
 
     function test_breakComposesWithBeatInBothOrders() public {
@@ -152,14 +176,14 @@ contract LadderTest is MroTestBase {
         t.applyMark(1, 4, 0);   // Beat first
         t.applyMark(1, 8, 0);   // then Break
         vm.stopPrank();
-        assertEq(t.marksOf(1) & 0xFFFE, (1 << 4) | (1 << 8));
+        assertEq(t.marksOf(1) & PAIR_BITS, (1 << 4) | (1 << 8));
 
         _readyBreakAndPairTwo();
         vm.startPrank(WARDEN);
         t.applyMark(2, 8, 0);   // Break first
         t.applyMark(2, 4, 0);   // then Beat
         vm.stopPrank();
-        assertEq(t.marksOf(2) & 0xFFFE, (1 << 4) | (1 << 8));
+        assertEq(t.marksOf(2) & PAIR_BITS, (1 << 4) | (1 << 8));
     }
 
     /// @dev The control that keeps the two tests above honest: WITHIN pair 2 the
@@ -193,7 +217,7 @@ contract LadderTest is MroTestBase {
         _makeWhole(id);
         assertEq(t.viewOf(id).streak, 365, "Break's gate needs a 365-day run");
 
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         t.setUpgrade(3, u[3]);
         t.setUpgrade(4, u[4]);
         t.setUpgrade(7, u[7]);
@@ -213,7 +237,7 @@ contract LadderTest is MroTestBase {
     function test_theLadderMatchesTheJavascriptMirror() public pure {
         assertEq(
             keccak256(abi.encode(Ladder.all())),
-            0xe48dfa7ee05a90c1ec7fc9cd15d400587161909c02f9f327ef3b106c74e15408,
+            0x3785f965f6caac72aca115c62ccdf90a1b888316695702ac35ddc72712489830,
             "the Warden's catalogue and the contract's ladder disagree"
         );
     }
@@ -236,7 +260,7 @@ contract LadderTest is MroTestBase {
     /// If this fails, the question is whether the SPEC changed -- not whether
     /// to update the expectation.
     function test_theLadderMatchesTheSpecTable() public pure {
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
 
         //         id  price (USDC, 6dp)  minLevel  minStreak  whole  excludes
         _row(u[1],  1,     1_000_000,           0,         0,  false,  2);   // Hush
@@ -304,7 +328,14 @@ contract LadderTest is MroTestBase {
         vm.stopPrank();
 
         uint256 expected = (1 << 1) | (1 << 4) | (1 << 5) | (1 << 7) | (1 << 9);
-        assertEq(t.marksOf(1) & 0xFFFE, expected, "the five Marks a token can hold at once");
+        assertEq(t.marksOf(1) & PAIR_BITS, expected, "the five Marks a token can hold at once");
+        // SIX, counting the one nobody applied. `_readyEveryPair` makes the
+        // token whole, and the credit that does so gives it a finishing place
+        // and the Mark that goes with it -- here Apex, because it is the first
+        // token in this test to finish. It is asserted rather than masked away:
+        // a token wearing five bought or earned Marks wears a sixth, and that
+        // is the real maximum.
+        assertTrue(t.marksOf(1) & (1 << 15) != 0, "and the Mark its finished year gave it");
         assertEq((t.marksOf(1) >> 16) & 0xFF, 2, "the Iris keeps the leaf it was bought in");
 
         // And the ceiling holds: every remaining id is now closed by its partner.
@@ -377,7 +408,7 @@ contract LadderTest is MroTestBase {
         }
         _makeWhole(id);
 
-        MachineReadableOnly.Upgrade[11] memory u = Ladder.all();
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         for (uint8 m = 1; m <= 10; m++) t.setUpgrade(m, u[m]);
         return id;
     }
