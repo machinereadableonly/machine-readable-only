@@ -231,11 +231,32 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // yesterday. The one thing the copy makes matter went unannounced by the
       // only tool that knew. Every field below is computed from values this
       // handler already holds; nothing new is read.
-      const streakDeadline = new Date((day + 2) * DAY_MS).toISOString();
+      // THE CREDIT THAT MAKES 365 ENDS THE YEAR, and this reply is the one
+      // place the agent hears it while it is still acting. Every other surface
+      // had been brought into line -- `tokenView` nulls both dates, the door
+      // refuses the next call `year-complete`, the chain reverts
+      // AlreadyFinished -- and the ACCEPTED reply still handed out a window to
+      // come back in and a deadline to keep. An agent doing exactly what it was
+      // told would then be refused every day for ever, with nothing in the
+      // accepted reply to suggest it had been misled. An accepted answer that
+      // instructs a loop the door refuses is worse than a refusal.
+      //
+      // Both dates NULL rather than dropped, the same rule `tokenView` follows:
+      // they are part of every accepted reply's shape, and an explicit "there is
+      // none" is an answer where a missing key reads as a fault. The shape is
+      // asserted on both branches in tools.test.mjs.
+      const finished = level >= FINISH_LEVEL;
+      const streakDeadline = finished ? null : new Date((day + 2) * DAY_MS).toISOString();
       const runBroke = streak === 1 && token.streak > 1
         ? { was: token.streak, lastCreditedDay: token.lastDay }
         : undefined;
       const nextRung = RUNGS.find((r) => r > streak) ?? null;
+      // The run that broke is still reported on the finishing day: a token that
+      // slipped during its year is coloured by that slip for ever, so the day
+      // it finishes is the last moment the fact is worth stating.
+      const brokeNote = runBroke
+        ? ` Your run of ${runBroke.was} ended: the ${runBroke.was} days are kept, the colour restarts.`
+        : "";
 
       return {
         ok: true,
@@ -244,15 +265,21 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
         level,
         streak,
         heart: `${Math.min(level, FINISH_LEVEL)}/${FINISH_LEVEL}`,
-        nextWindowOpensAt: new Date((day + 1) * DAY_MS).toISOString(),
+        nextWindowOpensAt: finished ? null : new Date((day + 1) * DAY_MS).toISOString(),
         onChainBy: onChainBy(day),
         streakDeadline,
         nextRung: nextRung === null ? null : { at: nextRung, daysAway: nextRung - streak },
         ...(runBroke ? { runBroke } : {}),
-        note:
-          `Day ${level} credited; it is written on chain at 00:05 UTC. Your run is ${streak}. ` +
-          `Check in again before ${streakDeadline} to keep it.` +
-          (runBroke ? ` Your run of ${runBroke.was} ended: the ${runBroke.was} days are kept, the colour restarts.` : ""),
+        note: finished
+          // NOTHING IS CLAIMED ABOUT THE PLACE ITSELF. The credit is queued
+          // here and the contract decides the place when it writes it, so this
+          // says where to read it rather than what it is.
+          ? `Day ${level} credited; it is written on chain at 00:05 UTC. Your year is complete: ` +
+            `the record is final, and no further day can be credited to this token. Its place in the ` +
+            `order tokens finish is written round the border once the chain has recorded it; ` +
+            `\`status\` shows it.` + brokeNote
+          : `Day ${level} credited; it is written on chain at 00:05 UTC. Your run is ${streak}. ` +
+            `Check in again before ${streakDeadline} to keep it.` + brokeNote,
       };
     },
   };

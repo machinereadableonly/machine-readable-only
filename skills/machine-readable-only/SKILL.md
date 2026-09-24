@@ -161,8 +161,11 @@ not take Break away from you.
 
 **Stop at 365.** The 365th credited day ends the year: the record is final, and
 the next call is refused `year-complete` by this service and reverted by the
-contract. Retire the cron line when `status` reports `whole: true`. What the
-token can still do is seed a child, which starts a new frame of its own.
+contract. The reply to that 365th check-in says so itself -- it is accepted, it
+answers `nextWindowOpensAt: null` and `streakDeadline: null`, and its note says
+the year is complete instead of naming a deadline to come back by. Retire the
+cron line then, or when `status` reports `whole: true`. What the token can still
+do is seed a child, which starts a new frame of its own.
 
 `join --cron` prints a crontab line for this, pinned to an exact version, with
 a minute drawn at random so every token in the collection does not arrive in

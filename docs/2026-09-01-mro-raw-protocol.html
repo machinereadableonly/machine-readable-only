@@ -531,7 +531,8 @@ wallet must sign, and we never submit it:</p>
 <p><code>onChainBy</code> is when the day is written on chain; <code>streakDeadline</code> is the end of
 tomorrow, which is the last moment a check-in still continues this run.
 <code>nextRung</code> is the next run at which the colour changes (3, 7, 30, 100), or
-<code>null</code> past the last one.</p>
+<code>null</code> past the last one. That is every day but the last: on the 365th, both
+<code>nextWindowOpensAt</code> and <code>streakDeadline</code> are <code>null</code>, which is the reply below.</p>
 <p><strong>When a run has just ended, the reply says so</strong>, rather than reporting
 <code>streak: 1</code> and leaving you to notice:</p>
 <pre><code>&quot;runBroke&quot;: { &quot;was&quot;: 99, &quot;lastCreditedDay&quot;: 20694 }
@@ -541,8 +542,30 @@ restarts.&quot; The days are never lost; only the colour restarts.</p>
 <p>A second check-in on the same day is refused with <code>already-credited-today</code>,
 <code>nextWindowOpensAt</code>, and the <code>onChainBy</code> of the credit you already have. It is
 not a penalty and nothing is at risk.</p>
-<p><strong>The 365th credit is the last one.</strong> A year is 365 credited days and does not
-begin again, so a call against a token that already has them is refused:</p>
+<p><strong>The 365th credit is the last one, and its own reply says so.</strong> It is an
+ordinary accepted reply -- the same fields, in the same order -- with the two
+dates answered as <code>null</code>, because there is no next window and no run left to
+keep:</p>
+<pre><code>checkin { &quot;tokenId&quot;: 1 }
+-&gt; { &quot;ok&quot;: true, &quot;accepted&quot;: true, &quot;creditedDay&quot;: 21057,
+     &quot;level&quot;: 365, &quot;streak&quot;: 365, &quot;heart&quot;: &quot;365/365&quot;,
+     &quot;nextWindowOpensAt&quot;: null,
+     &quot;onChainBy&quot;:         &quot;...T00:05:00.000Z&quot;,
+     &quot;streakDeadline&quot;:    null,
+     &quot;nextRung&quot;: null,
+     &quot;note&quot;: &quot;Day 365 credited; it is written on chain at 00:05 UTC. Your
+              year is complete: the record is final, and no further day can
+              be credited to this token. Its place in the order tokens
+              finish is written round the border once the chain has
+              recorded it; `status` shows it.&quot; }
+</code></pre>
+<p><code>null</code> rather than an absent key: both fields are part of every accepted reply,
+and an explicit &quot;there is none&quot; is an answer where a missing key reads as a
+fault. <code>runBroke</code> still appears if the run ended on that day. Nothing here
+names the place, because the credit is queued at this moment and the contract
+decides the place when it writes it -- read it back from <code>status</code> or from the
+chain after 00:05 UTC.</p>
+<p>A year does not begin again, so the NEXT call against that token is refused:</p>
 <pre><code>checkin { &quot;tokenId&quot;: 1 }
 -&gt; { &quot;ok&quot;: false, &quot;accepted&quot;: false, &quot;reason&quot;: &quot;year-complete&quot;,
      &quot;heart&quot;: &quot;365/365&quot;,
@@ -582,10 +605,10 @@ They are <code>null</code> rather than absent, because they are part of every vi
 and &quot;there is none&quot; is an answer where a missing key reads as a fault. A client
 that schedules its next visit from them must check: there is no next window
 after the 365th day.</p>
-<p><strong><code>years</code> is gone</strong> (removed 2026-09-24). It reported <code>level / 365</code> on a piece
-whose year now ends at 365 and does not begin again, so it could only ever
-answer 0 or 1 -- which <code>whole</code> already says. <code>finisher</code> is what distinguishes
-one finished token from another.</p>
+<p><strong><code>status</code> carries <code>finisher</code>, not a year count.</strong> There is one year, so how
+many a token has completed is <code>whole</code>, and what distinguishes one finished
+token from another is the place it came in. (The view carried a <code>years</code> field
+until 2026-09-24. It answered <code>level / 365</code> and could only ever be 0 or 1.)</p>
 <h2>The Mark ladder</h2>
 <p>Fifteen Marks: ten optional ones in five pairs, and five that are given for
 finishing a year and can never be asked for.</p>
@@ -680,6 +703,11 @@ exclude each other:</p>
 <td>no limit</td>
 </tr>
 </tbody></table>
+<p><strong>The names are lower case everywhere a machine reads them</strong> -- <code>status</code>&#39;s
+<code>finisher.mark</code>, <code>ladder</code>&#39;s <code>finishers[].name</code> and the token metadata all
+answer <code>apex</code>, not <code>Apex</code> -- exactly as the ten Marks in the pairs do. Capitals
+appear only in prose, including the table printed in <code>llms.txt</code>, so match on
+the lower-case form and never case-fold a comparison by hand.</p>
 <p>The place is written round the border of the artwork as sixteen binary digits,
 drawn as cell bitmaps rather than as SVG text, in that Mark&#39;s ink. It is in the
 metadata too, as the <code>Finisher</code> attribute, so nothing has to rasterise an image
@@ -1048,6 +1076,9 @@ where a year stops and what happens at the end of one.</p>
 <li><strong>A year is 365 credited days and does not begin again.</strong> <code>checkin</code> refuses a
 finished token with <code>year-complete</code>, and <code>_credit</code> reverts
 <code>AlreadyFinished(id)</code> at that level, so neither side can credit a 366th day.</li>
+<li><strong>The accepted reply for the 365th day answers <code>nextWindowOpensAt: null</code> and
+<code>streakDeadline: null</code></strong>, and its note says the year is complete rather than
+naming a deadline to come back by. Every other field is unchanged.</li>
 <li><strong>The credit that reaches 365 gives the token a place</strong>, in the order tokens
 finish; same-day finishes are placed by lowest token id. The contract emits
 <code>Finished(id, ordinal, markId)</code>, writes the ordinal into bits 64-95 of

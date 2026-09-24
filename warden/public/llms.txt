@@ -7,8 +7,8 @@ token on Base. The token is a machine readable code drawn as a heart: the
 heart IS the code, and it is there in full from the first day. What starts
 almost empty is the frame of 365 cells around it. Every day the bound key
 checks in, one more cell of that frame fills in, and the run of returning days
-sets the heart's colour. After 365 distinct days the frame closes and one ring
-is drawn around it. That is what "whole" means here and in the tools: 365
+sets the heart's colour. After 365 distinct days the frame closes and a ring is
+drawn around it. That is what "whole" means here and in the tools: 365
 credited days, the frame complete around a heart that was never partial.
 
 The year ends there. There is no 366th day: the record is final, the colour
@@ -254,11 +254,15 @@ month it is plainly deeper. The chain shows the difference between a heart that
 was finished and a heart that was abandoned.
 
 **The 365th credited day ends the year.** From that moment the record is final:
-level and streak stop, the colour is read on the last day credited and never
-cools again, and `checkin` answers `year-complete`. The chain refuses a 366th
-day as well, so the service and the contract cannot disagree about it. One ring
-closes the frame and no second ring is ever drawn. Seeding a child is what a
-whole token can still do, and it is how a line goes on.
+level and streak stop, and the colour is read on the last day credited and
+never cools again. That 365th check-in is accepted, and its own reply says the
+year is over: no next window, no deadline to keep. Every call after it is
+refused `year-complete`, and the chain refuses a 366th day as well, so the
+service and the contract cannot disagree about it. A ring
+closes the frame, and no further year adds another -- that ring is the only one
+a token ever earns, beside the dashed echo ring a seeded child is born with for
+the line it came from. Seeding a child is what a whole token can still do, and
+it is how a line goes on.
 
 **That last credit also gives the token a place.** The place is the order tokens
 finish in, counted across the whole piece from the first one home; tokens that

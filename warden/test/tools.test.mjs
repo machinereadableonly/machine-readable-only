@@ -267,6 +267,86 @@ test("CONTROL: the credit that MAKES 365 is still accepted", async () => {
   assert.equal(q.getToken(1).level, 365);
 });
 
+// AND THAT ACCEPTED REPLY MUST NOT SEND THE AGENT BACK TOMORROW.
+//
+// The test above proves the finishing day is credited and says nothing about
+// what the agent is TOLD. It was told `nextWindowOpensAt`, a `streakDeadline`
+// and "Check in again before <deadline> to keep it" -- and the call it was sent
+// back to make is refused `year-complete` every day after. An accepted reply
+// that instructs a loop the door refuses is worse than a refusal, because the
+// agent has no reason to doubt it.
+//
+// Null rather than absent, the same rule `tokenView` follows: both fields are
+// part of every accepted reply's shape, and an explicit "there is none" is an
+// answer where a missing key reads as a fault.
+test("the accepted 365th reply says the year is over and gives no next window", async () => {
+  const { q } = withToken({ lastDay: 100 });
+  q.creditDay(1, 100, 364, 5);
+  const tool = makeCheckinTool({ q, chain: noChainRead, today: () => 101 });
+
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1", sigHash: "d".repeat(64) });
+
+  assert.equal(r.accepted, true, "the finishing day is still credited");
+  assert.equal(r.nextWindowOpensAt, null, "there is no next window after the 365th day");
+  assert.equal(r.streakDeadline, null, "there is no run left to keep");
+  assert.doesNotMatch(r.note, /Check in again/, "the note still sends the agent back for a 366th day");
+  assert.match(r.note, /year is complete/);
+  // What it says instead has to be actionable: the place is on chain, and
+  // `status` is where an agent reads it.
+  assert.match(r.note, /status/);
+});
+
+// THE CONTROL FOR THE ONE ABOVE. Without it the assertions pass for a tool
+// that has stopped answering either date at all.
+test("CONTROL: the 364th accepted reply still carries both dates", async () => {
+  const { q } = withToken({ lastDay: 100 });
+  q.creditDay(1, 100, 363, 5);
+  const tool = makeCheckinTool({ q, chain: noChainRead, today: () => 101 });
+
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1", sigHash: "e".repeat(64) });
+
+  assert.equal(r.level, 364);
+  assert.equal(r.nextWindowOpensAt, new Date(102 * 86_400_000).toISOString());
+  assert.equal(r.streakDeadline, new Date(103 * 86_400_000).toISOString());
+  assert.match(r.note, /Check in again before/);
+});
+
+// THE PUBLISHED SHAPE OF AN ACCEPTED CHECK-IN, both branches of it.
+//
+// The reply is printed field by field in `docs/2026-09-01-mro-raw-protocol.md`
+// and its byte-identical copy inside the skill, and an agent has no
+// human-facing page to fall back on. The two branches must carry the SAME key
+// set -- the finishing day differs in the VALUES it answers, never in which
+// questions it answers -- or a client tabulating the reply meets a missing key
+// on the one day the piece exists to record.
+test("an accepted check-in carries exactly the published field set, on both branches", async () => {
+  const published = [
+    "accepted", "creditedDay", "heart", "level", "nextRung", "nextWindowOpensAt",
+    "note", "ok", "onChainBy", "streak", "streakDeadline",
+  ];
+
+  const ordinary = withToken({ lastDay: 100 });
+  ordinary.q.creditDay(1, 100, 10, 5);
+  const day11 = await makeCheckinTool({ q: ordinary.q, chain: noChainRead, today: () => 101 })
+    .handler({ tokenId: 1 }, { keyId: "k1", sigHash: "f".repeat(64) });
+  assert.deepEqual(
+    Object.keys(day11).sort(),
+    published,
+    "the published shape changed: update the protocol document and llms.txt in the same commit",
+  );
+
+  const finishing = withToken({ lastDay: 100 });
+  finishing.q.creditDay(1, 100, 364, 5);
+  const day365 = await makeCheckinTool({ q: finishing.q, chain: noChainRead, today: () => 101 })
+    .handler({ tokenId: 1 }, { keyId: "k1", sigHash: "0".repeat(64) });
+  assert.equal(day365.level, 365, "the branch under test is the finishing one");
+  assert.deepEqual(
+    Object.keys(day365).sort(),
+    published,
+    "the published shape changed: update the protocol document and llms.txt in the same commit",
+  );
+});
+
 test("a day BEFORE lastDay is refused too, not credited as a backfill", async () => {
   // A clock that has gone backwards, or a reconcile that moved lastDay
   // forward. The chain reverts on `day <= lastDay`, both halves of it.
