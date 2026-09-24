@@ -330,6 +330,12 @@ export function queries(db) {
     setOwner: db.prepare("UPDATE tokens SET owner = ? WHERE tokenId = ?"),
     setKeyId: db.prepare("UPDATE tokens SET keyId = ? WHERE tokenId = ?"),
     setMarkBit: db.prepare("UPDATE tokens SET marks = marks | ? WHERE tokenId = ?"),
+    // ONE STATEMENT, so the place and the Mark that names it are one fact. The
+    // two are a single event on chain and a token that carried one without the
+    // other would be a token whose border says a place its Marks deny.
+    setFinished: db.prepare(
+      "UPDATE tokens SET finisher = ?, marks = marks | ? WHERE tokenId = ?"
+    ),
   };
 
   return {
@@ -957,6 +963,15 @@ export function queries(db) {
         s.setMarkBit.run(1 << upgradeId, tokenId);
       });
     },
+
+    /// A token's year is complete, and the chain has said where it came.
+    ///
+    /// The place and the Mark arrive together in one `Finished` event and are
+    /// written together here. IDEMPOTENT BY CONSTRUCTION: the place is assigned
+    /// rather than counted and the bit is OR'd, so the same event applied twice
+    /// leaves exactly the same row -- which matters because reconcile re-reads
+    /// a block range whenever a run repeats or a cursor is rewound.
+    setFinished: (tokenId, ordinal, markId) => s.setFinished.run(ordinal, 1 << markId, tokenId),
 
     /// Facts only the chain knows: a transfer or a rebind the Warden never saw.
     setOwner: (tokenId, owner) => s.setOwner.run(owner, tokenId),

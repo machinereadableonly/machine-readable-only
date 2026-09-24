@@ -88,10 +88,10 @@ test("a token view carries exactly the published field set", async () => {
   assert.deepEqual(
     Object.keys(view).sort(),
     [
-      "chainId", "children", "contract", "docs", "generation", "heart", "lastDay",
-      "late", "level", "marks", "mcp", "nextWindowOpensAt", "onChainBy", "owner",
-      "parentId", "pendingOnChain", "resting", "streak", "streakDeadline",
-      "tokenId", "whole", "years",
+      "chainId", "children", "contract", "docs", "finisher", "generation", "heart",
+      "lastDay", "late", "level", "marks", "mcp", "nextWindowOpensAt", "onChainBy",
+      "owner", "parentId", "pendingOnChain", "resting", "streak", "streakDeadline",
+      "tokenId", "whole",
     ],
     "the published shape changed: update the protocol document and llms.txt in the same commit",
   );
@@ -139,4 +139,77 @@ test("the window and the deadline are one day apart, and derived from lastDay", 
     86_400_000,
     "the window is exactly one day wide, as the contract enforces",
   );
+});
+
+// ---------------------------------------------------------------------------
+// The finishing place -- Plan "the finisher's Marks and the year that ends"
+// ---------------------------------------------------------------------------
+//
+// The door refuses a finished token's check-in with `year-complete` and tells
+// the agent "its place is written round the border; `status` shows it". These
+// are the tests that make that sentence true: before them a finished token's
+// view was indistinguishable from any other whole one.
+
+test("a finished token's view names its place and the Mark that marks it", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 20_700, mintDay: 20_336 });
+  q.creditDay(1, 20_700, 365, 365);
+  q.setFinished(1, 1, 15);
+  const tool = makeStatusTool({ q, chain: openChain() });
+
+  const view = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+
+  assert.deepEqual(view.finisher, { place: 1, mark: "apex" });
+  assert.equal(view.heart, "365/365");
+  assert.equal(view.whole, true);
+  assert.equal("years" in view, false, "years is gone: the year ends at 365 and does not repeat");
+});
+
+// markNameIn names the FIRST Mark it finds in a mask, so the mask it is given
+// has to be narrowed to the five finisher bits before it is asked. Handed the
+// whole of `marks`, a token that also wears Hush would be reported as having
+// finished in the place of a Mark it bought.
+test("a bought Mark alongside the finisher does not rename the place", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 20_700, mintDay: 20_336 });
+  q.creditDay(1, 20_700, 365, 365);
+  q.reserveMark(1, 2);
+  q.markOrderWritten(1, 2);          // Ache, bit 2
+  q.setFinished(1, 2, 14);           // Atrium, bit 14
+  const tool = makeStatusTool({ q, chain: openChain() });
+
+  const view = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.deepEqual(view.finisher, { place: 2, mark: "atrium" });
+  assert.equal(view.marks, (1 << 2) | (1 << 14), "both Marks are still reported in `marks`");
+});
+
+test("a token that has not finished carries finisher: null, not a place of 0", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 20_700, mintDay: 20_600 });
+  const tool = makeStatusTool({ q, chain: openChain() });
+
+  const view = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(view.finisher, null);
+});
+
+// The half of this that was a live contradiction: the door refuses a finished
+// token FOREVER, and `status` was still handing it a time to come back and a
+// deadline to keep a run by. An agent that schedules from those two fields
+// would return every day to be refused every day.
+test("a finished token is not told when to come back", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 20_700, mintDay: 20_336 });
+  q.creditDay(1, 20_700, 365, 365);
+  q.setFinished(1, 40, 12);
+  const tool = makeStatusTool({ q, chain: openChain() });
+
+  const view = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+
+  assert.equal(view.nextWindowOpensAt, null, "there is no next window: the year is complete");
+  assert.equal(view.streakDeadline, null, "and no run left to lose");
+  assert.deepEqual(view.finisher, { place: 40, mark: "chamber" });
+  // Still the published shape: the keys are present and explicitly empty
+  // rather than missing, so a client reading them always finds an answer.
+  assert.equal("nextWindowOpensAt" in view, true);
+  assert.equal("streakDeadline" in view, true);
 });

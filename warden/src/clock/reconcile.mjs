@@ -47,6 +47,12 @@ export const DEPLOY_BLOCK = { 84532: 47_161_021n };
 /// this is deliberately the chain's bound and not the catalogue's ten.
 const MAX_MARK_ID = 15;
 
+/// The lowest of the five finisher Marks, from MachineReadableOnly's own
+/// `finisherMark()`, which answers 15 for the first place and 11 for the
+/// sixty-fifth onwards. A `Finished` naming anything below this is a decode
+/// that lost its argument, not a Mark.
+const MIN_FINISHER_MARK_ID = 11;
+
 /**
  * Read every log this contract emitted in a block range, one page at a time.
  *
@@ -91,7 +97,7 @@ export async function readEvents(pub, { contract, fromBlock, toBlock, span = MAX
  */
 export function applyEvents(q, events, { log = () => {} } = {}) {
   const applied = {
-    Rested: 0, Transfer: 0, Rebound: 0, Minted: 0, MarkApplied: 0, skipped: 0,
+    Rested: 0, Transfer: 0, Rebound: 0, Minted: 0, MarkApplied: 0, Finished: 0, skipped: 0,
     // 4.M8. THE THREE EVENTS THAT ARE SEEN AND NOT APPLIED, counted rather than
     // discarded, because "the mirror ignored it" and "the chain never said it"
     // used to look identical from here.
@@ -216,6 +222,38 @@ export function applyEvents(q, events, { log = () => {} } = {}) {
         }
         q.markOrderWritten(tokenId, upgradeId);
         applied.MarkApplied += 1;
+        break;
+      }
+      case "Finished": {
+        // THE ONLY EVENT THAT CARRIES A PLACE. The finishing credit gives the
+        // Mark itself and emits this INSTEAD of MarkApplied -- there is no
+        // order to mark written, because nobody asked for it and nobody paid --
+        // so without this case a finished token is indistinguishable from any
+        // other whole one, and the `year-complete` refusal points the agent at
+        // a `status` that cannot answer.
+        //
+        // Both arguments are validated the way MarkApplied validates its id,
+        // and for the same reason: a decode that lost one would write a bit no
+        // Mark owns, or a place of 0 that reads back as "never finished", and
+        // nothing ever clears either. Places start at 1 -- the contract's
+        // `ordinal = ++finishers` cannot hand out a 0 -- and the Mark is one of
+        // the five in the finisher band.
+        const ordinal = Number(event.args?.ordinal);
+        const markId = Number(event.args?.markId);
+        if (
+          !Number.isInteger(ordinal) || ordinal < 1 ||
+          !Number.isInteger(markId) || markId < MIN_FINISHER_MARK_ID || markId > MAX_MARK_ID
+        ) {
+          applied.skipped += 1;
+          log(
+            `clock: a Finished on token ${tokenId} carried no usable place ` +
+              `(ordinal ${String(event.args?.ordinal)}, markId ${String(event.args?.markId)}); nothing written`
+          );
+          break;
+        }
+        q.setFinished(tokenId, ordinal, markId);
+        applied.Finished += 1;
+        log(`clock: token ${tokenId} finished its year in place ${ordinal}, mark ${markId}`);
         break;
       }
     }

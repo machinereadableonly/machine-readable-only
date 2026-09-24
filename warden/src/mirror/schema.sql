@@ -48,6 +48,16 @@ CREATE TABLE IF NOT EXISTS tokens (
   lastDay    INTEGER NOT NULL,
   mintDay    INTEGER NOT NULL,
   marks      INTEGER NOT NULL DEFAULT 0,   -- the bitmask, one bit per mark id
+  -- The finishing place: 1 for the first token to reach 365, 2 for the next,
+  -- and 0 for every token whose year is not complete. Learned from the
+  -- contract's `Finished` event, which is emitted INSTEAD of MarkApplied --
+  -- nobody ordered this Mark and nobody paid for it.
+  --
+  -- ITS OWN COLUMN RATHER THAN MORE OF `marks`, because it cannot go there.
+  -- The contract keeps the place in bits 64-95 of its own marks word, and
+  -- `marks` here is a SQLite INTEGER, which is 64 bits and signed. The place
+  -- would not fit and could not be read back.
+  finisher   INTEGER NOT NULL DEFAULT 0,
   generation INTEGER NOT NULL DEFAULT 0,
   parentId   INTEGER,
   status     TEXT NOT NULL DEFAULT 'queued',  -- queued | written (the WRITE pipeline)

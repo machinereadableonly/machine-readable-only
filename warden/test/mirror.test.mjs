@@ -93,6 +93,73 @@ test("an older mirror without the column is migrated rather than left broken", (
     [{ tokenId: 7, upgradeId: 3, variant: 0 }]);
 });
 
+// -- the finishing place ----------------------------------------------------
+//
+// `tokens.marks` is a 64-bit SQLite INTEGER and the contract writes the place
+// into bits 64-95 of its own marks word, which cannot be mirrored there at all.
+// So the place is its own column, and the ONE event that carries it also
+// carries the Mark bit that names it.
+
+test("setFinished writes the place and ORs the Mark bit in one go", () => {
+  const { q } = fresh();
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  q.setFinished(1, 7, 13);
+  assert.equal(q.getToken(1).finisher, 7);
+  assert.equal(q.getToken(1).marks, 1 << 13);
+});
+
+test("setFinished leaves the Marks the token already wears alone", () => {
+  const { q } = fresh();
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  q.reserveMark(1, 2);
+  q.markOrderWritten(1, 2);
+  q.setFinished(1, 1, 15);
+  assert.equal(q.getToken(1).marks, (1 << 2) | (1 << 15), "Ache is still there beside Apex");
+});
+
+test("a token that has not finished reads a place of 0, not null", () => {
+  const { q } = fresh();
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  assert.equal(q.getToken(1).finisher, 0);
+});
+
+// The same rule as the mark_orders column above: CREATE TABLE IF NOT EXISTS is
+// a no-op on a table that already exists, so a column added to schema.sql never
+// reaches a mirror created before it. This one matters more than most -- a
+// missing column reads `undefined`, and `undefined` is falsy, so every finished
+// token would report no place at all rather than failing loudly.
+test("an older mirror without `finisher` is migrated rather than left broken", () => {
+  const db = openDb(":memory:");
+  db.exec("DROP TABLE tokens");
+  // The PREVIOUS shape of the table, column for column.
+  db.exec(
+    "CREATE TABLE tokens (" +
+      "tokenId INTEGER PRIMARY KEY, keyId TEXT NOT NULL, owner TEXT NOT NULL, " +
+      "level INTEGER NOT NULL DEFAULT 1, streak INTEGER NOT NULL DEFAULT 1, " +
+      "bestRun INTEGER NOT NULL DEFAULT 1, lastDay INTEGER NOT NULL, " +
+      "mintDay INTEGER NOT NULL, marks INTEGER NOT NULL DEFAULT 0, " +
+      "generation INTEGER NOT NULL DEFAULT 0, parentId INTEGER, " +
+      "status TEXT NOT NULL DEFAULT 'queued', resting INTEGER NOT NULL DEFAULT 0)"
+  );
+  db.exec("INSERT INTO tokens (tokenId, keyId, owner, lastDay, mintDay) VALUES (1, 'k1', '0xabc', 100, 100)");
+
+  const before = new Set(db.prepare("PRAGMA table_info(tokens)").all().map((c) => c.name));
+  assert.equal(before.has("finisher"), false, "the fixture must start without the column");
+
+  // Re-running the migration is what a restart does.
+  migrate(db);
+  const q = queries(db);
+  assert.equal(q.getToken(1).finisher, 0, "an existing token has not finished");
+  q.setFinished(1, 2, 14);
+  assert.equal(q.getToken(1).finisher, 2);
+  assert.equal(q.getToken(1).marks, 1 << 14);
+
+  // A second migrate is the next restart, and it must not throw on the column
+  // it already added.
+  migrate(db);
+  assert.equal(q.getToken(1).finisher, 2);
+});
+
 // -- forgetting keys that were never used -----------------------------------
 //
 // Registration is free and unauthenticated, so the per-thumbprint limit never

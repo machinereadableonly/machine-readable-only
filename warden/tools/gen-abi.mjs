@@ -35,7 +35,11 @@ const REQUIRED_FUNCTIONS = ["mint", "batchCheckIn", "applyMark", "seed"];
 // apply nothing -- see applyEvents for why neither can -- but an event the ABI
 // omits cannot even be seen, and "the mirror ignored it" and "the chain never
 // said it" then look identical.
-const REQUIRED_EVENTS = ["Minted", "BatchCheckedIn", "MarkApplied", "Rebound", "Transfer", "Rested", "Seeded", "SunsetAt"];
+// `Finished` is the finishing credit's own event, emitted INSTEAD of
+// MarkApplied, and it is the only place a token's PLACE is ever stated. An ABI
+// that omitted it would leave every finished token looking like any other whole
+// one, silently.
+const REQUIRED_EVENTS = ["Minted", "BatchCheckedIn", "MarkApplied", "Rebound", "Transfer", "Rested", "Seeded", "SunsetAt", "Finished"];
 
 for (const name of REQUIRED_FUNCTIONS) {
   if (!abi.some((e) => e.type === "function" && e.name === name)) {

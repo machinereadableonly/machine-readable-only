@@ -168,6 +168,66 @@ test("MarkApplied marks the order written AND sets the bit the tools read", () =
   assert.equal(q.getToken(1).marks, 1 << 3);
 });
 
+// The finishing credit emits `Finished` and NOT `MarkApplied`: there is no
+// order to mark written, nobody paid for it, and this is the only event that
+// ever says which place a token took. Without this case a finished token looks
+// exactly like any other whole one, and the `year-complete` refusal points the
+// agent at a `status` that cannot answer.
+test("Finished records the place AND sets the finisher Mark bit", () => {
+  const { q } = mirrorWithToken();
+  const applied = applyEvents(q, [chainEvent("Finished", { id: 1n, ordinal: 3, markId: 14 })]);
+  assert.equal(applied.Finished, 1);
+  assert.equal(q.getToken(1).finisher, 3, "the place the chain gave it");
+  assert.equal(q.getToken(1).marks, 1 << 14, "Atrium, and nothing else");
+});
+
+// Reconcile re-reads a block range whenever a run is repeated or a cursor is
+// rewound, so the same log arrives twice as a matter of course. Writing the
+// place is not a counter and must not behave like one.
+test("the same Finished applied twice changes nothing the second time", () => {
+  const { q } = mirrorWithToken();
+  const e = chainEvent("Finished", { id: 1n, ordinal: 3, markId: 14 });
+  applyEvents(q, [e]);
+  const first = { ...q.getToken(1) };
+  applyEvents(q, [e]);
+  assert.deepEqual({ ...q.getToken(1) }, first);
+});
+
+// 4.L8 again, on the other event that carries a Mark id. A decode that lost the
+// argument would write a bit no finisher owns, and nothing ever clears a bit.
+// Ids 11-15 are the whole finisher band (MachineReadableOnly.finisherMark).
+test("a Finished carrying a Mark id outside the finisher band is skipped, not written", () => {
+  const { q } = mirrorWithToken();
+  const lines = [];
+  const applied = applyEvents(
+    q,
+    [chainEvent("Finished", { id: 1n, ordinal: 1, markId: 8 })],
+    { log: (m) => lines.push(m) }
+  );
+  assert.equal(applied.Finished, 0);
+  assert.equal(applied.skipped, 1);
+  assert.equal(q.getToken(1).finisher, 0, "nothing written");
+  assert.equal(q.getToken(1).marks, 0);
+  assert.match(lines[0], /Finished/);
+});
+
+// Places start at 1 -- the contract's `ordinal = ++finishers` can never hand
+// out a 0 -- so a 0 here is a lost argument wearing the shape of a real one,
+// and it would read back as "not finished".
+test("a Finished with no usable ordinal is skipped, not written", () => {
+  const { q } = mirrorWithToken();
+  const lines = [];
+  const applied = applyEvents(
+    q,
+    [chainEvent("Finished", { id: 1n, ordinal: 0, markId: 15 })],
+    { log: (m) => lines.push(m) }
+  );
+  assert.equal(applied.Finished, 0);
+  assert.equal(applied.skipped, 1);
+  assert.equal(q.getToken(1).finisher, 0);
+  assert.equal(q.getToken(1).marks, 0);
+});
+
 // A token minted by some other warden, or one this mirror was restored without,
 // is not this service's to invent.
 test("an event for a token the mirror never heard of is skipped, not inserted", () => {
@@ -200,7 +260,7 @@ test("events this reconcile does not handle are ignored without counting as skip
     ev("MetadataUpdate", { _tokenId: 1n }),
   ]);
   assert.equal(applied.skipped, 0);
-  for (const k of ["Rested", "Transfer", "Rebound", "Minted", "MarkApplied"]) assert.equal(applied[k], 0);
+  for (const k of ["Rested", "Transfer", "Rebound", "Minted", "MarkApplied", "Finished"]) assert.equal(applied[k], 0);
 });
 
 // 15.11. `getLogs({ address })` is a NODE-SIDE filter, and viem's

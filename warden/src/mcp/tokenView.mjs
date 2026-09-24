@@ -4,6 +4,11 @@
 
 import { onChainBy } from "./nextSteps.mjs";
 import { dayStartIso } from "../day.mjs";
+import { FINISHER_MASK, LADDER, markNameIn } from "./ladder.mjs";
+
+/// A year is 365 credited days and it does not repeat. The contract's own
+/// FINISH_LEVEL, and the level at which every window below closes for good.
+const FINISH_LEVEL = 365;
 
 /**
  * Where a token says the rest of the piece is.
@@ -31,13 +36,26 @@ export function tokenLinks({ domain, contract, chainId }) {
 export function tokenView(q, tokenId, links = null, now = Date.now()) {
   const t = q.getToken(tokenId);
   if (!t) return null;
+  // Whether this token's year is over. Everything the piece measures in days
+  // stops here, so it is asked once and read three times below.
+  const finished = t.level >= FINISH_LEVEL;
   return {
     tokenId: t.tokenId,
     level: t.level,
     streak: t.streak,
-    heart: `${Math.min(t.level, 365)}/365`,
-    whole: t.level >= 365,
-    years: Math.floor(t.level / 365),
+    heart: `${Math.min(t.level, FINISH_LEVEL)}/365`,
+    whole: finished,
+    // `years` is GONE. It counted completed years as `level / 365` on a piece
+    // where the year now ends at 365 and does not begin again, so it could only
+    // ever answer 0 or 1 -- the same fact `whole` already carries, in a field
+    // whose name promises a second year that cannot happen.
+    //
+    // What replaces it is the thing that DOES distinguish one finished token
+    // from another: the place it came in. `null` until the chain says so, which
+    // is the finishing credit's `Finished` event and nothing else.
+    finisher: t.finisher
+      ? { place: t.finisher, mark: markNameIn(t.marks & FINISHER_MASK, LADDER) }
+      : null,
     marks: t.marks,
     lastDay: t.lastDay,
     generation: t.generation,
@@ -73,8 +91,19 @@ export function tokenView(q, tokenId, links = null, now = Date.now()) {
     // run survives only if the next credit lands INSIDE that day, which is why
     // the deadline is its end. Both from `lastDay`, which is the same field the
     // contract's `lastDay < day <= today()` reads.
-    nextWindowOpensAt: dayStartIso(t.lastDay + 1),
-    streakDeadline: dayStartIso(t.lastDay + 2),
+    //
+    // NULL ONCE THE YEAR IS COMPLETE, because there is no next window and no
+    // run left to lose: the door refuses a finished token's check-in with
+    // `year-complete` forever, and these two fields were still handing it a
+    // time to come back and a deadline to keep. An agent scheduling from them
+    // would have returned every day to be refused every day.
+    //
+    // Null rather than absent, unlike `onChainBy` and `late` above. Those two
+    // are extra fields that exist only in a passing state; these two are part
+    // of every view's published shape, and an explicit "there is none" is an
+    // answer where a missing key reads as a fault.
+    nextWindowOpensAt: finished ? null : dayStartIso(t.lastDay + 1),
+    streakDeadline: finished ? null : dayStartIso(t.lastDay + 2),
     // Counted, not stored. `seedsAvailable` is still deliberately NOT here,
     // for a different reason than before: the write path exists since
     // 2026-09-07, so the old objection -- publishing an entitlement the

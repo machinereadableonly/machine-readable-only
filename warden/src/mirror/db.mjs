@@ -64,6 +64,15 @@ export function migrate(db) {
     db.exec("UPDATE tokens SET bestRun = streak WHERE streak > bestRun");
   }
 
+  // The finishing place. NOT backfillable, unlike bestRun above: no row here
+  // has ever held it, and the chain is the only place it exists -- the next
+  // reconcile that reads a `Finished` out of the range it pages is what fills
+  // it in. 0 is the honest answer meanwhile, and it is also the true answer for
+  // every token there is today, because nothing has finished yet.
+  if (!columns.has("finisher")) {
+    db.exec("ALTER TABLE tokens ADD COLUMN finisher INTEGER NOT NULL DEFAULT 0");
+  }
+
   const orderCols = new Set(db.prepare("PRAGMA table_info(mark_orders)").all().map((c) => c.name));
   if (!orderCols.has("variant")) {
     db.exec("ALTER TABLE mark_orders ADD COLUMN variant INTEGER NOT NULL DEFAULT 0");
