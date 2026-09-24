@@ -33,7 +33,21 @@ const ENTRY_ERRORS = {
   // The token's year is already complete on chain: `_credit` refuses a 366th
   // day. The door refuses these too, so one reaching the chain means the
   // MIRROR fell behind, not that anything is wrong with the chain's record.
-  // Dropping it loses nothing -- there is no day left to write.
+  //
+  // WHAT `by: "id"` COSTS HERE, stated rather than glossed. It condemns EVERY
+  // queued entry for that token, not just the refused one. When the token was
+  // ALREADY at 365 before this chunk -- the case this rule is for -- that loses
+  // nothing, because none of its entries was ever writable. It would lose a day
+  // in one other shape: the same chunk carrying the credit that FINISHES the
+  // token and then a later one for it, where the first is good and only the
+  // second is refused.
+  //
+  // The door is what makes that shape require a broken mirror, not merely a
+  // late one. `checkin` refuses on the mirror's own level, and yearCompleteBlock
+  // refuses on the chain's, so two queued days whose second is the 366th need
+  // the mirror's level to disagree with the credits the mirror itself already
+  // holds. Nothing is marked written either way, so such a loss would surface
+  // in `stuckCredits` with an alert rather than pass silently.
   AlreadyFinished: { by: "id" },
   FutureDay: { by: "day" },
 };
@@ -43,9 +57,14 @@ const ENTRY_ERRORS = {
  *
  * FINISHING PLACE IS DECIDED BY THIS ORDER. The contract gives places in the
  * order credits arrive inside one `batchCheckIn` (`_finish`), and the published
- * rule is lowest token id first within a day. The SQL already selects in this
- * order; the heal and bisect paths below reorder what is left, so the order is
- * re-imposed at the last moment rather than trusted from upstream.
+ * rule is lowest token id first within a day.
+ *
+ * THIS HOLDS WITHIN A CHUNK, WHICH IS ALL IT CAN. The heal and bisect paths
+ * below reorder what is left of a chunk, so the order is re-imposed on it at
+ * the last moment rather than trusted from the caller. Order ACROSS chunks is
+ * not this function's to fix -- run.mjs slices an already-ordered list, and a
+ * sort inside one slice cannot put a token back in a slice it was not in. That
+ * global order comes from `pendingCredits`' `ORDER BY day ASC, tokenId ASC`.
  */
 const byDayThenId = (a, b) => a.day - b.day || a.tokenId - b.tokenId;
 
@@ -343,8 +362,11 @@ export async function writeCheckInChunk(
  * preserves that, and each half is sorted again at the top of
  * writeCheckInChunk -- so two transactions assign places in exactly the order
  * one would have. Halving is not an edge case on a heavy finishing night: a
- * finishing credit costs about 49,500 gas more than an ordinary one, so enough
- * of them in one chunk is what makes the estimate decline in the first place.
+ * finishing credit is dearer than an ordinary one -- how much dearer is printed
+ * by `test_theFinishingCreditCostsMoreThanAnOrdinaryOne` in
+ * contracts/test/CheckIn.t.sol, which also prints what a whole chunk of them
+ * would add -- so enough of them in one chunk is what makes the estimate
+ * decline in the first place.
  *
  * An abort in the first half stops here, and the second half is not sent. Its
  * entries stay queued and the run exits loudly, which is what an abort is for;

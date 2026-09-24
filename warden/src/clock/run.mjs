@@ -537,6 +537,13 @@ export async function runClock({
     alert(`clock: credit for token ${entry.tokenId} has an id the contract cannot decode; skipped, and it stays queued`);
   }
 
+  // THE GLOBAL ORDER IS THE SQL'S, NOT THE CHUNK'S. Finishing place is the
+  // order credits arrive on chain, so it runs across chunk boundaries as well
+  // as inside them -- and this is a flat list sliced in order, which a sort
+  // inside one slice could never repair. `pendingCredits` selects
+  // `ORDER BY day ASC, tokenId ASC`, and everything above preserves it;
+  // writeCheckInChunk re-imposes the same order on whatever is left of a chunk
+  // after a heal or a bisect has reordered it.
   for (const entries of chunk(sendable, chunkSize)) {
     const result = await writeCheckInChunk(writer, entries, { log, lastDayOf });
     for (const entry of result.written) {

@@ -391,11 +391,12 @@ test("AlreadyFinished drops the named token's entries and writes the rest", asyn
   assert.equal(r.aborted, null);
 });
 
-// A finishing credit costs about 49,500 gas more than an ordinary one, so a
-// heavy finishing night fills the chunk's headroom and the estimate declines.
-// Halving is therefore the NORMAL path on the nights this order matters most,
-// and it must not shuffle the places: the whole first half goes before the
-// whole second.
+// A finishing credit is dearer than an ordinary one -- the margin is measured
+// and printed by `test_theFinishingCreditCostsMoreThanAnOrdinaryOne` in
+// contracts/test/CheckIn.t.sol -- so a heavy finishing night fills the chunk's
+// headroom and the estimate declines. Halving is therefore the NORMAL path on
+// the nights this order matters most, and it must not shuffle the places: the
+// whole first half goes before the whole second.
 test("a chunk too big to estimate is halved in (day, tokenId) order, first half first", async () => {
   const writer = gasStubWriter(2);
   const r = await writeCheckInChunk(writer, [entry(4, 100), entry(1, 100), entry(3, 100), entry(2, 100)]);
@@ -428,4 +429,23 @@ test("after a heal reorders what is left, the next send is sorted again", async 
     [1, 9],
     "the heal appended token 1 to the end; the send must put it back in front of token 9",
   );
+});
+
+// THE SORT ON THE WAY IN IS OBSERVABLE, and this is where. Every send is
+// preceded by the sort inside the loop, so on the ordinary paths the two are
+// indistinguishable -- but `attempts-exhausted` returns BEFORE any send, and
+// hands back `remaining` as `dropped`. Those rows stay queued for tomorrow, so
+// their order is the order they are re-offered in.
+test("a chunk exhausted before its first send still reports its entries in order", async () => {
+  const writer = stubWriter();
+  const r = await writeCheckInChunk(writer, [entry(9, 100), entry(2, 101), entry(3, 100)], {
+    maxAttempts: 0,
+  });
+
+  assert.equal(writer.calls.length, 0, "nothing was sent, so only the entry sort can have run");
+  assert.deepEqual(
+    r.dropped.map((d) => [d.entry.day, d.entry.tokenId]),
+    [[100, 3], [100, 9], [101, 2]],
+  );
+  for (const d of r.dropped) assert.equal(d.reason, "attempts-exhausted");
 });

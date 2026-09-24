@@ -368,3 +368,27 @@ test("a contended write WAITS for the other writer rather than failing", async (
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// THE ONLY PLACE CROSS-CHUNK ORDER LIVES. Finishing place is the order credits
+// arrive on chain (`_finish`), and that order runs across chunk boundaries:
+// run.mjs slices this list flat, and the sort inside writeCheckInChunk can only
+// order what is already in one slice. So the `ORDER BY` here is load-bearing
+// for the artwork, not a nicety -- without it a token could be handed a place
+// that belongs to a lower id in the same day.
+test("pendingCredits comes back in (day, tokenId) order however the rows went in", () => {
+  const { q } = fresh();
+  for (const tokenId of [9, 2, 5]) {
+    q.insertToken({ tokenId, keyId: `k${tokenId}`, owner: "0xabc", lastDay: 99, mintDay: 99 });
+  }
+  // Inserted worst-first: descending id inside a day, and the later day before
+  // the earlier one.
+  for (const [tokenId, day] of [[9, 101], [2, 101], [5, 100], [9, 100], [2, 100]]) {
+    assert.equal(q.insertCredit(tokenId, day, `sig-${tokenId}-${day}`), true);
+  }
+
+  assert.deepEqual(
+    q.pendingCredits(101).map((r) => [r.day, r.tokenId]),
+    [[100, 2], [100, 5], [100, 9], [101, 2], [101, 9]],
+    "day ascending, and lowest token id first within the day",
+  );
+});
