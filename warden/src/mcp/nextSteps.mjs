@@ -35,7 +35,7 @@ export const NEXT = {
   "already-credited-today":
     "You already came back today, and `nextWindowOpensAt` says when the next window opens. This is not a penalty: nothing was lost and your run is intact.",
   "year-complete":
-    "Your year is complete. The record is final and its place is written round the border; `status` shows it. A whole token can seed a child once its key has a seed available.",
+    "Your year is complete. The record is final and its place is written round the border once the chain has recorded it, normally the same night; `status` shows it. A whole token can seed a child once its key has a seed available.",
   "already-minted":
     "This key has minted its one token. `status` with no argument shows it.",
   "supply-cap-reached": "The collection is full.",

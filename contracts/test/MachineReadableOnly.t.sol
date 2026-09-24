@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Vm} from "forge-std/Vm.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 import {MroTestBase} from "./MroTestBase.sol";
@@ -81,6 +82,31 @@ contract MachineReadableOnlyTest is MroTestBase {
         vm.prank(MALLORY);
         vm.expectRevert();
         t.setSupplyCap(1);
+    }
+
+    /// @notice THE SUPPLY CAP CANNOT OUTGROW THE FINISHER'S BAND.
+    ///
+    /// @dev `DigitBand` writes a finishing place as sixteen binary digits, so
+    /// the 65,536th token to finish would have its number drawn wrong -- and a
+    /// token's picture is permanent. The band cannot grow a digit without a new
+    /// deployment, so the dial that could outrun it is the one that refuses.
+    /// Both sides of the bound, because a guard set one too tight would take
+    /// away a cap the band can actually draw.
+    function test_setSupplyCapRefusesACapTheBandCannotDraw() public {
+        t.setSupplyCap(65_535);
+        assertEq(t.supplyCap(), 65_535, "the largest cap sixteen digits can write is allowed");
+
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.SupplyCapTooLarge.selector, uint32(65_536)));
+        t.setSupplyCap(65_536);
+        assertEq(t.supplyCap(), 65_535, "a refused cap must leave the dial where it was");
+    }
+
+    /// @dev And ownership is still the first gate: a stranger is refused for
+    /// being a stranger, not told the cap is too large.
+    function test_anOversizedSupplyCapFromANonOwnerIsRefusedForOwnership() public {
+        vm.prank(MALLORY);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
+        t.setSupplyCap(65_536);
     }
 
     function test_setWalletCapRevertsForANonOwner() public {

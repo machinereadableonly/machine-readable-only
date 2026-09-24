@@ -7,6 +7,11 @@ pragma solidity ^0.8.30;
 /// @dev `gap` is days since the last check-in, rebuilt against the chain's own
 /// clock rather than the fixture's. Sunset is not here: it is piece-wide and
 /// irreversible, so the soak applies it last and on its own.
+/// @dev SOME LABELS ARE HISTORICAL. Spec 10f ended the year at 365 credited
+/// days, so "1 years" and "2 years" name levels the chain can no longer
+/// reach; both are kept because a year count past the end must still draw
+/// exactly one ring, and that is what they prove. Change them in
+/// tools/state-matrix.mjs, never here.
 library SoakStates {
     struct State {
         uint32 level;

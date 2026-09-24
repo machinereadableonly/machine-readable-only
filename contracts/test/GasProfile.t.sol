@@ -8,12 +8,14 @@ import {CodeRenderer} from "../src/render/CodeRenderer.sol";
 import {FrameRenderer} from "../src/render/FrameRenderer.sol";
 import {HeartMask} from "../src/render/HeartMask.sol";
 import {TokenView} from "../src/render/TokenView.sol";
+import {WorstCase} from "./WorstCase.sol";
 import {Base64} from "solady/src/utils/Base64.sol";
 import {LibString} from "solady/src/utils/LibString.sol";
 
 /// @notice WHERE the dearest token's gas actually goes.
 ///
-/// @dev `RealTokenGas.t.sol` says the dearest token costs LARGEST_TOKEN_GAS
+/// @dev `RealTokenGas.t.sol` measures the dearest token at
+/// `WorstCase.LARGEST_TOKEN_GAS`
 /// against a 4,000,000 hard limit (re-measured 2026-09-23), which is 11.5%
 /// headroom -- the dearest and the largest are now one token. That
 /// number says how much of the budget is spent; it does not say what spent it.
@@ -65,18 +67,19 @@ contract GasProfileTest is Test {
     uint256 constant BYTE_LIMIT = 24_000;
 
     /// @dev The largest token the shipping contract can produce -- a finished
-    /// child wearing every legal Mark and its place -- as
-    /// `RealTokenGas.t.sol` measures it. Named constants rather than two
-    /// subtracted literals in a `console.log`, so the headroom this file prints
-    /// is computed from the figure it names and one number has to be updated
-    /// rather than three kept in agreement.
+    /// child wearing every legal Mark and its place -- READ FROM
+    /// `WorstCase.sol`, which `RealTokenGas.t.sol` pins to its own measurement.
+    /// This file used to carry its own copy of both figures, which is a second
+    /// place for the truth to live and nothing asserted the two agreed; now a
+    /// worst case that moves turns RealTokenGas red rather than leaving this
+    /// file quietly printing last month's headroom.
     ///
-    /// This file cannot measure it: it profiles the RENDERER from a view
+    /// This file cannot measure them: it profiles the RENDERER from a view
     /// already in memory and deploys no token. Re-measured 2026-09-23; it was
     /// 2,799,616 / 18,249 while a finished token carried no band and could be
     /// ten rings deep.
-    uint256 constant LARGEST_TOKEN_GAS = 3_540_467;
-    uint256 constant LARGEST_TOKEN_BYTES = 22_162;
+    uint256 constant LARGEST_TOKEN_GAS = WorstCase.LARGEST_TOKEN_GAS;
+    uint256 constant LARGEST_TOKEN_BYTES = WorstCase.LARGEST_TOKEN_BYTES;
 
     function setUp() public {
         r = new Renderer();

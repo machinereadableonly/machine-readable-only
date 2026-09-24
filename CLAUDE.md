@@ -256,9 +256,14 @@ a leak:** a commit that DELETES a string still shows it in its diff, so check
   applies to a `data:` URI is **TESTED AND CLOSED (2026-09-22)**: a throwaway
   spike on Sepolia served a 22,492-character tokenURI and Alchemy ingested it,
   rasterised it, and the QR decoded from ten of their renders. See
-  `.claude/rules/contracts.md`. **Do not quote a figure from memory -- run
-  `GasBudget.t.sol` and read it.** See `.claude/rules/contracts.md` and the
-  `gas-budget` memory.
+  `.claude/rules/contracts.md`. **Do not quote a figure from memory -- run the
+  harness that owns the figure and read it. There are TWO and they answer
+  different questions: `RealTokenGas.t.sol` measures the contract that SHIPS
+  and is the only source for a figure anyone publishes; `GasBudget.t.sol`
+  measures the `MROSpikeToken` harness, which is what makes a twelve-stage
+  sweep affordable and is the only source for a stage comparison.** Quoting one
+  against the other is a number describing nothing. See
+  `.claude/rules/contracts.md` and the `gas-budget` memory.
 - **EVERY QR BITMAP MUST BE RE-SOLVED against `machinereadableonly.com` before
   any mainnet mint.** A bitmap encodes its own url, so nothing solved against the
   `example.com` placeholder carries over -- including every Base Sepolia token

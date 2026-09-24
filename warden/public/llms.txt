@@ -327,6 +327,10 @@ another pair. Then the five that are given, best place first:
    five are not sold: `how many` is the size of the place band, which is what a
    token's own finish claims.
 
+   THE NAMES ARE CAPITALISED HERE FOR READING ONLY. On the wire they are lower
+   case: `status`, `ladder` and the token's own metadata all say `apex`, never
+   `Apex`. Compare them case-insensitively, or against the lower-case form.
+
 The `ladder` tool reads all of that back for any token, free: what it wears,
 what that has closed, what each side costs, what it is still short of, and --
 on every side still open -- the partner that taking it would close. Ask before

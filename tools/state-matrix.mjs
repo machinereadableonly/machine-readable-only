@@ -71,7 +71,11 @@ export function renderCases() {
     });
   }
 
-  // Ring counts, including one past the end of the year.
+  // Ring counts, including one past the end of the year. THE LABEL IS
+  // HISTORICAL: "2 years" is a level the chain cannot reach since Spec 10f, and
+  // it is generated verbatim into contracts/script/SoakStates.sol, where it
+  // reads as a claim about the piece. It is kept anyway, because a year count
+  // past the end must still draw exactly one ring and this is what proves it.
   for (const y of RING_YEARS) {
     out.push({ label: `${y} years`, ...base, level: Math.max(1, y * DAY_CELLS) });
   }

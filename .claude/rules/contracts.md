@@ -62,7 +62,12 @@ was documented-but-untested until this ran. It now has:
 
 A throwaway `MROSpikeToken` on Base Sepolia carrying the real byte worst case
 -- a child at the ring cap, every Mark, and a finisher's digit band -- served a
-**22,492-character tokenURI** with a **21,594-byte SVG**. Alchemy parsed it,
+**22,492-character tokenURI** with a **21,594-byte SVG**. THE RING-CAP STATE IS
+HISTORICAL: spec 10f ended the year at 365 credited days, so `ringBudget` gives
+a token one ring of its own and no shipping token can reach that canvas any
+more. The spike is not wrong for it -- a state the chain can no longer produce
+BOUNDS the shipped worst case from above, so a ceiling proven there is proven
+for anything the piece can now draw. Alchemy parsed it,
 took all sixteen attributes, flattened the SVG on its own CDN, and **the QR
 decoded from TEN of their renders, 250px to 1600px, every one to its own url.**
 
@@ -77,7 +82,13 @@ token id. The Foundry figure of 23,046 is the same state on the `example.com`
 bitmap; the real domain came out 554 bytes smaller.
 
 Gas is not the constraint: Base's own guidance puts the practical `tokenURI`
-ceiling near 300M read gas, and this token spends 2.87M.
+ceiling near 300M read gas, and the dearest token the SHIPPING contract can
+produce spends 3,540,467 -- a finished child wearing every legal Mark, its echo
+ring and the finisher's digit band, at 22,162 bytes, with 459,533 gas and 1,838
+bytes of headroom. Measured by `RealTokenGas.t.sol` on 2026-09-24; the pin
+lives in `contracts/test/WorstCase.sol` and that test goes red if it moves. The
+2.87M this paragraph used to quote was the day-364 child, which stopped being
+the dearest token when the digit band landed.
 
 **THE GAS LIMIT WAS RAISED TWICE ON 2026-09-21, by the operator, on
 measurement: 2,000,000 to 3,000,000 from a component estimate, then to

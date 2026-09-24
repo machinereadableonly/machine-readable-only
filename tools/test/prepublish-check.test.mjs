@@ -13,7 +13,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,16 +27,28 @@ const HOME_TARGET = ["", "home", "someone", "projects", "mro", "node_modules"].j
 /// A throwaway git repository with the given paths staged. Nothing is
 /// committed: `git ls-files` reads the index, so staging is all the scan needs
 /// and no author identity is involved.
-function scratchRepo(build) {
+///
+/// `core.excludesFile=/dev/null` ON EVERY GIT CALL. A global ignore file is
+/// this machine's business and not the fixture's, and one line in it matching
+/// `node_modules` would make `git add -A` skip the symlink these tests exist to
+/// catch -- leaving a suite that passes because it staged nothing. The guard
+/// would then be proven by a repository with no leak in it.
+///
+/// The directory is removed when the test that made it ends: `mkdtempSync`
+/// leaves it behind otherwise, and a run per commit accumulates them in the
+/// system temp directory for ever.
+function scratchRepo(t, build) {
   const dir = mkdtempSync(join(tmpdir(), "mro-prepublish-"));
-  execFileSync("git", ["init", "-q"], { cwd: dir });
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const git = (...args) => execFileSync("git", ["-c", "core.excludesFile=/dev/null", ...args], { cwd: dir });
+  git("init", "-q");
   build(dir);
-  execFileSync("git", ["add", "-A"], { cwd: dir });
+  git("add", "-A");
   return dir;
 }
 
-test("a tracked symlink whose target is an absolute home path is flagged", () => {
-  const dir = scratchRepo((root) => {
+test("a tracked symlink whose target is an absolute home path is flagged", (t) => {
+  const dir = scratchRepo(t, (root) => {
     mkdirSync(join(root, "warden"));
     writeFileSync(join(root, "warden/ok.mjs"), "// nothing to see\n");
     symlinkSync(HOME_TARGET, join(root, "warden/node_modules"));
@@ -50,10 +62,10 @@ test("a tracked symlink whose target is an absolute home path is flagged", () =>
   );
 });
 
-test("CONTROL: a tracked symlink with a relative target is not flagged", () => {
+test("CONTROL: a tracked symlink with a relative target is not flagged", (t) => {
   // Without this, the test above would pass for a checker that flagged every
   // symlink it saw -- which would fail on any legitimate relative link.
-  const dir = scratchRepo((root) => {
+  const dir = scratchRepo(t, (root) => {
     mkdirSync(join(root, "warden"));
     mkdirSync(join(root, "shared"));
     writeFileSync(join(root, "shared/keep"), "\n");
@@ -65,11 +77,11 @@ test("CONTROL: a tracked symlink with a relative target is not flagged", () => {
   assert.deepEqual(findings, []);
 });
 
-test("CONTROL: an ordinary file is still read, line by line", () => {
+test("CONTROL: an ordinary file is still read, line by line", (t) => {
   // The scan must not have been broken in the course of teaching it about
   // links: an absolute home path inside a FILE is the rule's original case,
   // and the line number is part of the answer.
-  const dir = scratchRepo((root) => {
+  const dir = scratchRepo(t, (root) => {
     writeFileSync(join(root, "notes.md"), `first line\nsecond ${HOME_TARGET}/x\n`);
   });
 
@@ -77,11 +89,11 @@ test("CONTROL: an ordinary file is still read, line by line", () => {
   assert.deepEqual(findings, [{ file: "notes.md", line: 2, rule: "absolute home path" }]);
 });
 
-test("a tracked path that cannot be read is named, never silently skipped", () => {
+test("a tracked path that cannot be read is named, never silently skipped", (t) => {
   // A silent skip is what let the symlink through. A path the guard could not
   // read has NOT been checked, so it comes back in `unreadable` for the script
   // to print.
-  const dir = scratchRepo((root) => {
+  const dir = scratchRepo(t, (root) => {
     writeFileSync(join(root, "gone.txt"), "staged, then removed\n");
   });
   execFileSync("rm", [join(dir, "gone.txt")]);

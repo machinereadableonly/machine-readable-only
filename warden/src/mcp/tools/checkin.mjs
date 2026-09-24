@@ -250,7 +250,13 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       const runBroke = streak === 1 && token.streak > 1
         ? { was: token.streak, lastCreditedDay: token.lastDay }
         : undefined;
-      const nextRung = RUNGS.find((r) => r > streak) ?? null;
+      // A FINISHED TOKEN IS WALKING TOWARDS NOTHING. The rung table knows only
+      // about the run, so a token that finishes its year on a run of 6 still
+      // had 7 above it and was told to reach for it -- in the same reply that
+      // says no further day can ever be credited. Both dates were already
+      // null; this is the third field that pointed at a tomorrow the door
+      // refuses, and it is nulled on the same fact rather than on its own rule.
+      const nextRung = finished ? null : (RUNGS.find((r) => r > streak) ?? null);
       // The run that broke is still reported on the finishing day: a token that
       // slipped during its year is coloured by that slip for ever, so the day
       // it finishes is the last moment the fact is worth stating.

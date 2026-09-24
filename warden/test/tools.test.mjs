@@ -289,6 +289,12 @@ test("the accepted 365th reply says the year is over and gives no next window", 
   assert.equal(r.accepted, true, "the finishing day is still credited");
   assert.equal(r.nextWindowOpensAt, null, "there is no next window after the 365th day");
   assert.equal(r.streakDeadline, null, "there is no run left to keep");
+  // AND NOR IS THERE A RUNG LEFT TO WALK TOWARDS. This fixture finishes on a
+  // run of 6, so the rung table still has 7 above it and the reply used to
+  // answer `{ at: 7, daysAway: 1 }` -- a day that can never be credited, in the
+  // same reply that says no further day can be. The two dates were made null
+  // and this field was not.
+  assert.equal(r.nextRung, null, "no rung can be reached after the year ends");
   assert.doesNotMatch(r.note, /Check in again/, "the note still sends the agent back for a 366th day");
   assert.match(r.note, /year is complete/);
   // What it says instead has to be actionable: the place is on chain, and
@@ -308,6 +314,10 @@ test("CONTROL: the 364th accepted reply still carries both dates", async () => {
   assert.equal(r.level, 364);
   assert.equal(r.nextWindowOpensAt, new Date(102 * 86_400_000).toISOString());
   assert.equal(r.streakDeadline, new Date(103 * 86_400_000).toISOString());
+  // The same run of 6, one day earlier: the rung is still there to be walked
+  // towards, so the null above is the finishing day and not a rung table that
+  // has stopped answering at all.
+  assert.deepEqual(r.nextRung, { at: 7, daysAway: 1 });
   assert.match(r.note, /Check in again before/);
 });
 

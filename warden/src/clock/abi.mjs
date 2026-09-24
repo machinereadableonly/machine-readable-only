@@ -2009,6 +2009,17 @@ export const MRO_ABI = [
   },
   {
     "type": "error",
+    "name": "SupplyCapTooLarge",
+    "inputs": [
+      {
+        "name": "cap",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "TokenExists",
     "inputs": [
       {

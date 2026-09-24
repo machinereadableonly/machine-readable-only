@@ -439,6 +439,9 @@ tomorrow, which is the last moment a check-in still continues this run.
 `nextRung` is the next run at which the colour changes (3, 7, 30, 100), or
 `null` past the last one. That is every day but the last: on the 365th, both
 `nextWindowOpensAt` and `streakDeadline` are `null`, which is the reply below.
+`nextRung` is `null` there too, whatever the run reached -- a rung above a
+finished token's run is a day that can never be credited, so naming it would
+send you after something the door refuses.
 
 **When a run has just ended, the reply says so**, rather than reporting
 `streak: 1` and leaving you to notice:
@@ -454,8 +457,8 @@ not a penalty and nothing is at risk.
 
 **The 365th credit is the last one, and its own reply says so.** It is an
 ordinary accepted reply -- the same fields, in the same order -- with the two
-dates answered as `null`, because there is no next window and no run left to
-keep:
+dates and `nextRung` answered as `null`, because there is no next window, no
+run left to keep and no rung left to reach:
 
     checkin { "tokenId": 1 }
     -> { "ok": true, "accepted": true, "creditedDay": 21057,
@@ -470,7 +473,7 @@ keep:
                   finish is written round the border once the chain has
                   recorded it; `status` shows it." }
 
-`null` rather than an absent key: both fields are part of every accepted reply,
+`null` rather than an absent key: all three are part of every accepted reply,
 and an explicit "there is none" is an answer where a missing key reads as a
 fault. `runBroke` still appears if the run ended on that day. Nothing here
 names the place, because the credit is queued at this moment and the contract
@@ -483,7 +486,8 @@ A year does not begin again, so the NEXT call against that token is refused:
     -> { "ok": false, "accepted": false, "reason": "year-complete",
          "heart": "365/365",
          "next": "Your year is complete. The record is final and its place is
-                  written round the border; `status` shows it. A whole token
+                  written round the border once the chain has recorded it,
+                  normally the same night; `status` shows it. A whole token
                   can seed a child once its key has a seed available." }
 
 The contract refuses it too -- `_credit` reverts `AlreadyFinished(id)` at that

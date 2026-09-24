@@ -5,6 +5,7 @@ import {console} from "forge-std/Test.sol";
 
 import {Ladder} from "../src/Ladder.sol";
 import {MroTestBase} from "./MroTestBase.sol";
+import {WorstCase} from "./WorstCase.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {MarkRenderer} from "../src/render/MarkRenderer.sol";
 import {TokenView} from "../src/render/TokenView.sol";
@@ -241,6 +242,17 @@ contract RealTokenGasTest is MroTestBase {
         (uint256 gasUsed, uint256 len) = _measure("REAL child, whole year, every legal mark", child);
         console.log("  headroom, gas  ", GAS_LIMIT - gasUsed);
         console.log("  headroom, bytes", BYTE_LIMIT - len);
+
+        // AND THE PUBLISHED FIGURE IS THIS ONE. `GasProfile.t.sol` prints the
+        // headroom that is left over from these two numbers and cannot measure
+        // them itself -- it renders from a view in memory and deploys no token
+        // -- so it read a hand-copied pair until `WorstCase.sol` gave both
+        // files one source. Pinned exactly rather than banded: the bands live
+        // in `GasBudget.t.sol`, and this says the number a document quotes is
+        // the number the contract produces. If this goes red, re-measure, then
+        // update `WorstCase.sol` and every figure quoted from it.
+        assertEq(gasUsed, WorstCase.LARGEST_TOKEN_GAS, "the worst case moved: update WorstCase.sol");
+        assertEq(len, WorstCase.LARGEST_TOKEN_BYTES, "the worst case moved: update WorstCase.sol");
     }
 
     /// @notice A LAPSED token -- a state the spike cannot represent at all.

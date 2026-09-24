@@ -91,6 +91,8 @@ export function gateStates() {
     // still the first survivor in match order.
     { label: "child, newborn",     ...base, level: 1,    streak: 0,   marks: [], echo: 365 },
     { label: "child, whole 1y",    ...base, level: 365,  streak: 400, marks: [], echo: 3650 },
+    // The label is HISTORICAL -- there is no ring cap since Spec 10f -- and it
+    // is pinned by robust-solve.test.mjs, so renaming it would defeat a guard.
     { label: "child, at ring cap", ...base, level: 3650, streak: 30,  marks: [], echo: 3650 },
   ];
 }

@@ -5,6 +5,7 @@ import {
 } from "../gates.mjs";
 import { keyIdToBytes32 } from "../keyId.mjs";
 import { onChainBy } from "../nextSteps.mjs";
+import { FINISH_LEVEL } from "../ladder.mjs";
 
 export function makeSeedTool({ q, chain, today, alert = console.error }) {
   requireChain(chain, "seed");
@@ -55,7 +56,7 @@ export function makeSeedTool({ q, chain, today, alert = console.error }) {
           return { ok: false, reason: "not-bound-to-caller" };
         }
       }
-      if (parent.level < 365) return { ok: false, reason: "parent-not-whole" };
+      if (parent.level < FINISH_LEVEL) return { ok: false, reason: "parent-not-whole" };
 
       // THE BUDGET WAS THE LAST GATE HERE ANSWERED FROM THE MIRROR, and it was
       // answered off the one column a rebind rewrites. It used to read

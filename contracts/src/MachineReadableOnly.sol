@@ -289,7 +289,15 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     function setRenderer(address r) external onlyOwner { _setRenderer(r); }
     function setWarden(address w) external onlyOwner { _setWarden(w); }
 
+    /// @dev THE BAND IS SIXTEEN DIGITS WIDE, so this dial stops at 65,535.
+    /// `DigitBand` writes a finisher's place round the border as sixteen
+    /// binary digits (`DigitBand.BITS`), and a token's picture is permanent --
+    /// the 65,536th token to finish would wear a number that wrapped, with no
+    /// way to redraw it. The band cannot gain a digit without a new deployment
+    /// of this contract, so the cap is what refuses rather than the renderer.
+    /// `finisherMark` takes a uint32 and nothing else ties supply to the band.
     function setSupplyCap(uint32 cap) external onlyOwner {
+        if (cap > 65_535) revert SupplyCapTooLarge(cap);
         supplyCap = cap;
         emit SupplyCapSet(cap);
     }
@@ -383,6 +391,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     error ZeroKeyId();
     error TokenExists(uint256 id);
     error SupplyCap();
+    error SupplyCapTooLarge(uint32 cap);
     error WalletCap();
     error BadCodeLength(uint256 got);
 

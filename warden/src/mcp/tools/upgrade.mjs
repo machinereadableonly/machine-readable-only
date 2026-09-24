@@ -3,7 +3,7 @@ import * as z from "zod";
 import { paidWriteBlock, bindingBlock, requireChain } from "../gates.mjs";
 import { keyIdToBytes32 } from "../keyId.mjs";
 import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
-import { VARIANT_NAMES, effectiveRun, ladderSentence, markNameIn } from "../ladder.mjs";
+import { FINISH_LEVEL, VARIANT_NAMES, effectiveRun, ladderSentence, markNameIn } from "../ladder.mjs";
 
 // There was an exported UPGRADE_REASONS array here, listing the eight
 // pre-payment refusals. Nothing imported it, nothing validated against it, and
@@ -32,7 +32,7 @@ import { VARIANT_NAMES, effectiveRun, ladderSentence, markNameIn } from "../ladd
  */
 function markGateBlock({ token, held, mark, variant }) {
   if (token.level < mark.minLevel) return "mark-level-too-low";
-  if (mark.needsWhole && token.level < 365) return "mark-needs-whole";
+  if (mark.needsWhole && token.level < FINISH_LEVEL) return "mark-needs-whole";
   if (mark.minStreak && effectiveRun(token) < mark.minStreak) return "mark-needs-streak";
   if (held & (1 << mark.id)) return "mark-already-applied";
   if (held & mark.excludes) return "mark-excluded";
