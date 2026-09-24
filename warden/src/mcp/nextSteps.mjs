@@ -84,7 +84,9 @@ export const NEXT = {
   "mark-already-applied":
     "This token already wears it.",
   "mark-inactive":
-    "That Mark is not one this service offers. `ladder` lists the ten that exist.",
+    "That Mark is not one this service offers. `ladder` lists the Marks that exist.",
+  "mark-not-requestable":
+    "Marks 11-15 are given by finishing your year, in the order tokens finish; they cannot be asked for.",
   "mark-sold-out":
     "That Mark is no longer available.",
 };

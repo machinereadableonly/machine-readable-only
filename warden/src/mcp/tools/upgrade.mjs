@@ -102,6 +102,16 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
 
       const mark = catalogue[upgradeId];
       if (!mark) return { ok: false, reason: "mark-inactive" };
+      // GIVEN AT 365 BY FINISHING PLACE (MachineReadableOnly.finisherMark),
+      // never asked for. `upgradeId`'s schema already stops 11-15; this is the
+      // second wall, for a caller that reaches the handler some other way. It
+      // sits ABOVE the price guard on purpose: a finisher Mark has no price, so
+      // that guard would report it as a catalogue error -- alerting the
+      // operator about a wiring fault that does not exist, and telling the
+      // agent `mark-inactive` about a Mark that is entirely active.
+      if (mark.route === "finisher") {
+        return { ok: false, reason: "mark-not-requestable", upgradeId };
+      }
       if (q.markSold(upgradeId) >= mark.supply) return { ok: false, reason: "mark-sold-out" };
 
       // WHAT THIS TOKEN HAS TAKEN, which is not the same thing as what the

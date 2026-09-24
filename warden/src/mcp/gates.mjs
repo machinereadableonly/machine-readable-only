@@ -18,6 +18,11 @@
 // write; it does not admit it. Refusing costs an agent a retry, admitting
 // costs it a payment for a transaction that was always going to revert.
 
+// The year's end, imported rather than written again. It is the contract's own
+// constant and every place that reads it has to move with it; it lived here as
+// a bare 365 beside a private copy in tokenView.mjs until 2026-09-24.
+import { FINISH_LEVEL } from "./ladder.mjs";
+
 /// Refuse when the contract will not accept ANY write right now.
 /// Mirrors the `notSunset` and `whenNotPaused` modifiers every write carries.
 export async function chainBlock(chain) {
@@ -65,8 +70,8 @@ export async function tokenBlock(chain, tokenId, q = null, prefetched) {
  * credit that `batchCheckIn` reverts on, and one reverting credit fails the
  * whole night's chunk.
  *
- * 365 is INCLUSIVE, exactly as the contract has it: at 365 the year is over,
- * and the credit that MAKES 365 is taken at level 364.
+ * FINISH_LEVEL is INCLUSIVE, exactly as the contract has it: at 365 the year
+ * is over, and the credit that MAKES 365 is taken at level 364.
  *
  * A null from the chain refuses, like every other gate here.
  *
@@ -76,7 +81,7 @@ export async function tokenBlock(chain, tokenId, q = null, prefetched) {
 export async function yearCompleteBlock(chain, tokenId, prefetched) {
   const life = prefetched === undefined ? await chain.lifecycleOf(tokenId) : prefetched;
   if (life === null) return "chain-unavailable";
-  return life.level >= 365 ? "year-complete" : null;
+  return life.level >= FINISH_LEVEL ? "year-complete" : null;
 }
 
 /// Refuse when the chain has already minted `walletCap` tokens to an address.

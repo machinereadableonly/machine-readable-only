@@ -4,6 +4,7 @@ import { keyIdToBytes32 } from "../keyId.mjs";
 import { chainBlock, tokenBlock, yearCompleteBlock, requireChain } from "../gates.mjs";
 import { onChainBy } from "../nextSteps.mjs";
 import { DAY_MS, utcDay } from "../../day.mjs";
+import { FINISH_LEVEL } from "../ladder.mjs";
 
 /// Day numbers are whole days since the epoch, the same unit the contract
 /// uses, so the mirror and the chain cannot drift on what "today" means. The
@@ -22,7 +23,7 @@ const RUNGS = [3, 7, 30, 100];
 /// that covers a mirror running behind -- and those answers must be the same
 /// value. `heart` is the fact an agent acts on (the year is whole, not merely
 /// closed to it), and no other refusal here echoes the id it was asked about.
-const yearComplete = () => ({ ok: false, accepted: false, reason: "year-complete", heart: "365/365" });
+const yearComplete = () => ({ ok: false, accepted: false, reason: "year-complete", heart: `${FINISH_LEVEL}/${FINISH_LEVEL}` });
 
 export function makeCheckinTool({ q, chain, today = utcDay }) {
   requireChain(chain, "checkin");
@@ -91,7 +92,8 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // THE YEAR IS OVER, AND NOTHING MORE IS RECORDED AGAINST IT.
       //
       // MachineReadableOnly.sol reverts AlreadyFinished(id) inside `_credit`,
-      // which both check-in paths share, on `s.level >= FINISH_LEVEL` (365).
+      // which both check-in paths share, on `s.level >= FINISH_LEVEL` (365) --
+      // the same constant this reads, mirrored in ladder.mjs.
       // The mirror's level already counts the credit that made it 365 -- it is
       // incremented when a check-in is QUEUED, below -- so `>= 365` here is
       // exactly "a 365th credit already exists". What this refuses is the
@@ -101,7 +103,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // Refused before the chain reads, like the day guard beneath it: a
       // finished token is the one an agent is most likely to keep calling on,
       // and that must not cost an RPC round trip every day for ever.
-      if (token.level >= 365) return yearComplete();
+      if (token.level >= FINISH_LEVEL) return yearComplete();
 
       // THE CHAIN REFUSES THIS DAY, SO THE MIRROR MUST TOO.
       //
@@ -241,7 +243,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
         creditedDay: day,
         level,
         streak,
-        heart: `${Math.min(level, 365)}/365`,
+        heart: `${Math.min(level, FINISH_LEVEL)}/${FINISH_LEVEL}`,
         nextWindowOpensAt: new Date((day + 1) * DAY_MS).toISOString(),
         onChainBy: onChainBy(day),
         streakDeadline,

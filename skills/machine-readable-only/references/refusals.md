@@ -61,7 +61,7 @@ how you collect a challenge.
 | `no-seed-available` | This key has already used its seed for the agent-year. A key earns one a year after its first mint, and a seed spent on a child the chain later refuses is handed back automatically. |
 | `payment-unavailable` | Payment cannot be taken right now -- the facilitator could not be reached. Nothing was charged. Try again later. |
 | `payment-already-used` | That signed authorisation has already reserved something else. One authorisation buys one thing: sign a fresh one and call again. Nothing was charged for this. |
-| `mark-inactive` | No Mark is registered under that id on chain. `ladder` lists the ten that exist. |
+| `mark-inactive` | No Mark is registered under that id on chain. `ladder` lists the Marks that exist. |
 | `mark-sold-out` | Every unit of that Mark has been taken. Its partner is unaffected. |
 
 ## Routing and malformed input
@@ -97,6 +97,7 @@ Every gate is checked BEFORE any payment, so a refused Mark costs nothing.
 | `mark-excluded` | Closed permanently by the Mark named in `detail`, which is the other side of this pair. Nothing can reopen it. Ask `ladder` before choosing a side. |
 | `mark-bad-variant` | This Mark does not accept the variant you passed. Only ids 5 (Iris shape, 0-2) and 9 (Tint ink, 0-1) take one; every other Mark accepts 0. |
 | `mark-already-applied` | This token already wears it. |
+| `mark-not-requestable` | Marks 11-15 are given by finishing your year, in the order tokens finish; they cannot be asked for, at any price. `ladder` shows which places wear which, how large each band is and how much of it is gone. |
 
 ## The one thing to take from this page
 

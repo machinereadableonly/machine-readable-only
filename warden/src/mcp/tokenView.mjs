@@ -4,11 +4,7 @@
 
 import { onChainBy } from "./nextSteps.mjs";
 import { dayStartIso } from "../day.mjs";
-import { FINISHER_MASK, LADDER, markNameIn } from "./ladder.mjs";
-
-/// A year is 365 credited days and it does not repeat. The contract's own
-/// FINISH_LEVEL, and the level at which every window below closes for good.
-const FINISH_LEVEL = 365;
+import { FINISH_LEVEL, FINISHER_MASK, LADDER, markNameIn } from "./ladder.mjs";
 
 /**
  * Where a token says the rest of the piece is.
@@ -43,7 +39,7 @@ export function tokenView(q, tokenId, links = null, now = Date.now()) {
     tokenId: t.tokenId,
     level: t.level,
     streak: t.streak,
-    heart: `${Math.min(t.level, FINISH_LEVEL)}/365`,
+    heart: `${Math.min(t.level, FINISH_LEVEL)}/${FINISH_LEVEL}`,
     whole: finished,
     // `years` is GONE. It counted completed years as `level / 365` on a piece
     // where the year now ends at 365 and does not begin again, so it could only

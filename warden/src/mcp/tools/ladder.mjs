@@ -111,7 +111,7 @@ export function makeLadderTool({ q, catalogue }) {
     name: "ladder",
     config: {
       title: "Read the Mark ladder for a token",
-      description: "Free. For each of the five pairs: what this token wears, what that has closed permanently, what each side costs and what it is still short of. Ask before you buy.",
+      description: "Free. For each of the five pairs: what this token wears, what that has closed permanently, what each side costs and what it is still short of. Ask before you buy. Also the five Marks given at 365 by finishing place, which are never sold.",
       inputSchema: z.object({ tokenId: z.number().int().positive().describe("A token id. Any token, not only your own.") }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -164,6 +164,34 @@ export function makeLadderTool({ q, catalogue }) {
         entry.closedBy = blocking.name;
       }
 
+      // AND THE FIVE THAT ARE GIVEN. They are in no pair and nothing can ask
+      // for one, so they carry no price, no state and no gate -- every field a
+      // side has exists to help an agent decide, and there is no decision here.
+      // What is worth saying is what a place is worth: which places wear it,
+      // how many the band holds, and how many of those are gone.
+      //
+      // BEST PLACE FIRST, which is descending id: the contract's own table
+      // (MachineReadableOnly.finisherMark) runs 1st, 2nd-4th, 5th-14th and on,
+      // and reading it in id order would start at "everyone else".
+      const finishers = Object.values(catalogue)
+        .filter((m) => m.route === "finisher")
+        .sort((a, b) => b.id - a.id)
+        .map((m) => ({
+          id: m.id,
+          name: m.name.toLowerCase(),
+          places: m.places,
+          // NULL FOR THE BAND WITH NO END. The catalogue says Infinity, which
+          // is not a JSON number: serialised it becomes null anyway, so saying
+          // null here is the difference between a meaning that was chosen and
+          // one a serialiser produced.
+          cap: m.supply === Infinity ? null : m.supply,
+          // From the MIRROR, never from the catalogue: a static count is
+          // incremented by nothing, and a band that is full has to say so.
+          // Optional for the same reason `failedMask` above is -- a stub `q` in
+          // a test must not take this free, read-only tool down.
+          taken: q.markHolders?.(m.id) ?? 0,
+        }));
+
       // The two numbers every gate above is measured against, so an agent told
       // it is short of a run of 30 can see how short. `resting` is here because
       // it is the one state that closes every pair at once, and a page of
@@ -176,6 +204,7 @@ export function makeLadderTool({ q, catalogue }) {
         streak: token.streak,
         resting: Boolean(token.resting),
         pairs,
+        finishers,
       };
     },
   };

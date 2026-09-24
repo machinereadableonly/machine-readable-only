@@ -97,6 +97,45 @@ test("a token view carries exactly the published field set", async () => {
   );
 });
 
+// AND THE OTHER BRANCH OF THE SAME VIEW. The assertion above runs against a
+// token in its first week, so every field that a FINISHED token answers
+// differently -- `finisher`, and the two dates that go null once there is no
+// next window -- is decided by code that test never reaches. A key appearing or
+// vanishing only there would have shipped with the published shape "unchanged".
+test("a FINISHED token's view carries exactly the same published field set", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 101, 365, 365);
+  q.setFinished(1, 1, 15);          // first home, so it wears Apex
+  const tool = makeStatusTool({
+    q,
+    chain: openChain(),
+    links: { docs: "https://example.com/llms.txt", mcp: "https://example.com/mcp", contract: "0xc0de", chainId: 84532 },
+  });
+
+  const view = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+
+  // NOT VACUOUS: the branch under test is the finished one, so say so before
+  // asserting the shape. A view that quietly failed to finish would otherwise
+  // pass this as a second copy of the test above.
+  assert.equal(view.whole, true);
+  assert.deepEqual(view.finisher, { place: 1, mark: "apex" });
+  assert.equal(view.nextWindowOpensAt, null, "a finished token has no next window");
+  assert.equal(view.streakDeadline, null, "and no run left to lose");
+
+  assert.deepEqual(
+    Object.keys(view).sort(),
+    [
+      "chainId", "children", "contract", "docs", "finisher", "generation", "heart",
+      "lastDay", "late", "level", "marks", "mcp", "nextWindowOpensAt", "onChainBy",
+      "owner", "parentId", "pendingOnChain", "resting", "streak", "streakDeadline",
+      "tokenId", "whole",
+    ],
+    "the published shape changed for a finished token: update the protocol document and llms.txt in the same commit",
+  );
+});
+
 // The two fields that only exist while a token is waiting. A view of a WRITTEN
 // token must not carry them: "on chain by" and "late" are meaningless once it
 // is on chain, and an agent branching on their presence would read a settled

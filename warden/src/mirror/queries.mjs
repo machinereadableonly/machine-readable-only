@@ -250,6 +250,12 @@ export function queries(db) {
     // such a Mark as plain `held` and its partner as permanently `closed`.
     failedMarks: db.prepare("SELECT upgradeId FROM mark_orders WHERE tokenId = ? AND status = 'failed'"),
     markSold: db.prepare("SELECT COUNT(*) AS n FROM mark_orders WHERE upgradeId = ?"),
+    // HOW MANY TOKENS WEAR A MARK, which is a different question from how many
+    // were ordered. A finisher Mark is given by the token contract at 365 and
+    // passes through no mark_orders row at all, so markSold answers 0 for all
+    // five of them for ever; the only record of one is the bit the reconcile
+    // writes into tokens.marks.
+    markHolders: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE (marks & ?) <> 0"),
     hasMinted: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE keyId = ?"),
 
     // --- the Clock's statements. Everything below is written by Plan 3 only;
@@ -835,6 +841,11 @@ export function queries(db) {
     /// incremented by anything, so the sold-out gate would never fire and the
     /// supply would be unlimited.
     markSold: (upgradeId) => s.markSold.get(upgradeId).n,
+
+    /// How many tokens this mirror knows of actually wear a Mark. `ladder`
+    /// reports it for the five given at 365, where a place band's cap is only
+    /// meaningful beside how much of it is gone.
+    markHolders: (markId) => s.markHolders.get(1 << markId).n,
     hasMinted: (keyId) => s.hasMinted.get(keyId).n > 0,
 
     // --- the Clock's surface ------------------------------------------------

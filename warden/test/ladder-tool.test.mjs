@@ -400,3 +400,106 @@ test("the tool that takes earned Marks does not describe itself as a shop", asyn
   assert.match(tool.config.description, /bought or earned/);
   assert.match(tool.config.description, /closes the other permanently/);
 });
+
+// ---------------------------------------------------------------------------
+// THE FIVE THAT ARE NOT FOR SALE.
+//
+// Marks 11-15 are given by the token contract at 365, in the order tokens
+// finish, and no amount of money reaches one. They are in no pair, so they have
+// no side, no gate to walk towards and nothing they forfeit -- which is
+// everything the `pairs` block above reports. Left out of this tool entirely
+// they were invisible to the one surface an agent reads before deciding what a
+// year is worth; listed as a sixth pair they would read as five Marks that
+// close each other, which is a puzzle rather than an answer. So they are their
+// own group, and the group carries no price and no call to action.
+// ---------------------------------------------------------------------------
+
+test("the finisher Marks are shown as their own group, by place, with a cap and a count", async () => {
+  const res = await ladder.handler({ tokenId: 1 }, ctx);
+
+  // Best place first, which is the order a reader meets them in: 1st, then
+  // 2nd-4th, and so on down to everyone else.
+  assert.deepEqual(res.finishers.map((f) => f.name), ["apex", "atrium", "valve", "chamber", "aorta"]);
+  assert.deepEqual(res.finishers.map((f) => f.id), [15, 14, 13, 12, 11]);
+  assert.deepEqual(res.finishers.map((f) => f.places), ["1st", "2nd-4th", "5th-14th", "15th-64th", "65th on"]);
+  // The size of the place band, and `null` for the band that has no end.
+  // Infinity is not JSON, so saying null on purpose is the only way the
+  // meaning is chosen rather than produced by a serialiser.
+  assert.deepEqual(res.finishers.map((f) => f.cap), [1, 3, 10, 50, null]);
+});
+
+// A price, a `waitingOn` or a `closes` on one of these rows would describe a
+// door that is not there -- the ONE thing this group must never do is read as
+// something an agent could go and get.
+test("a finisher row carries no price and nothing to act on", async () => {
+  const res = await ladder.handler({ tokenId: 1 }, ctx);
+  for (const row of res.finishers) {
+    assert.deepEqual(
+      Object.keys(row).sort(),
+      ["cap", "id", "name", "places", "taken"],
+      `${row.name} carries a field this group must not have`,
+    );
+  }
+  // And the group is named for what it is, so a client can tell the two blocks
+  // apart without matching on ids.
+  assert.equal("pairs" in res && "finishers" in res, true);
+});
+
+// THE PAIRS ARE UNTOUCHED. The whole risk of adding a second block is that the
+// first one quietly grows a sixth member.
+test("the pairs block is still exactly the five pairs and the ten requestable Marks", async () => {
+  const res = await ladder.handler({ tokenId: 1 }, ctx);
+  assert.equal(res.pairs.length, 5);
+  const ids = res.pairs.flatMap((p) => p.sides).map((s) => s.id).sort((a, b) => a - b);
+  assert.deepEqual(ids, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+});
+
+// `taken` is read from the mirror, never from the catalogue: a static count is
+// never incremented by anything, and a Mark whose band is full must say so.
+test("`taken` counts the tokens that actually wear each finisher Mark", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  for (const tokenId of [1, 2, 3]) {
+    q.insertToken({ tokenId, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  }
+  q.setFinished(1, 1, 15);      // first home wears Apex
+  q.setFinished(2, 5, 13);      // fifth and sixth both wear Valve
+  q.setFinished(3, 6, 13);
+
+  const res = await makeLadderTool({ q, catalogue: LADDER }).handler({ tokenId: 1 }, ctx);
+  const taken = Object.fromEntries(res.finishers.map((f) => [f.name, f.taken]));
+  assert.deepEqual(taken, { apex: 1, atrium: 0, valve: 2, chamber: 0, aorta: 0 });
+});
+
+// THE CONTROL. Without it the test above passes for a tool that counts every
+// token once, or that reports the same number for every row.
+test("CONTROL: with nothing finished every count is zero", async () => {
+  const res = await ladder.handler({ tokenId: 1 }, ctx);
+  for (const row of res.finishers) assert.equal(row.taken, 0, `${row.name} counted a finish that has not happened`);
+});
+
+// The schema stops 11-15 (pay.test.mjs pins that), so this is the SECOND wall:
+// a caller that reaches the handler some other way is refused by name rather
+// than sent into a payment demand for a Mark nothing can sell.
+test("`upgrade` refuses a finisher Mark by name, past the schema, without asking for payment", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  db.exec("UPDATE tokens SET level = 365, streak = 365, bestRun = 365 WHERE tokenId = 1");
+
+  const tool = makeUpgradeTool({
+    q, chain: openChain(), catalogue: LADDER,
+    paid: () => { throw new Error("a Mark that is given must never reach the payment wrapper"); },
+  });
+
+  for (const upgradeId of [11, 12, 13, 14, 15]) {
+    const r = await tool.handler({ tokenId: 1, upgradeId }, { keyId: "k1" });
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "mark-not-requestable", `id ${upgradeId} was not refused as unrequestable`);
+    assert.equal(r.upgradeId, upgradeId);
+  }
+  // CONTROL: the same tool still takes an ordinary earned Mark, so the refusal
+  // above is about the route and not about a tool that refuses everything.
+  const ok = await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: "k1" });
+  assert.equal(ok.accepted, true);
+});

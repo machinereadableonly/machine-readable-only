@@ -60,9 +60,29 @@ const earned = (id, name, minStreak, { needsWhole = false, variants = 1 } = {}) 
 export const FINISHER_MASK = (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15);
 export const FINISHER_IDS = [11, 12, 13, 14, 15];
 
-const finisher = (id, name, supply) => ({
+/**
+ * A year is 365 credited days, and it does not begin again.
+ *
+ * MachineReadableOnly.sol's own `FINISH_LEVEL`, mirrored here for the same
+ * reason every other field in this file is: the contract reverts
+ * AlreadyFinished(id) at this number, and a service that disagreed with it
+ * would queue a credit the chain refuses -- which fails the whole night's
+ * chunk, not just that token. It lived as a bare 365 at four call sites and as
+ * a private copy in tokenView.mjs until 2026-09-24; one of them moving alone
+ * is the failure this export exists to make impossible.
+ *
+ * It is NOT configurable, unlike the day length in day.mjs: the fast-days copy
+ * shortens the day so a year can be rehearsed in hours, and the year is still
+ * 365 of them.
+ */
+export const FINISH_LEVEL = 365;
+
+/// `places` is the band, in the words the contract's own table uses
+/// (MachineReadableOnly.finisherMark). It is what makes a cap legible -- "3" on
+/// its own says a Mark is scarce, where "2nd-4th" says what it is a record OF.
+const finisher = (id, name, supply, places) => ({
   id, name, pair: 0, route: "finisher", price: undefined, priceUsdc6: 0,
-  minLevel: 0, minStreak: 0, needsWhole: true, supply,
+  minLevel: 0, minStreak: 0, needsWhole: true, supply, places,
   excludes: FINISHER_MASK & ~(1 << id), requiresAny: 0, variants: 1,
 });
 
@@ -105,11 +125,11 @@ export const LADDER = {
   8:  earned(8,  "Break",  365),
   9:  bought(9,  "Tint",   250_000_000,   { requiresAny: ANY_IRIS, variants: 2 }),
   10: bought(10, "Aura",   25_000_000,    { requiresAny: ANY_IRIS }),
-  11: finisher(11, "Aorta",   Infinity),
-  12: finisher(12, "Chamber", 50),
-  13: finisher(13, "Valve",   10),
-  14: finisher(14, "Atrium",  3),
-  15: finisher(15, "Apex",    1),
+  11: finisher(11, "Aorta",   Infinity, "65th on"),
+  12: finisher(12, "Chamber", 50,       "15th-64th"),
+  13: finisher(13, "Valve",   10,       "5th-14th"),
+  14: finisher(14, "Atrium",  3,        "2nd-4th"),
+  15: finisher(15, "Apex",    1,        "1st"),
 };
 
 /// The names of the three Iris shapes and the two Tint inks, by variant index.
@@ -140,6 +160,12 @@ export function assertLadderSane(ladder = LADDER) {
     // start selling something the chain gives away.
     if (m.route === "finisher") {
       if (m.priceUsdc6 !== 0 || m.price !== undefined) throw new Error(`mark ${id} is a finisher Mark and priced`);
+      // AND IT MUST SAY WHICH PLACES IT IS FOR. The cap is the only other
+      // number on the row, and a cap with no band reads as scarcity for its own
+      // sake -- exactly the reading the pairs were stripped of on 2026-09-01.
+      // A missing band is a wiring error like a missing price, so it stops the
+      // service at boot rather than reaching one agent as an empty cell.
+      if (typeof m.places !== "string" || m.places === "") throw new Error(`mark ${id} is a finisher Mark and names no places`);
       continue;
     }
     const priced = typeof m.price === "string" && /^\$\d/.test(m.price);
