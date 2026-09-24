@@ -10,6 +10,13 @@ import { packIds, chunk, writeCheckInChunk } from "../src/clock/batch.mjs";
 
 const entry = (tokenId, day) => ({ tokenId, day });
 
+/// Ids back out of the packed calldata, the way the contract slices them.
+const unpackIds = (packed) => {
+  const ids = [];
+  for (let i = 2; i < packed.length; i += 8) ids.push(parseInt(packed.slice(i, i + 8), 16));
+  return ids;
+};
+
 /**
  * A writer that refuses any chunk containing a poisoned id, naming it the way
  * the chain does, and accepts anything else.
@@ -296,7 +303,7 @@ function gasStubWriter(limit) {
     calls,
     async send(functionName, args, opts) {
       const count = args[1].length;
-      calls.push({ count, label: opts?.label });
+      calls.push({ count, ids: unpackIds(args[0]), days: args[1], label: opts?.label });
       if (count > limit) return { ok: false, reason: "gas-estimate-too-large" };
       return { ok: true, hash: "0xbeef" };
     },
@@ -350,4 +357,75 @@ test("a single entry that will not estimate is condemned by name", async () => {
   assert.equal(r.aborted, null);
   assert.deepEqual(r.written, []);
   assert.deepEqual(r.dropped, [{ entry: entry(1, 100), reason: "gas-estimate-too-large" }]);
+});
+
+// ---------------------------------------------------------------------------
+// The order a chunk is SENT in -- task 9
+// ---------------------------------------------------------------------------
+
+// THE SEND ORDER IS NOW PART OF THE ARTWORK. `_finish` gives a finishing token
+// its place in the order credits arrive inside batchCheckIn, and the published
+// rule is lowest token id first within a day. Before the finisher's Marks the
+// order was merely tidy; now a chunk sent out of order hands a stranger's token
+// somebody else's place, and nothing on chain can undo it.
+
+test("a chunk is sent in (day, tokenId) order, whatever order it arrived in", async () => {
+  const writer = stubWriter();
+  const r = await writeCheckInChunk(writer, [entry(9, 100), entry(2, 101), entry(3, 100)]);
+
+  assert.equal(r.aborted, null);
+  assert.deepEqual(unpackIds(writer.calls[0].ids), [3, 9, 2], "day first, then token id within the day");
+  assert.deepEqual(writer.calls[0].days, [100, 100, 101]);
+});
+
+// The mirror's own selection is already ordered, so this only bites when the
+// mirror has fallen behind -- which is exactly when the rest of this file's
+// recovery paths run and reorder what is left.
+test("AlreadyFinished drops the named token's entries and writes the rest", async () => {
+  const writer = stubWriter({ poison: new Map([[7, "AlreadyFinished"]]) });
+  const r = await writeCheckInChunk(writer, [entry(7, 100), entry(8, 100)]);
+
+  assert.deepEqual(unpackIds(writer.calls[1].ids), [8], "the rest of the day still lands");
+  assert.deepEqual(r.dropped.map((d) => [d.entry.tokenId, d.reason]), [[7, "AlreadyFinished"]]);
+  assert.deepEqual(r.written.map((e) => e.tokenId), [8]);
+  assert.equal(r.aborted, null);
+});
+
+// A finishing credit costs about 49,500 gas more than an ordinary one, so a
+// heavy finishing night fills the chunk's headroom and the estimate declines.
+// Halving is therefore the NORMAL path on the nights this order matters most,
+// and it must not shuffle the places: the whole first half goes before the
+// whole second.
+test("a chunk too big to estimate is halved in (day, tokenId) order, first half first", async () => {
+  const writer = gasStubWriter(2);
+  const r = await writeCheckInChunk(writer, [entry(4, 100), entry(1, 100), entry(3, 100), entry(2, 100)]);
+
+  assert.equal(r.aborted, null);
+  assert.deepEqual(writer.calls[0].ids, [1, 2, 3, 4], "the refused estimate was already sorted");
+  assert.deepEqual(writer.calls[1].ids, [1, 2], "the first half is sent first");
+  assert.deepEqual(writer.calls[2].ids, [3, 4]);
+  assert.deepEqual(
+    writer.calls.slice(1).flatMap((c) => c.ids),
+    [1, 2, 3, 4],
+    "the two sends together are one ascending run, so places follow token id",
+  );
+});
+
+// healDayNotAdvanced returns `[...others, ...stillWritable]`, which moves the
+// healed token's surviving entries to the END. That is the reorder the sort
+// before each send exists for.
+test("after a heal reorders what is left, the next send is sorted again", async () => {
+  // The chain already holds day 98 for token 1; token 9 has nothing.
+  const writer = dayAwareWriter(new Map([[1, 98]]));
+  const r = await writeCheckInChunk(writer, [entry(1, 98), entry(1, 99), entry(9, 99)], {
+    lastDayOf: async (id) => (id === 1 ? 98 : 0),
+  });
+
+  assert.equal(r.aborted, null);
+  assert.deepEqual(r.healed.map((e) => [e.tokenId, e.day]), [[1, 98]]);
+  assert.deepEqual(
+    writer.calls[1].ids,
+    [1, 9],
+    "the heal appended token 1 to the end; the send must put it back in front of token 9",
+  );
 });

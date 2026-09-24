@@ -30,8 +30,24 @@
 const ENTRY_ERRORS = {
   NoSuchToken: { by: "id" },
   Resting: { by: "id" },
+  // The token's year is already complete on chain: `_credit` refuses a 366th
+  // day. The door refuses these too, so one reaching the chain means the
+  // MIRROR fell behind, not that anything is wrong with the chain's record.
+  // Dropping it loses nothing -- there is no day left to write.
+  AlreadyFinished: { by: "id" },
   FutureDay: { by: "day" },
 };
+
+/**
+ * The order a chunk is sent in.
+ *
+ * FINISHING PLACE IS DECIDED BY THIS ORDER. The contract gives places in the
+ * order credits arrive inside one `batchCheckIn` (`_finish`), and the published
+ * rule is lowest token id first within a day. The SQL already selects in this
+ * order; the heal and bisect paths below reorder what is left, so the order is
+ * re-imposed at the last moment rather than trusted from upstream.
+ */
+const byDayThenId = (a, b) => a.day - b.day || a.tokenId - b.tokenId;
 
 /**
  * Resolve a `DayNotAdvanced(id)` refusal against what the chain actually holds.
@@ -146,7 +162,8 @@ export async function writeCheckInChunk(
   entries,
   { maxAttempts = 12, log = () => {}, lastDayOf = null } = {}
 ) {
-  let remaining = [...entries];
+  // Sorted on the way in, and again before every send: see byDayThenId.
+  let remaining = [...entries].sort(byDayThenId);
   const dropped = [];
   const healed = [];
   // `attempts` is every call made, for reporting. `shrinks` is the budget:
@@ -170,6 +187,11 @@ export async function writeCheckInChunk(
       return { written: [], healed, dropped, aborted: null, attempts };
     }
     attempts += 1;
+
+    // Immediately before the send, because the heal path appends the healed
+    // token's surviving entries to the end and the filters below leave gaps.
+    // This is the line that decides who finishes first.
+    remaining.sort(byDayThenId);
 
     const result = await writer.send(
       "batchCheckIn",
@@ -315,6 +337,14 @@ export async function writeCheckInChunk(
  * The first half goes first because entries arrive ordered by day: a token's
  * older day must land before its newer one, or the chain refuses the older one
  * for good (`day <= lastDay`).
+ *
+ * That awaited first half is also what keeps FINISHING PLACE in order across a
+ * split. `entries` is already sorted by byDayThenId when it gets here, slicing
+ * preserves that, and each half is sorted again at the top of
+ * writeCheckInChunk -- so two transactions assign places in exactly the order
+ * one would have. Halving is not an edge case on a heavy finishing night: a
+ * finishing credit costs about 49,500 gas more than an ordinary one, so enough
+ * of them in one chunk is what makes the estimate decline in the first place.
  *
  * An abort in the first half stops here, and the second half is not sent. Its
  * entries stay queued and the run exits loudly, which is what an abort is for;
