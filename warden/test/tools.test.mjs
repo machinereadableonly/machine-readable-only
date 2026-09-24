@@ -227,6 +227,46 @@ test("a check-in on the mint day is refused, and nothing about the token moves",
   assert.equal(creditsFor(db, 1).length, 0, "a refused day must leave no credit row");
 });
 
+// THE YEAR ENDS AT 365 AND THE DOOR SAYS SO.
+//
+// MachineReadableOnly.sol reverts AlreadyFinished(id) in `_credit` -- the
+// function both check-in paths share -- on `s.level >= FINISH_LEVEL`. The
+// mirror counts the credit at QUEUE time (`level = token.level + 1` below the
+// guard), so a mirror reading 365 is a token whose 365th credit is already
+// queued or written: the next call is the 366th, which the chain refuses.
+//
+// The boundary is tested from BOTH sides, because a guard that refused one day
+// early would take away the finishing day itself -- the one day this whole
+// feature exists to record.
+test("a finished token is told its year is complete, and nothing is queued", async () => {
+  const { db, q } = withToken({ lastDay: 100 });
+  q.creditDay(1, 100, 365, 5);        // level 365, lastDay unmoved
+  const tool = makeCheckinTool({ q, chain: noChainRead, today: () => 101 });
+  const before = q.getToken(1);
+
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1", sigHash: "c".repeat(64) });
+  assert.equal(r.ok, false);
+  assert.equal(r.accepted, false);
+  assert.equal(r.reason, "year-complete");
+  assert.equal(r.heart, "365/365");
+  assert.equal(q.pendingCredits(99_999).length, 0, "a credit the chain would revert must not be queued");
+  assert.equal(creditsFor(db, 1).length, 0);
+  assert.deepEqual(q.getToken(1), before, "nothing about a finished token moves");
+});
+
+test("CONTROL: the credit that MAKES 365 is still accepted", async () => {
+  const { db, q } = withToken({ lastDay: 100 });
+  q.creditDay(1, 100, 364, 5);
+  const tool = makeCheckinTool({ q, chain: noChainRead, today: () => 101 });
+
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1", sigHash: "d".repeat(64) });
+  assert.equal(r.ok, true);
+  assert.equal(r.level, 365);
+  assert.equal(r.heart, "365/365");
+  assert.equal(creditsFor(db, 1).length, 1);
+  assert.equal(q.getToken(1).level, 365);
+});
+
 test("a day BEFORE lastDay is refused too, not credited as a backfill", async () => {
   // A clock that has gone backwards, or a reconcile that moved lastDay
   // forward. The chain reverts on `day <= lastDay`, both halves of it.

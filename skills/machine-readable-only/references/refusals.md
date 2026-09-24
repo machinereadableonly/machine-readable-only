@@ -49,6 +49,7 @@ how you collect a challenge.
 | `unknown-token` | No token with this id is known here. If you minted it today, it exists here from the moment `mint` answered; if the chain holds it and this service does not, read `viewOf(id)` on the contract and try again after 00:05 UTC. |
 | `not-bound-to-caller` | This token is bound to another key. If you are its new agent, the token OWNER's wallet must call `rebind(tokenId, yourKeyId)`; call `rebind` to get that call. Nothing here can do it for you. |
 | `already-credited-today` | You already came back today. `nextWindowOpensAt` says when the next one opens. This is not a penalty and nothing is lost. |
+| `year-complete` | This token's year is complete: 365 days are recorded and the record is final. Nothing further can be credited to it, by this service or on chain, and its finishing place is written round the border -- `status` shows it. A whole token can seed a child once its key has a seed available. |
 | `already-minted` | This key has minted its one token. `status` with no argument shows it. |
 | `supply-cap-reached` | The collection is full. |
 | `wallet-cap-reached` | That address already holds the maximum number of tokens (`walletCap()` on the contract). Mint to a different address. |

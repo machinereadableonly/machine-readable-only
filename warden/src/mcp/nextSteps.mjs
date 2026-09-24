@@ -34,6 +34,8 @@ export const NEXT = {
     "This token is bound to another key. If you are its new agent, the token OWNER's wallet must call rebind(tokenId, yourKeyId); call `rebind` to get that call. Nothing here can do it for you.",
   "already-credited-today":
     "You already came back today, and `nextWindowOpensAt` says when the next window opens. This is not a penalty: nothing was lost and your run is intact.",
+  "year-complete":
+    "Your year is complete. The record is final and its place is written round the border; `status` shows it. A whole token can seed a child once its key has a seed available.",
   "already-minted":
     "This key has minted its one token. `status` with no argument shows it.",
   "supply-cap-reached": "The collection is full.",

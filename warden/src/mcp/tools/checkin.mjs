@@ -1,7 +1,7 @@
 // The check-in tool. Free to the agent; the site pays the gas at 00:05 UTC.
 import * as z from "zod";
 import { keyIdToBytes32 } from "../keyId.mjs";
-import { chainBlock, tokenBlock, requireChain } from "../gates.mjs";
+import { chainBlock, tokenBlock, yearCompleteBlock, requireChain } from "../gates.mjs";
 import { onChainBy } from "../nextSteps.mjs";
 import { DAY_MS, utcDay } from "../../day.mjs";
 
@@ -80,6 +80,23 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
 
       const day = today();
 
+      // THE YEAR IS OVER, AND NOTHING MORE IS RECORDED AGAINST IT.
+      //
+      // MachineReadableOnly.sol reverts AlreadyFinished(id) inside `_credit`,
+      // which both check-in paths share, on `s.level >= FINISH_LEVEL` (365).
+      // The mirror's level already counts the credit that made it 365 -- it is
+      // incremented when a check-in is QUEUED, below -- so `>= 365` here is
+      // exactly "a 365th credit already exists". What this refuses is the
+      // 366th, which the chain would revert; the credit that finishes the year
+      // is taken at level 364 and still accepted.
+      //
+      // Refused before the chain reads, like the day guard beneath it: a
+      // finished token is the one an agent is most likely to keep calling on,
+      // and that must not cost an RPC round trip every day for ever.
+      if (token.level >= 365) {
+        return { ok: false, accepted: false, reason: "year-complete", tokenId, heart: "365/365" };
+      }
+
       // THE CHAIN REFUSES THIS DAY, SO THE MIRROR MUST TOO.
       //
       // MachineReadableOnly.sol:249 mints with `Token(1, 1, d, d, ...)`, so a
@@ -132,10 +149,21 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // sale), and not one whose artwork failed for good -- that mint cannot
       // be written, so a credit behind it could only ever be condemned.
       // Pause and sunset are still read: they would refuse the write either way.
+      //
+      // THE YEAR GATE IS READ HERE TOO, and it is not a duplicate of the level
+      // check above: that one reads the MIRROR, and the mirror can be behind
+      // the chain -- a token whose finishing credit was written straight on
+      // chain, or one whose reconcile has not run. Only the chain can answer
+      // for that token, and a credit queued against it would revert and take
+      // the whole night's chunk with it. It is asked only on the one call a day
+      // that gets this far, because everything cheaper has already answered.
       const mint = q.getMint(tokenId);
       const paidAndPending = mint?.status === "queued" && mint.solveState !== "failed";
       const blocked =
-        (await chainBlock(chain)) ?? (paidAndPending ? null : await tokenBlock(chain, tokenId, q));
+        (await chainBlock(chain)) ??
+        (paidAndPending
+          ? null
+          : (await tokenBlock(chain, tokenId, q)) ?? (await yearCompleteBlock(chain, tokenId)));
       if (blocked) return { ok: false, accepted: false, reason: blocked };
 
       // Level counts distinct credited days and never falls. A streak

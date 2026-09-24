@@ -8,7 +8,7 @@
 // to revert.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chainBlock, tokenBlock, walletCapBlock, supplyBlock, receiverBlock, paidWriteBlock, requireChain } from "../src/mcp/gates.mjs";
+import { chainBlock, tokenBlock, walletCapBlock, supplyBlock, receiverBlock, yearCompleteBlock, paidWriteBlock, requireChain } from "../src/mcp/gates.mjs";
 import { makeChainReader, SUNSET_CACHE_MS } from "../src/chain/read.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
@@ -19,6 +19,7 @@ import { makeSeedTool } from "../src/mcp/tools/seed.mjs";
 import {
   openChain, sunsetChain, pausedChain, unreadableChain,
   restingChain, unknownTokenChain, walletFullChain, supplyFullChain, nonReceiverChain,
+  finishedChain,
 } from "./chain-stub.mjs";
 
 const TO = "0x" + "11".repeat(20);
@@ -115,6 +116,24 @@ test("paidWriteBlock asks the supply cap only for a call that MINTS", async () =
 test("receiverBlock passes an ordinary wallet and refuses one that cannot receive", async () => {
   assert.equal(await receiverBlock(openChain(), TO), null);
   assert.equal(await receiverBlock(nonReceiverChain(), TO), "recipient-cannot-receive");
+});
+
+// The contract reverts AlreadyFinished(id) inside `_credit`, which both
+// check-in paths share, so a token at FINISH_LEVEL refuses every further
+// credit. 365 is the boundary and it is INCLUSIVE: `s.level >= FINISH_LEVEL`.
+test("yearCompleteBlock refuses a finished token, admits the day that finishes it", async () => {
+  const atLevel = (level) =>
+    openChain({ lifecycleOf: async () => ({ exists: true, resting: false, sunset: false, level, lastDay: 0 }) });
+  assert.equal(await yearCompleteBlock(atLevel(364), 1), null, "day 365 is still to come");
+  assert.equal(await yearCompleteBlock(atLevel(365), 1), "year-complete");
+  assert.equal(await yearCompleteBlock(finishedChain(), 1), "year-complete");
+  // A token the chain does not hold has level 0 and is not finished; it is
+  // tokenBlock's business, not this gate's.
+  assert.equal(await yearCompleteBlock(unknownTokenChain(), 1), null);
+});
+
+test("yearCompleteBlock refuses an unreadable chain rather than assuming room is left", async () => {
+  assert.equal(await yearCompleteBlock(unreadableChain(), 1), "chain-unavailable");
 });
 
 test("receiverBlock refuses an unreadable chain rather than assuming it can receive", async () => {
@@ -266,7 +285,8 @@ test("an upgrade whose token is sealed DURING settlement is paid-but-unavailable
   let calls = 0;
   const chain = openChain({
     lifecycleOf: async () => ({
-      exists: true, resting: ++calls > 1, sunset: false, level: 400, lastDay: 0,
+      // 200 rather than 400: a level past 365 is one the chain cannot hold.
+      exists: true, resting: ++calls > 1, sunset: false, level: 200, lastDay: 0,
     }),
   });
   const tool = makeUpgradeTool({
@@ -305,6 +325,11 @@ for (const [label, chain, reason] of [
   ["a paused contract", pausedChain, "paused"],
   ["a sealed token", restingChain, "resting"],
   ["an unreachable chain", unreadableChain, "chain-unavailable"],
+  // The mirror in these tests is at level 1, so the door's own level guard
+  // cannot fire: this is the CHAIN gate, and the case it exists for is a
+  // mirror that is behind -- a reconcile that has not run over a token whose
+  // year finished. Without it the credit is queued and batchCheckIn reverts.
+  ["a finished token", finishedChain, "year-complete"],
 ]) {
   test(`checkin refuses ${label} and credits nothing`, async () => {
     const db = openDb(":memory:");

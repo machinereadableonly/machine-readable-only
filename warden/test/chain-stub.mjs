@@ -70,7 +70,18 @@ export const unreadableChain = () =>
   });
 export const restingChain = () =>
   openChain({
-    lifecycleOf: async () => ({ exists: true, resting: true, sunset: false, level: 400, lastDay: 0 }),
+    // 200, not 400. A level above 365 is a state the chain can no longer hold:
+    // `_credit` reverts AlreadyFinished once a token reaches FINISH_LEVEL, so a
+    // stub answering 400 describes a token that cannot exist -- and would make
+    // every test using it a test of an impossible chain.
+    lifecycleOf: async () => ({ exists: true, resting: true, sunset: false, level: 200, lastDay: 0 }),
+  });
+/// A token whose year is complete: the contract reverts AlreadyFinished(id) on
+/// any further credit, by either check-in path. The mirror can be BEHIND this
+/// -- a reconcile that has not run -- which is the case this stub is for.
+export const finishedChain = () =>
+  openChain({
+    lifecycleOf: async () => ({ exists: true, resting: false, sunset: false, level: 365, lastDay: 0 }),
   });
 export const unknownTokenChain = () =>
   openChain({

@@ -45,6 +45,32 @@ export async function tokenBlock(chain, tokenId, q = null) {
   return "resting";
 }
 
+/**
+ * Refuse a credit to a token whose year is already complete.
+ *
+ * Mirrors `revert AlreadyFinished(id)`, which lives in `_credit` -- the one
+ * function `batchCheckIn` and `checkInWithVoucher` share -- and fires on
+ * `s.level >= FINISH_LEVEL`. A finished record is final in the same way a
+ * sealed one is, reached by completion rather than by the owner.
+ *
+ * WHY THE CHAIN AND NOT THE MIRROR. `checkin` refuses on its own level first,
+ * which is cheaper and catches every ordinary case. This gate is for the case
+ * the mirror cannot answer: a mirror BEHIND the chain, where a reconcile has
+ * not yet copied the finishing credit back. There the mirror would queue a
+ * credit that `batchCheckIn` reverts on, and one reverting credit fails the
+ * whole night's chunk.
+ *
+ * 365 is INCLUSIVE, exactly as the contract has it: at 365 the year is over,
+ * and the credit that MAKES 365 is taken at level 364.
+ *
+ * A null from the chain refuses, like every other gate here.
+ */
+export async function yearCompleteBlock(chain, tokenId) {
+  const life = await chain.lifecycleOf(tokenId);
+  if (life === null) return "chain-unavailable";
+  return life.level >= 365 ? "year-complete" : null;
+}
+
 /// Refuse when the chain has already minted `walletCap` tokens to an address.
 /// Mirrors WalletCap, which guards both mint and seed.
 export async function walletCapBlock(chain, to) {
