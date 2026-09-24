@@ -1,4 +1,9 @@
-node_modules/
+# NO TRAILING SLASH. `node_modules/` matches a DIRECTORY only, so a SYMLINK
+# named node_modules -- which is how a worktree gets its dependencies -- was not
+# ignored, and `git add -A` tracked the link. Its blob is the target path, an
+# absolute home path, published in the tree. Without the slash the pattern
+# matches the name whatever it is.
+node_modules
 contracts/out/
 contracts/cache/
 contracts/broadcast/

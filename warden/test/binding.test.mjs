@@ -168,7 +168,7 @@ test("bindingBlock refuses when the chain cannot be read", async () => {
 // is the cheapest possible way to destroy value in somebody else's token.
 test("a seller cannot take a free Mark on a token the chain has already rebound away", async () => {
   const { db, q } = mirror();
-  db.exec("UPDATE tokens SET level = 400, streak = 400, bestRun = 400 WHERE tokenId = 7");
+  db.exec("UPDATE tokens SET level = 365, streak = 365, bestRun = 365 WHERE tokenId = 7");
   assert.equal(q.getToken(7).keyId, SELLER, "the mirror is stale, which is the premise");
 
   const tool = makeUpgradeTool({
@@ -191,7 +191,7 @@ test("a seller cannot take a free Mark on a token the chain has already rebound 
 // that refused everyone.
 test("CONTROL: the buyer the chain names IS admitted, though the mirror still says otherwise", async () => {
   const { db, q } = mirror();
-  db.exec("UPDATE tokens SET level = 400, streak = 400, bestRun = 400 WHERE tokenId = 7");
+  db.exec("UPDATE tokens SET level = 365, streak = 365, bestRun = 365 WHERE tokenId = 7");
 
   const tool = makeUpgradeTool({
     q,
@@ -222,7 +222,7 @@ test("CONTROL: the buyer the chain names IS admitted, though the mirror still sa
 
 test("a seller cannot spend the seed of a token the chain has already rebound away", async () => {
   const { db, q } = mirror();
-  db.exec("UPDATE tokens SET level = 400 WHERE tokenId = 7");
+  db.exec("UPDATE tokens SET level = 365 WHERE tokenId = 7");
 
   const tool = makeSeedTool({
     q,

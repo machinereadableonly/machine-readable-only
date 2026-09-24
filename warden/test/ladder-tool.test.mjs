@@ -77,7 +77,7 @@ test("it takes no payment and refuses an unknown token by name", async () => {
 // A tool that says "waiting on a run of 7 days" to a token that already has one
 // is worse than saying nothing: it reads as a refusal the agent cannot act on.
 test("a side whose gates are already met is waiting on nothing", async () => {
-  const run = ladderFor({ level: 400, streak: 400 });
+  const run = ladderFor({ level: 365, streak: 365 });
   const res = await run.handler({ tokenId: 1 }, ctx);
   for (const pair of res.pairs) {
     for (const side of pair.sides) {
@@ -200,7 +200,7 @@ test("a Mark bought but not yet written already closes its partner", async () =>
 // refuses all ten. Quoting $1,250.00 beside a side that cannot be bought at any
 // price is the opposite of what this tool is for.
 test("a sealed token is shown no open side at all, and told why", async () => {
-  const tool = ladderWithReservations({ level: 400, streak: 400, resting: 1 });
+  const tool = ladderWithReservations({ level: 365, streak: 365, resting: 1 });
   const res = await tool.handler({ tokenId: 1 }, ctx);
   assert.equal(res.resting, true);
   for (const pair of res.pairs) {
@@ -214,7 +214,7 @@ test("a sealed token is shown no open side at all, and told why", async () => {
 // THE CONTROL. Without it the test above passes for a tool that closes
 // everything for everybody.
 test("an unsealed token says so and keeps its open sides", async () => {
-  const res = await ladderWithReservations({ level: 400, streak: 400 }).handler({ tokenId: 1 }, ctx);
+  const res = await ladderWithReservations({ level: 365, streak: 365 }).handler({ tokenId: 1 }, ctx);
   assert.equal(res.resting, false);
   assert.equal(res.pairs.flatMap(p => p.sides).filter(s => s.state === "open").length, 10);
 });
@@ -349,7 +349,7 @@ test("`ladder`'s forfeit and `upgrade`'s refusal name the pair partner with the 
   const db = openDb(":memory:");
   const q = queries(db);
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
-  db.exec("UPDATE tokens SET level = 400, streak = 400, bestRun = 400 WHERE tokenId = 1");
+  db.exec("UPDATE tokens SET level = 365, streak = 365, bestRun = 365 WHERE tokenId = 1");
 
   // What the ladder PROMISES taking Ache would close, while both sides are open.
   const before = await makeLadderTool({ q, catalogue: LADDER }).handler({ tokenId: 1 }, ctx);
@@ -375,7 +375,7 @@ test("an accepted upgrade says what it just closed, on the earned route and the 
   const earnedDb = openDb(":memory:");
   const earnedQ = queries(earnedDb);
   earnedQ.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
-  earnedDb.exec("UPDATE tokens SET level = 400, streak = 400, bestRun = 400 WHERE tokenId = 1");
+  earnedDb.exec("UPDATE tokens SET level = 365, streak = 365, bestRun = 365 WHERE tokenId = 1");
   const earnedTool = makeUpgradeTool({ q: earnedQ, chain: openChain(), catalogue: LADDER, paid: settleNow });
   const earned = await earnedTool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: "k1" });
   assert.equal(earned.accepted, true);
@@ -384,7 +384,7 @@ test("an accepted upgrade says what it just closed, on the earned route and the 
   const boughtDb = openDb(":memory:");
   const boughtQ = queries(boughtDb);
   boughtQ.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
-  boughtDb.exec("UPDATE tokens SET level = 400, streak = 400, bestRun = 400 WHERE tokenId = 1");
+  boughtDb.exec("UPDATE tokens SET level = 365, streak = 365, bestRun = 365 WHERE tokenId = 1");
   const boughtTool = makeUpgradeTool({ q: boughtQ, chain: openChain(), catalogue: LADDER, paid: settleNow });
   const bought = await boughtTool.handler({ tokenId: 1, upgradeId: 1 }, { keyId: "k1" });
   assert.equal(bought.accepted, true);

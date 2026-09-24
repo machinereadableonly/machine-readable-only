@@ -346,6 +346,46 @@ for (const [label, chain, reason] of [
   });
 }
 
+/// A mirror holding one ordinary token, bound to k1, that checked in on day 100.
+function checkinMirror(level = 1) {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  if (level > 1) q.creditDay(1, 100, level, 1);
+  return q;
+}
+
+// ONE REASON, ONE SHAPE. `year-complete` is decided in two places -- the
+// mirror's own level, and this chain gate for a mirror running behind -- and
+// the two answers used to differ in their fields. A client cannot branch on a
+// field that is there only sometimes, and an agent reading `heart` to learn the
+// year is whole would see it from one path and not the other.
+test("the year-complete refusal is the SAME value whether the mirror or the chain decided it", async () => {
+  const fromChain = await makeCheckinTool({ q: checkinMirror(), chain: finishedChain(), today: () => 101 })
+    .handler({ tokenId: 1 }, { keyId: "k1", sigHash: "h" });
+  const fromMirror = await makeCheckinTool({ q: checkinMirror(365), chain: openChain(), today: () => 101 })
+    .handler({ tokenId: 1 }, { keyId: "k1", sigHash: "h" });
+
+  assert.deepEqual(fromChain, fromMirror);
+  assert.deepEqual(fromChain, { ok: false, accepted: false, reason: "year-complete", heart: "365/365" });
+});
+
+// `resting` and `level` come out of ONE `viewOf`, and read.mjs caches nothing,
+// so a gate fetching its own record buys a second eth_call for a fact the
+// caller already holds -- on the free tool, every day, for every token.
+test("checkin reads the token's lifecycle once, however many gates ask about it", async () => {
+  let reads = 0;
+  const counting = openChain({
+    lifecycleOf: async () => {
+      reads += 1;
+      return { exists: true, resting: false, sunset: false, level: 1, lastDay: 0 };
+    },
+  });
+  const r = await makeCheckinTool({ q: checkinMirror(), chain: counting, today: () => 101 })
+    .handler({ tokenId: 1 }, { keyId: "k1", sigHash: "h" });
+  assert.equal(r.ok, true, "the credit must actually be taken, or the gates were never reached");
+  assert.equal(reads, 1, "two gates, one read");
+});
+
 // --- seed ------------------------------------------------------------------
 
 test("seed refuses a full recipient wallet, which the contract checks against the CHILD", async () => {

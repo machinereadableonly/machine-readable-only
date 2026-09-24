@@ -36,8 +36,13 @@ export async function chainBlock(chain) {
  * without it `/t/<id>` would go on telling a scanner that a sealed token is
  * still running. Recording it is free: the read has already happened.
  */
-export async function tokenBlock(chain, tokenId, q = null) {
-  const life = await chain.lifecycleOf(tokenId);
+export async function tokenBlock(chain, tokenId, q = null, prefetched) {
+  // `prefetched` is one `lifecycleOf` record a caller has ALREADY read, for a
+  // caller that runs two gates off the same fact and should pay for one
+  // eth_call rather than two. `undefined` means "nothing was handed over";
+  // null is a real answer and means the chain could not be read, so the two
+  // cannot be collapsed into a truthiness test.
+  const life = prefetched === undefined ? await chain.lifecycleOf(tokenId) : prefetched;
   if (life === null) return "chain-unavailable";
   if (!life.exists) return "unknown-token";
   if (!life.resting) return null;
@@ -64,9 +69,12 @@ export async function tokenBlock(chain, tokenId, q = null) {
  * and the credit that MAKES 365 is taken at level 364.
  *
  * A null from the chain refuses, like every other gate here.
+ *
+ * `prefetched` is the same option `tokenBlock` takes, and for the same reason:
+ * `checkin` runs both gates and they ask the chain one identical question.
  */
-export async function yearCompleteBlock(chain, tokenId) {
-  const life = await chain.lifecycleOf(tokenId);
+export async function yearCompleteBlock(chain, tokenId, prefetched) {
+  const life = prefetched === undefined ? await chain.lifecycleOf(tokenId) : prefetched;
   if (life === null) return "chain-unavailable";
   return life.level >= 365 ? "year-complete" : null;
 }

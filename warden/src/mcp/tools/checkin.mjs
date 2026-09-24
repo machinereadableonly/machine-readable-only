@@ -16,6 +16,14 @@ export { utcDay };
 /// an agent what it is walking towards.
 const RUNGS = [3, 7, 30, 100];
 
+/// The one shape of the year-complete refusal, wherever it is decided.
+///
+/// It is answered from two places -- the mirror's own level, and the chain gate
+/// that covers a mirror running behind -- and those answers must be the same
+/// value. `heart` is the fact an agent acts on (the year is whole, not merely
+/// closed to it), and no other refusal here echoes the id it was asked about.
+const yearComplete = () => ({ ok: false, accepted: false, reason: "year-complete", heart: "365/365" });
+
 export function makeCheckinTool({ q, chain, today = utcDay }) {
   requireChain(chain, "checkin");
   return {
@@ -23,7 +31,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
     config: {
       title: "Check in",
       description:
-        "Record today's visit for a token bound to your key. Free. The site pays the gas and writes it on chain at 00:05 UTC. Once per UTC day; a second call the same day is refused with `already-credited-today` and `nextWindowOpensAt`.",
+        "Record today's visit for a token bound to your key. Free. The site pays the gas and writes it on chain at 00:05 UTC. Once per UTC day; a second call the same day is refused with `already-credited-today` and `nextWindowOpensAt`. A year is 365 credited days: after the 365th the record is final, and a further call is refused with `year-complete`.",
       inputSchema: z.object({ tokenId: z.number().int().positive().describe("A token bound to your key.") }),
       annotations: { readOnlyHint: false, openWorldHint: false },
     },
@@ -93,9 +101,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // Refused before the chain reads, like the day guard beneath it: a
       // finished token is the one an agent is most likely to keep calling on,
       // and that must not cost an RPC round trip every day for ever.
-      if (token.level >= 365) {
-        return { ok: false, accepted: false, reason: "year-complete", tokenId, heart: "365/365" };
-      }
+      if (token.level >= 365) return yearComplete();
 
       // THE CHAIN REFUSES THIS DAY, SO THE MIRROR MUST TOO.
       //
@@ -157,14 +163,27 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // for that token, and a credit queued against it would revert and take
       // the whole night's chunk with it. It is asked only on the one call a day
       // that gets this far, because everything cheaper has already answered.
+      //
+      // ONE READ, BOTH GATES. `resting` and `level` come out of the same
+      // `viewOf`, and nothing caches it, so letting each gate fetch its own
+      // would buy a second eth_call for one fact -- on the free tool, every
+      // day, for every token. The record is read here and handed to both.
       const mint = q.getMint(tokenId);
       const paidAndPending = mint?.status === "queued" && mint.solveState !== "failed";
-      const blocked =
-        (await chainBlock(chain)) ??
-        (paidAndPending
-          ? null
-          : (await tokenBlock(chain, tokenId, q)) ?? (await yearCompleteBlock(chain, tokenId)));
-      if (blocked) return { ok: false, accepted: false, reason: blocked };
+      let blocked = await chainBlock(chain);
+      if (!blocked && !paidAndPending) {
+        const life = await chain.lifecycleOf(tokenId);
+        blocked =
+          (await tokenBlock(chain, tokenId, q, life)) ?? (await yearCompleteBlock(chain, tokenId, life));
+      }
+      // ONE REASON, ONE SHAPE. `year-complete` is answered here and at the
+      // mirror guard above, and the two used to disagree about what came with
+      // it; a client cannot branch on a field that is present only sometimes.
+      if (blocked) {
+        return blocked === "year-complete"
+          ? yearComplete()
+          : { ok: false, accepted: false, reason: blocked };
+      }
 
       // Level counts distinct credited days and never falls. A streak
       // CONTINUES only when this day is the one immediately after the last
