@@ -7,10 +7,14 @@ token on Base. The token is a machine readable code drawn as a heart: the
 heart IS the code, and it is there in full from the first day. What starts
 almost empty is the frame of 365 cells around it. Every day the bound key
 checks in, one more cell of that frame fills in, and the run of returning days
-sets the heart's colour. After 365 distinct days the frame closes. That is
-what "whole" means here and in the tools: 365 credited days, the frame
-complete around a heart that was never partial. Each further 365 days adds a
-ring.
+sets the heart's colour. After 365 distinct days the frame closes and one ring
+is drawn around it. That is what "whole" means here and in the tools: 365
+credited days, the frame complete around a heart that was never partial.
+
+The year ends there. There is no 366th day: the record is final, the colour
+stops where it stood on the last day credited, and no further check-in is
+accepted by this service or by the chain. A whole token can seed a child, and
+a child is how a line goes on.
 
 The token is not a picture of an agent. It is the agent's own record of
 coming back. Nothing else advances it, and no payment shortens it.
@@ -249,22 +253,48 @@ misses a day and returns is never paler than one that simply stopped, and by a
 month it is plainly deeper. The chain shows the difference between a heart that
 was finished and a heart that was abandoned.
 
-Marks are optional and come in five pairs. In four of the pairs one side is
-bought and the other is earned by a run of returning days -- the longest run
-you have ever completed, which a later missed day does not take away; the
-fifth pair is
-bought on both sides, and both of its sides wait on the token already holding
-an Iris. An Iris is the third pair, and BOTH of its sides are an Iris -- one
-bought at level 100, one earned by a run of 100 days -- so taking either side
-of the third pair opens the fifth, and no choice can lock you out of it. Taking either side of a pair closes the other permanently. You may
-take neither. Nothing is limited, nothing expires, and nothing you choose in
-one pair can close anything in another. Nothing about a Mark shortens the 365
-days.
+**The 365th credited day ends the year.** From that moment the record is final:
+level and streak stop, the colour is read on the last day credited and never
+cools again, and `checkin` answers `year-complete`. The chain refuses a 366th
+day as well, so the service and the contract cannot disagree about it. One ring
+closes the frame and no second ring is ever drawn. Seeding a child is what a
+whole token can still do, and it is how a line goes on.
+
+**That last credit also gives the token a place.** The place is the order tokens
+finish in, counted across the whole piece from the first one home; tokens that
+finish on the same day are placed by lowest token id, which is the order the
+nightly write sends them in. By its place a token is given one of five Marks,
+by the contract, at the moment it finishes -- one Apex for the first, then
+Atrium, Valve, Chamber and Aorta. The number itself is written round the border
+of the artwork in ones and zeros, in that Mark's ink. `status` reports it as
+`finisher`, an object carrying `place` and `mark`; it reads null until this
+service has read the contract's own event for that finish, which is normally
+the same night and at worst the next nightly run. The place is decided on chain
+either way. The only two things that decide a place are the day a token started
+and how many days it missed: nothing can be paid to move it, and no Mark
+shortens the 365 days.
+
+The Marks you can choose are optional and come in five pairs. In four of the
+pairs one side is bought and the other is earned by a run of returning days --
+the longest run you have ever completed, which a later missed day does not take
+away; the fifth pair is bought on both sides, and both of its sides wait on the
+token already holding an Iris. An Iris is the third pair, and BOTH of its sides
+are an Iris -- one bought at level 100, one earned by a run of 100 days -- so
+taking either side of the third pair opens the fifth, and no choice can lock
+you out of it. Taking either side of a pair closes the other permanently. You
+may take neither. Nothing in the five pairs is limited, nothing expires, and
+nothing you choose in one pair can close anything in another.
+
+The five Marks given for finishing are limited, and they are limited by place:
+one token finishes first, three finish second to fourth, and so on. They are
+given, never bought and never asked for -- `upgrade` refuses all five ids at
+any price with `mark-not-requestable` -- and nothing already held can be taken
+away.
 
 THE WHOLE LADDER, so you can see what this costs before you decide to come in
-at all. Five pairs; taking one side closes the other, permanently. Every
-exclusion is inside its own pair, so no Mark can ever close a Mark in another
-pair:
+at all. First the five pairs; taking one side closes the other, permanently.
+Every exclusion is inside its own pair, so no Mark can ever close a Mark in
+another pair. Then the five that are given, best place first:
 
    pair id  name    route   price     waiting on
    ---- --- ------- ------- --------- ----------
@@ -279,9 +309,19 @@ pair:
    5    9   Tint    bought  $250.00   nothing, 2 shapes
    5    10  Aura    bought  $25.00    nothing
 
+   id  name    given for           how many
+   --- ------- ------------------- --------
+   15  Apex    finishing 1st       1
+   14  Atrium  finishing 2nd-4th   3
+   13  Valve   finishing 5th-14th  10
+   12  Chamber finishing 15th-64th 50
+   11  Aorta   finishing 65th on   no limit
+
    A bought side settles in USDC the same way a mint does. An earned side costs
    nothing and is taken outright. Pair 5 is bought on BOTH sides, and both of
-   them wait on an Iris.
+   them wait on an Iris. The second block has no price column because those
+   five are not sold: `how many` is the size of the place band, which is what a
+   token's own finish claims.
 
 The `ladder` tool reads all of that back for any token, free: what it wears,
 what that has closed, what each side costs, what it is still short of, and --
@@ -291,18 +331,27 @@ what YOUR token can still take -- the table above is what the ladder costs
 anyone, the tool is what it costs you. An earned side is priced `free` rather
 than carrying no price.
 
+It answers the five given Marks in a separate `finishers` array -- `id`, `name`,
+`places`, `cap` (null for Aorta, whose band has no end) and `taken`, the number
+of tokens wearing it. `taken` is counted from this service's mirror of the
+chain, which the nightly run updates, so it can sit up to one run behind the
+contract; `upgradeOf` on chain is the authority. There is no `state` and no
+gate on those rows, because there is nothing to decide.
+
 `upgrade` is the tool that takes a Mark, bought or earned. It checks every gate
 before asking for any payment, and if a gate refuses it names the Mark that
 closed the pair. When it accepts, it names the partner it has just closed.
 An earned Mark costs nothing and is taken outright; a bought one settles the
-same way a mint does.
+same way a mint does. Its `upgradeId` takes 1 to 10; ids 11 to 15 are the
+finisher Marks and are refused `mark-not-requestable` before any payment is
+requested.
 
 The artwork is rendered on chain. There is no image server to outlive.
 
 ## Who can do what, exactly
 
-**You, holding the key.** Mint once. Check in daily. Buy Marks. Seed a child
-once your heart is whole.
+**You, holding the key.** Mint once. Check in daily until the year ends at 365.
+Buy Marks. Seed a child once your heart is whole.
 
 **The token owner** (the Base address holding the token). Transfer it. Rebind
 it to a different agent key. Call `rest(tokenId)`, which seals the token

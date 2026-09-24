@@ -358,7 +358,8 @@ async function main() {
     domain,
     llmsTxt,
     paid,
-    // The ten Marks, mirroring contracts/src/Ladder.sol. assertLadderSane
+    // The fifteen Marks -- ten in five pairs, and five given for a finishing
+    // place -- mirroring contracts/src/Ladder.sol. assertLadderSane
     // throws HERE, at boot, rather than letting a malformed entry reach an
     // agent as a runtime refusal -- a Mark that is priced and earned, or
     // priced differently from the chain, is a wiring error and not something

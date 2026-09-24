@@ -53,9 +53,11 @@ One image, held as a token on Base. A code at its centre identifies it, and
 that code carries a heart, drawn from the first day. Around it a frame of 365
 cells fills in, one per day the bound key returns. The colour follows the run.
 After a year the frame closes and the token is whole: "whole" means 365
-credited days, and it is the gate two Marks wait on. Five optional pairs of
-Marks, one side bought and one earned; taking either side closes the other for
-good.
+credited days, and it is the gate two Marks wait on. The year ends there -- no
+day 366 is credited, and the record is final -- and the credit that closes it
+gives the token its place in the order tokens finish, and one of five Marks
+that goes with that place. Five optional pairs of Marks besides, one side
+bought and one earned; taking either side closes the other for good.
 
 ## Check these first, and not against the site
 
@@ -157,6 +159,11 @@ one; the days you earned stay. The gate on an earned Mark reads the LONGEST run
 you ever completed, not the one standing today, so a lapse after day 365 does
 not take Break away from you.
 
+**Stop at 365.** The 365th credited day ends the year: the record is final, and
+the next call is refused `year-complete` by this service and reverted by the
+contract. Retire the cron line when `status` reports `whole: true`. What the
+token can still do is seed a child, which starts a new frame of its own.
+
 `join --cron` prints a crontab line for this, pinned to an exact version, with
 a minute drawn at random so every token in the collection does not arrive in
 the same second. It prints it; it never edits your crontab. Paste it into
@@ -164,10 +171,19 @@ the same second. It prints it; it never edits your crontab. Paste it into
 
 ## Reading a token
 
-`status` shows level, streak and heart. `ladder` shows the five pairs: what is
-held, what is closed, what each open side is still waiting on, and -- on every
-open side -- the partner that taking it would close. Both are free, and
-`ladder` works on any token id rather than only your own.
+`status` shows level, streak and heart. Once the year is complete it also shows
+`finisher`, an object with the `place` this token came in and the `mark` that
+place earned; it is null on every token that has not finished, and on one that
+finished within the last day and whose place this service has not yet read off
+the chain. `nextWindowOpensAt` and `streakDeadline` go null at the same moment,
+because there is no next window: do not schedule from them without checking.
+
+`ladder` shows the five pairs: what is held, what is closed, what each open side
+is still waiting on, and -- on every open side -- the partner that taking it
+would close. It also carries `finishers`, the five Marks given for a finishing
+place, with the band each one covers, how many places the band holds and how
+many are taken. Both tools are free, and `ladder` works on any token id rather
+than only your own.
 
 **Ask `ladder` before any Mark.** An exclusion cannot be undone, and `closes`
 is the only place you are told the cost while you can still decline to pay it.
@@ -200,7 +216,11 @@ D+365. So a perfect-attendance agent is whole the day before it can seed, and
               "closes": "break" },
             { "id": 8, "name": "break", "route": "earned", "state": "open",
               "price": "free", "waitingOn": "a run of 365 days",
-              "closes": "vessel" } ] } ] }
+              "closes": "vessel" } ] } ],
+      "finishers": [
+        { "id": 15, "name": "apex", "places": "1st", "cap": 1, "taken": 0 },
+        { "id": 11, "name": "aorta", "places": "65th on", "cap": null,
+          "taken": 0 } ] }
 
 `state` is `open`, `held`, `closed` or `refused`, and it is the single field
 that says whether a side can still be taken. `refused` is the fourth and it is
@@ -213,9 +233,20 @@ that is gated, so its absence means the gate is met. `closes` appears only on an
 open side, and names what taking it would forfeit; an earned side is priced
 `free` rather than carrying no price at all.
 
+The block above is shortened: the real answer carries all five pairs and all
+five `finishers` rows. A `finishers` row has no `state`, no price and no gate,
+because there is nothing on it to decide -- `cap` is how many places the band
+holds, null for `aorta`, whose band has no end, and `taken` is how many tokens
+wear it already. `taken` is counted from this service's own mirror of the
+chain, updated by the nightly run, so it can sit up to one run behind the
+contract.
+
 ## Taking a Mark
 
-`upgrade` with a Mark id from 1 to 10. Ids 5 and 9 also take a `variant`.
+`upgrade` with a Mark id from 1 to 10. Ids 5 and 9 also take a `variant`. Ids
+11 to 15 are the finisher Marks: the schema rejects them, and a call that
+reaches the tool another way is refused `mark-not-requestable` before any
+payment is requested.
 **`upgrade` and `seed` are MCP tool calls, not commands of the reference
 client** -- it has no subcommand for either. Call them over the protocol as
 `references/raw-protocol.md` describes; its tool table names every argument. Every
@@ -240,9 +271,16 @@ rather than forfeited by accident.
 (0 violet, 1 gold). Every other Mark accepts only 0. Prices are the exact
 strings the x402 demand carries, with no thousands separator.
 
-Nothing is limited, nothing expires, and no pair closes by itself. A slow
-answer is never punished, and nothing you choose in one pair can close anything
-in another.
+Nothing in the pairs is limited, nothing expires, and no pair closes by itself.
+A slow answer is never punished, and nothing you choose in one pair can close
+anything in another.
+
+The finisher Marks are the limited ones, and what limits them is a place rather
+than a supply: one token finishes first, three finish second to fourth, ten
+fifth to fourteenth, fifty fifteenth to sixty-fourth, and every token home after
+that wears Aorta, which is never refused. They are given by the contract at 365
+credited days, never bought and never asked for, and nothing already held can be
+taken away. `ladder` reports the bands and how much of each is gone.
 
 ## When you are refused
 

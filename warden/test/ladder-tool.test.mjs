@@ -503,3 +503,106 @@ test("`upgrade` refuses a finisher Mark by name, past the schema, without asking
   const ok = await tool.handler({ tokenId: 1, upgradeId: 2 }, { keyId: "k1" });
   assert.equal(ok.accepted, true);
 });
+
+// ---------------------------------------------------------------------------
+// THE WHOLE PUBLISHED SHAPE -- the sibling of status.test.mjs's own.
+//
+// Every test above checks a field or two, so one could be renamed, dropped or
+// added and nothing here would notice. That matters because this answer is a
+// published contract: `docs/2026-09-01-mro-raw-protocol.md` prints it field by
+// field, its byte-identical copy ships inside the skill, and `llms.txt`
+// describes it in prose. An agent has no human-facing page to fall back on, so
+// a wire change that does not reach those documents reaches an agent as a
+// surprise.
+//
+// Asserted as EXACT sets rather than subsets, for the same reason status does
+// it: a subset check cannot see a field quietly disappear, and it cannot see a
+// new one appear either.
+// ---------------------------------------------------------------------------
+
+test("the ladder answer carries exactly the published top-level field set", async () => {
+  const res = await ladder.handler({ tokenId: 1 }, ctx);
+
+  assert.deepEqual(
+    Object.keys(res).sort(),
+    ["finishers", "level", "ok", "pairs", "resting", "streak", "tokenId"],
+    "the published shape changed: update the protocol document and llms.txt in the same commit",
+  );
+});
+
+test("a pair, and a side of one, carry exactly the published field set", async () => {
+  // A token mid-ladder: pair 2 is decided by Beat, and pairs 1, 3, 4 and 5 are
+  // open -- so this one answer carries a decided pair, an open gated side, an
+  // open ungated side and a side with variants. Every optional key the shape
+  // has is reachable here, which is what makes an exact assertion honest.
+  const res = await ladder.handler({ tokenId: 1 }, ctx);
+
+  const pairKeys = new Set();
+  const sideKeys = new Set();
+  for (const pair of res.pairs) {
+    for (const k of Object.keys(pair)) pairKeys.add(k);
+    for (const side of pair.sides) for (const k of Object.keys(side)) sideKeys.add(k);
+    // These three are on every side, decided or not: `state` is the one field
+    // that says whether a side can be taken, and `price` and `route` have to
+    // agree with each other.
+    for (const side of pair.sides) {
+      for (const required of ["id", "name", "route", "state", "price"]) {
+        assert.ok(required in side, `side ${side.id} is missing ${required}`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    [...pairKeys].sort(),
+    ["closed", "closedBy", "held", "pair", "sides"],
+    "the published shape changed: update the protocol document and llms.txt in the same commit",
+  );
+  assert.deepEqual(
+    [...sideKeys].sort(),
+    ["closes", "id", "name", "price", "route", "state", "variants", "waitingOn"],
+    "the published shape changed: update the protocol document and llms.txt in the same commit",
+  );
+});
+
+test("a finishers row carries exactly the published field set, on every row", async () => {
+  const res = await ladder.handler({ tokenId: 1 }, ctx);
+
+  assert.equal(res.finishers.length, 5, "the finishers block lost a row");
+  for (const row of res.finishers) {
+    assert.deepEqual(
+      Object.keys(row).sort(),
+      ["cap", "id", "name", "places", "taken"],
+      "the published shape changed: update the protocol document and llms.txt in the same commit",
+    );
+  }
+});
+
+// AND THE OTHER BRANCH OF THE SAME ANSWER. The assertions above run against a
+// token that has decided one pair; a sealed token takes a different path
+// through `sideOf` -- every side closed, no gate quoted, no forfeit named --
+// and a key appearing or vanishing only there would ship with the published
+// shape "unchanged".
+test("a SEALED token's ladder answer carries the same published field set", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  db.exec("UPDATE tokens SET resting = 1, level = 40 WHERE tokenId = 1");
+  const res = await makeLadderTool({ q, catalogue: LADDER }).handler({ tokenId: 1 }, ctx);
+
+  // NOT VACUOUS: say the branch under test was actually taken before asserting
+  // the shape it produces.
+  assert.equal(res.resting, true);
+  assert.ok(res.pairs.flatMap((p) => p.sides).every((s) => s.state === "closed"));
+
+  assert.deepEqual(
+    Object.keys(res).sort(),
+    ["finishers", "level", "ok", "pairs", "resting", "streak", "tokenId"],
+    "the published shape changed: update the protocol document and llms.txt in the same commit",
+  );
+  const sideKeys = new Set(res.pairs.flatMap((p) => p.sides).flatMap((s) => Object.keys(s)));
+  assert.deepEqual(
+    [...sideKeys].sort(),
+    ["id", "name", "price", "route", "state", "variants"],
+    "the published shape changed: update the protocol document and llms.txt in the same commit",
+  );
+});

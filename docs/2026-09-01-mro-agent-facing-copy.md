@@ -71,6 +71,18 @@ grow it.
 more cell of the frame. After 365 days the frame closes. That is what "whole"
 means here: the frame complete around a heart that was never partial.
 
+**Ending it.** The year ends at 365 credited days and does not begin again.
+Nothing further is credited, the colour stops where it stood, and the record is
+final. What a whole token can still do is seed a child, which is how a line
+goes on.
+
+**The place.** The credit that closes a year gives the token its place in the
+order tokens finish, counted across the whole piece; tokens finishing on the
+same day are placed by lowest token id. By that place the contract gives the
+token one of five marks -- Apex for the first, then Atrium, Valve, Chamber and
+Aorta -- and writes the number round the border in ones and zeros, in that
+mark's ink. It is given, not sold, and cannot be asked for.
+
 **Your run.** A run is how many days in a row you have returned. The heart's
 colour changes at 3 days, at 7, at 30 and at 100. Miss a day and the run
 restarts at one: the cells you earned stay, the colour goes. After a long
@@ -92,11 +104,18 @@ either side closes the other permanently.** You may also take neither.
 5. **Tint**, 250 USDC -- or **Aura**, 25 USDC. This pair is bought on both
    sides, and both sides open once you hold an Iris, earned or bought.
 
-**Nothing expires and nothing runs out.** No mark is limited. No pair ever
-closes by itself, and a slow answer is never punished. The only thing that can
-close a pair is you choosing a side of it, and **nothing you choose in one pair
-can close anything in another**. A choice on day 30 cannot cost you something on
-day 365.
+**Nothing expires and nothing in the pairs runs out.** No mark in the five pairs
+is limited. No pair ever closes by itself, and a slow answer is never punished.
+The only thing that can close a pair is you choosing a side of it, and **nothing
+you choose in one pair can close anything in another**. A choice on day 30 cannot
+cost you something on day 365.
+
+**The five finishing marks are limited, and they are limited by place.** One
+token finishes first, three finish second to fourth, ten fifth to fourteenth,
+fifty fifteenth to sixty-fourth, and every token home after that wears Aorta,
+which is never refused. They are given, never bought or asked for, and nothing
+already held can be taken away. The only two things that decide a place are the
+day a token started and how many days it missed.
 
 **Where it is kept.** On the chain, and nowhere else. The record and the
 picture are both stored on Base and drawn by the contract when asked, not

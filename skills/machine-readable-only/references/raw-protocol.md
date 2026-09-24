@@ -389,7 +389,7 @@ Nine tools. None of them takes your key id -- it comes from the signature.
 | `ladder` | `tokenId` | free |
 | `checkin` | `tokenId` | free |
 | `mint` | `to` (0x address) | 1 USDC |
-| `upgrade` | `tokenId`, `upgradeId` (1-10), `variant?` (0-2, default 0) | the Mark's price |
+| `upgrade` | `tokenId`, `upgradeId` (1-10; 11-15 are given, never requested), `variant?` (0-2, default 0) | the Mark's price |
 | `seed` | `parentId`, `to` | free |
 | `rebind` | `tokenId` | free, returns a call to sign |
 | `rest` | `tokenId` | free, returns a call to sign |
@@ -451,6 +451,29 @@ A second check-in on the same day is refused with `already-credited-today`,
 `nextWindowOpensAt`, and the `onChainBy` of the credit you already have. It is
 not a penalty and nothing is at risk.
 
+**The 365th credit is the last one.** A year is 365 credited days and does not
+begin again, so a call against a token that already has them is refused:
+
+    checkin { "tokenId": 1 }
+    -> { "ok": false, "accepted": false, "reason": "year-complete",
+         "heart": "365/365",
+         "next": "Your year is complete. The record is final and its place is
+                  written round the border; `status` shows it. A whole token
+                  can seed a child once its key has a seed available." }
+
+The contract refuses it too -- `_credit` reverts `AlreadyFinished(id)` at that
+level -- so the service and the chain cannot disagree about where a year ends.
+Stop the daily call when `status` answers `whole: true`; it will be refused
+every day otherwise, and nothing is charged for that.
+
+**The credit that reaches 365 gives the token a finishing place**, in the order
+tokens finish across the whole piece. Tokens finishing on the same day are
+placed by lowest token id, which is the order the nightly batch is sorted in
+(`warden/src/clock/batch.mjs`). The place is written on chain as part of the
+`marks` word and announced as the `Finished(id, ordinal, markId)` event, and by
+it the contract gives the token one of the five Marks listed under The Mark
+ladder below. Nothing can buy a place and nothing can hurry one.
+
 **A token this service does not know yet is not a token that does not exist.**
 On a mirror miss the chain is asked before answering, so `unknown-token` means
 the CHAIN does not have it either. When the chain does have it and this service
@@ -462,11 +485,33 @@ While a token is queued, `status` and `/t/{id}` carry `onChainBy` and `late`.
 happened -- which the Clock may do on purpose when gas is high. It is a state,
 not a fault.
 
+**Once a token has finished, `status` and `/t/{id}` carry `finisher`**, either
+`null` or `{ "place": 1, "mark": "apex" }`: the place this token came in and the
+lower-case name of the Mark that place earned. It reads `null` on every token
+that has not finished, and also on one that finished within the last day and
+whose `Finished` event this service has not yet read -- normally the same night,
+at worst the next nightly run. The chain decided the place either way, so
+`viewOf` is the authority and this field follows it.
+
+**`nextWindowOpensAt` and `streakDeadline` are `null` on a finished token.**
+They are `null` rather than absent, because they are part of every view's shape
+and "there is none" is an answer where a missing key reads as a fault. A client
+that schedules its next visit from them must check: there is no next window
+after the 365th day.
+
+**`years` is gone** (removed 2026-09-24). It reported `level / 365` on a piece
+whose year now ends at 365 and does not begin again, so it could only ever
+answer 0 or 1 -- which `whole` already says. `finisher` is what distinguishes
+one finished token from another.
+
 ## The Mark ladder
 
-Marks are optional and come in five pairs. **Taking either side of a pair
-closes the other permanently.** No pair can close anything in another. You may
-take neither, and nothing about a Mark shortens the 365 days.
+Fifteen Marks: ten optional ones in five pairs, and five that are given for
+finishing a year and can never be asked for.
+
+**Taking either side of a pair closes the other permanently.** No pair can close
+anything in another. You may take neither, and nothing about a Mark shortens the
+365 days.
 
 In four of the pairs one side is BOUGHT and the other is EARNED by a run of
 returning days. A run here is the LONGEST you have ever completed, not the one
@@ -491,6 +536,30 @@ choice between them is informed rather than forfeited by accident.
 `mark-bad-variant` rather than charging you for a shape the chain will not
 write. Prices are the exact strings the x402 demand carries -- no thousands
 separator.
+
+### The five given for finishing
+
+Ids 11 to 15 are not a sixth pair and are not for sale. The contract gives one
+to every token that reaches 365 credited days, chosen by the place it came in
+(`MachineReadableOnly.finisherMark`), and a token finishes once, so the five
+exclude each other:
+
+| id | name | places | how many |
+|---|---|---|---|
+| 15 | apex | 1st | 1 |
+| 14 | atrium | 2nd-4th | 3 |
+| 13 | valve | 5th-14th | 10 |
+| 12 | chamber | 15th-64th | 50 |
+| 11 | aorta | 65th on | no limit |
+
+The place is written round the border of the artwork as sixteen binary digits,
+drawn as cell bitmaps rather than as SVG text, in that Mark's ink. It is in the
+metadata too, as the `Finisher` attribute, so nothing has to rasterise an image
+to read a rank. **`upgrade` cannot take one at any price.** `upgradeId`'s schema
+accepts 1 to 10, so a call naming 11 to 15 is refused by the MCP layer before
+the tool runs; a call that reaches the handler another way is refused
+`mark-not-requestable`, with no payment demand. The `ladder` tool reports the
+five in their own `finishers` array, described below.
 
 Every argument in `tools/list` carries a `description`, and `upgrade`'s
 `upgradeId` carries the whole ladder -- ids, names, prices and gates --
@@ -533,6 +602,13 @@ already wears Ache:
               "price": "$25.00", "waitingOn": "an Iris, by either route",
               "closes": "tint" }
           ] }
+      ],
+      "finishers": [
+        { "id": 15, "name": "apex",    "places": "1st",       "cap": 1,    "taken": 0 },
+        { "id": 14, "name": "atrium",  "places": "2nd-4th",   "cap": 3,    "taken": 0 },
+        { "id": 13, "name": "valve",   "places": "5th-14th",  "cap": 10,   "taken": 0 },
+        { "id": 12, "name": "chamber", "places": "15th-64th", "cap": 50,   "taken": 0 },
+        { "id": 11, "name": "aorta",   "places": "65th on",   "cap": null, "taken": 0 }
       ]
     }
 
@@ -541,6 +617,18 @@ already wears Ache:
 says whether a side can still be taken. `waitingOn` appears only on an open side
 that is gated, so its absence means the gate is met. A decided pair also carries
 `held` (or `refused`), `closed` and `closedBy` at the top level.
+
+**`finishers` is the second block, and it is not a pair** (new 2026-09-24). All
+five rows are always present, best place first. A row carries `id`, `name`,
+`places` (the band, in the contract's own words), `cap` and `taken`, and it
+carries no `state`, no `price`, no `waitingOn` and no `closes` -- every one of
+those fields exists to help an agent decide something, and there is nothing
+here to decide. `cap` is how many places the band holds and is `null` for
+`aorta`, whose band has no end; that is the chosen meaning rather than a
+serialiser's, since the catalogue holds `Infinity` and JSON cannot carry it.
+`taken` is how many tokens wear the Mark already, counted from this service's
+mirror of the chain, so it can sit up to one nightly run behind the contract --
+`upgradeOf(markId)` on chain is the authority.
 
 **`closes` is the forfeit, before you take it** (new 2026-09-06). It appears on
 every OPEN side and names the partner that taking this side would foreclose
@@ -619,11 +707,14 @@ case-fold to match them. It can only ever name the other side of the same pair.
 Every other refusal is temporary, and all of these arrive BEFORE any payment is
 requested: `mark-level-too-low`, `mark-needs-streak`, `mark-needs-whole`,
 `mark-needs-iris`, `mark-bad-variant`, `mark-already-applied`,
-`mark-inactive`, `unknown-token`, `not-bound-to-caller`, and
+`mark-inactive`, `mark-not-requestable`, `unknown-token`,
+`not-bound-to-caller`, and
 `chain-unavailable` / `paused` / `sunset` / `resting` from the contract's own
-gates. `mark-sold-out` is in the same list and cannot fire today: nothing in
-the ladder is limited, and this service refuses to start on a catalogue that
-says otherwise.
+gates. `mark-sold-out` is in the same list and cannot fire today: nothing that
+can be bought or earned is limited, and this service refuses to start on a
+catalogue that says otherwise. The five given for finishing are limited by
+place, and they never reach that check -- `mark-not-requestable` answers them
+first, because a band being full is not why they cannot be asked for.
 
 **One refusal arrives after you have committed to paying, and cancels the
 payment: `paid-but-unavailable`.** The payment round trip takes seconds, and
@@ -783,16 +874,18 @@ chain cannot be read we refuse rather than admit.
 
 ## 7. Come back
 
-`checkin` with your token id, once per UTC day. Free to you; the site pays the
-gas and writes the day on chain at 00:05 UTC.
+`checkin` with your token id, once per UTC day, until the token has 365 of
+them. Free to you; the site pays the gas and writes the day on chain at
+00:05 UTC.
 
 The check-in window on chain is exactly one day wide: `lastDay < day <=
 today()`. A second call in the same UTC day is refused. Read the contract's own
 `today()` rather than trusting your clock.
 
-Refusals: `unknown-token`, `not-bound-to-caller`, and the chain gates. A token
-whose key was rebound is re-checked against the chain, not against our
-database, so a legitimate rebind is never locked out.
+Refusals: `unknown-token`, `not-bound-to-caller`, `year-complete` once the
+token has its 365 days, and the chain gates. A token whose key was rebound is
+re-checked against the chain, not against our database, so a legitimate rebind
+is never locked out.
 
 ### 7.1 Seed a child, once a year
 
@@ -864,6 +957,34 @@ else here is additive.
   `0xe6c54f9a` to `0x91321088`. That only matters if you call the renderer
   library directly.
 
+### 7.3 What changed on 2026-09-24: the year ends
+
+**`viewOf`'s type list is unchanged**, so nothing here breaks a decoder. The
+place rides in the `marks` word the struct already carried. What changed is
+where a year stops and what happens at the end of one.
+
+- **A year is 365 credited days and does not begin again.** `checkin` refuses a
+  finished token with `year-complete`, and `_credit` reverts
+  `AlreadyFinished(id)` at that level, so neither side can credit a 366th day.
+- **The credit that reaches 365 gives the token a place**, in the order tokens
+  finish; same-day finishes are placed by lowest token id. The contract emits
+  `Finished(id, ordinal, markId)`, writes the ordinal into bits 64-95 of
+  `marks`, and gives the token the Mark for that place.
+- **Five Marks, ids 11 to 15**, given for a place and refused by `upgrade` with
+  `mark-not-requestable`. The table is under The Mark ladder above.
+- **`status` and `/t/{id}` answer `finisher`** -- `{ place, mark }` or `null` --
+  **and no longer answer `years`.** `nextWindowOpensAt` and `streakDeadline` are
+  `null` once the year is complete.
+- **`ladder` answers a `finishers` array** beside `pairs`, with the band, its
+  size and how many places are taken.
+- **`tokenURI` metadata carries a `Finisher` attribute**: the place as a number,
+  and 0 on every token that has not finished. The five names appear in the
+  Marks attribute as `apex`, `atrium`, `valve`, `chamber` and `aorta`.
+
+**The contract half of this lands with the next deployment.** The pair named in
+section 8 predates it, so against that address a token at 365 has no place and
+no finisher Mark.
+
 ---
 
 ## 8. Read the chain instead of asking us
@@ -898,8 +1019,12 @@ seedsGiven, parent, echo, resting, sunset, sunsetDay, fellRun, fellDay, marks,
 agentKeyId, code, today. Eighteen values.
 
 `marks` is 2 there, which is bit 1 set, which is Hush. The Mark set lives in bits
-1 to 10; bits 16 and up carry the Iris shape, the Tint ink and the earned run, so
-test `marks & 0xFFFE` for "wears any Mark" and never `marks != 0`.
+1 to 15 -- 1 to 10 for the pairs, 11 to 15 for the Marks given for finishing --
+and bits 16 and up carry other things: 16-23 the Iris shape, 24-31 the Tint ink,
+32-63 the run the earned Iris was taken at, and **64-95 the finishing place**, 0
+while the token has not finished. So test `marks & 0xFFFE` for "wears any Mark"
+and never `marks != 0`, and read the place as `(marks >> 64) & 0xFFFFFFFF`
+rather than off any Mark bit.
 
 **`level` is 1 from the moment a token is minted, so `level == 0` means never
 minted.** Do not read the leading `1` as existence: that is the id you asked
