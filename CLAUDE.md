@@ -156,7 +156,9 @@ a leak:** a commit that DELETES a string still shows it in its diff, so check
   transaction per UTC day at 00:05.
 - **Token art:** static identity QR (payload `https://<domain>/t/<id>`, JSON)
   plus a 365-cell pixel heart, one cell per credited day. Streak sets colour at
-  3 / 7 / 30 / 100; a lapse pales it in steps. Rings mark extra years.
+  3 / 7 / 30 / 100; a lapse pales it in steps. **ONE ring, drawn when the token
+  completes its 365 days -- no year adds another** (spec 10f, built). A child
+  draws a second, dashed, for its echo.
 - **Marks:** the ten-Mark ladder, built 2026-09-02. The seven independent tiers
   (Vein, Blue Blood, Voice, Bloom, Halo, Crown, Singularity) are RETIRED. Ten
   Marks in five pairs, nothing limited, ids 1-10: Hush $1 / Ache run 7;
@@ -168,6 +170,16 @@ a leak:** a commit that DELETES a string still shows it in its diff, so check
   `docs/specs/2026-09-02-mro-mark-ladder-design.md`; read it beside
   `contracts/src/Ladder.sol` and `warden/src/mcp/ladder.mjs`, which mirror each
   other by hash.
+- **Finisher Marks (DECIDED 2026-09-23, BUILT 2026-09-24):** ids 11-15 are
+  **GIVEN, never asked for.** The credit that takes a token to 365 finishes it,
+  and its finishing PLACE picks the Mark: 1st Apex, 2nd-4th Atrium, 5th-14th
+  Valve, 15th-64th Chamber, 65th onwards Aorta, which is never refused. Each
+  writes the place round the border in its own ink -- gold, silver, bronze, blue,
+  the heart's red. The place bands are CONSTANTS in the token contract, not
+  dials, and `applyMark` refuses ids 11-15 outright; the Warden reserves nothing
+  and sells nothing. Ties within a day break by lowest token id, which is the
+  Clock's `(day, tokenId)` sort. Spec `10l` and `10m` of
+  `docs/specs/2026-09-20-mro-finisher-marks-design.md`.
 - **Endings:** Rest (owner seals, irreversible), Sunset (operator closes),
   Lineage (one seed per agent-year, same collection, tenure not depth).
 - **Heartbeat (DECIDED and BUILT 2026-09-18, pre-deploy, PERMANENT):**
@@ -229,8 +241,12 @@ a leak:** a commit that DELETES a string still shows it in its diff, so check
   must VERIFY `timeLastUpdated` moved rather than fire and forget. **Never claim
   Alchemy ignores ERC-4906** -- nothing has ever tested that. Full investigation
   in the `phase0-status` memory.
-- **tokenURI gas is settled but has NO single worst case.** The dearest token
-  and the largest token are DIFFERENT TOKENS, and both are CHILDREN since Plan 7.
+- **tokenURI gas is settled and has ONE worst case.** Since the digit band, the
+  dearest token and the largest token are THE SAME TOKEN -- a finished child
+  wearing every legal Mark and its place. They were different tokens until
+  2026-09-23; say which harness any figure came from, because the SHIPPING
+  measurement (`RealTokenGas.t.sol`) and the SPIKE (`GasBudget.t.sol`) moved in
+  opposite directions on the same branch and both are right.
   Hard limits 4M gas / 24 KB pass (gas 2M -> 3M -> 4M on 2026-09-21, bytes
   20K -> 24K on 2026-09-22, all by the operator and on measurement -- see
   `.claude/rules/contracts.md`); the 1M / 5 KB target is MISSED and must be

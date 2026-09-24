@@ -26,12 +26,26 @@
 // away by moving a size out of the list.
 //
 // THE CONTROLS ARE THE POINT. A child's canvas is not new: canvasFor(0, echo)
-// is 53, exactly what a founding token with one year ring has, and
-// canvasFor(10, echo) is 89, exactly the founding ring cap. So each child is
+// is 53, exactly what a founding token with one year ring has. So each child is
 // compared against a FOUNDING token on the identical canvas, at the identical
 // module size, whose only difference is that its innermost ring is solid
 // instead of dashed. Without that pair, a failure could not be attributed to
 // the ring rather than to the canvas.
+//
+// SPEC 10f RETIRED THE TEN-RING CAP (built 2026-09-24), and the comments below
+// were written against it. A token now keeps ONE ring of its own plus the echo
+// ring, so the widest canvas the piece can produce is 57 cells, not 89. Two
+// things follow for this file and neither is a code change:
+//
+//   - The deep cases no longer sit at a "cap". canvasFor(10, echo) is 57 and
+//     canvasFor(10, 0) is 53, so the deep pair is no longer the identical
+//     canvas the paragraph above claims -- the shallow pair still is. Level
+//     3650 is not a level the chain can reach either; it is an input to a
+//     renderer, and the renderer answers one ring for it.
+//   - The states are KEPT anyway. Removing a state from a decode gate can only
+//     ADD survivors, never remove one, and every committed bitmap was solved
+//     against this gate as it stands. Trimming it could move a mask that a
+//     minted token would ship with.
 //
 // MEMORY. This is a rendering sweep, which is the exact shape of job that took
 // this machine down on 2026-08-28 (400 SVGs x 14 sizes, 6.28 GB resident, one
@@ -63,17 +77,21 @@ const { DEST, CODE, TARGET } = SHEET;
 
 // The five sizes every Mark sheet in this project is judged at, plus four more.
 // 848 is 16 x 53, the exact multiple a 53-cell child renders at with no
-// resampling, and 1424 is 16 x 89, the same for a child at the cap -- both are
-// in because the intrinsic size the SVG declares is canvas x 16 and a consumer
-// that honours it lands exactly there. 350, 700 and 900 come from the ring-cap
-// gate in render-token.test.mjs, which is the existing test for a ten-ring
-// canvas and the closest thing to a precedent for the deep case.
+// resampling, and 1424 was 16 x 89, the same for a child at the old ten-ring
+// cap -- both are in because the intrinsic size the SVG declares is canvas x 16
+// and a consumer that honours it lands exactly there. Since spec 10f there is
+// no 89-cell canvas, so 1424 is now an ordinary oversize raster rather than an
+// exact multiple; it is kept because a stricter list can only remove survivors.
+// 350, 700 and 900 come from the deep-canvas gate in render-token.test.mjs.
 const SIZES = [256, 350, 500, 700, 848, 900, 1080, 1424, 1600];
 
 // A child at level 1 can wear Hush and nothing else: Iris needs level 100, Beat
 // needs a completed run of 30, Tint needs an Iris, and Vessel needs a whole
-// heart. A child at the cap can wear the whole maximal legal set. Asking a
-// newborn to wear five Marks would be testing a token that cannot exist.
+// heart. A deep child can wear the whole maximal legal set. Asking a newborn to
+// wear five Marks would be testing a token that cannot exist. (The case labels
+// below still say "at the cap"; since spec 10f there is no ring cap, and the
+// labels are kept because the tests and the committed masks were judged under
+// them -- a rename is how a guard like this gets defeated by tidying.)
 const NEWBORN_MARKS = [HUSH];
 const CAP_MARKS = [HUSH, BEAT, IRIS_BOUGHT, VESSEL, TINT];
 

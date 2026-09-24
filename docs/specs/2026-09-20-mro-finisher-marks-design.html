@@ -75,7 +75,9 @@
 </head>
 <body>
 <h1>Machine Readable Only -- The Finisher&#39;s Mark</h1>
-<p>Design record, 2026-09-20. DRAFT, not yet approved for build.</p>
+<p>Design record, 2026-09-20. <strong>BUILT 2026-09-24 -- read section 10m first.</strong> It
+records what shipped and it is the authority wherever an earlier section
+disagrees with it.</p>
 <p>Brainstormed with the operator on 2026-09-20. Supersedes nothing. Extends
 <code>2026-09-02-mro-mark-ladder-design.md</code>, which remains the authority on the ten
 Marks in five pairs; this document adds a sixth group and does not alter any
@@ -203,6 +205,10 @@ The cross-pair exclusion removed on 2026-09-02 made abstention the optimal
 play, and a finisher Mark that forfeited Vessel or Break would recreate exactly
 that trap at exactly the moment the piece most wants the agent to act.</p>
 <h3>On the cap numbers</h3>
+<p><strong>The numbers stand; &quot;they are dials&quot; does not.</strong> 10m built the place bands as
+CONSTANTS in the token contract, because a table the owner could edit after
+finishers exist is a promise that can be broken. The <code>Upgrade</code> records repeat
+the caps for readers and a test pins the two together.</p>
 <p>50 / 10 / 3 / 1 are deliberately small. Comparable projects argue for modesty:
 BLINK, the closest design, has 1 mint of 5,555, and five of six early-2026
 agent mints had dead infrastructure within six months. A cap of 500 would never
@@ -230,11 +236,19 @@ new storage slot and no extra SLOAD on the <code>tokenURI</code> path.</p>
 <p>A single <code>uint32 _finishersSoFar</code> counter in the contract increments on each
 first finisher claim. One new slot, written once per finisher.</p>
 <h3>It counts CLAIM order, not completion order</h3>
+<p><strong>SUPERSEDED BY 10m: it counts FINISHING order</strong>, because there is no claim to
+count. The worry below -- two orders that could disagree -- is answered by
+removing one of them rather than by choosing between them.</p>
 <p>A token could become whole in January and not claim until March. If the
 ordinal counted completion while the caps counted claims, the two orders would
 disagree, and the piece would be able to show finisher number 1 holding a Mark
 that finisher number 4 had already taken. One order, used for both.</p>
 <h3>Metadata first, not drawn</h3>
+<p><strong>SUPERSEDED: IT IS DRAWN.</strong> 10k built the digit band -- the place written round
+the border of every finished token -- and 10l made its ink the finisher&#39;s Mark.
+The <code>Finisher</code> metadata trait also ships, always, zero included. The gas
+argument below was overtaken by two limit raises and by 10f&#39;s ring cap, and the
+cost was measured rather than estimated; see 10m.</p>
 <p>The ordinal ships as a metadata trait (<code>Finisher</code>, a number). It is NOT drawn
 into the artwork in this design.</p>
 <p><code>tokenURI</code> already MISSES its 1M gas / 5 KB target and passes only the 2M /
@@ -244,6 +258,12 @@ Renderer is swappable, so drawing the ordinal remains available later, measured
 against a real gas figure rather than an estimate.</p>
 <hr>
 <h2>6. Multiple finishers on the same day</h2>
+<p><strong>SUPERSEDED BY 10m (built 2026-09-24).</strong> There is no claim: the credit that
+reaches 365 gives the Mark, so nothing here describes what runs. The ORDERING
+rule it argues for was adopted unchanged -- lowest token id first within a day,
+now applied to the Clock&#39;s batch rather than to a queue of claims -- and the
+reasoning below is why. Read it as the argument for that rule, not as a
+description of a mechanism.</p>
 <p>The operator asked for this specifically, and it is not an edge case: it is the
 NORMAL case at launch, because a cohort that mints in the same week finishes in
 the same week.</p>
@@ -289,6 +309,11 @@ takeable, and a claim for an exhausted Mark is refused at the door with the
 reason, not accepted and then reverted by the chain.</p>
 <hr>
 <h2>7. A reservation is state too</h2>
+<p><strong>SUPERSEDED BY 10m (built 2026-09-24) for the finisher Marks.</strong> Nothing
+reserves a finisher Mark, because nothing asks for one: the chain gives it, and
+<code>_upgrades[markId].sold</code> moves in the same transaction as the place. The defect
+described below is real and the <code>sold + reserved</code> rule still governs the PAID
+ladder; it simply has no finisher Mark left to apply to.</p>
 <p><strong>This is the defect most likely to ship if it is not written down</strong>, because
 the project has already made it once, in this exact shape.</p>
 <p>On 2026-09-03 the <code>upgrade</code> path decided a Mark&#39;s exclusion from
@@ -792,6 +817,11 @@ change.</strong> The echo ring already carries the depth the year rings used to.
 <p><strong>The QR version raise stays dead.</strong> It needed roughly 8,927 bytes and +1.38M
 gas; this frees 870 bytes and 134,353 gas. Not close. See 10b, and do not
 re-open it on the strength of this saving.</p>
+<p><strong>OVERTAKEN 2026-09-21, and not by this saving.</strong> The version was raised to 10
+after the byte and gas limits moved and the real cost was measured at about half
+the estimate this paragraph rests on. The paragraph is kept because its
+reasoning -- that a ring cap does not buy a version raise -- was correct; what
+bought it was the limits, not the rings. See 10b&#39;s superseded note and 10j.</p>
 <h3>Open</h3>
 <ul>
 <li><strong>This changes decided ground.</strong> The ten-ring cap was chosen in August from a
@@ -799,8 +829,11 @@ rendered sheet, against a design where tokens ran for a decade. That premise
 is what changed, not the sheet&#39;s finding.</li>
 <li><strong>Every Base Sepolia token would render differently.</strong> They are testnet and
 stay as they are; see the testnet-is-a-rehearsal rule.</li>
-<li>The finisher&#39;s ring and the token&#39;s own completion ring are candidates to be
-the SAME ring, drawn differently per finisher Mark. Not decided.</li>
+<li><del>The finisher&#39;s ring and the token&#39;s own completion ring are candidates to be
+the SAME ring, drawn differently per finisher Mark.</del> <strong>CLOSED: there is no
+finisher&#39;s ring.</strong> 10k moved the distinction off the rings entirely and onto
+the digit band, and 10l made the band&#39;s ink the Mark. A finished token draws
+one ring whatever its place.</li>
 </ul>
 <hr>
 <h2>10g. One ring, five looks</h2>
@@ -1394,22 +1427,214 @@ The Solidity <code>DigitBand.INK</code> and its JS mirror move together, as ever
 (10g&#39;s &quot;default look&quot;): the band needs an ordinal, and the ordinal is written by
 the claim, so the likely answer is no band until the claim lands. Confirm in
 the build.</p>
+<p><strong>ANSWERED IN THE BUILD (10m): there is no such state.</strong> <code>_finish</code> writes the
+ordinal and the Mark bit into one word in one statement, so a token with a place
+always has a Mark. <code>DigitBand.INK</code>&#39;s near-black survives only as the fallback
+for a state the chain cannot reach.</p>
+<hr>
+<h2>10m. BUILT 2026-09-24: the Mark is given at 365, and 10f is built</h2>
+<p>Decided with the operator on 2026-09-23 and built on the days that follow.
+<strong>This section is the record of what shipped. Where an earlier section of this
+document disagrees with it, this section is right.</strong></p>
+<h3>What changed from the design above</h3>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>What it replaces</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>The Mark is ASSIGNED at 365, not claimed.</strong> The credit that takes <code>level</code> to 365 increments a counter; the counter value is the place; the place picks the Mark.</td>
+<td>Sections 4, 6 and 7: an agent claiming a Mark over MCP, with the Warden reserving caps (<code>sold + reserved</code>). None of that is built, and none of it is needed.</td>
+</tr>
+<tr>
+<td><strong>Place is FINISHING order, ties within a day by lowest token id.</strong> The Clock sorts each batch by <code>(day, tokenId)</code>.</td>
+<td>Section 5&#39;s &quot;claim order&quot; -- there is no separate claim any more, so the two orders cannot disagree.</td>
+</tr>
+<tr>
+<td><strong>Stop-at-365 (10f) is in this build.</strong> A credit to a token already at 365 reverts.</td>
+<td>10f was decided on 2026-09-20 and never built.</td>
+</tr>
+<tr>
+<td><strong>The tier boundaries are CONSTANTS in the token contract</strong>, not dials.</td>
+<td>Section 4&#39;s &quot;they are dials (<code>setUpgrade</code>)&quot;. A place-to-Mark table the owner could edit after finishers exist is a promise that can be broken; the constants cannot be. The <code>Upgrade</code> records for 11-15 still carry the caps, for readers, and a test pins them to the constants.</td>
+</tr>
+<tr>
+<td><strong><code>applyMark</code> refuses ids 11-15 outright.</strong></td>
+<td>Nothing -- before this build <code>applyMark</code> would have accepted them once <code>setUpgrade</code> activated them.</td>
+</tr>
+</tbody></table>
+<h3>What was built</h3>
+<p><strong>The contract.</strong> <code>FINISH_LEVEL</code> is 365 and lives in <code>_credit</code>, which both
+check-in paths share. A credit to a token already at 365 reverts
+<code>AlreadyFinished(id)</code>; the credit that REACHES 365 calls <code>_finish</code>, which
+increments <code>finishers</code>, writes the ordinal and the finisher Mark bit into the
+marks word in one statement -- the ordinal at bits 64-95, the slot
+<code>TokenView.sol</code> reserves for it -- increments <code>_upgrades[markId].sold</code>, and emits
+<code>Finished(id, ordinal, markId)</code>. <code>finisherMark(ordinal)</code> is the constant place
+table: 1st Apex (15), 2nd to 4th Atrium (14), 5th to 14th Valve (13), 15th to
+64th Chamber (12), 65th onwards Aorta (11), which is never refused. <code>applyMark</code>
+reverts <code>MarkNotRequestable</code> for any id at or above 11, so a place is never
+asked for.</p>
+<p><strong>The picture (10f).</strong> <code>MAX_RINGS</code> is deleted from <code>FrameRenderer.sol</code> and
+<code>tools/render-token.mjs</code>. A token draws ONE ring of its own, plus the echo ring
+if it is a seeded child, so the widest canvas the piece can produce is a finished
+child&#39;s 57 cells where it was 89. <code>_absence</code> returns 0 once whole and <code>_rung</code>
+reads at <code>lastDay</code> rather than today, so a finished token&#39;s image stops moving
+with the clock without being <code>resting</code> -- completion must not block <code>seed</code>.</p>
+<p><strong>The number (10l).</strong> Every finished token carries the digit band, written in
+its Mark&#39;s ink: gold, silver, bronze, blue and the heart&#39;s red.</p>
+<p><strong>The Clock.</strong> <code>pendingCredits</code> selects <code>ORDER BY day ASC, tokenId ASC</code>, and
+one named comparator, <code>byDayThenId</code>, is applied at the top of
+<code>writeCheckInChunk</code> and again immediately before every send, so a halving or a
+heal cannot hand a token somebody else&#39;s place. <code>AlreadyFinished</code> joins the
+entry errors keyed by id: the door refuses a 366th check-in, so one reaching the
+chain means the mirror fell behind, and dropping it loses nothing.</p>
+<p><strong>The Warden.</strong> A finished token&#39;s check-in is refused as year-complete, by the
+mirror&#39;s level and by a chain read for the case the mirror cannot answer. The
+<code>ladder</code> tool shows the five as their OWN GROUP, never a sixth pair, with no
+price and no call to action, and <code>upgrade</code> refuses the route by name with
+<code>mark-not-requestable</code>. The mirror learns the place from the <code>Finished</code> event
+into its own column -- <code>tokens.marks</code> is a signed 64-bit SQLite INTEGER and
+cannot hold bits 64-95 -- and <code>tokenView</code> drops <code>years</code>, which could only answer
+0 or 1 on a piece whose year does not repeat, and adds
+<code>finisher: { place, mark } | null</code>.</p>
+<p><strong>Nothing reserves anything.</strong> There is no cap accounting in the Warden and no
+reserved mask for a finisher Mark, because nothing is sold and nothing is asked
+for. <code>markSold</code> answers 0 for all five for ever.</p>
+<h3>The measured figures</h3>
+<p><strong>Run them; do not quote them.</strong> These are what <code>RealTokenGas.t.sol</code>,
+<code>GasBudget.t.sol -vv</code>, <code>CheckIn.t.sol -vv</code> and <code>forge build --sizes</code> printed on
+2026-09-24.</p>
+<p><strong>The worst case is now ONE token</strong> -- a finished child wearing every legal Mark
+and its place. The dearest and the largest have converged for the first time:
+the rings that went made the picture smaller, the band made it larger, and the
+band wins.</p>
+<p><strong>State the harness with the figure.</strong> The two harnesses moved in opposite
+directions on the same branch and both are right.</p>
+<table>
+<thead>
+<tr>
+<th>harness</th>
+<th>before this branch</th>
+<th>at HEAD</th>
+<th>limit</th>
+<th>headroom</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>shipping, dearest (<code>RealTokenGas.t.sol</code>)</td>
+<td>2,870,177 gas</td>
+<td><strong>3,540,467 gas</strong></td>
+<td>4,000,000</td>
+<td>459,533</td>
+</tr>
+<tr>
+<td>shipping, largest (<code>RealTokenGas.t.sol</code>)</td>
+<td>18,249 bytes</td>
+<td><strong>22,162 bytes</strong></td>
+<td>24,000</td>
+<td>1,838</td>
+</tr>
+<tr>
+<td>spike, banded (<code>GasBudget.t.sol</code>)</td>
+<td>3,705,772 gas</td>
+<td>3,534,616 gas</td>
+<td>4,000,000</td>
+<td>465,384</td>
+</tr>
+<tr>
+<td>spike, banded (<code>GasBudget.t.sol</code>)</td>
+<td>23,046 bytes</td>
+<td>22,152 bytes</td>
+<td>24,000</td>
+<td>1,848</td>
+</tr>
+</tbody></table>
+<p>The SHIPPING figures ROSE because a shipping token could not be a finisher
+before this branch, so that harness had no way to measure the band at all. The
+SPIKE figures FELL because the spike could only project the band onto a ring-cap
+canvas that 10f has abolished. A rise there and a fall here are the same fact
+seen twice, and quoting one against the other is the error this table exists to
+stop.</p>
+<p><strong>The one real external ceiling is Alchemy&#39;s documented 30,000 bytes</strong>, and
+22,162 leaves 7,838 under it.</p>
+<p>The 1,000,000 gas / 5,000 byte TARGET is still MISSED, and is still asserted as
+missed.</p>
+<p><strong>What the finishing credit costs</strong>, measured in isolation by
+<code>contracts/test/CheckIn.t.sol::test_theFinishingCreditCostsMoreThanAnOrdinaryOne</code>:</p>
+<pre><code>an ordinary credit, FIRST of the day        47,630
+an ordinary credit, day already stamped     40,161   &lt;- the baseline
+the night&#39;s lastWardenDay stamp, once        7,469
+the FIRST finishing credit                  89,639
+a later finishing credit                    89,664
+what finishing costs, thereafter           +49,503
+</code></pre>
+<p>The baseline is the SECOND call of the night, not the first. <code>onlyWarden</code> stamps
+<code>lastWardenDay</code> once per night, and a per-night cost has no business inside a
+per-token difference; measuring against the first call flattered the finishing
+credit by about 7,500 gas. The first finisher is not the dear one, which is the
+opposite of what the storage rules suggest: <code>finishers</code> shares its slot with
+<code>lastWardenDay</code>, which the modifier has already stamped, so the counter is never
+cold. A full chunk of finishers would add 69,304,200 gas, so about sixteen fit
+one 1,400-entry chunk before the estimate declines and the Clock writes the
+chunk in halves -- a dearer night, not a stalled one.</p>
+<p><strong>Deployability</strong>, <code>forge build --sizes</code>, against the 24,576-byte EIP-170 limit:
+<code>MachineReadableOnly</code> runtime 16,007 bytes, margin 8,569; <code>Renderer</code> runtime
+20,445 bytes, margin 4,131. Both positive, and a strict-limit anvil deploy
+returns non-empty code and a real <code>tokenURI</code> read back.</p>
+<p><strong>Decode: 18 of 18.</strong> <code>tools/finisher-band-sheet.mjs</code> renders the unbanded
+control plus one place per Mark -- six tiles, paired to their Marks by
+<code>finisherMark</code> rather than by hand -- and decodes each at 256, 848 and 1600 px.
+Every tile reads its own url. The tool also reads each band&#39;s ink back off the
+SVG by structure rather than by string search, because Aorta&#39;s red is also the
+heart&#39;s red and a string search would pass on the fallback near-black.</p>
+<h3>What this section supersedes, by name</h3>
+<ul>
+<li><strong>Section 4&#39;s &quot;On the cap numbers&quot;</strong>, in the one clause that says the caps are
+dials. The numbers themselves -- 1 / 3 / 10 / 50 plus one uncapped -- stand.</li>
+<li><strong>Section 5&#39;s &quot;It counts CLAIM order, not completion order&quot;</strong> and <strong>&quot;Metadata
+first, not drawn&quot;</strong>. The place counts FINISHING order, and it is drawn.</li>
+<li><strong>Section 6 in whole.</strong> There is no claim to order, so there is no same-day
+claim race; what is ordered is the Clock&#39;s batch, and it is ordered by
+<code>(day, tokenId)</code> exactly as section 6 recommended.</li>
+<li><strong>Section 7 in whole.</strong> A reservation cannot go stale if there is no
+reservation. The defect it warns about is real and the rule still governs the
+PAID ladder; it simply has no finisher Mark to apply to.</li>
+<li><strong>Section 8&#39;s change table</strong>, where it puts the ordinal at bits 32-63. Section
+5&#39;s own correction is right: bits 32-63 are the earned Iris&#39;s run, the ordinal
+is at 64-95, and that is what was built.</li>
+<li><strong>Section 10&#39;s validation step 2</strong>, &quot;prove the reservation guard by breaking
+it&quot;. There is no reservation guard to break.</li>
+</ul>
 <hr>
 <h2>11. Non-goals</h2>
 <p>Stated so they are not re-litigated mid-build:</p>
 <ul>
 <li><strong>The piece does not stop at 365 days.</strong> Per-token completion was chosen over
-a global ending. A global stop would kill lineage outright: <code>seed()</code> requires
+a global ending, and it is BUILT (10f, 10m): a TOKEN stops at 365, the piece
+does not. A global stop would kill lineage outright: <code>seed()</code> requires
 a whole parent and the seed budget is <code>(today() - first) / 365</code>, so a founder
 earns their first seed on the very day they become whole. Halting the piece
 that day would leave children born at level 1 forever.</li>
 <li><strong>No existing Mark changes.</strong> Pairs 1 to 5 are untouched.</li>
 <li><strong>No payment for a finisher Mark.</strong> All five are earned. Payment stays USDC
 elsewhere on the ladder, unchanged.</li>
-<li><strong>The ordinal is not drawn</strong> in this design.</li>
+<li><del><strong>The ordinal is not drawn</strong> in this design.</del> <strong>STALE -- IT IS DRAWN.</strong> 10k
+built the digit band and 10l made its ink the finisher&#39;s Mark, so the place is
+written round the border of every finished token. Measured, not estimated:
+the band costs 871,911 gas and 4,636 bytes, and the banded worst case fits
+both hard limits with 459,533 gas and 1,838 bytes to spare (10m).</li>
 <li><strong>The finished token is not redrawn.</strong> The decoupled compositions were
 rendered and rejected on looks; see 10b.</li>
-<li><strong>The QR version is not raised</strong>, and no other symbology replaces it; see 10b.</li>
+<li><del><strong>The QR version is not raised.</strong></del> <strong>STALE -- IT WAS RAISED TO VERSION 10 on
+2026-09-21</strong>, which is why the contract is being redeployed: <code>CODE_BYTES</code> is a
+<code>constant</code> at 407 and <code>mint</code> and <code>seed</code> reject any other length. This
+document&#39;s gas verdict against the raise rested on an estimate from a borrowed
+gas-per-unit constant, and 10b&#39;s own superseded note records the real cost at
+about half that estimate. See 10b and 10j. <strong>No other
+symbology replaces QR</strong>, and that half of the non-goal stands; see 10b.</li>
 <li><strong>Base64 stays</strong>; see 10c.</li>
 <li><strong>The ring is not a colour.</strong> Five inks were rendered, tested at every tier,
 and rejected; see 10k. Do not re-propose a coloured finisher ring.</li>
@@ -1425,8 +1650,12 @@ inscription with both rendered; see 10k.</li>
 Aorta</strong> (ids 15 down to 11), parts of the heart. Apex is the heart&#39;s tip and
 means the top; Aorta, the artery carrying red blood out, goes with the red
 ink. Chosen over a set named after the inks and a finish-line set.</li>
-<li><strong>The combination strategy</strong> in section 9, if he wants it decided rather than
-recommended.</li>
+<li><del>The combination strategy.</del> <strong>SETTLED 2026-09-20 and BUILT.</strong> The five share
+one surface -- the digit band -- so the decode sweep does not multiply at all.
+Section 9 records it; 10m records what shipped.</li>
 </ul>
+<p><strong>NOTHING IN THIS LIST IS OPEN.</strong> Every line above is struck, and the build is
+recorded in 10m. The decisions the operator still owns are the mainnet ones in
+<code>CLAUDE.md</code>, not anything in this document.</p>
 </body>
 </html>

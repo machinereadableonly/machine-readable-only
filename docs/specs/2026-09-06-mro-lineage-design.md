@@ -155,6 +155,16 @@ one worst case.
 The consequence, stated plainly: a child's own rings cap at 9, not 10. A child
 that runs for a decade shows nine lit rings and one dashed.
 
+**SUPERSEDED 2026-09-24 by section 10f of
+`docs/specs/2026-09-20-mro-finisher-marks-design.md`, and BUILT.** There is no
+`MAX_RINGS` any more: a token stops at 365 credited days and keeps ONE ring of
+its own, plus the echo ring if it is a child. A decade of persistence is
+recorded as a LINE rather than as ten rings on one token, and the echo ring
+already carries that depth. Nothing else in this document changes -- the echo is
+still one dashed innermost ring, sealed at the seed -- but the arithmetic in this
+subsection and the 89-cell canvas it defends are gone. The widest canvas the
+piece can now produce is a finished child's 57 cells.
+
 ### 3.3 Where it sits, and why that needs no work
 
 Ring `k` sits at depth `2k`, and the canvas grows outward as years accumulate,

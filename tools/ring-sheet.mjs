@@ -2,6 +2,18 @@
 // range of ring counts, all at the SAME display size, and decodes each one --
 // because every ring added makes the canvas bigger, which makes every module
 // smaller at a fixed size, which is what a scanner actually sees.
+//
+// THIS TOOL IS A HISTORICAL RECORD SINCE SPEC 10f (built 2026-09-24), and it is
+// kept for that. It is what the ring question was ANSWERED from: rings are what
+// made the code block a quarter of the picture at the old ten-ring cap.
+//
+// The cap it swept no longer exists. A token stops at 365 credited days and
+// keeps ONE ring of its own, so ringBudget answers 1 for every row from 1
+// upward and every one of those rows now renders the identical 53-cell canvas.
+// Only the zero-ring row (51 cells) still differs. The RINGS list is left as it
+// was rather than trimmed to what the chain can reach, because the point of
+// keeping the tool is to be able to re-run the comparison that settled the
+// decision; re-reading it as a current measurement is the mistake to avoid.
 import { writeFileSync } from "node:fs";
 import { Resvg } from "@resvg/resvg-js";
 import { solve, payloadFor } from "./qart.mjs";
