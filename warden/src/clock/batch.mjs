@@ -18,6 +18,8 @@
 // naming the exact entry to drop. Bisecting is the fallback for errors that
 // name nothing, not the strategy.
 
+import { FINISH_LEVEL } from "../mcp/ladder.mjs";
+
 /// Errors that condemn ONE entry, and which of the error's arguments says so.
 /// `by: "id"` means the argument is a token id; `by: "day"` means a day number,
 /// which condemns every entry for that day rather than one token.
@@ -30,25 +32,9 @@
 const ENTRY_ERRORS = {
   NoSuchToken: { by: "id" },
   Resting: { by: "id" },
-  // The token's year is already complete on chain: `_credit` refuses a 366th
-  // day. The door refuses these too, so one reaching the chain means the
-  // MIRROR fell behind, not that anything is wrong with the chain's record.
-  //
-  // WHAT `by: "id"` COSTS HERE, stated rather than glossed. It condemns EVERY
-  // queued entry for that token, not just the refused one. When the token was
-  // ALREADY at 365 before this chunk -- the case this rule is for -- that loses
-  // nothing, because none of its entries was ever writable. It would lose a day
-  // in one other shape: the same chunk carrying the credit that FINISHES the
-  // token and then a later one for it, where the first is good and only the
-  // second is refused.
-  //
-  // The door is what makes that shape require a broken mirror, not merely a
-  // late one. `checkin` refuses on the mirror's own level, and yearCompleteBlock
-  // refuses on the chain's, so two queued days whose second is the 366th need
-  // the mirror's level to disagree with the credits the mirror itself already
-  // holds. Nothing is marked written either way, so such a loss would surface
-  // in `stuckCredits` with an alert rather than pass silently.
-  AlreadyFinished: { by: "id" },
+  // `AlreadyFinished` is NOT here either: condemning by id would take the
+  // credit that FINISHES a token down with the ones after it. It is trimmed by
+  // trimPastTheFinish below, which keeps every entry the chain can still take.
   FutureDay: { by: "day" },
 };
 
@@ -112,6 +98,45 @@ async function healDayNotAdvanced(entries, tokenId, lastDayOf) {
   return { healed, dropped: [], remaining: [...others, ...stillWritable] };
 }
 
+/**
+ * Resolve an `AlreadyFinished(id)` refusal by dropping only the entries past
+ * the token's 365th day.
+ *
+ * THE SHAPE THIS EXISTS FOR. A chunk carrying the credit that FINISHES a token
+ * and then a later credit for the same token: the first is good and only the
+ * second is refused. Condemning by id -- what this used to do -- dropped both,
+ * and the finishing day is the one day a token's record can never get back.
+ *
+ * WHY THE REFUSED ENTRIES ARE A SUFFIX. A token's entries go in day order
+ * (byDayThenId), `_credit` adds one level each, and it refuses once the level
+ * reaches FINISH_LEVEL -- so every entry after the first refused one is refused
+ * too. The token's LAST entry is therefore always refused, whatever the chain
+ * holds, and at least that one is condemned on every call. That is what makes
+ * this progress rather than loop.
+ *
+ * `levelOf(tokenId)` sizes the suffix in one step: the chain can still take
+ * `FINISH_LEVEL - level` of them. A NULL READ IS "COULD NOT ASK" and condemns
+ * the last entry alone; so does a read that claims room for every entry, which
+ * a public RPC that is behind can return, and which the refusal just disproved.
+ * Either way the loop comes back, one entry shorter, and asks again.
+ *
+ * Returns `{ remaining, dropped }`.
+ */
+async function trimPastTheFinish(entries, tokenId, levelOf) {
+  const mine = entries.filter((e) => String(e.tokenId) === String(tokenId)).sort(byDayThenId);
+  const others = entries.filter((e) => String(e.tokenId) !== String(tokenId));
+  if (mine.length === 0) return { remaining: entries, dropped: [] };
+
+  const level = levelOf ? await levelOf(Number(tokenId)) : null;
+  const room = level === null || level === undefined ? mine.length - 1 : FINISH_LEVEL - level;
+  // At most every entry but the last, and never fewer than none.
+  const keep = Math.max(0, Math.min(mine.length - 1, room));
+  return {
+    remaining: [...others, ...mine.slice(0, keep)],
+    dropped: mine.slice(keep).map((entry) => ({ entry, reason: "AlreadyFinished" })),
+  };
+}
+
 /// Errors that condemn the WHOLE RUN, not an entry. Bisecting on these would
 /// split down to single entries, fail on every one, and turn one refusal into
 /// 2n pointless calls against the node.
@@ -172,6 +197,10 @@ export function chunk(items, size) {
  * it cannot be read. It is what makes `DayNotAdvanced` recoverable; without it
  * the fallback is to condemn one entry per refusal, which is correct but slow.
  *
+ * `levelOf(tokenId)` reads one token's `level` from the chain, or null. It lets
+ * an `AlreadyFinished` refusal drop only the entries past the finish in one
+ * step; without it they go one at a time, which is correct but slower.
+ *
  * `maxAttempts` bounds the shrink loop. Without it a pathological chunk where
  * every entry is bad would make one call per entry; with it, the remainder is
  * reported as dropped for a named reason rather than hammering the node.
@@ -179,7 +208,7 @@ export function chunk(items, size) {
 export async function writeCheckInChunk(
   writer,
   entries,
-  { maxAttempts = 12, log = () => {}, lastDayOf = null } = {}
+  { maxAttempts = 12, log = () => {}, lastDayOf = null, levelOf = null } = {}
 ) {
   // Sorted on the way in, and again before every send: see byDayThenId.
   let remaining = [...entries].sort(byDayThenId);
@@ -276,7 +305,7 @@ export async function writeCheckInChunk(
       }
       shrinks += 1;
       log(`batchCheckIn: ${remaining.length} entries will not estimate; writing them in two halves`);
-      return writeInHalves(writer, remaining, { maxAttempts: maxAttempts - shrinks, log, lastDayOf }, { healed, dropped, attempts });
+      return writeInHalves(writer, remaining, { maxAttempts: maxAttempts - shrinks, log, lastDayOf, levelOf }, { healed, dropped, attempts });
     }
 
     if (result.reason !== "reverted-on-simulate") {
@@ -313,6 +342,20 @@ export async function writeCheckInChunk(
       // loop on a filter that removes nothing.
     }
 
+    // AlreadyFinished condemns only what lies past the token's 365th day, so
+    // the credit that finishes it is never taken down with the ones after it.
+    if (errorName === "AlreadyFinished" && errorArgs.length > 0) {
+      const outcome = await trimPastTheFinish(remaining, errorArgs[0], levelOf);
+      if (outcome.dropped.length > 0) {
+        dropped.push(...outcome.dropped);
+        remaining = outcome.remaining;
+        shrinks += 1;
+        log(`clock: dropped ${outcome.dropped.length} entr${outcome.dropped.length === 1 ? "y" : "ies"} past the finish for token ${errorArgs[0]}, retrying ${remaining.length}`);
+        continue;
+      }
+      // Named a token with no entries here: fall through to the bisect.
+    }
+
     const rule = ENTRY_ERRORS[errorName];
     if (rule && errorArgs.length > 0) {
       const value = String(errorArgs[0]);
@@ -339,7 +382,7 @@ export async function writeCheckInChunk(
       return { written: [], healed, dropped, aborted: null, attempts };
     }
     log(`clock: ${errorName ?? "unknown revert"} named no entry, bisecting ${remaining.length} into ${Math.ceil(remaining.length / 2)}`);
-    return writeInHalves(writer, remaining, { maxAttempts: maxAttempts - shrinks, log, lastDayOf }, { healed, dropped, attempts });
+    return writeInHalves(writer, remaining, { maxAttempts: maxAttempts - shrinks, log, lastDayOf, levelOf }, { healed, dropped, attempts });
   }
 
   return { written: [], healed, dropped, aborted: null, attempts };

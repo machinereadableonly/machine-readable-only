@@ -85,6 +85,28 @@ export async function chainLastDay({ publicClient, contract, tokenId }) {
   }
 }
 
+/**
+ * One token's `level` as the CHAIN holds it, or null when it cannot be read.
+ *
+ * What lets an `AlreadyFinished` refusal keep a token's finishing credit: the
+ * chain can take `FINISH_LEVEL - level` more of its entries, and only the rest
+ * are dropped. Null on ANY failure, which the caller treats as "could not ask"
+ * and answers by dropping the one entry that is refused whatever the chain holds.
+ */
+export async function chainLevel({ publicClient, contract, tokenId }) {
+  try {
+    const view = await publicClient.readContract({
+      address: contract,
+      abi: MRO_ABI,
+      functionName: "viewOf",
+      args: [BigInt(tokenId)],
+    });
+    return Number(view.level);
+  } catch {
+    return null;
+  }
+}
+
 /// Just enough ABI to ask a recipient the one question that matters.
 const ERC721_RECEIVER_ABI = [
   {
@@ -408,6 +430,10 @@ export async function runClock({
     );
   }
 
+  // `levelOf` keeps a token's finishing credit when the chain refuses a later
+  // one for it: see trimPastTheFinish in batch.mjs.
+  const levelOf = (tokenId) => chainLevel({ publicClient, contract, tokenId });
+
   // Nothing is sent once a write phase has aborted: NotWarden, Sunset and
   // EnforcedPause refuse `seed` for exactly the reasons they refuse `mint`.
   for (const s of summary.aborted ? [] : q.pendingSeeds()) {
@@ -545,7 +571,7 @@ export async function runClock({
   // writeCheckInChunk re-imposes the same order on whatever is left of a chunk
   // after a heal or a bisect has reordered it.
   for (const entries of chunk(sendable, chunkSize)) {
-    const result = await writeCheckInChunk(writer, entries, { log, lastDayOf });
+    const result = await writeCheckInChunk(writer, entries, { log, lastDayOf, levelOf });
     for (const entry of result.written) {
       q.markCreditWritten(entry.tokenId, entry.day);
       summary.credited.push(entry);

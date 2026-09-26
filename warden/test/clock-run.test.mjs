@@ -206,6 +206,42 @@ test("a refused entry is dropped, the rest land, and the dropped row goes termin
   assert.deepEqual(q.pendingCredits(TODAY).map((e) => e.tokenId), []);
 });
 
+// THE WIRING, not the helper. runClock must hand writeCheckInChunk a `levelOf`
+// that reads the chain, or AlreadyFinished falls back to one entry per refusal.
+// The outcome is the same either way, so the CALL COUNT is what says the read
+// is connected: sized by the level it is one refusal, unsized it is two.
+test("the run reads a token's level from the chain to trim an AlreadyFinished refusal in one step", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  for (const day of [TODAY - 3, TODAY - 2, TODAY - 1]) q.insertCredit(1, day, `sig${day}`);
+
+  // On chain the token sits at 364: the first queued day finishes it.
+  const chain = {
+    ...noChain,
+    async readContract({ functionName, args }) {
+      if (functionName === "viewOf" && args[0] === 1n) return { level: 364, lastDay: TODAY - 4 };
+      throw new Error(`unexpected read: ${functionName}`);
+    },
+  };
+  let level = 364;
+  const writer = okWriter({
+    async send(fn, args, opts) {
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      if (fn === "batchCheckIn" && args[1].length > 365 - level) {
+        return { ok: false, reason: "reverted-on-simulate", errorName: "AlreadyFinished", errorArgs: ["1"] };
+      }
+      if (fn === "batchCheckIn") level += args[1].length;
+      return { ok: true, hash: "0x1" };
+    },
+  });
+  const summary = await runClock({ ...baseArgs(q), publicClient: chain, writer });
+
+  assert.deepEqual(summary.credited.map((e) => e.day), [TODAY - 3], "the finishing credit is written");
+  assert.deepEqual(summary.dropped.map((d) => [d.entry.day, d.reason]), [[TODAY - 2, "AlreadyFinished"], [TODAY - 1, "AlreadyFinished"]]);
+  assert.equal(writer.sent.filter((s) => s.functionName === "batchCheckIn").length, 2, "one refusal sized by the chain read, then one send");
+});
+
 // Continuing through a queue of mints while the piece is paused turns one
 // refusal into a hundred.
 for (const errorName of ["NotWarden", "Sunset", "EnforcedPause"]) {

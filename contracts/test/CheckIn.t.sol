@@ -358,6 +358,93 @@ contract CheckInTest is MroTestBase {
         emit log_named_uint("a full chunk of finishers would add", (laterGas - ordinaryGas) * CHECKIN_CHUNK);
     }
 
+    /// @notice A heavy finishing night still gets written: an EIGHTH of a chunk,
+    /// every entry a finishing credit, fits the Clock's gas guard.
+    ///
+    /// @dev WHY AN EIGHTH. A whole chunk of finishers does not fit -- the test
+    /// above prints what it would add -- and the Clock does not need it to.
+    /// `batch.mjs` halves a chunk whose estimate is refused, and 1,400 halves
+    /// to 700, 350 and then 175 within three of its twelve shrinks. So the
+    /// promise worth pinning is that 175 finishers fit, with the same margin the
+    /// full ordinary chunk must leave. warden/test/clock-batch.test.mjs drives
+    /// the halving itself; this is the number that says the halving ends.
+    ///
+    /// Every finisher here is a DIFFERENT place, 1st to 175th, so the batch
+    /// crosses every finisher band and writes every one of the five Marks --
+    /// the dearest shape a real night can take, not one repeated cheap case.
+    ///
+    /// MEASURED IN ISOLATION with pre-encoded calldata, for the reasons
+    /// `test_aFullChunkFitsTheGasGuard` gives. The setup packs ids into a
+    /// preallocated buffer instead of `_packed`, whose concatenation loop is
+    /// O(n^2) and would not finish over the 63,525 setup entries.
+    /// forge-config: default.isolate = true
+    function test_anEighthOfAChunkOfFinishersFitsTheGasGuard() public {
+        uint32 n = CHECKIN_CHUNK / 8;
+        uint32 first = 2;
+        vm.startPrank(WARDEN);
+        for (uint32 i = 0; i < n; i++) {
+            // One wallet each, so walletCap can never be what fails this.
+            t.mint(first + i, address(uint160(0x20000 + i)), bytes32(uint256(first + i)), _code(), _today());
+        }
+        vm.stopPrank();
+
+        // Every token from level 1 to 364 in ONE batch: days d+1 .. d+363 for
+        // each, token-major, so each token's days ascend as the contract needs.
+        uint32 d = t.today();
+        uint32 grow = 363;
+        uint32 total = n * grow;
+        bytes memory growIds = new bytes(uint256(total) * 4);
+        uint32[] memory growDays = new uint32[](total);
+        for (uint32 i = 0; i < n; i++) {
+            for (uint32 k = 0; k < grow; k++) {
+                uint256 at = uint256(i) * grow + k;
+                _putId(growIds, at, first + i);
+                growDays[at] = d + 1 + k;
+            }
+        }
+        _warpToDay(d + grow);
+        vm.prank(WARDEN);
+        t.batchCheckIn(growIds, growDays);
+        assertEq(t.viewOf(first).level, 364, "setup must leave every token one day short");
+
+        // The measured night: every token's 365th day, lowest id first.
+        uint32 finishDay = d + grow + 1;
+        bytes memory ids = new bytes(uint256(n) * 4);
+        uint32[] memory ds = new uint32[](n);
+        for (uint32 i = 0; i < n; i++) {
+            _putId(ids, i, first + i);
+            ds[i] = finishDay;
+        }
+        bytes memory callData = abi.encodeCall(MachineReadableOnly.batchCheckIn, (ids, ds));
+        _warpToDay(finishDay);
+
+        vm.prank(WARDEN);
+        uint256 before = gasleft();
+        (bool ok,) = address(t).call(callData);
+        uint256 used = before - gasleft();
+        assertTrue(ok, "a batch of finishers must not revert");
+
+        // The measurement described the branch it claims to.
+        assertEq(t.viewOf(first).level, 365, "the first token must have finished");
+        assertEq(t.viewOf(first + n - 1).marks >> 64, n, "the last token must hold the last place");
+
+        uint256 padded = (used * 1125) / 1000;
+        emit log_named_uint("finishers in the batch", n);
+        emit log_named_uint("gas for the batch", used);
+        emit log_named_uint("padded as the Clock pads it", padded);
+        assertLe(padded, MAX_TX_GAS - CHUNK_MARGIN, "175 finishers, padded, must leave CHUNK_MARGIN under the Clock's guard");
+    }
+
+    /// @dev Write one id as the 4 big-endian bytes batchCheckIn decodes, at
+    /// entry `index` of a preallocated buffer.
+    function _putId(bytes memory buf, uint256 index, uint32 id) private pure {
+        uint256 o = index * 4;
+        buf[o] = bytes1(uint8(id >> 24));
+        buf[o + 1] = bytes1(uint8(id >> 16));
+        buf[o + 2] = bytes1(uint8(id >> 8));
+        buf[o + 3] = bytes1(uint8(id));
+    }
+
     // -----------------------------------------------------------------
     // ALL-OR-NOTHING IS THE DESIGN, not an oversight
     //

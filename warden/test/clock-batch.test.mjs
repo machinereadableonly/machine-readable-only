@@ -7,6 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { packIds, chunk, writeCheckInChunk } from "../src/clock/batch.mjs";
+import { CHECKIN_CHUNK } from "../src/clock/run.mjs";
 
 const entry = (tokenId, day) => ({ tokenId, day });
 
@@ -347,6 +348,31 @@ test("halving repeats on each half until it fits", async () => {
   assert.deepEqual(writer.calls.map((c) => c.count), [4, 2, 1, 1, 2, 1, 1]);
 });
 
+// A HEAVY FINISHING NIGHT. A whole chunk of finishing credits does not fit one
+// transaction; contracts/test/CheckIn.t.sol pins that an EIGHTH of a chunk does
+// (`test_anEighthOfAChunkOfFinishersFitsTheGasGuard`). So the stub refuses to
+// estimate anything above CHECKIN_CHUNK / 8, and this asserts the halving gets
+// every finisher written, sends them in id order across all eight transactions
+// -- which is what gives each one its place -- and stays inside maxAttempts.
+test("a whole chunk of finishers is halved down to what fits, and every place lands in order", async () => {
+  const fits = CHECKIN_CHUNK / 8;
+  const writer = gasStubWriter(fits);
+  const entries = Array.from({ length: CHECKIN_CHUNK }, (_, i) => entry(i + 1, 465));
+
+  const r = await writeCheckInChunk(writer, entries);
+
+  assert.equal(r.aborted, null);
+  assert.deepEqual(r.dropped, [], "no finisher may be condemned for a chunk that was merely heavy");
+  assert.equal(r.written.length, CHECKIN_CHUNK);
+  const landed = writer.calls.filter((c) => c.count <= fits);
+  assert.equal(landed.length, 8, "1,400 halves to eight transactions of 175");
+  assert.deepEqual(
+    landed.flatMap((c) => c.ids),
+    entries.map((e) => e.tokenId),
+    "the transactions that land carry every id once, lowest first -- the order places are given in",
+  );
+});
+
 // The floor of the halve. A SINGLE entry that will not estimate is genuinely
 // undeliverable -- there is nothing left to halve -- so it is condemned by name
 // rather than halved forever or aborting the night.
@@ -381,7 +407,7 @@ test("a chunk is sent in (day, tokenId) order, whatever order it arrived in", as
 // The mirror's own selection is already ordered, so this only bites when the
 // mirror has fallen behind -- which is exactly when the rest of this file's
 // recovery paths run and reorder what is left.
-test("AlreadyFinished drops the named token's entries and writes the rest", async () => {
+test("AlreadyFinished drops a finished token's only entry and writes the rest", async () => {
   const writer = stubWriter({ poison: new Map([[7, "AlreadyFinished"]]) });
   const r = await writeCheckInChunk(writer, [entry(7, 100), entry(8, 100)]);
 
@@ -389,6 +415,85 @@ test("AlreadyFinished drops the named token's entries and writes the rest", asyn
   assert.deepEqual(r.dropped.map((d) => [d.entry.tokenId, d.reason]), [[7, "AlreadyFinished"]]);
   assert.deepEqual(r.written.map((e) => e.tokenId), [8]);
   assert.equal(r.aborted, null);
+});
+
+/**
+ * A writer that models `_credit`'s finish line: each token starts at the level
+ * in `levels`, every entry adds one in array order, and the first entry that
+ * would take a token past 365 refuses the whole batch with AlreadyFinished(id)
+ * -- exactly the contract's shape. Nothing is committed on a refusal.
+ */
+function finishLineWriter(levels) {
+  const calls = [];
+  return {
+    calls,
+    async send(functionName, args) {
+      const ids = unpackIds(args[0]);
+      calls.push({ ids, days: args[1] });
+      const next = new Map(levels);
+      for (const id of ids) {
+        const level = next.get(id) ?? 1;
+        if (level >= 365) return { ok: false, reason: "reverted-on-simulate", errorName: "AlreadyFinished", errorArgs: [String(id)] };
+        next.set(id, level + 1);
+      }
+      for (const [id, level] of next) levels.set(id, level);
+      return { ok: true, hash: "0xbeef" };
+    },
+  };
+}
+
+// THE DEFECT THIS CLOSES. A chunk carrying token 7's 365th day AND a 366th: the
+// chain refuses only the second, and condemning by id dropped the finishing
+// credit with it -- the one day a token's record can never get back.
+test("AlreadyFinished keeps the credit that FINISHES the token and drops only what lies past it", async () => {
+  const levels = new Map([[7, 363], [8, 10]]);
+  const writer = finishLineWriter(levels);
+  const r = await writeCheckInChunk(writer, [entry(7, 100), entry(7, 101), entry(7, 102), entry(8, 100)], {
+    levelOf: async (id) => levels.get(id),
+  });
+
+  assert.equal(r.aborted, null);
+  assert.deepEqual(r.written.map((e) => [e.tokenId, e.day]), [[7, 100], [8, 100], [7, 101]]);
+  assert.deepEqual(r.dropped.map((d) => [d.entry.tokenId, d.entry.day, d.reason]), [[7, 102, "AlreadyFinished"]]);
+  assert.equal(levels.get(7), 365, "token 7 finished");
+  assert.equal(writer.calls.length, 2, "one refusal, sized by the chain read, then one send");
+});
+
+// The chain read sizes the suffix in ONE step, however long it is.
+test("AlreadyFinished drops a whole run of entries past the finish in one step when the level can be read", async () => {
+  const levels = new Map([[7, 364]]);
+  const writer = finishLineWriter(levels);
+  const entries = [100, 101, 102, 103].map((d) => entry(7, d));
+  const r = await writeCheckInChunk(writer, entries, { levelOf: async (id) => levels.get(id) });
+
+  assert.deepEqual(r.written.map((e) => e.day), [100]);
+  assert.deepEqual(r.dropped.map((d) => d.entry.day), [101, 102, 103]);
+  assert.equal(writer.calls.length, 2);
+});
+
+// COULD NOT ASK. The token's last entry is refused whatever the chain holds, so
+// it alone is dropped and the loop asks again -- slower, never wrong.
+test("AlreadyFinished with no readable level drops the LAST entry only, until the finish fits", async () => {
+  const levels = new Map([[7, 364]]);
+  const writer = finishLineWriter(levels);
+  const entries = [100, 101, 102].map((d) => entry(7, d));
+  const r = await writeCheckInChunk(writer, entries, { levelOf: async () => null });
+
+  assert.deepEqual(r.written.map((e) => e.day), [100], "the finishing credit survives");
+  assert.deepEqual(r.dropped.map((d) => d.entry.day), [102, 101], "latest first, one per refusal");
+  assert.equal(writer.calls.length, 3);
+});
+
+// A STALE READ. A public RPC that is behind can report room the refusal just
+// disproved; the read is not trusted past what the refusal proves.
+test("AlreadyFinished with a stale level that claims room for everything still drops the last entry", async () => {
+  const levels = new Map([[7, 364]]);
+  const writer = finishLineWriter(levels);
+  const entries = [100, 101].map((d) => entry(7, d));
+  const r = await writeCheckInChunk(writer, entries, { levelOf: async () => 300 });
+
+  assert.deepEqual(r.written.map((e) => e.day), [100]);
+  assert.deepEqual(r.dropped.map((d) => d.entry.day), [101]);
 });
 
 // A finishing credit is dearer than an ordinary one -- the margin is measured
