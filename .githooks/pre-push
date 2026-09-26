@@ -36,9 +36,17 @@ fail=0
 # The exit code is the whole signal, so nothing here is piped into a formatter.
 # A pipeline's status is the LAST command's, which let a real finding through
 # on 2026-09-09.
-echo "pre-push: pattern guard (tools/prepublish-check.mjs)"
+# The range this push publishes: everything the upstream does not have yet.
+# Compared against the upstream this push is actually updating, not a
+# hardcoded branch. Both guards read it.
+upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)"
+range="${upstream:-origin/main}..HEAD"
+
+echo "pre-push: pattern guard (tools/prepublish-check.mjs $range)"
 if command -v node >/dev/null 2>&1; then
-  node tools/prepublish-check.mjs
+  # HEAD's committed files and path names, plus every blob in $range: a leak
+  # added and removed inside the push is gone from HEAD but not from history.
+  node tools/prepublish-check.mjs "$range"
   if [ $? -ne 0 ]; then
     echo "pre-push: REFUSED -- the pattern guard found something. Read it above."
     fail=1
@@ -54,10 +62,6 @@ fi
 scanner="$HOME/scripts/id-scan.mjs"
 echo "pre-push: identity scan ($scanner)"
 if [ -f "$scanner" ]; then
-  # Compare against the upstream this push is actually updating, not a
-  # hardcoded branch.
-  upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)"
-  range="${upstream:-origin/main}..HEAD"
   node "$scanner" "$range"
   if [ $? -ne 0 ]; then
     echo "pre-push: REFUSED -- the identity scan found something."

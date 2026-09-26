@@ -1,17 +1,17 @@
-// Pre-publish guard. Fails if anything in the tracked tree would leak an
-// operator identity or a machine-specific path into a public repository.
+// Pre-publish guard. Fails if anything COMMITTED -- a file, a path name, or,
+// given a range, a blob in the commits being pushed -- would leak an operator
+// identity or a machine-specific path into a public repository.
 //
 // Deliberately GENERIC: it holds no personal values, so this file is safe to
 // publish alongside everything it checks. The private token list lives outside
-// the repository and is checked separately, by hand, before publishing.
+// the repository and is checked separately by ~/scripts/id-scan.mjs, which the
+// pre-push hook runs right after this.
 //
-// Run: node tools/prepublish-check.mjs
+// Run: node tools/prepublish-check.mjs [range]   e.g. origin/main..HEAD
 // Exit 0 = clean, exit 1 = findings.
 
 import { execFileSync } from "node:child_process";
-import { lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -122,8 +122,10 @@ const RULES = [
   },
 ];
 
-/// Every rule applied to one line of one tracked path.
-function scanLine(rel, line, lineNo, findings) {
+/// Every rule applied to one line of one tracked path. `extra` rides on each
+/// finding: `{ pathName: true }` for a match in the path itself, `{ history }`
+/// for a blob that is in the pushed commits but no longer in HEAD.
+function scanLine(rel, line, lineNo, findings, extra = {}) {
   for (const rule of RULES) {
     const m = line.match(rule.re);
     if (!m) continue;
@@ -135,23 +137,85 @@ function scanLine(rel, line, lineNo, findings) {
     // entry now names the rule it was granted, and anything else in that
     // file is still a finding.
     if (allows(rel, rule.name)) continue;
-    findings.push({ file: rel, line: lineNo, rule: rule.name });
+    findings.push({ file: rel, line: lineNo, rule: rule.name, ...extra });
   }
 }
 
+const skipped = (rel) => SKIP_PREFIX.some((p) => rel.startsWith(p));
+
+/// Run git in `root` and return stdout as a Buffer. maxBuffer is raised
+/// because `cat-file --batch` returns every committed file at once.
+const git = (root, args, input) =>
+  execFileSync("git", args, { cwd: root, input, maxBuffer: 1 << 30 });
+
 /**
- * Scan every tracked path under `root`.
+ * Read many objects in ONE `git cat-file --batch` call and return a Map of
+ * sha -> Buffer. An object git cannot find is left out, and the caller names it.
+ */
+function readBlobs(root, shas) {
+  const out = new Map();
+  if (shas.length === 0) return out;
+  const buf = git(root, ["cat-file", "--batch"], shas.join("\n") + "\n");
+  let at = 0;
+  while (at < buf.length) {
+    const eol = buf.indexOf(0x0a, at);
+    const [sha, type, size] = buf.subarray(at, eol).toString("utf8").split(" ");
+    at = eol + 1;
+    if (type === "missing") continue;
+    const n = Number(size);
+    out.set(sha, buf.subarray(at, at + n));
+    at += n + 1; // the content, then the newline git puts after it
+  }
+  return out;
+}
+
+/// Every rule over one blob's text, line by line. Binary blobs are skipped.
+function scanBlob(rel, content, findings, extra, onLine) {
+  if (content.includes(0)) return; // binary: nothing to match
+  content.toString("utf8").split("\n").forEach((line, i) => {
+    onLine?.(line);
+    scanLine(rel, line, i + 1, findings, extra);
+  });
+}
+
+/**
+ * Scan what is COMMITTED, never the working tree.
+ *
+ * WHY COMMITTED. This runs from the pre-push hook, and a push publishes
+ * commits, not the files on disk. Reading the working tree let two shapes
+ * through: a leak committed and then cleaned on disk but not re-committed
+ * (the scan saw the clean file, the push carried the leak), and a symlink,
+ * whose committed blob IS its target string but which readFileSync followed
+ * (the 2026-09-24 leak). Reading blobs from git answers both: a symlink's blob
+ * is scanned as the text it is, and nothing is read through a link.
+ *
+ * PATH NAMES ARE SCANNED TOO. The 2026-09-21 leak was a session scratchpad
+ * path, and a tracked path name is published exactly as its content is. A
+ * match in a name comes back with `pathName: true` and line 0.
+ *
+ * `range` (e.g. `origin/main..HEAD`) adds every blob the pushed commits carry
+ * that HEAD no longer does. A leak added in one commit and removed in the next
+ * is not in HEAD, but it IS in the history the push publishes. Those findings
+ * carry `history: range`.
  *
  * Exported so it can be driven against a scratch repository by a test. The
  * repository is the default, and running this file as a script scans it.
  *
  * Returns `{ tracked, findings, pending, unreadable }`.
  */
-export function scanTree(root = REPO_ROOT) {
-  const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
-    .split("\n")
+export function scanTree(root = REPO_ROOT, { range = null } = {}) {
+  // `mode type sha<TAB>path`, NUL-separated so no path can break the parse.
+  const entries = git(root, ["ls-tree", "-r", "-z", "HEAD"])
+    .toString("utf8")
+    .split("\0")
     .filter(Boolean)
-    .filter((f) => !SKIP_PREFIX.some((p) => f.startsWith(p)));
+    .map((rec) => {
+      const tab = rec.indexOf("\t");
+      const [mode, type, sha] = rec.slice(0, tab).split(" ");
+      return { mode, type, sha, path: rec.slice(tab + 1) };
+    })
+    .filter((e) => !skipped(e.path));
+  const tracked = entries.map((e) => e.path);
 
   const findings = [];
   // Counted, not reported line by line. A PENDING-BEFORE-MAINNET marker is not
@@ -160,48 +224,50 @@ export function scanTree(root = REPO_ROOT) {
   // it would pay. So it is a notice with a count, and the hard gate is the
   // launch checklist plus tools/test/skill-doc.test.mjs.
   let pending = 0;
-  // Paths this could not read at all. NAMED rather than skipped: the bug below
-  // was a silent skip, and a guard that cannot read a tracked path has not
-  // checked it.
+  // Objects git could not produce. NAMED rather than skipped: a guard that
+  // cannot read a path has not checked it.
   const unreadable = [];
 
-  for (const rel of tracked) {
-    const path = join(root, rel);
+  for (const e of entries) scanLine(e.path, e.path, 0, findings, { pathName: true });
 
-    // LSTAT FIRST, AND IT IS THE POINT OF THIS LOOP. A tracked SYMLINK stores
-    // its target string as its blob -- that is the published content -- but
-    // readFileSync FOLLOWS the link, so a link to a directory threw EISDIR
-    // into a bare `catch { continue }` and the target was never scanned at
-    // all. That is exactly how an absolute home path was committed: the guard
-    // ran, reported clean, and had not looked. Read the LINK, never through it.
-    let stat;
-    try {
-      stat = lstatSync(path);
-    } catch (err) {
-      unreadable.push({ file: rel, why: err.code ?? "unreadable" });
-      continue;
-    }
-
-    if (stat.isSymbolicLink()) {
-      scanLine(rel, readlinkSync(path), 1, findings);
-      continue;
-    }
-    // A gitlink (submodule) is a tracked path with no content of its own here.
-    if (stat.isDirectory()) continue;
-
-    let text;
-    try {
-      text = readFileSync(path, "utf8");
-    } catch (err) {
-      unreadable.push({ file: rel, why: err.code ?? "unreadable" });
-      continue;
-    }
-    if (text.includes("\0")) continue; // binary: nothing to match
-
-    text.split("\n").forEach((line, i) => {
+  // A gitlink (submodule) is a commit id, with no content of its own here.
+  const blobs = entries.filter((e) => e.type === "blob");
+  const contents = readBlobs(root, blobs.map((e) => e.sha));
+  for (const e of blobs) {
+    const content = contents.get(e.sha);
+    if (!content) { unreadable.push({ file: e.path, why: "missing object" }); continue; }
+    scanBlob(e.path, content, findings, {}, (line) => {
       if (line.includes("PENDING-BEFORE-MAINNET")) pending += 1;
-      scanLine(rel, line, i + 1, findings);
     });
+  }
+
+  if (range) {
+    // `sha path` for every object the range introduces; commits have no path.
+    const inHead = new Set(blobs.map((e) => e.sha));
+    const seen = new Map();
+    for (const line of git(root, ["rev-list", "--objects", range]).toString("utf8").split("\n")) {
+      const space = line.indexOf(" ");
+      if (space < 0) continue;
+      const sha = line.slice(0, space);
+      const path = line.slice(space + 1);
+      if (!inHead.has(sha) && !seen.has(sha) && !skipped(path)) seen.set(sha, path);
+    }
+    // Trees are in that list too: ask git which of the objects are blobs.
+    const types = seen.size
+      ? git(root, ["cat-file", "--batch-check"], [...seen.keys()].join("\n") + "\n").toString("utf8")
+      : "";
+    const historyBlobs = types
+      .split("\n")
+      .map((l) => l.split(" "))
+      .filter(([, type]) => type === "blob")
+      .map(([sha]) => ({ sha, path: seen.get(sha) }));
+    const old = readBlobs(root, historyBlobs.map((b) => b.sha));
+    for (const b of historyBlobs) {
+      scanLine(b.path, b.path, 0, findings, { pathName: true, history: range });
+      const content = old.get(b.sha);
+      if (!content) { unreadable.push({ file: b.path, why: "missing object" }); continue; }
+      scanBlob(b.path, content, findings, { history: range });
+    }
   }
 
   return { tracked, findings, pending, unreadable };
@@ -210,7 +276,9 @@ export function scanTree(root = REPO_ROOT) {
 /// The whole check, as the script runs it. Reports to the console and answers
 /// with the exit code: 0 clean, 1 findings.
 function main() {
-  const { tracked, findings, pending, unreadable } = scanTree();
+  // The pre-push hook passes the range being pushed; run by hand, HEAD alone.
+  const range = process.argv[2] ?? null;
+  const { tracked, findings, pending, unreadable } = scanTree(REPO_ROOT, { range });
 
   // Author identity across the whole history. A personal mailbox in an author
   // field is not fixed by editing files -- it needs a history rewrite.
@@ -236,10 +304,9 @@ function main() {
     );
   }
 
-  // NAMED, NOT SILENT. Nothing in this tree is expected to be unreadable, and
-  // the one class that used to be -- a tracked symlink -- is now scanned by its
-  // target rather than followed. A path listed here has NOT been checked, so it
-  // is printed even though it is not itself a finding.
+  // NAMED, NOT SILENT. Every object is read from git, so nothing is expected
+  // here; a path listed has NOT been checked, so it is printed even though it
+  // is not itself a finding.
   for (const u of unreadable) {
     console.error(`prepublish-check: notice -- ${u.file} could not be read (${u.why}); it was NOT checked`);
   }
@@ -257,7 +324,11 @@ function main() {
     return 0;
   }
 
-  for (const f of findings) console.error(`${f.file}:${f.line}: ${f.rule}`);
+  for (const f of findings) {
+    const where = f.pathName ? "(path name)" : f.line;
+    const when = f.history ? ` [in the history of ${f.history}, gone from HEAD]` : "";
+    console.error(`${f.file}:${where}: ${f.rule}${when}`);
+  }
   if (badAuthors.length) {
     // Print the count, never the address: this output lands in logs and
     // transcripts.
