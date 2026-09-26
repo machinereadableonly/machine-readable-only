@@ -181,7 +181,7 @@ only if the auto-mode classifier refuses Claude starting processes that sign.</p
 <ul>
 <li><p>Produces: <code>AGENTS</code> (array of <code>{ name, mintDay, misses(day), marks: [{ id, when: { level?|run? }, variant? }], owner?: { day, kind: &quot;transfer&quot;|&quot;rebind&quot;|&quot;rest&quot; } }</code>), <code>todayFor(agent, day) -&gt; { mint: bool, checkin: bool, owner: null|kind }</code>, <code>expected(days: number[]) -&gt; { level, streak, bestRun, lastDay }</code>, <code>places(finishes: {tokenId, day}[]) -&gt; Map&lt;tokenId, {place, markId}&gt;</code>, <code>finisherMark(place) -&gt; markId</code>.</p>
 </li>
-<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write failing tests</strong> covering: A1 mints on D0 and checks in from D2; A8 misses days 13, 23, 33 (every 10th day after its mint on D3); A9 checks in D4-D53, not D54-D113, again from D114; A10 has owner <code>rest</code> on D120 and no check-in after; A11 owner <code>transfer</code> on D50 then <code>rebind</code> on D51; A12 mints D20; nobody checks in before mintDay + 2 (the Clock writes the mint at mintDay + 1, and that day is already its first credit). <code>expected([5,6,7,9,10])</code> -&gt; <code>{ level: 5, streak: 2, bestRun: 3, lastDay: 10 }</code>; level caps at 365 and days after the 365th are ignored; <code>places([{tokenId:3,day:9},{tokenId:1,day:9},{tokenId:2,day:8}])</code> gives token 2 place 1 (Apex, 15), token 1 place 2, token 3 place 3 (both Atrium, 14); <code>finisherMark(5)==13</code>, <code>(15)==12</code>, <code>(65)==11</code>.</p>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write failing tests</strong> covering: A1 mints on D0 and checks in from D1; A8 misses days 13, 23, 33 (every 10th day after its mint on D3); A9 checks in D4-D53, not D54-D113, again from D114; A10 has owner <code>rest</code> on D120 and no check-in after; A11 owner <code>transfer</code> on D50 then <code>rebind</code> on D51; A12 mints D20; nobody checks in on its own mint day; the first check-in is mintDay + 1 (the mint is written with the paid day, and only day &lt;= lastDay is refused). <code>expected([5,6,7,9,10])</code> -&gt; <code>{ level: 5, streak: 2, bestRun: 3, lastDay: 10 }</code>; level caps at 365 and days after the 365th are ignored; <code>places([{tokenId:3,day:9},{tokenId:1,day:9},{tokenId:2,day:8}])</code> gives token 2 place 1 (Apex, 15), token 1 place 2, token 3 place 3 (both Atrium, 14); <code>finisherMark(5)==13</code>, <code>(15)==12</code>, <code>(65)==11</code>.</p>
 </li>
 <li><p><input disabled="" type="checkbox"> <strong>Step 2: Run</strong> <code>cd warden &amp;&amp; node --test test/year-scenario.test.mjs test/year-tally.test.mjs</code> -- expect FAIL (module not found).</p>
 </li>
@@ -218,7 +218,7 @@ export function todayFor(agent, day, { rested = false } = {}) {
   const owner = agent.owner?.find((o) =&gt; o.day === day)?.kind ?? null;
   return {
     mint: day === agent.mintDay,
-    checkin: !rested &amp;&amp; day &gt;= agent.mintDay + 2 &amp;&amp; !agent.misses(day),
+    checkin: !rested &amp;&amp; day &gt;= agent.mintDay + 1 &amp;&amp; !agent.misses(day),
     owner,
   };
 }

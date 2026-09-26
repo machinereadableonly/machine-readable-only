@@ -68,7 +68,7 @@ All new code in `warden/tools/year/`; tests in `warden/test/year-*.test.mjs`.
 **Interfaces:**
 - Produces: `AGENTS` (array of `{ name, mintDay, misses(day), marks: [{ id, when: { level?|run? }, variant? }], owner?: { day, kind: "transfer"|"rebind"|"rest" } }`), `todayFor(agent, day) -> { mint: bool, checkin: bool, owner: null|kind }`, `expected(days: number[]) -> { level, streak, bestRun, lastDay }`, `places(finishes: {tokenId, day}[]) -> Map<tokenId, {place, markId}>`, `finisherMark(place) -> markId`.
 
-- [ ] **Step 1: Write failing tests** covering: A1 mints on D0 and checks in from D2; A8 misses days 13, 23, 33 (every 10th day after its mint on D3); A9 checks in D4-D53, not D54-D113, again from D114; A10 has owner `rest` on D120 and no check-in after; A11 owner `transfer` on D50 then `rebind` on D51; A12 mints D20; nobody checks in before mintDay + 2 (the Clock writes the mint at mintDay + 1, and that day is already its first credit). `expected([5,6,7,9,10])` -> `{ level: 5, streak: 2, bestRun: 3, lastDay: 10 }`; level caps at 365 and days after the 365th are ignored; `places([{tokenId:3,day:9},{tokenId:1,day:9},{tokenId:2,day:8}])` gives token 2 place 1 (Apex, 15), token 1 place 2, token 3 place 3 (both Atrium, 14); `finisherMark(5)==13`, `(15)==12`, `(65)==11`.
+- [ ] **Step 1: Write failing tests** covering: A1 mints on D0 and checks in from D1; A8 misses days 13, 23, 33 (every 10th day after its mint on D3); A9 checks in D4-D53, not D54-D113, again from D114; A10 has owner `rest` on D120 and no check-in after; A11 owner `transfer` on D50 then `rebind` on D51; A12 mints D20; nobody checks in on its own mint day; the first check-in is mintDay + 1 (the mint is written with the paid day, and only day <= lastDay is refused). `expected([5,6,7,9,10])` -> `{ level: 5, streak: 2, bestRun: 3, lastDay: 10 }`; level caps at 365 and days after the 365th are ignored; `places([{tokenId:3,day:9},{tokenId:1,day:9},{tokenId:2,day:8}])` gives token 2 place 1 (Apex, 15), token 1 place 2, token 3 place 3 (both Atrium, 14); `finisherMark(5)==13`, `(15)==12`, `(65)==11`.
 
 - [ ] **Step 2: Run** `cd warden && node --test test/year-scenario.test.mjs test/year-tally.test.mjs` -- expect FAIL (module not found).
 
@@ -105,7 +105,7 @@ export function todayFor(agent, day, { rested = false } = {}) {
   const owner = agent.owner?.find((o) => o.day === day)?.kind ?? null;
   return {
     mint: day === agent.mintDay,
-    checkin: !rested && day >= agent.mintDay + 2 && !agent.misses(day),
+    checkin: !rested && day >= agent.mintDay + 1 && !agent.misses(day),
     owner,
   };
 }
