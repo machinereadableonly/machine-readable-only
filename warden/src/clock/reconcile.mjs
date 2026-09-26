@@ -14,16 +14,20 @@
 // artwork lie about itself.
 //
 // THE PAGING IS NOT AN OPTIMISATION. The public Base RPC refuses any
-// eth_getLogs spanning more than 10,000 blocks ("eth_getLogs is limited to a
-// 10,000 range", measured 2026-08-31). Base blocks are 2 seconds, so 10,000
-// blocks is about 5.5 hours and a single day is about 43,200. An unpaged daily
-// reconcile does not fail loudly -- it either errors on the whole call or, with
-// a narrower window, silently reads a fraction of the day and reports success.
+// eth_getLogs wider than its range cap, and the cap moves without notice: it
+// was 10,000 blocks when measured on 2026-08-31, and by 2026-09-23 Base Sepolia
+// answered "eth_getLogs is limited to a 1,000 range" -- which failed every
+// nightly reconcile for three nights (measured 2026-09-26; Base mainnet then
+// answered "a 2,000 range"). Base blocks are 2 seconds, so a single day is
+// about 43,200 blocks, or 44 pages. An unpaged daily reconcile does not fail
+// loudly -- it either errors on the whole call or, with a narrower window,
+// silently reads a fraction of the day and reports success.
 import { parseEventLogs } from "viem";
 import { MRO_ABI } from "./abi.mjs";
 
-/// The measured cap. Not a tunable guess: larger is refused outright.
-export const MAX_LOG_SPAN = 10_000n;
+/// The measured cap, the smaller of the two chains' (Sepolia 1,000, mainnet
+/// 2,000, both 2026-09-26). Not a tunable guess: larger is refused outright.
+export const MAX_LOG_SPAN = 1_000n;
 
 /// The block MachineReadableOnly was deployed in on Base Sepolia. Reconcile
 /// floors here rather than using a rolling window, because a rolling window
@@ -40,7 +44,7 @@ export const MAX_LOG_SPAN = 10_000n;
 /// the 2026-09-06 pair), and the script, which rewrites only the value, left
 /// it describing a superseded deployment (found 2026-09-12). The value is the
 /// fact.
-export const DEPLOY_BLOCK = { 84532: 47_161_021n };
+export const DEPLOY_BLOCK = { 84532: 47_321_628n };
 
 /// The highest Mark id the CONTRACT will accept, from MachineReadableOnly.sol's
 /// own `MAX_MARK_ID`. Ids 11-15 are unwritten today (Plan 6 reserved them), so

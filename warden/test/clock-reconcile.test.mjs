@@ -1,4 +1,4 @@
-// Reconcile, and the 10,000-block wall it has to page around.
+// Reconcile, and the eth_getLogs range cap it has to page around.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readEvents, applyEvents, MAX_LOG_SPAN, DEPLOY_BLOCK } from "../src/clock/reconcile.mjs";
@@ -64,9 +64,22 @@ test("a span wider than the RPC allows is refused rather than attempted", async 
   const pub = recordingRpc();
   await assert.rejects(
     () => readEvents(pub, { contract: "0xabc", fromBlock: 0n, toBlock: 100n, span: MAX_LOG_SPAN + 1n }),
-    /exceeds the 10000-block limit/
+    /exceeds the 1000-block limit/
   );
   assert.equal(pub.windows.length, 0, "nothing was asked of the node");
+});
+
+// PINNED TO THE MEASUREMENT, NOT TO THE CONSTANT. Every other test here
+// compares against MAX_LOG_SPAN itself, so they passed for three nights while
+// the public Base Sepolia RPC refused every page: it cut eth_getLogs to "a
+// 1,000 range" (measured 2026-09-26; Base mainnet answers "a 2,000 range").
+// The smaller of the two binds, because one constant serves both chains.
+test("no page asks the node for more than the 1,000 blocks Base Sepolia accepts", async () => {
+  const pub = recordingRpc();
+  await readEvents(pub, { contract: "0xabc", fromBlock: 0n, toBlock: 43_200n });
+  for (const [a, b] of pub.windows) {
+    assert.ok(b - a + 1n <= 1_000n, `window ${a}..${b} is ${b - a + 1n} blocks; the RPC refuses more than 1,000`);
+  }
 });
 
 // A day of Base is about 43,200 blocks. The whole point of this module.
@@ -76,7 +89,7 @@ test("a full day pages into windows the RPC will accept, with no gap and no over
   const to = from + 43_200n;
   const { pages } = await readEvents(pub, { contract: "0xabc", fromBlock: from, toBlock: to });
 
-  assert.equal(pages, 5, "43,200 blocks needs five 10,000-block pages");
+  assert.equal(pages, 44, "43,201 blocks needs forty-four 1,000-block pages");
   for (const [a, b] of pub.windows) {
     assert.ok(b - a < MAX_LOG_SPAN, `window ${a}..${b} is ${b - a + 1n} blocks, over the limit`);
   }
@@ -117,7 +130,7 @@ test("the Base Sepolia deploy block is recorded, so reconcile floors instead of 
   // red after an otherwise clean adoption. That is the pin doing its job, but
   // the script claims to change the address "everywhere at once", so it now
   // rewrites this line too.
-  assert.equal(DEPLOY_BLOCK[84532], 47_161_021n);
+  assert.equal(DEPLOY_BLOCK[84532], 47_321_628n);
 });
 
 // --- applying what the chain said ------------------------------------------
