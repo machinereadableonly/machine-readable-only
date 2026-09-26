@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Accelerated Year Implementation Plan</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>The Accelerated Year Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Build and start a 38-hour Base Sepolia run in which twelve scripted agents live one 5-minute-day year through the real door, Warden, Clock and client, while an independent checker compares every token against its expected state.</p>
+<p><strong>Architecture:</strong> Pure decision modules (<code>scenario</code>, <code>tally</code>, <code>decide</code>) with unit tests, wrapped by two long-lived Node processes (<code>runner</code>, <code>checker</code>) and a shell Clock loop, all under one PM2 process list, run from a <code>git archive</code> export of HEAD. Keys, databases and logs live in <code>$MRO_YEAR_DIR</code> (default <code>$HOME/.mro-year</code>), outside every repository.</p>
+<p><strong>Tech Stack:</strong> Node 24.14.1 (<code>node:test</code>), viem 2.56.0 (already a warden dependency), the client library <code>client/src/index.mjs</code>, Foundry for the deploy, PM2 7.0.1.</p>
+<p><strong>Spec:</strong> <code>docs/specs/2026-09-26-mro-accelerated-year-design.md</code></p>
+<h2>Why</h2>
+<p>Everything built since Phase 4 (finish at 365, finisher places, ties, QR v10,
+the digit band, the heartbeat, the finishing-night fix, dozen-agent batches) has
+only passed unit tests. This run is the last cheap place to see it live before
+the mainnet mint of token #1, where history is permanent. It unblocks nothing
+by itself; it removes the risk that mainnet is the first place those paths run.</p>
+<h2>Global Constraints</h2>
+<ul>
+<li>Chain: Base Sepolia, 84532, only. <code>DeployFast.s.sol</code> refuses any other.</li>
+<li>Day: <code>MRO_DAY_SECONDS=300</code>; Clock at +30 s (<code>MRO_CLOCK_OFFSET_SECONDS=30</code>), runner at +60 s, checker at +240 s of each fast day.</li>
+<li>Warden: port 4006, bound 127.0.0.1, <code>MRO_DOMAIN=fast.test</code>; clients use <code>--site https://fast.test</code> and endpoint <code>http://127.0.0.1:4006</code>.</li>
+<li>Nothing tracked may contain an absolute path, an address, a key, a session id or an identifier. Paths come from <code>MRO_YEAR_DIR</code> with default <code>$HOME/.mro-year</code>.</li>
+<li>Keys are files of mode 600 in a directory of mode 700; nothing ever prints a key.</li>
+<li>Code comments: why-only, no history, plain ASCII (<code>~/.claude/rules/code-comments.md</code>).</li>
+<li>All four suites green before every commit: <code>cd contracts &amp;&amp; forge test</code>, <code>npm test</code> in <code>tools/</code>, <code>warden/</code>, <code>client/</code>.</li>
+<li>Heavy compute goes through <code>~/scripts/safe-build.sh</code>. Use <code>/bin/grep</code>.</li>
+<li>Mark ids: 1 Hush, 2 Ache, 3 Static, 4 Beat, 5 Iris (bought), 6 Iris (earned), 7 Vessel, 8 Break, 9 Tint, 10 Aura. Finisher: place 1 -&gt; 15 Apex, 2-4 -&gt; 14 Atrium, 5-14 -&gt; 13 Valve, 15-64 -&gt; 12 Chamber, 65+ -&gt; 11 Aorta.</li>
+</ul>
+<h2>Operator note</h2>
+<p>After completing any TJ-only step, tell Claude so it can update memory
+immediately. The only TJ-only step expected is running <code>start.sh</code> (Task 7), and
+only if the auto-mode classifier refuses Claude starting processes that sign.</p>
+<h2>File structure</h2>
+<p>All new code in <code>warden/tools/year/</code>; tests in <code>warden/test/year-*.test.mjs</code>.</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>scenario.mjs</code></td>
+<td>The twelve agents as data, and <code>todayFor(agent, day)</code></td>
+</tr>
+<tr>
+<td><code>tally.mjs</code></td>
+<td>Expected level/streak/bestRun from credited days; finish places</td>
+</tr>
+<tr>
+<td><code>decide.mjs</code></td>
+<td>Pure runner decisions: due Marks, buy-or-demand, retry</td>
+</tr>
+<tr>
+<td><code>chain.mjs</code></td>
+<td>viem clients: <code>viewOf</code>, USDC balance/transfer, ETH send, owner calls</td>
+</tr>
+<tr>
+<td><code>agent.mjs</code></td>
+<td>One agent&#39;s door calls through the client library (mint, beat, upgrade, seed, rebind/rest call)</td>
+</tr>
+<tr>
+<td><code>runner.mjs</code></td>
+<td>The daily loop over agents; <code>runner.jsonl</code>; <code>state.json</code></td>
+</tr>
+<tr>
+<td><code>checker.mjs</code></td>
+<td>The daily comparison; milestone decode; <code>checker.jsonl</code></td>
+</tr>
+<tr>
+<td><code>report.mjs</code></td>
+<td>Both logs -&gt; <code>report.html</code></td>
+</tr>
+<tr>
+<td><code>wallets.mjs</code></td>
+<td>Create 12 wallets + 13 identities in the data dir</td>
+</tr>
+<tr>
+<td><code>fund.mjs</code></td>
+<td>Mint USDC from the test wallet; gas ETH from the fast Clock</td>
+</tr>
+<tr>
+<td><code>clock-loop.sh</code></td>
+<td>The real Clock every fast day at +30 s; <code>clock.jsonl</code></td>
+</tr>
+<tr>
+<td><code>year.config.cjs</code></td>
+<td>PM2: <code>mro-year-warden</code>, <code>mro-year-clock</code>, <code>mro-year-runner</code>, <code>mro-year-checker</code></td>
+</tr>
+<tr>
+<td><code>setup.sh</code></td>
+<td>Export tree, write <code>year.conf</code>, deploy, cursor; idempotent</td>
+</tr>
+<tr>
+<td><code>start.sh</code> / <code>stop.sh</code></td>
+<td>Operator one-liners</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>Task 1: scenario and tally (pure)</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/tools/year/scenario.mjs</code>, <code>warden/tools/year/tally.mjs</code></li>
+<li>Test: <code>warden/test/year-scenario.test.mjs</code>, <code>warden/test/year-tally.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>AGENTS</code> (array of <code>{ name, mintDay, misses(day), marks: [{ id, when: { level?|run? }, variant? }], owner?: { day, kind: &quot;transfer&quot;|&quot;rebind&quot;|&quot;rest&quot; } }</code>), <code>todayFor(agent, day) -&gt; { mint: bool, checkin: bool, owner: null|kind }</code>, <code>expected(days: number[]) -&gt; { level, streak, bestRun, lastDay }</code>, <code>places(finishes: {tokenId, day}[]) -&gt; Map&lt;tokenId, {place, markId}&gt;</code>, <code>finisherMark(place) -&gt; markId</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write failing tests</strong> covering: A1 mints on D0 and checks in from D2; A8 misses days 13, 23, 33 (every 10th day after its mint on D3); A9 checks in D4-D53, not D54-D113, again from D114; A10 has owner <code>rest</code> on D120 and no check-in after; A11 owner <code>transfer</code> on D50 then <code>rebind</code> on D51; A12 mints D20; nobody checks in before mintDay + 2 (the Clock writes the mint at mintDay + 1, and that day is already its first credit). <code>expected([5,6,7,9,10])</code> -&gt; <code>{ level: 5, streak: 2, bestRun: 3, lastDay: 10 }</code>; level caps at 365 and days after the 365th are ignored; <code>places([{tokenId:3,day:9},{tokenId:1,day:9},{tokenId:2,day:8}])</code> gives token 2 place 1 (Apex, 15), token 1 place 2, token 3 place 3 (both Atrium, 14); <code>finisherMark(5)==13</code>, <code>(15)==12</code>, <code>(65)==11</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run</strong> <code>cd warden &amp;&amp; node --test test/year-scenario.test.mjs test/year-tally.test.mjs</code> -- expect FAIL (module not found).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement.</strong></p>
+</li>
+</ul>
+<pre><code class="language-js">// scenario.mjs
+const never = () =&gt; false;
+const earnedLadder = [
+  { id: 2, when: { run: 7 } }, { id: 4, when: { run: 30 } },
+  { id: 6, when: { run: 100 } }, { id: 8, when: { run: 365 } },
+];
+export const AGENTS = [
+  { name: &quot;A1&quot;, mintDay: 0, misses: never, marks: earnedLadder, seeds: true },
+  { name: &quot;A2&quot;, mintDay: 0, misses: never, marks: earnedLadder },
+  { name: &quot;A3&quot;, mintDay: 0, misses: never, marks: earnedLadder },
+  { name: &quot;A4&quot;, mintDay: 1, misses: never, marks: [] },
+  { name: &quot;A5&quot;, mintDay: 2, misses: never, marks: [
+      { id: 1, when: { level: 1 } }, { id: 3, when: { level: 30 } },
+      { id: 5, when: { level: 100 }, variant: 2 }, { id: 9, when: { level: 100 }, after: 5 },
+      { id: 7, when: { level: 365 } } ] },
+  { name: &quot;A6&quot;, mintDay: 2, misses: never, marks: earnedLadder },
+  { name: &quot;A7&quot;, mintDay: 2, misses: never, marks: [
+      { id: 3, when: { level: 30 } }, { id: 6, when: { run: 100 } }, { id: 10, when: { run: 100 }, after: 6 } ] },
+  { name: &quot;A8&quot;, mintDay: 3, misses: (d) =&gt; (d - 3) % 10 === 0, marks: [] },
+  { name: &quot;A9&quot;, mintDay: 3, misses: (d) =&gt; d &gt;= 54 &amp;&amp; d &lt; 114, marks: [] },
+  { name: &quot;A10&quot;, mintDay: 3, misses: never, marks: [], owner: [{ day: 120, kind: &quot;rest&quot; }] },
+  { name: &quot;A11&quot;, mintDay: 3, misses: never, marks: [],
+    owner: [{ day: 50, kind: &quot;transfer&quot;, to: &quot;A12&quot; }, { day: 51, kind: &quot;rebind&quot; }] },
+  { name: &quot;A12&quot;, mintDay: 20, misses: never, marks: [] },
+];
+
+export function todayFor(agent, day, { rested = false } = {}) {
+  const owner = agent.owner?.find((o) =&gt; o.day === day)?.kind ?? null;
+  return {
+    mint: day === agent.mintDay,
+    checkin: !rested &amp;&amp; day &gt;= agent.mintDay + 2 &amp;&amp; !agent.misses(day),
+    owner,
+  };
+}
+</code></pre>
+<pre><code class="language-js">// tally.mjs
+export const FINISH_LEVEL = 365;
+export function finisherMark(place) {
+  if (place &lt;= 1) return 15;
+  if (place &lt;= 4) return 14;
+  if (place &lt;= 14) return 13;
+  if (place &lt;= 64) return 12;
+  return 11;
+}
+// days: the chain days credited, mint day included, ascending or not.
+export function expected(days) {
+  const sorted = [...new Set(days)].sort((a, b) =&gt; a - b).slice(0, FINISH_LEVEL);
+  let streak = 0, bestRun = 0, prev = null;
+  for (const d of sorted) {
+    streak = prev !== null &amp;&amp; d === prev + 1 ? streak + 1 : 1;
+    bestRun = Math.max(bestRun, streak);
+    prev = d;
+  }
+  return { level: sorted.length, streak, bestRun, lastDay: prev };
+}
+// Ties within a day break by lowest token id, as the Clock sorts a batch.
+export function places(finishes) {
+  const order = [...finishes].sort((a, b) =&gt; a.day - b.day || a.tokenId - b.tokenId);
+  return new Map(order.map((f, i) =&gt; [f.tokenId, { place: i + 1, markId: finisherMark(i + 1) }]));
+}
+</code></pre>
+<p>  Note the A8 test must match <code>misses: (d) =&gt; (d - 3) % 10 === 0</code> -- days 13, 23, ... are missed (every 10th day after its mint). Write the test to that definition. <code>bestRun</code> here must equal the contract&#39;s <code>_effectiveRun</code>; if Task 5&#39;s live comparison ever disagrees, the contract is the authority and this function is corrected.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the tests</strong> -- expect PASS.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong> <code>feat(year): the twelve agents as data, and the expected-state tally</code>.</li>
+</ul>
+<hr>
+<h3>Task 2: decide (pure runner decisions)</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/tools/year/decide.mjs</code></li>
+<li>Test: <code>warden/test/year-decide.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>AGENTS</code> mark entries from Task 1.</p>
+</li>
+<li><p>Produces: <code>dueMarks(agent, view, requested: Set&lt;id&gt;, held: bigint) -&gt; entry[]</code>; <code>buyOrDemand({ price, balance, reserve }) -&gt; &quot;buy&quot;|&quot;demand-only&quot;</code>; <code>FINAL_REASONS</code> (Set); <code>shouldRetry(result, attempt) -&gt; bool</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Failing tests:</strong> a <code>{ run: 7 }</code> Mark is due once <code>view.bestRun &gt;= 7</code> and not before; <code>level</code> uses <code>view.level</code>; an entry with <code>after: 5</code> is not due until bit 5 is set in <code>held</code>; a requested id is never due again; <code>buyOrDemand({price:5_000000n, balance:9_000000n, reserve:1_000000n})</code> is <code>&quot;buy&quot;</code>, with balance 5_500000n it is <code>&quot;demand-only&quot;</code>; <code>shouldRetry({reason:&quot;chain-unavailable&quot;},1)</code> true, <code>(...,3)</code> false, <code>{reason:&quot;already-credited-today&quot;}</code> false, <code>{ok:true}</code> false.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2:</strong> run, expect FAIL.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement.</strong></p>
+</li>
+</ul>
+<pre><code class="language-js">export const FINAL_REASONS = new Set([&quot;already-credited-today&quot;, &quot;resting&quot;, &quot;sunset&quot;, &quot;not-bound-to-caller&quot;, &quot;year-complete&quot;]);
+export const MAX_ATTEMPTS = 3;
+export function dueMarks(agent, view, requested, held) {
+  return agent.marks.filter((m) =&gt; {
+    if (requested.has(m.id)) return false;
+    if (m.after &amp;&amp; !(held &amp; (1n &lt;&lt; BigInt(m.after)))) return false;
+    if (m.when.level !== undefined &amp;&amp; view.level &lt; m.when.level) return false;
+    if (m.when.run !== undefined &amp;&amp; view.bestRun &lt; m.when.run) return false;
+    return true;
+  });
+}
+// reserve: USDC still needed for mints not yet paid, so a Mark never starves a mint.
+export function buyOrDemand({ price, balance, reserve }) {
+  return balance - reserve &gt;= price ? &quot;buy&quot; : &quot;demand-only&quot;;
+}
+export function shouldRetry(result, attempt) {
+  if (result?.ok === true || attempt &gt;= MAX_ATTEMPTS) return false;
+  return !FINAL_REASONS.has(result?.reason);
+}
+</code></pre>
+<p>  <code>year-complete</code> is the check-in tool&#39;s own reason for a finished token (<code>warden/src/mcp/tools/checkin.mjs</code>). Re-read that file before committing and add any other reason it returns that a retry cannot change.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4:</strong> run, expect PASS. <strong>Step 5: Commit</strong> <code>feat(year): the runner&#39;s decisions -- due Marks, buy or demand, retry</code>.</li>
+</ul>
+<hr>
+<h3>Task 3: chain and agent adapters</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/tools/year/chain.mjs</code>, <code>warden/tools/year/agent.mjs</code></li>
+<li>Test: <code>warden/test/year-agent.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces (chain): <code>makeChain({ rpcUrl, contract })</code> -&gt; <code>{ viewOf(id) -&gt; { level, streak, lastDay, mintDay, generation, parent, echo, resting, marks: bigint, bestRun, finisherPlace } , usdcBalance(addr) -&gt; bigint, sendUsdc(fromKey, to, amount) -&gt; receipt, sendEth(fromKey, to, wei) -&gt; receipt, ownerCall(fromKey, { function, args }) -&gt; receipt, transfer(fromKey, from, to, id) -&gt; receipt, today() -&gt; number }</code>. Every send waits for the receipt and THROWS unless <code>receipt.status === &quot;success&quot;</code>.</p>
+</li>
+<li><p>Produces (agent): <code>makeAgent({ identityPath, walletKey, site, origin })</code> -&gt; <code>{ keyId, register(), mint(to, expectedPayTo) -&gt; result, beat(tokenId), upgrade(tokenId, id, variant, { pay, expectedPayTo }) -&gt; { outcome: &quot;applied-queued&quot;|&quot;demand-only&quot;|&quot;refused&quot;, demand?, result }, seed(parentId, to), ownerCallFor(tool, tokenId) }</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Failing test</strong> for <code>agent.upgrade</code> with an injected <code>callTool</code> double: with <code>pay:false</code> and a demand result it returns <code>{ outcome: &quot;demand-only&quot;, demand }</code> and never calls <code>payFor</code>; with <code>pay:true</code> it calls <code>payFor</code> with <code>expected.payTo</code> and the demand&#39;s own amount, then calls the tool again with <code>_meta</code>; a paid call answered by another demand returns <code>outcome: &quot;refused&quot;</code>. The double must ENCODE a real demand shape: build it with <code>readDemand</code>&#39;s expected input by copying one recorded from <code>warden/test</code> fixtures (<code>/bin/grep -rn &quot;accepts&quot; warden/test | head</code>) -- never a hand-invented object ([[stubs-hide-interface-drift]]).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2:</strong> run, expect FAIL.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement.</strong> <code>agent.mjs</code> follows <code>client/src/cli.mjs</code> <code>join</code> exactly: <code>call = { origin, site, signatureAgent: site, privateJwk }</code>; <code>registerKey({ origin, privateJwk })</code>; <code>callTool({ ...call, name, arguments })</code>; <code>readDemand</code>; <code>payFor({ result, walletPrivateKey, expected: { payTo, amount } })</code>; retry with <code>_meta</code>. <code>callTool</code>/<code>payFor</code> are injectable (<code>deps</code> param defaulting to the client library) for the test. <code>chain.mjs</code> reads <code>viewOf</code> with the ABI from <code>warden/src/clock/abi.mjs</code>, derives <code>bestRun</code> as <code>max(streak, fellRun)</code> only after checking <code>warden/src/mcp/ladder.mjs</code> <code>effectiveRun</code> and copying its exact rule, and reads <code>finisherPlace</code> from marks bits 64-95. USDC is <code>0x036CbD53842c5426634e7929541eC2318f3dCF7e</code> on 84532 (Circle&#39;s docs; the address is public and chain-fixed, so it may be a constant).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4:</strong> run, expect PASS. <strong>Step 5: Commit</strong> <code>feat(year): chain and agent adapters over the real client library</code>.</p>
+</li>
+</ul>
+<hr>
+<h3>Task 4: runner</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/tools/year/runner.mjs</code></li>
+<li>Test: <code>warden/test/year-runner.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: Tasks 1-3.</p>
+</li>
+<li><p>Produces: <code>runDay({ day, agents, state, chain, makeAgentFor, log, testWallet })</code> (exported for the test) and a <code>main()</code> that sleeps to <code>+60 s</code> of each fast day and calls it. <code>state.json</code>: <code>{ startDay, tokens: {A1: id}, requested: {A1: [ids]}, ownerDone: {A1: [kinds]}, seeded: bool, childId, rebindKey: {A11: path}, paused: null|reason }</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Failing test</strong> with fake chain/agents: on day 0 A1-A3 mint (log lines <code>{day, agent, action:&quot;mint&quot;, ok}</code>); a check-in that answers <code>chain-unavailable</code> twice then ok is attempted 3 times; a paused state does nothing but log <code>paused</code>; three consecutive <code>clock.jsonl</code> failures set <code>state.paused</code>; a Mark due with insufficient balance logs <code>outcome:&quot;demand-only&quot;</code> and adds the id to <code>requested</code>; A11&#39;s <code>transfer</code> sends from A11&#39;s wallet to A12&#39;s address and its <code>rebind</code> is sent from A12&#39;s wallet with calldata from the <code>rebind</code> tool called by the NEW key.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2:</strong> FAIL. <strong>Step 3: Implement</strong> <code>runDay</code> in this order per agent: owner action (if due) -&gt; mint (if due; payTo from <code>status</code>&#39;s treasury, expected amount from the demand, refused if not 1 USDC) -&gt; check-in with retry -&gt; due Marks (buy: <code>sendUsdc(testWalletKey, agentAddr, price)</code> then pay; else demand-only) -&gt; seed (A1, once <code>seedsAvailable(parent) &gt; 0</code>, child added to agents as <code>child</code> checking in daily). Every action appends one JSON line to <code>$MRO_YEAR_DIR/runner.jsonl</code> with <code>ts</code>, <code>day</code>, <code>agent</code>, <code>tokenId</code>, <code>action</code>, <code>ok</code>, <code>reason</code>. State is written after each agent (restart-safe). <code>main()</code> does a pass at start, then aligns to <code>+60 s</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4:</strong> PASS. <strong>Step 5: Commit</strong> <code>feat(year): the runner -- twelve agents, one fast day at a time</code>.</p>
+</li>
+</ul>
+<hr>
+<h3>Task 5: checker and report</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/tools/year/checker.mjs</code>, <code>warden/tools/year/report.mjs</code></li>
+<li>Test: <code>warden/test/year-checker.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>compare({ chain: view, mirror: tView, tally, place }) -&gt; Finding[]</code> where <code>Finding = { field, chain, mirror?, expected?, severity: &quot;FAIL&quot; }</code>; <code>milestones(prev, view) -&gt; string[]</code>; <code>renderReport(runnerLines, checkerLines) -&gt; html</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Failing tests:</strong> equal inputs give <code>[]</code>; chain level 5 vs tally 6 gives one FAIL on <code>level</code>; mirror level may exceed chain by exactly the credits accepted after the last Clock run (passed in as <code>pendingDays</code>) without a FAIL; a finished token whose chain place differs from <code>places()</code> gives a FAIL on <code>place</code>; <code>milestones</code> returns <code>&quot;streak-7&quot;</code> when streak crosses 7, <code>&quot;finished&quot;</code> when level reaches 365, <code>&quot;rested&quot;</code>, <code>&quot;echo&quot;</code> for a child&#39;s first read, <code>&quot;first-lapse&quot;</code> when streak falls, <code>&quot;heartbeat&quot;</code> when <code>lastWardenDay</code> advances on a day with no credit, mint or Mark; <code>renderReport</code> escapes <code>&lt;</code> in reasons.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2:</strong> FAIL. <strong>Step 3: Implement.</strong> Checker main loop at <code>+240 s</code>: for each token in <code>state.json</code>, read <code>viewOf</code> and <code>GET http://127.0.0.1:4006/t/&lt;id&gt;</code>; build the tally from the chain&#39;s <code>mintDay</code> plus <code>runner.jsonl</code> check-ins with <code>ok:true</code> and <code>day &lt; today</code> (chain) / <code>&lt;= today</code> (mirror); on any finding, wait 20 s and re-read once before logging FAIL to <code>checker.jsonl</code>. On a milestone, run <code>node tools/verify-tokenuri.mjs &lt;contract&gt; &lt;id&gt; &lt;rpc&gt; fast.test</code> from the exported tree via <code>~/scripts/safe-build.sh</code> and log <code>decoded:true|false</code>. <code>report.mjs</code> writes <code>$MRO_YEAR_DIR/report.html</code>: per agent final state, FAIL count, and a paths table (proven live / demand-only / not reached).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4:</strong> PASS. <strong>Step 5: Commit</strong> <code>feat(year): the checker, its milestones, and the report</code>.</p>
+</li>
+</ul>
+<hr>
+<h3>Task 6: setup, wallets, funding, process list</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Create: <code>warden/tools/year/wallets.mjs</code>, <code>fund.mjs</code>, <code>clock-loop.sh</code>, <code>year.config.cjs</code>, <code>setup.sh</code>, <code>start.sh</code>, <code>stop.sh</code></p>
+</li>
+<li><p>Modify: <code>contracts/script/fast/deploy-fast.sh</code> -- read the Warden address from <code>${MRO_FAST_CLOCK_ADDRESS_FILE:-$HOME/.mro-fast/clock.address}</code> (unchanged default).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1:</strong> <code>wallets.mjs</code>: create <code>$MRO_YEAR_DIR</code> (700), <code>wallets/A1.key</code>..<code>A12.key</code> (600, <code>generatePrivateKey</code> from viem) and <code>identities/A1.jwk.json</code>..<code>A12</code>, <code>A11b</code> via the client&#39;s <code>ensureIdentity</code>; refuses to overwrite; prints names and addresses only.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2:</strong> <code>fund.mjs</code>: 1 USDC to each agent from the test wallet (key from <code>~/.mro-test-wallet/wallet.key</code>, read by path, never printed), 0.0005 ETH to A10, A11, A12 from the fast Clock key; checks receipts; idempotent (skips a wallet already holding enough).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3:</strong> <code>clock-loop.sh</code>: the old fast loop, but <code>--env-file=$MRO_YEAR_DIR/year.conf</code>, cwd the exported tree, and one JSON line per run to <code>clock.jsonl</code> with the exit code.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4:</strong> <code>year.config.cjs</code>: four apps, cwd the exported tree&#39;s <code>warden/</code>, warden with the ecosystem&#39;s <code>node_args</code> but <code>--env-file</code> pointing at <code>year.conf</code>, <code>env: { PORT: &quot;4006&quot; }</code>, and the ecosystem&#39;s <code>filter_env</code> list verbatim on every app; logs in <code>$MRO_YEAR_DIR/logs/</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 5:</strong> <code>setup.sh</code> (idempotent, each stage skipped when done): <code>git archive HEAD</code> into <code>$MRO_YEAR_DIR/tree</code>, symlink <code>node_modules</code> for <code>warden</code>, <code>client</code>, <code>tools</code>; write <code>year.conf</code> from <code>~/.mro-fast/fast.conf</code> with <code>sed</code> (replacing <code>MRO_CONTRACT_ADDRESS</code>, <code>STATE_DB_PATH</code>, <code>CLOCK_CURSOR_PATH</code>, <code>CLOCK_LOCK_PATH</code>, adding <code>MRO_DAY_SECONDS=300</code>, <code>MRO_CLOCK_OFFSET_SECONDS=30</code>) -- never printing it; <code>deploy-fast.sh --broadcast</code>, address to <code>contract.address</code>, deploy block - 1 into the cursor file.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 6:</strong> <code>start.sh</code>: refuses unless all four suites pass (run, not piped); <code>pm2 start year.config.cjs</code>; reads back the four NAMES and their status; tails the first runner pass. <code>stop.sh</code>: <code>pm2 stop</code> the four (never <code>delete</code>), then <code>node report.mjs</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 7:</strong> <code>bash -n</code> every script; run <code>wallets.mjs</code> twice to prove it refuses to overwrite. <strong>Commit</strong> <code>feat(year): wallets, funding, the process list and the operator scripts</code>.</p>
+</li>
+</ul>
+<hr>
+<h3>Task 7: deploy, fund, start, smoke (phase boundary)</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1:</strong> All four suites green; <code>node tools/prepublish-check.mjs</code> clean.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2:</strong> <code>bash warden/tools/year/setup.sh</code> -- deploy to Base Sepolia (CAUTION: testnet transaction from the deployer; no real funds). Read back <code>cast code</code> non-empty and <code>today()</code> = <code>block.timestamp / 300</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3:</strong> <code>node warden/tools/year/wallets.mjs</code>, then <code>node warden/tools/year/fund.mjs</code>; read back every balance.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 4:</strong> <code>bash warden/tools/year/start.sh</code>. If the classifier refuses it, hand TJ the one-liner and wait.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Smoke, first 6 fast days (30 min):</strong> A1-A3 minted by the D0+1 Clock run in one transaction; A4 next day; check-ins accepted; <code>checker.jsonl</code> has zero FAIL; <code>clock.jsonl</code> all exit 0. Any FAIL here stops and re-plans before the long run continues.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 6:</strong> Save a <code>year-run</code> memory (addresses live in the data dir, not memory) and report to TJ: running, smoke clean, expected finish times.</li>
+</ul>
+<h2>After the run (about 38 hours)</h2>
+<p>The end phase needs no action: once every token is finished or resting the
+Clock writes nothing, and after 30 fast days it must send <code>heartbeat()</code>. When
+<code>checker.jsonl</code> logs <code>heartbeat</code>, run <code>stop.sh</code>, read <code>report.html</code>, file every FAIL as a finding checked against the
+code before fixing ([[check-the-finding-before-fixing-it]]), and send TJ the
+report.</p>
+</body>
+</html>
