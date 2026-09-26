@@ -5,29 +5,21 @@ import {LibBit} from "solady/src/utils/LibBit.sol";
 
 /// @notice Turns rows of filled cells into SVG path data, merging horizontal runs.
 ///
-/// @dev Shared by every renderer so the two of them cannot drift apart in syntax
-/// or in rounding. `CodeRenderer` and `FrameRenderer` draw completely different
-/// things, but both draw them as filled unit cells on the same grid, and a run of
-/// adjacent cells is written the same way in both.
+/// @dev Shared by every renderer so they cannot drift apart in syntax or in
+/// rounding. `CodeRenderer` and `FrameRenderer` draw completely different things,
+/// but both draw them as filled unit cells on the same grid, and a run of
+/// adjacent cells is written the same way in both. Merging runs into one path,
+/// rather than one `<rect>` per cell, is what makes the image affordable.
 ///
-/// Run merging is the mechanism that makes the image affordable at all: measured
-/// on the code block, one `<rect>` per cell came to 70,298 bytes and merged runs
-/// inside one path came to 4,986.
-///
-/// The gas shape of this library was measured rather than assumed, and two of its
-/// choices come straight out of that (see docs/phase0-results.md):
-///
-/// - **Runs are found by jumping, not by scanning.** Testing all 37 bits of every
-///   row cost 954,000 gas on the code block alone. Jumping from run to run with
-///   `LibBit.fls` visits each run once instead.
-/// - **Nothing is allocated per run.** A run is composed in a register and written
-///   with one `mstore` into a buffer reserved up front.
+/// Two choices keep the gas down: runs are found by jumping from run to run with
+/// `LibBit.fls` rather than by testing every bit of every row, and nothing is
+/// allocated per run -- a run is composed in a register and written with one
+/// `mstore` into a buffer reserved up front.
 library PathWriter {
     /// @dev The longest a single run can be: "M<x> <y>h<w>v1h-<w>z" with three
-    /// digits in every position. Counted out that is exactly 20 bytes
-    /// (1+3+1+3+1+3+4+3+1), which is why this constant is 20 and not less.
-    /// There is no slack: adding a character to the run format -- an L, a
-    /// decimal point -- overruns the per-run reservation and must raise this.
+    /// digits in every position, exactly 20 bytes (1+3+1+3+1+3+4+3+1). There is
+    /// no slack: adding a character to the run format -- an L, a decimal point
+    /// -- overruns the per-run reservation and must raise this.
     uint256 internal constant MAX_RUN_BYTES = 20;
 
     /// @dev Each run is written as a full 32-byte word, so the last one reaches
@@ -40,8 +32,6 @@ library PathWriter {
     /// -- two cells for the first ring and four for every ring after it, since
     /// ringSpan(r) = 2r - 1 -- so the widest canvas a token can wear is a
     /// finished child's two rings, 57 cells, and nothing can reach the cap.
-    /// (This said "grows by two a year", which is the first ring's step
-    /// mistaken for every ring's, until 2026-09-20.)
     uint256 private constant MAX_COORD = 1000;
 
     /// @notice A path under construction: the bytes, and how many are written.
@@ -53,11 +43,11 @@ library PathWriter {
     }
 
     /// @notice A buffer with room for `maxRuns` runs.
-    /// @dev Callers must bound `maxRuns` by what their geometry can actually
-    /// produce, not by what it typically does. A row of alternating cells is a
-    /// separate run for every other cell, which is the worst case and the one the
-    /// buffer has to survive: sizing to a measured figure instead would let such a
-    /// pattern write past the end into whatever memory follows.
+    /// @dev Callers must bound `maxRuns` by what their geometry CAN produce, not
+    /// by what it typically does. A row of alternating cells is a separate run
+    /// for every other cell, and that worst case is the one the buffer has to
+    /// survive: sized below it, `writeRow` reverts on such a pattern rather
+    /// than drawing it.
     function create(uint256 maxRuns) internal pure returns (Buffer memory buf) {
         buf.data = new bytes(maxRuns * MAX_RUN_BYTES + SLACK);
     }
@@ -92,9 +82,8 @@ library PathWriter {
             // forge-lint: disable-next-line(incorrect-shift)
             uint256 hole = ~row & ((1 << high) - 1);
             uint256 low = hole == 0 ? 0 : LibBit.fls(hole) + 1;
-            // Cheap next to what this function costs, and it turns any future
-            // miscalculation of `maxRuns` into a revert rather than a silent write
-            // into whatever memory follows the buffer.
+            // Turns any future miscalculation of `maxRuns` into a revert rather
+            // than a silent write into whatever memory follows the buffer.
             require(len + MAX_RUN_BYTES <= limit, "PathWriter: path overflow");
             len = _writeRun(ptr, len, x0 + width - 1 - high, y, high - low + 1);
             // forge-lint: disable-next-line(incorrect-shift)
@@ -114,9 +103,9 @@ library PathWriter {
     }
 
     /// @dev Composes "M<x> <y>h<w>v1h-<w>z" in a register and writes it with one
-    /// `mstore`, returning the new length. Writing 32 bytes for a run of 12 is
-    /// deliberate: the surplus is overwritten by the next run, and the buffer
-    /// carries a spare word for the last one.
+    /// `mstore`, returning the new length. A full 32-byte word is always written:
+    /// the surplus is overwritten by the next run, and the buffer carries a spare
+    /// word for the last one.
     function _writeRun(uint256 ptr, uint256 len, uint256 x, uint256 y, uint256 w)
         private
         pure

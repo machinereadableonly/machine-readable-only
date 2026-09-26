@@ -8,24 +8,14 @@ import {HeartMask} from "./HeartMask.sol";
 /// @notice The QR's three finder patterns -- the "eyes" -- reshaped and erased
 /// to ground before being redrawn on top of everything else.
 ///
-/// @dev Every module in the finder patterns keeps a fixed position: a QR puts
-/// them at the same three module coordinates for every token that ever
-/// mints. That is what makes reshaping them cheap where the heart and the
-/// noise are not -- nothing here depends on per-token data, so the whole
-/// overlay is nine shapes at positions derived from one runtime number, the
-/// code offset.
+/// @dev A QR puts the finder patterns at the same three module coordinates for
+/// every token, so nothing here depends on per-token data: the whole overlay is
+/// nine shapes at positions derived from one runtime number, the code offset.
 ///
-/// Recolouring the eyes was always safe: every module kept its value.
-/// Reshaping is not -- it erases the 7x7 and draws something else there, so
-/// the 1:1:3:1:1 ratio a scanner looks for along a line through the eye is
-/// genuinely at risk. Every shape here was decode-tested rather than judged
-/// by eye, in `tools/eye-shape-sheet.mjs` (the three shapes survive
-/// reshaping) and `tools/tint-on-green-sheet.mjs` (Tint's inks against
-/// Static's green noise, the surface that directly surrounds the eyes).
-///
-/// Cost measured on the prototype this is modelled on,
-/// `contracts/test/EyeCost.t.sol`: the target shape at the day-364 canvas is
-/// 9,061 gas and 623 bytes, against 366,776 gas and 11,076 bytes of headroom.
+/// Reshaping erases the 7x7 and draws something else there, so the 1:1:3:1:1
+/// ratio a scanner looks for along a line through an eye is genuinely at risk.
+/// Any change to a shape must be decode-tested, not judged by eye:
+/// `tools/eye-shape-sheet.mjs` and `tools/tint-on-green-sheet.mjs`.
 library EyeRenderer {
     /// @notice The three eyes, reshaped, at the three fixed finder-pattern
     /// positions relative to `codeOff`.
@@ -37,7 +27,7 @@ library EyeRenderer {
     /// @param ground the colour actually under the code block: HUSH_QUIET
     /// when Hush is worn, otherwise the field, which Aura tints. NEVER a
     /// constant -- a white constant would punch a white square into a tinted
-    /// page, the defect the first prototype found by sweeping combinations.
+    /// page.
     function eyes(uint256 codeOff, uint8 shape, string memory ink, string memory ground)
         internal
         pure
@@ -81,10 +71,9 @@ library EyeRenderer {
         return _target(x, y, ink, ground);
     }
 
-    /// @dev Concentric circles, r 3.5 / 2.5 / 1.5. All three share one centre,
-    /// which is why only one cx/cy pair is built. The centre is offset by
-    /// 7/2, which is not an integer, so it is written as a fixed ".5" rather
-    /// than carrying decimal arithmetic into the renderer for one digit.
+    /// @dev Concentric circles, r 3.5 / 2.5 / 1.5, all three sharing one centre.
+    /// That centre is offset by 7/2, which is not an integer, so the half is
+    /// written as a fixed ".5" rather than computed.
     function _target(uint256 x, uint256 y, string memory ink, string memory ground)
         private
         pure
@@ -125,11 +114,9 @@ library EyeRenderer {
     /// @dev Two opposite corners rounded, r 2.6 / 1.8 / 1.3. Solidity has no
     /// fractional arithmetic, so every decimal here is built as a string
     /// rather than computed: `x + 2.6` is `toString(x + 2)` with a literal
-    /// ".6" appended. The three offsets the leaf uses -- 2.6, 2.8, 3.3 -- were
-    /// checked against the JS reference before this was written: `7 - 2.6`
-    /// prints "4.4", `5 - 1.8` prints "3.2", `3 - 1.3` prints "1.7", and none
-    /// of the running offsets (x + 2.6, x + 1 + 1.8, x + 2 + 1.3) produce a
-    /// fractional part other than the one already in the literal.
+    /// ".6" appended. The offsets are chosen so that no running offset
+    /// (x + 2.6, x + 1 + 1.8, x + 2 + 1.3) produces a fractional part other
+    /// than the one already in the literal.
     function _leaf(uint256 x, uint256 y, string memory ink, string memory ground)
         private
         pure

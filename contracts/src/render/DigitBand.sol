@@ -7,76 +7,32 @@ import {FrameGeometry} from "./FrameGeometry.sol";
 /// @notice The finisher's own number, written round the border in actual 1s
 /// and 0s.
 ///
-/// @dev A machine reads the rank off the artwork and a human reads it as
-/// writing. In a piece called Machine Readable Only that is the border doing
-/// the work rather than decorating it. Colour was the alternative: five inks
-/// were rendered at every streak tier and all of them worked, and they lost
-/// anyway, because inks are PEERS -- nothing about teal says it is rarer than
-/// violet -- so rank had to be read from metadata. A number IS the rank.
-///
-/// Colour then came back on top of the number rather than instead of it: the
-/// five finisher Marks write the digits in gold, silver, bronze, blue and the
-/// heart's red. That is not the rejected design returning. The number already
-/// carries the rank, so the ink no longer has to, and gold over silver over
-/// bronze is a ranking a viewer reads at a glance before reading the digits.
-///
-/// NO SVG <text>, EVER. A token drawn with a font depends on what the VIEWER
-/// has installed: it renders differently in two browsers and may not render at
-/// all in ten years. Every digit here is a 3x3 cell bitmap emitted as a path,
-/// so the token carries its own letterforms.
-///
-/// THE `1` HAS A FLAG AND A FOOT. A first draft drew it as a plain vertical
-/// bar, and a row of them read as a dotted rule rather than as writing --
-/// losing the one thing the idea was for.
-///
-/// A SQUARE GLYPH IS WHY 3x3 WORKS. A 3-wide, 5-tall glyph needs a step of 4
-/// one way and 6 the other, and using 4 for both is what made the side digits
-/// collide on the first sheet. At 3x3 one step serves every edge, and the
-/// composition closes on all four rather than reading as a caption top and
-/// bottom.
-///
-/// UPRIGHT, NOT ROTATED. A quarter turn per edge gives a clockwise inscription
-/// with proper rotational symmetry -- right for a coin or a seal, wrong here,
-/// because the bottom edge comes out upside down and reads as a printing error
-/// on a screen. Both were rendered and the operator chose upright: it gives up
-/// the symmetry for being legible from the one viewpoint this artwork is
-/// actually seen from.
-///
-/// Design: docs/specs/2026-09-20-mro-finisher-marks-design.md section 10k.
+/// @dev NO SVG <text>: a font depends on what the viewer has installed. Every
+/// digit here is a 3x3 cell bitmap emitted as a path, so the token carries its
+/// own letterforms. The glyph is square so a single STEP serves all four edges,
+/// and every edge is upright rather than rotated a quarter turn per side.
 library DigitBand {
     uint256 internal constant GW = 3; // a glyph is three cells wide
-    uint256 internal constant GH = 3; // and three tall, which is the point
+    uint256 internal constant GH = 3; // and three cells tall
     uint256 internal constant STEP = 4; // three cells and one of space
     uint256 internal constant BITS = 16; // the ordinal, as sixteen binary digits
 
     /// @dev One gap short of BITS * STEP: the last digit needs no trailing
-    /// space, and centring on the TRUE span is what gives every edge equal
-    /// margins at both ends.
+    /// space, and centring on this true span gives every edge equal margins.
     uint256 internal constant SPAN = BITS * STEP - (STEP - GW);
 
     /// @notice The fallback ink: what the band is written in when the token
     /// holds an ordinal but no finisher Mark.
     ///
-    /// @dev THE BAND HAS FIVE INKS, and this is not one of them. The number is
-    /// written in the ink of the finisher Mark the token was given -- gold,
-    /// silver, bronze, blue or the heart's red, chosen by the operator
-    /// 2026-09-23 and selected by `MarkRenderer.finisherInk`. The five ARE the
-    /// rank, which is why they can be colours at all: colour lost to a number
-    /// in section 10k because five inks with nothing ranking them are peers,
-    /// and a place ranks them.
+    /// @dev The band normally has one of five inks -- gold, silver, bronze,
+    /// blue or the heart's red -- selected by `MarkRenderer.finisherInk`. This
+    /// near-black is only what the renderer draws when it is handed an ordinal
+    /// with no Mark, which `_finish` cannot produce: it writes the Mark bit and
+    /// the ordinal in a single word.
     ///
-    /// What is still true is what the ink must NOT be. It is not the frame's
-    /// fill and not the token's own colour: the frame walks down the tier
-    /// ladder as a streak lapses and turns gold under Vessel, and a finisher's
-    /// number must not change colour because its holder missed a week. The
-    /// Mark is fixed on the day the place is earned, so the band is the one
-    /// part of the picture that never moves again.
-    ///
-    /// `_finish` writes the Mark bit and the ordinal in a single word, so a
-    /// token with an ordinal and no Mark cannot exist on chain. This near-black
-    /// is what the renderer does when it is handed one anyway -- the spike's
-    /// `setMarks` can write it -- and it is the ink every pre-Mark sheet and
-    /// every Sepolia token minted before this change already carries.
+    /// The ink must never be the frame's fill or the token's own colour. Those
+    /// walk down the tier ladder as a streak lapses, and a finisher's number
+    /// must not change colour because its holder missed a week.
     ///
     /// Seven characters, like all five of the real inks, so the byte count does
     /// not depend on which one is chosen.
@@ -85,29 +41,21 @@ library DigitBand {
     /// @dev Three glyph cells, and no row of air: `bandUnits` then pads by up
     /// to 8 units, which is all that separates the digits from the ring.
     ///
-    /// THIS WAS `(GH + 1)`, and it broke the code (measured 2026-09-26). The
-    /// band sets the image's size in modules, and which pixel widths a crisp
-    /// rasteriser can decode depends on that size alone -- not on the digits,
-    /// not on the bitmap. `(GH + 1)` made a finished founding token 85 modules
-    /// across, and at 85 every token measured, under all eight masks, failed
-    /// at 350px, a width robust-solve guarantees. `GH` gives 83 (founding) and
-    /// 89 (child), which clear every gate width on all twelve tokens tested.
-    /// Re-measure before changing it: tools/echo-decode-check.mjs.
+    /// This sets the image's size in modules, and that size alone decides which
+    /// pixel widths a crisp rasteriser can decode -- not the digits, not the
+    /// bitmap. `GH + 1` puts a finished token at a size that fails to decode at
+    /// widths a robust solve is supposed to guarantee. Re-measure before
+    /// changing it: tools/echo-decode-check.mjs.
     uint256 private constant MIN_BAND = GH * FrameGeometry.MODULE_UNITS;
 
     /// @notice How thick the band is, in the common unit.
     ///
     /// @dev A glyph cell is one QR MODULE (9 units), not a frame cell (13).
-    /// That is what makes the picture the one the operator approved: at module
-    /// size the code block keeps about three fifths of the image.
-    ///
-    /// The canvas is counted in frame cells, and 13 does not divide 9, so left
-    /// alone the digits would land on fractional module coordinates -- which
-    /// PathWriter cannot write, because a run is composed in a single 32-byte
-    /// word with no room for a decimal point. The band absorbs the remainder:
-    /// it grows by up to 8 units, under one module and invisible, and in
-    /// exchange the whole band draws in one scaled group with small integer
-    /// coordinates.
+    /// The canvas is counted in frame cells and 13 does not divide 9, so the
+    /// band absorbs the remainder by growing up to 8 units. Without that the
+    /// digits would land on fractional module coordinates, which PathWriter
+    /// cannot write: a run is composed in a single 32-byte word with no room
+    /// for a decimal point.
     function bandUnits(uint256 canvasCells) internal pure returns (uint256) {
         uint256 band = MIN_BAND;
         while (
@@ -147,8 +95,7 @@ library DigitBand {
         // Two runs is the most a three-cell glyph row can take (101), so six is
         // the most one glyph contributes, and sixty-four glyphs bound the
         // buffer at 384. Sized to what the geometry CAN produce, not to what it
-        // typically does: PathWriter's own comment is explicit that a measured
-        // figure would let a worst-case pattern write past the end.
+        // typically does.
         PathWriter.Buffer memory buf = PathWriter.create(4 * BITS * 2 * GH);
 
         // Every row of the canvas that carries any digit, top to bottom.
@@ -165,11 +112,9 @@ library DigitBand {
     /// @dev Which cells of canvas row `y` the four edges light, packed the way
     /// PathWriter.writeRow expects: bit `modules - 1 - x` set means x is lit.
     ///
-    /// UPRIGHT means every edge reads the way a reader scans -- left to right
-    /// along the top and the bottom, top to bottom down each side -- so no
-    /// glyph is ever turned and one bitmap serves all four edges. The rejected
-    /// rotated variant cannot come back by accident, because there is no
-    /// rotation in this file to reach for.
+    /// Every edge reads the way a reader scans -- left to right along the top
+    /// and the bottom, top to bottom down each side -- so no glyph is ever
+    /// turned and one bitmap serves all four edges.
     function _rowBits(uint32 ordinal, uint256 y, uint256 modules, uint256 pad, uint256 last)
         private
         pure

@@ -8,33 +8,27 @@ import {Palette} from "./Palette.sol";
 ///
 /// @dev A Mark is a paid tier, bought or earned in one of five exclusive pairs.
 /// `Ladder.sol` and `MachineReadableOnly.applyMark` enforce that exclusion, not
-/// this library -- a mask handed in here could in principle hold both sides of
-/// a pair, and this library still has to behave, which it does because no two
-/// Marks in different pairs ever write the same surface.
+/// this library, which behaves even on a mask holding both sides of a pair
+/// because no two Marks in different pairs write the same surface.
 ///
 /// The five finisher Marks, ids 11 to 15, are not bought at all: a token is
 /// GIVEN one by the place it finished its year in, and each writes the
-/// finisher's number round the border in its own ink. They pair with nothing
-/// and exclude nothing, so the exclusion sentence above concerns the ten only.
+/// finisher's number round the border in its own ink. They pair with nothing,
+/// so the exclusion above concerns the ten only.
 ///
-/// All ten draw at this point. Hush, Ache, Static, Beat, Vessel and Aura each
-/// claim one surface below. Iris Bought, Iris Earned and Tint claim the eyes --
-/// drawn by `EyeRenderer`, which `Renderer.svg` calls with the ink and ground
-/// this library selects. Break claims no surface of its own -- it exchanges
-/// which rung colour the heart and the noise take, in `inks()` below.
-///
-/// This library is almost entirely colour selection, which is why it is cheap:
-/// `FrameRenderer` and `CodeRenderer` already take their fills as parameters, so
-/// each drawing Mark is a substituted string and nothing more.
+/// Hush, Ache, Static, Beat, Vessel and Aura each claim one surface below. Iris
+/// Bought, Iris Earned and Tint claim the eyes -- drawn by `EyeRenderer`, which
+/// `Renderer.svg` calls with the ink and ground this library selects. Break
+/// claims no surface of its own: it exchanges which rung colour the heart and
+/// the noise take, in `inks()` below.
 ///
 /// Every colour here MUST match the constant of the same name in
 /// `tools/render-token.mjs`. `Renderer.t.sol` diffs the two renderers byte for
 /// byte, so a divergence fails the suite rather than reaching a token.
 library MarkRenderer {
     /// @dev Bit n is mark n, ids 1 to 10 in ladder order. Bit 0 is never a mark.
-    /// FIVE PAIRS: in each, one side is bought and one earned, and they exclude
-    /// each other on chain. The renderer does not enforce that -- the contract
-    /// does -- so this library never has to consider two partners at once.
+    /// FIVE PAIRS: in each, one side is bought and one earned, and the contract
+    /// excludes them, so this library never sees two partners at once.
     uint256 internal constant HUSH = 1 << 1;
     uint256 internal constant ACHE = 1 << 2;
     uint256 internal constant STATIC = 1 << 3;
@@ -46,11 +40,11 @@ library MarkRenderer {
     uint256 internal constant TINT = 1 << 9;
     uint256 internal constant AURA = 1 << 10;
 
-    /// @dev The five finisher Marks, ids 11 to 15, deepest place last. Given
-    /// rather than bought: `MachineReadableOnly.finisherMark` maps a finishing
-    /// place to exactly one of these, so a token holds one of the five or none
-    /// of them. Bits 11-15 sit below the Iris shape at 16, so nothing packed
-    /// in the high bits of the marks word moves into this range.
+    /// @dev The five finisher Marks, ids 11 to 15, best place last. Given rather
+    /// than bought: `MachineReadableOnly.finisherMark` maps a finishing place to
+    /// exactly one of these, so a token holds one of the five or none of them.
+    /// Bits 11-15 sit below the Iris shape at bit 16, so nothing packed in the
+    /// high bits of the marks word reaches this range.
     uint256 internal constant AORTA = 1 << 11;
     uint256 internal constant CHAMBER = 1 << 12;
     uint256 internal constant VALVE = 1 << 13;
@@ -61,43 +55,28 @@ library MarkRenderer {
     /// drawing is the same code for both.
     uint256 internal constant ANY_IRIS = IRIS_BOUGHT | IRIS_EARNED;
 
-    /// @dev The last stop of Beat's gradient. VIOLET, chosen by the operator 2026-08-31
-    /// from a rendered sheet: it makes the heart bi-chromatic and reads as
-    /// spectrum rather than blood. Same string length as the red it replaced, so
-    /// zero bytes and zero gas.
+    /// @dev The last stop of Beat's gradient: violet, so the heart is
+    /// bi-chromatic and reads as spectrum rather than blood.
     string internal constant BEAT_TO = "#2000ff";
 
     string internal constant ACHE_GHOST = "#e3ccd3";
     string internal constant VESSEL_GOLD = "#b8860b";
     string internal constant HUSH_QUIET = "#fdf3e3";
 
-    /// @notice Tint's two inks. Violet and gold, decided by the operator 2026-09-02 from
-    /// tools/tint-on-green-sheet.mjs, which rendered every candidate against
-    /// Static's green -- the surface that directly surrounds the eyes.
-    ///
-    /// Violet holds at a luma gap of 0.2 to the green at the top rung and still
-    /// reads instantly: the project's oldest measured rule, that a colour
-    /// separates by HUE and not by weight. Gold's gap runs 40 / 31 / 41 / 51 /
-    /// 61 up the ladder, warm against green.
-    ///
-    /// Heart red is out because the untinted Iris already draws in the token's
-    /// own colour; green is out because it is Static's and the noise touches the
-    /// eyes; near-black is out because it is what an ORDINARY QR eye looks like.
+    /// @notice Tint's two inks, violet and gold. Both are chosen to separate
+    /// from Static's green -- the surface that directly surrounds the eyes -- by
+    /// HUE rather than by weight, which is the rule the decode depends on.
     string internal constant TINT_VIOLET = "#9800fc";
     string internal constant TINT_GOLD = "#b8860b";
 
-    /// @notice The five finisher inks, chosen by the operator 2026-09-23 from
-    /// rendered sheets (spec 10l).
+    /// @notice The five finisher inks: gold, silver and bronze are a ranking
+    /// every viewer already reads, and blue and the heart's red finish the five.
     ///
-    /// @dev Gold, silver and bronze are a ranking every viewer already reads
-    /// without being told; blue and the heart's red finish the five below them.
-    /// Two of the strings are shared with a paid Mark -- Apex's gold is
-    /// Vessel's and Chamber's blue is Beat's far stop -- and that is a
-    /// coincidence of value, not a link: `finisherInk` reads the finisher bits
-    /// only, so wearing Vessel can never colour the number.
-    ///
-    /// Seven characters each, like every other ink in the picture, so which
-    /// Mark a token wears never changes its byte count.
+    /// @dev Two strings are shared with a paid Mark -- Apex's gold is Vessel's
+    /// and Chamber's blue is Beat's far stop -- which is a coincidence of value,
+    /// not a link: `finisherInk` reads the finisher bits only. Seven characters
+    /// each, like every ink in the picture, so which Mark a token wears never
+    /// changes its byte count.
     string internal constant AORTA_RED = "#c8102e";
     string internal constant CHAMBER_BLUE = "#2000ff";
     string internal constant VALVE_BRONZE = "#a0612b";
@@ -113,15 +92,14 @@ library MarkRenderer {
     string internal constant FIELD_WHITE = "#ffffff";
     string internal constant AURA_FIELD = "#fbeff2";
 
-    /// @dev The page after a year away, and half way there. C4.10.
-    ///
-    /// Constants rather than arithmetic: the answer can only ever be one of
-    /// four, and `tools/render-token.mjs` computes them with `coolBy` so
+    /// @dev The page after a year away, and half way there. Constants rather
+    /// than arithmetic: the answer can only ever be one of four, and
+    /// `tools/render-token.mjs` computes them with `coolBy`, so
     /// `Renderer.t.sol`'s byte-for-byte diff catches a drift.
     ///
     /// COOLED BY A FIXED DELTA (25 of 255 over a full year), not toward a fixed
-    /// grey, so Aura's page keeps its colour and goes dusty rather than being
-    /// erased. A paid Mark must not be cancelled by the calendar.
+    /// grey, so Aura's page goes dusty rather than being erased: a paid Mark
+    /// must not be cancelled by the calendar.
     string internal constant FIELD_HALF = "#f3f3f3";
     string internal constant FIELD_COLD = "#e6e6e6";
     string internal constant AURA_HALF = "#efe3e6";
@@ -129,15 +107,11 @@ library MarkRenderer {
 
     /// @notice The page behind everything. Aura tints it, and absence cools it.
     ///
-    /// @dev C4.10. A token that never returned holds level 1 and streak 1
-    /// forever, so both `tierIndex(1)` and `lapsedIndex(1, ...)` are already
-    /// rung 0 and the HEART cannot carry absence. Nor can the frame: measured,
-    /// fading the unearned year toward the page moves at most 17 of 255 on a
-    /// colour already at 1.145:1 against it, and darkening it instead collapses
-    /// the earned/unearned reading on a token that DID earn days. The page is
-    /// the only surface that reaches a token holding almost no ink -- and it
-    /// fixes the frame as a side effect, because against a cooler ground the
-    /// pale unearned year reads as a halo instead of vanishing.
+    /// @dev The page is the only surface that can carry absence: a token that
+    /// never returned holds level 1 and streak 1 forever, so `tierIndex(1)` is
+    /// already rung 0 and the HEART cannot show it, while darkening the unearned
+    /// frame instead would collapse the earned/unearned reading on a token that
+    /// DID earn days.
     ///
     ///   under 30 days   the page as it is -- a lapse is not yet an absence
     ///   30 to 364       half way to the cold
@@ -153,7 +127,7 @@ library MarkRenderer {
     }
 
     /// @notice Frame cells not yet earned. Ache deepens them, so the year ahead
-    /// is visible from day one rather than being almost invisible.
+    /// is visible from day one.
     function ghost(uint256 marks) internal pure returns (string memory) {
         return has(marks, ACHE) ? ACHE_GHOST : Palette.ghost();
     }
@@ -172,29 +146,24 @@ library MarkRenderer {
     ///
     /// @dev Takes the RUNG rather than a colour, because both palettes are
     /// indexed by it and the two inks of a code block must come from the same
-    /// rung. Handing this a colour would let a caller pair a top-tier heart
-    /// with a start-tier noise, which is exactly the wiring mistake
-    /// `Palette.lapsedIndex` exists to prevent.
+    /// rung. Handing this a colour would let a caller pair a top-tier heart with
+    /// a start-tier noise.
     function noise(uint256 marks, uint256 rung) internal pure returns (string memory) {
         return has(marks, STATIC) ? Palette.staticAt(rung) : Palette.noiseAt(rung);
     }
 
     /// @notice The two inks of the code block, with Break's exchange applied.
     ///
-    /// @dev DEFINITION B, the rung-colour exchange: swap which rung colour each
-    /// region takes. Definition A -- swapping the FILLS verbatim -- was rendered
-    /// and decodes fine, but it inverts the wrong region: the noise ends up
-    /// carrying Beat's violet and the heart reads as a flat grey hole, which is
-    /// what Palette's chroma rule exists to prevent, and it contradicts this
-    /// Mark's own sentence that the code becomes the only red element.
+    /// @dev Break swaps which RUNG COLOUR each region takes, not the fills
+    /// verbatim: swapping the fills would invert the wrong region, leaving the
+    /// noise carrying Beat's violet and the heart a flat grey hole.
     ///
     /// The decode rule survives the exchange for free: `colourAt(r)` and the
     /// noise at the same rung are matched in luminance by construction, so
     /// swapping two equal-luminance inks leaves the binarizer the same picture.
     ///
     /// Break composes with either side of pair 2 and never both -- Static and
-    /// Beat exclude each other. Break + Static is STRONGER than Break alone at
-    /// every rung, 192 against 126 at the top.
+    /// Beat exclude each other.
     function inks(uint256 marks, uint256 rung)
         internal
         pure
@@ -218,11 +187,8 @@ library MarkRenderer {
     /// @notice The quiet zone hugging the code. Hush tints it.
     /// @dev Empty when Hush is not worn, so the assembler can concatenate it
     /// unconditionally. The tint is amber rather than a deeper rose so that it
-    /// stays distinguishable from Aura's field when both are worn.
-    ///
-    /// #fdf3e3 is decode-tested at 900, 700, 500 and 350 px. It is not near the
-    /// floor by accident: #f9eaef fails at 900 and #f7e3e8 fails at three of the
-    /// four sizes, so there is little room below this and none should be taken.
+    /// stays distinguishable from Aura's field when both are worn. It sits close
+    /// to the decode floor: a darker tint here stops the code scanning.
     function quietTint(uint256 marks) internal pure returns (string memory) {
         return has(marks, HUSH) ? HUSH_QUIET : "";
     }
@@ -255,21 +221,16 @@ library MarkRenderer {
     /// @notice The finisher's ordinal, from bits 64-95 of the marks word.
     /// 0 means the token is not a finisher.
     ///
-    /// @dev BITS 64-95, NOT 32-63. Section 8 of the finisher spec still says
-    /// 32-63 and section 5 explicitly corrects it: 32-63 are `irisRun` above,
-    /// the run an earned Iris was taken at, which the contract reads from the
-    /// token itself precisely so the Warden cannot forge it. An ordinal written
-    /// there would corrupt every earned Iris silently. TokenView.sol is the one
-    /// authority on this packing.
+    /// @dev BITS 64-95, NOT 32-63: bits 32-63 are `irisRun` above, so an ordinal
+    /// written there would corrupt every earned Iris silently. `TokenView.sol`
+    /// is the one authority on this packing.
     function ordinal(uint256 marks) internal pure returns (uint32) {
         return uint32((marks >> 64) & 0xFFFFFFFF);
     }
 
     /// @notice The ink the finisher's number is written in: the Mark IS the ink.
-    /// @dev Decided by the operator 2026-09-23 (spec 10l). Gold, silver, bronze
-    /// are a ranking every viewer already reads; blue and the heart's red finish
-    /// the five. Seven characters each, so the byte count never depends on
-    /// which. Checked highest place first, though a token only ever holds one.
+    /// @dev Checked highest place first, though a token only ever holds one of
+    /// the five. A token that is not a finisher gets the band's plain ink.
     function finisherInk(uint256 marks) internal pure returns (string memory) {
         if (has(marks, APEX)) return APEX_GOLD;
         if (has(marks, ATRIUM)) return ATRIUM_SILVER;
@@ -300,10 +261,10 @@ library MarkRenderer {
     /// name. Only these fifteen literals can ever reach the JSON, so no token
     /// state can inject text through this field.
     ///
-    /// The five finisher names come last, after the ten paid Marks, because
-    /// that is the ladder order: they are ids 11 to 15. They are LOWER CASE
-    /// here, matching the existing ten -- the Warden's ladder capitalises them
-    /// for its own listing, and the on-chain metadata does not.
+    /// The five finisher names come last because that is the ladder order: they
+    /// are ids 11 to 15. LOWER CASE here, matching the ten -- the Warden's
+    /// ladder capitalises them for its own listing; the on-chain metadata does
+    /// not.
     ///
     /// Both Iris ids emit "iris": they claim the same surface by two routes, and
     /// the route is visible in the image rather than in the JSON.

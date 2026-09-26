@@ -2,33 +2,18 @@
 pragma solidity ^0.8.30;
 
 /// @notice The colour table. One ladder of five tiers, plus the two ground tones.
-/// @dev Two measured facts shape every choice here, both established 2026-08-28
-/// against ZXing, the decoder a phone's scanner descends from:
+/// @dev Two decode rules constrain every value here:
 ///
-/// 1. Nothing in the code block may be paler than about #767676: #828282 and up
-///    fail from 500px. That sets the light end.
-/// 2. A tier separates from the noise by HUE, not by weight. The deepest red is
-///    only 1.30:1 against the noise in luminance and reads instantly, while a
-///    neutral grey at 1.11:1 vanished into it completely. That is why the first
-///    tier carries a trace of rose instead of being a pure grey.
-///
-/// A third fact, measured 2026-08-29 by the state soak, turned rule 2 from a
-/// preference into a requirement, and cost the constant noise ink:
-///
-/// 3. The two inks may not separate by luminance AT ALL. Both have to binarize
-///    as dark. Once a raster is large enough that ZXing's 8x8 blocks fall inside
-///    a single module, a block has no local contrast and resolves against its
-///    neighbours -- and the lighter ink goes to background. With the noise
-///    pinned at #767676 (luma 118) against a heart running 74 to 104, a bare
-///    token stopped decoding at 1200px and a fully marked one at 900px, while a
-///    plain black-on-white control of the same code passed at every size to
-///    1600. It is the GAP that does it, not darkness: luma 74 against 74 passes
-///    at 1600, and luma 17 against 74 fails. So the noise is no longer one
-///    colour. Each tier carries its own neutral grey, matched to it in
-///    luminance, and PaletteNoise.t.sol asserts the match rather than the
-///    values.
+/// 1. Nothing in the code block may be paler than about #767676, or the code
+///    stops decoding. That sets the light end.
+/// 2. The heart ink and the noise ink must not separate by LUMINANCE at all.
+///    Once a raster is large enough that a decoder's local-contrast blocks fall
+///    inside one module, the lighter of the two inks resolves as background. So
+///    the noise is not one colour: each rung carries its own neutral grey,
+///    matched to that rung's heart ink in luminance, and the two inks separate
+///    by hue alone. PaletteNoise.t.sol asserts the match, not the values.
 library Palette {
-    /// @notice Rungs on the ladder. Public so callers can walk it.
+    /// @notice Rungs on the ladder, so a caller can walk it.
     uint256 internal constant TIER_COUNT = 5;
 
     /// @notice The heart ink at a rung. Index 0 is the start of a life,
@@ -43,8 +28,8 @@ library Palette {
 
     /// @notice The noise ink at a rung: a neutral grey of the same luminance
     /// as the heart at that rung, so the two separate by hue alone.
-    /// @dev Do not retune one of these without the other. The pairing is the
-    /// whole point, and PaletteNoise.t.sol will fail if it is broken.
+    /// @dev Never retune one of these without its heart ink. PaletteNoise.t.sol
+    /// fails if the luminance pairing is broken.
     function noiseAt(uint256 index) internal pure returns (string memory) {
         if (index >= 4) return "#4a4a4a";   // matches #c8102e, luma 74
         if (index == 3) return "#545454";   // matches #bd2242, luma 84
@@ -54,30 +39,15 @@ library Palette {
     }
 
     /// @notice The noise ink at a rung when the token wears Static.
+    /// @dev Green, because it is the only hue that can hold high chroma at the
+    /// dark luma a deep streak forces, so the Mark strengthens as the run
+    /// deepens rather than dulling.
     ///
-    /// @dev GREEN, chosen by the operator 2026-09-02 from a rendered sheet
-    /// (tools/static-hue-sheet.mjs) that put all four candidates plus the
-    /// shipped grey under ONE derivation across all five run rungs.
-    ///
-    /// It was decided on a measured property, not on taste. Green is the ONLY
-    /// hue that keeps getting stronger as the run deepens:
-    ///
-    ///   hue      run 1  run 3  run 7  run 30  run 100
-    ///   green       10     21     39      55       66
-    ///   slate       10     22     42      43       38
-    ///   teal        11     24     46      42       37
-    ///   violet      12     26     48      43       37
-    ///
-    /// The cause is the luminance rule. A deeper streak darkens the heart, the
-    /// noise must darken to match, and a blue or violet cannot hold high chroma
-    /// at a dark luma while a green can. A Mark that looks its best at a 7-day
-    /// run and dulls by 100 is backwards on a piece about returning -- it is
-    /// exactly the failure that made the old Bloom broken.
-    ///
-    /// These are the SAME weights as `noiseAt`. Derived, not chosen: a green
-    /// direction [0, 124, 8] pulled toward its own grey until its chroma is 60%
-    /// of that rung's heart, then scaled onto that rung's exact BT.601 luma.
-    /// PaletteNoise.t.sol asserts both rules rather than these values.
+    /// Derived, not chosen: a green direction [0, 124, 8] pulled toward its own
+    /// grey until its chroma is 60% of that rung's heart, then scaled onto that
+    /// rung's exact BT.601 luma -- the SAME luma as `noiseAt`, since rule 2
+    /// above applies to this ink too. PaletteNoise.t.sol asserts both rules
+    /// rather than these values.
     function staticAt(uint256 index) internal pure returns (string memory) {
         if (index >= 4) return "#08770f";   // matches #c8102e, luma 74
         if (index == 3) return "#1d7a23";   // matches #bd2242, luma 84
@@ -101,19 +71,15 @@ library Palette {
     }
 
     /// @notice The colour once a lapse is taken into account.
-    /// @dev The lapse walks BACK DOWN this same ladder rather than introducing
-    /// paler tones, because paler tones are not available: anything lighter than
-    /// the noise stops decoding. Reusing the ladder means every colour a lapse
-    /// can produce is already proven scannable.
+    /// @dev A lapse walks BACK DOWN this same ladder rather than introducing
+    /// paler tones: anything lighter than the noise stops decoding, so reusing
+    /// the ladder keeps every colour a lapse can produce proven scannable.
+    /// It steps at 3, 7 and 30 days, and at 30 the heart is back where it
+    /// started.
     ///
-    /// Steps at 3, 7 and 30 days, so each step is one marketplace refresh rather
-    /// than a continuous fade that would need refreshing daily. At 30 days the
-    /// heart returns all the way to where it started, which is also what the
-    /// spec's separate effective-streak rule implies.
-    ///
-    /// Callers freeze the image for a resting or sunset token by calling tier()
-    /// with the stored streak instead of this. Keeping that decision out of here
-    /// leaves the palette a pure function of colour, not of token lifecycle.
+    /// A resting or sunset token is frozen by the CALLER, which passes the
+    /// stored streak to tier() instead of calling this. That keeps the palette a
+    /// pure function of colour, not of token lifecycle.
     function lapsed(uint32 streak, uint32 lastDay, uint32 today)
         internal
         pure
@@ -123,16 +89,15 @@ library Palette {
     }
 
     /// @notice The rung a token sits on once a lapse is taken into account.
-    /// @dev Returned as an index rather than a colour so a caller gets the
-    /// heart ink and the noise ink from the SAME rung. That is what makes it
-    /// impossible to wire the two to different tiers.
+    /// @dev An index rather than a colour, so a caller takes the heart ink and
+    /// the noise ink from the SAME rung.
     function lapsedIndex(uint32 streak, uint32 lastDay, uint32 today)
         internal
         pure
         returns (uint256)
     {
-        // A clock that runs backwards is not a lapse. Guard the subtraction
-        // rather than letting it wrap into a gap of four billion days.
+        // A clock that runs backwards is not a lapse: guard the subtraction
+        // rather than letting it wrap.
         uint32 gap = today > lastDay ? today - lastDay : 0;
         if (gap < 3) return tierIndex(streak);
         if (gap >= 30) return 0;
