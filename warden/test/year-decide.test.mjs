@@ -67,6 +67,20 @@ test("a Mark the chain already carries is not due, whatever requested says", () 
   assert.deepEqual(ids(dueMarks(a5, view(100, 100), new Set(), held(5, 9))), [1, 3]);
 });
 
+// FAIL CLOSED. The chain's own view names its run field `runFloor`, so a view
+// handed straight to dueMarks would carry `bestRun: undefined` and make every
+// run Mark due at once -- a payment the contract then refuses.
+test("a view missing level or bestRun is refused, not read as zero", () => {
+  const a2 = byName("A2");
+  assert.throws(() => dueMarks(a2, { level: 10 }, new Set(), 0n), /bestRun/);
+  assert.throws(() => dueMarks(a2, { bestRun: 10 }, new Set(), 0n), /level/);
+  assert.throws(() => dueMarks(a2, { level: 10, runFloor: 30 }, new Set(), 0n), /bestRun/);
+  assert.throws(() => dueMarks(a2, { level: NaN, bestRun: 1 }, new Set(), 0n), /level/);
+  assert.throws(() => dueMarks(a2, { level: "10", bestRun: 10 }, new Set(), 0n), /level/);
+  // An agent with no Marks is refused too: a bad view is a bug wherever it lands.
+  assert.throws(() => dueMarks(byName("A9"), {}, new Set(), 0n), /level/);
+});
+
 test("an agent with no Marks is never due one", () => {
   assert.deepEqual(dueMarks(byName("A9"), view(365, 365), new Set(), held(5)), []);
 });

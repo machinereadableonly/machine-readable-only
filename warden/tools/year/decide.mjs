@@ -36,8 +36,15 @@ export const MAX_ATTEMPTS = 3;
  *
  * A run gate reads `view.bestRun`, never the live streak, because that is what
  * the contract's `_effectiveRun` admits a Mark on.
+ *
+ * Both fields are demanded up front rather than compared as `undefined`: the
+ * chain's own view calls its run field `runFloor`, and one handed straight in
+ * would open every run Mark at once.
  */
 export function dueMarks(agent, view, requested, held) {
+  for (const field of ["level", "bestRun"]) {
+    if (!Number.isFinite(view?.[field])) throw new Error(`dueMarks needs a numeric ${field}, got ${view?.[field]}`);
+  }
   return agent.marks.filter((m) => {
     if (requested.has(m.id)) return false;
     if (held & (1n << BigInt(m.id))) return false;
