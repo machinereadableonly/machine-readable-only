@@ -107,6 +107,27 @@ test("the gate covers the sizes and states the failures were found at", () => {
   for (const l of ["child, newborn", "child, whole 1y", "child, at ring cap"]) {
     assert.ok(labels.includes(l), `gateStates lost "${l}", the only child in the gate`);
   }
+  // The banded states, protected because a real failure lived there: every
+  // finished founding token failed at 350px until DigitBand.MIN_BAND changed.
+  for (const l of ["finished, banded", "child, finished, banded"]) {
+    assert.ok(labels.includes(l), `gateStates lost "${l}", where the band broke every token at 350px`);
+  }
+});
+
+test("the banded gate states actually draw the digit band, at its declared size", () => {
+  // An inert state passes exactly like a working one. `ordinal` has to travel
+  // through renderGateState into renderSvg, or these render unbanded and the
+  // gate checks the old picture while reading as stricter.
+  const target = unpackModules(heartMaskBytes(), 37);
+  const solve = robustSolveFor(DOMAIN, 1);
+  const banded = gateStates().filter(s => s.ordinal);
+  assert.equal(banded.length, 2, "expected two banded states in the gate");
+  for (const state of banded) {
+    const withBand = renderGateState(solve, target, state);
+    const without = renderGateState(solve, target, { ...state, ordinal: 0 });
+    const width = (svg) => Number(svg.match(/ width="(\d+)"/)[1]);
+    assert.ok(width(withBand) > width(without), `"${state.label}" must be wider than the same token unbanded`);
+  }
 });
 
 test("the child gate states actually draw an echo ring", () => {
@@ -122,7 +143,7 @@ test("the child gate states actually draw an echo ring", () => {
   const target = unpackModules(heartMaskBytes(), 37);
   const solve = robustSolveFor(DOMAIN, 1);
   const children = gateStates().filter(s => s.echo);
-  assert.equal(children.length, 3, "expected three child states in the gate");
+  assert.equal(children.length, 4, "expected four child states in the gate, the fourth banded");
 
   for (const state of children) {
     // THROUGH renderGateState, which is the function the gate itself calls.

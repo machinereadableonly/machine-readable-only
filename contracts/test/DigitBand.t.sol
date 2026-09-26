@@ -39,8 +39,8 @@ contract DigitBandTest is Test {
                 "the band is the only thing that grows the canvas"
             );
             assertEq(units % FrameGeometry.MODULE_UNITS, 0, "the canvas must divide into whole modules");
-            assertGe(band, 36, "the band is never thinner than three glyph cells and one of air");
-            assertLe(band, 44, "the band never grows by more than a module to get there");
+            assertGe(band, 27, "the band is never thinner than three glyph cells");
+            assertLe(band, 35, "the band never grows by more than a module to get there");
         }
     }
 
@@ -67,10 +67,30 @@ contract DigitBandTest is Test {
     function test_theOneRingCanvasIsTheWorkedExample() public pure {
         uint256 cells = FrameRenderer.canvas(1);
         assertEq(cells, 53, "one ring is a 53 cell canvas");
-        assertEq(DigitBand.bandUnits(cells), 38, "the band is 38 units there");
-        assertEq(DigitBand.canvasUnits(cells), 765, "which makes the canvas 765 units");
+        assertEq(DigitBand.bandUnits(cells), 29, "the band is 29 units there");
+        assertEq(DigitBand.canvasUnits(cells), 747, "which makes the canvas 747 units");
         assertEq(
-            DigitBand.canvasUnits(cells) / FrameGeometry.MODULE_UNITS, 85, "that is 85 modules exactly"
+            DigitBand.canvasUnits(cells) / FrameGeometry.MODULE_UNITS, 83, "that is 83 modules exactly"
+        );
+    }
+
+    /// THE TWO SIZES THAT DECODE, pinned because they were measured, not
+    /// derived. Which pixel widths a crisp rasteriser can read depends on the
+    /// image's size in modules alone, and the old band made a finished founding
+    /// token 85 modules -- a size at which every token measured failed at
+    /// 350px, a width robust-solve guarantees, under all eight masks. 83 and 89
+    /// clear every gate width on all twelve tokens tested (2026-09-26). A change
+    /// here must be re-measured with tools/echo-decode-check.mjs, not reasoned.
+    function test_aFinishedTokenIsASizeThatDecodes() public pure {
+        assertEq(
+            DigitBand.canvasUnits(FrameRenderer.canvas(1)) / FrameGeometry.MODULE_UNITS,
+            83,
+            "a finished founding token is 83 modules, never the 85 that failed at 350px"
+        );
+        assertEq(
+            DigitBand.canvasUnits(FrameRenderer.canvas(2)) / FrameGeometry.MODULE_UNITS,
+            89,
+            "a finished child is 89 modules"
         );
     }
 
@@ -82,16 +102,16 @@ contract DigitBandTest is Test {
         );
     }
 
-    /// 85 modules, span 63, pad 11, last 82. The four edges put a glyph cell at
+    /// 83 modules, span 63, pad 10, last 80. The four edges put a glyph cell at
     /// each of those, and nothing else in the picture ever reaches them: the
     /// band is drawn in its own group, outside everything.
     function test_anOrdinalDrawsAllFourEdges() public pure {
         string memory p = DigitBand.path(1, FrameRenderer.canvas(1), INK);
 
         assertGt(bytes(p).length, 0, "a finisher carries a band");
-        assertTrue(LibString.contains(p, "M11 0"), "the top edge starts at the pad");
-        assertTrue(LibString.contains(p, " 82"), "the bottom edge sits on the last module row");
-        assertTrue(LibString.contains(p, "M82 "), "the right edge sits on the last module column");
+        assertTrue(LibString.contains(p, "M10 0"), "the top edge starts at the pad");
+        assertTrue(LibString.contains(p, " 80"), "the bottom edge sits on the last module row");
+        assertTrue(LibString.contains(p, "M80 "), "the right edge sits on the last module column");
         assertTrue(LibString.contains(p, "M0 "), "the left edge sits on column zero");
     }
 

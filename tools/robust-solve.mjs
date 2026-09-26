@@ -22,7 +22,7 @@
 // That asymmetry is why the gate is deliberately stricter than it needs to be.
 import { allMaskSolves, payloadFor, unpackModules } from "./qart.mjs";
 import { heartMaskBytes } from "./heart-mask.mjs";
-import { renderSvg, canvasFor, ACHE, HUSH, BEAT, AURA, VESSEL } from "./render-token.mjs";
+import { renderSvg, canvasFor, finisherMark, ACHE, HUSH, BEAT, AURA, VESSEL } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
 /// The raster sizes a candidate must clear. The two a third party picks
@@ -94,6 +94,23 @@ export function gateStates() {
     // The label is HISTORICAL -- there is no ring cap since Spec 10f -- and it
     // is pinned by robust-solve.test.mjs, so renaming it would defeat a guard.
     { label: "child, at ring cap", ...base, level: 3650, streak: 30,  marks: [], echo: 3650 },
+
+    // FINISHED, WITH THE DIGIT BAND, added 2026-09-26. Until then no gate state
+    // carried an ordinal, so no mask had ever been judged against the picture a
+    // token becomes on its 365th day -- and the band was failing EVERY token at
+    // 350px. The cause was the band's geometry, not the bitmap: the image's
+    // size in modules decides which widths decode, all eight masks failed
+    // alike, and the fix was DigitBand.MIN_BAND, not a mask. These two states
+    // are what would have caught it. A code is minted a year before its band is
+    // drawn, and the mask cannot be changed on the day the band arrives.
+    //
+    // The place is ordinal 1, Apex. Which digits are drawn made no measured
+    // difference -- removing every glyph failed at the same widths -- so one
+    // ordinal stands for all of them. Measured before they were added: ids 1-12
+    // on machinereadableonly.com cleared every gate size and the declared size
+    // in both, on the mask each already shipped.
+    { label: "finished, banded",       ...base, level: 365, streak: 365, marks: [...marks, finisherMark(1)], ordinal: 1 },
+    { label: "child, finished, banded", ...base, level: 365, streak: 365, marks: [...marks, finisherMark(1)], ordinal: 1, echo: 365 },
   ];
 }
 
@@ -130,7 +147,12 @@ export function gateSolve(solve, expected, target = want()) {
     // slot on its echo, so `canvasFor(years)` alone would compute the canvas
     // of a token with no echo -- and the control would then be rendered at
     // some other token's exact multiple, which is not a control at all.
-    const sizes = [...GATE_SIZES, canvasFor(years, state.echo ?? 0) * 16];
+    //
+    // A BANDED token declares a different size: the band widens the canvas, so
+    // its declared width is read off the SVG, which is what a consumer honours.
+    const declared = Number(svg.match(/ width="(\d+)"/)?.[1] ?? 0);
+    const control = state.ordinal ? declared : canvasFor(years, state.echo ?? 0) * 16;
+    const sizes = [...GATE_SIZES, control];
 
     for (const px of sizes) {
       checked++;

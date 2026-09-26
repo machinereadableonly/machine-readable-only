@@ -428,7 +428,11 @@ export const DIGIT_INK = "#2f2f2f";
 // with small integer coordinates.
 export function bandUnits(canvasCells, size) {
   const U = unitsFor(size);
-  let band = (GLYPH_H + 1) * U.module;
+  // Three glyph cells and no row of air. It was GLYPH_H + 1, which made a
+  // finished founding token 85 modules across -- a size at which every token
+  // measured failed to decode at 350px. MUST match DigitBand.MIN_BAND, which
+  // carries the measurement.
+  let band = GLYPH_H * U.module;
   while ((canvasCells * U.cell + 2 * band) % U.module !== 0) band++;
   return band;
 }

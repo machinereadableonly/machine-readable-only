@@ -25,27 +25,31 @@
 // docs/specs/2026-09-06-mro-lineage-design.md -- it is not something to tune
 // away by moving a size out of the list.
 //
-// THE CONTROLS ARE THE POINT. A child's canvas is not new: canvasFor(0, echo)
-// is 53, exactly what a founding token with one year ring has. So each child is
-// compared against a FOUNDING token on the identical canvas, at the identical
-// module size, whose only difference is that its innermost ring is solid
-// instead of dashed. Without that pair, a failure could not be attributed to
-// the ring rather than to the canvas.
+// THE CONTROLS ARE THE POINT, AND ONLY ONE PAIR STILL HAS A TRUE ONE. A
+// newborn child's canvas is canvasFor(0, echo) = 53, exactly what a founding
+// token with its one ring has, so the SHALLOW child is compared against a
+// FOUNDING token on the identical canvas, at the identical module size, whose
+// only difference is that its innermost ring is solid instead of dashed. There
+// a failure is attributable to the dash and nothing else.
 //
-// SPEC 10f RETIRED THE TEN-RING CAP (built 2026-09-24), and the comments below
-// were written against it. A token now keeps ONE ring of its own plus the echo
-// ring, so the widest canvas the piece can produce is 57 cells, not 89. Two
-// things follow for this file and neither is a code change:
+// THE DEEP CASES HAVE NO SAME-CANVAS CONTROL, AND CANNOT HAVE ONE. Spec 10f
+// (built 2026-09-24) gave a token ONE ring of its own, so a founding token
+// never grows past 53 cells, while a child with a year behind it carries its
+// own ring AND the echo ring: 57. Only a child can reach 57, so no solid-ring
+// twin of it exists to draw. Each deep case is therefore paired with the
+// founding token in the SAME STATE on its own 53-cell canvas. That pair still
+// answers "does the deep child scan?" -- the gate -- but a failure there could
+// be the canvas as well as the dash, and must be read that way.
 //
-//   - The deep cases no longer sit at a "cap". canvasFor(10, echo) is 57 and
-//     canvasFor(10, 0) is 53, so the deep pair is no longer the identical
-//     canvas the paragraph above claims -- the shallow pair still is. Level
-//     3650 is not a level the chain can reach either; it is an input to a
-//     renderer, and the renderer answers one ring for it.
-//   - The states are KEPT anyway. Removing a state from a decode gate can only
-//     ADD survivors, never remove one, and every committed bitmap was solved
-//     against this gate as it stands. Trimming it could move a mask that a
-//     minted token would ship with.
+// THE REACHABLE DEEP CASE IS "finished child, every legal Mark and its place":
+// 365 days, every Mark a child can legally hold, the Apex that finishing first
+// gives, and ordinal 1 -- the densest digit band, since a 0 glyph carries more
+// ink than a 1. That is the dearest token the shipping contract can produce
+// (.claude/rules/contracts.md). The two older deep cases are KEPT at level
+// 3,650, which the chain cannot reach -- the renderer draws one ring for it --
+// because removing a state from a decode gate can only ADD survivors, and every
+// committed bitmap was solved against this gate as it stands. Trimming it could
+// move a mask a minted token would ship with.
 //
 // MEMORY. This is a rendering sweep, which is the exact shape of job that took
 // this machine down on 2026-08-28 (400 SVGs x 14 sizes, 6.28 GB resident, one
@@ -66,7 +70,7 @@
 // identical workload. The allocations are native, so V8 cannot see them and the
 // peak follows collection timing rather than the work done. It is a sanity
 // check that the sweep is nowhere near the cap, not a figure to pin.
-import { renderSvg, canvasFor, HUSH, BEAT, IRIS_BOUGHT, VESSEL, TINT } from "./render-token.mjs";
+import { renderSvg, canvasFor, finisherMark, HUSH, BEAT, IRIS_BOUGHT, VESSEL, TINT } from "./render-token.mjs";
 import * as SHEET from "./sheet-code.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -109,8 +113,19 @@ const CASES = [
   { name: "child at the cap, every legal Mark",
     state: { level: 365 * 10, streak: 400, years: 10, echo: 3650,
              marks: CAP_MARKS, irisVariant: 2 } },
+  // Since spec 10f this draws ONE solid ring on 53 cells, not ten: the label
+  // is kept for the reason given above CAP_MARKS.
   { name: "founding token, 10 solid rings (control)",
     state: { level: 365 * 10, streak: 400, years: 10, echo: 0 } },
+
+  // The deepest child the chain can actually produce, and its founding twin in
+  // the same state. Not a same-canvas pair: see the header.
+  { name: "finished child, every legal Mark and its place",
+    state: { level: 365, streak: 365, years: 1, echo: 365, ordinal: 1,
+             marks: [...CAP_MARKS, finisherMark(1)], irisVariant: 2 } },
+  { name: "finished founding token, every legal Mark and its place (nearest control)",
+    state: { level: 365, streak: 365, years: 1, echo: 0, ordinal: 1,
+             marks: [...CAP_MARKS, finisherMark(1)], irisVariant: 2 } },
 ];
 
 // Every state is live rather than lapsed or sealed, so the page is at full
@@ -128,7 +143,8 @@ for (const c of CASES) {
   const state = { ...DAY, ...c.state };
   // One svg alive at a time. It goes out of scope with the iteration.
   const svg = renderSvg(CODE.modules, TARGET.want, CODE.size, state);
-  const canvas = canvasFor(state.years, state.echo);
+  // The digit band sits outside the ring canvas, so it is named on top.
+  const canvas = `${canvasFor(state.years, state.echo)} cells${state.ordinal ? " plus the digit band" : ""}`;
 
   const bad = [];
   for (const px of SIZES) {
@@ -143,7 +159,7 @@ for (const c of CASES) {
 
   const verdict = bad.length ? `FAILED at ${bad.length} of ${SIZES.length}` : "all sizes";
   console.log(`${c.name}`);
-  console.log(`  canvas ${canvas} cells, ${svg.length} svg bytes, decodes: ${verdict}`);
+  console.log(`  canvas ${canvas}, ${svg.length} svg bytes, decodes: ${verdict}`);
   for (const b of bad) console.log(`    ${b}`);
   failures += bad.length;
 }
@@ -155,4 +171,4 @@ if (failures) {
   console.log("problem: it goes back to the lineage spec, not to this file's size list.");
   process.exit(1);
 }
-console.log("\nzero rejections: a seeded child scans at every size, at both extremes.");
+console.log("\nzero rejections: a seeded child scans at every size, newborn and finished.");

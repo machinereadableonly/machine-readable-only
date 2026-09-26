@@ -18,10 +18,12 @@ pragma solidity ^0.8.30;
 /// the published figure IS the measured one. A change of any size is a change
 /// worth writing down.
 ///
-/// Measured 2026-09-23 on a finished child wearing every legal Mark, its echo
-/// ring and the finisher's digit band -- the first token in the piece's history
-/// to hold both records at once.
+/// Measured on a finished child wearing every legal Mark, its echo ring and
+/// the finisher's digit band -- the first token in the piece's history to hold
+/// both records at once. First pinned 2026-09-23 at 3,540,467 / 22,162;
+/// re-measured 2026-09-26 when the band lost its row of air (DigitBand.MIN_BAND),
+/// which moved the canvas from 91 modules to 89.
 library WorstCase {
-    uint256 internal constant LARGEST_TOKEN_GAS = 3_540_467;
-    uint256 internal constant LARGEST_TOKEN_BYTES = 22_162;
+    uint256 internal constant LARGEST_TOKEN_GAS = 3_539_751;
+    uint256 internal constant LARGEST_TOKEN_BYTES = 22_158;
 }

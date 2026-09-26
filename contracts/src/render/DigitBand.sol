@@ -82,8 +82,18 @@ library DigitBand {
     /// not depend on which one is chosen.
     string internal constant INK = "#2f2f2f";
 
-    /// @dev Three glyph cells and one of air between the digits and the ring.
-    uint256 private constant MIN_BAND = (GH + 1) * FrameGeometry.MODULE_UNITS;
+    /// @dev Three glyph cells, and no row of air: `bandUnits` then pads by up
+    /// to 8 units, which is all that separates the digits from the ring.
+    ///
+    /// THIS WAS `(GH + 1)`, and it broke the code (measured 2026-09-26). The
+    /// band sets the image's size in modules, and which pixel widths a crisp
+    /// rasteriser can decode depends on that size alone -- not on the digits,
+    /// not on the bitmap. `(GH + 1)` made a finished founding token 85 modules
+    /// across, and at 85 every token measured, under all eight masks, failed
+    /// at 350px, a width robust-solve guarantees. `GH` gives 83 (founding) and
+    /// 89 (child), which clear every gate width on all twelve tokens tested.
+    /// Re-measure before changing it: tools/echo-decode-check.mjs.
+    uint256 private constant MIN_BAND = GH * FrameGeometry.MODULE_UNITS;
 
     /// @notice How thick the band is, in the common unit.
     ///

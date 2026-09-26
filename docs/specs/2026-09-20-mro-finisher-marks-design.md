@@ -1066,6 +1066,17 @@ group with integer coordinates. PathWriter composes a run in a single 32-byte
 word and cannot carry a decimal point. At one ring: band 38 units, canvas 765
 units, 85 modules, pad 11.
 
+**SUPERSEDED 2026-09-26: the band has no row of air.** `MIN_BAND` is three glyph
+cells, not four, so at one ring the band is 29 units, the canvas 747 units, 83
+modules, pad 10 -- and a child's is 89 modules. The operator approved the change
+from a rendered sheet. It is a DECODE fix: which pixel widths a crisp rasteriser
+can read depends on the image's size in modules alone, and at 85 every token
+measured (ids 1-12, real domain, all eight masks) failed at 350px, a width
+robust-solve guarantees. Removing every glyph failed at the same widths, so the
+cause was the band's geometry, not its digits. At 83 and 89 all twelve clear
+every gate width and the declared size. The gate now carries two banded states,
+so a mask is judged against the picture its token becomes on day 365.
+
 **THE COST IS ABOUT 55% HIGHER THAN THE FIGURE IN THIS DOCUMENT**, because the
 figure in this document is for a different design. `DigitBandCost.t.sol` priced
 a 3x5 glyph on TWO edges -- 32 glyphs, section 10j. The design settled in 10k is

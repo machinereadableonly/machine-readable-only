@@ -562,7 +562,11 @@ test("a finisher's digit band does not stop the code decoding", () => {
   // Five ordinals across the range. Finisher 1 is the densest band -- a 0
   // glyph carries more ink than a 1 -- and 65535 the sparsest, so both ends
   // of the ink range are here.
-  const SIZES = [256, 500, 848, 1080, 1600];
+  // 350 IS HERE BECAUSE ITS ABSENCE HID A REAL FAILURE. Until 2026-09-26 the
+  // band made a finished founding token 85 modules across, and every token
+  // measured failed at 350px -- a width robust-solve guarantees -- while this
+  // list, which skipped it, stayed green. See DigitBand.MIN_BAND.
+  const SIZES = [256, 350, 500, 848, 1080, 1600];
   const ORDINALS = [1, 3, 9, 42, 365, 0xaaaa, 0xffff];
 
   for (const ordinal of ORDINALS) {

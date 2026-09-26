@@ -95,9 +95,9 @@ contract GasBudgetTest is Test {
     /// elsewhere, because Alchemy is the ONLY third-party metadata consumer
     /// this piece has ever had working -- Basescan ingests none on Base
     /// Sepolia and OpenSea is untested. 24,000 fits version 10 plus the digit
-    /// band: measured 2026-09-23, the largest token the shipping contract can
-    /// produce is 22,162 bytes (`RealTokenGas.t.sol`), which leaves 1,838 under
-    /// this limit and 7,838 under Alchemy's 30,000.
+    /// band: measured 2026-09-26, the largest token the shipping contract can
+    /// produce is 22,158 bytes (`RealTokenGas.t.sol`), which leaves 1,842 under
+    /// this limit and 7,842 under Alchemy's 30,000.
     ///
     /// UNTESTED, AND SAY SO: Alchemy's sentence sits among reasons an
     /// HTTP-hosted metadata URL fails to FETCH. This tokenURI is a data URI
@@ -149,7 +149,7 @@ contract GasBudgetTest is Test {
     /// THE PIECE'S ACTUAL WORST CASE IS BIGGER THAN BOTH BANDS AND IS NOT
     /// WATCHED BY THEM. A real token that reaches 365 is given a place in the
     /// same credit, so every finished token carries the digit band, and the
-    /// largest one measures 3,540,467 gas / 22,162 bytes
+    /// largest one measures 3,539,751 gas / 22,158 bytes
     /// (`RealTokenGas.t.sol`). Those are governed by the HARD LIMITS alone --
     /// by `test_theFinishersBandFitsBothHardLimits` here and by
     /// `RealTokenGas.t.sol` there. A band round the banded worst case is worth
@@ -159,7 +159,7 @@ contract GasBudgetTest is Test {
     /// The old paragraph here said the byte band left 1,200 under a 20,000
     /// limit and that the digit band "does not fit". The limit moved to 24,000
     /// on 2026-09-22 and the band does fit: measured, it costs 4,636 bytes and
-    /// the largest token lands 1,838 under. Both halves of that sentence were
+    /// the largest token lands 1,842 under. Both halves of that sentence were
     /// superseded within a day of being written.
     uint256 constant GAS_BAND = 2_945_000;
     uint256 constant BYTE_BAND = 18_800;

@@ -107,8 +107,8 @@ contract DigitBandRenderTest is Test {
 
         assertTrue(LibString.contains(plain, 'width="848"'), "one ring is 848px unbanded");
         assertFalse(LibString.contains(banded, 'width="848"'), "a banded token is wider than that");
-        // 765 units at 16px per 13-unit cell is 941px.
-        assertTrue(LibString.contains(banded, 'width="941"'), "and 765 units declares 941px");
+        // 747 units at 16px per 13-unit cell is 919px.
+        assertTrue(LibString.contains(banded, 'width="919"'), "and 747 units declares 919px");
     }
 
     /// The band is the ONLY difference. Everything inside the picture is

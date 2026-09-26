@@ -62,6 +62,10 @@ import {TokenView} from "../src/render/TokenView.sol";
 /// other is the mistake this paragraph exists to stop. Headroom after the rise:
 /// 459,533 gas and 1,838 bytes.
 ///
+/// RE-MEASURED 2026-09-26 when the digit band lost its row of air
+/// (`DigitBand.MIN_BAND`, a decode fix, not a cost one): 3,539,751 gas and
+/// 22,158 bytes, leaving 460,249 and 1,842. `WorstCase.sol` holds the pin.
+///
 /// Every state below is the deepest the SHIPPING CONTRACT can produce.
 contract RealTokenGasTest is MroTestBase {
     /// @dev The same hard limits `GasBudget.t.sol` asserts. Repeated rather
