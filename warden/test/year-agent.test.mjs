@@ -11,7 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ensureIdentity, readDemand } from "../../client/src/index.mjs";
-import { makeAgent, MINT_AMOUNT } from "../tools/year/agent.mjs";
+import { MINT_PRICE } from "../src/pay/x402.mjs";
+import { makeAgent, markAmount, MINT_AMOUNT } from "../tools/year/agent.mjs";
 
 const SITE = "https://fast.test";
 const ORIGIN = "http://127.0.0.1:4006";
@@ -113,7 +114,40 @@ test("an unpaid upgrade reads the demand and signs nothing", async () => {
   assert.deepEqual(rec.calls[0].arguments, { tokenId: 7, upgradeId: 3, variant: 0 });
 });
 
-test("a paid upgrade pins the treasury and the demand's own amount, then repeats the call with the authorisation", async () => {
+// The amount an agent will sign for comes from the catalogue the contract
+// mirrors, so a demand asking for more is refused before anything is signed.
+test("a Mark's price is the ladder's, and a demand for any other amount is refused", async () => {
+  assert.equal(markAmount(3), "5000000");
+  assert.equal(markAmount(7), "1250000000");
+  assert.equal(markAmount(2), "0");
+  assert.throws(() => markAmount(99), /no Mark 99/);
+
+  const rec = recorder([demandResult("9000000", "upgrade")]);
+  const agent = agentWith({ callTool: rec.callTool });
+  await assert.rejects(
+    () => agent.upgrade(7, 3, 0, { pay: true, expectedPayTo: TREASURY }),
+    /amount is 9000000, expected 5000000/
+  );
+  assert.equal(rec.calls.length, 1);
+});
+
+test("an explicit expected amount is what gets pinned", async () => {
+  const rec = recorder([demandResult("5000000", "upgrade")]);
+  const agent = agentWith({ callTool: rec.callTool });
+  await assert.rejects(
+    () => agent.upgrade(7, 3, 0, { pay: true, expectedPayTo: TREASURY, expectedAmount: "4000000" }),
+    /amount is 5000000, expected 4000000/
+  );
+});
+
+// One price, in two places: the gateway charges MINT_PRICE and this harness
+// signs for MINT_AMOUNT.
+test("MINT_AMOUNT is the gateway's own mint price in base units", () => {
+  assert.match(MINT_PRICE, /^\$\d+\.\d{2}$/);
+  assert.equal(String(Math.round(Number(MINT_PRICE.slice(1)) * 1_000_000)), MINT_AMOUNT);
+});
+
+test("a paid upgrade pins the treasury and the ladder's amount, then repeats the call with the authorisation", async () => {
   const rec = recorder([demandResult("5000000", "upgrade"), okResult({ ok: true, accepted: true, upgradeId: 3 })]);
   const seen = [];
   const meta = { "x402/payment": { x402Version: 2, accepted: { amount: "5000000" } } };

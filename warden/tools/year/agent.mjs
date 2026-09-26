@@ -4,10 +4,19 @@
 import {
   loadIdentity, registerKey, callTool, structured, readDemand, payFor,
 } from "../../../client/src/index.mjs";
+import { LADDER } from "../../src/mcp/ladder.mjs";
 
 /// A mint costs 1 USDC (the Warden's MINT_PRICE). Pinned here, out of band, so
 /// a demand asking for more is refused before anything is signed.
 export const MINT_AMOUNT = "1000000";
+
+/// What a Mark costs, from the catalogue the contract's Ladder.sol mirrors by
+/// hash -- never from the demand, which is the thing being checked.
+export function markAmount(upgradeId) {
+  const mark = LADDER[upgradeId];
+  if (!mark) throw new Error(`no Mark ${upgradeId} in the ladder`);
+  return String(mark.priceUsdc6);
+}
 
 const DEPS = { callTool, payFor, registerKey };
 
@@ -29,11 +38,6 @@ export function makeAgent({ identityPath, walletKey, site, origin }, deps = {}) 
   const tool = (name, args, _meta) => send({ ...call, name, arguments: args, ...(_meta ? { _meta } : {}) });
   const answer = (result) => structured(result) ?? result;
 
-  /// The offered requirement this payment is measured against, chosen by the
-  /// treasury the operator named rather than by position.
-  const offerFor = (demand, expectedPayTo) =>
-    demand.accepts.find((a) => String(a.payTo).toLowerCase() === String(expectedPayTo).toLowerCase()) ?? demand.accepts[0];
-
   async function mint(to, expectedPayTo) {
     const first = await tool("mint", { to });
     if (!readDemand(first)) return answer(first);
@@ -51,7 +55,7 @@ export function makeAgent({ identityPath, walletKey, site, origin }, deps = {}) 
     return answer(second);
   }
 
-  async function upgrade(tokenId, upgradeId, variant = 0, { pay: shouldPay = false, expectedPayTo } = {}) {
+  async function upgrade(tokenId, upgradeId, variant = 0, { pay: shouldPay = false, expectedPayTo, expectedAmount } = {}) {
     const args = { tokenId, upgradeId, variant };
     const first = await tool("upgrade", args);
     const demand = readDemand(first);
@@ -65,7 +69,7 @@ export function makeAgent({ identityPath, walletKey, site, origin }, deps = {}) 
     const meta = await pay({
       result: first,
       walletPrivateKey: walletKey,
-      expected: { payTo: expectedPayTo, amount: offerFor(demand, expectedPayTo).amount },
+      expected: { payTo: expectedPayTo, amount: expectedAmount ?? markAmount(upgradeId) },
     });
     const second = await tool("upgrade", args, meta);
     const failed = readDemand(second);

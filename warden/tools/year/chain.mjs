@@ -17,14 +17,15 @@ const USDC_ABI = parseAbi([
   "function transfer(address to, uint256 amount) returns (bool)",
 ]);
 
+/// The address a private key signs as. Exported so nothing else has to import viem.
+export const addressOf = (key) => privateKeyToAccount(key).address;
+
 /**
  * One token view, as the runner and checker read it.
  *
- * `bestRun` is the contract's `_effectiveRun`: the longest run ever completed,
- * which is what a Mark gate is measured against. TokenView carries no
- * `bestRun`, only the run that MOST RECENTLY fell, so this is a lower bound --
- * a token whose second lapse ended a shorter run reads low, and a Mark it has
- * earned looks not yet due rather than falsely due.
+ * `runFloor` is a FLOOR on the contract's `_effectiveRun`, not that value:
+ * TokenView exposes no `bestRun`, only the run that most recently fell, so a
+ * token whose second lapse ended a shorter run reads low.
  */
 export function decodeView(v) {
   const marks = BigInt(v.marks);
@@ -38,7 +39,7 @@ export function decodeView(v) {
     echo: Number(v.echo),
     resting: v.resting,
     marks,
-    bestRun: Math.max(Number(v.streak), Number(v.fellRun)),
+    runFloor: Math.max(Number(v.streak), Number(v.fellRun)),
     // Bits 64-95. Bits 32-63 hold the earned Iris's run.
     finisherPlace: Number((marks >> 64n) & 0xffffffffn),
   };
@@ -47,17 +48,19 @@ export function decodeView(v) {
 /**
  * Build the adapter.
  *
- * `publicClient` and `walletClient` are injectable so every call shape here can
- * be driven without a node or a key.
+ * `publicClient` and `walletFactory` are injectable so every call shape here can
+ * be driven without a node or a key. The factory takes the key per send, so no
+ * send can quietly borrow another wallet's signer.
  */
-export function makeChain({ rpcUrl, contract, chainId = CHAIN_ID, publicClient, walletClient }) {
+export function makeChain({ rpcUrl, contract, chainId = CHAIN_ID, publicClient, walletFactory }) {
   if (chainId !== CHAIN_ID) {
     throw new Error(`the accelerated year runs on Base Sepolia (${CHAIN_ID}) only, not ${chainId}`);
   }
   const pub = publicClient ?? createPublicClient({ chain: baseSepolia, transport: http(rpcUrl) });
-  const walletFor = (fromKey) =>
-    walletClient ??
-    createWalletClient({ account: privateKeyToAccount(fromKey), chain: baseSepolia, transport: http(rpcUrl) });
+  const walletFor =
+    walletFactory ??
+    ((fromKey) =>
+      createWalletClient({ account: privateKeyToAccount(fromKey), chain: baseSepolia, transport: http(rpcUrl) }));
 
   /// viem RESOLVES a reverted transaction, so nothing is a send until the
   /// receipt says success.
@@ -86,9 +89,14 @@ export function makeChain({ rpcUrl, contract, chainId = CHAIN_ID, publicClient, 
       confirm(await walletFor(fromKey).sendTransaction({ to, value: BigInt(wei) })),
 
     /// The call a `rebind` or `rest` tool answered with, sent by the wallet the
-    /// tool said must send it.
-    ownerCall: async (fromKey, { function: functionName, args }) =>
-      confirm(await walletFor(fromKey).writeContract({ address: contract, abi: MRO_ABI, functionName, args })),
+    /// tool said must send it. The answer's own `contract` is checked, so a
+    /// Warden pointed at another deployment cannot aim an owner call at it.
+    ownerCall: async (fromKey, { contract: named, function: functionName, args }) => {
+      if (String(named).toLowerCase() !== String(contract).toLowerCase()) {
+        throw new Error(`refusing an owner call for contract ${named}: this year runs ${contract}`);
+      }
+      return confirm(await walletFor(fromKey).writeContract({ address: contract, abi: MRO_ABI, functionName, args }));
+    },
 
     transfer: async (fromKey, from, to, id) =>
       confirm(await walletFor(fromKey).writeContract({

@@ -6,12 +6,14 @@ import assert from "node:assert/strict";
 import { encodeFunctionData } from "viem";
 
 import { MRO_ABI } from "../src/clock/abi.mjs";
-import { makeChain, decodeView, USDC, CHAIN_ID } from "../tools/year/chain.mjs";
+import { makeChain, decodeView, addressOf, USDC, CHAIN_ID } from "../tools/year/chain.mjs";
 
 const CONTRACT = "0x00000000000000000000000000000000000C0DE0";
 const AGENT = "0x00000000000000000000000000000000000000A1";
 const OTHER = "0x00000000000000000000000000000000000000A2";
+// Never funded: these only ever reach a fake factory in this file.
 const KEY = `0x${"11".repeat(32)}`;
+const KEY2 = `0x${"22".repeat(32)}`;
 
 /// A token view as viewOf returns it, with every field the adapter reads.
 const view = (over = {}) => ({
@@ -21,9 +23,11 @@ const view = (over = {}) => ({
   ...over,
 });
 
-/// Fake clients that answer from a script and record what they were asked.
+/// Fake clients that answer from a script and record what they were asked,
+/// including which key each send was signed with.
 function fakes({ reads = {}, status = "success" } = {}) {
   const sent = [];
+  const keys = [];
   const publicClient = {
     readContract: async (args) => {
       const answer = reads[args.functionName];
@@ -33,20 +37,23 @@ function fakes({ reads = {}, status = "success" } = {}) {
     },
     waitForTransactionReceipt: async ({ hash }) => ({ hash, status }),
   };
-  const walletClient = {
-    writeContract: async (args) => {
-      sent.push({ write: args.functionName, address: args.address, args: args.args });
-      return "0xhash";
-    },
-    sendTransaction: async (args) => {
-      sent.push({ send: "eth", to: args.to, value: args.value });
-      return "0xhash";
-    },
+  const walletFactory = (key) => {
+    keys.push(key);
+    return {
+      writeContract: async (args) => {
+        sent.push({ write: args.functionName, address: args.address, args: args.args });
+        return "0xhash";
+      },
+      sendTransaction: async (args) => {
+        sent.push({ send: "eth", to: args.to, value: args.value });
+        return "0xhash";
+      },
+    };
   };
-  return { sent, publicClient, walletClient };
+  return { sent, keys, publicClient, walletFactory };
 }
 
-const chainWith = (f) => makeChain({ rpcUrl: "http://127.0.0.1:0", contract: CONTRACT, publicClient: f.publicClient, walletClient: f.walletClient });
+const chainWith = (f) => makeChain({ rpcUrl: "http://127.0.0.1:0", contract: CONTRACT, publicClient: f.publicClient, walletFactory: f.walletFactory });
 
 test("the year runs on Base Sepolia only", () => {
   assert.equal(CHAIN_ID, 84532);
@@ -66,17 +73,19 @@ test("a view decodes to numbers, with the marks word kept as a BigInt", () => {
   const v = decodeView(view({ parent: 3n, echo: 120, resting: true, marks: 6n }));
   assert.deepEqual(v, {
     level: 40, streak: 9, lastDay: 1000, mintDay: 960, generation: 1,
-    parent: 3, echo: 120, resting: true, marks: 6n, bestRun: 30, finisherPlace: 0,
+    parent: 3, echo: 120, resting: true, marks: 6n, runFloor: 30, finisherPlace: 0,
   });
   assert.equal(typeof v.marks, "bigint");
 });
 
-// The gate the contract admits a Mark on is the longest run ever completed, so
-// a broken streak must not withdraw one.
-test("bestRun is the longer of the live streak and the run that fell", () => {
-  assert.equal(decodeView(view({ streak: 9, fellRun: 30 })).bestRun, 30);
-  assert.equal(decodeView(view({ streak: 44, fellRun: 30 })).bestRun, 44);
-  assert.equal(decodeView(view({ streak: 1, fellRun: 0 })).bestRun, 1);
+// A FLOOR, not the contract's _effectiveRun: TokenView exposes only the run
+// that most recently fell, so a shorter second lapse reads low.
+test("runFloor is the longer of the live streak and the run that fell", () => {
+  assert.equal(decodeView(view({ streak: 9, fellRun: 30 })).runFloor, 30);
+  assert.equal(decodeView(view({ streak: 44, fellRun: 30 })).runFloor, 44);
+  assert.equal(decodeView(view({ streak: 1, fellRun: 0 })).runFloor, 1);
+  // The floor is below the longest run ever when a later, shorter run fell.
+  assert.equal(decodeView(view({ streak: 3, fellRun: 12 })).runFloor, 12);
 });
 
 // Bits 32-63 hold the earned Iris's run, so a place read from the wrong shift
@@ -109,7 +118,7 @@ test("USDC, ETH, an owner call and a transfer each send the call the runner mean
   const chain = chainWith(f);
   await chain.sendUsdc(KEY, AGENT, 1_000_000n);
   await chain.sendEth(KEY, AGENT, 500_000_000_000_000n);
-  await chain.ownerCall(KEY, { function: "rebind", args: [7, `0x${"ab".repeat(32)}`] });
+  await chain.ownerCall(KEY, { contract: CONTRACT, function: "rebind", args: [7, `0x${"ab".repeat(32)}`] });
   await chain.transfer(KEY, AGENT, OTHER, 7);
 
   assert.deepEqual(f.sent, [
@@ -118,6 +127,36 @@ test("USDC, ETH, an owner call and a transfer each send the call the runner mean
     { write: "rebind", address: CONTRACT, args: [7, `0x${"ab".repeat(32)}`] },
     { write: "safeTransferFrom", address: CONTRACT, args: [AGENT, OTHER, 7n] },
   ]);
+});
+
+// A11's rebind is sent by a DIFFERENT wallet from its transfer, so a signer
+// shared between sends would sign one of them as the wrong agent.
+test("each send is signed with the key it was given, not one held from before", async () => {
+  const f = fakes();
+  const chain = chainWith(f);
+  await chain.transfer(KEY, AGENT, OTHER, 7);
+  await chain.ownerCall(KEY2, { contract: CONTRACT, function: "rest", args: [7] });
+  await chain.sendEth(KEY, AGENT, 1n);
+  assert.deepEqual(f.keys, [KEY, KEY2, KEY]);
+});
+
+// The Warden names the contract in the call it hands back; a Warden pointed at
+// another deployment must not aim an owner call at it.
+test("an owner call for another contract is refused rather than sent", async () => {
+  const f = fakes();
+  await assert.rejects(
+    () => chainWith(f).ownerCall(KEY, { contract: OTHER, function: "rest", args: [7] }),
+    /refusing an owner call/
+  );
+  assert.deepEqual(f.sent, []);
+  // The same address in another case is the same contract.
+  await chainWith(f).ownerCall(KEY, { contract: CONTRACT.toLowerCase(), function: "rest", args: [7] });
+});
+
+test("addressOf is the address a key signs as", () => {
+  assert.match(addressOf(KEY), /^0x[0-9a-fA-F]{40}$/);
+  assert.notEqual(addressOf(KEY), addressOf(KEY2));
+  assert.equal(addressOf(KEY), addressOf(KEY));
 });
 
 // The owner call arrives from the Warden as JSON, so its token id is a plain
@@ -139,7 +178,7 @@ test("a reverted send throws rather than returning a receipt", async () => {
   const chain = chainWith(fakes({ status: "reverted" }));
   await assert.rejects(() => chain.sendUsdc(KEY, AGENT, 1n), /reverted/);
   await assert.rejects(() => chain.sendEth(KEY, AGENT, 1n), /reverted/);
-  await assert.rejects(() => chain.ownerCall(KEY, { function: "rest", args: [7] }), /reverted/);
+  await assert.rejects(() => chain.ownerCall(KEY, { contract: CONTRACT, function: "rest", args: [7] }), /reverted/);
   await assert.rejects(() => chain.transfer(KEY, AGENT, OTHER, 7), /reverted/);
 });
 
