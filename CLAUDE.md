@@ -30,7 +30,7 @@ return visits, so the artwork is the agent's own history of coming back.
 - **The live deployment on Base Sepolia, chain 84532** -- the only pair to use:
 
       MachineReadableOnly  0x6a6f90E9586E2f58a65412b9b402494639bCc41C
-      Renderer             0x43f71db7347ec8D6Fa324b41F3115563d4911798
+      Renderer             0x86fA4c291e80606e5cc2Bf1F44e3e5CF8E198313
       block 47,321,628, 2026-09-26, both Basescan-verified
 
   **Every earlier pair is superseded; do not read state off one.** The mirror
