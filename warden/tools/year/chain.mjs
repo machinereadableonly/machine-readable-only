@@ -75,6 +75,9 @@ export function makeChain({ rpcUrl, contract, chainId = CHAIN_ID, publicClient, 
   return {
     viewOf: async (id) => decodeView(await read("viewOf", [BigInt(id)])),
     today: async () => Number(await read("today", [])),
+    /// Who holds a token now. A send whose response was lost still moved it, so
+    /// this is what makes a transfer safe to retry.
+    ownerOf: async (id) => read("ownerOf", [BigInt(id)]),
     seedsAvailable: async (parentId) => Number(await read("seedsAvailable", [BigInt(parentId)])),
 
     usdcBalance: async (address) =>

@@ -109,6 +109,7 @@ test("an unpaid upgrade reads the demand and signs nothing", async () => {
 
   const out = await agent.upgrade(7, 3, 0, { pay: false, expectedPayTo: TREASURY });
   assert.equal(out.outcome, "demand-only");
+  assert.equal(out.paid, false);
   assert.equal(out.demand.accepts[0].amount, "5000000");
   assert.equal(rec.calls.length, 1);
   assert.deepEqual(rec.calls[0].arguments, { tokenId: 7, upgradeId: 3, variant: 0 });
@@ -158,6 +159,7 @@ test("a paid upgrade pins the treasury and the ladder's amount, then repeats the
 
   const out = await agent.upgrade(7, 3, 0, { pay: true, expectedPayTo: TREASURY });
   assert.equal(out.outcome, "applied-queued");
+  assert.equal(out.paid, true);
   assert.deepEqual(out.result, { ok: true, accepted: true, upgradeId: 3 });
 
   assert.equal(seen.length, 1);
@@ -176,6 +178,7 @@ test("a paid call answered by another demand is a failed payment, never a succes
 
   const out = await agent.upgrade(7, 3, 0, { pay: true, expectedPayTo: TREASURY });
   assert.equal(out.outcome, "refused");
+  assert.equal(out.paid, false, "a second demand is a payment the door did not accept");
   assert.equal(out.demand.accepts[0].amount, "5000000");
 });
 
@@ -185,6 +188,18 @@ test("a refusal that is not a demand is refused, not reported as applied", async
   const out = await agent.upgrade(7, 3, 0, { pay: true, expectedPayTo: TREASURY });
   assert.equal(out.outcome, "refused");
   assert.equal(out.result.reason, "mark-level-too-low");
+  assert.equal(out.demand, undefined);
+  // A gate refusal and a post-payment refusal are the same shape but for this:
+  // one may be asked again, the other has been paid for.
+  assert.equal(out.paid, false);
+});
+
+test("a refusal AFTER the payment settled is reported as paid", async () => {
+  const rec = recorder([demandResult("5000000", "upgrade"), okResult({ ok: false, reason: "resting" })]);
+  const agent = agentWith({ callTool: rec.callTool, payFor: async () => ({ "x402/payment": {} }) });
+  const out = await agent.upgrade(7, 3, 0, { pay: true, expectedPayTo: TREASURY });
+  assert.equal(out.outcome, "refused");
+  assert.equal(out.paid, true);
   assert.equal(out.demand, undefined);
 });
 

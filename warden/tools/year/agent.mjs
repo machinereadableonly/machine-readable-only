@@ -55,6 +55,14 @@ export function makeAgent({ identityPath, walletKey, site, origin }, deps = {}) 
     return answer(second);
   }
 
+  /**
+   * Take a Mark.
+   *
+   * `paid` says whether an authorisation was signed and spent on this call, and
+   * it is not the same question as `outcome`: a priced Mark can be refused by a
+   * gate BEFORE any demand is issued, which looks identical in the answer. The
+   * caller needs the difference to know whether asking again would pay twice.
+   */
   async function upgrade(tokenId, upgradeId, variant = 0, { pay: shouldPay = false, expectedPayTo, expectedAmount } = {}) {
     const args = { tokenId, upgradeId, variant };
     const first = await tool("upgrade", args);
@@ -62,9 +70,9 @@ export function makeAgent({ identityPath, walletKey, site, origin }, deps = {}) 
 
     if (!demand) {
       const result = answer(first);
-      return { outcome: result?.ok ? "applied-queued" : "refused", result };
+      return { outcome: result?.ok ? "applied-queued" : "refused", result, paid: false };
     }
-    if (!shouldPay) return { outcome: "demand-only", demand, result: answer(first) };
+    if (!shouldPay) return { outcome: "demand-only", demand, result: answer(first), paid: false };
 
     const meta = await pay({
       result: first,
@@ -72,10 +80,13 @@ export function makeAgent({ identityPath, walletKey, site, origin }, deps = {}) 
       expected: { payTo: expectedPayTo, amount: expectedAmount ?? markAmount(upgradeId) },
     });
     const second = await tool("upgrade", args, meta);
+    // A second demand means THIS call's payment was not accepted. Whether the
+    // transfer was mined anyway is a question only the facilitator can answer,
+    // so `paid` reports what the door did, not what the chain holds.
     const failed = readDemand(second);
-    if (failed) return { outcome: "refused", demand: failed, result: answer(second) };
+    if (failed) return { outcome: "refused", demand: failed, result: answer(second), paid: false };
     const result = answer(second);
-    return { outcome: result?.ok ? "applied-queued" : "refused", result };
+    return { outcome: result?.ok ? "applied-queued" : "refused", result, paid: true };
   }
 
   return {

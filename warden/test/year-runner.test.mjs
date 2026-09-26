@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { AGENTS } from "../tools/year/scenario.mjs";
 import {
   runDay, emptyState, agentSpecs, creditedDays, clockFailing, nextWakeMs,
-  yearPaths, makeLog, loadState, writeState,
+  yearPaths, makeLog, loadState, writeState, passDeadlineMs,
   DEAD_TREASURY, MINT_USDC, RETRY_PAUSE_MS, SITE, ORIGIN,
 } from "../tools/year/runner.mjs";
 
@@ -46,7 +46,11 @@ function fakeDoor(script = {}) {
       beat: async (tokenId) => { record("beat", { tokenId }); return pop("beat", { ok: true, accepted: true }); },
       upgrade: async (tokenId, id, variant, opts = {}) => {
         record("upgrade", { tokenId, id, variant, pay: opts.pay, payTo: opts.expectedPayTo });
-        return pop("upgrade", { outcome: opts.pay ? "applied-queued" : "demand-only", demand: demand("5000000"), result: { ok: true } });
+        return pop("upgrade", {
+          outcome: opts.pay ? "applied-queued" : "demand-only",
+          demand: opts.pay ? undefined : demand("5000000"),
+          result: { ok: true }, paid: opts.pay === true,
+        });
       },
       seed: async (parentId, to) => { record("seed", { parentId, to }); return pop("seed", { ok: true, tokenId: 99 }); },
       ownerCallFor: async (tool, tokenId) => {
@@ -59,7 +63,7 @@ function fakeDoor(script = {}) {
 }
 
 /// The chain as the runner uses it: reads from a script, sends recorded.
-function fakeChain({ today = 0, views = {}, balances = {}, testUsdc = 30_000_000n, seeds = 0, fail = {} } = {}) {
+function fakeChain({ today = 0, views = {}, balances = {}, testUsdc = 30_000_000n, seeds = 0, owners = {}, fail = {} } = {}) {
   const sent = [];
   const view = (id) => ({ level: 1, streak: 1, marks: 0n, mintDay: 0, runFloor: 1, resting: false, ...(views[id] ?? {}) });
   return {
@@ -67,6 +71,7 @@ function fakeChain({ today = 0, views = {}, balances = {}, testUsdc = 30_000_000
     today: async () => today,
     viewOf: async (id) => view(id),
     seedsAvailable: async () => seeds,
+    ownerOf: async (id) => owners[id] ?? "0xaddr-nobody",
     usdcBalance: async (address) => balances[address] ?? (address === "0xaddr-test" ? testUsdc : 0n),
     sendUsdc: async (fromKey, to, amount) => {
       sent.push({ sendUsdc: { fromKey, to, amount } });
@@ -86,7 +91,10 @@ function fakeChain({ today = 0, views = {}, balances = {}, testUsdc = 30_000_000
 }
 
 /// One pass, with every seam a fake. Returns everything it touched.
-async function pass({ day = 0, specs = [], state = emptyState(), chain, door, log = [], clock = [], treasury = DEAD_TREASURY } = {}) {
+async function pass({
+  day = 0, specs = [], state = emptyState(), chain, door, log = [], clock = [],
+  treasury = DEAD_TREASURY, time = { ms: 0 }, deadline = Number.POSITIVE_INFINITY,
+} = {}) {
   const d = door ?? fakeDoor();
   const c = chain ?? fakeChain({ today: day });
   const lines = [];
@@ -102,7 +110,10 @@ async function pass({ day = 0, specs = [], state = emptyState(), chain, door, lo
     treasury,
     readLog: () => log,
     readClockLog: () => clock,
-    sleep: async (ms) => { slept.push(ms); },
+    // A wait costs the day the time it takes, as it does in the run.
+    sleep: async (ms) => { slept.push(ms); time.ms += ms; },
+    now: () => time.ms,
+    deadline,
     save: () => saved.push(structuredClone(state)),
   });
   return { state, lines, slept, saved, calls: d.calls, sent: c.sent };
@@ -147,15 +158,21 @@ test("a mint tops the agent up to one USDC from the test wallet, and not when it
   assert.deepEqual(funded.sent, []);
 });
 
-// A mint is the one action that MUST be paid, so a test wallet that cannot
-// cover it pauses the whole run rather than losing an agent quietly.
-test("a mint nobody can fund pauses the run", async () => {
+// A mint nobody can fund costs that agent a day, not the run: USDC arriving
+// later is used, and the mint falls due again on every later day.
+test("a mint nobody can fund is loud, skips that agent, and leaves the run going", async () => {
   const out = await pass({ day: 0, specs: [spec("A1"), spec("A2")], chain: fakeChain({ testUsdc: 0n }) });
-  assert.equal(out.state.paused, "mint-unfunded");
+  assert.equal(out.state.paused, null);
   assert.equal(callsFor(out.calls, "mint").length, 0);
-  assert.equal(linesFor(out.lines, "run-paused").length, 1);
-  // Nothing after the pause runs.
+  assert.deepEqual(out.lines.map((l) => [l.agent, l.action, l.reason]), [
+    ["A1", "mint", "mint-unfunded"], ["A2", "mint", "mint-unfunded"],
+  ]);
   assert.deepEqual(out.state.tokens, {});
+  assert.deepEqual(out.sent, []);
+
+  // And with money there the next day, both mint.
+  const later = await pass({ day: 1, specs: [spec("A1"), spec("A2")], chain: fakeChain({ today: 1 }) });
+  assert.deepEqual(later.state.tokens, { A1: 1, A2: 2 });
 });
 
 // The flake this covers is a settlement that fails after the authorisation was
@@ -450,6 +467,176 @@ test("a chain send that throws is logged for that agent and the pass continues",
   assert.deepEqual(linesFor(out.lines, "rest").map((l) => [l.ok, l.reason]), [[false, "execution reverted"]]);
   assert.deepEqual(out.state.ownerDone, {});
   assert.equal(callsFor(out.calls, "beat").filter((b) => b.agent === "A2").length, 1);
+});
+
+// ------------------------------------------------- Marks: paying exactly once
+
+// A Mark whose payment SETTLED is never ordered again, whatever the answer was:
+// the authorisation is spent, and asking again signs a second one.
+test("a Mark refused after its payment settled is never re-ordered", async () => {
+  const only = spec("A5", { marks: [{ id: 1, when: { level: 1 } }] });
+  const state = { ...emptyState(), tokens: { A5: 7 } };
+  const first = await pass({
+    day: 40, specs: [only], state,
+    chain: fakeChain({ today: 40, views: { 7: { level: 40, streak: 40 } } }),
+    door: fakeDoor({ A5: { upgrade: { outcome: "refused", paid: true, result: { ok: false, reason: "mark-excluded" } } } }),
+  });
+  assert.deepEqual(first.sent.map((s) => s.sendUsdc.amount), [1_000_000n]);
+  assert.deepEqual(linesFor(first.lines, "fund").map((l) => [l.markId, l.amount]), [[1, "1000000"]]);
+  assert.deepEqual(linesFor(first.lines, "mark").map((l) => [l.ok, l.settled, l.reason]), [[false, true, "mark-excluded"]]);
+  assert.deepEqual(first.state.requested, { A5: [1] });
+
+  const second = await pass({
+    day: 41, specs: [only], state,
+    chain: fakeChain({ today: 41, views: { 7: { level: 41, streak: 41 } } }),
+  });
+  assert.equal(callsFor(second.calls, "upgrade").length, 0);
+  assert.deepEqual(second.sent, []);
+});
+
+// A gate refusal happens BEFORE any demand, so the Mark is asked again -- and
+// the USDC already sitting in the agent's wallet is not sent twice.
+test("a Mark refused before any payment is re-ordered, and only the shortfall moves", async () => {
+  const only = spec("A5", { marks: [{ id: 1, when: { level: 1 } }] });
+  const state = { ...emptyState(), tokens: { A5: 7 } };
+  const refused = { outcome: "refused", paid: false, result: { ok: false, reason: "mark-level-too-low" } };
+  const first = await pass({
+    day: 40, specs: [only], state,
+    chain: fakeChain({ today: 40, views: { 7: { level: 40, streak: 40 } } }),
+    door: fakeDoor({ A5: { upgrade: refused } }),
+  });
+  assert.deepEqual(first.sent.map((s) => s.sendUsdc.amount), [1_000_000n]);
+  assert.deepEqual(first.state.requested, {});
+
+  // The agent still holds the price from that attempt: nothing needs to move.
+  const second = await pass({
+    day: 41, specs: [only], state,
+    chain: fakeChain({ today: 41, views: { 7: { level: 41, streak: 41 } }, balances: { "0xaddr-A5": 1_000_000n } }),
+  });
+  const asked = callsFor(second.calls, "upgrade");
+  assert.deepEqual(asked.map((a) => [a.id, a.pay]), [[1, true]]);
+  assert.deepEqual(second.sent, [], "the price is already in the wallet");
+  assert.deepEqual(linesFor(second.lines, "fund"), []);
+  assert.deepEqual(second.state.requested, { A5: [1] });
+});
+
+test("a part-funded agent is topped up to the price, not by it", async () => {
+  const only = spec("A5", { marks: [{ id: 3, when: { level: 30 } }] });
+  const out = await pass({
+    day: 40, specs: [only], state: { ...emptyState(), tokens: { A5: 7 } },
+    chain: fakeChain({ today: 40, views: { 7: { level: 40, streak: 40 } }, balances: { "0xaddr-A5": 2_000_000n } }),
+  });
+  assert.deepEqual(out.sent.map((s) => s.sendUsdc.amount), [3_000_000n]);
+});
+
+// ------------------------------------------------- the pass has an end
+
+test("the pass stops asking before the fast day does", () => {
+  // A 300-second day ending at 300_300_000 ms, and 20 s of margin.
+  assert.equal(passDeadlineMs(300_060_000, 300, 20), 300_280_000);
+  assert.equal(passDeadlineMs(300_000_000, 300, 20), 300_280_000);
+  // On the boundary itself the deadline belongs to the day just starting.
+  assert.equal(passDeadlineMs(300_300_000, 300, 20), 300_580_000);
+});
+
+// One slow door must not spend the day before the twelfth agent is asked.
+test("every agent gets a first attempt, however slow the door, and the rest is logged missed", async () => {
+  const time = { ms: 0 };
+  const all = AGENTS.map((a) => spec(a.name));
+  const tokens = Object.fromEntries(all.map((a, i) => [a.name, i + 1]));
+  const door = fakeDoor(Object.fromEntries(all.map((a) => [a.name, { beat: { ok: false, reason: "chain-unavailable" } }])));
+  const slow = {
+    calls: door.calls,
+    make: (s) => {
+      const built = door.make(s);
+      return { ...built, beat: async (id) => { time.ms += 30_000; return built.beat(id); } };
+    },
+  };
+  const out = await pass({
+    day: 30, specs: all, state: { ...emptyState(), tokens },
+    chain: fakeChain({ today: 30 }), door: slow, time, deadline: 200_000,
+  });
+
+  const beats = callsFor(out.calls, "beat");
+  assert.equal(beats.length, 12, "all twelve were asked once");
+  assert.deepEqual(new Set(beats.map((b) => b.attempt ?? 1)), new Set([1]));
+  assert.deepEqual(out.slept, [], "no time was left to wait for a retry");
+  assert.equal(linesFor(out.lines, "checkin").filter((l) => l.reason === "missed-deadline").length, 12);
+});
+
+test("retries stop when the next wait would not fit the day", async () => {
+  const out = await pass({
+    day: 4, specs: [spec("A2")], state: { ...emptyState(), tokens: { A2: 5 } },
+    door: fakeDoor({ A2: { beat: { ok: false, reason: "chain-unavailable" } } }),
+    // Room for one wait, and not for a second.
+    deadline: 45_000,
+  });
+  assert.equal(callsFor(out.calls, "beat").length, 2);
+  assert.deepEqual(out.slept, [RETRY_PAUSE_MS]);
+  assert.deepEqual(linesFor(out.lines, "checkin").map((l) => [l.attempt, l.reason]), [
+    [1, "chain-unavailable"], [2, "chain-unavailable"], [undefined, "missed-deadline"],
+  ]);
+});
+
+// The deadline is read again before each agent in a retry round: the round's own
+// calls can spend what was left of the day.
+test("an agent the retry round runs out of time for is logged missed, not asked", async () => {
+  const time = { ms: 0 };
+  const failing = fakeDoor({
+    A2: { beat: { ok: false, reason: "chain-unavailable" } },
+    A3: { beat: { ok: false, reason: "chain-unavailable" } },
+  });
+  const slow = {
+    calls: failing.calls,
+    make: (s) => {
+      const built = failing.make(s);
+      return { ...built, beat: async (id) => { time.ms += 20_000; return built.beat(id); } };
+    },
+  };
+  const out = await pass({
+    day: 4, specs: [spec("A2"), spec("A3")], state: { ...emptyState(), tokens: { A2: 5, A3: 6 } },
+    door: slow, time, deadline: 85_000,
+  });
+  const beats = callsFor(out.calls, "beat");
+  assert.deepEqual(beats.filter((b) => b.agent === "A2").length, 2);
+  assert.deepEqual(beats.filter((b) => b.agent === "A3").length, 1);
+  assert.deepEqual(
+    linesFor(out.lines, "checkin").filter((l) => l.reason === "missed-deadline").map((l) => l.agent),
+    ["A2", "A3"],
+  );
+});
+
+// ------------------------------------------------- owner calls, once only
+
+// A transfer whose response was lost still moved the token. Sending a second
+// one would refuse, and treating that as failure would strand the rebind.
+test("a transfer is not sent again when the destination already holds the token", async () => {
+  const state = { ...emptyState(), tokens: { A11: 11 } };
+  const out = await pass({
+    day: 50, specs: [spec("A11")], state,
+    chain: fakeChain({ today: 50, owners: { 11: "0xADDR-A12" } }),
+  });
+  assert.equal(out.sent.filter((s) => s.transfer).length, 0);
+  assert.deepEqual(linesFor(out.lines, "transfer").map((l) => [l.ok, l.reason]), [[true, "already-held"]]);
+  assert.deepEqual(out.state.ownerDone, { A11: ["transfer"] });
+});
+
+test("a door refusal of paused or sunset pauses the run from an owner call and from a seed", async () => {
+  const rest = await pass({
+    day: 120, specs: [spec("A10")], state: { ...emptyState(), tokens: { A10: 10 } },
+    chain: fakeChain({ today: 120 }),
+    door: fakeDoor({ A10: { "call:rest": { ok: false, reason: "sunset" } } }),
+  });
+  assert.equal(rest.state.paused, "sunset");
+  assert.deepEqual(rest.sent, []);
+
+  const seed = await pass({
+    day: 367, specs: [spec("A1")], state: { ...emptyState(), tokens: { A1: 1 } },
+    chain: fakeChain({ today: 367, seeds: 1, views: { 1: { level: 365, streak: 365 } } }),
+    door: fakeDoor({ A1: { seed: { ok: false, reason: "paused" } } }),
+  });
+  assert.equal(seed.state.paused, "paused");
+  assert.equal(seed.state.seeded, false);
 });
 
 // ---------------------------------------------------------------- the child

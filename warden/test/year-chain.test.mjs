@@ -107,6 +107,14 @@ test("viewOf, today and seedsAvailable read the contract and answer as numbers",
   assert.deepEqual(f.sent[2], { read: "seedsAvailable", address: CONTRACT, args: [7n] });
 });
 
+// A transfer whose response was lost still moved the token, so the runner asks
+// who holds it before sending another.
+test("ownerOf reads the holder from the token contract", async () => {
+  const f = fakes({ reads: { ownerOf: OTHER } });
+  assert.equal(await chainWith(f).ownerOf(7), OTHER);
+  assert.deepEqual(f.sent[0], { read: "ownerOf", address: CONTRACT, args: [7n] });
+});
+
 test("a USDC balance is read from Circle's own contract, as base units", async () => {
   const f = fakes({ reads: { balanceOf: 2_500_000n } });
   assert.equal(await chainWith(f).usdcBalance(AGENT), 2_500_000n);

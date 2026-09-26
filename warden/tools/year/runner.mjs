@@ -28,14 +28,22 @@ export const MINT_USDC = BigInt(MINT_AMOUNT);
 export const RETRY_PAUSE_MS = 30_000;
 export const DAY_SECONDS = 300;
 export const OFFSET_SECONDS = 60;
+/// How long before the fast day ends the pass stops asking. The next Clock run
+/// is 30 s past the boundary, and a credit landing after it belongs to that day.
+export const DEADLINE_MARGIN_SECONDS = 20;
 
 /// The parent of the run's one child, taken from the table rather than named.
 const PARENT = AGENTS.find((a) => a.seeds).name;
 const CHILD = "child";
-const never = () => false;
 
 /// A refusal no agent can work around: the piece itself is closed.
 const isFatal = (reason) => reason === "paused" || reason === "sunset";
+
+const sameAddress = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+
+/// A 32-byte hex string in an error is a key, whatever the error thinks it is.
+const KEY_SHAPED = /0x[0-9a-fA-F]{64}/g;
+const safeReason = (err) => safeErrorText(err).replace(KEY_SHAPED, "<redacted-hex>");
 
 export function yearPaths(dir = process.env.MRO_YEAR_DIR ?? join(homedir(), ".mro-year")) {
   return {
@@ -111,6 +119,13 @@ export function nextWakeMs(nowMs, daySeconds = DAY_SECONDS, offsetSeconds = OFFS
   return wake > nowMs ? wake : wake + period;
 }
 
+/// When this pass must stop asking: short of the fast day's end, so nothing is
+/// still in flight when the Clock writes the day.
+export function passDeadlineMs(nowMs, daySeconds = DAY_SECONDS, marginSeconds = DEADLINE_MARGIN_SECONDS) {
+  const period = daySeconds * 1000;
+  return Math.ceil((nowMs + 1) / period) * period - marginSeconds * 1000;
+}
+
 /**
  * The agents of the run: the twelve, plus the child once it exists.
  *
@@ -121,7 +136,10 @@ export function nextWakeMs(nowMs, daySeconds = DAY_SECONDS, offsetSeconds = OFFS
 export function agentSpecs(state) {
   const specs = AGENTS.map((a) => ({ ...a, identity: state.rebindKey?.[a.name] ?? a.name, wallet: a.name }));
   if (state.seeded && state.childDay !== null) {
-    specs.push({ name: CHILD, mintDay: state.childDay, misses: never, marks: [], identity: PARENT, wallet: PARENT });
+    specs.push({
+      name: CHILD, mintDay: state.childDay, misses: () => false, marks: [],
+      identity: PARENT, wallet: PARENT,
+    });
   }
   return specs;
 }
@@ -154,11 +172,15 @@ function mintReserve(agents, state) {
  * `day` is the run day and `chainDay` the contract's own; both are recorded on
  * every line, because the checker's tally is in chain days and the scenario is
  * written in run days.
+ *
+ * Every agent is asked once before any failure is asked again: one slow door
+ * must not spend the day's budget before the twelfth agent has had its turn.
  */
 export async function runDay({
   day, chainDay, agents, state, chain, makeAgentFor, log, testWallet,
   keyFor, addressFor, treasury = DEAD_TREASURY,
   readLog = () => [], readClockLog = () => [], sleep = defaultSleep, save = () => {},
+  now = Date.now, deadline,
 }) {
   const today = chainDay ?? (await chain.today());
   const line = (agent, fallbackToken, fields) => {
@@ -177,17 +199,43 @@ export async function runDay({
   }
 
   const ctx = {
-    day, today, state, chain, makeAgentFor, testWallet, keyFor, addressFor, treasury, sleep, line,
+    day, today, state, chain, makeAgentFor, testWallet, keyFor, addressFor, treasury, sleep, line, now,
+    deadline: deadline ?? passDeadlineMs(now()),
     reserve: mintReserve(agents, state),
     logLines: memo(readLog),
   };
 
+  const pending = [];
   for (const spec of agents) {
-    await runAgent(spec, ctx);
+    const unfinished = await runAgent(spec, ctx);
+    if (unfinished) pending.push(unfinished);
     save(state);
     if (state.paused) return state;
   }
+  await retrySweep(pending, ctx, save);
   return state;
+}
+
+/// The second sweep: one round of retries per attempt, all agents together, for
+/// as long as the day has room for another.
+async function retrySweep(pending, ctx, save) {
+  let waiting = pending;
+  for (let attempt = 2; attempt <= MAX_ATTEMPTS && waiting.length; attempt++) {
+    if (ctx.now() + RETRY_PAUSE_MS >= ctx.deadline) break;
+    await ctx.sleep(RETRY_PAUSE_MS);
+    const still = [];
+    for (const item of waiting) {
+      if (ctx.now() >= ctx.deadline) {
+        still.push(item);
+        continue;
+      }
+      if (!(await item.retry(attempt))) still.push(item);
+      save(ctx.state);
+      if (ctx.state.paused) return;
+    }
+    waiting = still;
+  }
+  for (const item of waiting) item.missed();
 }
 
 /// A refusal the operator has to clear: loud in the log and loud on stderr.
@@ -195,6 +243,12 @@ function pause(state, reason, runLine) {
   state.paused = reason;
   runLine({ action: "run-paused", reason });
   console.error(`RUN PAUSED: ${reason} -- clear state.json's paused field to resume`);
+}
+
+/// Loud, but not a pause: this agent loses a day, the other eleven do not.
+function loud(line, action, reason) {
+  line({ action, reason });
+  console.error(`RUNNER: ${action} -- ${reason}`);
 }
 
 async function runAgent(spec, ctx) {
@@ -213,11 +267,14 @@ async function runAgent(spec, ctx) {
   // check-in, and the `resting` refusal that answers it is a path worth proving.
   const plan = todayFor(spec, ctx.day, { rested: done.includes("rest") });
 
+  // From nextOwner, not from `plan.owner`: an action whose day passed while the
+  // runner was down is still owed, and is taken one per pass in table order.
   const owner = nextOwner(spec, ctx.day, done);
   if (owner && token() !== null) {
     if (await doOwner(spec, owner, { ctx, name, wallet, token, agent, rebuild, line })) {
       (state.ownerDone[name] ??= []).push(owner.kind);
     }
+    if (state.paused) return null;
   }
 
   // A token that never landed is minted on a later day too: a settlement can
@@ -225,31 +282,47 @@ async function runAgent(spec, ctx) {
   let minted = false;
   if (name !== CHILD && token() === null && ctx.day >= spec.mintDay) {
     minted = await doMint({ ctx, name, wallet, agent, line });
-    if (state.paused) return;
+    if (state.paused) return null;
   }
 
   // A token minted this pass is not on chain until the Clock writes it, so
   // nothing that reads the chain about it can run today.
-  if (minted) return;
+  if (minted) return null;
 
+  let unfinished = null;
   if (plan.checkin && token() !== null) {
-    await doCheckin({ ctx, token, agent, line });
-    if (state.paused) return;
+    const args = { ctx, token, agent, line };
+    if (!(await attemptCheckin(args, 1))) {
+      unfinished = {
+        retry: (attempt) => attemptCheckin(args, attempt),
+        missed: () => line({ action: "checkin", reason: "missed-deadline" }),
+      };
+    }
+    if (state.paused) return null;
   }
+
   if (spec.marks.length && token() !== null) {
     await doMarks(spec, { ctx, name, wallet, token, agent, line });
-    if (state.paused) return;
+    if (state.paused) return unfinished;
   }
   if (spec.seeds && !state.seeded && token() !== null) {
     await doSeed({ ctx, wallet, token, agent, line });
   }
+  return unfinished;
 }
 
 async function doOwner(spec, owner, { ctx, name, wallet, token, agent, rebuild, line }) {
   const id = token();
   try {
     if (owner.kind === "transfer") {
-      await ctx.chain.transfer(ctx.keyFor(wallet), ctx.addressFor(wallet), ctx.addressFor(owner.to), id);
+      const to = ctx.addressFor(owner.to);
+      // A send whose response was lost still moved the token, so who holds it is
+      // asked before a second one is sent.
+      if (sameAddress(await ctx.chain.ownerOf(id), to)) {
+        line({ action: "transfer", ok: true, reason: "already-held", holder: owner.to });
+        return true;
+      }
+      await ctx.chain.transfer(ctx.keyFor(wallet), ctx.addressFor(wallet), to, id);
       line({ action: "transfer", ok: true, holder: owner.to });
       return true;
     }
@@ -262,10 +335,7 @@ async function doOwner(spec, owner, { ctx, name, wallet, token, agent, rebuild, 
       const rebinder = ctx.makeAgentFor({ name: identity, identity, wallet });
       await rebinder.register();
       const call = await rebinder.ownerCallFor("rebind", id);
-      if (!call?.ok) {
-        line({ action: "rebind", reason: call?.reason ?? "no-answer" });
-        return false;
-      }
+      if (!call?.ok) return refusedOwnerCall(ctx, line, "rebind", call);
       await ctx.chain.ownerCall(ctx.keyFor(holder), call);
       ctx.state.rebindKey[name] = identity;
       rebuild();
@@ -274,33 +344,48 @@ async function doOwner(spec, owner, { ctx, name, wallet, token, agent, rebuild, 
     }
 
     const call = await agent().ownerCallFor(owner.kind, id);
-    if (!call?.ok) {
-      line({ action: owner.kind, reason: call?.reason ?? "no-answer" });
-      return false;
-    }
+    if (!call?.ok) return refusedOwnerCall(ctx, line, owner.kind, call);
     await ctx.chain.ownerCall(ctx.keyFor(wallet), call);
     line({ action: owner.kind, ok: true });
     return true;
   } catch (err) {
-    line({ action: owner.kind, reason: safeErrorText(err) });
+    line({ action: owner.kind, reason: safeReason(err) });
     return false;
   }
+}
+
+function refusedOwnerCall(ctx, line, action, call) {
+  const reason = call?.reason ?? "no-answer";
+  line({ action, reason });
+  if (isFatal(reason)) pause(ctx.state, reason, line);
+  return false;
+}
+
+/**
+ * Move USDC to `address` until it holds `need`, and no further.
+ *
+ * Only the shortfall travels: a Mark re-ordered after a refusal, or a mint
+ * retried on a later day, must not send its price a second time. Every movement
+ * is one `fund` line.
+ */
+async function topUp(ctx, line, address, need, extra = {}) {
+  const held = await ctx.chain.usdcBalance(address);
+  if (held >= need) return true;
+  const short = need - held;
+  if ((await ctx.chain.usdcBalance(ctx.testWallet.address)) < short) return false;
+  await ctx.chain.sendUsdc(ctx.testWallet.key, address, short);
+  line({ action: "fund", ok: true, amount: String(short), ...extra });
+  return true;
 }
 
 async function doMint({ ctx, name, wallet, agent, line }) {
   const address = ctx.addressFor(wallet);
   try {
-    const held = await ctx.chain.usdcBalance(address);
-    if (held < MINT_USDC) {
-      const short = MINT_USDC - held;
-      const bank = await ctx.chain.usdcBalance(ctx.testWallet.address);
-      if (bank < short) {
-        // The one action that must be paid. Carrying on would lose the agent.
-        pause(ctx.state, "mint-unfunded", line);
-        return false;
-      }
-      await ctx.chain.sendUsdc(ctx.testWallet.key, address, short);
-      line({ action: "fund", ok: true, amount: String(short) });
+    if (!(await topUp(ctx, line, address, MINT_USDC))) {
+      // Not a pause: USDC arriving later is used, and the mint falls due again
+      // on every later day until it lands.
+      loud(line, "mint", "mint-unfunded");
+      return false;
     }
     await agent().register();
     const result = await agent().mint(address, ctx.treasury);
@@ -310,30 +395,28 @@ async function doMint({ ctx, name, wallet, agent, line }) {
     if (isFatal(result?.reason)) pause(ctx.state, result.reason, line);
     return ok;
   } catch (err) {
-    line({ action: "mint", reason: safeErrorText(err) });
+    line({ action: "mint", reason: safeReason(err) });
     return false;
   }
 }
 
-async function doCheckin({ ctx, token, agent, line }) {
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    let result;
-    try {
-      result = await agent().beat(token());
-    } catch (err) {
-      result = { ok: false, reason: safeErrorText(err) };
-    }
-    const ok = result?.ok === true;
-    line({ action: "checkin", ok, reason: ok ? null : (result?.reason ?? "no-answer"), attempt });
-
-    if (ok) return;
-    if (isFatal(result?.reason)) {
-      pause(ctx.state, result.reason, line);
-      return;
-    }
-    if (!shouldRetry(result, attempt)) return;
-    await ctx.sleep(RETRY_PAUSE_MS);
+/// One attempt. True when the check-in is settled for today, either way.
+async function attemptCheckin({ ctx, token, agent, line }, attempt) {
+  let result;
+  try {
+    result = await agent().beat(token());
+  } catch (err) {
+    result = { ok: false, reason: safeReason(err) };
   }
+  const ok = result?.ok === true;
+  line({ action: "checkin", ok, reason: ok ? null : (result?.reason ?? "no-answer"), attempt });
+
+  if (ok) return true;
+  if (isFatal(result?.reason)) {
+    pause(ctx.state, result.reason, line);
+    return true;
+  }
+  return !shouldRetry(result, attempt);
 }
 
 async function doMarks(spec, { ctx, name, wallet, token, agent, line }) {
@@ -342,7 +425,7 @@ async function doMarks(spec, { ctx, name, wallet, token, agent, line }) {
   try {
     view = await ctx.chain.viewOf(id);
   } catch (err) {
-    line({ action: "mark", reason: safeErrorText(err) });
+    line({ action: "mark", reason: safeReason(err) });
     return;
   }
 
@@ -358,21 +441,32 @@ async function doMarks(spec, { ctx, name, wallet, token, agent, line }) {
 
   for (const mark of dueMarks(spec, marksView, requested, view.marks)) {
     const price = BigInt(markAmount(mark.id));
-    let pay = false;
+    const address = ctx.addressFor(wallet);
     try {
+      let pay = false;
       if (price > 0n) {
-        const bank = await ctx.chain.usdcBalance(ctx.testWallet.address);
-        pay = buyOrDemand({ price, balance: bank, reserve: ctx.reserve }) === "buy";
-        // Funded at the moment it falls due, so USDC arriving mid-run is used.
-        if (pay) await ctx.chain.sendUsdc(ctx.testWallet.key, ctx.addressFor(wallet), price);
+        // The decision is about the USDC that still has to MOVE: an agent left
+        // holding the price by a refused attempt is already funded.
+        const held = await ctx.chain.usdcBalance(address);
+        const short = price > held ? price - held : 0n;
+        pay = short === 0n ||
+          buyOrDemand({ price: short, balance: await ctx.chain.usdcBalance(ctx.testWallet.address), reserve: ctx.reserve }) === "buy";
+        if (pay && short > 0n) await topUp(ctx, line, address, price, { markId: mark.id });
       }
       const out = await agent().upgrade(id, mark.id, mark.variant ?? 0, { pay, expectedPayTo: ctx.treasury });
       const asked = out?.outcome === "applied-queued" || out?.outcome === "demand-only";
+      // A payment that settled buys exactly one attempt: the demand is gone from
+      // the second answer, so whatever it says, this Mark is never paid for again.
+      const settled = out?.paid === true && !out?.demand;
       const reason = out?.result?.ok === true ? null : (out?.result?.reason ?? null);
-      line({ action: "mark", ok: asked, reason, markId: mark.id, outcome: out?.outcome ?? "none", price: String(price) });
+      line({
+        action: "mark", ok: asked, reason, markId: mark.id,
+        outcome: out?.outcome ?? "none", price: String(price), settled,
+      });
 
-      // A refusal is left for the next pass: the run gate can open a day later.
-      if (asked) {
+      // A refusal BEFORE any payment is left for the next pass: the run gate can
+      // open a day later, and nothing was spent.
+      if (asked || settled) {
         (ctx.state.requested[name] ??= []).push(mark.id);
         requested.add(mark.id);
       }
@@ -381,7 +475,7 @@ async function doMarks(spec, { ctx, name, wallet, token, agent, line }) {
         return;
       }
     } catch (err) {
-      line({ action: "mark", reason: safeErrorText(err), markId: mark.id, price: String(price) });
+      line({ action: "mark", reason: safeReason(err), markId: mark.id, price: String(price) });
     }
   }
 }
@@ -392,14 +486,18 @@ async function doSeed({ ctx, wallet, token, agent, line }) {
     if ((await ctx.chain.seedsAvailable(id)) <= 0) return;
     const result = await agent().seed(id, ctx.addressFor(wallet));
     const child = result?.ok === true ? result.tokenId : null;
-    line({ action: "seed", ok: child !== null, reason: child !== null ? null : (result?.reason ?? "no-token-id"), tokenId: child ?? id });
-    if (child === null) return;
+    const reason = child !== null ? null : (result?.reason ?? "no-token-id");
+    line({ action: "seed", ok: child !== null, reason, tokenId: child ?? id });
+    if (child === null) {
+      if (isFatal(reason)) pause(ctx.state, reason, line);
+      return;
+    }
     ctx.state.seeded = true;
     ctx.state.childId = child;
     ctx.state.childDay = ctx.day;
     ctx.state.tokens[CHILD] = child;
   } catch (err) {
-    line({ action: "seed", reason: safeErrorText(err) });
+    line({ action: "seed", reason: safeReason(err) });
   }
 }
 
@@ -412,6 +510,16 @@ function memo(fn) {
 }
 
 const readKey = (path) => readFileSync(path, "utf8").trim();
+
+/// The key never reaches the message: viem's own error for a malformed private
+/// key quotes the value it was given.
+function addressOfKey(name, key) {
+  try {
+    return addressOf(key);
+  } catch {
+    throw new Error(`the ${name} key file does not hold a usable private key`);
+  }
+}
 
 function readAddressFile(path, fallback) {
   try {
@@ -431,12 +539,12 @@ export async function main() {
 
   const chain = makeChain({ rpcUrl: process.env.BASE_RPC_URL ?? "https://sepolia.base.org", contract });
   const testKey = readKey(process.env.MRO_TEST_WALLET_KEY_FILE ?? join(homedir(), ".mro-test-wallet", "wallet.key"));
-  const testWallet = { key: testKey, address: addressOf(testKey) };
+  const testWallet = { key: testKey, address: addressOfKey("test wallet", testKey) };
 
   const keyFor = (name) => readKey(paths.wallet(name));
   const addresses = new Map();
   const addressFor = (name) => {
-    if (!addresses.has(name)) addresses.set(name, addressOf(keyFor(name)));
+    if (!addresses.has(name)) addresses.set(name, addressOfKey(name, keyFor(name)));
     return addresses.get(name);
   };
   const agentsBuilt = new Map();
@@ -467,12 +575,16 @@ export async function main() {
         makeAgentFor, log, testWallet, keyFor, addressFor, treasury,
         readLog: () => readJsonl(paths.runnerLog),
         readClockLog: () => readJsonl(paths.clockLog),
+        deadline: passDeadlineMs(Date.now(), daySeconds),
         save: () => writeState(paths.state, state),
       });
       writeState(paths.state, state);
     } catch (err) {
       // A pass that dies takes one fast day with it, not the run.
-      log({ action: "pass-failed", ok: false, reason: safeErrorText(err) });
+      log({
+        day: null, chainDay: null, agent: null, tokenId: null,
+        action: "pass-failed", ok: false, reason: safeReason(err),
+      });
     }
     await defaultSleep(nextWakeMs(Date.now(), daySeconds) - Date.now());
   }
@@ -480,7 +592,7 @@ export async function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
-    console.error("runner:", safeErrorText(err));
+    console.error("runner:", safeReason(err));
     process.exitCode = 1;
   });
 }
