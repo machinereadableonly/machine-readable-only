@@ -29,9 +29,9 @@ return visits, so the artwork is the agent's own history of coming back.
   `build-status`; for the reviews read `reviews-closed`.
 - **The live deployment on Base Sepolia, chain 84532** -- the only pair to use:
 
-      MachineReadableOnly  0x0090979EFa10Adcfe8Df14AD3c2C8Db38b235eED
-      Renderer             0x80F079C5Bbb1E17b3C7441c21B094eB3e81A089b
-      block 47,161,021, 2026-09-22, both Basescan-verified
+      MachineReadableOnly  0x6a6f90E9586E2f58a65412b9b402494639bCc41C
+      Renderer             0x43f71db7347ec8D6Fa324b41F3115563d4911798
+      block 47,321,628, 2026-09-26, both Basescan-verified
 
   **Every earlier pair is superseded; do not read state off one.** The mirror
   holds only tokens minted on THIS pair, so an id not yet minted here answers
