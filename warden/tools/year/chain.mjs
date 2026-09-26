@@ -75,6 +75,10 @@ export function makeChain({ rpcUrl, contract, chainId = CHAIN_ID, publicClient, 
   return {
     viewOf: async (id) => decodeView(await read("viewOf", [BigInt(id)])),
     today: async () => Number(await read("today", [])),
+    /// The last day the Warden wrote anything, stamped by the contract's own
+    /// onlyWarden modifier. The checker reads it to see the heartbeat: on a day
+    /// when no token moved, this advancing is the only thing that did.
+    lastWardenDay: async () => Number(await read("lastWardenDay", [])),
     /// Who holds a token now. A send whose response was lost still moved it, so
     /// this is what makes a transfer safe to retry.
     ownerOf: async (id) => read("ownerOf", [BigInt(id)]),

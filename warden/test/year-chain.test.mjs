@@ -78,6 +78,15 @@ test("a view decodes to numbers, with the marks word kept as a BigInt", () => {
   assert.equal(typeof v.marks, "bigint");
 });
 
+// The heartbeat's own field: the checker asserts it advanced on a day when
+// nothing else did, so it has to be read from the contract rather than inferred.
+test("lastWardenDay is read from the contract, as a number", async () => {
+  const f = fakes({ reads: { lastWardenDay: 1430 } });
+  assert.equal(await chainWith(f).lastWardenDay(), 1430);
+  assert.deepEqual(f.sent[0], { read: "lastWardenDay", address: CONTRACT, args: [] });
+  assert.ok(MRO_ABI.some((e) => e.name === "lastWardenDay" && e.type === "function"));
+});
+
 // A FLOOR, not the contract's _effectiveRun: TokenView exposes only the run
 // that most recently fell, so a shorter second lapse reads low.
 test("runFloor is the longer of the live streak and the run that fell", () => {
