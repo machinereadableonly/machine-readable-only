@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { FINISH_LEVEL, expected, places, finisherMark } from "../tools/year/tally.mjs";
-import { FINISHER_IDS } from "../src/mcp/ladder.mjs";
+import { FINISHER_IDS, FINISH_LEVEL as WARDEN_FINISH_LEVEL } from "../src/mcp/ladder.mjs";
 import { AGENTS } from "../tools/year/scenario.mjs";
 
 // The contract's own bookkeeping, written out day by day: _credit advances the
@@ -25,8 +25,12 @@ function asTheContractWould(days) {
   return { level, effectiveRun: Math.max(streak, bestRun), lastDay };
 }
 
-test("the year ends at 365, the contract's FINISH_LEVEL", () => {
+// The literal stays a literal: a checker that imported its yardstick from the
+// service could not catch the service moving it. This is what keeps the two
+// copies honest instead.
+test("the year ends at 365, and the checker's copy is the Warden's number", () => {
   assert.equal(FINISH_LEVEL, 365);
+  assert.equal(FINISH_LEVEL, WARDEN_FINISH_LEVEL);
 });
 
 test("a gapped history: level counts days, streak is live, bestRun is the longest", () => {

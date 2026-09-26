@@ -30,15 +30,20 @@ export const MAX_ATTEMPTS = 3;
  * word from the chain, and an `after` entry waits for that Mark's bit in it --
  * pair five is bought on both sides and the second side needs the first.
  *
+ * A Mark the chain ALREADY carries is not due either, whatever `requested`
+ * says: a run resumed after a restart begins with an empty `requested` set, and
+ * ordering a Mark the token holds is a payment the contract then refuses.
+ *
  * A run gate reads `view.bestRun`, never the live streak, because that is what
  * the contract's `_effectiveRun` admits a Mark on.
  */
 export function dueMarks(agent, view, requested, held) {
   return agent.marks.filter((m) => {
     if (requested.has(m.id)) return false;
-    if (m.after && !(held & (1n << BigInt(m.after)))) return false;
-    if (m.when.level !== undefined && view.level < m.when.level) return false;
-    if (m.when.run !== undefined && view.bestRun < m.when.run) return false;
+    if (held & (1n << BigInt(m.id))) return false;
+    if (m.after !== undefined && !(held & (1n << BigInt(m.after)))) return false;
+    if (m.when?.level !== undefined && view.level < m.when.level) return false;
+    if (m.when?.run !== undefined && view.bestRun < m.when.run) return false;
     return true;
   });
 }

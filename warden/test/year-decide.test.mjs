@@ -5,7 +5,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { dueMarks, buyOrDemand, FINAL_REASONS, MAX_ATTEMPTS, shouldRetry } from "../tools/year/decide.mjs";
-import { AGENTS } from "../tools/year/scenario.mjs";
+import { AGENTS, todayFor } from "../tools/year/scenario.mjs";
+import { FINISH_LEVEL, expected } from "../tools/year/tally.mjs";
 
 const byName = (name) => AGENTS.find((a) => a.name === name);
 const view = (level, bestRun) => ({ level, bestRun });
@@ -39,15 +40,31 @@ test("a bought Mark is due on the level, not on the run", () => {
 test("an `after` entry waits for that Mark's bit to be set in held", () => {
   const a5 = byName("A5");
   assert.deepEqual(ids(dueMarks(a5, view(100, 100), new Set(), 0n)), [1, 3, 5]);
-  assert.deepEqual(ids(dueMarks(a5, view(100, 100), new Set(), held(5))), [1, 3, 5, 9]);
+  // Once 5 is held, 9 opens -- and 5 itself drops out, being held.
+  assert.deepEqual(ids(dueMarks(a5, view(100, 100), new Set(), held(5))), [1, 3, 9]);
   // A neighbouring bit is not the one it waits on.
   assert.deepEqual(ids(dueMarks(a5, view(100, 100), new Set(), held(4, 6))), [1, 3, 5]);
 });
 
 test("a requested id is never due again", () => {
   const a5 = byName("A5");
-  assert.deepEqual(ids(dueMarks(a5, view(100, 100), new Set([1, 3]), held(5))), [5, 9]);
+  assert.deepEqual(ids(dueMarks(a5, view(100, 100), new Set([1, 3]), 0n)), [5]);
+  assert.deepEqual(ids(dueMarks(a5, view(100, 100), new Set([1, 3]), held(5))), [9]);
   assert.deepEqual(ids(dueMarks(a5, view(365, 365), new Set([1, 3, 5, 7, 9]), held(5))), []);
+});
+
+// RESTART SAFETY. A run resumed after a restart begins with an empty
+// `requested` set, so the chain's own marks word is the only thing that can say
+// a Mark has already been taken. Ordering one the token holds is a payment the
+// contract refuses.
+test("a Mark the chain already carries is not due, whatever requested says", () => {
+  const a2 = byName("A2");
+  assert.deepEqual(ids(dueMarks(a2, view(365, 365), new Set(), held(2, 4))), [6, 8]);
+  assert.deepEqual(ids(dueMarks(a2, view(365, 365), new Set(), held(2, 4, 6, 8))), []);
+  // A5's second side of pair five is due on the first held bit and gone on its own.
+  const a5 = byName("A5");
+  assert.deepEqual(ids(dueMarks(a5, view(100, 100), new Set(), held(5))), [1, 3, 9]);
+  assert.deepEqual(ids(dueMarks(a5, view(100, 100), new Set(), held(5, 9))), [1, 3]);
 });
 
 test("an agent with no Marks is never due one", () => {
@@ -57,6 +74,53 @@ test("an agent with no Marks is never due one", () => {
 test("a due entry is the table's own record, variant and all", () => {
   const due = dueMarks(byName("A5"), view(100, 100), new Set([1, 3]), 0n);
   assert.deepEqual(due, [{ id: 5, when: { level: 100 }, variant: 2 }]);
+});
+
+/**
+ * THE THREE MODULES AGAINST EACH OTHER, over the whole year.
+ *
+ * Each module is right on its own terms and the year can still be wrong: a
+ * check-in rule off by one day costs the unbroken agents a day of run, and the
+ * run-365 Mark they are scripted to buy then never comes due. Nothing in a unit
+ * test of any one file can see that. This walks the real day list `todayFor`
+ * produces, tallies it with `expected`, and asks `dueMarks` whether every Mark
+ * the agent orders eventually opens.
+ *
+ * Verified to FAIL under the earlier `mintDay + 2` rule: A1, A2, A3 and A6 all
+ * lost Mark 8 (run 365), because their day list was gapped at the mint day and
+ * the best run reached only 364 by the time the level reached 365.
+ */
+test("every Mark an agent orders comes due somewhere in its real year", () => {
+  for (const a of AGENTS) {
+    if (a.marks.length === 0) continue;
+    const days = [a.mintDay];
+    const requested = new Set();
+    let held = 0n;
+    // An order sets that Mark's bit, which may open one that waits on it, so
+    // each day is drained until nothing more is due.
+    const drain = () => {
+      for (let more = true; more; ) {
+        more = false;
+        for (const m of dueMarks(a, expected(days), requested, held)) {
+          requested.add(m.id);
+          held |= 1n << BigInt(m.id);
+          more = true;
+        }
+      }
+    };
+    // The horizon covers the worst case in the table: A9 is away for 60 days.
+    for (let day = a.mintDay + 1; day <= 800 && days.length < FINISH_LEVEL; day++) {
+      if (todayFor(a, day).checkin) days.push(day);
+      drain();
+    }
+    drain();
+    assert.equal(days.length, FINISH_LEVEL, `${a.name} never finished its year`);
+    assert.deepEqual(
+      [...requested].sort((x, y) => x - y),
+      a.marks.map((m) => m.id).sort((x, y) => x - y),
+      `${a.name} never qualified for every Mark it orders`,
+    );
+  }
 });
 
 // The reserve is USDC still owed to mints that have not been paid for, so a

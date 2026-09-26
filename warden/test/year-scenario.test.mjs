@@ -24,9 +24,12 @@ test("twelve agents, A1 to A12, each with a mint day, a miss rule and Marks", ()
     assert.ok(Array.isArray(a.marks), `${a.name} marks`);
     for (const m of a.marks) {
       assert.ok(Number.isInteger(m.id) && m.id >= 1 && m.id <= 10, `${a.name} mark id ${m.id}`);
-      const gate = m.when ?? {};
+      // A missing `when` is not tolerated: a Mark with no gate would be ordered
+      // on the first day, before the token could possibly qualify.
+      assert.equal(typeof m.when, "object", `${a.name} mark ${m.id} has no when`);
+      assert.notEqual(m.when, null, `${a.name} mark ${m.id} when is null`);
       assert.ok(
-        gate.level !== undefined || gate.run !== undefined,
+        m.when.level !== undefined || m.when.run !== undefined,
         `${a.name} mark ${m.id} has no level or run gate`,
       );
     }
@@ -46,23 +49,24 @@ test("owner is an array of dated actions, or absent", () => {
   }
 });
 
-test("A1 mints on D0 and checks in from D2, never on D0 or D1", () => {
+test("A1 mints on D0 and checks in from D1, never on the day it mints", () => {
   const a1 = byName("A1");
   assert.equal(a1.mintDay, 0);
   assert.deepEqual(todayFor(a1, 0), { mint: true, checkin: false, owner: null });
-  assert.deepEqual(todayFor(a1, 1), { mint: false, checkin: false, owner: null });
+  assert.deepEqual(todayFor(a1, 1), { mint: false, checkin: true, owner: null });
   assert.deepEqual(todayFor(a1, 2), { mint: false, checkin: true, owner: null });
   assert.equal(todayFor(a1, 365).checkin, true);
 });
 
-// The Clock writes the mint at mintDay + 1 and that day is already the token's
-// first credit, so mintDay + 2 is the first day an agent has to ask for.
-test("nobody checks in before mintDay + 2", () => {
+// The mint is written with the day the agent PAID and the contract sets lastDay
+// to it, so the mint day is the token's first credit and the day after it is
+// already a day the chain accepts.
+test("nobody checks in on or before its mint day, and everybody does the day after", () => {
   for (const a of AGENTS) {
-    for (let day = 0; day <= a.mintDay + 1; day++) {
+    for (let day = 0; day <= a.mintDay; day++) {
       assert.equal(todayFor(a, day).checkin, false, `${a.name} checked in on D${day}`);
     }
-    assert.equal(todayFor(a, a.mintDay + 2).checkin, true, `${a.name} skipped its first day`);
+    assert.equal(todayFor(a, a.mintDay + 1).checkin, true, `${a.name} skipped its first day`);
   }
 });
 
@@ -77,18 +81,27 @@ test("only the mint day carries mint, and only an owner day carries owner", () =
   }
 });
 
-test("A8 misses every tenth day after its mint: 13, 23, 33 and no others", () => {
+// The whole year, not the first forty days: a miss rule that drifted late in
+// the run would have gone unseen, and A8's finishing day is set by how many it
+// misses over the whole 365.
+test("A8 misses every tenth day from D13, and nothing else, all year", () => {
   const a8 = byName("A8");
   assert.equal(a8.mintDay, 3);
   const missed = [];
-  for (let day = 5; day <= 40; day++) if (!todayFor(a8, day).checkin) missed.push(day);
-  assert.deepEqual(missed, [13, 23, 33]);
+  for (let day = 4; day <= 400; day++) if (!todayFor(a8, day).checkin) missed.push(day);
+  // First missed day 13, then every tenth: written out independently of the
+  // rule, so the test cannot pass by repeating the same arithmetic.
+  assert.deepEqual(missed, Array.from({ length: 39 }, (_, i) => 13 + i * 10));
+  assert.equal(missed.at(-1), 393);
+  assert.equal(todayFor(a8, 4).checkin, true);
+  assert.equal(todayFor(a8, 12).checkin, true);
+  assert.equal(todayFor(a8, 14).checkin, true);
 });
 
-test("A9 checks in from D5 to D53, is away D54 to D113, and returns on D114", () => {
+test("A9 checks in from D4 to D53, is away D54 to D113, and returns on D114", () => {
   const a9 = byName("A9");
   assert.equal(a9.mintDay, 3);
-  for (let day = 5; day <= 53; day++) {
+  for (let day = 4; day <= 53; day++) {
     assert.equal(todayFor(a9, day).checkin, true, `A9 missed D${day}`);
   }
   for (let day = 54; day <= 113; day++) {
@@ -128,8 +141,8 @@ test("A12 mints on D20, the late finisher, and is the address A11 transfers to",
   const a12 = byName("A12");
   assert.equal(a12.mintDay, 20);
   assert.equal(todayFor(a12, 20).mint, true);
-  assert.equal(todayFor(a12, 21).checkin, false);
-  assert.equal(todayFor(a12, 22).checkin, true);
+  assert.equal(todayFor(a12, 20).checkin, false);
+  assert.equal(todayFor(a12, 21).checkin, true);
   const target = byName("A11").owner.find((o) => o.kind === "transfer").to;
   assert.ok(AGENTS.some((a) => a.name === target), `A11 transfers to unknown ${target}`);
 });

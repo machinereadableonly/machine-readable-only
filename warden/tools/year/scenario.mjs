@@ -36,10 +36,10 @@ export const AGENTS = [
 /**
  * What one agent does on one run day: mint, check in, and any owner action.
  *
- * Check-ins start at mintDay + 2. The Clock writes the mint at mintDay + 1 and
- * the contract sets the new token's lastDay to its mint day, so that first
- * written day IS the token's first credit -- a check-in asked for any earlier
- * is one the chain refuses as DayNotAdvanced.
+ * Check-ins start at mintDay + 1. The Clock mints with the day the agent PAID,
+ * and the contract sets the new token's lastDay to that day, so the mint day is
+ * the token's first credit and the very next day is already a day the chain
+ * accepts. Both guards refuse only `day <= lastDay`.
  *
  * `rested` is handed in rather than read from the table: resting is a fact
  * about the token on chain, and only the runner knows whether the seal landed.
@@ -48,7 +48,7 @@ export function todayFor(agent, day, { rested = false } = {}) {
   const owner = agent.owner?.find((o) => o.day === day)?.kind ?? null;
   return {
     mint: day === agent.mintDay,
-    checkin: !rested && day >= agent.mintDay + 2 && !agent.misses(day),
+    checkin: !rested && day >= agent.mintDay + 1 && !agent.misses(day),
     owner,
   };
 }
