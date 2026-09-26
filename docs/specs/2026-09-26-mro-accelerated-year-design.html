@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design: the accelerated year -- twelve agents, one fast year, on Base Sepolia</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Design: the accelerated year -- twelve agents, one fast year, on Base Sepolia</h1>
+<p>Status: DESIGN, approved in conversation 2026-09-26, awaiting spec review.</p>
+<h2>Why</h2>
+<p>Everything built since the last fast-days run (Phase 4, closed 2026-09-17) has
+only ever passed unit tests. The following have never run on a live chain:</p>
+<ul>
+<li>a token finishing at 365, and the five finisher Marks given by place</li>
+<li>two or more tokens finishing on the same day, ordered by lowest token id</li>
+<li>QR version 10 and the digit band, on tokens that reached them by living</li>
+<li>the heartbeat, sent by the Clock after 30 days of writing nothing</li>
+<li>the finishing night keeping its finishing credits (the AlreadyFinished fix)</li>
+<li>a nightly batch carrying a dozen agents at once</li>
+<li>the 1,000-block <code>eth_getLogs</code> paging against the public RPC</li>
+</ul>
+<p>This is the last cheap place to see them together before token #1 is minted
+on mainnet, where a token&#39;s code bytes and history are permanent. The run
+answers one question: does a year of real agents, through the real door,
+Warden, Clock and client, leave every token exactly where the rules say it
+should be?</p>
+<h2>What it is</h2>
+<p>A fresh fast-days pair (<code>MachineReadableOnlyFast</code>, a 300-second day) deployed
+to Base Sepolia from the current tree, with its own Warden, Clock, an agent
+<strong>runner</strong> that drives twelve scripted agents, and an independent <strong>checker</strong>.
+A year is 365 x 5 min = about 30.4 hours; the whole run with late finishers and
+the heartbeat phase is about 38 hours.</p>
+<p>Real parts throughout: the real Warden (<code>warden/src/main.mjs</code>), the real Clock,
+the real client library, the x402.org testnet facilitator, and real test USDC.
+Nothing is simulated except the length of a day.</p>
+<p>Rejected: one PM2 process per agent (12 more processes on a box that is already
+the constraint), and live LLM agents (12 x 365 sessions, and unrepeatable).</p>
+<h2>Budget: the USDC we have</h2>
+<p>The test wallet holds <strong>33 test USDC</strong> (read 2026-09-26). That pays for the
+12 mints, one Hush and both Statics (A5 and A7): 23, leaving 10. The bought
+Iris ($25), Aura ($25), Tint and Vessel are requested with the demand only --
+the Warden&#39;s price demand is read and asserted, nothing is paid.</p>
+<p><strong>The runner buys for real whenever the balance allows.</strong> At the moment a
+purchase is due it reads the test wallet&#39;s USDC; if it covers the price, it
+funds the agent and pays; if not, it records <code>demand-only</code> and moves on. So USDC
+that arrives mid-run (a faucet claim, the Discord request) is used without a
+restart. Priority when money is short, cheapest first: Hush, Static, bought
+Iris, Aura, Tint, Vessel.</p>
+<p>Gas: the deployer (about 0.029 test ETH) funds the fast Clock and sends a
+small amount to the three wallets that make owner transactions.</p>
+<h2>The twelve agents</h2>
+<p>Each agent has its own wallet (payer and owner) and its own signing identity.
+&quot;Dn&quot; is fast day n counted from the first day of the run.</p>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>Mints</th>
+<th>Behaviour</th>
+<th>Expected end</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A1, A2, A3</td>
+<td>D0</td>
+<td>Never miss. Claim Ache (run 7), Beat (30), earned Iris (100), Break (365)</td>
+<td>Finish the same day: A1 <strong>Apex</strong> (lowest id), A2 and A3 <strong>Atrium</strong></td>
+</tr>
+<tr>
+<td>A4</td>
+<td>D1</td>
+<td>Never miss</td>
+<td>Finishes alone, 4th, <strong>Atrium</strong></td>
+</tr>
+<tr>
+<td>A5</td>
+<td>D2</td>
+<td>Never misses. The buyer: Hush at mint (paid), Static at level 30 (paid), bought Iris (leaf) at 100, Tint after Iris, Vessel at 365</td>
+<td><strong>Valve</strong>; Iris onward paid only if funds allow</td>
+</tr>
+<tr>
+<td>A6</td>
+<td>D2</td>
+<td>Claims every earned rung, never misses</td>
+<td><strong>Valve</strong>; Break</td>
+</tr>
+<tr>
+<td>A7</td>
+<td>D2</td>
+<td>Never misses. Static at level 30 (paid), claims the earned Iris at run 100, then Aura</td>
+<td><strong>Valve</strong>; pair exclusions and the Iris prerequisite</td>
+</tr>
+<tr>
+<td>A8</td>
+<td>D3</td>
+<td>Misses every 10th day</td>
+<td>Broken streaks, colour drops, finishes about D405, <strong>Valve</strong></td>
+</tr>
+<tr>
+<td>A9</td>
+<td>D3</td>
+<td>50 days in, 60 away, then back every day</td>
+<td>Fades fully and recovers, finishes about D425, <strong>Valve</strong></td>
+</tr>
+<tr>
+<td>A10</td>
+<td>D3</td>
+<td>Rests on D120</td>
+<td>Frozen art, <code>resting</code> refusals, never finishes</td>
+</tr>
+<tr>
+<td>A11</td>
+<td>D3</td>
+<td>D50: transfers the token to A12&#39;s wallet; A12&#39;s wallet rebinds it to a new key; A11 carries on with that key</td>
+<td><strong>Valve</strong></td>
+</tr>
+<tr>
+<td>A12</td>
+<td>D20</td>
+<td>Never misses</td>
+<td>Late finisher, about D385, <strong>Valve</strong></td>
+</tr>
+<tr>
+<td>child</td>
+<td>--</td>
+<td>A1 seeds a child once its key has an agent-year; the runner checks it in daily</td>
+<td>Echo ring drawn; does not finish in the run</td>
+</tr>
+</tbody></table>
+<p>Eleven finishers reach places 1-11: one Apex, three Atrium, seven Valve.
+<strong>Chamber (15th-64th) and Aorta (65th on) are NOT reached live</strong> -- the operator
+chose the real place rules over a test-only shortcut. They stay covered by
+<code>FinishLine.t.sol</code> and the rendered sheets.</p>
+<p>Earned Marks are REQUESTED by the runner; the Clock never grants one on its own.</p>
+<h2>Components</h2>
+<p>All code is committed under <code>warden/tools/year/</code>. Keys, databases and logs live
+in a data directory OUTSIDE every repository, read from <code>MRO_YEAR_DIR</code> (mode
+700). No path or address is written into a tracked file.</p>
+<ol>
+<li><strong><code>wallets.mjs</code></strong> -- creates the 12 wallets and identities (plus the
+rebind key for A11) in the data directory, mode 600, and prints addresses
+only.</li>
+<li><strong><code>fund.mjs</code></strong> -- sends each agent its mint USDC from the test wallet and
+the three owner wallets their gas from the deployer. Later purchases are
+funded by the runner at the moment they fall due.</li>
+<li><strong><code>scenario.mjs</code></strong> -- the table above as DATA: per agent, per day, what to
+do. The only file to edit for a different run.</li>
+<li><strong><code>runner.mjs</code></strong> -- wakes 60 s into each fast day. For every agent, it looks up
+today&#39;s action in the scenario and performs it through the real client
+library: <code>beat</code>, <code>join</code>, a Mark request, <code>seed</code>, and the owner transactions
+(<code>rest</code>, transfer, <code>rebind</code>) sent from that agent&#39;s wallet. A failed
+check-in is retried up to 3 times, 30 s apart, unless the reason is final
+(<code>already-credited-today</code>, <code>resting</code>, <code>sunset</code>). Every action is one JSON
+line in <code>runner.jsonl</code>.</li>
+<li><strong><code>checker.mjs</code></strong> -- wakes 90 s after each Clock run. It reads every token&#39;s
+<code>viewOf</code> from the chain and <code>/t/&lt;id&gt;</code> from the Warden, and compares both
+with its own tally derived from <code>runner.jsonl</code>: level, streak, best run,
+the Marks word, finish place and Mark, resting, children and echo. A
+mismatch is re-read once (the public RPC is not read-after-write
+consistent) before it is logged as FAIL in <code>checker.jsonl</code>.
+At milestones -- streak 3/7/30/100, first lapse, full fade, rest, every
+finish, the child&#39;s echo -- it renders <code>tokenURI</code> and decodes the QR at the
+gate widths with the existing decode tooling.</li>
+<li><strong><code>report.mjs</code></strong> -- turns both logs into one HTML report: per agent, a
+timeline, final state, FAILs, and a row per path (proven live / demand-only
+/ not reached).</li>
+<li><strong><code>year.config.cjs</code></strong> -- the PM2 process list: warden (port 4006, bound to
+127.0.0.1, <code>MRO_DAY_SECONDS=300</code>), clock, runner, checker. Each app carries
+the same <code>filter_env</code> list as <code>warden/ecosystem.config.cjs</code>. The name ends
+in <code>.config.cjs</code> because PM2 runs any other file as a single app.</li>
+<li><strong><code>start.sh</code> / <code>stop.sh</code></strong> -- the operator&#39;s one-liners. <code>start.sh</code> refuses
+unless the four suites pass, reads back the four process NAMES after
+starting, and runs the runner&#39;s first pass immediately.</li>
+</ol>
+<p>The stack runs from a <code>git archive</code> export of HEAD, not the live checkout: the
+Warden writes its key directory to a path fixed by its source location, and a
+fast Warden in the live tree would overwrite the live site&#39;s directory.</p>
+<h2>Hard stops and failure handling</h2>
+<ul>
+<li>A checker FAIL is logged and the run continues -- stopping at the first
+would hide the rest.</li>
+<li>The runner pauses all agents (and says why in <code>runner.jsonl</code>) when: the
+Clock has failed 3 runs in a row; a wallet cannot pay for an action that
+must be paid (a mint); or the chain refuses a write the checker expected to
+land.</li>
+<li>The public RPC&#39;s <code>eth_getLogs</code> cap and read-after-write lag are known; both
+are handled in the Clock and the checker, not worked around by hand.</li>
+</ul>
+<h2>The end phase</h2>
+<p>When every token is finished or resting, the Clock has nothing to write. After
+30 fast days (2.5 hours) of silence it must send <code>heartbeat()</code>; the checker
+asserts <code>lastWardenDay</code> advanced with no other write. Then <code>stop.sh</code> stops the
+four processes. <strong>The piece is NOT sunset</strong> -- Phase 4 already proved that, and
+an open contract can be reused for a second run.</p>
+<h2>Tests</h2>
+<p>Unit tests for <code>scenario.mjs</code> (a day&#39;s actions), the checker&#39;s tally (level,
+streak, lapse, place from finish order) and the runner&#39;s retry rule go in
+<code>warden/test/</code>, red first. The four suites stay green before any commit.</p>
+<h2>Operator steps</h2>
+<ol>
+<li>Start the stack: one command, <code>start.sh</code>. The auto-mode classifier refused
+Claude starting processes that sign transactions in Phase 4.</li>
+<li>Optional, any time: more test USDC to the test wallet. It is used as it
+arrives.</li>
+</ol>
+<p>Nothing here spends real funds, nothing touches mainnet or the live Sepolia
+pair, and nothing is irreversible.</p>
+<h2>Not in this design</h2>
+<ul>
+<li>Chamber and Aorta places live (needs 15 and 65 finishers).</li>
+<li>Vouchers and the Ownable2Step handover (covered by contract tests, skipped in
+Phase 4 for the same reason).</li>
+<li>Sunset, and a grandchild.</li>
+</ul>
+</body>
+</html>
