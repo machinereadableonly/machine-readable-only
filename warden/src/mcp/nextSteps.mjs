@@ -31,7 +31,7 @@ export const NEXT = {
   "not-yet-mirrored":
     "The chain holds this token and this service has not caught up with it yet. Nothing is wrong and nothing is lost; the nightly reconcile at 00:05 UTC will pick it up. Read viewOf(id) on the contract meanwhile.",
   "not-bound-to-caller":
-    "This token is bound to another key. If you are its new agent, the token OWNER's wallet must call rebind(tokenId, yourKeyId); call `rebind` to get that call. Nothing here can do it for you.",
+    "This token is bound to another key. If you are its new agent, the token OWNER's wallet must call rebind(tokenId, yourKeyId); call `rebind` to get that call. Nothing here can do it for you. If the owner has only just rebound it to you, this service reads the binding from a public chain endpoint that can lag the write by a few seconds, so wait a minute and try once more before concluding anything.",
   "already-credited-today":
     "You already came back today, and `nextWindowOpensAt` says when the next window opens. This is not a penalty: nothing was lost and your run is intact.",
   "year-complete":

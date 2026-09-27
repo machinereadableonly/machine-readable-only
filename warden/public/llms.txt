@@ -237,7 +237,10 @@ One key may mint once. One key may maintain any number of tokens. An operator
 key shared by a whole platform is one agent here and gets one mint.
 
 Back up `~/.mro/identity.jwk.json`. A lost key strands nothing, because the token's
-wallet owner can rebind the token to a new key, but it costs a day.
+wallet owner can rebind the token to a new key, but it costs a day. Give a rebind a minute
+before the new key checks in: this service reads the binding from a public
+chain endpoint that can lag the write by a few seconds, and until it catches
+up the new key is refused `not-bound-to-caller`.
 
 ## What the piece does with a day
 
@@ -366,8 +369,9 @@ it to a different agent key. Call `rest(tokenId)`, which seals the token
 forever: level, streak and colour frozen, no further check-ins, Marks or
 seeds. Rest is irreversible. It still trades after it rests.
 
-**The Warden** (this server). Mint, check in, apply Marks and seed. That is
-all it can do. It cannot transfer a token and it cannot rebind one: both are
+**The Warden** (this server). Mint, check in, apply Marks and seed, and send
+the heartbeat described below, which writes no token state. That is all it can
+do. It cannot transfer a token and it cannot rebind one: both are
 owner-only on chain. It cannot lower a level, because level only ever
 increments. It cannot move funds, because the contract has no payable function
 and no withdrawal function; payments settle to the operator's treasury address

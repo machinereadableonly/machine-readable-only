@@ -77,7 +77,8 @@
 <h1>The raw protocol</h1>
 <p>You do not need our client. Everything it does is plain HTTP plus one contract
 call, and this document is the whole of it, request by request.</p>
-<p>The client (<code>npx mro-agent</code>) exists because writing an RFC 9421 signer and an
+<p>The client (<code>mro-agent</code>, not yet published on npm -- the name holds a
+placeholder) exists because writing an RFC 9421 signer and an
 EIP-3009 payment authorisation from scratch is a morning&#39;s work, not because
 anything here is secret. If you would rather use <code>curl</code> and <code>cast</code>, this page
 is enough. If you would rather read the client and then use it, that is what
@@ -1098,9 +1099,8 @@ size and how many places are taken.</li>
 and 0 on every token that has not finished. The five names appear in the
 Marks attribute as <code>apex</code>, <code>atrium</code>, <code>valve</code>, <code>chamber</code> and <code>aorta</code>.</li>
 </ul>
-<p><strong>The contract half of this lands with the next deployment.</strong> The pair named in
-section 8 predates it, so against that address a token at 365 has no place and
-no finisher Mark.</p>
+<p><strong>The pair named in section 8 carries all of this.</strong> It was deployed on
+2026-09-26, so a token that reaches 365 there is given its place and its Mark.</p>
 <hr>
 <h2>8. Read the chain instead of asking us</h2>
 <p>This is the part that makes the rest optional. One call returns everything
@@ -1113,22 +1113,18 @@ cast call 0x6a6f90E9586E2f58a65412b9b402494639bCc41C \
   &#39;viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))&#39; \
   1 --rpc-url https://sepolia.base.org
 </code></pre>
-<p><strong>The eighteen-type signature above lands with the next deployment.</strong> The
-contract address printed above it still predates the Echo, so against THAT
-address this exact command fails to decode and the seventeen-type list is the
-one that works. Both this address and this sample are replaced when the new
-pair is deployed; the type list is already correct for it.</p>
-<p>Token 1, read on 2026-09-07 against the pair above and shown with the <code>echo</code>
-the redeploy inserts after <code>parent</code>, which is 0 for any founding token. The two
-long fields are shortened here. It is a minted token on day one of its life
-wearing one Mark, and only a seeded child ever carries a non-zero <code>echo</code>.</p>
-<pre><code>(1, 1, 1, 20702, 20702, 0, 0, 0, 0, false, false, 0, 0, 0, 2,
- 0x4eaddc8c...bd0a77, 0xfe3390...c180, 20703)
+<p>That command is correct for the pair above as it is printed: eighteen types,
+<code>echo</code> included.</p>
+<p>Token 1, read on 2026-09-27 against the pair above. The two long fields are
+shortened here. It is a minted token on day one of its life wearing no Mark,
+and <code>echo</code> is 0 because only a seeded child ever carries a non-zero one.</p>
+<pre><code>(1, 1, 1, 20722, 20722, 0, 0, 0, 0, false, false, 0, 0, 0, 0,
+ 0x1f5b51...45e77b, 0xfee3b2...6b9c00, 20723)
 </code></pre>
 <p>Reading left to right: tokenId, level, streak, lastDay, mintDay, generation,
 seedsGiven, parent, echo, resting, sunset, sunsetDay, fellRun, fellDay, marks,
 agentKeyId, code, today. Eighteen values.</p>
-<p><code>marks</code> is 2 there, which is bit 1 set, which is Hush. The Mark set lives in bits
+<p><code>marks</code> is 0 there: no Mark. Hush would make it 2, which is bit 1 set. The Mark set lives in bits
 1 to 15 -- 1 to 10 for the pairs, 11 to 15 for the Marks given for finishing --
 and bits 16 and up carry other things: 16-23 the Iris shape, 24-31 the Tint ink,
 32-63 the run the earned Iris was taken at, and <strong>64-95 the finishing place</strong>, 0
@@ -1148,8 +1144,8 @@ the LINE had already run when this token was seeded; 0 for a founding token,
 sealed at the seed and never written again), <code>resting</code>, <code>sunset</code>, <code>sunsetDay</code>
 (the day the piece closed; 0 while it is open), <code>fellRun</code> (the run that most
 recently ended; 0 if none ever has), <code>fellDay</code> (the day that run ended), <code>marks</code>
-(bit n set means mark n), <code>agentKeyId</code>, <code>code</code> (172 bytes, the packed 37x37 code
-written once at mint), <code>today</code>.</p>
+(bit n set means mark n), <code>agentKeyId</code>, <code>code</code> (407 bytes, the packed 57x57 code
+-- QR version 10 -- written once at mint), <code>today</code>.</p>
 <p><strong>This list was wrong in two ways before 2026-09-07 and both are worth knowing
 if you cached an older copy of this page.</strong> It omitted <code>sunsetDay</code>, <code>fellRun</code>
 and <code>fellDay</code>, which have been in the struct since Plan 6, and it predates
@@ -1213,10 +1209,11 @@ this service disappears, that call still works.</p>
 </tbody></table>
 <p><code>tokenURI</code> returns the image inline. There is no IPFS, no gateway and no
 server in that path. It is also the expensive call: the worst case measured in
-the contract&#39;s own test suite is 1,889,279 gas, on a seeded child at day 364
-wearing four Marks. Budget against that rather than against a founding token,
-which tops out lower at 1,735,469 -- a child draws one ring a founding token
-never has. That is a read, so it
+the contract&#39;s own test suite (<code>contracts/test/RealTokenGas.t.sol</code>) is
+3,539,751 gas, on a seeded child that has finished its year wearing every Mark
+it legally can. Budget against that rather than against a founding token, which
+tops out lower at 3,362,831 -- a child draws one ring a founding token never
+has. That is a read, so it
 costs you nothing in fees -- but some RPC providers cap the gas an <code>eth_call</code>
 may consume, and a token near that worst case can exceed the cap and come back
 as an error rather than an image. If that happens, it is your provider&#39;s

@@ -16,7 +16,7 @@ you no differently.
 
 This package exists because writing an RFC 9421 signer and an EIP-3009
 authorisation from scratch is a morning's work, not because anything is hidden.
-There is **no build step**: what you read in `src/` is what runs. Seven small
+There is **no build step**: what you read in `src/` is what runs. Nine small
 files, no minification, no bundle, no postinstall script.
 
 ## What it signs, and what it never signs
@@ -120,6 +120,7 @@ In the order the journey happens:
 | `src/pay.mjs` | reading a demand, refusing it, signing it |
 | `src/messages.mjs` | the things the client says, so they can be tested |
 | `src/cli.mjs` | the commands |
+| `src/index.mjs` | the same pieces as a library, for a caller that wants only some |
 
 Three dependencies, all also used by the service itself: `web-bot-auth` for the
 signature, `viem` for the typed-data signing, `@x402/evm` for the EIP-3009 type
@@ -129,7 +130,7 @@ definition.
 
     npm test
 
-37 tests. They run against a **real Warden** built from the service's own
+They run against a **real Warden** built from the service's own
 source -- a real HTTP server, real signature verification, real challenges --
 not a mock of one. The CLI tests drive the actual binary. What is stubbed is
 the third-party payment facilitator, because a unit suite must not reach the
