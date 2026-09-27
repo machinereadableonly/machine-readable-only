@@ -130,6 +130,18 @@ test("a USDC balance is read from Circle's own contract, as base units", async (
   assert.deepEqual(f.sent[0], { read: "balanceOf", address: USDC, args: [AGENT] });
 });
 
+// Funding tops a wallet up to the gas it needs, so it has to read what is
+// already there rather than sending the same amount on every run.
+test("a native balance is read as wei", async () => {
+  const f = fakes();
+  f.publicClient.getBalance = async ({ address }) => {
+    f.sent.push({ read: "getBalance", address });
+    return 500_000_000_000_000n;
+  };
+  assert.equal(await chainWith(f).ethBalance(AGENT), 500_000_000_000_000n);
+  assert.deepEqual(f.sent[0], { read: "getBalance", address: AGENT });
+});
+
 test("USDC, ETH, an owner call and a transfer each send the call the runner meant", async () => {
   const f = fakes();
   const chain = chainWith(f);

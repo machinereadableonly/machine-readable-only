@@ -6,7 +6,8 @@
 #   bash script/fast/deploy-fast.sh              # simulate only
 #   bash script/fast/deploy-fast.sh --broadcast  # actually send
 #
-# The pair's Warden is the fast Clock's own key (~/.mro-fast/clock.address),
+# The pair's Warden is the fast Clock's own key
+# (${MRO_FAST_CLOCK_ADDRESS_FILE:-~/.mro-fast/clock.address}),
 # never the live Clock's: the fast copy must not be able to touch the real one,
 # and the real one must not be able to write here.
 #
@@ -32,7 +33,11 @@ set -a
 set +a
 
 export EXPECTED_CHAIN_ID=84532
-WARDEN_ADDRESS="$(cat "$HOME/.mro-fast/clock.address")"
+# The Warden address file, overridable so a second run can use another
+# Clock wallet without editing this script. The default is unchanged.
+CLOCK_ADDRESS_FILE="${MRO_FAST_CLOCK_ADDRESS_FILE:-$HOME/.mro-fast/clock.address}"
+[ -f "$CLOCK_ADDRESS_FILE" ] || { echo "FAIL: no Warden address at $CLOCK_ADDRESS_FILE" >&2; exit 1; }
+WARDEN_ADDRESS="$(tr -d " \t\r\n" < "$CLOCK_ADDRESS_FILE")"
 export WARDEN_ADDRESS
 echo "chain   84532 (Base Sepolia)"
 echo "warden  $WARDEN_ADDRESS (the fast Clock)"

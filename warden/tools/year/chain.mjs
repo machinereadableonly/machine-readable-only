@@ -87,6 +87,10 @@ export function makeChain({ rpcUrl, contract, chainId = CHAIN_ID, publicClient, 
     usdcBalance: async (address) =>
       BigInt(await pub.readContract({ address: USDC, abi: USDC_ABI, functionName: "balanceOf", args: [address] })),
 
+    /// Native test ETH, in wei. Funding reads it to top a wallet up to the gas it
+    /// needs rather than sending the same amount again on every run.
+    ethBalance: async (address) => BigInt(await pub.getBalance({ address })),
+
     sendUsdc: async (fromKey, to, amount) =>
       confirm(await walletFor(fromKey).writeContract({
         address: USDC, abi: USDC_ABI, functionName: "transfer", args: [to, BigInt(amount)],
