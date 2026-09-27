@@ -86,10 +86,13 @@ year_apps_online() {
   [ -n "$jlist" ] || return 1
   # A here-string, not a pipe: the status this function returns must be node's
   # answer about the list, not pm2's about having printed one.
-  node -e '
+  # Only apps running THIS directory's tree matter: a re-export elsewhere cannot
+  # touch the files they execute.
+  YEAR_TREE="$DIR/tree/" node -e '
     let list = [];
     try { list = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(1); }
-    const up = list.filter((a) => a.name?.startsWith("mro-year-") && a.pm2_env?.status === "online");
+    const mine = (a) => String(a.pm2_env?.pm_exec_path ?? "").startsWith(process.env.YEAR_TREE);
+    const up = list.filter((a) => a.name?.startsWith("mro-year-") && a.pm2_env?.status === "online" && mine(a));
     process.stdout.write(up.map((a) => a.name).join(" "));
     process.exit(up.length > 0 ? 0 : 1);
   ' <<< "$jlist"
