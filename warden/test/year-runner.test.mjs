@@ -13,7 +13,7 @@ import { AGENTS } from "../tools/year/scenario.mjs";
 import {
   runDay, emptyState, agentSpecs, creditedDays, clockFailing, nextWakeMs,
   yearPaths, makeLog, loadState, writeState, passDeadlineMs,
-  agentIsDone, foundingAllDone, firstPassFits, daySecondsFrom,
+  agentIsDone, foundingAllDone, firstPassFits, deferFirstPass, daySecondsFrom,
   DAY_SECONDS, DEAD_TREASURY, FIRST_PASS_MIN_MS, MINT_USDC, RETRY_PAUSE_MS, SITE, ORIGIN,
 } from "../tools/year/runner.mjs";
 
@@ -838,6 +838,29 @@ test("a first pass with too little of the fast day left is not run", () => {
   // Past the deadline entirely, there is nothing left to defer from.
   assert.equal(firstPassFits(300_290_000, 300), false);
   assert.equal(FIRST_PASS_MIN_MS, 90_000);
+});
+
+// The deferral belongs to the start of a RUN, not the start of a process. PM2
+// restarts the runner for its own reasons, and one landing in the last seconds of
+// a fast day would cost all twelve agents that day's credit and break every
+// streak -- which is far worse than the boundary it was guarding against.
+test("only a run that has not begun defers its first pass", () => {
+  const late = 300_279_000;   // under 90 s of the fast day left
+  const early = 300_060_000;  // the ordinary wake, with the day ahead of it
+
+  // Day zero, with nowhere to put a mint: wait for the next fast day.
+  assert.equal(deferFirstPass(emptyState(), late, 300), true);
+  assert.equal(deferFirstPass(emptyState(), early, 300), false);
+
+  // A restart mid-run: the day is already this token's, and skipping it breaks
+  // twelve streaks.
+  const going = { ...emptyState(), startDay: 1000, tokens: { A1: 1 } };
+  assert.equal(deferFirstPass(going, late, 300), false);
+  assert.equal(deferFirstPass(going, early, 300), false);
+
+  // A deferral leaves startDay null, so the next wake asks the same question and
+  // that day's answer is yes.
+  assert.equal(emptyState().startDay, null);
 });
 
 test("the runner refuses a fast day it cannot use rather than sleeping on NaN", () => {

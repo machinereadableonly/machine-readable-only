@@ -155,6 +155,19 @@ export function firstPassFits(nowMs, daySeconds = DAY_SECONDS, minimumMs = FIRST
 }
 
 /**
+ * Whether to wait for the next fast day rather than pass now.
+ *
+ * Only a run that has NOT BEGUN may defer. PM2 restarts this process for its own
+ * reasons, and a restart in the last seconds of a fast day would cost all twelve
+ * agents that day's credit and break every streak -- far worse than the boundary
+ * the deferral guards against. `startDay` is written by the first pass that gets as
+ * far as reading the chain, and stays null through a deferral, so day zero keeps
+ * its protection and asks again at the next wake.
+ */
+export const deferFirstPass = (state, nowMs, daySeconds = DAY_SECONDS) =>
+  state.startDay === null && !firstPassFits(nowMs, daySeconds);
+
+/**
  * The fast day, validated: a bad value refuses to start rather than aligning a
  * process to a day length nothing else in the run is using.
  *
@@ -701,22 +714,20 @@ export async function main() {
   // length would make every sleep fire at once and the run a hot loop.
   const daySeconds = daySecondsFrom(process.env);
 
-  let first = true;
   for (;;) {
-    // The first pass runs wherever in the fast day the operator started the stack,
-    // and a mint day is written once and for ever. Too little of the day left, and
-    // the run waits for the next one rather than splitting A1-A3 across a boundary.
-    if (first && !firstPassFits(Date.now(), daySeconds)) {
+    // The run's first pass starts wherever in the fast day the operator started the
+    // stack, and a mint day is written once and for ever. Too little of the day
+    // left, and the run waits for the next one rather than splitting A1-A3 across a
+    // boundary. A RESTART never defers: see deferFirstPass.
+    if (deferFirstPass(state, Date.now(), daySeconds)) {
       log({
         day: null, chainDay: null, agent: null, tokenId: null, action: "first-pass-deferred",
         // Nothing failed: this is a pass deliberately not taken.
         ok: true, reason: `under ${FIRST_PASS_MIN_MS / 1000} s of the fast day left`,
       });
-      first = false;
       await defaultSleep(nextWakeMs(Date.now(), daySeconds) - Date.now());
       continue;
     }
-    first = false;
     try {
       const chainDay = await chain.today();
       // Persisted before the pass: a pass that dies must not let the next one
