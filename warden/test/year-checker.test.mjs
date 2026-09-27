@@ -11,7 +11,8 @@ import { EventEmitter } from "node:events";
 
 import {
   compare, milestones, heartbeatMilestone, emptyMemory, runPass, tokensOf,
-  daySecondsFrom, decodeArgs, checkerPaths, toBig, markBitsOf, mirrorReader, makeDecoder,
+  daySecondsFrom, decodeArgs, checkerPaths, toBig, markBitsOf,
+  mirrorReader, makeDecoder, readersOf,
   MARK_BITS, REREAD_PAUSE_MS, OFFSET_SECONDS, DECODE_TIMEOUT_MS,
 } from "../tools/year/checker.mjs";
 import { expected, places } from "../tools/year/tally.mjs";
@@ -52,6 +53,21 @@ test("a chain level below the tally is one FAIL on level", () => {
   });
   assert.equal(findings.length, 1);
   assert.deepEqual(findings[0], { field: "level", chain: 5, expected: 6, severity: "FAIL" });
+});
+
+// BOTH tallies are seeded with the chain's own mintDay, so a mint written on the
+// wrong day shifts every expected value with it and cancels out of level, streak
+// and lastDay alike. The runner's own record of the day it queued the creation is
+// the only witness that can see it.
+test("a mintDay the runner did not queue is a FAIL, even though the tally agrees", () => {
+  const tally = expected(days(1000, 10));
+  const agreeing = { chain: view(), mirror: mirrorView(), tally };
+  assert.deepEqual(compare({ ...agreeing, queued: 1000 }), []);
+  assert.deepEqual(compare({ ...agreeing, queued: 999 }), [
+    { field: "mintDay", chain: 1000, expected: 999, severity: "FAIL" },
+  ]);
+  // Nothing queued for it in the log leaves nothing to compare against.
+  assert.deepEqual(compare({ ...agreeing, queued: null }), []);
 });
 
 // The Warden credits a day the moment it accepts it; the Clock writes it at the
@@ -186,12 +202,27 @@ test("the heartbeat is lastWardenDay advancing on a day with no credit, mint or 
 
 test("the fast day is read from the environment and a useless value refuses to start", () => {
   assert.equal(daySecondsFrom({}), 300);
-  assert.equal(daySecondsFrom({ MRO_DAY_SECONDS: "60" }), 60);
+  assert.equal(daySecondsFrom({ MRO_DAY_SECONDS: "600" }), 600);
   for (const bad of ["0", "-5", "soon", "", "NaN"]) {
     assert.throws(() => daySecondsFrom({ MRO_DAY_SECONDS: bad }), /MRO_DAY_SECONDS/);
   }
   // The pass runs well after the Clock's own +30 s and well before the boundary.
   assert.ok(OFFSET_SECONDS > 30 && OFFSET_SECONDS < 300);
+  // A day no longer than the offset would have every pass waking past its own
+  // boundary and reading the following day, silently.
+  assert.throws(() => daySecondsFrom({ MRO_DAY_SECONDS: String(OFFSET_SECONDS) }), /240/);
+  assert.throws(() => daySecondsFrom({ MRO_DAY_SECONDS: "60" }), /greater than/);
+  assert.equal(daySecondsFrom({ MRO_DAY_SECONDS: String(OFFSET_SECONDS + 1) }), OFFSET_SECONDS + 1);
+});
+
+// Structural, not a promise: every send in the chain adapter takes the sending
+// key first, and what the pass is handed carries no send at all.
+test("the pass is handed the three reads and nothing that could write", () => {
+  const readers = readersOf({
+    viewOf: "v", today: "t", lastWardenDay: "w",
+    sendUsdc: "no", sendEth: "no", ownerCall: "no", transfer: "no", usdcBalance: "no", seedsAvailable: "no",
+  });
+  assert.deepEqual(Object.keys(readers).sort(), ["lastWardenDay", "today", "viewOf"]);
 });
 
 test("the tokens of a pass are the ones state.json has ids for", () => {
@@ -323,7 +354,13 @@ test("a pass logs one line per token and asks the chain for reads only", async (
   const h = harness({
     chain: fakeChain({ today: 1010, views: { 1: view(), 2: view({ level: 10, streak: 10 }) } }),
     mirror: { 1: mirrorView({ tokenId: 1 }), 2: mirrorView({ tokenId: 2 }) },
-    lines: [...checkins(1, 1001, 9), ...checkins(2, 1001, 9)],
+    // The mint lines matter: they are what gives the pass a queued day to compare
+    // the chain's mintDay against.
+    lines: [
+      { action: "mint", ok: true, tokenId: 1, chainDay: 1000 },
+      { action: "mint", ok: true, tokenId: 2, chainDay: 1000 },
+      ...checkins(1, 1001, 9), ...checkins(2, 1001, 9),
+    ],
     state: { tokens: { A1: 1, A2: 2 } },
   });
   const { said } = await quietly(h.run);
@@ -396,8 +433,6 @@ function growing(tokenId, count) {
   };
 }
 
-/// Nothing is a milestone on a first read: a restart would otherwise re-fire
-/// every rung a token has ever crossed, and pay for a decode of each.
 // viewOf answers a view of ZEROS for an id the chain has never been given --
 // level 0 is the contract's own test for that. A token the runner queued today is
 // not on chain until the Clock's run at the next boundary, so that is not a fault.
@@ -417,20 +452,30 @@ test("a token queued but not yet written by the Clock is pending, not a FAIL", a
   assert.deepEqual(h.decoded, []);
 });
 
-test("a token still not written two days after it was queued is a FAIL", async () => {
-  const h = harness({
-    chain: fakeChain({ today: 1003, views: { 1: view({ level: 0, streak: 0, lastDay: 0, mintDay: 0, runFloor: 0 }) } }),
+// The boundary itself, because one day of slack and two are different claims: at
+// +1 the Clock's run has had exactly one chance, and at +2 it has had two.
+test("pending lasts one day past the day it was queued, and not two", async () => {
+  const unwritten = (today) => harness({
+    chain: fakeChain({ today, views: { 1: view({ level: 0, streak: 0, lastDay: 0, mintDay: 0, runFloor: 0 }) } }),
     mirror: { 1: mirrorView({ tokenId: 1, level: 1, streak: 1, lastDay: 1000 }) },
     lines: [{ action: "mint", ok: true, tokenId: 1, chainDay: 1000 }],
     state: { tokens: { A1: 1 } },
   });
-  const { said } = await quietly(h.run);
-  const line = h.logged.find((l) => l.tokenId === 1);
+  const oneDay = unwritten(1001);
+  assert.deepEqual((await quietly(oneDay.run)).said, []);
+  assert.equal(oneDay.logged.find((l) => l.tokenId === 1).pending, true);
+
+  const twoDays = unwritten(1002);
+  const { said } = await quietly(twoDays.run);
+  const line = twoDays.logged.find((l) => l.tokenId === 1);
   assert.equal(line.ok, false);
+  assert.equal(line.pending, undefined);
   assert.deepEqual(line.findings.map((f) => f.field), ["onChain"]);
   assert.equal(said.length, 1);
 });
 
+/// Nothing is a milestone on a first read: a restart would otherwise re-fire
+/// every rung a token has ever crossed, and pay for a decode of each.
 test("a milestone is a crossing, so a first read of a token is quiet", async () => {
   const at = growing(1, 6);
   const h = harness({
@@ -524,6 +569,53 @@ function finishingPair() {
   });
   return { lines, nearly, done };
 }
+
+// `lastDaysMoved` only sees a token this pass read AND read before, so a night
+// the Clock spent crediting a token the checker has no earlier view of would have
+// looked silent. The runner's log is what rules the day out.
+test("a credited check-in rules out a heartbeat, even for a token never read before", async () => {
+  const memory = emptyMemory();
+  const rested = view({ level: 40, streak: 40, lastDay: 1039, runFloor: 40, resting: true });
+  const mirrored = mirrorView({ tokenId: 1, level: 40, streak: 40, lastDay: 1039, resting: true });
+  const lines = checkins(1, 1001, 39);
+  const settle = harness({
+    chain: fakeChain({ today: 1040, wardenDay: 1040, views: { 1: rested } }),
+    mirror: { 1: mirrored }, lines, state: { tokens: { A1: 1 } }, memory,
+  });
+  await quietly(settle.run);
+
+  // A second token appears, credited yesterday: the Clock wrote that, so today's
+  // advance is a batchCheckIn and not a heartbeat.
+  const busy = harness({
+    chain: fakeChain({ today: 1070, wardenDay: 1070, views: { 1: rested, 2: view({ level: 2, streak: 2, lastDay: 1069, mintDay: 1068, runFloor: 2 }) } }),
+    mirror: { 1: mirrored, 2: mirrorView({ tokenId: 2, level: 2, streak: 2, lastDay: 1069 }) },
+    lines: [...lines, { action: "checkin", ok: true, tokenId: 2, chainDay: 1069 }],
+    state: { tokens: { A1: 1, A2: 2 } }, memory,
+  });
+  await quietly(busy.run);
+  assert.deepEqual(busy.logged.filter((l) => l.milestone === "heartbeat"), []);
+});
+
+// Twenty seconds per token would spend four minutes inside a five-minute day, so
+// the whole divergent set waits together, once.
+test("thirteen tokens disagreeing at once wait once, not thirteen times", async () => {
+  const tokens = {};
+  const views = {};
+  const mirror = {};
+  const lines = [];
+  for (let id = 1; id <= 13; id++) {
+    tokens[`A${id}`] = id;
+    // Every one of them a day behind what the runner's log says it should be.
+    views[id] = view({ level: 9, streak: 9, lastDay: 1008, runFloor: 9 });
+    mirror[id] = mirrorView({ tokenId: id });
+    lines.push(...checkins(id, 1001, 9));
+  }
+  const h = harness({ chain: fakeChain({ today: 1010, views }), mirror, lines, state: { tokens } });
+  const { said } = await quietly(h.run);
+  assert.deepEqual(h.slept, [REREAD_PAUSE_MS]);
+  assert.equal(h.logged.filter((l) => l.ok === false).length, 13);
+  assert.equal(said.length, 13);
+});
 
 test("two tokens finishing the same day take their places by lowest id", async () => {
   const { lines, nearly, done } = finishingPair();

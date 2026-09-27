@@ -7,6 +7,10 @@ import { renderReport, esc, markStatus, FADE_NOTE } from "../tools/year/report.m
 
 const state = { startDay: 1000, tokens: { A1: 1, A5: 5, child: 9 } };
 
+/// Every table's row header IS the name, so a leading `<th>` finds the row the
+/// test means -- where `>Hush<` would also match an agent's Marks-held cell.
+const rowFor = (html, name) => html.split("\n").find((l) => l.startsWith(`<tr><th>${name}</th>`));
+
 /// The last checker line for a token is where the report reads its final state.
 const checked = (over = {}) => ({
   ts: "2026-09-26T00:00:00.000Z", chainDay: 1365, agent: "A1", tokenId: 1, ok: true,
@@ -40,35 +44,86 @@ test("a FAIL is counted against the agent that owns the token", () => {
     checked({ ok: false, findings: [{ field: "streak", chain: 1, expected: 5, severity: "FAIL" }] }),
     checked({ agent: "A5", tokenId: 5, place: 0, marks: "0" }),
   ], state);
-  const row = html.split("\n").find((l) => l.includes(">A1<"));
+  const row = rowFor(html, "A1");
   assert.ok(row, "the agent's row is on its own line");
   assert.match(row, /class="fail">2</);
   assert.match(html, /chain 4/);
   assert.match(html, /expected 5/);
 });
 
-test("a Mark paid for reads proven live, a Mark only quoted reads demand-only, one never asked reads not reached", () => {
+// PROVEN LIVE MEANS THE BIT IS ON CHAIN. An accepted order is a row in the
+// mirror's queue, and a Mark ordered but never written is the failure this run
+// exists to catch -- it must not read as the proof.
+test("a Mark is proven live only when its bit is on chain, ordered or not", () => {
   const lines = [
     marked({ markId: 1, outcome: "applied-queued" }),
     marked({ markId: 7, outcome: "demand-only", settled: false, price: "1250000000" }),
   ];
-  assert.equal(markStatus(lines, 1), "proven live");
+  assert.equal(markStatus(lines, 1, new Set([1])), "proven live");
+  assert.equal(markStatus(lines, 1), "ordered, not seen on chain");
+  assert.equal(markStatus(lines, 1, new Set([2])), "ordered, not seen on chain");
   assert.equal(markStatus(lines, 7), "demand-only");
   assert.equal(markStatus(lines, 3), "not reached");
-  // A demand-only answer followed by a real purchase is proven live.
-  assert.equal(markStatus([marked({ markId: 5, outcome: "demand-only" }), marked({ markId: 5 })], 5), "proven live");
-  const html = renderReport(lines, [checked()], state);
-  assert.match(html, /Hush/);
-  assert.match(html, /Vessel/);
+  // The bit outranks the order: a demand-only answer followed by a real purchase
+  // the Clock wrote is proven live.
+  assert.equal(markStatus([marked({ markId: 5, outcome: "demand-only" }), marked({ markId: 5 })], 5, new Set([5])), "proven live");
+
+  // And through the page: the bit comes from a PASSING checker row's marks word.
+  const ordered = renderReport(lines, [checked({ marks: "0" })], state);
+  assert.match(rowFor(ordered, "Hush"), /ordered, not seen on chain/);
+  const written = renderReport(lines, [checked({ marks: String(1n << 1n) })], state);
+  assert.match(rowFor(written, "Hush"), /proven live/);
+  assert.match(rowFor(written, "Vessel"), /demand-only/);
+});
+
+// A Mark bit read in a FAILING row is the value the finding is about, so it
+// cannot be the evidence that the Mark landed.
+test("a Mark bit seen only in a failing row is not proven live", () => {
+  const lines = [marked({ markId: 1, outcome: "applied-queued" })];
+  const html = renderReport(lines, [
+    checked({ ok: false, marks: String(1n << 1n), place: 0, findings: [{ field: "level", chain: 4, expected: 5, severity: "FAIL" }] }),
+  ], state);
+  assert.match(rowFor(html, "Hush"), /ordered, not seen on chain/);
+});
+
+// A pass that died before it read anything has no token, and was filtered out of
+// every count: a run whose every pass crashed read "Checker FAILs: 0".
+test("a pass-level failure is counted and has a row of its own", () => {
+  const crashed = (chainDay) => ({
+    ts: "2026-09-27T00:00:00.000Z", chainDay, agent: null, tokenId: null, ok: false,
+    findings: [{ field: "pass", chain: "HTTP request failed.", severity: "FAIL" }],
+  });
+  const html = renderReport([], [crashed(1001), crashed(null)], state);
+  const summary = html.split("\n").find((l) => l.includes("class=\"fail\">2<"));
+  assert.ok(summary, "both pass failures are in the FAIL total");
+  const row = html.split("\n").find((l) => l.includes("pass: chain HTTP request failed."));
+  assert.ok(row, "each pass failure has a findings row");
+  assert.match(row, /<td>--<\/td><td>--<\/td>/);
+  assert.ok(!/No token has ever differed/.test(html));
+});
+
+// The one agent whose absence most needs explaining is the one state.json holds
+// no token for, and reading the table off state.json alone dropped it.
+test("an agent that never minted still has a row", () => {
+  const html = renderReport([], [checked()], { startDay: 1000, tokens: { A1: 1 } });
+  const row = rowFor(html, "A7");
+  assert.ok(row, "A7 minted nothing and is still on the page");
+  assert.match(row, /never minted/);
+  // Every scripted agent is there, and the child only once it has been seeded.
+  for (const name of ["A1", "A4", "A9", "A12"]) assert.ok(rowFor(html, name), `${name} is missing`);
+  assert.ok(!rowFor(html, "child"), "an unseeded child is not claimed as an agent");
+  assert.ok(rowFor(renderReport([], [checked()], { startDay: 1000, tokens: { A1: 1, child: 9 } }), "child"));
 });
 
 test("the finisher places seen are proven live and the two the run cannot reach are not", () => {
   const html = renderReport([], [checked({ place: 1 }), checked({ agent: "A5", tokenId: 5, place: 5, marks: "8192" })], state);
-  const rowFor = (name) => html.split("\n").find((l) => l.includes(`>${name}<`));
-  assert.match(rowFor("Apex"), /proven live/);
-  assert.match(rowFor("Valve"), /proven live/);
-  assert.match(rowFor("Chamber"), /not reached/);
-  assert.match(rowFor("Aorta"), /not reached/);
+  // A place read in a failing row proves nothing.
+  const failing = renderReport([], [checked({ ok: false, place: 5, marks: "8192", findings: [{ field: "place", chain: 5, expected: 4, severity: "FAIL" }] })], state);
+  assert.match(rowFor(failing, "Valve"), /not reached/);
+  assert.match(rowFor(html, "Apex"), /proven live/);
+  assert.match(rowFor(html, "Valve"), /proven live/);
+  assert.match(rowFor(html, "Chamber"), /not reached/);
+  assert.match(rowFor(html, "Aorta"), /not reached/);
 });
 
 test("a milestone the checker logged is a proven path, and its decode result is shown", () => {

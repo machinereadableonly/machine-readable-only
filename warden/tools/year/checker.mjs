@@ -5,9 +5,11 @@
 // asked of the service under test, so a bug the Warden and its database share
 // cannot hide inside their agreement.
 //
-// IT IS READ-ONLY BY CONSTRUCTION. It is handed no wallet, no key path and no
-// signer; the only chain calls it can make are `viewOf`, `today` and
-// `lastWardenDay`. A checker that could write could paper over what it found.
+// IT CANNOT WRITE, and not by discipline: every send in the chain adapter takes
+// the sending key as its first argument, and the checker is never given a key, a
+// key path or a wallet. `main` hands the pass `readersOf(chain)` -- viewOf, today
+// and lastWardenDay -- so the three reads are the whole of its reach. A checker
+// that could write could paper over what it found.
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
@@ -80,10 +82,20 @@ export function markBitsOf(word) {
 /// against, so a mint retried on a later day is not judged from the first attempt.
 const QUEUEING_ACTIONS = ["mint", "seed"];
 
+/// Every runner action the Clock turns into a chain write. A day carrying one of
+/// these cannot be a heartbeat day, whatever the reads happen to show.
+const WRITING_ACTIONS = ["mint", "seed", "mark", "checkin"];
+
 export function queuedDay(lines, tokenId) {
   const queued = lines.filter((line) => line.ok && QUEUEING_ACTIONS.includes(line.action) && line.tokenId === tokenId);
   return queued.length ? queued[queued.length - 1].chainDay : null;
 }
+
+/// The three reads, and nothing else. Passing this rather than the adapter is
+/// what makes the checker's read-only claim structural instead of a promise.
+export const readersOf = (chain) => ({
+  viewOf: chain.viewOf, today: chain.today, lastWardenDay: chain.lastWardenDay,
+});
 
 export const tokensOf = (state) =>
   Object.entries(state?.tokens ?? {})
@@ -101,10 +113,20 @@ export const tokensOf = (state) =>
  *
  * `place` is what `places()` says this token's finishing place and Mark are, or
  * null for a token whose year is not over.
+ *
+ * `queued` is the day the runner recorded queueing this token's creation, from
+ * `queuedDay()`. It is the ONLY independent witness to the mint day: both tallies
+ * are SEEDED with the chain's own `mintDay`, so a mint written on the wrong day
+ * shifts every expected value with it and cancels out of every other comparison.
  */
-export function compare({ chain, mirror, tally, mirrorTally = tally, place = null }) {
+export function compare({ chain, mirror, tally, mirrorTally = tally, place = null, queued = null }) {
   const findings = [];
   const fail = (field, fields) => findings.push({ field, ...fields, severity: "FAIL" });
+
+  // The contract writes `mintDay = day` for both creation paths (mint and seed)
+  // and the Clock passes the day the agent paid, which is the day the runner
+  // recorded. They are the same number or one of the two is wrong.
+  if (queued !== null && chain.mintDay !== queued) fail("mintDay", { chain: chain.mintDay, expected: queued });
 
   for (const field of ["level", "streak", "lastDay"]) {
     if (chain[field] !== tally[field]) fail(field, { chain: chain[field], expected: tally[field] });
@@ -178,15 +200,23 @@ export function heartbeatMilestone({ prevWardenDay, wardenDay, lastDaysMoved, wr
   return lastDaysMoved || wroteAnything ? null : "heartbeat";
 }
 
-/// The fast day, validated: a bad value refuses to start rather than aligning
-/// the pass to a day length nothing else in the run is using.
+/**
+ * The fast day, validated: a bad value refuses to start rather than aligning the
+ * pass to a day length nothing else in the run is using.
+ *
+ * A day no longer than the offset is refused too. The pass wakes at +240 s, so a
+ * 240-second day would have it waking at or past the boundary -- reading the day
+ * after the one it means to check, every time, and silently.
+ */
 export function daySecondsFrom(env = process.env) {
   const raw = env.MRO_DAY_SECONDS;
   if (raw === undefined) return DAY_SECONDS;
   // An empty string reaches this as 0, which the bound below refuses.
   const seconds = Number(raw);
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    throw new Error(`MRO_DAY_SECONDS must be a positive number of seconds, got ${JSON.stringify(raw)}`);
+  if (!Number.isFinite(seconds) || seconds <= OFFSET_SECONDS) {
+    throw new Error(
+      `MRO_DAY_SECONDS must be a number of seconds greater than the checker's ${OFFSET_SECONDS} s offset, got ${JSON.stringify(raw)}`
+    );
   }
   return seconds;
 }
@@ -260,29 +290,34 @@ export async function runPass({
   const today = await chain.today();
   const wardenDay = await chain.lastWardenDay();
   const lines = readLog();
-  const tokens = tokensOf(state);
+  const readOne = (tokenId) => readToken({ chain, readMirror, tokenId, lines, today });
 
   // Read everything first: the places a finish earns depend on every token's
   // tally, so no single token can be judged before all of them are in.
   const reads = [];
-  for (const { agent, tokenId } of tokens) {
-    reads.push({ agent, tokenId, ...(await readToken({ chain, readMirror, tokenId, lines, today })) });
+  for (const { agent, tokenId } of tokensOf(state)) reads.push({ agent, ...(await readOne(tokenId)) });
+
+  let judged = judge(reads);
+  // ONE pause for the whole pass, not one per token. A public RPC is not
+  // read-after-write consistent, so a disagreement is re-read before it is
+  // believed -- but twelve tokens disagreeing at 20 s each would spend four
+  // minutes inside a fast day that is five long. The divergent set waits once,
+  // together, and is then re-read as a set.
+  if (judged.some((j) => j.findings.length)) {
+    await sleep(REREAD_PAUSE_MS);
+    const again = [];
+    for (const j of judged) {
+      again.push(j.findings.length ? { agent: j.read.agent, ...(await readOne(j.read.tokenId)) } : j.read);
+    }
+    judged = judge(again);
   }
 
-  const finishes = reads
-    .filter((r) => r.tally?.level >= FINISH_LEVEL)
-    .map((r) => ({ tokenId: r.tokenId, day: r.finishDay }));
-  const placeOf = places(finishes);
-
   let lastDaysMoved = false;
-  for (const read of reads) {
-    const { agent, tokenId } = read;
+  for (const { read: settled, findings } of judged) {
+    const { agent, tokenId } = settled;
     const prev = memory.tokens.get(tokenId) ?? null;
-    const place = placeOf.get(tokenId) ?? null;
-    const settled = await confirmed({ chain, readMirror, read, place, today, lines, sleep });
     if (prev && settled.chain && prev.view.lastDay !== settled.chain.lastDay) lastDaysMoved = true;
 
-    const findings = settled.findings;
     log({
       chainDay: today, agent, tokenId, ok: findings.length === 0,
       ...(settled.pending ? { pending: true } : {}),
@@ -312,8 +347,13 @@ export async function runPass({
 
   // The Clock's run at +30 s today drains what was queued yesterday, so a write
   // of either day's work means today's advance was not a heartbeat.
+  //
+  // A CREDITED CHECK-IN COUNTS, which is the point of asking the runner's log
+  // rather than trusting `lastDaysMoved`: that only sees a token this pass read
+  // AND read before, so a batchCheckIn for a token the checker has no earlier
+  // view of would have left the day looking silent.
   const wroteAnything = lines.some(
-    (line) => line.ok && ["mint", "mark", "seed"].includes(line.action) && (line.chainDay === today || line.chainDay === today - 1)
+    (line) => line.ok && WRITING_ACTIONS.includes(line.action) && (line.chainDay === today || line.chainDay === today - 1)
   );
   const beat = heartbeatMilestone({ prevWardenDay: memory.wardenDay, wardenDay, lastDaysMoved, wroteAnything });
   if (beat) log({ chainDay: today, agent: null, tokenId: null, milestone: beat, decoded: null, exit: null });
@@ -369,16 +409,25 @@ function findingsFor(read, place) {
       expected: `written by the Clock; queued on day ${read.queued ?? "never"}`, severity: "FAIL",
     }];
   }
-  return compare({ chain: read.chain, mirror: read.mirror, tally: read.tally, mirrorTally: read.mirrorTally, place });
+  return compare({
+    chain: read.chain, mirror: read.mirror, tally: read.tally, mirrorTally: read.mirrorTally,
+    place, queued: read.queued,
+  });
 }
 
-/// Compare, and on any finding read both sides once more before believing it.
-async function confirmed({ chain, readMirror, read, place, today, lines, sleep }) {
-  const first = findingsFor(read, place);
-  if (first.length === 0) return { ...read, findings: first };
-  await sleep(REREAD_PAUSE_MS);
-  const again = await readToken({ chain, readMirror, tokenId: read.tokenId, lines, today });
-  return { ...again, findings: findingsFor(again, place) };
+/**
+ * The whole pass judged at once.
+ *
+ * The places have to be worked out over every token together -- a finishing place
+ * is a token's position among all of them -- so they are recomputed here rather
+ * than carried, which keeps a re-read from being judged against the old order.
+ */
+function judge(reads) {
+  const finishes = reads
+    .filter((r) => r.tally?.level >= FINISH_LEVEL)
+    .map((r) => ({ tokenId: r.tokenId, day: r.finishDay }));
+  const placeOf = places(finishes);
+  return reads.map((read) => ({ read, findings: findingsFor(read, placeOf.get(read.tokenId) ?? null) }));
 }
 
 /// How a finding reads, on stderr and on the report's page alike: one definition,
@@ -421,8 +470,8 @@ export async function main({ env = process.env } = {}) {
     // quiet one.
     try {
       await runPass({
-        chain, readMirror, state: loadState(paths.state), readLog: () => readJsonl(paths.runnerLog),
-        log, memory, decode,
+        chain: readersOf(chain), readMirror, state: loadState(paths.state),
+        readLog: () => readJsonl(paths.runnerLog), log, memory, decode,
       });
     } catch (err) {
       log({ chainDay: null, agent: null, tokenId: null, ok: false, findings: [{ field: "pass", chain: safeErrorText(err), severity: "FAIL" }] });

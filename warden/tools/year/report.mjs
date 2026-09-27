@@ -40,13 +40,19 @@ export function esc(text) {
 /**
  * What the run proved about one requestable Mark.
  *
- * `applied-queued` is the Warden accepting the order, which is the path itself;
+ * PROVEN LIVE MEANS THE BIT IS ON CHAIN, not that the Warden accepted the order.
+ * An `applied-queued` outcome is a row in the mirror's queue: the Clock still has
+ * to write it, and a Mark that was ordered and never written is exactly the
+ * failure this run exists to catch. `marksSeen` is the set of Mark ids read off
+ * the chain in a passing checker row.
+ *
  * `demand-only` is the price read and asserted with nothing paid, which is what
  * the budget forced on the dearest four.
  */
-export function markStatus(runnerLines, id) {
+export function markStatus(runnerLines, id, marksSeen = new Set()) {
+  if (marksSeen.has(id)) return "proven live";
   const asked = runnerLines.filter((line) => line.action === "mark" && line.markId === id);
-  if (asked.some((line) => line.outcome === "applied-queued")) return "proven live";
+  if (asked.some((line) => line.outcome === "applied-queued")) return "ordered, not seen on chain";
   if (asked.some((line) => line.outcome === "demand-only")) return "demand-only";
   return "not reached";
 }
@@ -83,20 +89,37 @@ const MILESTONE_PATHS = [
   ["heartbeat", "The Clock's heartbeat on a silent day"],
 ];
 
-/// state.json's order is whatever the mints landed in; the table's is the one the
-/// run was designed in, with the child last.
+/**
+ * Every agent the run was designed with, plus anything state.json holds a token
+ * for, in the order the table was designed in and the child last.
+ *
+ * The UNION, not state.json's keys: an agent whose mint never landed has no
+ * token id, and reading its row off state.json alone would have dropped it from
+ * the page -- the one agent whose absence most needs explaining.
+ */
 function agentOrder(state) {
-  const scripted = [...AGENTS.map((a) => a.name), "child"];
-  const names = Object.keys(state?.tokens ?? {});
-  return [...names].sort((a, b) => {
+  const scripted = [...AGENTS.map((a) => a.name), CHILD];
+  const names = [...new Set([...AGENTS.map((a) => a.name), ...Object.keys(state?.tokens ?? {})])];
+  return names.sort((a, b) => {
     const rank = (n) => (scripted.indexOf(n) === -1 ? scripted.length : scripted.indexOf(n));
     return rank(a) - rank(b) || a.localeCompare(b);
   });
 }
 
+const CHILD = "child";
+const NONE = "--";
+
 const stateLines = (checkerLines) => checkerLines.filter((l) => l.ok !== undefined && l.tokenId !== null && l.tokenId !== undefined);
 
+/// A pass that died before it read anything: no token, and a FAIL that belongs in
+/// the total. Left out, a run whose every pass crashed read "FAILs: 0".
+const passLines = (checkerLines) =>
+  checkerLines.filter((l) => l.ok === false && (l.tokenId === null || l.tokenId === undefined));
+
 function agentRow(agent, tokenId, checkerLines) {
+  if (!Number.isInteger(tokenId)) {
+    return { agent, tokenId: NONE, fails: 0, heart: "never minted", streak: NONE, place: NONE, marks: NONE };
+  }
   const mine = stateLines(checkerLines).filter((l) => l.tokenId === tokenId);
   const last = mine[mine.length - 1] ?? null;
   const fails = mine.filter((l) => l.ok === false).length;
@@ -106,10 +129,10 @@ function agentRow(agent, tokenId, checkerLines) {
     agent, tokenId, fails,
     // A token queued in this fast day is not on chain yet, and the level the
     // chain answers for it is zero rather than a level it has lost.
-    heart: last ? (last.pending ? "not on chain yet" : `${last.level}/${FINISH_LEVEL}`) : "--",
-    streak: last?.streak ?? "--",
-    place: place ? `${ordinal(place)} (${LADDER[finisherMark(place)].name})` : "--",
-    marks: held.length ? held.join(", ") : "--",
+    heart: last ? (last.pending ? "not on chain yet" : `${last.level}/${FINISH_LEVEL}`) : NONE,
+    streak: last?.streak ?? NONE,
+    place: place ? `${ordinal(place)} (${LADDER[finisherMark(place)].name})` : NONE,
+    marks: held.length ? held.join(", ") : NONE,
   };
 }
 
@@ -129,15 +152,23 @@ function table(headings, rows) {
 export function renderReport(runnerLines, checkerLines, state) {
   const rows = stateLines(checkerLines);
   const milestones = checkerLines.filter((l) => l.milestone);
-  const fails = rows.filter((l) => l.ok === false);
+  // Both kinds of FAIL: a token that differed, and a pass that never got far
+  // enough to read one. Sorted together, with a dayless pass line last.
+  const fails = [...rows.filter((l) => l.ok === false), ...passLines(checkerLines)]
+    .sort((a, b) => (a.chainDay ?? Infinity) - (b.chainDay ?? Infinity));
   const decoded = milestones.filter((l) => l.decoded === true).length;
   const failedDecodes = milestones.filter((l) => l.decoded === false).length;
   const lastDay = rows.reduce((max, l) => Math.max(max, l.chainDay ?? 0), 0);
   const fastDays = state?.startDay && lastDay ? lastDay - state.startDay : null;
-  const placesSeen = new Set(rows.map((l) => l.place).filter((p) => p > 0));
+  // Only from a row that PASSED. A place read in a failing row is the value the
+  // finding is about, so calling the band proven from it would report the bug as
+  // the proof.
+  const passing = rows.filter((l) => l.ok);
+  const placesSeen = new Set(passing.map((l) => l.place).filter((p) => p > 0));
+  const marksSeen = new Set(passing.flatMap((l) => markBitsOf(l.marks ?? 0)));
 
   const summary = table(["Fast days covered", "Tokens", "Checker FAILs", "Milestones", "QR decodes"], [
-    `<tr>${td(fastDays === null ? "--" : fastDays)}${td(Object.keys(state?.tokens ?? {}).length)}` +
+    `<tr>${td(fastDays === null ? NONE : fastDays)}${td(Object.keys(state?.tokens ?? {}).length)}` +
       `${td(fails.length, fails.length ? "fail" : null)}${td(milestones.length)}` +
       `${td(`${decoded} decoded, ${failedDecodes} failed`, failedDecodes ? "fail" : null)}</tr>`,
   ]);
@@ -151,7 +182,8 @@ export function renderReport(runnerLines, checkerLines, state) {
   const marks = table(["Mark", "Route", "Gate", "This run"], REQUESTABLE_IDS.map((id) => {
     const m = LADDER[id];
     const gate = m.route === "earned" ? `run ${m.minStreak}` : [m.price, m.minLevel ? `level ${m.minLevel}` : null].filter(Boolean).join(", ");
-    return `<tr><th>${esc(m.name)}</th>${td(m.route)}${td(gate)}${td(markStatus(runnerLines, id), markStatus(runnerLines, id) === "proven live" ? null : "thin")}</tr>`;
+    const status = markStatus(runnerLines, id, marksSeen);
+    return `<tr><th>${esc(m.name)}</th>${td(m.route)}${td(gate)}${td(status, status === "proven live" ? null : "thin")}</tr>`;
   }));
 
   const finishers = table(["Mark", "Places", "This run"], FINISHER_IDS_BY_PLACE.map((id) => {
@@ -173,13 +205,14 @@ export function renderReport(runnerLines, checkerLines, state) {
 
   const milestoneTable = milestones.length
     ? table(["Day", "Agent", "Token", "Milestone", "QR decode"], milestones.map((l) =>
-        `<tr>${td(l.chainDay)}${td(l.agent ?? "--")}${td(l.tokenId ?? "--")}${td(l.milestone)}` +
+        `<tr>${td(l.chainDay ?? NONE)}${td(l.agent ?? NONE)}${td(l.tokenId ?? NONE)}${td(l.milestone)}` +
         `${td(l.decoded === null || l.decoded === undefined ? "not run" : l.decoded ? `decoded (exit ${l.exit})` : `FAILED (exit ${l.exit})`, l.decoded === false ? "fail" : null)}</tr>`))
     : "<p class=\"thin\">No milestone has been reached yet.</p>";
 
   const findingTable = fails.length
     ? table(["Day", "Agent", "Token", "Findings"], fails.map((l) =>
-        `<tr>${td(l.chainDay)}${td(l.agent)}${td(l.tokenId)}${td((l.findings ?? []).map(describeFinding).join("; "))}</tr>`))
+        `<tr>${td(l.chainDay ?? NONE)}${td(l.agent ?? NONE)}${td(l.tokenId ?? NONE)}` +
+        `${td((l.findings ?? []).map(describeFinding).join("; "))}</tr>`))
     : "<p>No token has ever differed from what the rules say it should be.</p>";
 
   const refused = new Map();
