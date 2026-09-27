@@ -13,12 +13,12 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import { safeErrorText } from "../../src/clock/redact.mjs";
 import { makeChain } from "./chain.mjs";
 import {
-  creditedDays, daySecondsFrom as daySecondsAbove, loadState, makeLog, nextWakeMs, readJsonl, yearPaths,
+  creditedDays, daySecondsFrom as daySecondsAbove, isEntry, loadState, makeLog, nextWakeMs, readJsonl, yearPaths,
   ORIGIN, SITE,
 } from "./runner.mjs";
 import { expected, places, FINISH_LEVEL } from "./tally.mjs";
@@ -507,7 +507,7 @@ export async function main({ env = process.env } = {}) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isEntry(import.meta.url)) {
   main().catch((err) => {
     console.error("checker:", safeErrorText(err));
     process.exitCode = 1;

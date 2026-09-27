@@ -1035,3 +1035,15 @@ test("the state file is replaced by a rename, leaving no half-written file behin
     assert.deepEqual(loadState(path), { ...emptyState(), tokens: { A1: 7 } });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("a script started by PM2 knows it is the entry point", async () => {
+  const { isEntry } = await import("../tools/year/runner.mjs");
+  const { pathToFileURL } = await import("node:url");
+  const script = "/srv/tree/warden/tools/year/runner.mjs";
+  const url = pathToFileURL(script).href;
+  const container = "/pm2/lib/ProcessContainerFork.js";
+  assert.equal(isEntry(url, ["node", script], {}), true, "plain node");
+  assert.equal(isEntry(url, ["node", container], { pm_exec_path: script }), true, "PM2 fork mode");
+  assert.equal(isEntry(url, ["node", container], {}), false, "imported, not run");
+  assert.equal(isEntry(url, ["node", "/other.mjs"], { pm_exec_path: "/other.mjs" }), false, "another script");
+});

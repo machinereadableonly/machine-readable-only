@@ -756,7 +756,15 @@ export async function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+/**
+ * Whether this module is the program being run. PM2's fork mode loads a script
+ * through its own container, so argv[1] names the container and only
+ * `pm_exec_path` names the script.
+ */
+export const isEntry = (metaUrl, argv = process.argv, env = process.env) =>
+  [argv[1], env.pm_exec_path].some((p) => Boolean(p) && metaUrl === pathToFileURL(p).href);
+
+if (isEntry(import.meta.url)) {
   main().catch((err) => {
     console.error("runner:", safeReason(err));
     process.exitCode = 1;
