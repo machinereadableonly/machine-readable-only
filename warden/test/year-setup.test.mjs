@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -466,6 +466,84 @@ test("a tree from another commit is re-exported, not accepted", () => {
     readFileSync(join(dir, "tree.head"), "utf8").trim(),
     execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim()
   );
+});
+
+// ---------------------------------------------------------------- the re-export guard
+//
+// THE ONE GUARD THAT PROTECTS A RUNNING YEAR: a re-export would swap the code
+// under the four live processes. It asks pm2 which apps are online and whether
+// they execute THIS data directory's tree, and until now neither answer had a
+// test -- so a filter that matched nothing looked exactly like "nothing is up".
+//
+// pm2 is stubbed on PATH, the same way the Clock loop test stubs a node that
+// always fails: the real one would answer about the box, not about the case.
+
+/// A `pm2` that answers `jlist` with one online app of this run, executing
+/// `execPath`. The real node stays on PATH -- setup.sh needs it.
+function stubPm2(execPath) {
+  const bin = tempDir("mro-year-bin-");
+  const jlist = JSON.stringify([
+    { name: "mro-year-warden", pm2_env: { status: "online", pm_exec_path: execPath } },
+  ]);
+  writeFileSync(
+    join(bin, "pm2"),
+    `#!/usr/bin/env bash\n[ "\${1:-}" = "jlist" ] || exit 1\ncat <<'JLIST'\n${jlist}\nJLIST\n`,
+    { mode: 0o755 }
+  );
+  return bin;
+}
+
+/// A dry run whose stderr is readable too: the guard's refusal and its notice
+/// are both written there.
+function dryRunWith(dir, conf, bin) {
+  return spawnSync("bash", [join(YEAR, "setup.sh"), "--dry-run"], {
+    encoding: "utf8",
+    env: { ...process.env, MRO_YEAR_DIR: dir, MRO_FAST_CONF: conf, PATH: `${bin}:${process.env.PATH}` },
+  });
+}
+
+/// A data directory whose recorded commit is stale, so a re-export is due and
+/// the guard is the only thing that can stop it.
+function stubStaleTree(prefix) {
+  const dir = tempDir(prefix);
+  const conf = join(dir, "fast.conf");
+  writeFileSync(conf, FAKE_CONF, { mode: 0o600 });
+  stubTree(dir);
+  writeFileSync(join(dir, "tree.head"), `${"0".repeat(40)}\n`);
+  return { dir, conf };
+}
+
+test("a re-export is refused while an app of THIS tree is online", () => {
+  const { dir, conf } = stubStaleTree("mro-year-online-");
+  const bin = stubPm2(join(dir, "tree", "warden", "src", "main.mjs"));
+
+  const out = dryRunWith(dir, conf, bin);
+  assert.notEqual(out.status, 0, `the re-export was not refused: ${out.stdout}`);
+  assert.match(out.stderr, /the run is up \(mro-year-warden\)/);
+  // The stale record is untouched, so nothing was exported over the live run.
+  assert.equal(readFileSync(join(dir, "tree.head"), "utf8").trim(), "0".repeat(40));
+});
+
+test("an online app on another tree is a notice, not a refusal", () => {
+  const { dir, conf } = stubStaleTree("mro-year-elsewhere-");
+  const bin = stubPm2(join(tmpdir(), "somebody-elses-year", "tree", "warden", "src", "main.mjs"));
+
+  const out = dryRunWith(dir, conf, bin);
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, /re-exported/);
+  // The mismatch is visible -- and this line is also the proof that the stub was
+  // the pm2 consulted, so the refusal above was aimed at the filter.
+  assert.match(out.stderr, /apps online outside .*mro-year-warden/);
+});
+
+test("a data directory given with a trailing slash still sees the live run", () => {
+  const { dir, conf } = stubStaleTree("mro-year-slash-");
+  const bin = stubPm2(join(dir, "tree", "warden", "src", "main.mjs"));
+
+  // PM2 records pm_exec_path lexically resolved; MRO_YEAR_DIR arrives as typed.
+  const out = dryRunWith(`${dir}/`, conf, bin);
+  assert.notEqual(out.status, 0, `a trailing slash walked past the guard: ${out.stdout}`);
+  assert.match(out.stderr, /the run is up \(mro-year-warden\)/);
 });
 
 // The port is one fact with two readers: the process list tells PM2 what to give

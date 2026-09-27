@@ -8,12 +8,13 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { AGENTS } from "../tools/year/scenario.mjs";
 import {
   runDay, emptyState, agentSpecs, creditedDays, clockFailing, nextWakeMs,
   yearPaths, makeLog, loadState, writeState, passDeadlineMs,
-  agentIsDone, foundingAllDone, firstPassFits, deferFirstPass, daySecondsFrom,
+  agentIsDone, foundingAllDone, firstPassFits, deferFirstPass, daySecondsFrom, isEntry,
   DAY_SECONDS, DEAD_TREASURY, FIRST_PASS_MIN_MS, MINT_USDC, RETRY_PAUSE_MS, SITE, ORIGIN,
 } from "../tools/year/runner.mjs";
 
@@ -1036,9 +1037,7 @@ test("the state file is replaced by a rename, leaving no half-written file behin
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("a script started by PM2 knows it is the entry point", async () => {
-  const { isEntry } = await import("../tools/year/runner.mjs");
-  const { pathToFileURL } = await import("node:url");
+test("a script started by PM2 knows it is the entry point", () => {
   const script = "/srv/tree/warden/tools/year/runner.mjs";
   const url = pathToFileURL(script).href;
   const container = "/pm2/lib/ProcessContainerFork.js";
@@ -1046,4 +1045,13 @@ test("a script started by PM2 knows it is the entry point", async () => {
   assert.equal(isEntry(url, ["node", container], { pm_exec_path: script }), true, "PM2 fork mode");
   assert.equal(isEntry(url, ["node", container], {}), false, "imported, not run");
   assert.equal(isEntry(url, ["node", "/other.mjs"], { pm_exec_path: "/other.mjs" }), false, "another script");
+});
+
+// The checker is started by PM2 too, and the argv[1] form would have it import
+// its own module and do nothing. Asserted on the SOURCE because the guard runs
+// at load: importing checker.mjs to look at it is the one thing that cannot ask.
+test("the checker's entry guard is isEntry, not argv[1]", () => {
+  const source = readFileSync(new URL("../tools/year/checker.mjs", import.meta.url), "utf8");
+  assert.match(source, /if \(isEntry\(import\.meta\.url\)\)/, "the checker's entry guard is not isEntry");
+  assert.ok(!source.includes("process.argv[1]"), "the checker still compares argv[1] itself");
 });

@@ -29,15 +29,6 @@ esac
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 
-DIR="${MRO_YEAR_DIR:-$HOME/.mro-year}"
-export MRO_YEAR_DIR="$DIR"
-TREE="$DIR/tree"
-CONF="$DIR/year.conf"
-FAST_CONF="${MRO_FAST_CONF:-$HOME/.mro-fast/fast.conf}"
-RPC="${BASE_RPC_URL:-https://sepolia.base.org}"
-BROADCAST="$REPO/contracts/broadcast/DeployFast.s.sol/84532/run-latest.json"
-CURSOR="$DIR/state.db.reconcile-cursor"
-
 export PATH="$HOME/.foundry/bin:$PATH"
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
   # shellcheck source=/dev/null
@@ -47,6 +38,21 @@ fi
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 command -v node >/dev/null || fail "no node on PATH"
+
+# Normalised THE WAY PM2 NORMALISES, before anything is derived from it or
+# exported. PM2 records pm_exec_path as path.resolve(cwd, script), so the guard
+# below compares against a lexically resolved absolute path: a trailing slash,
+# a `./` or a relative MRO_YEAR_DIR would make it miss the live run. Lexical on
+# purpose -- realpath would resolve a symlink PM2 leaves alone.
+DIR="${MRO_YEAR_DIR:-$HOME/.mro-year}"
+DIR="$(node -e 'process.stdout.write(require("path").resolve(process.argv[1]))' "$DIR")"
+export MRO_YEAR_DIR="$DIR"
+TREE="$DIR/tree"
+CONF="$DIR/year.conf"
+FAST_CONF="${MRO_FAST_CONF:-$HOME/.mro-fast/fast.conf}"
+RPC="${BASE_RPC_URL:-https://sepolia.base.org}"
+BROADCAST="$REPO/contracts/broadcast/DeployFast.s.sol/84532/run-latest.json"
+CURSOR="$DIR/state.db.reconcile-cursor"
 
 # Substitute a setting in place, or append it when the file has no such line.
 #
@@ -88,11 +94,19 @@ year_apps_online() {
   # answer about the list, not pm2's about having printed one.
   # Only apps running THIS directory's tree matter: a re-export elsewhere cannot
   # touch the files they execute.
-  YEAR_TREE="$DIR/tree/" node -e '
+  YEAR_TREE="$TREE/" node -e '
     let list = [];
     try { list = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(1); }
+    const online = list.filter((a) => a.name?.startsWith("mro-year-") && a.pm2_env?.status === "online");
     const mine = (a) => String(a.pm2_env?.pm_exec_path ?? "").startsWith(process.env.YEAR_TREE);
-    const up = list.filter((a) => a.name?.startsWith("mro-year-") && a.pm2_env?.status === "online" && mine(a));
+    const up = online.filter(mine);
+    const elsewhere = online.filter((a) => !mine(a));
+    if (elsewhere.length > 0) {
+      // Said out loud rather than refused: another data directory is running,
+      // which this run cannot touch -- but a filter that silently matched
+      // nothing would read exactly the same as no run at all.
+      require("fs").writeSync(2, `note: mro-year apps online outside ${process.env.YEAR_TREE}: ${elsewhere.map((a) => a.name).join(" ")}\n`);
+    }
     process.stdout.write(up.map((a) => a.name).join(" "));
     process.exit(up.length > 0 ? 0 : 1);
   ' <<< "$jlist"

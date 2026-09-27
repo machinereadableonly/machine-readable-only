@@ -16,13 +16,6 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 
-DIR="${MRO_YEAR_DIR:-$HOME/.mro-year}"
-export MRO_YEAR_DIR="$DIR"
-LOGS="$DIR/logs"
-CONF="$DIR/year.conf"
-CONFIG="$HERE/year.config.cjs"
-
-mkdir -p "$LOGS"
 export PATH="$HOME/.foundry/bin:$PATH"
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
   # shellcheck source=/dev/null
@@ -33,6 +26,18 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 
 command -v node >/dev/null || fail "no node on PATH"
 command -v pm2 >/dev/null || fail "no pm2 on PATH"
+
+# Normalised lexically before anything is derived from it, exactly as setup.sh
+# does: year.config.cjs resolves the same variable with path.join, and the two
+# have to name one directory or the run's paths and its guards disagree.
+DIR="${MRO_YEAR_DIR:-$HOME/.mro-year}"
+DIR="$(node -e 'process.stdout.write(require("path").resolve(process.argv[1]))' "$DIR")"
+export MRO_YEAR_DIR="$DIR"
+LOGS="$DIR/logs"
+CONF="$DIR/year.conf"
+CONFIG="$HERE/year.config.cjs"
+
+mkdir -p "$LOGS"
 
 # ------------------------------------------------------------ setup must be done
 for required in "$CONF" "$DIR/contract.address" "$DIR/treasury.address" "$DIR/tree/warden/src/main.mjs"; do
