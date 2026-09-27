@@ -35,26 +35,56 @@ const interpreter = process.env.MRO_YEAR_NODE || join(homedir(), ".nvm", "versio
 // Node racing an IPv6 connection anyway.
 const IPV4_ONLY = ["--dns-result-order=ipv4first", "--no-network-family-autoselection"];
 
-// THE SHELL'S SECRETS ARE NOT THESE PROCESSES' BUSINESS, and the list is copied
-// from ecosystem.config.cjs verbatim rather than adapted: a filter that drifts
-// from the live one is a filter nobody has reviewed. A LIST, never `true` --
-// PM2 7.0.1 tests `filter_env.length`, so a boolean does nothing at all. Each
-// entry drops any inherited variable whose NAME contains it; the `env` block of
-// each app below is untouched by it, which is how these processes get the little
-// configuration they do need.
-const filterEnv = ["TOKEN", "SECRET", "_KEY", "PASSWORD", "CDP_", "CLOUDFLARE", "NTFY_", "_ADDRESS"];
+// THE SHELL'S SECRETS ARE NOT THESE PROCESSES' BUSINESS. The live ecosystem's own
+// list comes first, READ FROM THAT FILE rather than copied into this one: a
+// filter that has drifted from the live one is a filter nobody has reviewed. A
+// LIST, never `true` -- PM2 7.0.1 tests `filter_env.length`, so a boolean does
+// nothing at all. Each entry drops any inherited variable whose NAME CONTAINS it.
+const ECOSYSTEM_FILTER_ENV = require("../../ecosystem.config.cjs").apps[0].filter_env;
 
-// What the runner, the checker and the Clock loop need to find their way. The
-// Warden reads its whole configuration from --env-file and needs none of it.
-// MRO_TEST_WALLET_KEY_FILE is a PATH, not a key: it is stated here because
-// filter_env drops any inherited name containing `_KEY`, and the runner must not
-// depend on the operator's shell for where the bank is.
-const tools = {
+// AND THE SETTINGS year.conf OWNS, because the shell BEATS --env-file. Node's own
+// rule is that "the value from the environment takes precedence", and PM2 passes
+// the whole shell that ran `pm2 start` into every app -- so an operator who had
+// exported MRO_CONTRACT_ADDRESS or STATE_DB_PATH for a one-off script would have
+// silently pointed the fast Warden at the live pair, or at the live mirror.
+// Dropping the names here means year.conf is the only place these can come from.
+const CONF_OWNED = [
+  "STATE_DB_PATH",
+  "MRO_DAY_SECONDS",
+  "MRO_CLOCK_OFFSET_SECONDS",
+  "MRO_CONTRACT_ADDRESS",
+  "MRO_DOMAIN",
+  "BASE_RPC_URL",
+];
+
+const filterEnv = [...ECOSYSTEM_FILTER_ENV, ...CONF_OWNED];
+
+// Each app's own `env` block is applied AFTER that filter (PM2 7.0.1
+// lib/Common.js: `[{}, filterEnv(process.env), app.env]` reduced with
+// Object.assign), so what an app is given below is deliberate configuration
+// rather than something inherited.
+//
+// The runner and the checker read no settings file: they are told where the run
+// lives, how long a day is, and which endpoint to read. BASE_RPC_URL is the
+// PUBLIC Base Sepolia endpoint, which is what their own defaults are too -- the
+// Warden and the Clock use whatever year.conf names, and neither of them is this.
+const toolsEnv = {
   MRO_YEAR_DIR: dir,
   MRO_DAY_SECONDS: "300",
-  MRO_TEST_WALLET_KEY_FILE: process.env.MRO_TEST_WALLET_KEY_FILE || join(homedir(), ".mro-test-wallet", "wallet.key"),
-  MRO_YEAR_NODE: interpreter,
+  BASE_RPC_URL: "https://sepolia.base.org",
 };
+
+// The bank's key FILE, a path and not a key. Stated because filter_env drops any
+// inherited name containing `_KEY`, and only the runner spends from it.
+const runnerEnv = {
+  ...toolsEnv,
+  MRO_TEST_WALLET_KEY_FILE: process.env.MRO_TEST_WALLET_KEY_FILE || join(homedir(), ".mro-test-wallet", "wallet.key"),
+};
+
+// The Clock loop gets NOTHING year.conf owns -- not even the day length, which it
+// reads out of that file by name. A copy here would reach the Clock process
+// through the environment and beat its --env-file.
+const loopEnv = { MRO_YEAR_DIR: dir, MRO_YEAR_NODE: interpreter };
 
 // An explicit restart policy, stated rather than defaulted, for the same reason
 // the live ecosystem states one: every process here refuses to start on a
@@ -95,13 +125,13 @@ module.exports = {
       // the node path above would refuse it.
       script: join(tree, "warden", "tools", "year", "clock-loop.sh"),
       interpreter: "bash",
-      env: tools,
+      env: loopEnv,
       max_memory_restart: "256M",
     }),
     app("mro-year-runner", {
       script: "tools/year/runner.mjs",
       node_args: IPV4_ONLY,
-      env: tools,
+      env: runnerEnv,
       max_memory_restart: "512M",
     }),
     app("mro-year-checker", {
@@ -111,7 +141,7 @@ module.exports = {
       // decode a QR at a milestone, and a spawned `node` is found on PATH -- which
       // a PM2 daemon started long ago may not have. The interpreter's own
       // directory is put in front of whatever PATH arrives.
-      env: { ...tools, PATH: `${dirname(interpreter)}:${process.env.PATH || ""}` },
+      env: { ...toolsEnv, PATH: `${dirname(interpreter)}:${process.env.PATH || ""}` },
       max_memory_restart: "512M",
     }),
   ],

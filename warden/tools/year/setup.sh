@@ -39,27 +39,61 @@ BROADCAST="$REPO/contracts/broadcast/DeployFast.s.sol/84532/run-latest.json"
 CURSOR="$DIR/state.db.reconcile-cursor"
 
 export PATH="$HOME/.foundry/bin:$PATH"
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$HOME/.nvm/nvm.sh" >/dev/null
+fi
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-# Substitute a setting in place, or append it when the file has no such line. The
-# file is rewritten through a temp file so a failed sed cannot leave half a
-# settings file behind.
+command -v node >/dev/null || fail "no node on PATH"
+
+# Substitute a setting in place, or append it when the file has no such line.
+#
+# awk, NOT sed: a sed replacement treats `&` as "the whole match" and the
+# delimiter as a delimiter, so an address or a path carrying either would be
+# rewritten into something else. awk is handed the value as a variable and prints
+# it literally. The file is rewritten through a temp file created under umask 077,
+# so the new settings never exist world-readable even for an instant.
 set_setting() {
   local key="$1" value="$2" file="$3"
-  if /bin/grep -q "^$key=" "$file"; then
-    sed "s|^$key=.*|$key=$value|" "$file" > "$file.tmp"
-  else
-    cat "$file" > "$file.tmp"
-    printf '%s=%s\n' "$key" "$value" >> "$file.tmp"
-  fi
+  (
+    umask 077
+    awk -v key="$key" -v value="$value" '
+      index($0, key "=") == 1 { print key "=" value; found = 1; next }
+      { print }
+      END { if (!found) print key "=" value }
+    ' "$file" > "$file.tmp"
+  )
   chmod 600 "$file.tmp"
   mv "$file.tmp" "$file"
 }
 
 # One setting's value, for the two public ones this script has to know. Nothing
-# printed: the caller puts it in a file.
-read_setting() { sed -n "s/^$1=//p" "$2" | head -1 | tr -d "\"' \r"; }
+# printed: the caller puts it in a file. awk rather than `sed | head`, because
+# under `pipefail` a `head` closing the pipe early makes sed exit 141.
+read_setting() {
+  awk -v key="$1" 'index($0, key "=") == 1 { sub(/^[^=]*=/, "", $0); gsub(/[ \t\r"'"'"']/, "", $0); print; exit }' "$2"
+}
+
+# Is any of this run's PM2 apps up? Read into a variable and parsed by node: a
+# `pm2 jlist | grep` would make the gate a pipeline, whose exit status is the last
+# command's, and it would leave the whole process list on disk.
+year_apps_online() {
+  command -v pm2 >/dev/null || return 1
+  local jlist
+  jlist="$(pm2 jlist 2>/dev/null || true)"
+  [ -n "$jlist" ] || return 1
+  # A here-string, not a pipe: the status this function returns must be node's
+  # answer about the list, not pm2's about having printed one.
+  node -e '
+    let list = [];
+    try { list = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(1); }
+    const up = list.filter((a) => a.name?.startsWith("mro-year-") && a.pm2_env?.status === "online");
+    process.stdout.write(up.map((a) => a.name).join(" "));
+    process.exit(up.length > 0 ? 0 : 1);
+  ' <<< "$jlist"
+}
 
 mkdir -p "$DIR" "$DIR/logs"
 chmod 700 "$DIR"
@@ -83,6 +117,12 @@ if [ -f "$DIR/tree.head" ]; then exported="$(tr -d " \t\r\n" < "$DIR/tree.head")
 if [ -d "$TREE/warden/src" ] && [ "$exported" = "$HEAD_ID" ]; then
   echo "tree: skipped, $TREE already holds this commit"
 else
+  # A RE-EXPORT WHILE THE RUN IS UP WOULD SWAP THE CODE UNDER IT: the Warden, the
+  # Clock loop and the two tools all read their files from this tree as they go,
+  # so a 38-hour run would be half one commit and half another.
+  if up="$(year_apps_online)"; then
+    fail "the run is up ($up) and $TREE needs re-exporting. Run stop.sh first."
+  fi
   mkdir -p "$TREE"
   git -C "$REPO" archive HEAD | tar -x -C "$TREE"
   printf '%s\n' "$HEAD_ID" > "$DIR/tree.head"
@@ -136,6 +176,11 @@ echo "settings: treasury address written to $DIR/treasury.address"
 CONTRACT=""
 if [ -s "$DIR/contract.address" ]; then
   CONTRACT="$(tr -d " \t\r\n" < "$DIR/contract.address")"
+  # WRITTEN BACK EVERY TIME, not only on the deploy. contract.address is the
+  # record of which pair this data directory belongs to, and year.conf can be
+  # rebuilt (it is skipped only while it exists) -- a rebuilt one would otherwise
+  # keep the `pending-deploy` sentinel and refuse to start for no reason.
+  set_setting MRO_CONTRACT_ADDRESS "$CONTRACT" "$CONF"
   echo "deploy: skipped, $DIR/contract.address already holds $CONTRACT"
 elif [ "$DRY" = 1 ]; then
   echo "deploy: would simulate, then broadcast:"
@@ -166,12 +211,16 @@ fi
 
 # The pair is only real if the chain has code at that address. A deploy that
 # reverted, or an address read from the wrong record, fails here.
-if [ -n "$CONTRACT" ]; then
+#
+# A DRY RUN MAKES NO NETWORK CALL AT ALL, including this one: it is the rehearsal
+# an operator does before deciding to deploy, and it has to work on a box with no
+# route to Base and no foundry.
+if [ "$DRY" = 1 ]; then
+  echo "deploy: would read back cast code for ${CONTRACT:-the new pair}"
+elif [ -n "$CONTRACT" ]; then
   code="$(cast code "$CONTRACT" --rpc-url "$RPC")"
   [ -n "$code" ] && [ "$code" != "0x" ] || fail "no code at $CONTRACT on $RPC: the pair is not deployed"
   echo "deploy: cast code at $CONTRACT is ${#code} characters, the pair is live"
-else
-  echo "deploy: would read back cast code for the new pair"
 fi
 
 # --------------------------------------------------------------- 4. the cursor

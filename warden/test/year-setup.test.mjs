@@ -15,7 +15,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { AGENTS } from "../tools/year/scenario.mjs";
-import { yearPaths } from "../tools/year/runner.mjs";
+import { clockFailing, readJsonl, yearPaths } from "../tools/year/runner.mjs";
 import { createWallets, WALLET_NAMES, IDENTITY_NAMES } from "../tools/year/wallets.mjs";
 import { CLOCK_RESERVE_WEI, fundEth, fundUsdc, gasRecipients, GAS_WEI, MINT_USDC } from "../tools/year/fund.mjs";
 
@@ -37,12 +37,38 @@ test("the process list names the four apps of the run", () => {
   );
 });
 
-test("every app carries the live ecosystem's filter_env, verbatim", () => {
+test("every app carries the live ecosystem's filter_env, plus the names year.conf owns", () => {
   const list = require(join(YEAR, "year.config.cjs"));
   const live = require(join(WARDEN, "ecosystem.config.cjs"));
-  const expected = live.apps[0].filter_env;
-  assert.ok(Array.isArray(expected) && expected.length > 0);
-  for (const app of list.apps) assert.deepEqual(app.filter_env, expected, `${app.name} filter_env`);
+  const ecosystem = live.apps[0].filter_env;
+  assert.ok(Array.isArray(ecosystem) && ecosystem.length > 0);
+
+  for (const app of list.apps) {
+    // The ecosystem's list, in its own order, at the front -- not merely present.
+    assert.deepEqual(app.filter_env.slice(0, ecosystem.length), ecosystem, `${app.name} ecosystem entries`);
+    // And the settings only year.conf may decide. Node lets the ENVIRONMENT beat
+    // --env-file, so an inherited one of these would quietly win.
+    for (const name of [
+      "STATE_DB_PATH", "MRO_DAY_SECONDS", "MRO_CLOCK_OFFSET_SECONDS",
+      "MRO_CONTRACT_ADDRESS", "MRO_DOMAIN", "BASE_RPC_URL",
+    ]) {
+      assert.ok(app.filter_env.includes(name), `${app.name} does not drop an inherited ${name}`);
+    }
+  }
+});
+
+test("the Clock loop is given nothing that year.conf owns", () => {
+  const dir = tempDir("mro-year-cfg-");
+  const clock = loadConfigWith({ MRO_YEAR_DIR: dir }).apps.find((a) => a.name === "mro-year-clock");
+  // It reads the day length out of year.conf itself, and passes that file to the
+  // Clock. A copy here would reach the Clock through the environment and beat it.
+  assert.deepEqual(Object.keys(clock.env).sort(), ["MRO_YEAR_DIR", "MRO_YEAR_NODE"]);
+});
+
+test("the Warden is given only its port", () => {
+  const dir = tempDir("mro-year-cfg-");
+  const warden = loadConfigWith({ MRO_YEAR_DIR: dir }).apps.find((a) => a.name === "mro-year-warden");
+  assert.deepEqual(Object.keys(warden.env), ["PORT"]);
 });
 
 test("the year's Warden runs on 4006 from the exported tree, against year.conf", () => {
@@ -76,14 +102,22 @@ test("every app logs into the data directory and is memory-capped", () => {
   }
 });
 
-test("the runner and checker are told the data directory and the day length", () => {
+test("the runner and checker are told everything they read, since the filter drops it", () => {
   const dir = tempDir("mro-year-cfg-");
   const list = loadConfigWith({ MRO_YEAR_DIR: dir });
-  for (const name of ["mro-year-runner", "mro-year-checker", "mro-year-clock"]) {
+  for (const name of ["mro-year-runner", "mro-year-checker"]) {
     const app = list.apps.find((a) => a.name === name);
     assert.equal(app.env.MRO_YEAR_DIR, dir, name);
     assert.equal(app.env.MRO_DAY_SECONDS, "300", name);
+    // Neither reads year.conf, and the filter drops an inherited endpoint, so the
+    // public one is stated. It is what their own code defaults to.
+    assert.equal(app.env.BASE_RPC_URL, "https://sepolia.base.org", name);
   }
+  // Only the runner spends: the checker is never told where the bank's key is.
+  const runner = list.apps.find((a) => a.name === "mro-year-runner");
+  const checker = list.apps.find((a) => a.name === "mro-year-checker");
+  assert.match(runner.env.MRO_TEST_WALLET_KEY_FILE, /wallet\.key$/);
+  assert.equal(checker.env.MRO_TEST_WALLET_KEY_FILE, undefined);
 });
 
 test("no home directory is written into the process list", () => {
@@ -121,7 +155,12 @@ test("the wallet maker makes a wallet per agent and an identity for the rebind",
     assert.equal(mode(paths.wallet(name)), 0o600, `${name} key mode`);
     assert.match(readFileSync(paths.wallet(name), "utf8").trim(), /^0x[0-9a-f]{64}$/);
   }
-  for (const name of IDENTITY_NAMES) assert.ok(existsSync(paths.identity(name)), `${name} identity`);
+  for (const name of IDENTITY_NAMES) {
+    assert.ok(existsSync(paths.identity(name)), `${name} identity`);
+    // An identity key is a private key too: the door knows an agent by it, and a
+    // readable one is an agent anybody can impersonate.
+    assert.equal(mode(paths.identity(name)), 0o600, `${name} identity mode`);
+  }
   assert.equal(mode(paths.dir), 0o700);
   // Addresses are public; a key is not, and nothing printed may carry one.
   for (const line of said) assert.ok(!/0x[0-9a-fA-F]{64}/.test(line), `printed a key-shaped string: ${line}`);
@@ -223,17 +262,91 @@ test("gas is topped up to the flat amount, and the Clock keeps its reserve", asy
 
 // ---------------------------------------------------------------- the scripts
 
-const SCRIPTS = ["setup.sh", "start.sh", "stop.sh", "clock-loop.sh"];
+const SCRIPTS = [
+  join(YEAR, "setup.sh"),
+  join(YEAR, "start.sh"),
+  join(YEAR, "stop.sh"),
+  join(YEAR, "clock-loop.sh"),
+  // Task 6 changed how this one reads its Warden address, so it is parsed here too.
+  join(WARDEN, "..", "contracts", "script", "fast", "deploy-fast.sh"),
+];
 
 test("every shell script parses", () => {
-  for (const name of SCRIPTS) execFileSync("bash", ["-n", join(YEAR, name)]);
+  for (const path of SCRIPTS) execFileSync("bash", ["-n", path]);
 });
 
-test("no home directory is written into a shell script", () => {
-  for (const name of SCRIPTS) {
-    const source = readFileSync(join(YEAR, name), "utf8");
-    assert.ok(!source.includes("/home/"), `${name} carries a home path`);
+// A `node -e '...'` block inside a shell script is JavaScript that no linter
+// sees: `bash -n` parses the quotes and says nothing about what is between them.
+// A shell comment written into one of these blocks -- which is exactly what a
+// `# shellcheck disable` line did during this task -- makes the program a syntax
+// error, and the only symptom is the guard it implements silently answering "no"
+// at the moment it matters.
+test("every node program embedded in a shell script is valid JavaScript", () => {
+  const checked = [];
+  for (const path of SCRIPTS) {
+    for (const [index, program] of embeddedNodePrograms(readFileSync(path, "utf8")).entries()) {
+      const file = join(tempDir("mro-year-js-"), `embedded-${index}.js`);
+      writeFileSync(file, program);
+      execFileSync("node", ["--check", file]);
+      checked.push(`${path}#${index}`);
+    }
   }
+  // If the extraction ever stops finding them, the check above passes vacuously.
+  assert.ok(checked.length >= 3, `expected the scripts' node programs, found ${checked.length}`);
+});
+
+/// Each `node -e '<program>'` block: from the opening quote to the next line
+/// whose first character is that quote.
+function embeddedNodePrograms(source) {
+  const programs = [];
+  const lines = source.split("\n");
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/node -e '$/.test(lines[i].trimEnd())) continue;
+    const end = lines.findIndex((line, j) => j > i && line.trim().startsWith("'"));
+    if (end > i) programs.push(lines.slice(i + 1, end).join("\n"));
+  }
+  return programs;
+}
+
+test("no home directory is written into a shell script", () => {
+  for (const path of SCRIPTS) {
+    assert.ok(!readFileSync(path, "utf8").includes("/home/"), `${path} carries a home path`);
+  }
+});
+
+// THE ONE LINE THE RUNNER READS FROM ANOTHER PROCESS. `clockFailing` pauses every
+// agent on three non-zero exits in a row, so the loop's JSON line and the
+// runner's reader have to agree about the field -- and they are in different
+// languages, which no unit test of either can catch. The loop is run for real
+// against a one-second day and a node that always fails.
+test("the Clock loop's line is the line clockFailing reads", () => {
+  const dir = tempDir("mro-year-loop-");
+  mkdirSync(join(dir, "tree", "warden", "src", "clock"), { recursive: true });
+  writeFileSync(join(dir, "tree", "warden", "src", "clock", "main.mjs"), "// a stand-in for the real Clock\n");
+  writeFileSync(join(dir, "year.conf"), "MRO_DAY_SECONDS=1\nMRO_CLOCK_OFFSET_SECONDS=0\n", { mode: 0o600 });
+  const fakeNode = join(dir, "fails.sh");
+  writeFileSync(fakeNode, "#!/usr/bin/env bash\nexit 3\n", { mode: 0o755 });
+
+  // `timeout` stops it; the loop never exits on its own, which is the point of it.
+  // Exit 124 is timeout's own "I killed it", and that is the expected end.
+  try {
+    execFileSync("timeout", ["5", "bash", join(YEAR, "clock-loop.sh")], {
+      env: { ...process.env, MRO_YEAR_DIR: dir, MRO_YEAR_NODE: fakeNode },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+  } catch (err) {
+    assert.equal(err.status, 124, `the loop exited on its own: ${err.stderr}`);
+  }
+
+  const lines = readJsonl(join(dir, "clock.jsonl"));
+  assert.ok(lines.length >= 3, `expected at least three runs in five seconds, got ${lines.length}`);
+  for (const line of lines) {
+    assert.equal(line.exit, 3, "the exit code is not the one the run answered");
+    assert.ok(Number.isInteger(line.chainDay), "chainDay is not a whole fast day");
+    assert.match(line.ts, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+  }
+  // The runner's own reader, unchanged, over the loop's own output.
+  assert.equal(clockFailing(lines), true);
 });
 
 /// A settings file shaped like the old fast one, with values nothing may print.
@@ -366,6 +479,97 @@ test("start refuses before setup has run, without starting anything", () => {
       }),
     /year.conf is not there/
   );
+});
+
+/// Everything start.sh checks for before it looks at pm2 or the port, so the
+/// refusals under test are the ones being aimed at.
+function stubReadyDir() {
+  const dir = tempDir("mro-year-ready-");
+  stubTree(dir);
+  mkdirSync(join(dir, "tree", "warden", "src"), { recursive: true });
+  writeFileSync(join(dir, "tree", "warden", "src", "main.mjs"), "// a stand-in\n");
+  writeFileSync(join(dir, "year.conf"), `${FAKE_CONF}\nMRO_CONTRACT_ADDRESS=0x${"a1".repeat(20)}\n`, { mode: 0o600 });
+  writeFileSync(join(dir, "contract.address"), `0x${"a1".repeat(20)}\n`);
+  writeFileSync(join(dir, "treasury.address"), "0x000000000000000000000000000000000000dEaD\n");
+  mkdirSync(join(dir, "wallets"), { recursive: true });
+  mkdirSync(join(dir, "identities"), { recursive: true });
+  for (const name of [...WALLET_NAMES, "A11b"]) {
+    if (name !== "A11b") writeFileSync(join(dir, "wallets", `${name}.key`), "", { mode: 0o600 });
+    writeFileSync(join(dir, "identities", `${name}.jwk.json`), "{}", { mode: 0o600 });
+  }
+  return dir;
+}
+
+// THE OLD mro-fast-warden BINDS THE SAME 4006 and is only `stopped`, so a pm2
+// resurrect would have it listening while this run's Warden tried to start. The
+// guard asks by connecting, and it runs BEFORE the suites -- so this test reaches
+// a refusal without ever starting a process or running a suite.
+test("start refuses while something is listening on 4006", async () => {
+  const { createServer, connect } = await import("node:net");
+  const dir = stubReadyDir();
+
+  const listening = await new Promise((resolve) => {
+    const server = createServer();
+    server.on("error", () => resolve(null));
+    server.listen(4006, "127.0.0.1", () => resolve(server));
+  });
+  // Nothing of ours could bind it: either somebody else has (which is the
+  // condition under test anyway) or the box refused, and then there is nothing to
+  // test against.
+  if (!listening) {
+    const busy = await new Promise((resolve) => {
+      const s = connect(4006, "127.0.0.1");
+      s.on("connect", () => { s.destroy(); resolve(true); });
+      s.on("error", () => resolve(false));
+    });
+    if (!busy) return;
+  }
+  try {
+    assert.throws(
+      () =>
+        execFileSync("bash", [join(YEAR, "start.sh")], {
+          encoding: "utf8",
+          env: { ...process.env, MRO_YEAR_DIR: dir },
+          stdio: ["ignore", "pipe", "pipe"],
+        }),
+      // Either refusal is correct and both come before the suites: the port, or
+      // pm2 already holding this run's apps (true while the year is running).
+      /4006|pm2 already holds/
+    );
+  } finally {
+    listening?.close();
+  }
+});
+
+test("a rebuilt settings file takes its pair back from contract.address", () => {
+  const dir = tempDir("mro-year-setup-");
+  const conf = join(dir, "fast.conf");
+  writeFileSync(conf, FAKE_CONF, { mode: 0o600 });
+  stubTree(dir);
+  // The record of which pair this data directory belongs to, as a real run leaves it.
+  const pair = `0x${"a1".repeat(20)}`;
+  writeFileSync(join(dir, "contract.address"), `${pair}\n`);
+
+  const said = dryRun(dir, conf);
+  const written = readFileSync(join(dir, "year.conf"), "utf8");
+  assert.ok(!written.includes("pending-deploy"), "the sentinel survived a known pair");
+  assert.ok(written.includes(`MRO_CONTRACT_ADDRESS=${pair}`));
+  // And it got there without asking a chain: `cast code` on that address would
+  // answer 0x and the script would have failed.
+  assert.match(said, /would read back cast code/);
+});
+
+test("a value carrying & or | is written literally, not as a substitution", () => {
+  // sed reads `&` as the whole match and `|` as its own delimiter. The data
+  // directory is the value most likely to carry either, so it carries both here.
+  const dir = tempDir("mro-year-a&b|c-");
+  const conf = join(dir, "fast.conf");
+  writeFileSync(conf, FAKE_CONF, { mode: 0o600 });
+  stubTree(dir);
+
+  dryRun(dir, conf);
+  const written = readFileSync(join(dir, "year.conf"), "utf8");
+  assert.ok(written.includes(`STATE_DB_PATH=${join(dir, "state.db")}`), written);
 });
 
 test("a dry run neither deploys nor writes a contract address", () => {

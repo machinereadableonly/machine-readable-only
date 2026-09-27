@@ -46,7 +46,12 @@ fi
 # The day length and the offset come from the settings file the Clock itself
 # reads, so the loop cannot drift from the day the contract is counting. Only
 # these two names are read, and nothing from that file is ever printed.
-read_setting() { sed -n "s/^$1=//p" "$CONF" | head -1 | tr -d "\"' \r"; }
+#
+# awk rather than `sed | head`: under `pipefail` a `head` that closes the pipe
+# early makes sed exit 141 and takes the whole script with it.
+read_setting() {
+  awk -v key="$1" 'index($0, key "=") == 1 { sub(/^[^=]*=/, "", $0); gsub(/[ \t\r"'"'"']/, "", $0); print; exit }' "$CONF"
+}
 DAY="$(read_setting MRO_DAY_SECONDS)"
 OFFSET="$(read_setting MRO_CLOCK_OFFSET_SECONDS)"
 : "${DAY:=300}"
@@ -57,7 +62,11 @@ echo "year-clock: a ${DAY}s day, run at +${OFFSET}s, logging to $LOG"
 
 while true; do
   now="$(date +%s)"
-  next=$(( (now / DAY + 1) * DAY + OFFSET ))
+  # THIS period's run when its moment has not passed yet, the next one's
+  # otherwise -- the same rule as the runner's nextWakeMs. Starting the loop at
+  # +5 s of a fast day used to throw that day's Clock run away and wait 300 s.
+  next=$(( (now / DAY) * DAY + OFFSET ))
+  if [ "$next" -le "$now" ]; then next=$(( next + DAY )); fi
   sleep $(( next - now ))
   # The fast day that has just closed: the one the run about to start writes.
   day=$(( next / DAY - 1 ))

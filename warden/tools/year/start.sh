@@ -47,6 +47,44 @@ for name in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12; do
 done
 [ -f "$DIR/identities/A11b.jwk.json" ] || fail "no rebind identity A11b. Run wallets.mjs first."
 
+# ------------------------------------------------------- nothing may be up already
+#
+# PM2's own list is read into a variable and parsed by node -- a `pm2 jlist | grep`
+# would make the gate a pipeline, whose exit status is the last command's, and
+# would leave the whole process list on disk.
+#
+# ANY mro-year-* app that already EXISTS is refused, stopped ones included.
+# `pm2 start` on an app pm2 already knows restarts the OLD definition and never
+# re-reads this file, so a changed year.config.cjs would silently not take effect.
+# Deleting and starting again is the only way to be sure the run is the one this
+# file describes -- which is also what the live Warden's own runbook says.
+jlist="$(pm2 jlist 2>/dev/null || true)"
+existing="$(node -e '
+  let list = [];
+  try { list = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { list = []; }
+  process.stdout.write(list.filter((a) => a.name?.startsWith("mro-year-")).map((a) => `${a.name}(${a.pm2_env?.status})`).join(" "));
+' <<< "$jlist")"
+if [ -n "$existing" ]; then
+  echo "FAIL: pm2 already holds this run's apps: $existing" >&2
+  echo "      Stop them with stop.sh (it also writes the report), then:" >&2
+  echo "      pm2 delete mro-year-warden mro-year-clock mro-year-runner mro-year-checker" >&2
+  exit 1
+fi
+
+# The fast Warden's own port. The OLD mro-fast-warden binds the same 4006, and it
+# is only `stopped` -- a pm2 resurrect or a hand restart would have it listening.
+# Asked by CONNECTING, not by reading a tool's output: a listener is a listener
+# whoever owns it, and ss/lsof output would have to be piped to be parsed.
+if node -e '
+  const net = require("net");
+  const s = net.connect(4006, "127.0.0.1");
+  s.on("connect", () => { s.destroy(); process.exit(0); });
+  s.on("error", () => process.exit(1));
+  s.setTimeout(2000, () => { s.destroy(); process.exit(1); });
+'; then
+  fail "something is already listening on 127.0.0.1:4006. The old mro-fast-warden is the likely owner -- stop it first."
+fi
+
 # The stack runs the EXPORT of HEAD, so a working tree with edits in it is not
 # what is about to run, and the suites below test the working tree.
 dirty="$(git -C "$REPO" status --porcelain 2>/dev/null | wc -l || true)"
@@ -86,24 +124,54 @@ run_suite client client npm test
 # ------------------------------------------------------------ start, then read back
 pm2 start "$CONFIG"
 
-# WHAT PM2 SAYS IT DID IS NOT WHAT IT DID. The names and their statuses are read
-# back out of pm2's own list: a missing app, or one that started and exited, must
-# stop this here rather than at the first empty log tomorrow.
 names="$(node -e 'const c=require(process.argv[1]);process.stdout.write(c.apps.map((a)=>a.name).join(" "))' "$CONFIG")"
-jlist="$LOGS/pm2-jlist.json"
-pm2 jlist > "$jlist"
+
+# ONE LINE PER APP: "<name> <status> <restart_time>", read out of pm2's own list
+# and never written to disk.
+read_states() {
+  local list
+  list="$(pm2 jlist 2>/dev/null || true)"
+  # $names is deliberately unquoted: each name is its own argument to node.
+  # shellcheck disable=SC2086
+  node -e '
+    let list = [];
+    try { list = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(1); }
+    for (const name of process.argv.slice(1)) {
+      const app = list.find((a) => a.name === name);
+      const status = app ? String(app.pm2_env?.status) : "missing";
+      const restarts = app ? String(app.pm2_env?.restart_time ?? "?") : "-";
+      console.log(`${name} ${status} ${restarts}`);
+    }
+  ' $names <<< "$list"
+}
+
+# WHAT PM2 SAYS IT DID IS NOT WHAT IT DID, AND `online` A SECOND AFTER STARTING
+# MEANS ALMOST NOTHING. Every process here refuses to start on a configuration it
+# cannot trust, and PM2 restarts a refusal ten times before giving up -- so the
+# list shows `online` while the app is in fact on its fourth attempt. The check
+# is: wait for the boot checks to have run, then require `online` with ZERO
+# restarts, and require the same answer again a few seconds later.
+echo "waiting 15s for the boot checks"
+sleep 15
+first="$(read_states)"
+sleep 5
+second="$(read_states)"
 
 echo "processes:"
-for name in $names; do
-  status="$(node -e '
-    const list = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-    const app = list.find((a) => a.name === process.argv[2]);
-    process.stdout.write(app ? String(app.pm2_env.status) : "missing");
-  ' "$jlist" "$name")"
-  echo "  $name $status"
-  [ "$status" = "online" ] || failed=1
-done
-[ "$failed" = 0 ] || fail "not every process is online. Read $LOGS and pm2 logs, then stop.sh."
+echo "$first"
+if [ "$first" != "$second" ]; then
+  echo "the second read disagreed with the first:" >&2
+  echo "$second" >&2
+  fail "a process is restarting. Read $LOGS and pm2 logs, then stop.sh."
+fi
+while read -r name status restarts; do
+  [ -n "$name" ] || continue
+  if [ "$status" != "online" ] || [ "$restarts" != "0" ]; then
+    echo "  $name is $status after $restarts restart(s)" >&2
+    failed=1
+  fi
+done <<< "$first"
+[ "$failed" = 0 ] || fail "not every process is online and unrestarted. Read $LOGS and pm2 logs, then stop.sh."
 
 # ------------------------------------------------------------ the first pass
 # The runner does a pass as soon as it starts, so the first line arrives in

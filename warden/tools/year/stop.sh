@@ -38,4 +38,7 @@ for name in $names; do
 done
 
 echo "stopped: $names"
+# start.sh refuses while pm2 still holds these names, because `pm2 start` on an
+# app pm2 already knows restarts the old definition instead of reading the file.
+echo "to run again: pm2 delete $names, then start.sh"
 node "$HERE/report.mjs"
