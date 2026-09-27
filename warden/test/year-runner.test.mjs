@@ -13,7 +13,8 @@ import { AGENTS } from "../tools/year/scenario.mjs";
 import {
   runDay, emptyState, agentSpecs, creditedDays, clockFailing, nextWakeMs,
   yearPaths, makeLog, loadState, writeState, passDeadlineMs,
-  DEAD_TREASURY, MINT_USDC, RETRY_PAUSE_MS, SITE, ORIGIN,
+  agentIsDone, foundingAllDone, firstPassFits, daySecondsFrom,
+  DAY_SECONDS, DEAD_TREASURY, FIRST_PASS_MIN_MS, MINT_USDC, RETRY_PAUSE_MS, SITE, ORIGIN,
 } from "../tools/year/runner.mjs";
 
 const byName = (name) => AGENTS.find((a) => a.name === name);
@@ -36,8 +37,10 @@ function fakeDoor(script = {}) {
     calls.push({ made: { name: s.name, identity: s.identity, wallet: s.wallet } });
     const pop = (action, fallback) => {
       const answer = script[s.name]?.[action];
-      if (Array.isArray(answer)) return answer.length ? answer.shift() : fallback;
-      return answer ?? fallback;
+      const one = Array.isArray(answer) ? (answer.length ? answer.shift() : fallback) : (answer ?? fallback);
+      // A scripted Error is a door that threw: a lost answer, not a refusal.
+      if (one instanceof Error) throw one;
+      return one;
     };
     const record = (action, fields) => calls.push({ agent: s.name, identity: s.identity, action, ...fields });
     return {
@@ -53,6 +56,12 @@ function fakeDoor(script = {}) {
         });
       },
       seed: async (parentId, to) => { record("seed", { parentId, to }); return pop("seed", { ok: true, tokenId: 99 }); },
+      // The `status` tool with no argument: the caller's own tokens, as
+      // warden/src/mcp/tools/status.mjs answers it.
+      status: async () => {
+        record("status", {});
+        return pop("status", { ok: true, tokens: [], contract: "0xc0", chainId: 84532 });
+      },
       ownerCallFor: async (tool, tokenId) => {
         record(`call:${tool}`, { tokenId });
         return pop(`call:${tool}`, { ok: true, contract: "0xc0", function: tool, args: [tokenId] });
@@ -772,6 +781,219 @@ test("the log sink stamps every line with a timestamp and one JSON object per li
     assert.equal(lines[0].action, "mint");
     assert.equal(lines[1].reason, "chain-unavailable");
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ------------------------------------------------- the child's own ending
+
+// Without this the child checks in every day for ever, so no day is ever silent
+// and the heartbeat the end phase exists to prove never fires.
+test("a check-in refused year-complete records that agent as done, and a rest counts too", async () => {
+  const out = await pass({
+    day: 400, specs: [spec("A2")], state: { ...emptyState(), tokens: { A2: 5 } },
+    chain: fakeChain({ today: 400 }),
+    door: fakeDoor({ A2: { beat: { ok: false, reason: "year-complete" } } }),
+  });
+  assert.deepEqual(out.state.done, { A2: true });
+  assert.equal(agentIsDone(out.state, "A2"), true);
+
+  // A sealed token is done as well: it can never be credited again.
+  assert.equal(agentIsDone({ ...emptyState(), ownerDone: { A10: ["rest"] } }, "A10"), true);
+  assert.equal(agentIsDone(emptyState(), "A10"), false);
+});
+
+test("the child checks in until every founding agent is done, and then stops", async () => {
+  const all = Object.fromEntries(AGENTS.filter((a) => a.name !== "A10").map((a) => [a.name, true]));
+  const base = { ...emptyState(), tokens: { A1: 1, child: 99 }, seeded: true, childId: 99, childDay: 300 };
+
+  // Eleven done and A10 neither finished nor sealed: the child still returns.
+  const going = { ...base, done: all };
+  assert.equal(foundingAllDone(going), false);
+  const busy = await pass({
+    day: 400, specs: [agentSpecs(going).find((s) => s.name === "child")], state: going,
+    chain: fakeChain({ today: 400 }),
+  });
+  assert.deepEqual(callsFor(busy.calls, "beat").map((b) => b.tokenId), [99]);
+
+  // A10 rests, which is the twelfth ending: from that day the child stops.
+  const over = { ...base, done: all, ownerDone: { A10: ["rest"] } };
+  assert.equal(foundingAllDone(over), true);
+  const quiet = await pass({
+    day: 401, specs: [agentSpecs(over).find((s) => s.name === "child")], state: over,
+    chain: fakeChain({ today: 401 }),
+  });
+  assert.deepEqual(callsFor(quiet.calls, "beat"), []);
+});
+
+// ------------------------------------------------- the first pass of a run
+
+// A pass started near a boundary can split A1-A3's mints across two fast days,
+// which is a permanent mintDay FAIL and a lost day one -- and Break, at a run of
+// 365, is then unreachable for the whole year.
+test("a first pass with too little of the fast day left is not run", () => {
+  // A 300-second day ending at 300_300_000 ms, less the pass's own 20 s margin.
+  assert.equal(passDeadlineMs(300_060_000, 300), 300_280_000);
+  assert.equal(firstPassFits(300_060_000, 300), true);
+  assert.equal(firstPassFits(300_280_000 - FIRST_PASS_MIN_MS, 300), true);
+  assert.equal(firstPassFits(300_280_000 - FIRST_PASS_MIN_MS + 1000, 300), false);
+  // Past the deadline entirely, there is nothing left to defer from.
+  assert.equal(firstPassFits(300_290_000, 300), false);
+  assert.equal(FIRST_PASS_MIN_MS, 90_000);
+});
+
+test("the runner refuses a fast day it cannot use rather than sleeping on NaN", () => {
+  assert.equal(daySecondsFrom({}), DAY_SECONDS);
+  assert.equal(daySecondsFrom({ MRO_DAY_SECONDS: "300" }), 300);
+  for (const bad of ["0", "-5", "soon", "", "NaN", "60"]) {
+    assert.throws(() => daySecondsFrom({ MRO_DAY_SECONDS: bad }), /MRO_DAY_SECONDS/);
+  }
+  // The checker's own copy is this function with its longer offset as the floor.
+  assert.equal(daySecondsFrom({ MRO_DAY_SECONDS: "61" }), 61);
+  assert.throws(() => daySecondsFrom({ MRO_DAY_SECONDS: "200" }, 240), /greater than the 240/);
+});
+
+// ------------------------------------------------- a lost answer, recovered
+
+// The Clock mints from a row the Warden has already written, so an answer lost in
+// transit leaves a token nobody owns a record of -- and an agent with no token id
+// never checks in again for the rest of the year.
+test("a mint the door says is already done adopts the token the door lists as ours", async () => {
+  const state = emptyState();
+  const out = await pass({
+    day: 0, specs: [spec("A1")], state,
+    door: fakeDoor({ A1: {
+      mint: { ok: false, reason: "already-minted" },
+      status: { ok: true, tokens: [{ tokenId: 4, level: 1, generation: 0, parentId: null }], contract: "0xc0", chainId: 84532 },
+    } }),
+  });
+  assert.equal(out.state.tokens.A1, 4);
+  assert.deepEqual(callsFor(out.calls, "status").map((c) => [c.agent, c.identity]), [["A1", "A1"]]);
+  assert.deepEqual(linesFor(out.lines, "token-adopted").map((l) => [l.ok, l.tokenId, l.reason]), [[true, 4, "already-minted"]]);
+});
+
+test("a mint whose answer never came back adopts the token too, and a child is never taken for it", async () => {
+  const state = emptyState();
+  const out = await pass({
+    day: 0, specs: [spec("A1")], state,
+    door: fakeDoor({ A1: {
+      mint: new Error("socket hang up"),
+      // A child of somebody else's token is not this agent's founding token.
+      status: { ok: true, tokens: [
+        { tokenId: 12, level: 1, generation: 1, parentId: 3 },
+        { tokenId: 7, level: 1, generation: 0, parentId: null },
+      ] },
+    } }),
+  });
+  assert.equal(out.state.tokens.A1, 7);
+  assert.deepEqual(linesFor(out.lines, "mint").map((l) => [l.ok, l.reason]), [[false, "socket hang up"]]);
+});
+
+test("a mint refused with no token of ours to find leaves the mint due again, silently", async () => {
+  const state = emptyState();
+  const out = await pass({
+    day: 0, specs: [spec("A1")], state,
+    door: fakeDoor({ A1: { mint: { ok: false, reason: "payment-failed" } } }),
+  });
+  assert.deepEqual(out.state.tokens, {});
+  assert.deepEqual(linesFor(out.lines, "token-adopted"), []);
+});
+
+// A seed is spent once per agent-year and the chain offers no second one, so a
+// lost seed answer is the one failure the runner cannot simply retry.
+test("a seed whose answer was lost adopts the child the door lists under the parent", async () => {
+  const state = { ...emptyState(), tokens: { A1: 1 } };
+  const door = fakeDoor({ A1: { status: { ok: true, tokens: [
+    { tokenId: 1, level: 365, generation: 0, parentId: null },
+    { tokenId: 99, level: 1, generation: 1, parentId: 1 },
+  ] } } });
+  const out = await pass({
+    day: 368, specs: [spec("A1")], state, door,
+    chain: fakeChain({ today: 368, seeds: 0, views: { 1: { level: 365, streak: 365 } } }),
+    // The attempt that was lost: only a seed already tried can have been spent.
+    log: [{ action: "seed", ok: false, tokenId: 1, chainDay: 367, reason: "chain-unavailable" }],
+  });
+  assert.equal(out.state.seeded, true);
+  assert.equal(out.state.childId, 99);
+  assert.equal(out.state.tokens.child, 99);
+  assert.deepEqual(linesFor(out.lines, "token-adopted").map((l) => [l.ok, l.tokenId]), [[true, 99]]);
+  assert.equal(agentSpecs(out.state).filter((s) => s.name === "child").length, 1);
+});
+
+test("a spent seed with no child to be found is logged, not passed over in silence", async () => {
+  const state = { ...emptyState(), tokens: { A1: 1 } };
+  const out = await pass({
+    day: 368, specs: [spec("A1")], state,
+    chain: fakeChain({ today: 368, seeds: 0, views: { 1: { level: 365, streak: 365 } } }),
+    log: [{ action: "seed", ok: false, tokenId: 1, chainDay: 367, reason: "chain-unavailable" }],
+  });
+  assert.equal(out.state.seeded, false);
+  assert.deepEqual(linesFor(out.lines, "seed").map((l) => [l.ok, l.reason]), [[false, "no-seed-available"]]);
+});
+
+// And before any seed has been attempted, no seed is due and nothing is missing:
+// A1 spends 365 days in exactly that state.
+test("a parent whose year is not over asks the door nothing about a child", async () => {
+  const out = await pass({
+    day: 40, specs: [spec("A1")], state: { ...emptyState(), tokens: { A1: 1 } },
+    chain: fakeChain({ today: 40, seeds: 0, views: { 1: { level: 40, streak: 40 } } }),
+  });
+  assert.deepEqual(callsFor(out.calls, "status"), []);
+  assert.deepEqual(linesFor(out.lines, "seed"), []);
+});
+
+// ------------------------------------------------- the money that did not move
+
+// topUp answers whether the USDC actually moved. The bank is read once to decide
+// and once to send, so a balance that falls between the two must not leave the
+// call paying with money the wallet does not hold.
+test("a top-up that could not move the price reads the demand instead of paying", async () => {
+  const chain = fakeChain({ today: 40, views: { 7: { level: 40, streak: 40 } } });
+  let bankReads = 0;
+  chain.usdcBalance = async (address) => {
+    if (address !== "0xaddr-test") return 0n;
+    return bankReads++ === 0 ? 30_000_000n : 0n;
+  };
+  const out = await pass({
+    day: 40, specs: [spec("A5", { marks: [{ id: 1, when: { level: 1 } }] })],
+    state: { ...emptyState(), tokens: { A5: 7 } }, chain,
+  });
+  assert.deepEqual(out.sent, []);
+  assert.deepEqual(callsFor(out.calls, "upgrade").map((a) => [a.id, a.pay]), [[1, false]]);
+  assert.deepEqual(linesFor(out.lines, "fund").map((l) => [l.ok, l.reason, l.markId]), [[false, "mark-unfunded", 1]]);
+  assert.deepEqual(linesFor(out.lines, "mark").map((l) => l.outcome), ["demand-only"]);
+});
+
+// ------------------------------------------------- a pause is still a record
+
+test("agents still waiting when a pause lands are logged missed, not dropped", async () => {
+  const out = await pass({
+    day: 4, specs: [spec("A2"), spec("A3")],
+    state: { ...emptyState(), tokens: { A2: 5, A3: 6 } },
+    door: fakeDoor({
+      A2: { beat: { ok: false, reason: "chain-unavailable" } },
+      A3: { beat: [{ ok: false, reason: "chain-unavailable" }, { ok: false, reason: "paused" }] },
+    }),
+  });
+  assert.equal(out.state.paused, "paused");
+  assert.deepEqual(
+    linesFor(out.lines, "checkin").filter((l) => l.reason === "missed-deadline").map((l) => l.agent),
+    ["A2"],
+  );
+});
+
+test("a pause in the first sweep still logs the agents already waiting on a retry", async () => {
+  const out = await pass({
+    day: 4, specs: [spec("A2"), spec("A3")],
+    state: { ...emptyState(), tokens: { A2: 5, A3: 6 } },
+    door: fakeDoor({
+      A2: { beat: { ok: false, reason: "chain-unavailable" } },
+      A3: { beat: { ok: false, reason: "sunset" } },
+    }),
+  });
+  assert.equal(out.state.paused, "sunset");
+  assert.deepEqual(
+    linesFor(out.lines, "checkin").filter((l) => l.reason === "missed-deadline").map((l) => l.agent),
+    ["A2"],
+  );
 });
 
 test("the state file is replaced by a rename, leaving no half-written file behind", () => {

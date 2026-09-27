@@ -162,3 +162,16 @@ test("the page is self-contained and readable in both themes", () => {
     assert.ok(!pattern.test(html), `the page must not carry ${pattern}`);
   }
 });
+
+// A report is asked for at the worst moments: a run stopped before state.json was
+// ever written, or one whose file holds nothing but a start day. The page must
+// still render, because it is how an operator finds out what happened.
+test("a state with no tokens at all still renders every scripted agent's row", () => {
+  for (const empty of [{}, { startDay: 1000 }, { tokens: {} }]) {
+    const html = renderReport([], [], empty);
+    assert.match(html, /^<!doctype html>/);
+    // Every one of the twelve is still named, each as never minted.
+    for (const name of ["A1", "A12"]) assert.ok(rowFor(html, name), `${name} has no row`);
+    assert.match(html, /never minted/);
+  }
+});

@@ -10,7 +10,7 @@
 // key path or a wallet. `main` hands the pass `readersOf(chain)` -- viewOf, today
 // and lastWardenDay -- so the three reads are the whole of its reach. A checker
 // that could write could paper over what it found.
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -18,8 +18,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { safeErrorText } from "../../src/clock/redact.mjs";
 import { makeChain } from "./chain.mjs";
 import {
-  creditedDays, loadState, makeLog, nextWakeMs, readJsonl, yearPaths,
-  DAY_SECONDS, ORIGIN, SITE,
+  creditedDays, daySecondsFrom as daySecondsAbove, loadState, makeLog, nextWakeMs, readJsonl, yearPaths,
+  ORIGIN, SITE,
 } from "./runner.mjs";
 import { expected, places, FINISH_LEVEL } from "./tally.mjs";
 
@@ -118,10 +118,20 @@ export const tokensOf = (state) =>
  * `queuedDay()`. It is the ONLY independent witness to the mint day: both tallies
  * are SEEDED with the chain's own `mintDay`, so a mint written on the wrong day
  * shifts every expected value with it and cancels out of every other comparison.
+ *
+ * `prevChain` is the PREVIOUS pass's chain view, or null on a first read. The
+ * mirror's marks, resting, generation, parent and finishing place are not credited
+ * at the door like a check-in is: they are written by the Clock's RECONCILE, which
+ * trails the head by twelve confirmations. So each of those five is allowed to
+ * hold either what the chain says now or what it said last pass -- a lag of one
+ * Clock run is the designed behaviour, and one that survives into the next pass is
+ * a finding.
  */
-export function compare({ chain, mirror, tally, mirrorTally = tally, place = null, queued = null }) {
+export function compare({ chain, mirror, tally, mirrorTally = tally, place = null, queued = null, prevChain = null }) {
   const findings = [];
   const fail = (field, fields) => findings.push({ field, ...fields, severity: "FAIL" });
+  /// True when the mirror holds neither this pass's value nor the last one's.
+  const reconciled = (held, now, before) => held === now || (prevChain !== null && held === before);
 
   // The contract writes `mintDay = day` for both creation paths (mint and seed)
   // and the Clock passes the day the agent paid, which is the day the runner
@@ -151,15 +161,25 @@ export function compare({ chain, mirror, tally, mirrorTally = tally, place = nul
     if (mirror[field] !== mirrorTally[field]) fail(field, { mirror: mirror[field], expected: mirrorTally[field] });
   }
   const mirrorMarks = toBig(mirror.marks);
-  if (mirrorMarks === null || mirrorMarks !== (chain.marks & MARK_BITS)) {
+  if (mirrorMarks === null || !reconciled(mirrorMarks, chain.marks & MARK_BITS, (prevChain?.marks ?? 0n) & MARK_BITS)) {
     fail("marks", { chain: String(chain.marks & MARK_BITS), mirror: String(mirror.marks) });
   }
-  if (mirror.resting !== chain.resting) fail("resting", { chain: chain.resting, mirror: mirror.resting });
-  if (mirror.generation !== chain.generation) fail("generation", { chain: chain.generation, mirror: mirror.generation });
+  if (!reconciled(mirror.resting, chain.resting, prevChain?.resting)) {
+    fail("resting", { chain: chain.resting, mirror: mirror.resting });
+  }
+  if (!reconciled(mirror.generation, chain.generation, prevChain?.generation)) {
+    fail("generation", { chain: chain.generation, mirror: mirror.generation });
+  }
   // The mirror holds null for a founding token where the chain holds zero.
-  if ((mirror.parentId ?? 0) !== chain.parent) fail("parent", { chain: chain.parent, mirror: mirror.parentId });
+  if (!reconciled(mirror.parentId ?? 0, chain.parent, prevChain?.parent)) {
+    fail("parent", { chain: chain.parent, mirror: mirror.parentId });
+  }
+  // Still against the place places() worked out, not against the chain's: the
+  // previous pass's read is only what the lag is measured from.
   const mirrorPlace = mirror.finisher?.place ?? 0;
-  if (mirrorPlace !== wanted) fail("place", { mirror: mirrorPlace, expected: wanted });
+  if (!reconciled(mirrorPlace, wanted, prevChain?.finisherPlace)) {
+    fail("place", { mirror: mirrorPlace, expected: wanted });
+  }
 
   return findings;
 }
@@ -201,25 +221,13 @@ export function heartbeatMilestone({ prevWardenDay, wardenDay, lastDaysMoved, wr
 }
 
 /**
- * The fast day, validated: a bad value refuses to start rather than aligning the
- * pass to a day length nothing else in the run is using.
+ * The fast day, validated: the runner's own check, with the CHECKER's floor.
  *
- * A day no longer than the offset is refused too. The pass wakes at +240 s, so a
+ * A day no longer than the offset is refused. The pass wakes at +240 s, so a
  * 240-second day would have it waking at or past the boundary -- reading the day
  * after the one it means to check, every time, and silently.
  */
-export function daySecondsFrom(env = process.env) {
-  const raw = env.MRO_DAY_SECONDS;
-  if (raw === undefined) return DAY_SECONDS;
-  // An empty string reaches this as 0, which the bound below refuses.
-  const seconds = Number(raw);
-  if (!Number.isFinite(seconds) || seconds <= OFFSET_SECONDS) {
-    throw new Error(
-      `MRO_DAY_SECONDS must be a number of seconds greater than the checker's ${OFFSET_SECONDS} s offset, got ${JSON.stringify(raw)}`
-    );
-  }
-  return seconds;
-}
+export const daySecondsFrom = (env) => daySecondsAbove(env, OFFSET_SECONDS);
 
 /// The repository's own tools directory, found from this file rather than
 /// configured: the two move together or the decode is checking another tree.
@@ -243,9 +251,20 @@ export function decodeArgs({ toolsDir: dir, contract, id, rpcUrl, site = SITE })
 }
 
 /// One decode at a time: rasterising in parallel is what takes this box down.
-export function makeDecoder({ contract, rpcUrl, dir = toolsDir(), spawnImpl = spawn }) {
+export function makeDecoder({ contract, rpcUrl, dir = toolsDir(), site = SITE, spawnImpl = spawn }) {
   return async ({ tokenId }) => {
-    const { command, args, cwd } = decodeArgs({ toolsDir: dir, contract, id: tokenId, rpcUrl });
+    const { command, args, cwd } = decodeArgs({ toolsDir: dir, contract, id: tokenId, rpcUrl, site });
+    // The verifier writes out/token-<id>.png by a RELATIVE path and does not make
+    // the directory. `tools/out/` is gitignored, so the git-archive export this run
+    // works from has no such directory -- and every decode failed on ENOENT, after
+    // the render and the scan had already succeeded.
+    try {
+      mkdirSync(join(dir, "out"), { recursive: true });
+    } catch (err) {
+      // A directory that cannot be made is one failed decode, not a dead pass: a
+      // throw here would end the whole pass and every token still to be read.
+      return { decoded: false, exit: null, said: safeErrorText(err) };
+    }
     return new Promise((resolve) => {
       let said = "";
       const child = spawnImpl(command, args, { cwd, timeout: DECODE_TIMEOUT_MS });
@@ -297,7 +316,11 @@ export async function runPass({
   const reads = [];
   for (const { agent, tokenId } of tokensOf(state)) reads.push({ agent, ...(await readOne(tokenId)) });
 
-  let judged = judge(reads);
+  // The previous pass's view of each token, which is what the mirror's
+  // reconcile-only fields are allowed to still be holding. Read before the loop
+  // below writes this pass's views over it.
+  const previous = (tokenId) => memory.tokens.get(tokenId)?.view ?? null;
+  let judged = judge(reads, previous);
   // ONE pause for the whole pass, not one per token. A public RPC is not
   // read-after-write consistent, so a disagreement is re-read before it is
   // believed -- but twelve tokens disagreeing at 20 s each would spend four
@@ -309,7 +332,7 @@ export async function runPass({
     for (const j of judged) {
       again.push(j.findings.length ? { agent: j.read.agent, ...(await readOne(j.read.tokenId)) } : j.read);
     }
-    judged = judge(again);
+    judged = judge(again, previous);
   }
 
   let lastDaysMoved = false;
@@ -398,7 +421,7 @@ async function readToken({ chain, readMirror, tokenId, lines, today }) {
 
 /// A chain that would not answer is itself the finding: nothing about this token
 /// can be judged, and silence must not read as agreement.
-function findingsFor(read, place) {
+function findingsFor(read, place, prevChain = null) {
   if (!read.chain) return [{ field: "read", chain: read.error, expected: "a token view", severity: "FAIL" }];
   // Nothing to compare: the chain has not been given this token yet, and it is
   // not due to have been.
@@ -411,7 +434,7 @@ function findingsFor(read, place) {
   }
   return compare({
     chain: read.chain, mirror: read.mirror, tally: read.tally, mirrorTally: read.mirrorTally,
-    place, queued: read.queued,
+    place, queued: read.queued, prevChain,
   });
 }
 
@@ -422,12 +445,15 @@ function findingsFor(read, place) {
  * is a token's position among all of them -- so they are recomputed here rather
  * than carried, which keeps a re-read from being judged against the old order.
  */
-function judge(reads) {
+function judge(reads, previous = () => null) {
   const finishes = reads
     .filter((r) => r.tally?.level >= FINISH_LEVEL)
     .map((r) => ({ tokenId: r.tokenId, day: r.finishDay }));
   const placeOf = places(finishes);
-  return reads.map((read) => ({ read, findings: findingsFor(read, placeOf.get(read.tokenId) ?? null) }));
+  return reads.map((read) => ({
+    read,
+    findings: findingsFor(read, placeOf.get(read.tokenId) ?? null, previous(read.tokenId)),
+  }));
 }
 
 /// How a finding reads, on stderr and on the report's page alike: one definition,

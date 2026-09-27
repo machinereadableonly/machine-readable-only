@@ -95,6 +95,10 @@ export function makeAgent({ identityPath, walletKey, site, origin }, deps = {}) 
     mint,
     upgrade,
     beat: async (tokenId) => answer(await tool("checkin", { tokenId })),
+    /// Every token bound to this key, which the Warden reads from the VERIFIED key
+    /// id rather than from an argument -- so this asks for nothing and is the only
+    /// way back to a token whose mint or seed answer was lost in transit.
+    status: async () => answer(await tool("status", {})),
     seed: async (parentId, to) => answer(await tool("seed", { parentId, to })),
     /// `rebind` and `rest` answer with a call for the token OWNER's wallet; this
     /// agent holds no wallet that could send one.

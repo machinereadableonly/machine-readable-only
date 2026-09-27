@@ -31,6 +31,10 @@ export const OFFSET_SECONDS = 60;
 /// How long before the fast day ends the pass stops asking. The next Clock run
 /// is 30 s past the boundary, and a credit landing after it belongs to that day.
 export const DEADLINE_MARGIN_SECONDS = 20;
+/// The least of a fast day the FIRST pass will start on. A pass that begins near
+/// a boundary can put A1-A3's mints on either side of it, and a token's mint day
+/// is written once and for ever.
+export const FIRST_PASS_MIN_MS = 90_000;
 
 /// The parent of the run's one child, taken from the table rather than named.
 const PARENT = AGENTS.find((a) => a.seeds).name;
@@ -60,10 +64,21 @@ export function yearPaths(dir = process.env.MRO_YEAR_DIR ?? join(homedir(), ".mr
 
 export function emptyState() {
   return {
-    startDay: null, tokens: {}, requested: {}, ownerDone: {},
+    startDay: null, tokens: {}, requested: {}, ownerDone: {}, done: {},
     seeded: false, childId: null, childDay: null, rebindKey: {}, paused: null,
   };
 }
+
+/// Whether this agent's year is over: the door refused a check-in with
+/// `year-complete`, or its owner sealed the token, which can never be credited
+/// again. Both are one-way.
+export const agentIsDone = (state, name) =>
+  state.done?.[name] === true || (state.ownerDone?.[name] ?? []).includes("rest");
+
+/// When the last of the twelve is done. The child's own check-ins stop here: while
+/// anything is still being credited no day is silent, and the heartbeat -- the
+/// whole point of the run's end phase -- can never fire.
+export const foundingAllDone = (state) => AGENTS.every((a) => agentIsDone(state, a.name));
 
 export function loadState(path) {
   let text;
@@ -127,6 +142,41 @@ export function passDeadlineMs(nowMs, daySeconds = DAY_SECONDS, marginSeconds = 
 }
 
 /**
+ * Whether the fast day still has room for the run's FIRST pass.
+ *
+ * Every later pass wakes at a known offset into a day, but the first one runs
+ * wherever the operator happened to start the stack. A pass that begins seconds
+ * before a boundary mints A1 on one chain day and A3 on the next: two permanent
+ * mintDay FAILs, day one lost for those tokens, and a run of 365 -- Break --
+ * unreachable for the whole year. Deferring costs one fast day out of 450.
+ */
+export function firstPassFits(nowMs, daySeconds = DAY_SECONDS, minimumMs = FIRST_PASS_MIN_MS) {
+  return passDeadlineMs(nowMs, daySeconds) - nowMs >= minimumMs;
+}
+
+/**
+ * The fast day, validated: a bad value refuses to start rather than aligning a
+ * process to a day length nothing else in the run is using.
+ *
+ * `Number("soon")` is NaN, which reaches nextWakeMs as a NaN sleep -- and
+ * setTimeout(NaN) fires at once, so the whole run becomes a hot loop against the
+ * door. `minimumSeconds` is the caller's own offset into the day: a day no longer
+ * than that leaves the pass nothing to run in.
+ */
+export function daySecondsFrom(env = process.env, minimumSeconds = OFFSET_SECONDS) {
+  const raw = env.MRO_DAY_SECONDS;
+  if (raw === undefined) return DAY_SECONDS;
+  // An empty string reaches this as 0, which the bound below refuses.
+  const seconds = Number(raw);
+  if (!Number.isFinite(seconds) || seconds <= minimumSeconds) {
+    throw new Error(
+      `MRO_DAY_SECONDS must be a number of seconds greater than the ${minimumSeconds} s offset this process runs at, got ${JSON.stringify(raw)}`
+    );
+  }
+  return seconds;
+}
+
+/**
  * The agents of the run: the twelve, plus the child once it exists.
  *
  * `identity` is the key an agent signs with and `wallet` the key it pays and
@@ -137,7 +187,9 @@ export function agentSpecs(state) {
   const specs = AGENTS.map((a) => ({ ...a, identity: state.rebindKey?.[a.name] ?? a.name, wallet: a.name }));
   if (state.seeded && state.childDay !== null) {
     specs.push({
-      name: CHILD, mintDay: state.childDay, misses: () => false, marks: [],
+      // Read at the call, not here: the day the twelfth founding agent ends is the
+      // day the child stops, and that can be this very pass.
+      name: CHILD, mintDay: state.childDay, misses: () => foundingAllDone(state), marks: [],
       identity: PARENT, wallet: PARENT,
     });
   }
@@ -210,7 +262,12 @@ export async function runDay({
     const unfinished = await runAgent(spec, ctx);
     if (unfinished) pending.push(unfinished);
     save(state);
-    if (state.paused) return state;
+    // A pause ends the day for everyone, and whoever was still waiting on a retry
+    // loses it. Unsaid, the log shows one attempt and no outcome at all.
+    if (state.paused) {
+      for (const item of pending) item.missed();
+      return state;
+    }
   }
   await retrySweep(pending, ctx, save);
   return state;
@@ -224,14 +281,20 @@ async function retrySweep(pending, ctx, save) {
     if (ctx.now() + RETRY_PAUSE_MS >= ctx.deadline) break;
     await ctx.sleep(RETRY_PAUSE_MS);
     const still = [];
-    for (const item of waiting) {
+    for (let i = 0; i < waiting.length; i++) {
+      const item = waiting[i];
       if (ctx.now() >= ctx.deadline) {
         still.push(item);
         continue;
       }
       if (!(await item.retry(attempt))) still.push(item);
       save(ctx.state);
-      if (ctx.state.paused) return;
+      // The pause ends the sweep, but every agent still waiting -- retried and
+      // still failing, or not reached at all -- has lost the day and says so.
+      if (ctx.state.paused) {
+        for (const rest of [...still, ...waiting.slice(i + 1)]) rest.missed();
+        return;
+      }
     }
     waiting = still;
   }
@@ -291,7 +354,7 @@ async function runAgent(spec, ctx) {
 
   let unfinished = null;
   if (plan.checkin && token() !== null) {
-    const args = { ctx, token, agent, line };
+    const args = { ctx, name, token, agent, line };
     if (!(await attemptCheckin(args, 1))) {
       unfinished = {
         retry: (attempt) => attemptCheckin(args, attempt),
@@ -378,6 +441,34 @@ async function topUp(ctx, line, address, need, extra = {}) {
   return true;
 }
 
+/**
+ * The tokens the door says are this key's own, when our record of one was lost.
+ *
+ * The Warden writes the row and takes the payment before it answers, so an answer
+ * lost in transit leaves a token that exists on both sides of the door and in no
+ * state file -- and an agent with no token id never checks in again for the rest
+ * of the run. `status` with no argument answers from the VERIFIED key id, so this
+ * can only ever find our own.
+ */
+async function ownTokens(agent) {
+  const answer = await agent().status();
+  return (answer?.tokens ?? []).filter((t) => Number.isInteger(t?.tokenId));
+}
+
+/// The founding token of this key: a child carries a parent, a mint does not.
+async function adoptMinted({ ctx, name, agent, line, reason }) {
+  try {
+    const mine = (await ownTokens(agent)).find((t) => (t.parentId ?? null) === null);
+    if (!mine) return false;
+    ctx.state.tokens[name] = mine.tokenId;
+    line({ action: "token-adopted", ok: true, reason, tokenId: mine.tokenId });
+    return true;
+  } catch (err) {
+    line({ action: "token-adopted", reason: safeReason(err) });
+    return false;
+  }
+}
+
 async function doMint({ ctx, name, wallet, agent, line }) {
   const address = ctx.addressFor(wallet);
   try {
@@ -393,15 +484,19 @@ async function doMint({ ctx, name, wallet, agent, line }) {
     if (ok) ctx.state.tokens[name] = result.tokenId;
     line({ action: "mint", ok, reason: ok ? null : (result?.reason ?? "no-token-id"), tokenId: ok ? result.tokenId : null });
     if (isFatal(result?.reason)) pause(ctx.state, result.reason, line);
+    // `already-minted` is the plainest case, but any refusal can follow a mint the
+    // door completed and we never heard about.
+    if (!ok && !ctx.state.paused) await adoptMinted({ ctx, name, agent, line, reason: result?.reason ?? "no-answer" });
     return ok;
   } catch (err) {
     line({ action: "mint", reason: safeReason(err) });
+    await adoptMinted({ ctx, name, agent, line, reason: "no-answer" });
     return false;
   }
 }
 
 /// One attempt. True when the check-in is settled for today, either way.
-async function attemptCheckin({ ctx, token, agent, line }, attempt) {
+async function attemptCheckin({ ctx, name, token, agent, line }, attempt) {
   let result;
   try {
     result = await agent().beat(token());
@@ -410,6 +505,11 @@ async function attemptCheckin({ ctx, token, agent, line }, attempt) {
   }
   const ok = result?.ok === true;
   line({ action: "checkin", ok, reason: ok ? null : (result?.reason ?? "no-answer"), attempt });
+
+  // The one refusal that is an ENDING rather than a failure: this token's year is
+  // over and nothing will ever credit it again. The child's own days end when the
+  // last of these arrives.
+  if (result?.reason === "year-complete") (ctx.state.done ??= {})[name] = true;
 
   if (ok) return true;
   if (isFatal(result?.reason)) {
@@ -451,7 +551,13 @@ async function doMarks(spec, { ctx, name, wallet, token, agent, line }) {
         const short = price > held ? price - held : 0n;
         pay = short === 0n ||
           buyOrDemand({ price: short, balance: await ctx.chain.usdcBalance(ctx.testWallet.address), reserve: ctx.reserve }) === "buy";
-        if (pay && short > 0n) await topUp(ctx, line, address, price, { markId: mark.id });
+        // topUp answers whether the money MOVED. The bank is read once to decide
+        // and once to send, so a balance that fell between the two would otherwise
+        // have the agent sign for USDC its wallet does not hold.
+        if (pay && short > 0n && !(await topUp(ctx, line, address, price, { markId: mark.id }))) {
+          pay = false;
+          line({ action: "fund", reason: "mark-unfunded", markId: mark.id, amount: String(short) });
+        }
       }
       const out = await agent().upgrade(id, mark.id, mark.variant ?? 0, { pay, expectedPayTo: ctx.treasury });
       const asked = out?.outcome === "applied-queued" || out?.outcome === "demand-only";
@@ -480,10 +586,45 @@ async function doMarks(spec, { ctx, name, wallet, token, agent, line }) {
   }
 }
 
+/// The child of this parent, among the tokens the door says are ours.
+async function adoptChild({ ctx, parentId, agent, line }) {
+  try {
+    const child = (await ownTokens(agent)).find((t) => t.parentId === parentId);
+    if (!child) return false;
+    recordChild(ctx, child.tokenId);
+    line({ action: "token-adopted", ok: true, reason: "seed-already-spent", tokenId: child.tokenId });
+    return true;
+  } catch (err) {
+    line({ action: "token-adopted", reason: safeReason(err) });
+    return false;
+  }
+}
+
+/// The child is the run's thirteenth agent from here on, so the day is recorded
+/// with it: `childDay` is what its check-ins start from.
+function recordChild(ctx, childId) {
+  ctx.state.seeded = true;
+  ctx.state.childId = childId;
+  ctx.state.childDay = ctx.day;
+  ctx.state.tokens[CHILD] = childId;
+}
+
 async function doSeed({ ctx, wallet, token, agent, line }) {
   const id = token();
   try {
-    if ((await ctx.chain.seedsAvailable(id)) <= 0) return;
+    if ((await ctx.chain.seedsAvailable(id)) <= 0) {
+      // Before the parent's year is over no seed is due and none is missing: that
+      // is A1's ordinary state for 365 days, so nothing is asked and nothing said.
+      if (!ctx.logLines().some((l) => l.action === "seed")) return;
+      // A seed is spent once per agent-year and the chain offers no second one, so
+      // a seed asked for and then reading zero was SPENT -- on a child whose answer
+      // we lost. Never silent: a child nobody can find is the run's one
+      // unrecoverable loss.
+      if (!(await adoptChild({ ctx, parentId: id, agent, line }))) {
+        loud(line, "seed", "no-seed-available");
+      }
+      return;
+    }
     const result = await agent().seed(id, ctx.addressFor(wallet));
     const child = result?.ok === true ? result.tokenId : null;
     const reason = child !== null ? null : (result?.reason ?? "no-token-id");
@@ -492,10 +633,7 @@ async function doSeed({ ctx, wallet, token, agent, line }) {
       if (isFatal(reason)) pause(ctx.state, reason, line);
       return;
     }
-    ctx.state.seeded = true;
-    ctx.state.childId = child;
-    ctx.state.childDay = ctx.day;
-    ctx.state.tokens[CHILD] = child;
+    recordChild(ctx, child);
   } catch (err) {
     line({ action: "seed", reason: safeReason(err) });
   }
@@ -559,9 +697,26 @@ export async function main() {
   };
 
   const state = loadState(paths.state);
-  const daySeconds = Number(process.env.MRO_DAY_SECONDS ?? DAY_SECONDS);
+  // Validated BEFORE the first pass, exactly as the checker does it: a NaN day
+  // length would make every sleep fire at once and the run a hot loop.
+  const daySeconds = daySecondsFrom(process.env);
 
+  let first = true;
   for (;;) {
+    // The first pass runs wherever in the fast day the operator started the stack,
+    // and a mint day is written once and for ever. Too little of the day left, and
+    // the run waits for the next one rather than splitting A1-A3 across a boundary.
+    if (first && !firstPassFits(Date.now(), daySeconds)) {
+      log({
+        day: null, chainDay: null, agent: null, tokenId: null, action: "first-pass-deferred",
+        // Nothing failed: this is a pass deliberately not taken.
+        ok: true, reason: `under ${FIRST_PASS_MIN_MS / 1000} s of the fast day left`,
+      });
+      first = false;
+      await defaultSleep(nextWakeMs(Date.now(), daySeconds) - Date.now());
+      continue;
+    }
+    first = false;
     try {
       const chainDay = await chain.today();
       // Persisted before the pass: a pass that dies must not let the next one

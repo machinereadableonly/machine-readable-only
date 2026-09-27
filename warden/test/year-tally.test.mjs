@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 
 import { FINISH_LEVEL, expected, places, finisherMark } from "../tools/year/tally.mjs";
 import { FINISHER_IDS, FINISH_LEVEL as WARDEN_FINISH_LEVEL } from "../src/mcp/ladder.mjs";
-import { AGENTS } from "../tools/year/scenario.mjs";
+import { AGENTS, todayFor } from "../tools/year/scenario.mjs";
 
 // The contract's own bookkeeping, written out day by day: _credit advances the
 // level, continues the streak only on the next day, raises bestRun on the way
@@ -74,9 +74,12 @@ test("bestRun is the contract's _effectiveRun, over every agent's real history",
     [1, 2, 3, 10, 11, 12, 13],
   ];
   for (const a of AGENTS) {
+    // The days the scenario itself credits, asked of todayFor rather than rebuilt
+    // here: a hand-built list started at mintDay + 2, which loses day one and caps
+    // bestRun at 364 -- the exact off-by-one that made Break unreachable.
     const days = [a.mintDay];
-    for (let day = a.mintDay + 2; days.length < FINISH_LEVEL + 5 && day < 600; day++) {
-      if (!a.misses(day)) days.push(day);
+    for (let day = a.mintDay + 1; days.length < FINISH_LEVEL + 5 && day < 600; day++) {
+      if (todayFor(a, day).checkin) days.push(day);
     }
     histories.push(days);
   }

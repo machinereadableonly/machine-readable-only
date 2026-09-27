@@ -8,6 +8,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   compare, milestones, heartbeatMilestone, emptyMemory, runPass, tokensOf,
@@ -138,6 +141,59 @@ test("resting, generation and the parent are compared across the two sides", () 
   assert.deepEqual(
     compare({ chain: view({ generation: 1, parent: 4 }), mirror: mirrorView({ generation: 1, parentId: 4 }), tally }),
     []
+  );
+});
+
+// The mirror's marks, resting, generation, parent and finishing place are written
+// by the Clock's RECONCILE, which trails the head by twelve confirmations -- so
+// they stand one Clock run behind the chain by design. Compared against this
+// pass's chain read alone, every one of them is a FAIL for a day.
+test("a reconcile-only field one pass behind the chain is not a FAIL", () => {
+  const tally = expected(days(1000, 10));
+  const chain = view({ marks: 1n << 2n, resting: true, generation: 1, parent: 4 });
+  const behind = mirrorView({ marks: 0, resting: false, generation: 0, parentId: null });
+
+  // What the chain said last pass is what the mirror holds now.
+  const previous = view({ marks: 0n, resting: false, generation: 0, parent: 0 });
+  assert.deepEqual(compare({ chain, mirror: behind, tally, prevChain: previous }), []);
+
+  // With no earlier read to lag behind, the chain alone is the yardstick.
+  assert.deepEqual(
+    compare({ chain, mirror: behind, tally }).map((f) => f.field).sort(),
+    ["generation", "marks", "parent", "resting"],
+  );
+
+  // And a lag that survives into the next pass matches neither read: a FAIL.
+  const older = view({ marks: 1n << 3n, resting: true, generation: 2, parent: 5 });
+  assert.deepEqual(
+    compare({ chain, mirror: behind, tally, prevChain: older }).map((f) => f.field).sort(),
+    ["generation", "marks", "parent", "resting"],
+  );
+});
+
+// The level, the streak and the last day are NOT reconcile-only: the Warden
+// credits them the moment it accepts a check-in, and mirrorTally already carries
+// that. A lag in one of them is a real finding and stays one.
+test("a level the mirror is behind on is a FAIL whatever the previous pass read", () => {
+  const tally = expected(days(1000, 10));
+  const findings = compare({
+    chain: view(), mirror: mirrorView({ level: 9 }), tally,
+    prevChain: view({ level: 9, streak: 9, lastDay: 1008 }),
+  });
+  assert.deepEqual(findings.map((f) => f.field), ["level"]);
+});
+
+test("a finishing place the mirror has not reconciled yet is not a FAIL for one pass", () => {
+  const tally = expected(days(1000, 365));
+  const chain = view({ level: 365, streak: 365, lastDay: 1364, runFloor: 365, marks: 1n << 15n, finisherPlace: 1 });
+  const nearly = view({ level: 364, streak: 364, lastDay: 1363, runFloor: 364 });
+  const mirror = mirrorView({ level: 365, streak: 365, lastDay: 1364, marks: 0, finisher: null });
+  const place = { place: 1, markId: 15 };
+  assert.deepEqual(compare({ chain, mirror, tally, place, prevChain: nearly }), []);
+  // The chain unchanged a pass later, and the mirror still silent about it.
+  assert.deepEqual(
+    compare({ chain, mirror, tally, place, prevChain: chain }).map((f) => f.field).sort(),
+    ["marks", "place"],
   );
 });
 
@@ -277,12 +333,55 @@ test("the decoder reads the verifier's exit code, and a verifier that will not s
     });
     return child;
   };
-  const decode = makeDecoder({ contract: "0xc0", rpcUrl: "http://rpc", dir: "/tools", spawnImpl: fakeSpawn });
-  assert.deepEqual(await decode({ tokenId: 7 }), { decoded: true, exit: 0, said: "token 7: OK" });
-  assert.deepEqual(await decode({ tokenId: 8 }), { decoded: false, exit: 1, said: "token 7: OK" });
-  assert.deepEqual(await decode({ tokenId: 9 }), { decoded: false, exit: null, said: "spawn ENOENT" });
-  // A hung rasterise must not eat the pass.
-  assert.equal(runs[0].options.timeout, DECODE_TIMEOUT_MS);
+  // A real directory, because the decoder makes the verifier's out/ inside it.
+  const dir = mkdtempSync(join(tmpdir(), "mro-year-exit-"));
+  try {
+    const decode = makeDecoder({ contract: "0xc0", rpcUrl: "http://rpc", dir, spawnImpl: fakeSpawn });
+    assert.deepEqual(await decode({ tokenId: 7 }), { decoded: true, exit: 0, said: "token 7: OK" });
+    assert.deepEqual(await decode({ tokenId: 8 }), { decoded: false, exit: 1, said: "token 7: OK" });
+    assert.deepEqual(await decode({ tokenId: 9 }), { decoded: false, exit: null, said: "spawn ENOENT" });
+    // A hung rasterise must not eat the pass.
+    assert.equal(runs[0].options.timeout, DECODE_TIMEOUT_MS);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// The verifier writes out/token-<id>.png with a RELATIVE path and does not make
+// the directory. `tools/out/` is gitignored, so the git-archive export the run
+// uses has no such directory and every decode failed on ENOENT.
+test("the decoder makes the verifier's out directory before the verifier starts", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mro-year-decode-"));
+  try {
+    const there = [];
+    const fakeSpawn = () => {
+      there.push(existsSync(join(dir, "out")));
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    };
+    const decode = makeDecoder({ contract: "0xc0", rpcUrl: "http://rpc", dir, spawnImpl: fakeSpawn });
+    assert.equal(existsSync(join(dir, "out")), false);
+    assert.deepEqual(await decode({ tokenId: 1 }), { decoded: true, exit: 0, said: "" });
+    assert.deepEqual(there, [true]);
+    // A second decode into a directory that already exists is not an error.
+    await decode({ tokenId: 2 });
+    assert.deepEqual(there, [true, true]);
+
+    // And a directory that cannot be made is ONE failed decode, never a throw: it
+    // would otherwise end the pass and every token still to be read in it.
+    writeFileSync(join(dir, "a-file"), "");
+    const broken = makeDecoder({ contract: "0xc0", rpcUrl: "http://rpc", dir: join(dir, "a-file"), spawnImpl: fakeSpawn });
+    const answer = await broken({ tokenId: 3 });
+    assert.equal(answer.decoded, false);
+    assert.equal(answer.exit, null);
+    assert.deepEqual(there, [true, true], "the verifier was never started");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("the decoder can be pointed at another domain, so a live pair can be proven", () => {
+  const cmd = decodeArgs({ toolsDir: "/tools", contract: "0xc0", id: 1, rpcUrl: "http://rpc", site: "https://machinereadableonly.com" });
+  assert.equal(cmd.args[4], "machinereadableonly.com");
 });
 
 test("markBitsOf reads the id bits and nothing else", () => {
@@ -615,6 +714,36 @@ test("thirteen tokens disagreeing at once wait once, not thirteen times", async 
   assert.deepEqual(h.slept, [REREAD_PAUSE_MS]);
   assert.equal(h.logged.filter((l) => l.ok === false).length, 13);
   assert.equal(said.length, 13);
+});
+
+// The pass is where the lag allowance has to reach: the previous view lives in
+// `memory`, so a Mark written tonight and reconciled tomorrow costs no FAIL.
+test("a Mark the mirror reconciles one pass late is not a FAIL, two passes late is", async () => {
+  const state = { tokens: { A1: 1 } };
+  const memory = emptyMemory();
+  const lines = checkins(1, 1001, 9);
+  const lagging = mirrorView({ tokenId: 1, marks: 0 });
+  const at = (chainView) => harness({
+    chain: fakeChain({ today: 1010, views: { 1: chainView } }),
+    mirror: { 1: lagging }, lines, state, memory,
+  });
+
+  const before = at(view());
+  assert.deepEqual((await quietly(before.run)).said, []);
+
+  // The Clock writes the Mark: the chain carries it, the mirror does not yet.
+  const written = at(view({ marks: 1n << 2n }));
+  const first = await quietly(written.run);
+  assert.deepEqual(first.said, []);
+  assert.equal(written.logged.find((l) => l.tokenId === 1).ok, true);
+  assert.deepEqual(written.slept, [], "a lag inside the allowance is not re-read either");
+
+  // A pass later the mirror still has not caught up, and that is a finding.
+  const still = at(view({ marks: 1n << 2n }));
+  const { said } = await quietly(still.run);
+  assert.equal(still.logged.find((l) => l.tokenId === 1).ok, false);
+  assert.deepEqual(still.logged.find((l) => l.tokenId === 1).findings.map((f) => f.field), ["marks"]);
+  assert.equal(said.length, 1);
 });
 
 test("two tokens finishing the same day take their places by lowest id", async () => {

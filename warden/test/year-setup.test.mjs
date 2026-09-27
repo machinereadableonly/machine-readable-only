@@ -468,6 +468,19 @@ test("a tree from another commit is re-exported, not accepted", () => {
   );
 });
 
+// The port is one fact with two readers: the process list tells PM2 what to give
+// the Warden, and start.sh refuses to start while anything already holds it. A
+// literal in the script would let the two drift apart silently.
+test("start.sh takes the fast Warden's port from the process list, not from a literal", () => {
+  const source = readFileSync(join(YEAR, "start.sh"), "utf8");
+  // A comment may name the port; the code may not.
+  const code = source.split("\n").filter((line) => !/^\s*#/.test(line)).join("\n");
+  assert.ok(!code.includes("4006"), "start.sh hard-codes the fast Warden's port");
+  assert.match(code, /mro-year-warden/, "start.sh does not read the port from the process list");
+  const warden = require(join(YEAR, "year.config.cjs")).apps.find((a) => a.name === "mro-year-warden");
+  assert.equal(warden.env.PORT, "4006");
+});
+
 test("start refuses before setup has run, without starting anything", () => {
   const dir = tempDir("mro-year-start-");
   assert.throws(

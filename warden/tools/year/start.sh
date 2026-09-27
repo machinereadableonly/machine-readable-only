@@ -71,18 +71,27 @@ if [ -n "$existing" ]; then
   exit 1
 fi
 
-# The fast Warden's own port. The OLD mro-fast-warden binds the same 4006, and it
-# is only `stopped` -- a pm2 resurrect or a hand restart would have it listening.
-# Asked by CONNECTING, not by reading a tool's output: a listener is a listener
-# whoever owns it, and ss/lsof output would have to be piped to be parsed.
+# The fast Warden's own port, READ FROM THE PROCESS LIST rather than written here:
+# it is the same fact PM2 gives the Warden, and two copies of it can drift apart.
+PORT="$(node -e '
+  const list = require(process.argv[1]);
+  const warden = list.apps.find((a) => a.name === "mro-year-warden");
+  if (!warden?.env?.PORT) { console.error("no PORT for mro-year-warden"); process.exit(1); }
+  process.stdout.write(String(warden.env.PORT));
+' "$CONFIG")"
+
+# The OLD mro-fast-warden binds the same port, and it is only `stopped` -- a pm2
+# resurrect or a hand restart would have it listening. Asked by CONNECTING, not by
+# reading a tool's output: a listener is a listener whoever owns it, and ss/lsof
+# output would have to be piped to be parsed.
 if node -e '
   const net = require("net");
-  const s = net.connect(4006, "127.0.0.1");
+  const s = net.connect(Number(process.argv[1]), "127.0.0.1");
   s.on("connect", () => { s.destroy(); process.exit(0); });
   s.on("error", () => process.exit(1));
   s.setTimeout(2000, () => { s.destroy(); process.exit(1); });
-'; then
-  fail "something is already listening on 127.0.0.1:4006. The old mro-fast-warden is the likely owner -- stop it first."
+' "$PORT"; then
+  fail "something is already listening on 127.0.0.1:$PORT. The old mro-fast-warden is the likely owner -- stop it first."
 fi
 
 # The stack runs the EXPORT of HEAD, so a working tree with edits in it is not
@@ -151,11 +160,22 @@ read_states() {
 # list shows `online` while the app is in fact on its fourth attempt. The check
 # is: wait for the boot checks to have run, then require `online` with ZERO
 # restarts, and require the same answer again a few seconds later.
+#
+# A read that cannot parse pm2's list exits non-zero, and `set -e` would end the
+# script there without a word -- with four apps already started. Whoever is
+# reading has to be told what is now running and how to stop it.
+unreadable() {
+  echo "FAIL: could not read pm2's process list. THE FOUR APPS ARE ALREADY STARTED." >&2
+  echo "      Stop them with stop.sh (it also writes the report), then:" >&2
+  echo "      pm2 delete $names" >&2
+  exit 1
+}
+
 echo "waiting 15s for the boot checks"
 sleep 15
-first="$(read_states)"
+first="$(read_states)" || unreadable
 sleep 5
-second="$(read_states)"
+second="$(read_states)" || unreadable
 
 echo "processes:"
 echo "$first"

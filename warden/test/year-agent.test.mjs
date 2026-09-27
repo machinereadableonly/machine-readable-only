@@ -264,6 +264,26 @@ test("seed asks for a child on the parent, free", async () => {
   assert.deepEqual(rec.calls[0].arguments, { parentId: 1, to: OWNER });
 });
 
+// `status` with no argument is how a lost mint or seed answer is recovered: the
+// Warden lists the tokens bound to the calling key, read from the verified key id
+// and never from an argument, so the call carries none.
+test("status asks for the caller's own tokens, with no argument at all", async () => {
+  const mine = {
+    ok: true,
+    tokens: [
+      { tokenId: 4, level: 1, streak: 1, generation: 0, parentId: null, resting: false },
+      { tokenId: 9, level: 1, streak: 1, generation: 1, parentId: 4, resting: false },
+    ],
+    contract: "0xc0", chainId: 84532,
+  };
+  const rec = recorder([okResult(mine)]);
+  const agent = agentWith({ callTool: rec.callTool });
+  assert.deepEqual(await agent.status(), mine);
+  assert.equal(rec.calls[0].name, "status");
+  assert.deepEqual(rec.calls[0].arguments, {});
+  assert.equal(rec.calls[0]._meta, undefined);
+});
+
 // rebind and rest return a call for the OWNER's wallet; this client never
 // sends one, so the agent hands the call object straight back.
 test("an owner call is fetched through the door and handed back unchanged", async () => {

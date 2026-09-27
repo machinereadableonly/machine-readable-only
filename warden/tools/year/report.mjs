@@ -174,7 +174,9 @@ export function renderReport(runnerLines, checkerLines, state) {
   ]);
 
   const agents = table(["Agent", "Token", "Heart", "Streak", "Place", "Marks held", "FAILs"], agentOrder(state).map((agent) => {
-    const row = agentRow(agent, state.tokens[agent], checkerLines);
+    // A run stopped before state.json was ever written still gets a page: it is
+    // how the operator finds out what happened.
+    const row = agentRow(agent, state?.tokens?.[agent], checkerLines);
     return `<tr><th>${esc(agent)}</th>${td(row.tokenId)}${td(row.heart)}${td(row.streak)}` +
       `${td(row.place)}${td(row.marks)}${td(row.fails, row.fails ? "fail" : null)}</tr>`;
   }));
