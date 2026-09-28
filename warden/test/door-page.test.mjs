@@ -46,9 +46,24 @@ test("the door page says who runs the piece and how to reach them", () => {
   assert.match(html, /\/issues/, "and a way to raise something");
 });
 
-test("it links the contract on an explorer that publishes the source", () => {
-  assert.match(html, /basescan\.org\/address\/0x5bAC4E9B/i);
-  assert.match(html, /blockscout\.com\/address\/0x5bAC4E9B/i);
+// The live address is the first one llms.txt names -- the same rule
+// adopt-deployment.sh reads it by -- so a redeploy that rewrites llms.txt and
+// misses this page goes red here.
+const llms = readFileSync(new URL("../public/llms.txt", import.meta.url), "utf8");
+const liveContract = llms.match(/0x[0-9a-fA-F]{40}/)?.[0];
+
+test("it links the LIVE contract on an explorer that publishes the source", () => {
+  assert.ok(liveContract, "llms.txt names no contract");
+  assert.ok(html.includes(`basescan.org/address/${liveContract}`), `Basescan link is not ${liveContract}`);
+  assert.ok(html.includes(`blockscout.com/address/${liveContract}`), `Blockscout link is not ${liveContract}`);
+  const others = [...html.matchAll(/0x[0-9a-fA-F]{40}/g)].map((m) => m[0]).filter((a) => a !== liveContract);
+  assert.deepEqual(others, [], "the page names an address that is not the live contract");
+});
+
+test("the treasury the page points to is actually named in llms.txt", () => {
+  assert.match(html, /treasury address named in\s+<a href="\/llms\.txt">/);
+  assert.match(llms, /treasury[\s\S]{0,200}0x000000000000000000000000000000000000dEaD/i,
+    "llms.txt must name the rehearsal treasury the door page sends people to");
 });
 
 test("it says where the money goes, and that testnet USDC is worth nothing", () => {

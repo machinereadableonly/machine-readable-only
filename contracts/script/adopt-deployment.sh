@@ -102,6 +102,7 @@ echo
 #   llms.txt              served to agents at the door
 #   raw-protocol.md       the agent-facing protocol document
 #   raw-protocol.html     its rendered form, re-rendered below
+#   door.html             the human-facing page, whose explorer links name the token
 #   agent-facing-copy     the locked copy this is all drawn from, .md and .html
 #   protocol-transcript   the tool that CAPTURES the protocol document
 #   x402-live-mint-check  the live payment check
@@ -114,6 +115,7 @@ echo
 FILES=(
   "$LLMS"
   "$PROTO"
+  warden/public/door.html
   docs/2026-09-01-mro-agent-facing-copy.md
   docs/2026-09-01-mro-agent-facing-copy.html
   warden/tools/protocol-transcript.mjs

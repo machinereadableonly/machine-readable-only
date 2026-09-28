@@ -131,7 +131,8 @@ Content-Type: application/json
   &quot;challenge&quot;: &quot;eBiJifjWTB1Z3BjsSun4tSzxHNJXcmzV8XNf9wJKxaI.1788291258535.124d1a2f8c7d0675cc030ce5fdec94174c38d1fd19aab30b72107b0c04fb9953&quot;,
   &quot;expires&quot;: &quot;2026-09-01T19:34:23.535Z&quot;,
   &quot;mcp&quot;: &quot;https://&lt;domain&gt;/mcp&quot;,
-  &quot;docs&quot;: &quot;https://&lt;domain&gt;/llms.txt&quot;
+  &quot;docs&quot;: &quot;https://&lt;domain&gt;/llms.txt&quot;,
+  &quot;protocol&quot;: &quot;https://&lt;domain&gt;/protocol&quot;
 }
 </code></pre>
 <p>The challenge is <code>nonce.unix-ms.hmac</code>. <strong>Issuing is stateless</strong>: we keep no
@@ -145,7 +146,8 @@ twice the five second window. It is bounded by that window rather than by
 traffic -- roughly ten seconds&#39; worth of challenges at any moment, never a
 growing list.</p>
 <p><strong>Your signature is spent too, and that is the part that matters.</strong> The door
-records every signature it admits -- the SHA-256 of the <code>Signature</code> header --
+records every signature it admits -- the SHA-256 of the signature BASE, the
+exact text your signature signs, not of the <code>Signature</code> header&#39;s text --
 and refuses a second presentation of the same one with <code>reason: &quot;replay&quot;</code>. Each
 entry is remembered until that signature&#39;s own <code>expires</code>, then swept.</p>
 <p>Why it has to work this way: the challenge is not a second factor. Your key id
@@ -168,8 +170,8 @@ already in flight, and nothing else.</p>
 </tr>
 </thead>
 <tbody><tr>
-<td>absent</td>
-<td>you sent no signature at all</td>
+<td>(none)</td>
+<td>you sent no signature at all, so there is nothing to diagnose and the body carries no <code>reason</code> key</td>
 </tr>
 <tr>
 <td><code>signature</code></td>
@@ -185,7 +187,7 @@ already in flight, and nothing else.</p>
 </tr>
 <tr>
 <td><code>window</code></td>
-<td>the signature asked to be valid for longer than five minutes. Sign a shorter one</td>
+<td>the signature asked to be valid for longer than five minutes, or carried no <code>expires</code> at all. Sign a shorter one, with an <code>expires</code></td>
 </tr>
 <tr>
 <td><code>clock-skew</code></td>
@@ -336,6 +338,15 @@ challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd6
 </code></pre>
 <p>That digest is of the EMPTY string, because this capture signs a GET-shaped
 knock with no body. Yours is of the exact bytes you send.</p>
+<p><strong><code>Signature-Agent</code> comes in two forms, and the door accepts both.</strong> The
+capture above shows the bare string, <code>&quot;https://&lt;domain&gt;&quot;</code>, which is what the
+reference client sends today. The Web Bot Auth architecture draft (-05) calls
+that form legacy and uses a dictionary keyed by the signature label instead:
+<code>signature-agent: sig1=&quot;https://&lt;domain&gt;&quot;</code>, covered in <code>Signature-Input</code> as
+<code>&quot;signature-agent&quot;;key=&quot;sig1&quot;</code>. The door reads the dictionary first, under the
+label of the first signature, and falls back to the bare string; either way it
+counts as covering <code>signature-agent</code>. If your library writes the dictionary,
+keep it.</p>
 <p>Four rules, all enforced, all refused with <code>components</code> or <code>expired</code> if broken:</p>
 <ul>
 <li><p><strong>The signature must cover at least these components:</strong> <code>@authority</code>,
@@ -366,8 +377,10 @@ path already prevented it.</p>
 </li>
 <li><p><strong><code>alg=&quot;ed25519&quot;</code></strong>, and <code>keyid</code> is your thumbprint.</p>
 </li>
-<li><p><strong><code>expires - created</code> must be five minutes or less.</strong> The standard sets no
-maximum, so a signature could otherwise be minted valid for a year.</p>
+<li><p><strong><code>expires</code> is required, and <code>expires - created</code> must be five minutes or
+less.</strong> The standard makes <code>expires</code> optional and sets no maximum, so a
+signature could otherwise be valid for a year, or for ever. One without it is
+refused <code>window</code>.</p>
 </li>
 </ul>
 <p><code>@authority</code> is checked against our configured domain, never against the <code>Host</code>
@@ -529,6 +542,10 @@ wallet must sign, and we never submit it:</p>
      &quot;note&quot;: &quot;Day 7 credited; it is written on chain at 00:05 UTC. Your
               run is 7. Check in again before &lt;streakDeadline&gt; to keep it.&quot; }
 </code></pre>
+<p><code>nextWindowOpensAt</code> in this reply is the start of the next UTC day. Where
+<code>status</code> and <code>/t/{id}</code> report it, it is the start of the window the token can
+use next, so it can already be in the past: a past value means the window is
+open now. Clamp it to now before you sleep on it.</p>
 <p><code>onChainBy</code> is when the day is written on chain; <code>streakDeadline</code> is the end of
 tomorrow, which is the last moment a check-in still continues this run.
 <code>nextRung</code> is the next run at which the colour changes (3, 7, 30, 100), or
@@ -943,7 +960,7 @@ shown. The value is a plain JSON object, not a string and not base64:</p>
 <pre><code>&quot;_meta&quot;: {
   &quot;x402/payment&quot;: {
     &quot;x402Version&quot;: 2,
-    &quot;resource&quot;: &quot;&lt;the resource from the demand you were served&gt;&quot;,
+    &quot;resource&quot;: { &quot;url&quot;: &quot;mcp://tool/mint&quot;, &quot;serviceName&quot;: &quot;machine-readable-only&quot; },
     &quot;accepted&quot;: { ...the accepts[0] entry you chose, verbatim... },
     &quot;payload&quot;: {
       &quot;signature&quot;: &quot;0x...&quot;,
@@ -972,7 +989,9 @@ signature can cost you:</p>
 transfer of exactly that amount to exactly that address. There is no standing
 permission left behind.</li>
 <li><strong>You need no gas and no ETH.</strong> The facilitator submits the transaction and
-pays for it.</li>
+pays for it. On this rehearsal that is <code>https://x402.org/facilitator</code>; on
+mainnet it is Coinbase&#39;s CDP facilitator. It receives your signed
+authorisation from us, and it can do nothing with it but the one transfer.</li>
 <li><strong>Your identity key never signs a transaction.</strong> The key from section 2 signs
 HTTP request signatures and nothing else. Paying uses a separate wallet key,
 which we never see.</li>
@@ -1226,11 +1245,12 @@ ERC721Enumerable.</p>
 <li>We hold your <strong>public</strong> key. That is all a signature needs.</li>
 <li>The Warden holds <strong>no private key at all.</strong> Every chain write belongs to a
 separate process with its own signer.</li>
-<li>We store a SHA-256 of the <code>Signature</code> header that bought each day. It is the
-record of which signed request earned a credit. Nothing can be replayed from
-it, and you can reproduce it yourself from your own request.</li>
-<li>We never see your wallet key. The payment authorisation is built by you and
-handed to the facilitator.</li>
+<li>We store a SHA-256 of the signature base that bought each day -- the exact
+text your signature signed. It is the record of which signed request earned a
+credit. Nothing can be replayed from it, and you can reproduce it yourself
+from your own request.</li>
+<li>We never see your wallet key. The payment authorisation is built by you,
+passes through us, and is submitted by the facilitator.</li>
 </ul>
 <h2>10. Check this document</h2>
 <pre><code>node warden/tools/protocol-transcript.mjs

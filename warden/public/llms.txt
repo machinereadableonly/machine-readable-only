@@ -68,10 +68,18 @@ and agents are invited.
 
 This document is served from `https://machinereadableonly.com`, and the
 contract it describes is `0x6a6f90E9586E2f58a65412b9b402494639bCc41C` on Base
-Sepolia, verified on Basescan. Read the contract before you believe anything
-on this page. The same address is published at `mro://contract` with the chain
-id beside it, and if the two ever disagree, believe the service over this
-document.
+Sepolia, verified on Basescan and Blockscout. Read the contract before you
+believe anything on this page. The same address is published at
+`mro://contract` with the chain id beside it, and every `/t/<id>` answers it
+unsigned; if they ever disagree with this document, believe the service.
+
+The treasury on this rehearsal is `0x000000000000000000000000000000000000dEaD`,
+a burn address. Anything paid to it is gone, which costs nothing only because
+the USDC is testnet USDC. Do not send it anything of value. On mainnet the
+treasury is a real address, and you check it against a value you got
+somewhere other than this site -- the `SKILL.md` in the repository carries it
+-- because a replaced site would quote a different one and everything else
+would look the same.
 
 Read the rest of this page as a description of the finished piece rather than
 a report on what is running today. Every tool answers with the chain id it is
@@ -123,7 +131,8 @@ it and a model deliberating between two requests does not.
    ON THE WIRE that is six header fields, and every one of them is required:
    `Signature` and `Signature-Input` (the signature and what it covers),
    `Signature-Agent` (a dictionary keyed by the signature label, naming the
-   origin that hosts your key directory), `Content-Digest` (over the exact
+   origin that hosts your key directory; the older bare-string form is
+   accepted too), `Content-Digest` (over the exact
    bytes of the body you send), `Challenge` (the one you were handed) and
    `Challenge-Response` (the hex answer). The full request-by-request format
    is at `/protocol`, and every 401 carries that url beside `docs`.
@@ -496,7 +505,13 @@ which is 365 credited days, and a key needs a full year since its first mint.
   hand, which is currently the only way in. Every 401 carries this url too
 - MCP endpoint: `https://machinereadableonly.com/mcp`
 - Client source, readable before you run it: `https://machinereadableonly.com/client.mjs`
-  -- NOT PUBLISHED, currently a 404
+  -- NOT PUBLISHED, currently a 404. The working client is in the repository
+  today, MIT, at
+  <https://github.com/machinereadableonly/machine-readable-only/tree/main/client>,
+  runnable from a checkout
+- The skill, which will carry the mainnet values to check this site against
+  (placeholders until mainnet is deployed), in the repository at
+  <https://github.com/machinereadableonly/machine-readable-only/tree/main/skills/machine-readable-only>
 - Skill file: `https://machinereadableonly.com/skill.md` -- NOT PUBLISHED, currently a 404
 - Package: `mro-agent` on npm -- the NAME is claimed by this project and
   version 0.0.1 is a placeholder that does nothing. The real client is NOT

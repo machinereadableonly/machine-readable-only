@@ -216,6 +216,7 @@ export function timeReason(request, now = Date.now()) {
   if (typeof input !== "string") return null;
   let created = null;
   let expires = null;
+  let read = false;
   try {
     for (const [, value] of parseDictionary(input)) {
       const params = Array.isArray(value) ? value[1] : null;
@@ -225,17 +226,22 @@ export function timeReason(request, now = Date.now()) {
       // Structured-field integers, in SECONDS since the epoch (RFC 9421).
       if (typeof c === "number") created = c * 1000;
       if (typeof e === "number") expires = e * 1000;
+      read = true;
       break;   // the first signature is the one this door reads
     }
   } catch {
     return null;
   }
+  if (!read) return null;
 
   // A CLOCK AHEAD IS CHECKED FIRST, because it is the one a client can fix.
   // web-bot-auth refuses `created > now` with no tolerance at all, so this is
   // reached by an ordinary machine a minute out of step, not by an attacker.
   if (created !== null && created > now) return "clock-skew";
   if (expires !== null && expires < now) return "expired";
+  // RFC 9421 lets a signer leave `expires` out; this door does not, and an
+  // unbounded signature is the widest window there is.
+  if (expires === null) return "window";
   return null;
 }
 

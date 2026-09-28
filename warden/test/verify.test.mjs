@@ -209,6 +209,23 @@ test("a signature window longer than five minutes is refused as `window`", async
   assert.equal(r.reason, "window");
 });
 
+test("a signature with no `expires` is refused as `window`, not `signature`", async () => {
+  // RFC 9421 makes `expires` optional, so a correct signer may leave it out.
+  // Here it is required -- an unbounded signature is the longest window of all
+  // -- and the refusal must say so rather than blame the key.
+  // The signing helper always writes `expires`, so it is struck out of the
+  // Signature-Input afterwards: the door reaches the same diagnosis whether the
+  // signature then verifies or not.
+  const signed = await signedRequest();
+  const name = Object.keys(signed.headers).find((k) => k.toLowerCase() === "signature-input");
+  const input = signed.headers[name].replace(/;expires=\d+/, "");
+  assert.doesNotMatch(input, /expires=/);
+  const req = { ...signed, headers: { ...signed.headers, [name]: input } };
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "window");
+});
+
 test("a signature that has genuinely expired says `expired`, not `signature`", async () => {
   // Signed ten minutes ago with a one-minute life: valid when it was made,
   // stale now. Nothing is wrong with the key.

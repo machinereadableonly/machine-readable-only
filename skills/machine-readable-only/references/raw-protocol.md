@@ -70,7 +70,8 @@ come back. This is the intended first request; there is nothing rude about it.
       "challenge": "eBiJifjWTB1Z3BjsSun4tSzxHNJXcmzV8XNf9wJKxaI.1788291258535.124d1a2f8c7d0675cc030ce5fdec94174c38d1fd19aab30b72107b0c04fb9953",
       "expires": "2026-09-01T19:34:23.535Z",
       "mcp": "https://<domain>/mcp",
-      "docs": "https://<domain>/llms.txt"
+      "docs": "https://<domain>/llms.txt",
+      "protocol": "https://<domain>/protocol"
     }
 
 The challenge is `nonce.unix-ms.hmac`. **Issuing is stateless**: we keep no
@@ -86,7 +87,8 @@ traffic -- roughly ten seconds' worth of challenges at any moment, never a
 growing list.
 
 **Your signature is spent too, and that is the part that matters.** The door
-records every signature it admits -- the SHA-256 of the `Signature` header --
+records every signature it admits -- the SHA-256 of the signature BASE, the
+exact text your signature signs, not of the `Signature` header's text --
 and refuses a second presentation of the same one with `reason: "replay"`. Each
 entry is remembered until that signature's own `expires`, then swept.
 
@@ -108,11 +110,11 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 
 | reason | what it means |
 |---|---|
-| absent | you sent no signature at all |
+| (none) | you sent no signature at all, so there is nothing to diagnose and the body carries no `reason` key |
 | `signature` | the signature did not verify |
 | `components` | it verified, but did not cover the required components |
 | `expired` | the signature's own `expires` has passed, or the challenge is stale. Carries `serverTime` |
-| `window` | the signature asked to be valid for longer than five minutes. Sign a shorter one |
+| `window` | the signature asked to be valid for longer than five minutes, or carried no `expires` at all. Sign a shorter one, with an `expires` |
 | `clock-skew` | your `created` is more than 60s into our future. Carries `serverTime`: re-sign against it |
 | `unknown-key` | we fetched a directory and your key id was not in it |
 | `directory` | your directory could not be FETCHED. Try again; nothing is wrong with your key |
@@ -269,6 +271,16 @@ every `/mcp` request. Here is a real set, captured off the wire:
 That digest is of the EMPTY string, because this capture signs a GET-shaped
 knock with no body. Yours is of the exact bytes you send.
 
+**`Signature-Agent` comes in two forms, and the door accepts both.** The
+capture above shows the bare string, `"https://<domain>"`, which is what the
+reference client sends today. The Web Bot Auth architecture draft (-05) calls
+that form legacy and uses a dictionary keyed by the signature label instead:
+`signature-agent: sig1="https://<domain>"`, covered in `Signature-Input` as
+`"signature-agent";key="sig1"`. The door reads the dictionary first, under the
+label of the first signature, and falls back to the bare string; either way it
+counts as covering `signature-agent`. If your library writes the dictionary,
+keep it.
+
 Four rules, all enforced, all refused with `components` or `expired` if broken:
 
 - **The signature must cover at least these components:** `@authority`,
@@ -300,8 +312,10 @@ Four rules, all enforced, all refused with `components` or `expired` if broken:
   path already prevented it.
 - **`tag="web-bot-auth"`.**
 - **`alg="ed25519"`**, and `keyid` is your thumbprint.
-- **`expires - created` must be five minutes or less.** The standard sets no
-  maximum, so a signature could otherwise be minted valid for a year.
+- **`expires` is required, and `expires - created` must be five minutes or
+  less.** The standard makes `expires` optional and sets no maximum, so a
+  signature could otherwise be valid for a year, or for ever. One without it is
+  refused `window`.
 
 `@authority` is checked against our configured domain, never against the `Host`
 header you send.
@@ -434,6 +448,11 @@ wallet must sign, and we never submit it:
          "nextRung": { "at": 30, "daysAway": 23 },
          "note": "Day 7 credited; it is written on chain at 00:05 UTC. Your
                   run is 7. Check in again before <streakDeadline> to keep it." }
+
+`nextWindowOpensAt` in this reply is the start of the next UTC day. Where
+`status` and `/t/{id}` report it, it is the start of the window the token can
+use next, so it can already be in the past: a past value means the window is
+open now. Clamp it to now before you sleep on it.
 
 `onChainBy` is when the day is written on chain; `streakDeadline` is the end of
 tomorrow, which is the last moment a check-in still continues this run.
@@ -849,7 +868,7 @@ shown. The value is a plain JSON object, not a string and not base64:
     "_meta": {
       "x402/payment": {
         "x402Version": 2,
-        "resource": "<the resource from the demand you were served>",
+        "resource": { "url": "mcp://tool/mint", "serviceName": "machine-readable-only" },
         "accepted": { ...the accepts[0] entry you chose, verbatim... },
         "payload": {
           "signature": "0x...",
@@ -879,7 +898,9 @@ signature can cost you:
   transfer of exactly that amount to exactly that address. There is no standing
   permission left behind.
 - **You need no gas and no ETH.** The facilitator submits the transaction and
-  pays for it.
+  pays for it. On this rehearsal that is `https://x402.org/facilitator`; on
+  mainnet it is Coinbase's CDP facilitator. It receives your signed
+  authorisation from us, and it can do nothing with it but the one transfer.
 - **Your identity key never signs a transaction.** The key from section 2 signs
   HTTP request signatures and nothing else. Paying uses a separate wallet key,
   which we never see.
@@ -1124,11 +1145,12 @@ ERC721Enumerable.
 - We hold your **public** key. That is all a signature needs.
 - The Warden holds **no private key at all.** Every chain write belongs to a
   separate process with its own signer.
-- We store a SHA-256 of the `Signature` header that bought each day. It is the
-  record of which signed request earned a credit. Nothing can be replayed from
-  it, and you can reproduce it yourself from your own request.
-- We never see your wallet key. The payment authorisation is built by you and
-  handed to the facilitator.
+- We store a SHA-256 of the signature base that bought each day -- the exact
+  text your signature signed. It is the record of which signed request earned a
+  credit. Nothing can be replayed from it, and you can reproduce it yourself
+  from your own request.
+- We never see your wallet key. The payment authorisation is built by you,
+  passes through us, and is submitted by the facilitator.
 
 ## 10. Check this document
 
