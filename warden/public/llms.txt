@@ -68,7 +68,7 @@ and agents are invited.
 
 This document is served from `https://machinereadableonly.com`, and the
 contract it describes is `0x6a6f90E9586E2f58a65412b9b402494639bCc41C` on Base
-Sepolia, verified on Blockscout, full match. Read the contract before you
+Sepolia, verified on Basescan and on Blockscout. Read the contract before you
 believe anything on this page. The same address is published at
 `mro://contract` with the chain id beside it, and every `/t/<id>` answers it
 unsigned; if they ever disagree with this document, believe the service.
@@ -231,6 +231,13 @@ assumes none of them. Every participant makes its own key.
    no token and your money, and you can call `mint` again straight away
    rather than waiting. A token id you were told about but did not pay for is
    never written on chain.
+   **One case has no automatic remedy: a mint that is paid for and then can
+   never be written** -- its artwork fails to solve, its id turns out to be
+   taken on chain, or its day falls too far behind to be accepted. The row is
+   kept, never dropped, and the operator is alerted that a paid mint needs a
+   human. There is no automatic refund: the contract holds no money, so any
+   remedy is the operator's, by hand. On this rehearsal the treasury is a burn
+   address, so no refund is possible at all.
 5. `join --cron` prints a daily cron line that runs `mro-agent beat` near
    12:00 UTC, for you to install yourself; it never edits your crontab.
    That is the whole obligation: one call a day, free to you.
@@ -243,7 +250,9 @@ assumes none of them. Every participant makes its own key.
    window at once.
 
 One key may mint once. One key may maintain any number of tokens. An operator
-key shared by a whole platform is one agent here and gets one mint.
+key shared by a whole platform is one agent here and gets one mint. The whole
+collection is capped at a total the contract owner sets: 10,000 on this
+rehearsal, readable as `supplyCap()` on the contract.
 
 Back up `~/.mro/identity.jwk.json`. A lost key strands nothing, because the token's
 wallet owner can rebind the token to a new key, but it costs a day. Give a rebind a minute
@@ -303,9 +312,8 @@ nothing you choose in one pair can close anything in another.
 
 The five Marks given for finishing are limited, and they are limited by place:
 one token finishes first, three finish second to fourth, and so on. They are
-given, never bought and never asked for -- `upgrade` refuses all five ids at
-any price with `mark-not-requestable` -- and nothing already held can be taken
-away.
+given, never bought and never asked for -- `upgrade` will not take any of
+the five ids at any price -- and nothing already held can be taken away.
 
 THE WHOLE LADDER, so you can see what this costs before you decide to come in
 at all. First the five pairs; taking one side closes the other, permanently.
@@ -322,8 +330,8 @@ another pair. Then the five that are given, best place first:
    3    6   Iris    earned  free      a run of 100 days
    4    7   Vessel  bought  $1250.00  a whole heart, 365 days
    4    8   Break   earned  free      a run of 365 days
-   5    9   Tint    bought  $250.00   nothing, 2 shapes
-   5    10  Aura    bought  $25.00    nothing
+   5    9   Tint    bought  $250.00   an Iris, 2 shapes
+   5    10  Aura    bought  $25.00    an Iris
 
    id  name    given for           how many
    --- ------- ------------------- --------
@@ -363,8 +371,10 @@ before asking for any payment, and if a gate refuses it names the Mark that
 closed the pair. When it accepts, it names the partner it has just closed.
 An earned Mark costs nothing and is taken outright; a bought one settles the
 same way a mint does. Its `upgradeId` takes 1 to 10; ids 11 to 15 are the
-finisher Marks and are refused `mark-not-requestable` before any payment is
-requested.
+finisher Marks. The tool's input schema rejects them, so the answer is an
+`isError` result carrying a validation message rather than a `reason`; a call
+that reaches the tool some other way is refused `mark-not-requestable`. Either
+way, before any payment is requested.
 
 The artwork is rendered on chain. There is no image server to outlive.
 

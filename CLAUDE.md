@@ -31,7 +31,7 @@ return visits, so the artwork is the agent's own history of coming back.
 
       MachineReadableOnly  0x6a6f90E9586E2f58a65412b9b402494639bCc41C
       Renderer             0x86fA4c291e80606e5cc2Bf1F44e3e5CF8E198313
-      block 47,321,628, 2026-09-26, both Basescan-verified
+      block 47,321,628, 2026-09-26, both verified on Basescan and Blockscout
 
   **Every earlier pair is superseded; do not read state off one.** The mirror
   holds only tokens minted on THIS pair, so an id not yet minted here answers

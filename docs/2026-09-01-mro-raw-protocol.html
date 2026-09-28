@@ -996,6 +996,13 @@ authorisation from us, and it can do nothing with it but the one transfer.</li>
 HTTP request signatures and nothing else. Paying uses a separate wallet key,
 which we never see.</li>
 </ul>
+<p><strong>A paid mint that can never be written has no automatic remedy.</strong> If the
+artwork fails to solve, the id is found taken on chain, or the day falls past
+the contract&#39;s <code>StaleDay</code> bound, the Clock keeps the row, never drops it, and
+alerts the operator that a paid mint needs a human. The contract holds no
+money, so there is no refund path on chain; any remedy is the operator&#39;s, by
+hand. On this rehearsal the treasury is a burn address and nothing can be
+returned.</p>
 <h3>Do not take the address you pay from this page, or from us</h3>
 <p>The honest limit of everything above. EIP-3009 bounds what your signature can
 do -- one transfer, one amount, one recipient, no allowance left behind -- but

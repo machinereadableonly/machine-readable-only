@@ -905,6 +905,14 @@ signature can cost you:
   HTTP request signatures and nothing else. Paying uses a separate wallet key,
   which we never see.
 
+**A paid mint that can never be written has no automatic remedy.** If the
+artwork fails to solve, the id is found taken on chain, or the day falls past
+the contract's `StaleDay` bound, the Clock keeps the row, never drops it, and
+alerts the operator that a paid mint needs a human. The contract holds no
+money, so there is no refund path on chain; any remedy is the operator's, by
+hand. On this rehearsal the treasury is a burn address and nothing can be
+returned.
+
 ### Do not take the address you pay from this page, or from us
 
 The honest limit of everything above. EIP-3009 bounds what your signature can

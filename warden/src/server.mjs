@@ -185,10 +185,14 @@ export function createServer(config) {
         return json(res, 400, { ok: false, reason: "target" });
       }
 
+      // HEAD is GET without the content (RFC 9110 9.3.2), and Node drops the
+      // body of a HEAD reply itself. Scanners and caches preflight with it.
+      const reads = req.method === "GET" || req.method === "HEAD";
+
       // Case 1: the QR's destination. Public, unsigned, JSON only. Gating this
       // would mean a scanned token leads nowhere, which is the one distribution
       // surface the artwork has.
-      if (req.method === "GET" && path.startsWith("/t/")) {
+      if (reads && path.startsWith("/t/")) {
         // Strict decimal only. Number() accepts "0x1" (aliasing /t/0x1 to
         // token 1) and "" (becoming token 0), so a route-shaped string that
         // is not plain decimal digits is refused before it ever reaches
@@ -206,7 +210,7 @@ export function createServer(config) {
       // under /srv that drifts from the repository. Public and unsigned for
       // the same reason /t/ is: an agent that has not been admitted yet is
       // exactly who needs to read them.
-      if (req.method === "GET" && (path === "/" || path === "/llms.txt")) {
+      if (reads && (path === "/" || path === "/llms.txt")) {
         const isDoor = path === "/";
         const body = isDoor ? config.doorHtml : config.llmsTxt;
         // A Warden wired without the documents 404s them rather than throwing
@@ -226,7 +230,7 @@ export function createServer(config) {
       // neither served nor linked, so an agent that could not use the client
       // had to guess the wire format or go and read a git repository. Every
       // 401 now carries its url beside `docs`.
-      if (req.method === "GET" && path === "/protocol") {
+      if (reads && path === "/protocol") {
         if (typeof config.protocolMd !== "string") return json(res, 404, { ok: false, reason: "not-found" });
         res.writeHead(200, {
           // text/markdown, because that is what it is. Agents read either, and
@@ -247,7 +251,7 @@ export function createServer(config) {
       // Measured 2026-09-16 by an outside-in probe: /robots.txt answered 401
       // to an unsigned GET, which is exactly the shape of request every
       // crawler makes.
-      if (req.method === "GET" && path === "/robots.txt") {
+      if (reads && path === "/robots.txt") {
         // Same degrade-rather-than-throw shape as the documents above.
         if (typeof config.robotsTxt !== "string") {
           return json(res, 404, { ok: false, reason: "not-found" });
@@ -282,7 +286,7 @@ export function createServer(config) {
       // a placeholder, because a payment manifest would tell an agent it can
       // pay us when it cannot.
       if (
-        req.method === "GET" &&
+        reads &&
         (path === "/.well-known/mcp.json" ||
           path === "/.well-known/mcp" ||
           path === "/.well-known/mcp/server-card.json" ||
@@ -306,13 +310,13 @@ export function createServer(config) {
       // a caller to sign and retry, and no signature produces a file that does
       // not exist. Only these two named paths are answered this way; anything
       // else unknown stays gated, so the door is not a map of what exists.
-      if (req.method === "GET" && (path === "/client.mjs" || path === "/skill.md")) {
+      if (reads && (path === "/client.mjs" || path === "/skill.md")) {
         return json(res, 404, { ok: false, reason: "not-built-yet" });
       }
 
       // The served key directory. Also public: a directory nobody can read is
       // not a directory.
-      if (req.method === "GET" && path === "/.well-known/http-message-signatures-directory") {
+      if (reads && path === "/.well-known/http-message-signatures-directory") {
         const doc = directory.current();
         // A conditional GET costs no body. The directory changes only when a
         // key registers, so a caller that polls it is asking the same question

@@ -25,6 +25,7 @@ function gateOf(m) {
   if (m.needsWhole) return "a whole heart, 365 days";
   if (m.minStreak) return `a run of ${m.minStreak} days`;
   if (m.minLevel) return `level ${m.minLevel}`;
+  if (m.requiresAny) return "an Iris";
   return "nothing";
 }
 

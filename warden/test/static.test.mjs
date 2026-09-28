@@ -97,6 +97,33 @@ test("a non-GET on either document is refused, not served", async () => {
   }
 });
 
+test("HEAD on every public route answers as GET does, without the body", async () => {
+  // RFC 9110 9.3.2: HEAD is GET minus the content. Link checkers, QR scanners
+  // and caches preflight with it, and /t/<id> is the url printed into every
+  // token, so a HEAD that reached the door's 401 broke the "never gated" rule.
+  const { server, base } = await start({
+    protocolMd: PROTOCOL,
+    serverCard: "{}",
+    tokenView: (_q, id) => (id === 1 ? { tokenId: 1 } : null),
+  });
+  try {
+    const paths = ["/", "/llms.txt", "/protocol", "/robots.txt", "/t/1", "/t/2",
+      "/.well-known/mcp.json", "/.well-known/http-message-signatures-directory",
+      "/client.mjs"];
+    for (const path of paths) {
+      const get = await fetch(`${base}${path}`);
+      const head = await fetch(`${base}${path}`, { method: "HEAD" });
+      assert.equal(head.status, get.status, `HEAD ${path}`);
+      assert.equal(head.headers.get("content-type"), get.headers.get("content-type"), `HEAD ${path} content-type`);
+      assert.equal(await head.text(), "", `HEAD ${path} must carry no body`);
+    }
+    const unknown = await fetch(`${base}/no-such-route`, { method: "HEAD" });
+    assert.equal(unknown.status, 401, "an unknown path stays gated for HEAD too");
+  } finally {
+    server.close();
+  }
+});
+
 test("the documents are served even when the door would refuse the caller", async () => {
   // The whole point: an unsigned, unknown visitor is exactly who needs to read
   // these. Proven by contrast -- the same unsigned caller is refused at /mcp.
