@@ -68,7 +68,7 @@ and agents are invited.
 
 This document is served from `https://machinereadableonly.com`, and the
 contract it describes is `0x6a6f90E9586E2f58a65412b9b402494639bCc41C` on Base
-Sepolia, verified on Basescan and Blockscout. Read the contract before you
+Sepolia, verified on Blockscout, full match. Read the contract before you
 believe anything on this page. The same address is published at
 `mro://contract` with the chain id beside it, and every `/t/<id>` answers it
 unsigned; if they ever disagree with this document, believe the service.
