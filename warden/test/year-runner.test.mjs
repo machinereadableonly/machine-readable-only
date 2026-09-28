@@ -432,6 +432,23 @@ test("A11's rebind is signed by the new key and sent by the wallet that now owns
   assert.deepEqual(beat.map((b) => [b.agent, b.identity]), [["A11", "A11b"]]);
 });
 
+test("on the day of its rebind, A11's refused check-in is retried until the chain catches up", async () => {
+  const state = { ...emptyState(), tokens: { A11: 11 }, ownerDone: { A11: ["transfer"] } };
+  const out = await pass({
+    day: 51, specs: [spec("A11")], state, chain: fakeChain({ today: 51 }),
+    door: fakeDoor({ A11: { beat: [{ ok: false, reason: "not-bound-to-caller" }, { ok: true, accepted: true }] } }),
+  });
+  const logged = linesFor(out.lines, "checkin");
+  assert.deepEqual(logged.map((l) => [l.attempt, l.ok, l.reason]), [[1, false, "not-bound-to-caller"], [2, true, null]]);
+
+  // On any other day the same refusal is final.
+  const later = await pass({
+    day: 52, specs: [spec("A11")], state, chain: fakeChain({ today: 52 }),
+    door: fakeDoor({ A11: { beat: [{ ok: false, reason: "not-bound-to-caller" }, { ok: true, accepted: true }] } }),
+  });
+  assert.equal(callsFor(later.calls, "beat").length, 1);
+});
+
 test("A10's rest is signed and sent by its own wallet, and ends its check-ins", async () => {
   const state = { ...emptyState(), tokens: { A10: 10 } };
   const out = await pass({ day: 120, specs: [spec("A10")], state, chain: fakeChain({ today: 120 }) });
@@ -506,6 +523,22 @@ test("a Mark refused after its payment settled is never re-ordered", async () =>
 
 // A gate refusal happens BEFORE any demand, so the Mark is asked again -- and
 // the USDC already sitting in the agent's wallet is not sent twice.
+test("a refusal with no reason of its own is still logged with one", async () => {
+  // Two answers carry no `reason`: a payment the door did not accept comes back
+  // as a second demand, and a schema rejection is plain text. Found live as
+  // `reason: null` beside `outcome: "refused"`.
+  const only = spec("A5", { marks: [{ id: 1, when: { level: 1 } }] });
+  const run = (answer) => pass({
+    day: 40, specs: [only], state: { ...emptyState(), tokens: { A5: 7 } },
+    chain: fakeChain({ today: 40, views: { 7: { level: 40, streak: 40 } }, balances: { "0xaddr-A5": 1_000_000n } }),
+    door: fakeDoor({ A5: { upgrade: answer } }),
+  });
+  const declined = await run({ outcome: "refused", demand: demand("1000000"), result: { x402Version: 2 }, paid: false });
+  assert.deepEqual(linesFor(declined.lines, "mark").map((l) => l.reason), ["payment-not-accepted"]);
+  const bare = await run({ outcome: "refused", result: { content: [{ type: "text", text: "invalid" }] }, paid: false });
+  assert.deepEqual(linesFor(bare.lines, "mark").map((l) => l.reason), ["refused-without-reason"]);
+});
+
 test("a Mark refused before any payment is re-ordered, and only the shortfall moves", async () => {
   const only = spec("A5", { marks: [{ id: 1, when: { level: 1 } }] });
   const state = { ...emptyState(), tokens: { A5: 7 } };
@@ -733,6 +766,20 @@ test("creditedDays is the chain's mint day plus every accepted check-in", () => 
   // A credit on the mint day itself counts once: the chain credits a day once.
   assert.deepEqual(creditedDays(lines, 6, 12), [12]);
   assert.deepEqual(creditedDays([], 5, 10), [10]);
+});
+
+test("a check-in accepted after the token rested is not a credit", () => {
+  // Found live: A10 rested, and a public RPC still showing it open let the door
+  // accept a check-in 0.2 s later. The chain refused it, so the tally must too.
+  const lines = [
+    { action: "checkin", ok: true, tokenId: 10, chainDay: 119 },
+    { action: "rest", ok: true, tokenId: 10, chainDay: 120 },
+    { action: "checkin", ok: true, tokenId: 10, chainDay: 120 },
+  ];
+  assert.deepEqual(creditedDays(lines, 10, 1), [1, 119]);
+  // A rest that failed seals nothing.
+  const failed = [{ action: "rest", ok: false, tokenId: 10, chainDay: 120 }, lines[2]];
+  assert.deepEqual(creditedDays(failed, 10, 1), [1, 120]);
 });
 
 // ---------------------------------------------------------------- the clock

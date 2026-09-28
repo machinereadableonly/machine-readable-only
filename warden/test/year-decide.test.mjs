@@ -164,6 +164,17 @@ test("a refusal a retry cannot change is never asked again", () => {
   assert.equal(shouldRetry({ reason: "already-credited-today" }, 1), false);
 });
 
+test("not-bound-to-caller is retried on the day of a rebind, and only then", () => {
+  // A public RPC can lag a rebind by seconds, so the new key is refused until
+  // the chain read catches up. Found live: A11 lost a day to this.
+  assert.equal(shouldRetry({ reason: "not-bound-to-caller" }, 1, { justRebound: true }), true);
+  assert.equal(shouldRetry({ reason: "not-bound-to-caller" }, 2, { justRebound: true }), true);
+  assert.equal(shouldRetry({ reason: "not-bound-to-caller" }, MAX_ATTEMPTS, { justRebound: true }), false);
+  assert.equal(shouldRetry({ reason: "not-bound-to-caller" }, 1), false);
+  // A rebind makes no other final refusal retryable.
+  assert.equal(shouldRetry({ reason: "resting" }, 1, { justRebound: true }), false);
+});
+
 test("success is not retried, and neither is a missing result", () => {
   assert.equal(shouldRetry({ ok: true }, 1), false);
   assert.equal(shouldRetry({ ok: true, reason: "chain-unavailable" }, 1), false);

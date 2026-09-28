@@ -210,11 +210,15 @@ export function agentSpecs(state) {
 }
 
 /// The chain days a token has been credited: its mint day, plus every check-in
-/// the door accepted. The mirror is never asked -- that is the checker's job.
+/// the door accepted before the token rested. The mirror is never asked -- that
+/// is the checker's job. A door reading a lagging RPC can accept a check-in
+/// after a rest; the chain refuses it, so it is not counted.
 export function creditedDays(lines, tokenId, mintDay) {
   const days = new Set([mintDay]);
   for (const line of lines) {
-    if (line.action === "checkin" && line.ok && line.tokenId === tokenId) days.add(line.chainDay);
+    if (line.tokenId !== tokenId || !line.ok) continue;
+    if (line.action === "rest") break;
+    if (line.action === "checkin") days.add(line.chainDay);
   }
   return [...days].sort((a, b) => a - b);
 }
@@ -346,9 +350,11 @@ async function runAgent(spec, ctx) {
   // From nextOwner, not from `plan.owner`: an action whose day passed while the
   // runner was down is still owed, and is taken one per pass in table order.
   const owner = nextOwner(spec, ctx.day, done);
+  let justRebound = false;
   if (owner && token() !== null) {
     if (await doOwner(spec, owner, { ctx, name, wallet, token, agent, rebuild, line })) {
       (state.ownerDone[name] ??= []).push(owner.kind);
+      justRebound = owner.kind === "rebind";
     }
     if (state.paused) return null;
   }
@@ -367,7 +373,7 @@ async function runAgent(spec, ctx) {
 
   let unfinished = null;
   if (plan.checkin && token() !== null) {
-    const args = { ctx, name, token, agent, line };
+    const args = { ctx, name, token, agent, line, justRebound };
     if (!(await attemptCheckin(args, 1))) {
       unfinished = {
         retry: (attempt) => attemptCheckin(args, attempt),
@@ -509,7 +515,7 @@ async function doMint({ ctx, name, wallet, agent, line }) {
 }
 
 /// One attempt. True when the check-in is settled for today, either way.
-async function attemptCheckin({ ctx, name, token, agent, line }, attempt) {
+async function attemptCheckin({ ctx, name, token, agent, line, justRebound }, attempt) {
   let result;
   try {
     result = await agent().beat(token());
@@ -529,7 +535,7 @@ async function attemptCheckin({ ctx, name, token, agent, line }, attempt) {
     pause(ctx.state, result.reason, line);
     return true;
   }
-  return !shouldRetry(result, attempt);
+  return !shouldRetry(result, attempt, { justRebound });
 }
 
 async function doMarks(spec, { ctx, name, wallet, token, agent, line }) {
@@ -577,7 +583,7 @@ async function doMarks(spec, { ctx, name, wallet, token, agent, line }) {
       // A payment that settled buys exactly one attempt: the demand is gone from
       // the second answer, so whatever it says, this Mark is never paid for again.
       const settled = out?.paid === true && !out?.demand;
-      const reason = out?.result?.ok === true ? null : (out?.result?.reason ?? null);
+      const reason = out?.result?.ok === true || asked ? null : refusalReason(out);
       line({
         action: "mark", ok: asked, reason, markId: mark.id,
         outcome: out?.outcome ?? "none", price: String(price), settled,
@@ -597,6 +603,13 @@ async function doMarks(spec, { ctx, name, wallet, token, agent, line }) {
       line({ action: "mark", reason: safeReason(err), markId: mark.id, price: String(price) });
     }
   }
+}
+
+/// Why a Mark was refused. A declined payment answers with a second demand and
+/// a schema rejection with plain text; neither carries a `reason` of its own.
+function refusalReason(out) {
+  if (out?.result?.reason) return out.result.reason;
+  return out?.demand && out?.outcome === "refused" ? "payment-not-accepted" : "refused-without-reason";
 }
 
 /// The child of this parent, among the tokens the door says are ours.

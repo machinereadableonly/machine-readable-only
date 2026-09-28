@@ -61,7 +61,10 @@ export function buyOrDemand({ price, balance, reserve }) {
 }
 
 /// Whether to ask again after this answer, given the attempt just made.
-export function shouldRetry(result, attempt) {
+/// `justRebound`: the token was rebound this pass, and a public RPC can still
+/// show the old key for a few seconds, so the new key's refusal is not final yet.
+export function shouldRetry(result, attempt, { justRebound = false } = {}) {
   if (result?.ok === true || attempt >= MAX_ATTEMPTS) return false;
+  if (justRebound && result?.reason === "not-bound-to-caller") return true;
   return !FINAL_REASONS.has(result?.reason);
 }
