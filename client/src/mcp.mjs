@@ -138,6 +138,16 @@ export async function rpc({ origin, site, privateJwk, signatureAgent, method, pa
     }
     throw new Error(doorMessage(body.reason));
   }
+
+  // EVERY OTHER NON-2XX IS A REFUSAL TOO. Only 401 was read, so a 429 or a 500
+  // -- both JSON with no `result` -- left callTool returning undefined, which
+  // printed as a value and exited 0. This client's documented deployment is a
+  // cron job, which reports failure by exit status alone.
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = [body.reason, body.next].filter(Boolean).join(": ");
+    throw new Error(`${site ?? origin} answered ${res.status}${detail ? ` -- ${detail}` : ""}`);
+  }
   return readRpc(res);
 }
 

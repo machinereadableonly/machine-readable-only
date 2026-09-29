@@ -329,7 +329,10 @@ async function assertChain(call, { chain, contract }) {
 function report(label, result) {
   const value = structured(result) ?? result;
   out(label, value);
-  if (value?.ok === false) process.exitCode = 2;
+  // NO ANSWER IS NOT A GOOD ANSWER. Only `ok: false` counted, so a tool result
+  // that never arrived printed as `undefined` and exited 0, and so did one the
+  // site marked `isError`. Both are refusals.
+  if (value == null || result?.isError === true || value?.ok === false) process.exitCode = 2;
   return value;
 }
 
