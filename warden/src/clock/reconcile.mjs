@@ -24,6 +24,7 @@
 // silently reads a fraction of the day and reports success.
 import { parseEventLogs } from "viem";
 import { MRO_ABI } from "./abi.mjs";
+import { keyIdToBytes32 } from "../mcp/keyId.mjs";
 
 /// The measured cap, the smaller of the two chains' (Sepolia 1,000, mainnet
 /// 2,000, both 2026-09-26). Not a tunable guess: larger is refused outright.
@@ -153,7 +154,8 @@ export function applyEvents(q, events, { log = () => {} } = {}) {
     // Every event this reconcile cares about names a token. Transfer's is
     // `tokenId`; the rest use `id` or `tokenId` depending on the event.
     const tokenId = Number(event.args?.tokenId ?? event.args?.id ?? 0);
-    if (!tokenId || !q.getToken(tokenId)) {
+    const token = tokenId ? q.getToken(tokenId) : null;
+    if (!token) {
       applied.skipped += 1;
       continue;
     }
@@ -206,10 +208,25 @@ export function applyEvents(q, events, { log = () => {} } = {}) {
         applied.Rebound += 1;
         break;
       }
-      case "Minted":
-        q.markMintWritten(tokenId);
-        applied.Minted += 1;
+      case "Minted": {
+        // AN ID IS NOT AN IDENTITY. The mint pass proves a `TokenExists` is
+        // ours by owner AND key before it closes a row; this closed a PAID row
+        // on the id alone, so a foreign token at a reserved id -- which needs a
+        // restored or a second mirror -- reported a sale that never happened,
+        // in the same run the mint pass correctly alerted on it.
+        const eventKey = String(event.args?.keyId ?? "").toLowerCase();
+        if (!eventKey || eventKey !== keyIdToBytes32(token.keyId).toLowerCase()) {
+          applied.skipped += 1;
+          log(
+            `clock: a Minted on token ${tokenId} names a key this mirror does not hold for it; ` +
+              "the row is left alone"
+          );
+          break;
+        }
+        if (q.markMintWrittenFromChain(tokenId)) applied.Minted += 1;
+        else applied.skipped += 1;
         break;
+      }
       case "MarkApplied": {
         // 4.L8. `?? 0` WOULD HAVE SET BIT 0, WHICH IS NOT A MARK. Ids run
         // 1..15 on chain (MachineReadableOnly.sol MAX_MARK_ID), so a decode

@@ -6,6 +6,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
 import { MRO_ABI } from "../src/clock/abi.mjs";
+import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 
@@ -167,9 +168,38 @@ test("Transfer moves ownership, and the mint's own Transfer from the zero addres
 test("Minted moves both the mint row and the token row to written", () => {
   const { db, q } = mirrorWithToken();
   assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued");
-  applyEvents(q, [ev("Minted", { id: 1n, keyId: "0xkey" })]);
+  applyEvents(q, [ev("Minted", { id: 1n, keyId: keyIdToBytes32("k1") })]);
   assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "written");
   assert.equal(q.getToken(1).status, "written");
+});
+
+// AN ID IS NOT AN IDENTITY. The mint pass checks owner AND key before it
+// believes a `TokenExists`; this one believed the id alone, so a foreign token
+// at a reserved id -- a restored or second mirror -- closed a PAID row that had
+// never been written, in the same run the mint pass correctly alerted on it.
+test("a Minted naming another agent's key does not close this paid row", () => {
+  const { db, q } = mirrorWithToken();
+  const applied = applyEvents(q, [ev("Minted", { id: 1n, keyId: keyIdToBytes32("somebody-else") })]);
+  assert.equal(applied.Minted, 0);
+  assert.equal(applied.skipped, 1, "the disagreement is reported, not swallowed");
+  assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued");
+});
+
+// Only a QUEUED row is this event's to settle. A row still awaiting its
+// payment has not been sold, and a Minted re-read from a rewound cursor must
+// not promote it.
+test("a Minted does not promote a row that is awaiting payment", () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xowner", lastDay: 100, mintDay: 100 });
+  q.insertMint({ tokenId: 1, toAddress: "0xowner", keyId: "k1", payNonce: "0xunsettled" });
+
+  const applied = applyEvents(q, [ev("Minted", { id: 1n, keyId: keyIdToBytes32("k1") })]);
+  assert.equal(applied.Minted, 0);
+  assert.equal(
+    db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status,
+    "awaiting-payment",
+  );
 });
 
 test("MarkApplied marks the order written AND sets the bit the tools read", () => {

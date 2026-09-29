@@ -319,6 +319,9 @@ export function queries(db) {
       "UPDATE mark_orders SET status = 'failed' WHERE tokenId = ? AND upgradeId = ?"
     ),
     markMintWritten: db.prepare("UPDATE mints SET status = 'written' WHERE tokenId = ?"),
+    markMintWrittenIfQueued: db.prepare(
+      "UPDATE mints SET status = 'written' WHERE tokenId = ? AND status = 'queued'"
+    ),
     // F7. Tokens whose own mint (or seed -- both live here) has not been
     // written to the chain yet. A credit for one of these cannot be sent: the
     // contract answers NoSuchToken and the batch condemns the entry TERMINALLY,
@@ -935,6 +938,19 @@ export function queries(db) {
         s.markTokenWritten.run(tokenId);
       });
     },
+    /// Reconcile's route, and deliberately not markMintWritten. A `Minted` read
+    /// off the chain settles only a row this service was still trying to write:
+    /// one awaiting its payment has not been sold, and one already written or
+    /// released is not this event's to reopen. Answers whether it changed
+    /// anything, so the caller can count a disagreement instead of a write.
+    markMintWrittenFromChain(tokenId) {
+      return this.transact(() => {
+        const changed = s.markMintWrittenIfQueued.run(tokenId).changes > 0;
+        if (changed) s.markTokenWritten.run(tokenId);
+        return changed;
+      });
+    },
+
     /// A seed landed. Deliberately the SAME two statements markMintWritten
     /// runs, and deliberately its own name: 'written' means the identical thing
     /// on both routes, but a Clock pass that sends `seed` must never read as
