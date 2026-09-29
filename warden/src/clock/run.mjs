@@ -45,6 +45,10 @@ export const CONFIRMATIONS = 12;
 /// three nights running is not going to fix itself.
 export const STALE_AFTER_RUNS = 3;
 
+/// Drop reasons that are NOT a condemnation: the chain never judged these
+/// entries, so the rows stay queued for a run that can offer them.
+const STAYS_QUEUED = new Set(["attempts-exhausted", "not-accounted-on-chain", "lastday-unreadable"]);
+
 /**
  * Run the Clock once.
  *
@@ -102,6 +106,29 @@ export async function chainLevel({ publicClient, contract, tokenId }) {
       args: [BigInt(tokenId)],
     });
     return Number(view.level);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One token's run as the CHAIN holds it: level, streak and lastDay together,
+ * or null when any of them cannot be read.
+ *
+ * The three are one fact. A partial answer -- a stub, a node that served a
+ * struct this code does not understand -- must not be written over the mirror
+ * in pieces.
+ */
+export async function chainRunOf({ publicClient, contract, tokenId }) {
+  try {
+    const view = await publicClient.readContract({
+      address: contract,
+      abi: MRO_ABI,
+      functionName: "viewOf",
+      args: [BigInt(tokenId)],
+    });
+    const run = { level: Number(view.level), streak: Number(view.streak), lastDay: Number(view.lastDay) };
+    return Object.values(run).every((n) => Number.isInteger(n)) ? run : null;
   } catch {
     return null;
   }
@@ -212,6 +239,9 @@ export async function runClock({
   chainId,
   today,
   lastReconciledBlock = null,
+  // Persists the cursor as reconcile finishes each page, so a night that fails
+  // half way keeps what it read. main.mjs owns where that is written.
+  saveCursor = () => {},
   chunkSize = CHECKIN_CHUNK,
   log = console.log,
   alert = console.error,
@@ -274,20 +304,28 @@ export async function runClock({
   //    another day.
   Object.assign(summary, await resolveUnresolvedPayments({ q, publicClient, alert, log }));
 
-  // 1. THE GAS GUARD, BEFORE ANYTHING IS SENT. Stopping the whole run rather
-  //    than skipping individual writes is deliberate: a run that wrote the
-  //    mints and abandoned the check-ins leaves the mirror half-applied, and
-  //    waiting costs nothing at all. A pending row keeps its own day number, so
-  //    levels and streaks come out identical whenever the write lands.
+  // 1. THE GAS GUARD, BEFORE ANYTHING IS SENT. It stops every WRITE pass and
+  //    not the run: skipping one write and making another would leave the
+  //    mirror half-applied, but returning here stopped the mirror LEARNING as
+  //    well -- no reconcile, so a token its owner sealed went on telling
+  //    /t/<id> it was alive, and no queue was scanned for a row needing a
+  //    human. The same rule the pause abort already follows (4.L9).
+  //
+  //    Waiting costs nothing: a pending row keeps its own day number, so levels
+  //    and streaks come out identical whenever the write lands. That is why a
+  //    gas stop on its own is not a failure -- see exitCodeFor.
   const gas = await writer.gasOk();
   if (!gas.ok) {
     summary.gasStopped = true;
     alert(`clock: gas is ${writer.formatGas(gas.gasPrice)}, above the cap of ${writer.formatGas(gas.capWei)} -- nothing written`);
-    return summary;
+  } else {
+    log(`clock: gas ${writer.formatGas(gas.gasPrice)}, under the cap`);
+    await writer.startRun();
   }
-  log(`clock: gas ${writer.formatGas(gas.gasPrice)}, under the cap`);
 
-  await writer.startRun();
+  /// Nothing is SENT once the gas guard or a write pass has stopped the run.
+  /// Read-only work carries on.
+  const noWrites = () => summary.gasStopped || Boolean(summary.aborted);
 
   // 2. A MINT WHOSE ARTWORK NEVER SOLVED CAN NEVER BE WRITTEN. The contract
   //    takes `code` once and keeps it forever, so minting a placeholder makes a
@@ -299,7 +337,7 @@ export async function runClock({
   }
 
   // 3. MINTS.
-  for (const mint of q.pendingMints()) {
+  for (const mint of noWrites() ? [] : q.pendingMints()) {
     const result = await writer.send(
       "mint",
       // The mirror stores the RFC 7638 thumbprint as base64url; the contract
@@ -436,7 +474,7 @@ export async function runClock({
 
   // Nothing is sent once a write phase has aborted: NotWarden, Sunset and
   // EnforcedPause refuse `seed` for exactly the reasons they refuse `mint`.
-  for (const s of summary.aborted ? [] : q.pendingSeeds()) {
+  for (const s of noWrites() ? [] : q.pendingSeeds()) {
     // FOUR arguments, and NO key id among them. The child inherits the parent's
     // agent key on chain (`_agentKeyOf[childId] = key`), so unlike `mint` there
     // is no bytes32 here for keyIdToBytes32 to get wrong -- but the address and
@@ -531,9 +569,19 @@ export async function runClock({
     return life;
   };
 
+  // How many landed days the mirror has not marked yet: the chain credits one
+  // level per day above the one every token is created with. It is what stops
+  // a day nobody sent being healed as written the moment a later day lands.
+  // Null when the level cannot be read, which is "could not ask" as ever.
+  const healRoomOf = async (tokenId) => {
+    const level = await chainLevel({ publicClient, contract, tokenId });
+    if (!Number.isInteger(level)) return null;
+    return level - 1 - q.writtenCreditCount(tokenId);
+  };
+
   // Nothing is sent once a write phase has aborted -- see the mints loop for
   // why the run continues to reconcile anyway.
-  const pending = summary.aborted ? [] : q.pendingCredits(today - 1);
+  const pending = noWrites() ? [] : q.pendingCredits(today - 1);
 
   // 15.8. ONE BAD ROW IS ONE ROW'S PROBLEM. packIds throws on an id that will
   // not fit in four bytes, it is called with no `try`, and the throw
@@ -571,7 +619,7 @@ export async function runClock({
   // writeCheckInChunk re-imposes the same order on whatever is left of a chunk
   // after a heal or a bisect has reordered it.
   for (const entries of chunk(sendable, chunkSize)) {
-    const result = await writeCheckInChunk(writer, entries, { log, lastDayOf, levelOf });
+    const result = await writeCheckInChunk(writer, entries, { log, lastDayOf, levelOf, healRoomOf });
     for (const entry of result.written) {
       q.markCreditWritten(entry.tokenId, entry.day);
       summary.credited.push(entry);
@@ -593,10 +641,15 @@ export async function runClock({
       // TERMINAL, not "stays queued". A credit the chain condemned will be
       // condemned again every night for the same reason, and re-offering it
       // forever is how a real problem becomes a line somebody learns to scroll
-      // past. `attempts-exhausted` is the exception: that entry was never
-      // judged, only rationed, so it stays queued for tomorrow.
-      if (drop.reason === "attempts-exhausted") {
-        alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was not attempted (${drop.reason}) and stays queued`);
+      // past.
+      //
+      // NOT EVERY DROP IS A JUDGEMENT, and the ones in STAYS_QUEUED are not:
+      // an entry the attempt budget rationed, a day the chain's level does not
+      // account for, and one whose lastDay the node would not answer were none
+      // of them offered to the chain. Condemning those reports a lost day as
+      // decided, and marking them written hides it entirely.
+      if (STAYS_QUEUED.has(drop.reason)) {
+        alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was not written (${drop.reason}) and stays queued`);
         continue;
       }
       // F7. A CREDIT IS NOT CONDEMNED FOR ITS MINT BEING LATE. `NoSuchToken`
@@ -622,6 +675,21 @@ export async function runClock({
       q.failCredit(drop.entry.tokenId, drop.entry.day);
       summary.stuckCredits.push(drop);
       alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was refused (${drop.reason}) and needs a human`);
+      // AND THE MIRROR STOPS CLAIMING THE DAY. The Warden advanced level,
+      // streak and lastDay when it accepted the check-in; the chain has just
+      // refused it, so those three are wrong until something writes the
+      // chain's own numbers over them. A read that fails changes nothing.
+      const run = await chainRunOf({ publicClient, contract, tokenId: drop.entry.tokenId });
+      if (run) q.correctFromChain(drop.entry.tokenId, run);
+      else log(`clock: token ${drop.entry.tokenId} could not be re-read, so the mirror still overstates it`);
+    }
+    // NO FURTHER CHUNK AFTER ONE THAT JUDGED NOTHING. A later chunk can carry
+    // a NEWER day for a token whose day this chunk left unsent, and landing it
+    // puts the skipped day permanently below the chain's lastDay -- where the
+    // next night reads it as already written. The rest of the run goes on.
+    if (result.stop) {
+      alert(`clock: check-ins stopped after a chunk that judged nothing (${result.stop}); the rest stay queued`);
+      break;
     }
     if (result.aborted) {
       summary.aborted = result.aborted;
@@ -653,7 +721,7 @@ export async function runClock({
       summary.stuckMarks.map((o) => `${o.upgradeId} on ${o.tokenId}`).join(", "));
   }
 
-  for (const order of summary.aborted ? [] : q.pendingMarkOrders()) {
+  for (const order of noWrites() ? [] : q.pendingMarkOrders()) {
     // THREE arguments. The variant is the shape or ink the agent chose and paid
     // for, and it exists nowhere else -- the contract writes it into the token's
     // own word, permanently. Dropping it would silently hand out the default.
@@ -694,6 +762,21 @@ export async function runClock({
     }
   }
 
+  // 5b. EVERY CONDEMNED CREDIT, NOT ONLY TONIGHT'S. `failCredit` is terminal and
+  //    nothing read the table afterwards, so a credit the chain refused failed
+  //    the run once and then let every later night exit 0 -- with a day of the
+  //    artwork lost and nobody told again. Read from the mirror, so it keeps
+  //    failing until a human clears the row.
+  const tonight = new Map(summary.stuckCredits.map((d) => [`${d.entry.tokenId}:${d.entry.day}`, d.reason]));
+  summary.stuckCredits = q.stuckCredits().map((row) => ({
+    entry: { tokenId: row.tokenId, day: row.day },
+    reason: tonight.get(`${row.tokenId}:${row.day}`) ?? "refused-on-an-earlier-run",
+  }));
+  const earlier = summary.stuckCredits.length - tonight.size;
+  if (earlier > 0) {
+    alert(`clock: ${earlier} credit(s) condemned on an earlier run are still waiting for a human`);
+  }
+
   // 6. WHAT HAS NOT MOVED IN THREE RUNS. 4.L3: STALE_AFTER_RUNS was exported
   //    and read by nothing, and the spec's three-run alert did not exist -- so
   //    a row that quietly failed every night produced one ordinary log line a
@@ -724,18 +807,35 @@ export async function runClock({
   //     does not hold it, and the whole question is what the contract believes.
   //     A read that fails is not treated as silence -- it would send a write on
   //     no evidence, nightly, whenever the RPC was unwell.
-  if (!summary.aborted) {
+  //
+  //     A PAUSE IS THE ONE ABORT THIS MUST SURVIVE. `heartbeat()` is
+  //     deliberately not `whenNotPaused`, so that a long pause cannot force the
+  //     ending -- and skipping the block on any abort handed that straight
+  //     back: one row queued before the pause reverts EnforcedPause on the
+  //     first write and the operator falls silent on chain. Every other abort
+  //     is a reason the heartbeat would fail for too.
+  //
+  //     A heartbeat is a WRITE, so a gas stop skips it like any other.
+  if (!summary.gasStopped && (!summary.aborted || summary.aborted === "EnforcedPause")) {
+    // A HEAL IS NOT A WRITE. It is the discovery that a day landed on some
+    // earlier night, and it sends no transaction, so it cannot have stamped
+    // `lastWardenDay` -- counting it made a night of pure healing look busy
+    // and pay for nothing.
     const wroteThisRun =
       summary.minted.length > 0 ||
       summary.seeded.length > 0 ||
       summary.credited.length > 0 ||
-      summary.healed.length > 0 ||
       summary.marks.length > 0;
-    let lastWardenDay = null;
+    let stamp = null;
     try {
-      lastWardenDay = Number(
-        await publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "lastWardenDay" })
-      );
+      // SUNSET IS READ WITH THE STAMP, not assumed. heartbeatDue has taken it
+      // since it was written and nothing passed it, so an idle run went on
+      // paying for a transaction every 30 days after the piece had closed.
+      const [lastWardenDay, sunset] = await Promise.all([
+        publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "lastWardenDay" }),
+        publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "isSunset" }),
+      ]);
+      stamp = { lastWardenDay: Number(lastWardenDay), sunset: Boolean(sunset) };
     } catch (err) {
       // `shortMessage` ONLY. `err.message` from viem carries the RPC endpoint,
       // provider key and all, into a log this project ships to an operator.
@@ -745,12 +845,12 @@ export async function runClock({
       // ignore it. `shortMessage` ONLY -- viem's `message` carries the RPC
       // endpoint and its provider key into a log an operator reads.
       log(
-        "clock: could not read lastWardenDay, so no heartbeat decision was made " +
+        "clock: could not read lastWardenDay and isSunset, so no heartbeat decision was made " +
           `(${err?.shortMessage ?? "no short message"})`
       );
     }
-    if (lastWardenDay !== null) {
-      const decision = heartbeatDue({ today, lastWardenDay, wroteThisRun });
+    if (stamp !== null) {
+      const decision = heartbeatDue({ today, ...stamp, wroteThisRun });
       summary.heartbeat = decision;
       if (decision.due) {
         const result = await writer.send("heartbeat", []);
@@ -772,7 +872,7 @@ export async function runClock({
 
   // 7. RECONCILE. Last, so it sees this run's own writes as well as whatever
   //    the token owners did during the day.
-  summary.reconciled = await reconcile({ q, publicClient, contract, chainId, lastReconciledBlock, log });
+  summary.reconciled = await reconcile({ q, publicClient, contract, chainId, lastReconciledBlock, log, saveCursor });
 
   // 4.L10. `skipped` IS A DIVERGENCE SIGNAL, not a statistic. Every skip is an
   // event the CHAIN emitted about a token this mirror has never heard of -- a
@@ -941,7 +1041,9 @@ function isRunLevel(result) {
  * caller persisted last time; passing it makes the window the gap since then
  * rather than the whole history, which matters after an outage.
  */
-export async function reconcile({ q, publicClient, contract, chainId, lastReconciledBlock, log = () => {} }) {
+export async function reconcile({
+  q, publicClient, contract, chainId, lastReconciledBlock, log = () => {}, saveCursor = () => {},
+}) {
   // 15.6. CONFIRMATION DEPTH. This used to read to the bare head and apply
   // one-way state from it -- `setResting` has no clearing statement and
   // `markMintWritten` removes the row from pendingMints permanently, so a log
@@ -957,21 +1059,39 @@ export async function reconcile({ q, publicClient, contract, chainId, lastReconc
   if (floor === undefined) {
     throw new Error(`no deploy block recorded for chain ${chainId}: reconcile would guess at its own history`);
   }
-  const from = lastReconciledBlock === null ? floor : BigInt(lastReconciledBlock) + 1n;
+  // CLAMPED TO THE FLOOR. A cursor below the deploy block -- a hand-edited
+  // file, or one left by a contract that came before this one -- would page
+  // through blocks this contract did not exist in, which is slow rather than
+  // wrong; one ABOVE the head is the dangerous direction and is handled below.
+  const asked = lastReconciledBlock === null ? floor : BigInt(lastReconciledBlock) + 1n;
+  const from = asked < floor ? floor : asked;
   if (from > head) return { from, to: head, pages: 0, applied: null };
 
-  const { events, pages } = await readEvents(publicClient, {
+  // APPLIED AND SAVED PER PAGE. Reading the whole window before applying any of
+  // it meant one failed page threw away the night's reading and left the cursor
+  // where it was -- so a backlog grew every night and success became less
+  // likely, not more. A day is about 44 pages.
+  const applied = {};
+  let reached = null;
+  const { pages } = await readEvents(publicClient, {
     contract,
     fromBlock: from,
     toBlock: head,
     span: MAX_LOG_SPAN,
+    log,
+    onEvents: (events, { to: pageEnd }) => {
+      for (const [name, n] of Object.entries(applyEvents(q, events, { log }))) {
+        applied[name] = (applied[name] ?? 0) + n;
+      }
+      reached = pageEnd;
+      saveCursor(pageEnd);
+    },
     onPage: ({ from: a, to: b, found }) => {
       if (found > 0) log(`clock: reconcile ${a}..${b}: ${found} logs`);
     },
   });
-  const applied = applyEvents(q, events, { log });
   log(`clock: reconciled ${from}..${head} in ${pages} page${pages === 1 ? "" : "s"}: ${JSON.stringify(applied)}`);
-  return { from, to: head, pages, applied };
+  return { from, to: reached ?? head, pages, applied };
 }
 
 export { packIds };

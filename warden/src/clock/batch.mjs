@@ -75,27 +75,50 @@ const byDayThenId = (a, b) => a.day - b.day || a.tokenId - b.tokenId;
  * backfilled. The fallback condemns exactly ONE entry: the contract reverts on
  * the FIRST offending entry in array order, so that is the only one it named.
  *
+ * `lastDay` ALONE IS NOT PROOF A DAY LANDED. A day the Clock never sent -- an
+ * exhausted chunk, a night that stopped early -- sits below the chain's lastDay
+ * the moment any later day lands, and healing it records a day of the artwork
+ * as kept when it was lost. `healRoomOf(tokenId)` is how many credits the
+ * chain's `level` holds that the mirror has not marked written, so it bounds
+ * the heal. Credits arrive in ascending day order, so the days the chain holds
+ * are the TOP of the candidate list; everything below that is left queued and
+ * reported.
+ *
  * Returns `{ healed, remaining, dropped }`.
  */
-async function healDayNotAdvanced(entries, tokenId, lastDayOf) {
+async function healDayNotAdvanced(entries, tokenId, lastDayOf, healRoomOf) {
   const mine = entries.filter((e) => String(e.tokenId) === String(tokenId));
   const others = entries.filter((e) => String(e.tokenId) !== String(tokenId));
 
   const lastDay = lastDayOf ? await lastDayOf(Number(tokenId)) : null;
   if (lastDay === null || lastDay === undefined) {
-    // Could not ask. Condemn the first entry for that id and keep the rest, so
-    // one unreadable moment cannot cost the token its other days.
+    // Could not ask. The contract reverts on the FIRST offending entry in array
+    // order, so that is the only one this refusal is about: it comes out of the
+    // chunk and the token keeps its other days. It is NOT condemned -- an
+    // unreadable node says nothing about the row, and the caller's condemnation
+    // is terminal, so one bad minute on the RPC would destroy a day the chain
+    // would have taken the next night.
     const [first, ...rest] = mine;
     return {
       healed: [],
-      dropped: first ? [{ entry: first, reason: "DayNotAdvanced" }] : [],
+      dropped: first ? [{ entry: first, reason: "lastday-unreadable" }] : [],
       remaining: [...others, ...rest],
     };
   }
 
-  const healed = mine.filter((e) => e.day <= lastDay);
+  const candidates = mine.filter((e) => e.day <= lastDay).sort(byDayThenId);
   const stillWritable = mine.filter((e) => e.day > lastDay);
-  return { healed, dropped: [], remaining: [...others, ...stillWritable] };
+  const room = healRoomOf ? await healRoomOf(Number(tokenId)) : null;
+  const healed =
+    room === null || room === undefined
+      ? candidates
+      : candidates.slice(Math.max(0, candidates.length - Math.max(0, room)));
+  const unaccounted = candidates.slice(0, candidates.length - healed.length);
+  return {
+    healed,
+    dropped: unaccounted.map((entry) => ({ entry, reason: "not-accounted-on-chain" })),
+    remaining: [...others, ...stillWritable],
+  };
 }
 
 /**
@@ -192,6 +215,9 @@ export function chunk(items, size) {
  *   dropped  - `{ entry, reason }` for each entry the chain condemned
  *   aborted  - a run-level reason, or null. When set, NOTHING was written and
  *              the caller must stop the whole run rather than continue.
+ *   stop     - set when this chunk made no judgement about its remaining
+ *              entries, so the caller must send no FURTHER chunk. Not an
+ *              abort: the rest of the run is unaffected.
  *
  * `lastDayOf(tokenId)` reads one token's `lastDay` from the chain, or null when
  * it cannot be read. It is what makes `DayNotAdvanced` recoverable; without it
@@ -201,6 +227,10 @@ export function chunk(items, size) {
  * an `AlreadyFinished` refusal drop only the entries past the finish in one
  * step; without it they go one at a time, which is correct but slower.
  *
+ * `healRoomOf(tokenId)` bounds a heal by what the chain's level accounts for;
+ * see healDayNotAdvanced. Without it, `lastDay` alone decides, which cannot
+ * tell a day that landed from one that was never sent.
+ *
  * `maxAttempts` bounds the shrink loop. Without it a pathological chunk where
  * every entry is bad would make one call per entry; with it, the remainder is
  * reported as dropped for a named reason rather than hammering the node.
@@ -208,7 +238,7 @@ export function chunk(items, size) {
 export async function writeCheckInChunk(
   writer,
   entries,
-  { maxAttempts = 12, log = () => {}, lastDayOf = null, levelOf = null } = {}
+  { maxAttempts = 12, log = () => {}, lastDayOf = null, levelOf = null, healRoomOf = null } = {}
 ) {
   // Sorted on the way in, and again before every send: see byDayThenId.
   let remaining = [...entries].sort(byDayThenId);
@@ -232,7 +262,12 @@ export async function writeCheckInChunk(
   while (remaining.length > 0) {
     if (shrinks >= maxAttempts) {
       for (const entry of remaining) dropped.push({ entry, reason: "attempts-exhausted" });
-      return { written: [], healed, dropped, aborted: null, attempts };
+      // `stop` IS NOT `aborted`. Nothing here refused the run, so the Marks and
+      // reconcile still go ahead -- but the caller must send no further chunk.
+      // These entries were never judged, only rationed, and a later chunk
+      // landing a newer day for one of these tokens is what makes a skipped day
+      // unwritable and then heals it as written.
+      return { written: [], healed, dropped, aborted: null, stop: "attempts-exhausted", attempts };
     }
     attempts += 1;
 
@@ -305,7 +340,7 @@ export async function writeCheckInChunk(
       }
       shrinks += 1;
       log(`batchCheckIn: ${remaining.length} entries will not estimate; writing them in two halves`);
-      return writeInHalves(writer, remaining, { maxAttempts: maxAttempts - shrinks, log, lastDayOf, levelOf }, { healed, dropped, attempts });
+      return writeInHalves(writer, remaining, { maxAttempts: maxAttempts - shrinks, log, lastDayOf, levelOf, healRoomOf }, { healed, dropped, attempts });
     }
 
     if (result.reason !== "reverted-on-simulate") {
@@ -322,7 +357,7 @@ export async function writeCheckInChunk(
     // recovery path; see healDayNotAdvanced.
     if (errorName === "DayNotAdvanced" && errorArgs.length > 0) {
       const before = remaining.length;
-      const outcome = await healDayNotAdvanced(remaining, errorArgs[0], lastDayOf);
+      const outcome = await healDayNotAdvanced(remaining, errorArgs[0], lastDayOf, healRoomOf);
       healed.push(...outcome.healed);
       dropped.push(...outcome.dropped);
       remaining = outcome.remaining;
@@ -382,7 +417,7 @@ export async function writeCheckInChunk(
       return { written: [], healed, dropped, aborted: null, attempts };
     }
     log(`clock: ${errorName ?? "unknown revert"} named no entry, bisecting ${remaining.length} into ${Math.ceil(remaining.length / 2)}`);
-    return writeInHalves(writer, remaining, { maxAttempts: maxAttempts - shrinks, log, lastDayOf, levelOf }, { healed, dropped, attempts });
+    return writeInHalves(writer, remaining, { maxAttempts: maxAttempts - shrinks, log, lastDayOf, levelOf, healRoomOf }, { healed, dropped, attempts });
   }
 
   return { written: [], healed, dropped, aborted: null, attempts };
@@ -427,6 +462,7 @@ async function writeInHalves(writer, entries, opts, sofar) {
     healed: [...sofar.healed, ...halves.flatMap((h) => h.healed)],
     dropped: [...sofar.dropped, ...halves.flatMap((h) => h.dropped)],
     aborted: last.aborted,
+    stop: halves.map((h) => h.stop).find(Boolean) ?? null,
     attempts: sofar.attempts + halves.reduce((n, h) => n + h.attempts, 0),
     // Carried through rather than lost, as the bisect used to lose them: the
     // hash names a receipt-unknown transaction in the alert, and the block is

@@ -6,6 +6,7 @@ import { encodeFunctionData } from "viem";
 import { MRO_ABI } from "../src/clock/abi.mjs";
 import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
 import { runClock, CHECKIN_CHUNK } from "../src/clock/run.mjs";
+import { exitCodeFor } from "../src/clock/cursor.mjs";
 import { MAX_TX_GAS } from "../src/clock/write.mjs";
 // DERIVED, not hardcoded: this changes with every redeploy, and a test that
 // pins the old value fails for a reason that has nothing to do with what it
@@ -108,6 +109,41 @@ test("gas above the cap writes nothing at all", async () => {
   assert.equal(writer.sent.length, 0, "not one transaction was sent");
   assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued");
   assert.match(alerts[0], /above the cap/);
+});
+
+// A GAS STOP IS ABOUT WRITING. Returning before the read-only passes meant a
+// dear night also stopped the mirror LEARNING -- no reconcile, so a token its
+// owner sealed went on telling /t/<id> it was alive, and nothing scanned the
+// queues for a row that needs a human.
+test("a gas stop skips the writes and still reconciles and scans", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1, { solveState: "failed" });
+  const asked = [];
+  const chain = {
+    async getBlockNumber() { return FLOOR + 100n; },
+    async getLogs({ fromBlock, toBlock }) { asked.push([fromBlock, toBlock]); return []; },
+  };
+  const writer = okWriter({
+    async gasOk() { return { ok: false, gasPrice: 900_000_000n, capWei: 50_000_000n }; },
+  });
+  const summary = await runClock({ ...baseArgs(q), publicClient: chain, writer, alert: () => {} });
+
+  assert.equal(summary.gasStopped, true);
+  assert.equal(writer.sent.length, 0, "not one transaction was sent");
+  assert.deepEqual(summary.stuck, [1], "the paid mint that needs a human is still reported");
+  assert.equal(asked.length, 1, "and the night still read the chain");
+  assert.ok(summary.reconciled);
+  assert.ok(summary.stale, "the three-run scan still runs");
+});
+
+test("a gas stop on its own is not a failure: the same rows go out tomorrow", async () => {
+  const { q } = mirror();
+  const writer = okWriter({
+    async gasOk() { return { ok: false, gasPrice: 900_000_000n, capWei: 50_000_000n }; },
+  });
+  const summary = await runClock({ ...baseArgs(q), writer, alert: () => {} });
+
+  assert.equal(exitCodeFor(summary), 0);
 });
 
 test("a solved, paid mint is written and both rows move to written", async () => {
@@ -724,7 +760,10 @@ test("CONTROL: a fresh queue raises no staleness alert", async () => {
 // load-balanced RPC and an irreversible read.
 test("reconcile trails the head, so a lagging replica cannot cost blocks", async () => {
   const { db, q } = mirror();
-  const HEAD = 46_200_000n;
+  // DERIVED FROM THE FLOOR, like every other block number here: reconcile
+  // clamps to the deploy block, so a literal head from a superseded deployment
+  // reads as "nothing to do" rather than as the case under test.
+  const HEAD = FLOOR + 46_200n;
   const asked = [];
   const laggingChain = {
     async getBlockNumber() { return HEAD; },
@@ -759,7 +798,7 @@ test("reconcile trails the head, so a lagging replica cannot cost blocks", async
 // that runs backwards.
 test("a head that has not advanced asks the node for nothing", async () => {
   const { db, q } = mirror();
-  const HEAD = 46_200_000n;
+  const HEAD = FLOOR + 46_200n;
   const asked = [];
   const stalled = {
     async getBlockNumber() { return HEAD; },
@@ -785,7 +824,7 @@ test("a head that has not advanced asks the node for nothing", async () => {
 // must not re-read from a lower point and call that progress.
 test("a head that moves backwards between runs does not drag the cursor back", async () => {
   const { db, q } = mirror();
-  let head = 46_200_000n;
+  let head = FLOOR + 46_200n;
   const flapping = {
     async getBlockNumber() { return head; },
     async getLogs() { return []; },
@@ -794,10 +833,10 @@ test("a head that moves backwards between runs does not drag the cursor back", a
   const first = await runClock({
     ...baseArgs(q), publicClient: flapping, writer: okWriter(), lastReconciledBlock: head - 100n,
   });
-  assert.equal(first.reconciled.to, 46_200_000n - 12n);
+  assert.equal(first.reconciled.to, FLOOR + 46_200n - 12n);
 
   // The next call lands on a replica 50 blocks behind.
-  head = 46_199_950n;
+  head = FLOOR + 46_150n;
   const second = await runClock({
     ...baseArgs(q), publicClient: flapping, writer: okWriter(), lastReconciledBlock: first.reconciled.to,
   });
@@ -980,10 +1019,11 @@ test("an unnamed revert with a GOOD recipient reports the detail and stays queue
 // still be live with every unit test green.
 
 /// A chain whose `lastWardenDay` is `day`, and which answers nothing else.
-const chainStampedAt = (day) => ({
+const chainStampedAt = (day, { sunset = false } = {}) => ({
   ...noChain,
   async readContract({ functionName }) {
     if (functionName === "lastWardenDay") return day;
+    if (functionName === "isSunset") return sunset;
     throw new Error(`unexpected read: ${functionName}`);
   },
 });
@@ -1051,4 +1091,267 @@ test("a chain that cannot be read sends no heartbeat and does not stop the run",
   assert.equal(summary.heartbeat, undefined);
   assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 0);
   assert.ok(summary.reconciled, "and the run still reconciled");
+});
+
+// A CONDEMNED CREDIT USED TO FAIL THE RUN FOR ONE NIGHT ONLY. `failCredit` is
+// terminal and nothing read the table afterwards, so from the second night
+// systemd recorded success with a day of the artwork lost and a mirror that
+// still claimed it.
+test("a credit condemned on an earlier night keeps failing the run", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  q.insertCredit(1, TODAY - 9, "sig-old");
+  q.failCredit(1, TODAY - 9);
+
+  const alerts = [];
+  const summary = await runClock({ ...baseArgs(q), writer: okWriter(), alert: (m) => alerts.push(m) });
+
+  assert.deepEqual(
+    summary.stuckCredits.map((d) => [d.entry.tokenId, d.entry.day]),
+    [[1, TODAY - 9]],
+    "the night must still report it",
+  );
+  assert.equal(exitCodeFor(summary), 1, "and systemd must still see a failure");
+  assert.ok(alerts.some((a) => a.includes("condemned")), `got: ${alerts.join(" | ")}`);
+});
+
+// THE MIRROR OVERSTATES THE TOKEN UNTIL SOMEBODY CORRECTS IT. The Warden
+// advanced level, streak and lastDay when the agent checked in; the chain then
+// refused the credit, and /t/<id> went on reporting a day that never landed.
+test("condemning a credit writes the chain's own view over the mirror's", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  q.insertCredit(1, TODAY - 1, "sig");
+  q.creditDay(1, TODAY - 1, 5, 5);
+
+  const publicClient = {
+    ...noChain,
+    async readContract({ functionName }) {
+      if (functionName === "lastWardenDay") return TODAY;
+      if (functionName === "isSunset") return false;
+      if (functionName === "viewOf") return { level: 3, streak: 1, lastDay: TODAY - 4 };
+      throw new Error(`unexpected read: ${functionName}`);
+    },
+  };
+  const writer = okWriter({
+    async send(fn, args, opts) {
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      if (fn === "batchCheckIn") {
+        return { ok: false, reason: "reverted-on-simulate", errorName: "Resting", errorArgs: ["1"] };
+      }
+      return { ok: true, hash: "0x1" };
+    },
+  });
+  await runClock({ ...baseArgs(q), publicClient, writer, alert: () => {} });
+
+  const token = q.getToken(1);
+  assert.equal(token.level, 3, "the level the CHAIN holds, not the one the Warden hoped for");
+  assert.equal(token.streak, 1);
+  assert.equal(token.lastDay, TODAY - 4);
+});
+
+// A CURSOR CAN OUTLIVE ITS CONTRACT. adopt-deployment.sh rewrites the address
+// and the deploy floor and leaves the cursor file alone, so a cursor below the
+// floor would page hundreds of thousands of blocks this contract never existed
+// in, every night.
+test("a cursor below the deploy block starts at the floor, not below it", async () => {
+  const { q } = mirror();
+  const asked = [];
+  const chain = {
+    async getBlockNumber() { return FLOOR + 100n; },
+    async getLogs({ fromBlock, toBlock }) { asked.push([fromBlock, toBlock]); return []; },
+  };
+  await runClock({
+    ...baseArgs(q),
+    publicClient: chain,
+    writer: okWriter(),
+    lastReconciledBlock: FLOOR - 100_000n,
+  });
+
+  assert.equal(asked.length, 1);
+  assert.equal(asked[0][0], FLOOR, "the first window must start at the contract's own first block");
+});
+
+// PER PAGE, NOT PER NIGHT. One failed page used to throw away everything the
+// run had read, so the backlog grew every night and success became less likely.
+test("the cursor is saved as each page is applied, and survives a page that fails", async () => {
+  const { q } = mirror();
+  const saved = [];
+  const chain = {
+    async getBlockNumber() { return FLOOR + 2_500n; },
+    async getLogs({ fromBlock }) {
+      if (fromBlock >= FLOOR + 2_000n) throw new Error("the node gave up on the third page");
+      return [];
+    },
+  };
+
+  await assert.rejects(() =>
+    runClock({
+      ...baseArgs(q),
+      publicClient: chain,
+      writer: okWriter(),
+      saveCursor: (block) => saved.push(block),
+    })
+  );
+
+  assert.deepEqual(saved, [FLOOR + 999n, FLOOR + 1_999n], "the two pages that were read are kept");
+});
+
+// THE RUN'S OWN CHUNK LOOP MUST STOP. Proving `stop` in writeCheckInChunk is
+// not enough: the defect is that a LATER chunk lands a newer day for a token
+// whose day the exhausted chunk left unsent, and only this loop can do that.
+test("a chunk that judged nothing stops the night's remaining chunks", async () => {
+  const { db, q } = mirror();
+  for (let id = 1; id <= 15; id += 1) {
+    queueMint(q, db, id);
+    db.exec(`UPDATE mints SET status = 'written' WHERE tokenId = ${id}`);
+    q.insertCredit(id, TODAY - 1, `sig${id}`);
+  }
+
+  // Every call condemns the lowest id it was handed, so the first chunk of 14
+  // spends its whole shrink budget and never judges the rest.
+  const writer = okWriter({
+    async send(fn, args, opts) {
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      if (fn !== "batchCheckIn") return { ok: true, hash: "0x1" };
+      const ids = [];
+      for (let i = 2; i < args[0].length; i += 8) ids.push(parseInt(args[0].slice(i, i + 8), 16));
+      return { ok: false, reason: "reverted-on-simulate", errorName: "NoSuchToken", errorArgs: [String(ids[0])] };
+    },
+  });
+  await runClock({ ...baseArgs(q), writer, chunkSize: 14, alert: () => {} });
+
+  const idsSent = writer.sent
+    .filter((s) => s.functionName === "batchCheckIn")
+    .flatMap((s) => {
+      const ids = [];
+      for (let i = 2; i < s.args[0].length; i += 8) ids.push(parseInt(s.args[0].slice(i, i + 8), 16));
+      return ids;
+    });
+  assert.equal(idsSent.includes(15), false, "the second chunk must not be sent");
+  assert.equal(
+    db.prepare("SELECT status FROM credits WHERE tokenId = 15").get().status,
+    "queued",
+    "and its row waits for a night that can judge it",
+  );
+});
+
+// A PAUSE IS THE ONE ABORT THE HEARTBEAT MUST SURVIVE. The contract leaves
+// `heartbeat()` without whenNotPaused precisely so a long pause cannot force
+// the ending -- and one row queued before the pause aborted the run before the
+// heartbeat block, which handed that back.
+test("a run the pause aborted still says the operator is here", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const writer = okWriter({
+    async send(fn, args, opts) {
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      if (fn === "mint") return { ok: false, reason: "reverted-on-simulate", errorName: "EnforcedPause", errorArgs: [] };
+      return { ok: true, hash: "0x1" };
+    },
+  });
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainStampedAt(TODAY - 40),
+    writer,
+  });
+
+  assert.equal(summary.aborted, "EnforcedPause");
+  assert.equal(summary.heartbeat.due, true);
+  assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 1);
+});
+
+// Any other abort is a reason the heartbeat would fail for too.
+test("a run aborted by Sunset sends no heartbeat", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const writer = okWriter({
+    async send(fn, args, opts) {
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      if (fn === "mint") return { ok: false, reason: "reverted-on-simulate", errorName: "Sunset", errorArgs: [] };
+      return { ok: true, hash: "0x1" };
+    },
+  });
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainStampedAt(TODAY - 40, { sunset: true }),
+    writer,
+  });
+
+  assert.equal(summary.heartbeat, undefined);
+  assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 0);
+});
+
+// A CLOSED PIECE CANNOT BE HELD OPEN. heartbeatDue has taken `sunset` since it
+// was written and the call site never passed it, so an idle run went on paying
+// for a transaction every 30 days after the ending.
+test("after sunset the heartbeat is not sent, however quiet the chain is", async () => {
+  const { q } = mirror();
+  const writer = okWriter();
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainStampedAt(TODAY - 400, { sunset: true }),
+    writer,
+  });
+
+  assert.equal(summary.heartbeat.due, false);
+  assert.equal(summary.heartbeat.why, "sunset");
+  assert.equal(writer.sent.length, 0);
+});
+
+test("a chain that cannot answer isSunset makes no heartbeat decision", async () => {
+  const { q } = mirror();
+  const writer = okWriter();
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: {
+      ...noChain,
+      async readContract({ functionName }) {
+        if (functionName === "lastWardenDay") return TODAY - 40;
+        throw new Error("rpc down");
+      },
+    },
+    writer,
+  });
+
+  assert.equal(summary.heartbeat, undefined);
+  assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 0);
+});
+
+// A HEAL WRITES NOTHING ON CHAIN, so it cannot have stamped the day. Counting
+// it as a write meant a night of pure healing looked busy and sent nothing.
+test("a run whose only outcome was a heal still sends the heartbeat", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  q.insertCredit(1, TODAY - 1, "sig");
+
+  // The chain already holds that day, so the chunk is healed and no
+  // transaction lands.
+  const publicClient = {
+    ...noChain,
+    async readContract({ functionName }) {
+      if (functionName === "lastWardenDay") return TODAY - 40;
+      if (functionName === "isSunset") return false;
+      if (functionName === "viewOf") return { lastDay: TODAY - 1, level: 2 };
+      throw new Error(`unexpected read: ${functionName}`);
+    },
+  };
+  const writer = okWriter({
+    async send(fn, args, opts) {
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      if (fn === "batchCheckIn") {
+        return { ok: false, reason: "reverted-on-simulate", errorName: "DayNotAdvanced", errorArgs: ["1"] };
+      }
+      return { ok: true, hash: "0x1" };
+    },
+  });
+  const summary = await runClock({ ...baseArgs(q), publicClient, writer });
+
+  assert.equal(summary.healed.length, 1, "the day was healed, not written");
+  assert.deepEqual(summary.credited, []);
+  assert.equal(summary.heartbeat.due, true, "nothing this run stamped lastWardenDay");
+  assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 1);
 });

@@ -352,6 +352,9 @@ export function queries(db) {
       "UPDATE mark_orders SET status = 'failed' WHERE tokenId = ? AND upgradeId = ?"
     ),
     markMintWritten: db.prepare("UPDATE mints SET status = 'written' WHERE tokenId = ?"),
+    markMintWrittenIfQueued: db.prepare(
+      "UPDATE mints SET status = 'written' WHERE tokenId = ? AND status = 'queued'"
+    ),
     // F7. Tokens whose own mint (or seed -- both live here) has not been
     // written to the chain yet. A credit for one of these cannot be sent: the
     // contract answers NoSuchToken and the batch condemns the entry TERMINALLY,
@@ -362,6 +365,12 @@ export function queries(db) {
     failCredit: db.prepare("UPDATE credits SET status = 'failed' WHERE tokenId = ? AND day = ?"),
     stuckCredits: db.prepare(
       "SELECT tokenId, day FROM credits WHERE status = 'failed' ORDER BY day ASC, tokenId ASC"
+    ),
+    writtenCreditCount: db.prepare(
+      "SELECT COUNT(*) AS n FROM credits WHERE tokenId = ? AND status = 'written'"
+    ),
+    correctFromChain: db.prepare(
+      "UPDATE tokens SET level = ?, streak = ?, lastDay = ? WHERE tokenId = ?"
     ),
     markOrderWritten: db.prepare(
       "UPDATE mark_orders SET status = 'written' WHERE tokenId = ? AND upgradeId = ?"
@@ -996,6 +1005,19 @@ export function queries(db) {
         s.markTokenWritten.run(tokenId);
       });
     },
+    /// Reconcile's route, and deliberately not markMintWritten. A `Minted` read
+    /// off the chain settles only a row this service was still trying to write:
+    /// one awaiting its payment has not been sold, and one already written or
+    /// released is not this event's to reopen. Answers whether it changed
+    /// anything, so the caller can count a disagreement instead of a write.
+    markMintWrittenFromChain(tokenId) {
+      return this.transact(() => {
+        const changed = s.markMintWrittenIfQueued.run(tokenId).changes > 0;
+        if (changed) s.markTokenWritten.run(tokenId);
+        return changed;
+      });
+    },
+
     /// A seed landed. Deliberately the SAME two statements markMintWritten
     /// runs, and deliberately its own name: 'written' means the identical thing
     /// on both routes, but a Clock pass that sends `seed` must never read as
@@ -1023,6 +1045,21 @@ export function queries(db) {
     /// Credits waiting for a human. The `stuckMints` / `stuckMarkOrders`
     /// pattern, applied to the one queue that lacked it.
     stuckCredits: () => s.stuckCredits.all(),
+
+    /// The CHAIN's view of a token's run, written over the mirror's.
+    ///
+    /// The Warden advances level, streak and lastDay when it accepts a
+    /// check-in, before the chain has seen it. When the chain then refuses that
+    /// credit, those three are wrong permanently and `status` and /t/<id>
+    /// overstate the token for the life of the piece. `bestRun` is deliberately
+    /// left alone: it only ever rises, on chain and here.
+    correctFromChain: (tokenId, { level, streak, lastDay }) =>
+      s.correctFromChain.run(level, streak, lastDay, tokenId),
+
+    /// How many of this token's days the mirror believes the chain holds. With
+    /// the chain's own `level` it says how many landed days the mirror has not
+    /// marked yet, which is what bounds the Clock's heal.
+    writtenCreditCount: (tokenId) => s.writtenCreditCount.get(tokenId).n,
 
     /// A Mark landed. The bit is set here rather than by the Warden, because
     /// until the chain has it the token does not really carry the Mark.

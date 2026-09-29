@@ -116,6 +116,11 @@ test("an unreadable chain drops only the entry the revert named, not the token",
   assert.deepEqual(r.dropped.map((d) => d.entry), [entry(42, 100)], "only the first entry for that id");
   assert.deepEqual(r.written, [entry(42, 101)], "the good day still lands");
   assert.deepEqual(r.healed, [], "nothing is healed on a failed read");
+  assert.equal(
+    r.dropped[0].reason,
+    "lastday-unreadable",
+    "an unreadable node is not a judgement about the entry",
+  );
 });
 
 // THE WEDGE ITSELF. Thirteen stale entries is more than maxAttempts, which is
@@ -136,6 +141,64 @@ test("more stale entries than maxAttempts no longer exhausts the loop", async ()
   assert.equal(r.healed.length, 13, "every stale row is resolved against the chain, not retried");
   assert.deepEqual(r.written, [entry(99, 101)], "and the fresh day still lands");
   assert.equal(r.dropped.length, 0);
+});
+
+// THE HEAL MUST BE ACCOUNTED FOR, not inferred from `lastDay` alone. A chunk
+// that returned attempts-exhausted left its entries unsent; a later chunk then
+// landed a LATER day for the same token, and every skipped day below the new
+// lastDay read as "already on chain". A day of the artwork was lost while the
+// mirror reported it kept.
+//
+// `healRoomOf` is how many days the chain has credited that the mirror has not
+// marked. The chain credits in ascending order, so the days it holds are the
+// TOP of the candidate list.
+test("only as many days as the chain's level accounts for are healed", async () => {
+  const onChain = new Map([[42, 300]]);
+  const writer = chainWriter({ onChain });
+  const r = await writeCheckInChunk(writer, [entry(42, 100), entry(42, 300)], {
+    lastDayOf: lastDayReader(onChain),
+    healRoomOf: async () => 1,
+  });
+
+  assert.deepEqual(r.healed, [entry(42, 300)], "the day the chain's level pays for");
+  assert.deepEqual(
+    r.dropped.map((d) => [d.entry.day, d.reason]),
+    [[100, "not-accounted-on-chain"]],
+    "the skipped day is reported, never marked written",
+  );
+});
+
+test("a chain accounting for every candidate heals every candidate", async () => {
+  const onChain = new Map([[42, 300]]);
+  const writer = chainWriter({ onChain });
+  const r = await writeCheckInChunk(writer, [entry(42, 100), entry(42, 300)], {
+    lastDayOf: lastDayReader(onChain),
+    healRoomOf: async () => 2,
+  });
+
+  assert.deepEqual(r.healed, [entry(42, 100), entry(42, 300)]);
+  assert.deepEqual(r.dropped, []);
+});
+
+// STOP AFTER AN EXHAUSTED CHUNK. Its entries were never judged, only rationed,
+// so a later chunk landing a newer day for one of those tokens is what makes
+// the skipped day unwritable and then heals it as written.
+test("an exhausted chunk stops the run's later chunks", async () => {
+  const writer = {
+    calls: [],
+    async send(_fn, args) {
+      const ids = [];
+      for (let i = 2; i < args[0].length; i += 8) ids.push(parseInt(args[0].slice(i, i + 8), 16));
+      this.calls.push(ids);
+      return { ok: false, reason: "reverted-on-simulate", errorName: "NoSuchToken", errorArgs: [String(ids[0])] };
+    },
+  };
+  const entries = [];
+  for (let id = 1; id <= 14; id += 1) entries.push(entry(id, 100));
+  const r = await writeCheckInChunk(writer, entries, { lastDayOf: async () => 0 });
+
+  assert.equal(r.stop, "attempts-exhausted", "the caller must send no further chunk");
+  assert.equal(r.dropped.filter((d) => d.reason === "attempts-exhausted").length, 2);
 });
 
 // A GENUINE CONDEMNATION still condemns. Healing must not swallow the errors
@@ -194,13 +257,16 @@ const TODAY = 20_700;
 
 /// A chain that holds `lastDay` for each token, and refuses any check-in at or
 /// below it -- which is what a landed-but-unmarked batch leaves behind.
-function chainAt(lastDays) {
+function chainAt(lastDays, levels = new Map()) {
   return {
     async getBlockNumber() { return 1n; },
     async getLogs() { return []; },
     async readContract({ functionName, args }) {
+      if (functionName === "lastWardenDay") return TODAY;
+      if (functionName === "isSunset") return false;
       if (functionName !== "viewOf") throw new Error(`unexpected read ${functionName}`);
-      return { lastDay: lastDays.get(Number(args[0])) ?? 0 };
+      const tokenId = Number(args[0]);
+      return { lastDay: lastDays.get(tokenId) ?? 0, level: levels.get(tokenId) ?? 2 };
     },
   };
 }
@@ -271,4 +337,97 @@ test("a run heals the landed day in the MIRROR and still credits the new one", a
     { day: TODAY - 1, status: "written" },
   ]);
   assert.deepEqual(q.pendingCredits(TODAY).map((r) => ({ ...r })), [], "nothing comes back tomorrow");
+});
+
+// AN UNREADABLE NODE IS NOT A VERDICT ON THE ROW. The fallback condemned the
+// entry the revert named, and `failCredit` is terminal -- so one bad minute on
+// the RPC destroyed a day the chain would have taken the next night.
+test("a lastDay the node would not answer leaves the credit queued", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  seedPaidMint(q, { tokenId: 1, toAddress: "0x" + "11".repeat(20), keyId: "k1" });
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0x" + "11".repeat(20), lastDay: TODAY - 2, mintDay: TODAY - 9 });
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  db.exec("UPDATE tokens SET status = 'written' WHERE tokenId = 1");
+  q.insertCredit(1, TODAY - 1, "sig");
+
+  const unreadable = {
+    async getBlockNumber() { return 1n; },
+    async getLogs() { return []; },
+    async readContract({ functionName }) {
+      if (functionName === "lastWardenDay") return TODAY;
+      if (functionName === "isSunset") return false;
+      throw new Error("the node would not answer viewOf");
+    },
+  };
+  const writer = {
+    sent: [],
+    address: "0xwarden",
+    formatGas: (w) => `${w} wei`,
+    async startRun() { return 0; },
+    async gasOk() { return { ok: true, gasPrice: 6_000_000n, capWei: 50_000_000n }; },
+    async send(functionName) {
+      if (functionName !== "batchCheckIn") return { ok: true, hash: "0x1" };
+      return { ok: false, reason: "reverted-on-simulate", errorName: "DayNotAdvanced", errorArgs: ["1"] };
+    },
+  };
+
+  const summary = await runClock({
+    q,
+    publicClient: unreadable,
+    writer,
+    contract: "0xcontract",
+    chainId: 84532,
+    today: TODAY,
+    log: () => {},
+    alert: () => {},
+  });
+
+  assert.deepEqual(summary.stuckCredits, [], "nothing was judged, so nothing is condemned");
+  assert.equal(
+    db.prepare("SELECT status FROM credits WHERE tokenId = 1").get().status,
+    "queued",
+    "the day goes out again on a night the node will answer",
+  );
+});
+
+// THE DAY THAT NEVER LANDED, through the whole run. The chain holds day
+// TODAY-1 for token 1 and its level pays for exactly one credit, so the older
+// queued day was never written -- and marking it written is the one outcome
+// that makes a lost day invisible.
+test("a queued day the chain's level cannot account for stays queued", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  seedPaidMint(q, { tokenId: 1, toAddress: "0x" + "11".repeat(20), keyId: "k1" });
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0x" + "11".repeat(20), lastDay: TODAY - 5, mintDay: TODAY - 5 });
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  db.exec("UPDATE tokens SET status = 'written' WHERE tokenId = 1");
+
+  q.insertCredit(1, TODAY - 3, "sig-skipped");
+  q.insertCredit(1, TODAY - 1, "sig-landed");
+
+  const lastDays = new Map([[1, TODAY - 1]]);
+  const alerts = [];
+  const summary = await runClock({
+    q,
+    publicClient: chainAt(lastDays, new Map([[1, 2]])),
+    writer: writerRefusingStale(lastDays),
+    contract: "0xcontract",
+    chainId: 84532,
+    today: TODAY,
+    log: () => {},
+    alert: (m) => alerts.push(m),
+  });
+
+  assert.deepEqual(summary.healed.map((e) => e.day), [TODAY - 1], "only the day the chain paid for");
+  assert.deepEqual(summary.stuckCredits, [], "a day nobody judged is not condemned either");
+  const rows = db.prepare("SELECT day, status FROM credits ORDER BY day").all().map((r) => ({ ...r }));
+  assert.deepEqual(rows, [
+    { day: TODAY - 3, status: "queued" },
+    { day: TODAY - 1, status: "written" },
+  ]);
+  assert.ok(
+    alerts.some((a) => a.includes("not-accounted-on-chain")),
+    `the skipped day must be reported, got: ${alerts.join(" | ")}`,
+  );
 });
