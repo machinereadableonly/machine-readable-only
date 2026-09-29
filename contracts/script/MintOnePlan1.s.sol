@@ -13,9 +13,9 @@ import {SpikeBitmaps} from "./SpikeBitmaps.sol";
 /// token on a deployed contract so its tokenURI can be read back through a
 /// real provider rather than through Foundry. Kept because that read-back is
 /// worth repeating after every redeploy. It reuses
-/// SpikeBitmaps.code(1), which encodes https://example.com/t/1#, because
-/// MRO_DOMAIN is still example.com (the real domain is undecided) and
-/// CODE_BYTES (172) matches SpikeBitmaps.BYTES.
+/// SpikeBitmaps.code(1), which encodes a placeholder-domain url: the mint only
+/// checks the code's LENGTH, and SpikeBitmaps.BYTES is the contract's
+/// CODE_BYTES. A mainnet token needs a bitmap solved against the real domain.
 ///
 ///   forge script script/MintOnePlan1.s.sol:MintOnePlan1 \
 ///     --sig "run(address)" <token-address> --rpc-url base_sepolia --broadcast

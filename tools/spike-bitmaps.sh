@@ -11,8 +11,8 @@
 # reasoning, and the same shape, as tools/soak-offline.sh.
 #
 # The solved rows are kept at tools/out/spike-rows.jsonl (gitignored) rather than
-# in a temp file that is deleted on exit. Solving 27 tokens takes about eight
-# minutes; assembling them takes a second. When assembly fails, the rows must
+# in a temp file that is deleted on exit. Solving the full set takes minutes;
+# assembling them takes a second. When assembly fails, the rows must
 # still be there, or a one-line bug costs the whole eight minutes again -- which
 # is exactly what happened the first time this ran.
 set -uo pipefail
@@ -21,7 +21,9 @@ cd "$(dirname "$0")/.."
 . "$HOME/.nvm/nvm.sh"
 
 DOMAIN=${1:-example.com}
-COUNT=${2:-27}
+# The soak mints one token per state and each needs its own bitmap, so the
+# default count is read from SoakStates rather than restated here.
+COUNT=${2:-$(sed -n 's/.*COUNT = \([0-9]*\);.*/\1/p' contracts/script/SoakStates.sol)}
 ROWS=tools/out/spike-rows.jsonl
 mkdir -p tools/out
 
