@@ -665,6 +665,10 @@ export function eyeOverlay(codeOff, shape, ink, ground, size) {
  * never been applied.
  */
 export function renderSvg(modules, want, size, state) {
+  // A short target reads `undefined` past its end and paints the rest of the
+  // code in the noise ink, which looks like a valid picture. Refuse instead.
+  if (want.length !== size * size)
+    throw new Error(`heart target is ${want.length} modules, not ${size * size}`);
   const {
     level = 0, streak = 0, years: rawYears = 0, marks = [],
     lastDay = 0, today = 0, resting = false, sunset = false,

@@ -676,3 +676,15 @@ test("the five finisher names reach the metadata in ladder order", () => {
   // them for its own listing; the on-chain metadata does not.
   for (const name of MARKS) assert.equal(name, name.toLowerCase());
 });
+
+test("renderSvg refuses a heart target that does not cover the code", () => {
+  // The target is indexed by module, so a short one reads `undefined` past its
+  // end and silently paints the rest of the code in the noise ink. Nothing in
+  // the picture says so -- the two inks are close in weight -- which is how a
+  // version-5 target survived a version raise.
+  const short = TARGET.want.slice(0, 37 * 37);
+  assert.throws(() => renderSvg(CODE.modules, short, CODE.size, { level: 1 }),
+    /heart target/i);
+  assert.throws(() => renderSvg(CODE.modules, [...TARGET.want, 0], CODE.size, { level: 1 }),
+    /heart target/i);
+});

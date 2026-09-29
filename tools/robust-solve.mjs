@@ -21,7 +21,7 @@
 // token: a fragile code, once minted, is carried for the life of the piece.
 // That asymmetry is why the gate is deliberately stricter than it needs to be.
 import { allMaskSolves, payloadFor, unpackModules } from "./qart.mjs";
-import { heartMaskBytes } from "./heart-mask.mjs";
+import { heartMaskBytes, SIZE } from "./heart-mask.mjs";
 import { renderSvg, canvasFor, finisherMark, ACHE, HUSH, BEAT, AURA, VESSEL } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -114,7 +114,9 @@ export function gateStates() {
   ];
 }
 
-const want = () => unpackModules(heartMaskBytes(), 37);
+/// The heart target the gate renders against, at the mask's own side. Exported
+/// so a test can assert it spans the whole code rather than a corner of it.
+export const gateTarget = () => unpackModules(heartMaskBytes(), SIZE);
 
 /// One gate state, rendered exactly as the gate renders it.
 ///
@@ -132,7 +134,7 @@ export function renderGateState(solve, target, state) {
 /// Does this solve decode to `expected` in every gate state at every gate size?
 /// Returns { ok, checked, failures } rather than a bare boolean, so a caller can
 /// report WHICH size and state rejected a candidate instead of just that one did.
-export function gateSolve(solve, expected, target = want()) {
+export function gateSolve(solve, expected, target = gateTarget()) {
   const failures = [];
   let checked = 0;
 
@@ -177,7 +179,7 @@ export function gateSolve(solve, expected, target = want()) {
 /// on any payload measured so far.
 export function robustSolve(payload, { onProgress } = {}) {
   const expected = payload.endsWith("#") ? payload.slice(0, -1) : payload;
-  const target = want();
+  const target = gateTarget();
   const tried = [];
 
   for (const candidate of allMaskSolves(payload)) {
