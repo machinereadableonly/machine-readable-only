@@ -14,7 +14,12 @@ import { jwkToKeyID } from "web-bot-auth";
 /// A directory response larger than this is refused unread. A JWKS is a few
 /// hundred bytes; anything near this cap is not one.
 const MAX_BODY = 64 * 1024;
+
+/// Node's `timeout` option is IDLE time, not elapsed time: a host that sends
+/// one byte a second is never idle, so it never fires. FETCH_DEADLINE_MS is the
+/// wall clock, and it is what stops a trickling host holding its slot below.
 const FETCH_TIMEOUT_MS = 3000;
+const FETCH_DEADLINE_MS = 10_000;
 
 /**
  * Expand an IPv6 literal to its 16 bytes, or null if it is not one.
@@ -167,13 +172,25 @@ export function isBlockedAddress(addr) {
  * the socket uses. There is no window between checking and connecting.
  *
  * `deps` takes `request` and `lookup` so every path here is testable with no
- * network at all.
+ * network at all, and `deadlineMs` so a test need not wait out the real one.
  */
 export function guardedFetchDirectory(url, deps = {}) {
   const doRequest = deps.request ?? httpsRequest;
   const resolver = deps.lookup ?? dnsLookup;
+  const deadlineMs = deps.deadlineMs ?? FETCH_DEADLINE_MS;
 
-  return new Promise((resolve, reject) => {
+  return new Promise((rawResolve, rawReject) => {
+    // The deadline has to be cleared on EVERY exit, including the refusals
+    // before a request exists, or a timer holds the event loop open.
+    let deadline = null;
+    const done = (fn) => (value) => {
+      if (deadline) clearTimeout(deadline);
+      deadline = null;
+      fn(value);
+    };
+    const resolve = done(rawResolve);
+    const reject = done(rawReject);
+
     let parsed;
     try {
       parsed = new URL(url);
@@ -278,6 +295,9 @@ export function guardedFetchDirectory(url, deps = {}) {
     );
     req.on("timeout", () => req.destroy(new Error("directory timed out")));
     req.on("error", reject);
+    // DESTROYED, not merely abandoned: the socket has to close, or the slot
+    // this fetch holds in makeLookup is freed while the connection lives on.
+    deadline = setTimeout(() => req.destroy(new Error("directory took too long")), deadlineMs);
     req.end();
   });
 }
@@ -403,6 +423,19 @@ const FAILURE_TTL_CEILING_MS = 600_000;
 /// reflector aimed at a third party, and a memory cost here.
 const MAX_INFLIGHT_FETCHES = 8;
 
+/// And how many of those one domain may hold. Sharing a promise per URL bounds
+/// a caller naming one host, not a caller naming eight subdomains of a host it
+/// controls -- which is the whole ceiling above, taken by one party.
+const MAX_INFLIGHT_PER_SITE = 2;
+
+/// The last two labels of a directory host, standing in for its registrable
+/// domain. There is no public suffix list here, so "a.b.co.uk" groups as
+/// "co.uk": the error is always toward grouping more hosts together, never
+/// fewer, so the ceiling cannot be escaped by adding a label.
+function siteKeyOf(url) {
+  return new URL(url).hostname.split(".").slice(-2).join(".");
+}
+
 /// Remember one directory result, evicting the oldest entry when full.
 function rememberDirectory(cache, url, entry) {
   if (cache.size >= MAX_CACHED_DIRECTORIES && !cache.has(url)) {
@@ -475,6 +508,15 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map(), inFl
         // thousand different ones. Refusing is honest here: we could not fetch.
         if (inFlight.size >= MAX_INFLIGHT_FETCHES) {
           throw new DirectoryUnavailableError(url, new Error("too many directory fetches in flight"));
+        }
+        const site = siteKeyOf(url);
+        let sameSite = 0;
+        for (const held of inFlight.keys()) if (siteKeyOf(held) === site) sameSite++;
+        if (sameSite >= MAX_INFLIGHT_PER_SITE) {
+          throw new DirectoryUnavailableError(
+            url,
+            new Error("too many directory fetches in flight for this domain")
+          );
         }
         pending = fetchDirectory(url).finally(() => inFlight.delete(url));
         inFlight.set(url, pending);
