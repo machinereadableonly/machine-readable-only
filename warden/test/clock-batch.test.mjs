@@ -95,8 +95,10 @@ test("several bad ids are dropped one refusal at a time", async () => {
   const r = await writeCheckInChunk(writer, entries);
 
   assert.deepEqual(r.written.map((e) => e.tokenId), [1, 2]);
+  // Token 30's refusal is a DayNotAdvanced with no readable lastDay, which
+  // comes out of the chunk without being condemned: the run leaves it queued.
   assert.deepEqual(r.dropped.map((d) => [d.entry.tokenId, d.reason]).sort(),
-    [[10, "NoSuchToken"], [20, "Resting"], [30, "DayNotAdvanced"]].sort());
+    [[10, "NoSuchToken"], [20, "Resting"], [30, "lastday-unreadable"]].sort());
   assert.equal(r.aborted, null);
 });
 

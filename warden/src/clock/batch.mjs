@@ -92,12 +92,16 @@ async function healDayNotAdvanced(entries, tokenId, lastDayOf, healRoomOf) {
 
   const lastDay = lastDayOf ? await lastDayOf(Number(tokenId)) : null;
   if (lastDay === null || lastDay === undefined) {
-    // Could not ask. Condemn the first entry for that id and keep the rest, so
-    // one unreadable moment cannot cost the token its other days.
+    // Could not ask. The contract reverts on the FIRST offending entry in array
+    // order, so that is the only one this refusal is about: it comes out of the
+    // chunk and the token keeps its other days. It is NOT condemned -- an
+    // unreadable node says nothing about the row, and the caller's condemnation
+    // is terminal, so one bad minute on the RPC would destroy a day the chain
+    // would have taken the next night.
     const [first, ...rest] = mine;
     return {
       healed: [],
-      dropped: first ? [{ entry: first, reason: "DayNotAdvanced" }] : [],
+      dropped: first ? [{ entry: first, reason: "lastday-unreadable" }] : [],
       remaining: [...others, ...rest],
     };
   }

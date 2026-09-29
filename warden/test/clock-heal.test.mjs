@@ -116,6 +116,11 @@ test("an unreadable chain drops only the entry the revert named, not the token",
   assert.deepEqual(r.dropped.map((d) => d.entry), [entry(42, 100)], "only the first entry for that id");
   assert.deepEqual(r.written, [entry(42, 101)], "the good day still lands");
   assert.deepEqual(r.healed, [], "nothing is healed on a failed read");
+  assert.equal(
+    r.dropped[0].reason,
+    "lastday-unreadable",
+    "an unreadable node is not a judgement about the entry",
+  );
 });
 
 // THE WEDGE ITSELF. Thirteen stale entries is more than maxAttempts, which is
@@ -332,6 +337,58 @@ test("a run heals the landed day in the MIRROR and still credits the new one", a
     { day: TODAY - 1, status: "written" },
   ]);
   assert.deepEqual(q.pendingCredits(TODAY).map((r) => ({ ...r })), [], "nothing comes back tomorrow");
+});
+
+// AN UNREADABLE NODE IS NOT A VERDICT ON THE ROW. The fallback condemned the
+// entry the revert named, and `failCredit` is terminal -- so one bad minute on
+// the RPC destroyed a day the chain would have taken the next night.
+test("a lastDay the node would not answer leaves the credit queued", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  seedPaidMint(q, { tokenId: 1, toAddress: "0x" + "11".repeat(20), keyId: "k1" });
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0x" + "11".repeat(20), lastDay: TODAY - 2, mintDay: TODAY - 9 });
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  db.exec("UPDATE tokens SET status = 'written' WHERE tokenId = 1");
+  q.insertCredit(1, TODAY - 1, "sig");
+
+  const unreadable = {
+    async getBlockNumber() { return 1n; },
+    async getLogs() { return []; },
+    async readContract({ functionName }) {
+      if (functionName === "lastWardenDay") return TODAY;
+      if (functionName === "isSunset") return false;
+      throw new Error("the node would not answer viewOf");
+    },
+  };
+  const writer = {
+    sent: [],
+    address: "0xwarden",
+    formatGas: (w) => `${w} wei`,
+    async startRun() { return 0; },
+    async gasOk() { return { ok: true, gasPrice: 6_000_000n, capWei: 50_000_000n }; },
+    async send(functionName) {
+      if (functionName !== "batchCheckIn") return { ok: true, hash: "0x1" };
+      return { ok: false, reason: "reverted-on-simulate", errorName: "DayNotAdvanced", errorArgs: ["1"] };
+    },
+  };
+
+  const summary = await runClock({
+    q,
+    publicClient: unreadable,
+    writer,
+    contract: "0xcontract",
+    chainId: 84532,
+    today: TODAY,
+    log: () => {},
+    alert: () => {},
+  });
+
+  assert.deepEqual(summary.stuckCredits, [], "nothing was judged, so nothing is condemned");
+  assert.equal(
+    db.prepare("SELECT status FROM credits WHERE tokenId = 1").get().status,
+    "queued",
+    "the day goes out again on a night the node will answer",
+  );
 });
 
 // THE DAY THAT NEVER LANDED, through the whole run. The chain holds day

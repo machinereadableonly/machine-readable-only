@@ -47,7 +47,7 @@ export const STALE_AFTER_RUNS = 3;
 
 /// Drop reasons that are NOT a condemnation: the chain never judged these
 /// entries, so the rows stay queued for a run that can offer them.
-const STAYS_QUEUED = new Set(["attempts-exhausted", "not-accounted-on-chain"]);
+const STAYS_QUEUED = new Set(["attempts-exhausted", "not-accounted-on-chain", "lastday-unreadable"]);
 
 /**
  * Run the Clock once.
