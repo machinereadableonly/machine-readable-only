@@ -4,10 +4,9 @@
  * THE PROBLEM THIS ANSWERS. `@x402/mcp` reports a settlement that threw exactly
  * as it reports one the facilitator declined, and fires no hook for either. A
  * throw is also what a timeout or a dropped response looks like -- and by that
- * point the EIP-3009 transfer may already be mined. Until 2026-09-18 the Warden
- * read both as failure and deleted the reservation, so an agent could be
- * debited up to $1,250.00 and hold nothing, its authorisation spent, with one
- * log line as the only trace.
+ * point the EIP-3009 transfer may already be mined. Reading both as failure
+ * and deleting the reservation debits an agent up to $1,250.00 for nothing,
+ * its authorisation spent, with one log line as the only trace.
  *
  * The gateway HOLDS such a row in 'payment-unresolved' instead, carrying
  * everything the chain has to be shown. This is the other half.
