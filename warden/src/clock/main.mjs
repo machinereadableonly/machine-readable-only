@@ -152,7 +152,8 @@ async function main() {
       // would read as two sales. These are payments whose outcome was unknown
       // and now is not -- and any left unresolved fail the run.
       `${summary.resolvedPaid.length} held payments found paid, ` +
-      `${summary.resolvedUnpaid.length} released, ${summary.unresolvedPayments.length} still unresolved`
+      `${summary.resolvedUnpaid.length} released, ${summary.deferredPayments.length} deferred, ` +
+      `${summary.unresolvedPayments.length} still unresolved`
   );
   db.close();
 

@@ -293,6 +293,9 @@ export async function runClock({
     /// never happened and has been released.
     resolvedPaid: [],
     resolvedUnpaid: [],
+    /// No transfer found yet, but the authorisation is still spendable: held,
+    /// asked again next run, and not a failure.
+    deferredPayments: [],
     /// And the ones still in doubt. They fail the run every night until a
     /// human settles them, because the defect these replaced was silent.
     unresolvedPayments: [],

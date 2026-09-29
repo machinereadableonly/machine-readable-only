@@ -17,9 +17,10 @@ const FLOOR = DEPLOY_BLOCK[84532];
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
+import { CODE_BYTES } from "../tools/code-bytes.mjs";
 
 const TODAY = 20_700;
-const QR = "ab".repeat(172);
+const QR = "ab".repeat(CODE_BYTES);
 
 function mirror() {
   const db = openDb(":memory:");

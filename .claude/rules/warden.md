@@ -10,21 +10,24 @@ Loaded only when working under `warden/` or `client/`.
 
 ## Architecture invariants
 
-- **The Warden holds NO private key.** Every chain write is the Clock's. The
-  signer is separated on chain and proven in both directions.
+- **The Warden never signs.** Every chain write is the Clock's, and the signer
+  is separated on chain. But both run as the same user from one shared env
+  file, and the Warden only deletes `CLOCK_PRIVATE_KEY` at startup: defence in
+  depth, not a process boundary.
 - **`BASE_RPC_URL` is load-bearing for EVERY write**, not just the rebind
   re-check, because the gates are read live from the chain.
 - **A gate is read from the CHAIN, never from the mirror.** WalletCap, Resting,
   notSunset, whenNotPaused and SupplyCap. Cache a gate only in the direction the
   contract makes one-way; an unreadable RPC **REFUSES rather than admits**; a
-  money gate is re-read AFTER settlement. Five gates have been found this way,
+  money gate is re-read after VERIFY and before settle, so a state change
+  between then and the Clock's write can still refuse a paid row. Five gates have been found this way,
   the fifth two review waves after a document declared the set complete -- so
   read the contract's modifiers, not the design doc.
 - **The Warden's rebind re-check is a SECURITY CONTROL**: it must read the
   chain, never its own database.
-- **Read the contract's `today()`, never the box's clock.** The check-in window
-  is one UTC day wide on chain (`lastDay < day <= today()`), so a second run in
-  a UTC day gets `FutureDay`.
+- **Read the contract's `today()`, never the box's clock.** The chain accepts
+  `lastDay < day <= today()` with NO lower floor, so a day in the future gets
+  `FutureDay` and a late one is still accepted.
 
 ## The database
 
@@ -47,10 +50,12 @@ Loaded only when working under `warden/` or `client/`.
   mined -- into the same `createSettlementFailedResult`, with the same fallback
   message. The difference exists only at the call, so `src/pay/x402.mjs` wraps
   `settlePayment` to see it, and refuses a resource server it cannot wrap.
-  A declined payment releases its reservation; an unknown one is HELD as
-  `payment-unresolved` with the payer and token contract, which the Clock then
-  resolves by reading EIP-3009 `authorizationState(payer, nonce)`. Never
-  release on silence, and never ask that question at the moment of failure --
+  Declined means no transaction hash AND a pre-broadcast `errorReason`
+  (`isDeclined` in `x402.mjs`); anything else is HELD as `payment-unresolved`,
+  and so is a reservation that expires. The Clock decides a held row from an
+  `AuthorizationUsed` log plus a matching `Transfer(payer, payTo, amount)` in
+  the same transaction -- never `authorizationState`, which is also true after
+  a cancel -- and releases only after `validBefore`. Never release on silence, and never ask that question at the moment of failure --
   a public RPC is not read-after-write consistent.
 - **A refusal must carry `isError`**, or x402 settles it anyway and the agent
   pays for nothing.
