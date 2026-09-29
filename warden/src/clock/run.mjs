@@ -641,12 +641,13 @@ export async function runClock({
       // TERMINAL, not "stays queued". A credit the chain condemned will be
       // condemned again every night for the same reason, and re-offering it
       // forever is how a real problem becomes a line somebody learns to scroll
-      // past. `attempts-exhausted` is the exception: that entry was never
-      // judged, only rationed, so it stays queued for tomorrow.
-      // NOT EVERY DROP IS A JUDGEMENT. These two were never offered to the
-      // chain at all -- rationed by the attempt budget, or a day the chain's
-      // level does not account for -- so condemning them would report a lost
-      // day as decided, and marking them written would hide it entirely.
+      // past.
+      //
+      // NOT EVERY DROP IS A JUDGEMENT, and the ones in STAYS_QUEUED are not:
+      // an entry the attempt budget rationed, a day the chain's level does not
+      // account for, and one whose lastDay the node would not answer were none
+      // of them offered to the chain. Condemning those reports a lost day as
+      // decided, and marking them written hides it entirely.
       if (STAYS_QUEUED.has(drop.reason)) {
         alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was not written (${drop.reason}) and stays queued`);
         continue;
@@ -761,17 +762,11 @@ export async function runClock({
     }
   }
 
-  // 6. WHAT HAS NOT MOVED IN THREE RUNS. 4.L3: STALE_AFTER_RUNS was exported
-  //    and read by nothing, and the spec's three-run alert did not exist -- so
-  //    a row that quietly failed every night produced one ordinary log line a
-  //    night and no signal at all. Counted from what the mirror already stores
-  //    (a credit's day, a reservation's timestamp), so there is no run counter
-  //    to keep in step and no migration.
-  // 6a. EVERY CONDEMNED CREDIT, NOT ONLY TONIGHT'S. `failCredit` is terminal
-  //     and nothing read the table afterwards, so a credit the chain refused
-  //     failed the run once and then let every later night exit 0 -- with a day
-  //     of the artwork lost and nobody told again. Read from the mirror, so it
-  //     keeps failing until a human clears the row.
+  // 5b. EVERY CONDEMNED CREDIT, NOT ONLY TONIGHT'S. `failCredit` is terminal and
+  //    nothing read the table afterwards, so a credit the chain refused failed
+  //    the run once and then let every later night exit 0 -- with a day of the
+  //    artwork lost and nobody told again. Read from the mirror, so it keeps
+  //    failing until a human clears the row.
   const tonight = new Map(summary.stuckCredits.map((d) => [`${d.entry.tokenId}:${d.entry.day}`, d.reason]));
   summary.stuckCredits = q.stuckCredits().map((row) => ({
     entry: { tokenId: row.tokenId, day: row.day },
@@ -782,6 +777,12 @@ export async function runClock({
     alert(`clock: ${earlier} credit(s) condemned on an earlier run are still waiting for a human`);
   }
 
+  // 6. WHAT HAS NOT MOVED IN THREE RUNS. 4.L3: STALE_AFTER_RUNS was exported
+  //    and read by nothing, and the spec's three-run alert did not exist -- so
+  //    a row that quietly failed every night produced one ordinary log line a
+  //    night and no signal at all. Counted from what the mirror already stores
+  //    (a credit's day, a reservation's timestamp), so there is no run counter
+  //    to keep in step and no migration.
   const stale = q.staleRows(today, now(), STALE_AFTER_RUNS);
   summary.stale = stale;
   const staleTotal = stale.credits.length + stale.mints.length + stale.markOrders.length;
@@ -813,6 +814,7 @@ export async function runClock({
   //     back: one row queued before the pause reverts EnforcedPause on the
   //     first write and the operator falls silent on chain. Every other abort
   //     is a reason the heartbeat would fail for too.
+  //
   //     A heartbeat is a WRITE, so a gas stop skips it like any other.
   if (!summary.gasStopped && (!summary.aborted || summary.aborted === "EnforcedPause")) {
     // A HEAL IS NOT A WRITE. It is the discovery that a day landed on some
