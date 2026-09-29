@@ -323,11 +323,24 @@ export async function keyIdOf(jwk) {
  * Proof of possession is checked by the CALLER before this runs: the route
  * verifies a signature over a server nonce. This function stores what has
  * already been proved.
+ *
+ * ONLY THE THREE MEMBERS THE THUMBPRINT IS MADE OF ARE STORED. The whole
+ * submitted object was kept verbatim and rendered into the public directory,
+ * so a caller could pad one key to the body cap and make every render of the
+ * directory megabytes long. Rebuilding it here also means the door only ever
+ * serves a key of the one type it accepts.
  */
 export async function registerKey(q, jwk, now = Date.now(), directory = null) {
-  const keyId = await keyIdOf(jwk);
+  if (!jwk || jwk.kty !== "OKP" || jwk.crv !== "Ed25519" || typeof jwk.x !== "string") {
+    return { ok: false, reason: "invalid-jwk" };
+  }
+  const stored = { kty: jwk.kty, crv: jwk.crv, x: jwk.x };
+  // Derived from what is STORED, not from what arrived: RFC 7638 hashes these
+  // three members alone, so the two agree -- and if they ever stopped, the id
+  // would have to name the key the directory actually serves.
+  const keyId = await keyIdOf(stored);
   if (keyId === null) return { ok: false, reason: "invalid-jwk" };
-  q.insertKey({ keyId, jwk, directory, registeredAt: now });
+  q.insertKey({ keyId, jwk: stored, directory, registeredAt: now });
   return { ok: true, keyId };
 }
 

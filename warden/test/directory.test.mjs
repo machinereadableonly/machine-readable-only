@@ -15,6 +15,36 @@ test("a registered key can be looked up by its thumbprint", async () => {
   assert.ok(q.getKey(r.keyId));
 });
 
+test("only the three members the thumbprint is made of are stored", async () => {
+  // Everything else a caller sends was kept verbatim and served from the
+  // public directory, so padding one key bloated every render of it.
+  const q = queries(openDb(":memory:"));
+  const padded = { ...JWK, kid: "B".repeat(512), junk: "A".repeat(32 * 1024), use: "sig" };
+  const r = await registerKey(q, padded, 1000);
+  assert.equal(r.ok, true);
+  assert.deepEqual(JSON.parse(q.getKey(r.keyId).jwk), { kty: "OKP", crv: "Ed25519", x: JWK.x });
+
+  // The id is the RFC 7638 thumbprint, which is made of those three members
+  // alone -- so trimming cannot move it.
+  assert.equal(r.keyId, await jwkToKeyID(JWK, async (b) => crypto.subtle.digest("SHA-256", b),
+    (u) => Buffer.from(u).toString("base64url")));
+  assert.equal(renderDirectory(q).includes("A".repeat(100)), false);
+});
+
+test("a key that is not an Ed25519 OKP key is refused", async () => {
+  const q = queries(openDb(":memory:"));
+  for (const jwk of [
+    { kty: "EC", crv: "P-256", x: JWK.x, y: JWK.x },
+    { kty: "OKP", crv: "X25519", x: JWK.x },
+    { kty: "OKP", crv: "Ed25519" },
+  ]) {
+    const r = await registerKey(q, jwk, 1000);
+    assert.equal(r.ok, false, JSON.stringify(jwk));
+    assert.equal(r.reason, "invalid-jwk");
+  }
+  assert.equal(q.allKeys().length, 0);
+});
+
 test("the directory renders every registered key as a JWKS", async () => {
   const q = queries(openDb(":memory:"));
   await registerKey(q, JWK, 1000);
