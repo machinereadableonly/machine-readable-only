@@ -116,6 +116,64 @@ test("a one-block range is still read", async () => {
   assert.deepEqual(pub.windows, [[42n, 42n]]);
 });
 
+// THE CAP MOVES WITHOUT NOTICE. It was 10,000 blocks in August and 1,000 by
+// late September, and reconcile died every night for three nights while every
+// test passed. A run that cannot narrow its own page fails for a constant that
+// was right when it shipped.
+test("a node that refuses the page width is answered by halving it, not by failing", async () => {
+  const windows = [];
+  const pub = {
+    async getLogs({ fromBlock, toBlock }) {
+      windows.push([fromBlock, toBlock]);
+      if (toBlock - fromBlock + 1n > 250n) {
+        const err = new Error("RPC Request failed.");
+        err.details = "eth_getLogs is limited to a 250 range";
+        throw err;
+      }
+      return [];
+    },
+  };
+  const { pages } = await readEvents(pub, { contract: "0xabc", fromBlock: 0n, toBlock: 999n });
+
+  assert.equal(pages, 4, "1,000 blocks in 250-block pages");
+  for (const [a, b] of windows.slice(-4)) {
+    assert.ok(b - a + 1n <= 250n, `window ${a}..${b} is still wider than the node allows`);
+  }
+});
+
+test("a failure that is not about the range is not answered by halving", async () => {
+  const pub = {
+    async getLogs() {
+      const err = new Error("RPC Request failed.");
+      err.details = "execution timeout";
+      throw err;
+    },
+  };
+  await assert.rejects(() => readEvents(pub, { contract: "0xabc", fromBlock: 0n, toBlock: 999n }));
+});
+
+// APPLIED PER PAGE. Holding the whole window until the last page meant one
+// failed page threw away the night's reading, so a backlog grew every night
+// and success became less likely rather than more.
+test("each page's events are handed over as it is read, not after the last one", async () => {
+  const pub = {
+    async getLogs({ fromBlock }) {
+      if (fromBlock > 1_000n) throw new Error("the third page is where the night ends");
+      return [];
+    },
+  };
+  const handed = [];
+  await assert.rejects(() =>
+    readEvents(pub, {
+      contract: "0xabc",
+      fromBlock: 0n,
+      toBlock: 2_999n,
+      onEvents: (_events, { to }) => handed.push(to),
+    })
+  );
+  assert.deepEqual(handed, [999n, 1_999n], "the two pages that were read are kept");
+});
+
 test("the Base Sepolia deploy block is recorded, so reconcile floors instead of using a rolling window", () => {
   // THIS ONE IS DELIBERATELY A LITERAL. Everywhere else the floor is derived,
   // but something has to fail when a redeploy happens and nobody updates it:

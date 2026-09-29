@@ -125,13 +125,18 @@ async function main() {
     contract,
     chainId,
     today,
-    lastReconciledBlock: readCursor(CURSOR),
+    lastReconciledBlock: readCursor(CURSOR, { chainId, contract, log: console.error }),
+    // Saved as each page is applied, so a night that fails half way keeps what
+    // it read instead of re-reading it tomorrow on top of a longer backlog.
+    saveCursor: (block) => writeCursor(CURSOR, block, { chainId, contract }),
   });
 
   // The cursor moves ONLY on a reconcile that actually completed -- see
-  // nextCursor, which owns that rule and is tested on its own.
+  // nextCursor, which owns that rule and is tested on its own. The pages above
+  // have usually written it already; this is what moves it on a night with no
+  // page to read.
   const advanceTo = nextCursor(summary);
-  if (advanceTo !== null) writeCursor(CURSOR, advanceTo);
+  if (advanceTo !== null) writeCursor(CURSOR, advanceTo, { chainId, contract });
 
   console.log(
     `clock: run finished in ${Date.now() - started}ms -- ` +

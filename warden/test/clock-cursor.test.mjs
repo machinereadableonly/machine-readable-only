@@ -10,7 +10,7 @@
 // They now live in src/clock/cursor.mjs as pure functions main.mjs imports.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -114,6 +114,75 @@ test("writeCursor creates the directory it needs", () => {
     const path = join(dir, "nested", "deeper", "cursor");
     writeCursor(path, 42n);
     assert.equal(readCursor(path), 42n);
+  } finally {
+    cleanup();
+  }
+});
+
+// THE CURSOR NAMES ITS DEPLOYMENT. A block number alone means nothing once the
+// contract is redeployed: adopt-deployment.sh rewrites the address and the
+// floor and leaves the cursor file untouched, so the old number would send
+// reconcile past the new contract's whole history.
+const HERE = { chainId: 84532, contract: "0xAAaa" };
+const ELSEWHERE = { chainId: 84532, contract: "0xbbbb" };
+
+test("a cursor written with its contract and chain is read back for that pair", () => {
+  const { dir, cleanup } = tempDir();
+  try {
+    const path = join(dir, "cursor");
+    writeCursor(path, 47_321_700n, HERE);
+    assert.equal(readCursor(path, HERE), 47_321_700n);
+  } finally {
+    cleanup();
+  }
+});
+
+test("a cursor written for another contract is ignored, not obeyed", () => {
+  const { dir, cleanup } = tempDir();
+  try {
+    const path = join(dir, "cursor");
+    writeCursor(path, 47_321_700n, ELSEWHERE);
+    assert.equal(readCursor(path, HERE), null, "reconcile restarts from the deploy floor");
+  } finally {
+    cleanup();
+  }
+});
+
+test("a cursor written on another chain is ignored too", () => {
+  const { dir, cleanup } = tempDir();
+  try {
+    const path = join(dir, "cursor");
+    writeCursor(path, 47_321_700n, { ...HERE, chainId: 8453 });
+    assert.equal(readCursor(path, HERE), null);
+  } finally {
+    cleanup();
+  }
+});
+
+// The live box holds a bare number written by every version before this one.
+// It is the cursor for the contract that is configured now, because that is the
+// only contract it can have been written for.
+test("the bare number the live box holds is still read, as this contract's block", () => {
+  const { dir, cleanup } = tempDir();
+  try {
+    const path = join(dir, "cursor");
+    writeFileSync(path, "47321628\n");
+    assert.equal(readCursor(path, HERE), 47_321_628n);
+  } finally {
+    cleanup();
+  }
+});
+
+// A HALF-WRITTEN CURSOR IS A CORRUPT ONE, and the run that reads it stops.
+// Writing in place made that reachable from any kill during the write.
+test("the cursor is put in place by rename, leaving no partial file behind", () => {
+  const { dir, cleanup } = tempDir();
+  try {
+    const path = join(dir, "cursor");
+    writeCursor(path, 1n, HERE);
+    writeCursor(path, 2n, HERE);
+    assert.equal(readCursor(path, HERE), 2n);
+    assert.equal(existsSync(`${path}.tmp`), false, "the temporary file is not left lying about");
   } finally {
     cleanup();
   }

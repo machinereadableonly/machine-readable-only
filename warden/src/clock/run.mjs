@@ -216,6 +216,9 @@ export async function runClock({
   chainId,
   today,
   lastReconciledBlock = null,
+  // Persists the cursor as reconcile finishes each page, so a night that fails
+  // half way keeps what it read. main.mjs owns where that is written.
+  saveCursor = () => {},
   chunkSize = CHECKIN_CHUNK,
   log = console.log,
   alert = console.error,
@@ -813,7 +816,7 @@ export async function runClock({
 
   // 7. RECONCILE. Last, so it sees this run's own writes as well as whatever
   //    the token owners did during the day.
-  summary.reconciled = await reconcile({ q, publicClient, contract, chainId, lastReconciledBlock, log });
+  summary.reconciled = await reconcile({ q, publicClient, contract, chainId, lastReconciledBlock, log, saveCursor });
 
   // 4.L10. `skipped` IS A DIVERGENCE SIGNAL, not a statistic. Every skip is an
   // event the CHAIN emitted about a token this mirror has never heard of -- a
@@ -982,7 +985,9 @@ function isRunLevel(result) {
  * caller persisted last time; passing it makes the window the gap since then
  * rather than the whole history, which matters after an outage.
  */
-export async function reconcile({ q, publicClient, contract, chainId, lastReconciledBlock, log = () => {} }) {
+export async function reconcile({
+  q, publicClient, contract, chainId, lastReconciledBlock, log = () => {}, saveCursor = () => {},
+}) {
   // 15.6. CONFIRMATION DEPTH. This used to read to the bare head and apply
   // one-way state from it -- `setResting` has no clearing statement and
   // `markMintWritten` removes the row from pendingMints permanently, so a log
@@ -998,21 +1003,39 @@ export async function reconcile({ q, publicClient, contract, chainId, lastReconc
   if (floor === undefined) {
     throw new Error(`no deploy block recorded for chain ${chainId}: reconcile would guess at its own history`);
   }
-  const from = lastReconciledBlock === null ? floor : BigInt(lastReconciledBlock) + 1n;
+  // CLAMPED TO THE FLOOR. A cursor below the deploy block -- a hand-edited
+  // file, or one left by a contract that came before this one -- would page
+  // through blocks this contract did not exist in, which is slow rather than
+  // wrong; one ABOVE the head is the dangerous direction and is handled below.
+  const asked = lastReconciledBlock === null ? floor : BigInt(lastReconciledBlock) + 1n;
+  const from = asked < floor ? floor : asked;
   if (from > head) return { from, to: head, pages: 0, applied: null };
 
-  const { events, pages } = await readEvents(publicClient, {
+  // APPLIED AND SAVED PER PAGE. Reading the whole window before applying any of
+  // it meant one failed page threw away the night's reading and left the cursor
+  // where it was -- so a backlog grew every night and success became less
+  // likely, not more. A day is about 44 pages.
+  const applied = {};
+  let reached = null;
+  const { pages } = await readEvents(publicClient, {
     contract,
     fromBlock: from,
     toBlock: head,
     span: MAX_LOG_SPAN,
+    log,
+    onEvents: (events, { to: pageEnd }) => {
+      for (const [name, n] of Object.entries(applyEvents(q, events, { log }))) {
+        applied[name] = (applied[name] ?? 0) + n;
+      }
+      reached = pageEnd;
+      saveCursor(pageEnd);
+    },
     onPage: ({ from: a, to: b, found }) => {
       if (found > 0) log(`clock: reconcile ${a}..${b}: ${found} logs`);
     },
   });
-  const applied = applyEvents(q, events, { log });
   log(`clock: reconciled ${from}..${head} in ${pages} page${pages === 1 ? "" : "s"}: ${JSON.stringify(applied)}`);
-  return { from, to: head, pages, applied };
+  return { from, to: reached ?? head, pages, applied };
 }
 
 export { packIds };

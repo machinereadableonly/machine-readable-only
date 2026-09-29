@@ -724,7 +724,10 @@ test("CONTROL: a fresh queue raises no staleness alert", async () => {
 // load-balanced RPC and an irreversible read.
 test("reconcile trails the head, so a lagging replica cannot cost blocks", async () => {
   const { db, q } = mirror();
-  const HEAD = 46_200_000n;
+  // DERIVED FROM THE FLOOR, like every other block number here: reconcile
+  // clamps to the deploy block, so a literal head from a superseded deployment
+  // reads as "nothing to do" rather than as the case under test.
+  const HEAD = FLOOR + 46_200n;
   const asked = [];
   const laggingChain = {
     async getBlockNumber() { return HEAD; },
@@ -759,7 +762,7 @@ test("reconcile trails the head, so a lagging replica cannot cost blocks", async
 // that runs backwards.
 test("a head that has not advanced asks the node for nothing", async () => {
   const { db, q } = mirror();
-  const HEAD = 46_200_000n;
+  const HEAD = FLOOR + 46_200n;
   const asked = [];
   const stalled = {
     async getBlockNumber() { return HEAD; },
@@ -785,7 +788,7 @@ test("a head that has not advanced asks the node for nothing", async () => {
 // must not re-read from a lower point and call that progress.
 test("a head that moves backwards between runs does not drag the cursor back", async () => {
   const { db, q } = mirror();
-  let head = 46_200_000n;
+  let head = FLOOR + 46_200n;
   const flapping = {
     async getBlockNumber() { return head; },
     async getLogs() { return []; },
@@ -794,10 +797,10 @@ test("a head that moves backwards between runs does not drag the cursor back", a
   const first = await runClock({
     ...baseArgs(q), publicClient: flapping, writer: okWriter(), lastReconciledBlock: head - 100n,
   });
-  assert.equal(first.reconciled.to, 46_200_000n - 12n);
+  assert.equal(first.reconciled.to, FLOOR + 46_200n - 12n);
 
   // The next call lands on a replica 50 blocks behind.
-  head = 46_199_950n;
+  head = FLOOR + 46_150n;
   const second = await runClock({
     ...baseArgs(q), publicClient: flapping, writer: okWriter(), lastReconciledBlock: first.reconciled.to,
   });
@@ -1052,6 +1055,53 @@ test("a chain that cannot be read sends no heartbeat and does not stop the run",
   assert.equal(summary.heartbeat, undefined);
   assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 0);
   assert.ok(summary.reconciled, "and the run still reconciled");
+});
+
+// A CURSOR CAN OUTLIVE ITS CONTRACT. adopt-deployment.sh rewrites the address
+// and the deploy floor and leaves the cursor file alone, so a cursor below the
+// floor would page hundreds of thousands of blocks this contract never existed
+// in, every night.
+test("a cursor below the deploy block starts at the floor, not below it", async () => {
+  const { q } = mirror();
+  const asked = [];
+  const chain = {
+    async getBlockNumber() { return FLOOR + 100n; },
+    async getLogs({ fromBlock, toBlock }) { asked.push([fromBlock, toBlock]); return []; },
+  };
+  await runClock({
+    ...baseArgs(q),
+    publicClient: chain,
+    writer: okWriter(),
+    lastReconciledBlock: FLOOR - 100_000n,
+  });
+
+  assert.equal(asked.length, 1);
+  assert.equal(asked[0][0], FLOOR, "the first window must start at the contract's own first block");
+});
+
+// PER PAGE, NOT PER NIGHT. One failed page used to throw away everything the
+// run had read, so the backlog grew every night and success became less likely.
+test("the cursor is saved as each page is applied, and survives a page that fails", async () => {
+  const { q } = mirror();
+  const saved = [];
+  const chain = {
+    async getBlockNumber() { return FLOOR + 2_500n; },
+    async getLogs({ fromBlock }) {
+      if (fromBlock >= FLOOR + 2_000n) throw new Error("the node gave up on the third page");
+      return [];
+    },
+  };
+
+  await assert.rejects(() =>
+    runClock({
+      ...baseArgs(q),
+      publicClient: chain,
+      writer: okWriter(),
+      saveCursor: (block) => saved.push(block),
+    })
+  );
+
+  assert.deepEqual(saved, [FLOOR + 999n, FLOOR + 1_999n], "the two pages that were read are kept");
 });
 
 // THE RUN'S OWN CHUNK LOOP MUST STOP. Proving `stop` in writeCheckInChunk is

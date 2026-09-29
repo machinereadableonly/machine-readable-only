@@ -59,23 +59,56 @@ const MAX_MARK_ID = 15;
 const MIN_FINISHER_MARK_ID = 11;
 
 /**
+ * Does this failure mean the node refused the WIDTH of the page?
+ *
+ * Read off the node's own words, in the field viem puts them in. The cap moves
+ * without notice -- 10,000 blocks when measured in August, 1,000 on Base
+ * Sepolia by late September, 2,000 on mainnet -- and a run that cannot narrow
+ * its page fails every night with a constant that was right when it shipped.
+ *
+ * `message` is deliberately NOT read: viem puts the request url in it, and this
+ * decision is made in a process that logs what it decides.
+ */
+function refusedTheRange(err) {
+  const said = `${err?.details ?? ""} ${err?.shortMessage ?? ""}`;
+  return /\brange\b|too many results|block limit/i.test(said);
+}
+
+/**
  * Read every log this contract emitted in a block range, one page at a time.
  *
  * `onPage` is called per page so a long catch-up reports progress rather than
  * going quiet for minutes.
+ *
+ * `onEvents(events, { from, to })` is called with each page's own events as
+ * they arrive, and switches the accumulating array off. A caller that applies
+ * per page keeps the night's progress when a later page fails -- and does not
+ * hold a whole backlog in the memory of a unit with MemoryMax=1G.
  */
-export async function readEvents(pub, { contract, fromBlock, toBlock, span = MAX_LOG_SPAN, onPage = () => {} }) {
+export async function readEvents(
+  pub,
+  { contract, fromBlock, toBlock, span = MAX_LOG_SPAN, onPage = () => {}, onEvents = null, log = () => {} }
+) {
   if (span > MAX_LOG_SPAN) {
     throw new Error(`log span ${span} exceeds the ${MAX_LOG_SPAN}-block limit the RPC enforces`);
   }
   const events = [];
   let pages = 0;
-  for (let start = BigInt(fromBlock); start <= BigInt(toBlock); start += span) {
+  let width = BigInt(span);
+  for (let start = BigInt(fromBlock); start <= BigInt(toBlock); ) {
     // Inclusive on both ends, so the window is span-1 wide, not span. Off by
     // one here re-reads a block per page, which is harmless, or skips one,
     // which loses whatever it held.
-    const end = start + span - 1n > BigInt(toBlock) ? BigInt(toBlock) : start + span - 1n;
-    const logs = await pub.getLogs({ address: contract, fromBlock: start, toBlock: end });
+    const end = start + width - 1n > BigInt(toBlock) ? BigInt(toBlock) : start + width - 1n;
+    let logs;
+    try {
+      logs = await pub.getLogs({ address: contract, fromBlock: start, toBlock: end });
+    } catch (err) {
+      if (width <= 1n || !refusedTheRange(err)) throw err;
+      width = width / 2n > 0n ? width / 2n : 1n;
+      log(`clock: the node refused a ${end - start + 1n}-block page; narrowing to ${width}`);
+      continue;
+    }
     // 15.11. The `address` above is a NODE-SIDE filter, and viem's
     // parseEventLogs does not re-apply it -- read at source in viem 2.56.0, it
     // matches on topic0, event name and args only, and the string "address"
@@ -84,9 +117,12 @@ export async function readEvents(pub, { contract, fromBlock, toBlock, span = MAX
     // ERC-721 emits a topic-compatible Transfer, so this is not a hypothetical
     // shape; it is the most common event on the chain.
     const ours = logs.filter((l) => l.address?.toLowerCase() === contract.toLowerCase());
-    events.push(...parseEventLogs({ abi: MRO_ABI, logs: ours }));
+    const page = parseEventLogs({ abi: MRO_ABI, logs: ours });
     pages += 1;
+    if (onEvents) await onEvents(page, { from: start, to: end });
+    else events.push(...page);
     onPage({ from: start, to: end, found: logs.length, pages });
+    start = end + 1n;
   }
   return { events, pages };
 }

@@ -10,17 +10,27 @@
 //
 // Pure functions over a path and a summary. No environment, no defaults read
 // from process.env: main.mjs still owns all of that and passes it in.
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
+
+const sameContract = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
 
 /**
  * The last reconciled block, or null when there genuinely is not one yet.
  *
+ * A CURSOR BELONGS TO A DEPLOYMENT. `adopt-deployment.sh` rewrites the contract
+ * address and the deploy floor and leaves this file alone, so a bare block
+ * number would send reconcile past the new contract's entire history -- and
+ * `Rested`, `Transfer` and `Rebound` reach the mirror through reconcile alone.
+ * A cursor naming another contract or another chain is therefore ignored, which
+ * restarts from the floor rather than skipping what it cannot account for.
+ *
  * @param path where the cursor is kept
- * @returns BigInt block number, or null for "no cursor yet"
+ * @param o.chainId, o.contract  the pair this run is reconciling
+ * @returns BigInt block number, or null for "no cursor for this pair"
  * @throws when the cursor exists but cannot be trusted
  */
-export function readCursor(path) {
+export function readCursor(path, { chainId = null, contract = null, log = () => {} } = {}) {
   let raw;
   try {
     raw = readFileSync(path, "utf8").trim();
@@ -37,20 +47,57 @@ export function readCursor(path) {
     throw new Error(`could not read the reconcile cursor at ${path}: ${err.message}`);
   }
   if (raw === "") return null;
-  // A cursor that is not a number is corruption, not a first run, for the same
-  // reason: silently re-reading the whole chain is the expensive answer.
+
+  if (raw.startsWith("{")) {
+    let record;
+    try {
+      record = JSON.parse(raw);
+    } catch {
+      throw new Error(`the reconcile cursor at ${path} is not readable: ${JSON.stringify(raw.slice(0, 40))}`);
+    }
+    const mine =
+      (contract === null || sameContract(record.contract, contract)) &&
+      (chainId === null || Number(record.chainId) === Number(chainId));
+    if (!mine) {
+      log(
+        `clock: the reconcile cursor at ${path} was written for another deployment; ` +
+          "reading from the deploy block instead"
+      );
+      return null;
+    }
+    return asBlock(record.block, path);
+  }
+
+  // A BARE NUMBER is every version before the record above, and the live box
+  // holds one. It can only have been written for the contract configured now.
+  return asBlock(raw, path);
+}
+
+function asBlock(value, path) {
+  // A cursor that is not a number is corruption, not a first run: silently
+  // re-reading the whole chain is the expensive answer.
   try {
-    return BigInt(raw);
+    return BigInt(value);
   } catch {
     throw new Error(
-      `the reconcile cursor at ${path} is not a block number: ${JSON.stringify(raw.slice(0, 40))}`
+      `the reconcile cursor at ${path} is not a block number: ${JSON.stringify(String(value).slice(0, 40))}`
     );
   }
 }
 
-export function writeCursor(path, block) {
+/**
+ * Put the cursor in place, whole.
+ *
+ * WRITTEN AND RENAMED, never in place: a kill during the write left a partial
+ * file, and a partial cursor is a corrupt one that stops every later run. A
+ * rename within a directory is atomic, so a reader sees the old cursor or the
+ * new one and nothing between.
+ */
+export function writeCursor(path, block, { chainId = null, contract = null } = {}) {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, String(block));
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify({ chainId, contract, block: String(block) }));
+  renameSync(tmp, path);
 }
 
 /**
