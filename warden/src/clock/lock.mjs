@@ -1,0 +1,110 @@
+// One Clock at a time, and how the lock of a run that died is reclaimed.
+//
+// `Type=oneshot` stops systemd starting a second copy of the timer's own run,
+// but says nothing about a rehearsal tool an operator starts by hand -- and two
+// signers on one account build two transactions on the same nonce, the second
+// of which is simply lost.
+//
+// The lock NAMES ITS RUN because the alternative was a corpse: a SIGKILL (the
+// unit's MemoryMax, an OOM, a power loss) leaves the file behind, and a lock
+// nobody can prove is dead halts every later run until a human deletes it.
+// After 30 days that is paid mints refused as StaleDay and a stopped heartbeat.
+//
+// Kept out of main.mjs so it can be tested at all: no test may import main.mjs,
+// which opens the mirror, reads a private key and talks to a chain as
+// module-load side effects. Same reason cursor.mjs is its own file.
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+
+const BOOT_ID_PATH = "/proc/sys/kernel/random/boot_id";
+
+/// The kernel's id for this boot, or null where it cannot be read. Null is not
+/// a failure: the pid liveness check below stands on its own.
+export function currentBootId(path = BOOT_ID_PATH) {
+  try {
+    return readFileSync(path, "utf8").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function lockOwner(bootIdPath = BOOT_ID_PATH) {
+  return { pid: process.pid, bootId: currentBootId(bootIdPath) };
+}
+
+/// Signal 0 asks whether a pid exists without touching it. EPERM means it
+/// exists and belongs to somebody else, which is still alive.
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === "EPERM";
+  }
+}
+
+function readHolder(path) {
+  try {
+    const holder = JSON.parse(readFileSync(path, "utf8"));
+    return Number.isInteger(holder?.pid) ? holder : null;
+  } catch {
+    return null;
+  }
+}
+
+function claim(path, owner) {
+  writeFileSync(path, JSON.stringify(owner), { flag: "wx" });
+}
+
+/**
+ * Take the run lock, reclaiming it from a run that cannot still be holding it.
+ *
+ * Reclaimed when the boot id differs -- nothing from a previous boot is
+ * running, whatever its pid says today -- or when the pid is gone. Anything
+ * else is refused, including a lock whose contents name no run: that is the
+ * bare `wx` file the old lock left, and guessing about it is how one guard
+ * becomes the race it exists to prevent.
+ */
+export function takeLock(path, owner, { isAlive = processIsAlive } = {}) {
+  try {
+    claim(path, owner);
+    return;
+  } catch (err) {
+    if (err.code !== "EEXIST") throw err;
+  }
+
+  const holder = readHolder(path);
+  if (!holder) {
+    throw new Error(
+      `the run lock at ${path} names no run, so it cannot be told from a live one. ` +
+        "If no run is actually in progress, delete it and start again."
+    );
+  }
+  const rebooted = holder.bootId && owner.bootId && holder.bootId !== owner.bootId;
+  if (!rebooted && isAlive(holder.pid)) {
+    throw new Error(
+      `another clock run (pid ${holder.pid}) holds ${path}. Only one may write at a time: ` +
+        "two signers on one account build two transactions on the same nonce."
+    );
+  }
+
+  unlinkSync(path);
+  try {
+    claim(path, owner);
+  } catch (err) {
+    if (err.code !== "EEXIST") throw err;
+    // Another run reclaimed it in the same moment. It holds the lock, not us.
+    throw new Error(`the run lock at ${path} was taken by another run while this one reclaimed it`);
+  }
+}
+
+/// Release only OUR lock. A run that was refused the lock releasing it on the
+/// way out would delete the lock of the run that legitimately holds it.
+export function releaseLock(path, owner) {
+  const holder = readHolder(path);
+  if (!holder || holder.pid !== owner.pid || holder.bootId !== owner.bootId) return;
+  try {
+    unlinkSync(path);
+  } catch {
+    /* already gone: nothing to release */
+  }
+}

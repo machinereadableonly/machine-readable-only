@@ -10,8 +10,6 @@
 //
 // It exits non-zero when the run could not do its job, so the systemd unit
 // records a failure rather than a silent success.
-import { readFileSync, writeFileSync, mkdirSync, openSync, closeSync, unlinkSync } from "node:fs";
-import { dirname } from "node:path";
 import { createPublicClient, http } from "viem";
 import { openDb } from "../mirror/db.mjs";
 import { queries } from "../mirror/queries.mjs";
@@ -19,6 +17,7 @@ import { makeWriter, chainFor } from "./write.mjs";
 import { runClock } from "./run.mjs";
 import { DEPLOY_BLOCK } from "./reconcile.mjs";
 import { readCursor, writeCursor, nextCursor, exitCodeFor } from "./cursor.mjs";
+import { lockOwner, takeLock, releaseLock } from "./lock.mjs";
 import { MRO_ABI } from "./abi.mjs";
 import { utcDay } from "../mcp/tools/checkin.mjs";
 import { safeErrorText } from "./redact.mjs";
@@ -71,49 +70,15 @@ if (DEPLOY_BLOCK[chainId] === undefined) {
 /// is one signer on one nonce writing to that mirror.
 const LOCK = process.env.CLOCK_LOCK_PATH ?? `${stateDbPath}.run-lock`;
 
-/**
- * One Clock at a time.
- *
- * 16.8. There was no lock of any kind. `Type=oneshot` stops systemd starting a
- * SECOND copy of the timer's own run, but it says nothing about a rehearsal
- * tool an operator starts by hand -- and this project has such tools, and has
- * used them against the live mirror. Two signers on one account means two
- * transactions built on the same nonce, and the second is simply lost.
- *
- * `wx` is the whole mechanism: an atomic create-if-absent. No daemon, no
- * dependency, and a crash that leaves the file behind is recoverable by
- * deleting it -- which the message says, because a lock nobody knows how to
- * clear is worse than no lock.
- */
-// Whether THIS process owns the lock. Without it, a run that was refused the
-// lock would release it on the way out and delete the lock belonging to the
-// run that legitimately holds it -- turning the guard into the very race it
-// exists to prevent.
-let holdsLock = false;
-
-function takeLock() {
-  try {
-    closeSync(openSync(LOCK, "wx"));
-    holdsLock = true;
-  } catch (err) {
-    if (err.code !== "EEXIST") throw err;
-    throw new Error(
-      `another clock run holds ${LOCK}. Only one may write at a time: two signers ` +
-        "on one account build two transactions on the same nonce. If no run is " +
-        `actually in progress, delete ${LOCK} and start again.`
-    );
-  }
-}
-
-function releaseLock() {
-  if (!holdsLock) return;
-  holdsLock = false;
-  try { unlinkSync(LOCK); } catch { /* already gone: nothing to release */ }
-}
+/// Who this run is, so a lock left by a run that died can be told from a live
+/// one. The rule lives in lock.mjs, which is tested directly.
+const owner = lockOwner();
+const take = () => takeLock(LOCK, owner);
+const release = () => releaseLock(LOCK, owner);
 
 async function main() {
   const started = Date.now();
-  takeLock();
+  take();
   const db = openDb(stateDbPath);
   const q = queries(db);
   const chain = chainFor(chainId);
@@ -208,7 +173,7 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
     if (stopping) return;   // a second signal must not race the first
     stopping = true;
     console.error(`clock: ${signal} received; releasing the run lock and exiting`);
-    releaseLock();
+    release();
     process.exit(1);
   });
 }
@@ -223,4 +188,4 @@ main()
   })
   // ALWAYS, on every path. A lock the happy path releases and the error path
   // does not is a lock that turns one bad night into every night after it.
-  .finally(releaseLock);
+  .finally(release);
