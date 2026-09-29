@@ -980,10 +980,11 @@ test("an unnamed revert with a GOOD recipient reports the detail and stays queue
 // still be live with every unit test green.
 
 /// A chain whose `lastWardenDay` is `day`, and which answers nothing else.
-const chainStampedAt = (day) => ({
+const chainStampedAt = (day, { sunset = false } = {}) => ({
   ...noChain,
   async readContract({ functionName }) {
     if (functionName === "lastWardenDay") return day;
+    if (functionName === "isSunset") return sunset;
     throw new Error(`unexpected read: ${functionName}`);
   },
 });
@@ -1051,4 +1052,122 @@ test("a chain that cannot be read sends no heartbeat and does not stop the run",
   assert.equal(summary.heartbeat, undefined);
   assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 0);
   assert.ok(summary.reconciled, "and the run still reconciled");
+});
+
+// A PAUSE IS THE ONE ABORT THE HEARTBEAT MUST SURVIVE. The contract leaves
+// `heartbeat()` without whenNotPaused precisely so a long pause cannot force
+// the ending -- and one row queued before the pause aborted the run before the
+// heartbeat block, which handed that back.
+test("a run the pause aborted still says the operator is here", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const writer = okWriter({
+    async send(fn, args, opts) {
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      if (fn === "mint") return { ok: false, reason: "reverted-on-simulate", errorName: "EnforcedPause", errorArgs: [] };
+      return { ok: true, hash: "0x1" };
+    },
+  });
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainStampedAt(TODAY - 40),
+    writer,
+  });
+
+  assert.equal(summary.aborted, "EnforcedPause");
+  assert.equal(summary.heartbeat.due, true);
+  assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 1);
+});
+
+// Any other abort is a reason the heartbeat would fail for too.
+test("a run aborted by Sunset sends no heartbeat", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const writer = okWriter({
+    async send(fn, args, opts) {
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      if (fn === "mint") return { ok: false, reason: "reverted-on-simulate", errorName: "Sunset", errorArgs: [] };
+      return { ok: true, hash: "0x1" };
+    },
+  });
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainStampedAt(TODAY - 40, { sunset: true }),
+    writer,
+  });
+
+  assert.equal(summary.heartbeat, undefined);
+  assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 0);
+});
+
+// A CLOSED PIECE CANNOT BE HELD OPEN. heartbeatDue has taken `sunset` since it
+// was written and the call site never passed it, so an idle run went on paying
+// for a transaction every 30 days after the ending.
+test("after sunset the heartbeat is not sent, however quiet the chain is", async () => {
+  const { q } = mirror();
+  const writer = okWriter();
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: chainStampedAt(TODAY - 400, { sunset: true }),
+    writer,
+  });
+
+  assert.equal(summary.heartbeat.due, false);
+  assert.equal(summary.heartbeat.why, "sunset");
+  assert.equal(writer.sent.length, 0);
+});
+
+test("a chain that cannot answer isSunset makes no heartbeat decision", async () => {
+  const { q } = mirror();
+  const writer = okWriter();
+  const summary = await runClock({
+    ...baseArgs(q),
+    publicClient: {
+      ...noChain,
+      async readContract({ functionName }) {
+        if (functionName === "lastWardenDay") return TODAY - 40;
+        throw new Error("rpc down");
+      },
+    },
+    writer,
+  });
+
+  assert.equal(summary.heartbeat, undefined);
+  assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 0);
+});
+
+// A HEAL WRITES NOTHING ON CHAIN, so it cannot have stamped the day. Counting
+// it as a write meant a night of pure healing looked busy and sent nothing.
+test("a run whose only outcome was a heal still sends the heartbeat", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  q.insertCredit(1, TODAY - 1, "sig");
+
+  // The chain already holds that day, so the chunk is healed and no
+  // transaction lands.
+  const publicClient = {
+    ...noChain,
+    async readContract({ functionName }) {
+      if (functionName === "lastWardenDay") return TODAY - 40;
+      if (functionName === "isSunset") return false;
+      if (functionName === "viewOf") return { lastDay: TODAY - 1, level: 2 };
+      throw new Error(`unexpected read: ${functionName}`);
+    },
+  };
+  const writer = okWriter({
+    async send(fn, args, opts) {
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      if (fn === "batchCheckIn") {
+        return { ok: false, reason: "reverted-on-simulate", errorName: "DayNotAdvanced", errorArgs: ["1"] };
+      }
+      return { ok: true, hash: "0x1" };
+    },
+  });
+  const summary = await runClock({ ...baseArgs(q), publicClient, writer });
+
+  assert.equal(summary.healed.length, 1, "the day was healed, not written");
+  assert.deepEqual(summary.credited, []);
+  assert.equal(summary.heartbeat.due, true, "nothing this run stamped lastWardenDay");
+  assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 1);
 });

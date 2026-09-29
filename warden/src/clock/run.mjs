@@ -724,18 +724,33 @@ export async function runClock({
   //     does not hold it, and the whole question is what the contract believes.
   //     A read that fails is not treated as silence -- it would send a write on
   //     no evidence, nightly, whenever the RPC was unwell.
-  if (!summary.aborted) {
+  //
+  //     A PAUSE IS THE ONE ABORT THIS MUST SURVIVE. `heartbeat()` is
+  //     deliberately not `whenNotPaused`, so that a long pause cannot force the
+  //     ending -- and skipping the block on any abort handed that straight
+  //     back: one row queued before the pause reverts EnforcedPause on the
+  //     first write and the operator falls silent on chain. Every other abort
+  //     is a reason the heartbeat would fail for too.
+  if (!summary.aborted || summary.aborted === "EnforcedPause") {
+    // A HEAL IS NOT A WRITE. It is the discovery that a day landed on some
+    // earlier night, and it sends no transaction, so it cannot have stamped
+    // `lastWardenDay` -- counting it made a night of pure healing look busy
+    // and pay for nothing.
     const wroteThisRun =
       summary.minted.length > 0 ||
       summary.seeded.length > 0 ||
       summary.credited.length > 0 ||
-      summary.healed.length > 0 ||
       summary.marks.length > 0;
-    let lastWardenDay = null;
+    let stamp = null;
     try {
-      lastWardenDay = Number(
-        await publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "lastWardenDay" })
-      );
+      // SUNSET IS READ WITH THE STAMP, not assumed. heartbeatDue has taken it
+      // since it was written and nothing passed it, so an idle run went on
+      // paying for a transaction every 30 days after the piece had closed.
+      const [lastWardenDay, sunset] = await Promise.all([
+        publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "lastWardenDay" }),
+        publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "isSunset" }),
+      ]);
+      stamp = { lastWardenDay: Number(lastWardenDay), sunset: Boolean(sunset) };
     } catch (err) {
       // `shortMessage` ONLY. `err.message` from viem carries the RPC endpoint,
       // provider key and all, into a log this project ships to an operator.
@@ -745,12 +760,12 @@ export async function runClock({
       // ignore it. `shortMessage` ONLY -- viem's `message` carries the RPC
       // endpoint and its provider key into a log an operator reads.
       log(
-        "clock: could not read lastWardenDay, so no heartbeat decision was made " +
+        "clock: could not read lastWardenDay and isSunset, so no heartbeat decision was made " +
           `(${err?.shortMessage ?? "no short message"})`
       );
     }
-    if (lastWardenDay !== null) {
-      const decision = heartbeatDue({ today, lastWardenDay, wroteThisRun });
+    if (stamp !== null) {
+      const decision = heartbeatDue({ today, ...stamp, wroteThisRun });
       summary.heartbeat = decision;
       if (decision.due) {
         const result = await writer.send("heartbeat", []);
