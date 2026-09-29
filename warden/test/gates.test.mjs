@@ -23,7 +23,11 @@ import {
 } from "./chain-stub.mjs";
 
 const TO = "0x" + "11".repeat(20);
-import { settleNow } from "./paid-stub.mjs";
+
+/// A mirror with nothing in it, for the gates that now subtract what this
+/// service has promised and the chain has not been told.
+const emptyMirror = () => queries(openDb(":memory:"));
+import { settleNow, settleNowFor } from "./paid-stub.mjs";
 
 // --- the gate functions ----------------------------------------------------
 
@@ -55,9 +59,58 @@ test("tokenBlock works without a mirror to write to", async () => {
 });
 
 test("walletCapBlock refuses a full address and an unreadable chain", async () => {
-  assert.equal(await walletCapBlock(openChain(), TO), null);
-  assert.equal(await walletCapBlock(walletFullChain(), TO), "wallet-cap-reached");
-  assert.equal(await walletCapBlock(unreadableChain(), TO), "chain-unavailable");
+  const empty = emptyMirror();
+  assert.equal(await walletCapBlock(openChain(), empty, TO), null);
+  assert.equal(await walletCapBlock(walletFullChain(), empty, TO), "wallet-cap-reached");
+  assert.equal(await walletCapBlock(unreadableChain(), empty, TO), "chain-unavailable");
+});
+
+// THE WINDOW THE CHAIN CANNOT SEE. A mint reaches the chain only at the next
+// 00:05 run, so between a payment and that run the contract's own count is
+// behind by every reservation this mirror holds. The twenty-first mint to one
+// address in a day was charged for and then reverted WalletCap, with no branch
+// in the Clock to notice it.
+test("walletCapBlock subtracts the mints this mirror has promised", async () => {
+  const q = emptyMirror();
+  const chain = openChain({ walletRoomFor: async () => 1 });
+  assert.equal(await walletCapBlock(chain, q, TO), null, "the chain's last slot is free");
+
+  q.transact(() => {
+    q.insertMint({ tokenId: 1, toAddress: TO, keyId: "k1", payNonce: "0xone" });
+    q.insertToken({ tokenId: 1, keyId: "k1", owner: TO, lastDay: 0, mintDay: 0 });
+  });
+  assert.equal(await walletCapBlock(chain, q, TO), "wallet-cap-reached", "and this mirror has taken it");
+
+  // ANOTHER ADDRESS IS UNTOUCHED. The cap is per recipient on chain, so a
+  // subtraction that counted every unwritten mint would refuse everybody.
+  assert.equal(await walletCapBlock(chain, q, "0x" + "22".repeat(20)), null);
+});
+
+test("supplyBlock subtracts them too, which is the sell-out day", async () => {
+  const q = emptyMirror();
+  const chain = openChain({ supplyRoom: async () => 1 });
+  assert.equal(await supplyBlock(chain, q), null);
+
+  // A SEED COUNTS, not only a paid mint: the contract takes both from the same
+  // SupplyCap, and a seeded child's row lands in `mints` queued outright.
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: TO, lastDay: 0, mintDay: 0 });
+  q.insertSeed({ childId: 2, parentId: 1, toAddress: TO, keyId: "k1", lastDay: 0, mintDay: 0 });
+  assert.equal(await supplyBlock(chain, q), "supply-cap-reached");
+});
+
+// The one row that must NOT be subtracted: a token the chain already holds is
+// in the chain's own count, so counting it twice would close the collection a
+// token early, for ever.
+test("a written row is not subtracted twice", async () => {
+  const q = emptyMirror();
+  const chain = openChain({ supplyRoom: async () => 1 });
+  q.transact(() => {
+    q.insertMint({ tokenId: 1, toAddress: TO, keyId: "k1", payNonce: "0xone" });
+    q.insertToken({ tokenId: 1, keyId: "k1", owner: TO, lastDay: 0, mintDay: 0 });
+  });
+  q.markMintWritten(1);
+  assert.equal(await supplyBlock(chain, q), null);
+  assert.equal(await walletCapBlock(chain, q, TO), null);
 });
 
 test("paidWriteBlock checks only what it is given, in a stable order", async () => {
@@ -67,23 +120,24 @@ test("paidWriteBlock checks only what it is given, in a stable order", async () 
     lifecycleOf: async () => { asked.push("lifecycle"); return { exists: true, resting: false, sunset: false, level: 1, lastDay: 0 }; },
     walletRoomFor: async () => { asked.push("wallet"); return 20; },
   });
-  assert.equal(await paidWriteBlock(chain, {}), null);
+  assert.equal(await paidWriteBlock(chain, { q: emptyMirror() }), null);
   assert.deepEqual(asked, []);
 
   // Contract state wins over a token reason, so the answer does not depend on
   // which concurrent read happens to resolve first.
   const closedAndResting = sunsetChain();
   closedAndResting.lifecycleOf = async () => ({ exists: true, resting: true, sunset: true, level: 1, lastDay: 0 });
-  assert.equal(await paidWriteBlock(closedAndResting, { tokenId: 1, to: TO }), "sunset");
+  assert.equal(await paidWriteBlock(closedAndResting, { tokenId: 1, to: TO, q: emptyMirror() }), "sunset");
 });
 
 test("supplyBlock reads the collection's room from the chain, and refuses on an unreadable one", async () => {
-  assert.equal(await supplyBlock(openChain()), null);
-  assert.equal(await supplyBlock(supplyFullChain()), "supply-cap-reached");
+  const q = emptyMirror();
+  assert.equal(await supplyBlock(openChain(), q), null);
+  assert.equal(await supplyBlock(supplyFullChain(), q), "supply-cap-reached");
   // One slot left is still a slot: the boundary is provoked from both sides,
   // because a gate that is merely PRESENT proves nothing about where it sits.
-  assert.equal(await supplyBlock(openChain({ supplyRoom: async () => 1 })), null);
-  assert.equal(await supplyBlock(unreadableChain()), "chain-unavailable");
+  assert.equal(await supplyBlock(openChain({ supplyRoom: async () => 1 }), q), null);
+  assert.equal(await supplyBlock(unreadableChain(), q), "chain-unavailable");
 });
 
 // `upgrade` adds a Mark, not a token, and the contract has no SupplyCap on
@@ -92,9 +146,9 @@ test("supplyBlock reads the collection's room from the chain, and refuses on an 
 test("paidWriteBlock asks the supply cap only for a call that MINTS", async () => {
   let asked = 0;
   const counting = () => openChain({ supplyRoom: async () => { asked += 1; return 0; } });
-  assert.equal(await paidWriteBlock(counting(), { tokenId: 1 }), null);
+  assert.equal(await paidWriteBlock(counting(), { tokenId: 1, q: emptyMirror() }), null);
   assert.equal(asked, 0, "upgrade must not pay for a read the contract never makes");
-  assert.equal(await paidWriteBlock(counting(), { to: TO, mints: true }), "supply-cap-reached");
+  assert.equal(await paidWriteBlock(counting(), { to: TO, q: emptyMirror(), mints: true }), "supply-cap-reached");
   assert.equal(asked, 1);
 });
 
@@ -149,10 +203,38 @@ test("paidWriteBlock asks the receiver gate only when there is a recipient", asy
   let asked = 0;
   const counting = () =>
     openChain({ canReceiveERC721: async () => { asked += 1; return false; } });
-  assert.equal(await paidWriteBlock(counting(), {}), null);
+  assert.equal(await paidWriteBlock(counting(), { q: emptyMirror() }), null);
   assert.equal(asked, 0, "upgrade must not pay for a read its write never makes");
-  assert.equal(await paidWriteBlock(counting(), { to: TO }), "recipient-cannot-receive");
+  assert.equal(await paidWriteBlock(counting(), { to: TO, q: emptyMirror() }), "recipient-cannot-receive");
   assert.equal(asked, 1);
+});
+
+// THROUGH THE REAL TOOL, because the gate functions above can be right while
+// the handler that calls them passes no mirror. This is the repro the review
+// ran: with room for one on chain, the last slot was sold twice and the second
+// mint paid its dollar and then reverted at the Clock, retrying every night.
+test("the last slot cannot be sold twice through mint", async () => {
+  const q = queries(openDb(":memory:"));
+  const chain = openChain({ walletRoomFor: async () => 1, supplyRoom: async () => 100 });
+  const tool = makeMintTool({ q, chain, paid: settleNowFor(q), today: () => 100, alert: () => {} });
+
+  const first = await tool.handler({ to: TO }, { keyId: "k1" });
+  assert.equal(first.ok, true);
+
+  const second = await tool.handler({ to: TO }, { keyId: "k2" });
+  assert.equal(second.ok, false, "a second mint to a full address is refused BEFORE it is charged");
+  assert.equal(second.reason, "wallet-cap-reached");
+  assert.equal(q.tokenCount(), 1);
+});
+
+test("and neither can the collection's", async () => {
+  const q = queries(openDb(":memory:"));
+  const chain = openChain({ walletRoomFor: async () => 100, supplyRoom: async () => 1 });
+  const tool = makeMintTool({ q, chain, paid: settleNowFor(q), today: () => 100, alert: () => {} });
+
+  assert.equal((await tool.handler({ to: TO }, { keyId: "k1" })).ok, true);
+  const second = await tool.handler({ to: "0x" + "22".repeat(20) }, { keyId: "k2" });
+  assert.equal(second.reason, "supply-cap-reached");
 });
 
 test("a tool factory refuses to build without a chain reader", () => {

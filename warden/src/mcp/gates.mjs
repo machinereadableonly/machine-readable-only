@@ -84,12 +84,25 @@ export async function yearCompleteBlock(chain, tokenId, prefetched) {
   return life.level >= FINISH_LEVEL ? "year-complete" : null;
 }
 
-/// Refuse when the chain has already minted `walletCap` tokens to an address.
-/// Mirrors WalletCap, which guards both mint and seed.
-export async function walletCapBlock(chain, to) {
+/**
+ * Refuse when the chain has already minted `walletCap` tokens to an address.
+ * Mirrors WalletCap, which guards both mint and seed.
+ *
+ * THE MIRROR'S PROMISES COUNT TOO, which is the same subtraction
+ * `seedBudgetBlock` makes below and for the same reason. The chain learns of a
+ * mint at the next 00:05 run, so for up to a day the chain's own count is blind
+ * to every reservation this database holds -- and the twenty-first mint to one
+ * address in a day is paid for and then reverts WalletCap, with no branch in
+ * the Clock to notice.
+ *
+ * `q` is required rather than optional: a caller that forgot it would get the
+ * chain's figure with nothing subtracted, which is the over-issue this exists
+ * to prevent.
+ */
+export async function walletCapBlock(chain, q, to) {
   const room = await chain.walletRoomFor(to);
   if (room === null) return "chain-unavailable";
-  return room > 0 ? null : "wallet-cap-reached";
+  return room - q.unwrittenCreationsTo(to) > 0 ? null : "wallet-cap-reached";
 }
 
 /**
@@ -102,11 +115,16 @@ export async function walletCapBlock(chain, to) {
  * answered from the mirror: the constant 10_000 against `q.tokenCount()`. The
  * cap is an owner dial and the row count is a fact about this database, so both
  * halves could disagree with the chain at once. See read.mjs supplyRoom().
+ *
+ * The mirror's unwritten creations are SUBTRACTED from the chain's figure, for
+ * the reason given on walletCapBlock: on the sell-out day the collection's last
+ * slot would otherwise be sold as many times as agents asked for it inside one
+ * Clock interval. Every one of them but the first pays and gets a revert.
  */
-export async function supplyBlock(chain) {
+export async function supplyBlock(chain, q) {
   const room = await chain.supplyRoom();
   if (room === null) return "chain-unavailable";
-  return room > 0 ? null : "supply-cap-reached";
+  return room - q.unwrittenCreations() > 0 ? null : "supply-cap-reached";
 }
 
 /**
@@ -183,6 +201,9 @@ export const RECIPIENT_REMEDY =
  * declared rather than inferred from `to` so that a caller adding an address
  * for some other reason cannot silently acquire a gate it does not want.
  *
+ * `q` is required by any caller passing `to` or `mints`, because both cap gates
+ * subtract what this mirror has promised and the chain has not yet been told.
+ *
  * The reads run concurrently because they are independent, and the first reason
  * in gate order wins so the answer is stable rather than a race.
  */
@@ -190,8 +211,8 @@ export async function paidWriteBlock(chain, { tokenId, to, q, mints = false } = 
   const [contractState, token, wallet, supply, receiver] = await Promise.all([
     chainBlock(chain),
     tokenId === undefined ? null : tokenBlock(chain, tokenId, q),
-    to === undefined ? null : walletCapBlock(chain, to),
-    mints ? supplyBlock(chain) : null,
+    to === undefined ? null : walletCapBlock(chain, q, to),
+    mints ? supplyBlock(chain, q) : null,
     // Keyed off `to` like the wallet cap, and for the same reason: a write
     // with no recipient has nothing to deliver to. `upgrade` never asks.
     to === undefined ? null : receiverBlock(chain, to),
@@ -237,7 +258,7 @@ export function requireChain(chain, toolName) {
   // not hypothetical: `chain.freeIdFrom is not a function` reached production
   // in 2026-09-03 while every tool test passed, because the test double had the
   // methods the doubles were written with rather than the ones the code calls.
-  for (const method of ["writesOpen", "lifecycleOf", "walletRoomFor", "supplyRoom", "freeIdFrom", "boundKeyOf", "seedsAvailable", "canReceiveERC721"]) {
+  for (const method of ["writesOpen", "lifecycleOf", "walletRoomFor", "supplyRoom", "freeIdFrom", "boundKeyOf", "seedsAvailable", "canReceiveERC721", "blockNumber"]) {
     if (typeof chain?.[method] !== "function") {
       throw new Error(`${toolName} requires a chain reader with ${method}()`);
     }

@@ -109,6 +109,17 @@ export function migrate(db) {
     db.exec("ALTER TABLE mark_orders ADD COLUMN asset TEXT");
   }
 
+  // What the chain is shown before a held payment is called paid. NULL on every
+  // row written before this, and the resolver refuses to decide without them
+  // rather than falling back to the flag that could be forged.
+  for (const [table, present] of [["mints", mintCols], ["mark_orders", orderCols]]) {
+    if (present.has("payTo")) continue;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN payTo TEXT`);
+    db.exec(`ALTER TABLE ${table} ADD COLUMN payAmount TEXT`);
+    db.exec(`ALTER TABLE ${table} ADD COLUMN validBefore INTEGER`);
+    db.exec(`ALTER TABLE ${table} ADD COLUMN reservedBlock INTEGER`);
+  }
+
   // ONE PAID MINT PER KEY, which is narrower than what this guard used to say
   // and is what it always meant.
   //

@@ -1,6 +1,7 @@
 // warden/src/mcp/tools/upgrade.mjs
 import * as z from "zod";
 import { paidWriteBlock, bindingBlock, requireChain } from "../gates.mjs";
+import { sweep } from "../sweep.mjs";
 import { keyIdToBytes32 } from "../keyId.mjs";
 import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
 import { FINISH_LEVEL, VARIANT_NAMES, effectiveRun, ladderSentence, markNameIn } from "../ladder.mjs";
@@ -77,6 +78,10 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
 
     async handler(args, ctx) {
       const { tokenId, upgradeId, variant = 0 } = args;
+      // BEFORE THE MASK IS READ. `reservedMask` counts an 'awaiting-payment'
+      // row, so a Mark whose settlement answer never arrived closed its pair
+      // for that token until some stranger's paid call swept it.
+      sweep(q, "upgrade", alert);
       const token = q.getToken(tokenId);
       if (!token) return { ok: false, reason: "unknown-token" };
       // 5.M2. THE MIRROR IS NOT THE AUTHORITY ON WHO THIS TOKEN IS BOUND TO.
@@ -222,15 +227,8 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         (await bindingBlock(chain, tokenId, ctx.keyId, keyIdToBytes32));
       if (blocked) return { ok: false, reason: blocked };
 
-      // Reservations nobody paid for are cleared before the reservation below
-      // is attempted: the unique index on (tokenId, upgradeId) is what stops a
-      // Mark being bought twice, and a dead 'awaiting-payment' row occupies it
-      // exactly as a live one does. Without this a failed settlement would
-      // refuse that Mark to that token for good.
-      q.dropExpiredReservations();
-
       // Only now is payment requested.
-      return paid(async (_args, { payNonce }) => {
+      return paid(async (_args, { payNonce, payment }) => {
         // EVERYTHING ABOVE IS NOW STALE. The payment round trip takes seconds,
         // and in that window another buyer can take the last unit or the same
         // token can be marked. So the decision is made again here, against the
@@ -284,6 +282,11 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         // Clock cannot apply a Mark nobody has paid for yet. The earned route
         // above uses reserveMark and queues outright, because nothing settles
         // there.
+        // The head the reservation is made at, which bounds the log search if
+        // this settlement's outcome is ever in doubt. A chain that cannot
+        // answer does not refuse the Mark; it leaves a row the Clock hands to a
+        // human instead of deciding.
+        const reservedBlock = blocked ? null : await chain.blockNumber();
         let reserved = false;
         try {
           reserved = !blocked && q.reserveMarkPaid(tokenId, upgradeId, variant, payNonce);
@@ -297,6 +300,11 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
           return { ok: false, reason: "payment-already-used" };
         }
         if (reserved) {
+          // A SEPARATE STATEMENT because reserveMarkPaid owns its own
+          // transaction and node:sqlite has no nested one. A crash in the gap
+          // leaves a row with no facts, which the Clock reports to a human
+          // rather than deciding -- the same place an unreadable chain lands.
+          q.setPaymentFacts({ ...payment, payNonce, block: reservedBlock });
           // `ok: true` because every refusal from this tool carries
           // `ok: false`, and a client that branches on `result.ok` -- the one
           // field every other tool here answers with -- read a PAID success as

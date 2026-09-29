@@ -47,15 +47,48 @@ export function adaptContext(mcpCtx) {
  * paying client, it is what the settlement actually submits on chain, and both
  * sides read it off the same payload.
  *
- * BOTH ENVELOPES ARE HANDLED because @x402/evm's exact scheme can carry either
- * an EIP-3009 authorisation or a Permit2 one, and the nonce sits at a different
+ * BOTH ENVELOPES ARE READ because @x402/evm's exact scheme can carry either an
+ * EIP-3009 authorisation or a Permit2 one, and the nonce sits at a different
  * path in each. An envelope with neither returns null, and the caller refuses
  * rather than guessing -- a reservation with no key to settle it by is a row
  * nothing can ever promote, which is a free token.
+ *
+ * Reading a Permit2 nonce is not the same as accepting one. `withNonce` refuses
+ * any payload without an EIP-3009 `authorization`, because a Permit2 nonce is
+ * not an EIP-3009 nonce and the Clock's resolver would be asking the token
+ * about an unrelated authorisation.
  */
 export function payNonceOf(paymentPayload) {
   const p = paymentPayload?.payload;
   return p?.authorization?.nonce ?? p?.permit2Authorization?.nonce ?? null;
+}
+
+/// The EIP-3009 authorisation itself, or null for any other envelope.
+export function authorizationOf(paymentPayload) {
+  return paymentPayload?.payload?.authorization ?? null;
+}
+
+/**
+ * Everything the chain will later have to be shown to agree that this exact
+ * payment happened, gathered while the payload is still in hand.
+ *
+ * The recipient and the amount come from the REQUIREMENT this service built,
+ * not from the payload: the payload is the payer's claim, and a resolver that
+ * matched a transfer against the payer's own numbers would accept a dust
+ * transfer to the payer's own address as payment.
+ */
+export function paymentFactsOf(paymentPayload, requirement) {
+  const auth = authorizationOf(paymentPayload);
+  if (!auth) return null;
+  const validBefore = Number(auth.validBefore);
+  return {
+    payNonce: auth.nonce ?? null,
+    payer: auth.from ?? null,
+    asset: requirement?.asset ?? null,
+    payTo: requirement?.payTo ?? null,
+    amount: requirement?.amount ?? null,
+    validBefore: Number.isSafeInteger(validBefore) ? validBefore : null,
+  };
 }
 
 /**
@@ -72,6 +105,55 @@ export function payNonceOf(paymentPayload) {
 export function payerOf(paymentPayload) {
   const p = paymentPayload?.payload;
   return p?.authorization?.from ?? p?.permit2Authorization?.from ?? null;
+}
+
+/**
+ * The facilitator refusals that can ONLY have happened before a transfer was
+ * broadcast, taken from @x402/evm's own `exact` scheme error constants.
+ *
+ * WHY AN ALLOWLIST AND NOT "anything that is not pending". `errorReason` is a
+ * free string in @x402/core -- a facilitator may send one this build has never
+ * seen -- and the two readings of an unknown reason are not symmetrical.
+ * Treating it as declined releases a reservation whose money may have moved;
+ * treating it as unknown costs a night's delay and an alert. So the list is
+ * what is KNOWN to be safe, and everything else is unknown.
+ *
+ * Deliberately absent, though they look like they belong: `transaction_failed`
+ * and `transfer_event_mismatch` are decided from a receipt, so a transfer was
+ * broadcast, and `settlement_pending` carries a hash by definition.
+ */
+export const PRE_BROADCAST_REASONS = new Set([
+  "asset_not_deployed_contract",
+  "invalid_exact_evm_scheme",
+  "invalid_exact_evm_network_mismatch",
+  "invalid_exact_evm_missing_eip712_domain",
+  "invalid_exact_evm_recipient_mismatch",
+  "invalid_exact_evm_signature",
+  "invalid_exact_evm_payload_authorization_valid_before",
+  "invalid_exact_evm_payload_authorization_valid_after",
+  "invalid_exact_evm_authorization_value",
+  "invalid_exact_evm_payload_authorization_value_mismatch",
+  "invalid_exact_evm_token_name_mismatch",
+  "invalid_exact_evm_token_version_mismatch",
+  "invalid_exact_evm_eip3009_not_supported",
+  "invalid_exact_evm_nonce_already_used",
+  "invalid_exact_evm_insufficient_balance",
+  "invalid_exact_evm_transaction_simulation_failed",
+]);
+
+/**
+ * Did the facilitator say, in terms this service can rely on, that no transfer
+ * was ever sent?
+ *
+ * A HASH SETTLES IT ON ITS OWN. The installed reference facilitator answers
+ * `success: false` WITH a transaction on two paths -- the receipt wait timing
+ * out after broadcast, and a mined transfer failing event validation -- and in
+ * both the money can still move. Anything carrying a hash is unknown, whatever
+ * reason came with it.
+ */
+export function isDeclined(settlement) {
+  if (settlement?.transaction) return false;
+  return PRE_BROADCAST_REASONS.has(settlement?.errorReason ?? "");
 }
 
 /// The token contract an authorisation spends, off the requirement the
@@ -204,6 +286,32 @@ function payRefusal(value) {
     structuredContent: answered,
     isError: true,
   };
+}
+
+/**
+ * Lift a settled success into a complete MCP tool result.
+ *
+ * WHERE THE RECEIPT WAS GOING. @x402/mcp returns the handler's plain value with
+ * its settlement receipt added as `_meta`. A plain value has no `content`, so
+ * mcp/server.mjs wraps it -- and the wrap puts the whole value, receipt
+ * included, inside `structuredContent`. The protocol document tells agents to
+ * read `_meta["x402/payment-response"]` off the result, which is one level up
+ * from where it landed, so the receipt for every paid call was unreachable at
+ * the address it was published at.
+ *
+ * `withNext` is applied here for the same reason payRefusal applies it: a
+ * complete tool result is passed through mcp/server.mjs untouched, so the next
+ * step it would otherwise add never arrives.
+ */
+function settledResult(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result.content)) return result;
+  const { _meta, ...value } = result;
+  const answered = withNext(value);
+  const wire = {
+    content: [{ type: "text", text: JSON.stringify(answered) }],
+    structuredContent: answered,
+  };
+  return _meta === undefined ? wire : { ...wire, _meta };
 }
 
 /**
@@ -341,7 +449,12 @@ export function makePaymentGateway({
       try {
         const settlement = await settlePayment(paymentPayload, paymentRequirements, ...rest);
         if (payNonce && !settlement?.success) {
-          outcomes.set(payNonce, { ...where, kind: "declined", detail: settlement?.errorReason ?? null });
+          // A `success: false` IS NOT A DECLINE ON ITS OWN. See isDeclined:
+          // the reference facilitator returns one with a broadcast transaction
+          // hash on two paths, and releasing those is how an agent is debited
+          // for a token it does not get.
+          const kind = isDeclined(settlement) ? "declined" : "unresolved";
+          outcomes.set(payNonce, { ...where, kind, detail: settlement?.errorReason ?? null });
         }
         return settlement;
       } catch (err) {
@@ -396,8 +509,9 @@ export function makePaymentGateway({
       hooks: {
         // THE ONLY PLACE THIS SERVICE LEARNS THE MONEY MOVED. @x402/mcp fires
         // this after settlePaymentResult and only when settleResult.success is
-        // true; there is deliberately no failure hook to pair with it, which is
-        // why a reservation has to expire on its own rather than be cancelled.
+        // true; there is deliberately no failure hook to pair with it, so a
+        // failure is reported to this service by silence and the gateway has to
+        // watch the settle call itself to tell one kind of silence from another.
         //
         // It must never throw. An exception here happens AFTER the payer has
         // been debited, and letting it propagate would turn a successful sale
@@ -420,8 +534,13 @@ export function makePaymentGateway({
         },
       },
     });
-    wrappers.set(key, wrap);
-    return wrap;
+    // The requirement travels with the wrapper because it holds the asset, the
+    // recipient and the amount this service asked for -- the three facts a held
+    // payment is later checked against, and the only versions of them that are
+    // ours rather than the payer's.
+    const built = { wrap, requirement: accepts[0] };
+    wrappers.set(key, built);
+    return built;
   }
 
   /**
@@ -441,8 +560,9 @@ export function makePaymentGateway({
         return payRefusal({ ok: false, reason: "payment-unavailable", detail: "no-price" });
       }
       let wrap;
+      let requirement;
       try {
-        wrap = await wrapperFor(price, tool, description);
+        ({ wrap, requirement } = await wrapperFor(price, tool, description));
       } catch (err) {
         alert(`payment unavailable (${facilitatorUrl}, ${network}): ${err.message}`);
         return payRefusal({ ok: false, reason: "payment-unavailable" });
@@ -466,12 +586,28 @@ export function makePaymentGateway({
       let reservedNonce = null;
 
       const withNonce = async (handlerArgs, x402Ctx) => {
-        const payNonce = payNonceFromMeta({ toolName: tool, args: handlerArgs, meta: x402Ctx?.meta });
+        const payload = x402Ctx?.meta
+          ? extractPaymentFromMeta({ name: tool, arguments: handlerArgs, _meta: x402Ctx.meta })
+          : null;
+        const payNonce = payNonceOf(payload);
         if (!payNonce) {
           alert(`${tool}: a verified payment carried no usable nonce, so nothing could be reserved`);
           return { ok: false, reason: "payment-unavailable", detail: "no-nonce" };
         }
-        const result = await handler(handlerArgs, { payNonce });
+        // EIP-3009 ONLY, and the refusal is the point rather than an omission.
+        // A Permit2 envelope carries a Permit2 nonce, which is not the value an
+        // EIP-3009 token records -- so a held payment signed that way would be
+        // resolved by asking USDC about somebody else's authorisation, and a
+        // payer who cancelled one beforehand would be handed a free token.
+        // Until Permit2 is deliberately supported with a resolver of its own, a
+        // payload this service cannot later verify is refused before it is
+        // charged.
+        const facts = paymentFactsOf(payload, requirement);
+        if (!facts) {
+          alert(`${tool}: a verified payment carried no EIP-3009 authorisation, so nothing could be reserved`);
+          return { ok: false, reason: "payment-unavailable", detail: "unsupported-authorisation" };
+        }
+        const result = await handler(handlerArgs, { payNonce, payment: facts });
         if (result?.ok) reservedNonce = payNonce;
         return result;
       };
@@ -483,7 +619,7 @@ export function makePaymentGateway({
       // A reservation with no settlement behind it is released now rather than
       // left to age out, so the agent can try again immediately.
       if (reservedNonce) {
-        if (settled.delete(reservedNonce)) return result;
+        if (settled.delete(reservedNonce)) return settledResult(result);
         const outcome = outcomes.get(reservedNonce);
         outcomes.delete(reservedNonce);
 
@@ -499,8 +635,9 @@ export function makePaymentGateway({
             );
           } catch (err) {
             // The sweep is the backstop for exactly this: the row keeps its
-            // 'awaiting-payment' status, so it is still unwritable by the Clock.
-            alert(`${tool}: a reservation could not be released and will expire instead: ${err.message}`);
+            // 'awaiting-payment' status, so it is still unwritable by the Clock,
+            // and the sweep hands it to the Clock rather than deleting it.
+            alert(`${tool}: a reservation could not be released and will be swept instead: ${err.message}`);
           }
           return result;
         }

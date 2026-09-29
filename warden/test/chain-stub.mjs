@@ -51,6 +51,9 @@ export function openChain({ boundTo = "k1", ...overrides } = {}) {
     // wallet, which is what almost every --to is. True rather than null: null
     // is "could not ask" and refuses.
     canReceiveERC721: async () => true,
+    // The head at reservation time, which bounds the log search a held payment
+    // is later resolved by.
+    blockNumber: async () => 47_321_628,
     ...overrides,
   };
 }
@@ -67,6 +70,7 @@ export const unreadableChain = () =>
     boundKeyOf: async () => null,
     seedsAvailable: async () => null,
     canReceiveERC721: async () => null,
+    blockNumber: async () => null,
   });
 export const restingChain = () =>
   openChain({

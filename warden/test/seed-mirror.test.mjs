@@ -222,17 +222,17 @@ test("a child of a parent that does not exist is refused outright", () => {
 });
 
 // THIS TEST COULD NOT FAIL UNTIL 2026-09-07, and it guarded the only property
-// nothing else in the repository guards. `dropExpiredReservations` selects
+// nothing else in the repository guards. The sweep selects
 // `status = 'awaiting-payment' AND payNonce IS NOT NULL`, and the fixture had
-// nothing in that state at all -- so the sweep was a no-op and the assertion
-// was true by construction. PROVEN BY MUTATION: deleting `AND payNonce IS NOT
-// NULL`, the exact guard this test's comment names, left all 23 tests in this
-// file green, plus settlement-commit.test.mjs and binding.test.mjs.
+// nothing in that state at all -- so it was a no-op and the assertion was true
+// by construction. PROVEN BY MUTATION: deleting `AND payNonce IS NOT NULL`, the
+// exact guard this test's comment names, left all 23 tests in this file green,
+// plus settlement-commit.test.mjs and binding.test.mjs.
 //
 // THE POSITIVE CONTROL IS THE FIX. A genuinely reserved, genuinely stale mint
-// sits beside the child, and the SAME call must delete that one and keep this
-// one. A sweep that deletes nothing now fails on the first assertion; a sweep
-// that deletes everything fails on the second. Neither was reachable before.
+// sits beside the child, and the SAME call must take that one and leave this
+// one. A sweep that touches nothing now fails on the first assertion; a sweep
+// that takes everything fails on the second. Neither was reachable before.
 test("a stale reservation is swept and a free seed beside it is not", () => {
   const { q } = fresh();
   parentToken(q);
@@ -244,15 +244,18 @@ test("a stale reservation is swept and a free seed beside it is not", () => {
   q.insertMint({ tokenId: 3, toAddress: "0xC", keyId: "unpaid", payNonce: "0xnever" });
   assert.equal(q.getMint(3).status, "awaiting-payment", "the control has to actually be reservable");
 
-  const swept = q.dropExpiredReservations(Date.now() + 86_400_000);
+  const swept = q.sweepExpiredReservations(Date.now() + 86_400_000);
 
-  assert.equal(swept.mints, 1, "the unpaid reservation is exactly what this sweep is for");
-  assert.equal(q.getMint(3), undefined, "and it is gone");
-  assert.equal(q.getToken(3), undefined, "with its token row, which holds a supply slot");
+  assert.deepEqual(swept.mints.map((r) => r.tokenId), [3], "the unsettled reservation is what this sweep is for");
+  // HELD, NOT DELETED: the row survived its window, which only happens when
+  // nothing was left running to learn the settlement's outcome.
+  assert.equal(q.getMint(3).status, "payment-unresolved");
+  assert.ok(q.getToken(3), "its token row stays with it, still awaiting payment");
 
   // The child, which nobody paid for and which spends a once-a-year budget.
   assert.ok(q.getToken(2), "a free row has no payNonce and must not be swept");
   assert.ok(q.getMint(2), "and neither half of the pair may go");
+  assert.equal(q.getMint(2).status, "queued", "a free seed is untouched by a payment sweep");
   assert.equal(q.seedsSpent("k"), 1, "and the seed it spent is still spent");
 });
 
@@ -289,10 +292,10 @@ test("a row awaiting payment with no nonce, or no timestamp, is not swept", () =
   db.exec("UPDATE mints SET reservedAt = NULL WHERE tokenId = 4");
   assert.equal(q.getMint(4).reservedAt, null);
 
-  q.dropExpiredReservations(Date.now());
-  assert.ok(q.getMint(3), "no nonce means no payment was ever authorised, whatever the timestamp says");
-  assert.ok(q.getToken(3), "and its token row holds a supply slot that must not vanish with it");
-  assert.ok(q.getMint(4), "and a row with no reservedAt has no age to be older than");
+  q.sweepExpiredReservations(Date.now());
+  assert.equal(q.getMint(3).status, "awaiting-payment", "no nonce means no payment was ever authorised");
+  assert.ok(q.getToken(3), "and its token row holds a supply slot that must not change with it");
+  assert.equal(q.getMint(4).status, "awaiting-payment", "and a row with no reservedAt has no age to be older than");
   assert.ok(q.getToken(4));
 });
 

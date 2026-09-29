@@ -105,8 +105,8 @@ export function makeSeedTool({ q, chain, today, alert = console.error }) {
         (await tokenBlock(chain, parentId, q)) ??
         (await bindingBlock(chain, parentId, ctx.keyId, keyIdToBytes32)) ??
         (await seedBudgetBlock(chain, q, parentId, ctx.keyId)) ??
-        (await walletCapBlock(chain, to)) ??
-        (await supplyBlock(chain));
+        (await walletCapBlock(chain, q, to)) ??
+        (await supplyBlock(chain, q));
       if (blocked) return { ok: false, reason: blocked };
 
       // EVERY GATE PASSES. RESERVE THE CHILD AND LET THE CLOCK WRITE IT.
