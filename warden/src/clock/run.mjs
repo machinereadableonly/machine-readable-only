@@ -111,6 +111,29 @@ export async function chainLevel({ publicClient, contract, tokenId }) {
   }
 }
 
+/**
+ * One token's run as the CHAIN holds it: level, streak and lastDay together,
+ * or null when any of them cannot be read.
+ *
+ * The three are one fact. A partial answer -- a stub, a node that served a
+ * struct this code does not understand -- must not be written over the mirror
+ * in pieces.
+ */
+export async function chainRunOf({ publicClient, contract, tokenId }) {
+  try {
+    const view = await publicClient.readContract({
+      address: contract,
+      abi: MRO_ABI,
+      functionName: "viewOf",
+      args: [BigInt(tokenId)],
+    });
+    const run = { level: Number(view.level), streak: Number(view.streak), lastDay: Number(view.lastDay) };
+    return Object.values(run).every((n) => Number.isInteger(n)) ? run : null;
+  } catch {
+    return null;
+  }
+}
+
 /// Just enough ABI to ask a recipient the one question that matters.
 const ERC721_RECEIVER_ABI = [
   {
@@ -643,6 +666,13 @@ export async function runClock({
       q.failCredit(drop.entry.tokenId, drop.entry.day);
       summary.stuckCredits.push(drop);
       alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was refused (${drop.reason}) and needs a human`);
+      // AND THE MIRROR STOPS CLAIMING THE DAY. The Warden advanced level,
+      // streak and lastDay when it accepted the check-in; the chain has just
+      // refused it, so those three are wrong until something writes the
+      // chain's own numbers over them. A read that fails changes nothing.
+      const run = await chainRunOf({ publicClient, contract, tokenId: drop.entry.tokenId });
+      if (run) q.correctFromChain(drop.entry.tokenId, run);
+      else log(`clock: token ${drop.entry.tokenId} could not be re-read, so the mirror still overstates it`);
     }
     // NO FURTHER CHUNK AFTER ONE THAT JUDGED NOTHING. A later chunk can carry
     // a NEWER day for a token whose day this chunk left unsent, and landing it
@@ -729,6 +759,21 @@ export async function runClock({
   //    night and no signal at all. Counted from what the mirror already stores
   //    (a credit's day, a reservation's timestamp), so there is no run counter
   //    to keep in step and no migration.
+  // 6a. EVERY CONDEMNED CREDIT, NOT ONLY TONIGHT'S. `failCredit` is terminal
+  //     and nothing read the table afterwards, so a credit the chain refused
+  //     failed the run once and then let every later night exit 0 -- with a day
+  //     of the artwork lost and nobody told again. Read from the mirror, so it
+  //     keeps failing until a human clears the row.
+  const tonight = new Map(summary.stuckCredits.map((d) => [`${d.entry.tokenId}:${d.entry.day}`, d.reason]));
+  summary.stuckCredits = q.stuckCredits().map((row) => ({
+    entry: { tokenId: row.tokenId, day: row.day },
+    reason: tonight.get(`${row.tokenId}:${row.day}`) ?? "refused-on-an-earlier-run",
+  }));
+  const earlier = summary.stuckCredits.length - tonight.size;
+  if (earlier > 0) {
+    alert(`clock: ${earlier} credit(s) condemned on an earlier run are still waiting for a human`);
+  }
+
   const stale = q.staleRows(today, now(), STALE_AFTER_RUNS);
   summary.stale = stale;
   const staleTotal = stale.credits.length + stale.mints.length + stale.markOrders.length;

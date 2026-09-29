@@ -336,6 +336,9 @@ export function queries(db) {
     writtenCreditCount: db.prepare(
       "SELECT COUNT(*) AS n FROM credits WHERE tokenId = ? AND status = 'written'"
     ),
+    correctFromChain: db.prepare(
+      "UPDATE tokens SET level = ?, streak = ?, lastDay = ? WHERE tokenId = ?"
+    ),
     markOrderWritten: db.prepare(
       "UPDATE mark_orders SET status = 'written' WHERE tokenId = ? AND upgradeId = ?"
     ),
@@ -978,6 +981,16 @@ export function queries(db) {
     /// Credits waiting for a human. The `stuckMints` / `stuckMarkOrders`
     /// pattern, applied to the one queue that lacked it.
     stuckCredits: () => s.stuckCredits.all(),
+
+    /// The CHAIN's view of a token's run, written over the mirror's.
+    ///
+    /// The Warden advances level, streak and lastDay when it accepts a
+    /// check-in, before the chain has seen it. When the chain then refuses that
+    /// credit, those three are wrong permanently and `status` and /t/<id>
+    /// overstate the token for the life of the piece. `bestRun` is deliberately
+    /// left alone: it only ever rises, on chain and here.
+    correctFromChain: (tokenId, { level, streak, lastDay }) =>
+      s.correctFromChain.run(level, streak, lastDay, tokenId),
 
     /// How many of this token's days the mirror believes the chain holds. With
     /// the chain's own `level` it says how many landed days the mirror has not

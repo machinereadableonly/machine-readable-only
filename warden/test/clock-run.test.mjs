@@ -6,6 +6,7 @@ import { encodeFunctionData } from "viem";
 import { MRO_ABI } from "../src/clock/abi.mjs";
 import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
 import { runClock, CHECKIN_CHUNK } from "../src/clock/run.mjs";
+import { exitCodeFor } from "../src/clock/cursor.mjs";
 import { MAX_TX_GAS } from "../src/clock/write.mjs";
 // DERIVED, not hardcoded: this changes with every redeploy, and a test that
 // pins the old value fails for a reason that has nothing to do with what it
@@ -1055,6 +1056,65 @@ test("a chain that cannot be read sends no heartbeat and does not stop the run",
   assert.equal(summary.heartbeat, undefined);
   assert.equal(writer.sent.filter((s) => s.functionName === "heartbeat").length, 0);
   assert.ok(summary.reconciled, "and the run still reconciled");
+});
+
+// A CONDEMNED CREDIT USED TO FAIL THE RUN FOR ONE NIGHT ONLY. `failCredit` is
+// terminal and nothing read the table afterwards, so from the second night
+// systemd recorded success with a day of the artwork lost and a mirror that
+// still claimed it.
+test("a credit condemned on an earlier night keeps failing the run", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  q.insertCredit(1, TODAY - 9, "sig-old");
+  q.failCredit(1, TODAY - 9);
+
+  const alerts = [];
+  const summary = await runClock({ ...baseArgs(q), writer: okWriter(), alert: (m) => alerts.push(m) });
+
+  assert.deepEqual(
+    summary.stuckCredits.map((d) => [d.entry.tokenId, d.entry.day]),
+    [[1, TODAY - 9]],
+    "the night must still report it",
+  );
+  assert.equal(exitCodeFor(summary), 1, "and systemd must still see a failure");
+  assert.ok(alerts.some((a) => a.includes("condemned")), `got: ${alerts.join(" | ")}`);
+});
+
+// THE MIRROR OVERSTATES THE TOKEN UNTIL SOMEBODY CORRECTS IT. The Warden
+// advanced level, streak and lastDay when the agent checked in; the chain then
+// refused the credit, and /t/<id> went on reporting a day that never landed.
+test("condemning a credit writes the chain's own view over the mirror's", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
+  q.insertCredit(1, TODAY - 1, "sig");
+  q.creditDay(1, TODAY - 1, 5, 5);
+
+  const publicClient = {
+    ...noChain,
+    async readContract({ functionName }) {
+      if (functionName === "lastWardenDay") return TODAY;
+      if (functionName === "isSunset") return false;
+      if (functionName === "viewOf") return { level: 3, streak: 1, lastDay: TODAY - 4 };
+      throw new Error(`unexpected read: ${functionName}`);
+    },
+  };
+  const writer = okWriter({
+    async send(fn, args, opts) {
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      if (fn === "batchCheckIn") {
+        return { ok: false, reason: "reverted-on-simulate", errorName: "Resting", errorArgs: ["1"] };
+      }
+      return { ok: true, hash: "0x1" };
+    },
+  });
+  await runClock({ ...baseArgs(q), publicClient, writer, alert: () => {} });
+
+  const token = q.getToken(1);
+  assert.equal(token.level, 3, "the level the CHAIN holds, not the one the Warden hoped for");
+  assert.equal(token.streak, 1);
+  assert.equal(token.lastDay, TODAY - 4);
 });
 
 // A CURSOR CAN OUTLIVE ITS CONTRACT. adopt-deployment.sh rewrites the address
