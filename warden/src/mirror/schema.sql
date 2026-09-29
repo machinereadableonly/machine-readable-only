@@ -103,10 +103,14 @@ CREATE TABLE IF NOT EXISTS mark_orders (
   -- take no payment at all and are therefore queued outright. See `status`.
   payNonce   TEXT,
   reservedAt INTEGER,
-  -- The payer and the token contract of the authorisation, written only when a
-  -- settlement's outcome is unknown. See the same pair on `mints` below.
-  payer      TEXT,
-  asset      TEXT,
+  -- Who signed the authorisation, and everything the chain has to be shown to
+  -- agree that THIS payment happened. See the same block on `mints` below.
+  payer        TEXT,
+  asset        TEXT,
+  payTo        TEXT,
+  payAmount    TEXT,
+  validBefore  INTEGER,
+  reservedBlock INTEGER,
   -- awaiting-payment | queued | written | failed.
   --
   -- 'awaiting-payment' is where a BOUGHT Mark starts. The `authorization` flow
@@ -148,17 +152,31 @@ CREATE TABLE IF NOT EXISTS mints (
   -- never NULL on a row this service wrote.
   payNonce   TEXT,
   reservedAt INTEGER,
-  -- WHO SIGNED THE AUTHORISATION, and WHICH TOKEN CONTRACT it spends. Written
-  -- only when a settlement's outcome is UNKNOWN, because that is the only case
-  -- anything reads them: together with payNonce they are exactly what
-  -- EIP-3009's `authorizationState(payer, nonce)` needs, so the Clock can ask
-  -- the chain whether the money actually moved instead of guessing.
+  -- EVERYTHING THE CHAIN HAS TO BE SHOWN TO AGREE THAT THIS PAYMENT HAPPENED,
+  -- written at reservation time because by the time an outcome is in doubt the
+  -- payload that carried them is gone.
+  --
+  -- `authorizationState(payer, nonce)` alone is NOT an oracle: an EIP-3009
+  -- token sets that flag on `cancelAuthorization` and on any other transfer
+  -- spending the same nonce, so a payer can spend its own nonce on dust and
+  -- read back as paid. The Clock therefore matches an AuthorizationUsed log
+  -- against a Transfer of `payAmount` to `payTo` in the same transaction, which
+  -- needs all four.
   --
   -- The payer is NOT toAddress. The wallet that pays and the address that
   -- receives the token are allowed to differ, and asking USDC about the
   -- recipient would answer about an authorisation nobody signed.
-  payer     TEXT,
-  asset     TEXT,
+  --
+  -- `validBefore` bounds the release: below it the transfer can still land, so
+  -- an absent log means "not yet", not "never". `reservedBlock` bounds the log
+  -- search, which matters because a public RPC caps eth_getLogs at a thousand
+  -- blocks and moves that cap without notice.
+  payer         TEXT,
+  asset         TEXT,
+  payTo         TEXT,
+  payAmount     TEXT,
+  validBefore   INTEGER,
+  reservedBlock INTEGER,
   qr        TEXT,                            -- the solved bitmap, hex; NULL until solved
   solveState TEXT NOT NULL DEFAULT 'pending', -- pending | solving | done | failed
   solveTries INTEGER NOT NULL DEFAULT 0,

@@ -124,7 +124,7 @@ test("a mirror created before the new columns existed opens, migrates and works"
   assert.equal(q.settleByNonce("0xn", "0xtx").kind, "mint");
   // A row written BEFORE these columns existed has no payNonce, and must never
   // be swept as an expired reservation -- that would delete real history.
-  assert.deepEqual(q.dropExpiredReservations(Date.now() + 1), { mints: 0, marks: 0 });
+  assert.deepEqual(q.sweepExpiredReservations(Date.now() + 1), { mints: [], marks: [] });
 
   // The USED key on an upgraded mirror must survive the prune. The old code
   // recorded no usage at all, so without the backfill every pre-existing key

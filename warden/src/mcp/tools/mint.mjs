@@ -3,6 +3,7 @@ import * as z from "zod";
 import { onChainBy } from "../nextSteps.mjs";
 import { MINT_PRICE, MINT_RESOURCE } from "../../pay/x402.mjs";
 import { paidWriteBlock, requireChain, RECIPIENT_REMEDY } from "../gates.mjs";
+import { sweep } from "../sweep.mjs";
 import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
 
 export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
@@ -22,6 +23,12 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
     },
 
     async handler(args, ctx) {
+      // BEFORE `hasMinted`, which counts any row for the key including one
+      // whose settlement answer never arrived. Run afterwards, it could never
+      // be reached by the very key it was there to unstick: that key was
+      // refused `already-minted` and waited on some stranger's paid call.
+      sweep(q, "mint", alert);
+
       // Both gates come before payment. Charging for a mint that cannot happen
       // is the worst failure this tool has.
       if (q.hasMinted(ctx.keyId)) return { ok: false, reason: "already-minted" };
@@ -31,7 +38,7 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
       // to this mirror, and every one of them reverts a mint. Checked BEFORE
       // payment: charging for a mint the chain will refuse is the worst failure
       // this tool has.
-      const blocked = await paidWriteBlock(chain, { to: args.to, mints: true });
+      const blocked = await paidWriteBlock(chain, { to: args.to, q, mints: true });
       if (blocked) {
         // One refusal here is the agent's own address choice rather than a
         // fact about the piece, and it is fixable in a single retry -- so it
@@ -42,14 +49,7 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
           : { ok: false, reason: blocked };
       }
 
-      // Expire reservations nobody paid for BEFORE deciding anything. The
-      // unique index on mints.keyId is what makes one mint per key real, and a
-      // dead 'awaiting-payment' row sits in it just as solidly as a real one --
-      // so without this sweep an agent whose settlement failed once would be
-      // told `already-minted` forever, for a token it does not have.
-      q.dropExpiredReservations();
-
-      return paid(async (_args, { payNonce }) => {
+      return paid(async (_args, { payNonce, payment }) => {
         // BOTH GATES ARE RE-DECIDED HERE, because the payment round trip takes
         // seconds and everything checked before it is now stale.
         //
@@ -78,7 +78,7 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
         // re-read is the only thing between a paid-for mint and a token the
         // contract would refuse to write. `seed` takes slots from the same
         // count, so this is not only a race between two mints.
-        const stillBlocked = await paidWriteBlock(chain, { to: args.to, mints: true });
+        const stillBlocked = await paidWriteBlock(chain, { to: args.to, q, mints: true });
         if (stillBlocked) {
           alert(`mint refused for key ${ctx.keyId} after payment was verified: the chain now refuses it: ${stillBlocked}`);
           return { ok: false, reason: "paid-but-unavailable", detail: stillBlocked };
@@ -95,6 +95,12 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
           alert(`mint refused for key ${ctx.keyId} after payment was verified: no free token id could be established on chain`);
           return { ok: false, reason: "paid-but-unavailable", detail: "chain-unavailable" };
         }
+        // The head the reservation was made at, which bounds the log search if
+        // this settlement's outcome is ever in doubt. A chain that cannot
+        // answer does NOT refuse the mint -- the payment is already verified --
+        // but a row with no block is one the Clock hands to a human rather than
+        // decides.
+        const reservedBlock = await chain.blockNumber();
         const day = today();
         try {
           // The two rows are ONE FACT: a token with no mint record holds a
@@ -111,8 +117,8 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
             // after this function returns -- so these land as
             // 'awaiting-payment' and the Clock, which reads only 'queued', will
             // not write them. The settlement hook promotes them when the money
-            // actually moves; if it never does, dropExpiredReservations above
-            // clears them and this key can mint again.
+            // actually moves; when the answer never arrives at all, the sweep
+            // above hands them to the Clock to decide against the chain.
             //
             // solveState 'pending' is what puts this token in front of the
             // solver, and that is deliberate even before payment lands: solving
@@ -122,6 +128,10 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
             q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId, payNonce });
             q.insertToken({ tokenId, keyId: ctx.keyId, owner: args.to, lastDay: day, mintDay: day });
             q.setTokenAwaitingPayment(tokenId);
+            // In the same transaction as the row they describe: a reservation
+            // the chain cannot be asked about later is one a human has to
+            // settle by hand.
+            q.setPaymentFacts({ ...payment, payNonce, block: reservedBlock });
           });
         } catch (err) {
           // ONE AUTHORISATION PRESENTED TWICE. Not "already minted" -- nothing

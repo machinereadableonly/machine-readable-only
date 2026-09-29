@@ -94,6 +94,15 @@ export function queries(db) {
       "SELECT COUNT(*) AS n FROM tokens " +
         "WHERE keyId = ? AND parentId IS NOT NULL AND status != 'written'"
     ),
+    // Tokens this mirror has promised and the chain has not yet been told
+    // about. `mints` carries a row for every creation there is, paid or seeded,
+    // and every status but 'written' is one the next Clock run will try to
+    // mint. The chain's own WalletCap and SupplyCap counts cannot see any of
+    // them until then.
+    unwrittenCreationsTo: db.prepare(
+      "SELECT COUNT(*) AS n FROM mints WHERE toAddress = ? AND status != 'written'"
+    ),
+    unwrittenCreations: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE status != 'written'"),
     // 5.M3. How many children a token has seeded. Counted rather than stored,
     // so it cannot drift from the rows it describes.
     childCount: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE parentId = ?"),
@@ -166,22 +175,25 @@ export function queries(db) {
     // the chain decide later. `status = 'awaiting-payment'` in the WHERE is
     // what makes them safe to call twice: a row already promoted by a
     // settlement that arrived late is left exactly as it is.
+    // COALESCE, so a gateway that could not read the payer out of the payload
+    // cannot blank what the handler already wrote from it.
     holdUnresolvedMint: db.prepare(
-      "UPDATE mints SET status = 'payment-unresolved', payer = ?, asset = ? " +
+      "UPDATE mints SET status = 'payment-unresolved', payer = COALESCE(?, payer), asset = COALESCE(?, asset) " +
         "WHERE payNonce = ? AND status = 'awaiting-payment'"
     ),
     holdUnresolvedMarkOrder: db.prepare(
-      "UPDATE mark_orders SET status = 'payment-unresolved', payer = ?, asset = ? " +
+      "UPDATE mark_orders SET status = 'payment-unresolved', payer = COALESCE(?, payer), asset = COALESCE(?, asset) " +
         "WHERE payNonce = ? AND status = 'awaiting-payment'"
     ),
     // Resolving one. Both are keyed on 'payment-unresolved' so a row that
     // something else has already moved is left alone rather than overwritten.
     settleUnresolvedMint: db.prepare(
-      "UPDATE mints SET status = 'queued' WHERE payNonce = ? AND status = 'payment-unresolved' RETURNING tokenId"
+      "UPDATE mints SET status = 'queued', paymentTx = COALESCE(?, paymentTx) " +
+        "WHERE payNonce = ? AND status = 'payment-unresolved' RETURNING tokenId"
     ),
     settleUnresolvedMarkOrder: db.prepare(
-      "UPDATE mark_orders SET status = 'queued' WHERE payNonce = ? AND status = 'payment-unresolved' " +
-        "RETURNING tokenId, upgradeId"
+      "UPDATE mark_orders SET status = 'queued', paymentTx = COALESCE(?, paymentTx) " +
+        "WHERE payNonce = ? AND status = 'payment-unresolved' RETURNING tokenId, upgradeId"
     ),
     unresolvedMintForNonce: db.prepare(
       "SELECT tokenId FROM mints WHERE payNonce = ? AND status = 'payment-unresolved'"
@@ -190,12 +202,24 @@ export function queries(db) {
       "DELETE FROM mark_orders WHERE payNonce = ? AND status = 'payment-unresolved'"
     ),
     unresolvedMints: db.prepare(
-      "SELECT tokenId, payNonce, payer, asset, reservedAt FROM mints " +
-        "WHERE status = 'payment-unresolved' ORDER BY tokenId ASC"
+      "SELECT tokenId, payNonce, payer, asset, payTo, payAmount, validBefore, reservedBlock, reservedAt " +
+        "FROM mints WHERE status = 'payment-unresolved' ORDER BY tokenId ASC"
     ),
     unresolvedMarkOrders: db.prepare(
-      "SELECT tokenId, upgradeId, variant, payNonce, payer, asset, reservedAt FROM mark_orders " +
+      "SELECT tokenId, upgradeId, variant, payNonce, payer, asset, payTo, payAmount, validBefore, " +
+        "reservedBlock, reservedAt FROM mark_orders " +
         "WHERE status = 'payment-unresolved' ORDER BY tokenId ASC, upgradeId ASC"
+    ),
+    // What the chain will be shown later, written the moment the row is
+    // reserved. The payload carrying them is gone by the time an outcome is in
+    // doubt, and the gateway that learns of the doubt never sees the row.
+    factsForMint: db.prepare(
+      "UPDATE mints SET payer = ?, asset = ?, payTo = ?, payAmount = ?, validBefore = ?, reservedBlock = ? " +
+        "WHERE payNonce = ? AND status = 'awaiting-payment'"
+    ),
+    factsForMarkOrder: db.prepare(
+      "UPDATE mark_orders SET payer = ?, asset = ?, payTo = ?, payAmount = ?, validBefore = ?, reservedBlock = ? " +
+        "WHERE payNonce = ? AND status = 'awaiting-payment'"
     ),
     reserveMark: db.prepare("INSERT INTO mark_orders (tokenId, upgradeId, variant) VALUES (?, ?, ?)"),
     reserveMarkPaid: db.prepare(
@@ -230,19 +254,28 @@ export function queries(db) {
       "DELETE FROM mark_orders WHERE payNonce = ? AND status = 'awaiting-payment'"
     ),
 
-    // Reservations nobody ever paid for. `payNonce IS NOT NULL` keeps this away
-    // from rows written before these columns existed, which have no reservedAt
-    // and must never be swept.
+    // Reservations whose settlement never reported back. `payNonce IS NOT NULL`
+    // keeps this away from rows written before these columns existed, which
+    // have no reservedAt and must never be swept.
+    //
+    // THEY ARE MOVED, NOT DELETED. A row only survives its window when the
+    // process died between the handler and the settlement answer, which is
+    // exactly the case where the transfer may already be mined. Deleting it is
+    // how an agent pays and holds nothing.
     expiredMints: db.prepare(
-      "SELECT tokenId FROM mints WHERE status = 'awaiting-payment' " +
+      "SELECT tokenId, payNonce FROM mints WHERE status = 'awaiting-payment' " +
         "AND payNonce IS NOT NULL AND reservedAt < ?"
+    ),
+    holdExpiredMint: db.prepare("UPDATE mints SET status = 'payment-unresolved' WHERE tokenId = ?"),
+    expiredMarkOrders: db.prepare(
+      "SELECT tokenId, upgradeId, payNonce FROM mark_orders WHERE status = 'awaiting-payment' " +
+        "AND payNonce IS NOT NULL AND reservedAt < ?"
+    ),
+    holdExpiredMarkOrder: db.prepare(
+      "UPDATE mark_orders SET status = 'payment-unresolved' WHERE tokenId = ? AND upgradeId = ?"
     ),
     dropMint: db.prepare("DELETE FROM mints WHERE tokenId = ?"),
     dropMintToken: db.prepare("DELETE FROM tokens WHERE tokenId = ?"),
-    dropExpiredMarkOrders: db.prepare(
-      "DELETE FROM mark_orders WHERE status = 'awaiting-payment' " +
-        "AND payNonce IS NOT NULL AND reservedAt < ?"
-    ),
     reservedMarks: db.prepare("SELECT upgradeId FROM mark_orders WHERE tokenId = ?"),
     // 5.M7. The subset of those the CHAIN refused outright. reservedMask
     // deliberately counts a failed row -- a refusal can be undone by a human, a
@@ -448,6 +481,8 @@ export function queries(db) {
     firstMintDay: (keyId) => s.firstMintDay.get(keyId).d ?? 0,
     seedsSpent: (keyId) => s.seedsSpent.get(keyId).n,
     unwrittenSeeds: (keyId) => s.unwrittenSeeds.get(keyId).n,
+    unwrittenCreationsTo: (toAddress) => s.unwrittenCreationsTo.get(toAddress).n,
+    unwrittenCreations: () => s.unwrittenCreations.get().n,
     childCount: (tokenId) => s.childCount.get(tokenId).n,
     setLineage: (tokenId, generation, parentId) => s.setLineage.run(generation, parentId, tokenId),
 
@@ -661,23 +696,22 @@ export function queries(db) {
     /**
      * Act on the chain's answer about one held payment.
      *
-     * `paid` comes from EIP-3009's `authorizationState`, which is permanent and
-     * cannot be mistaken for anything else: true means this exact authorisation
-     * was spent, false means it never was. So there is no third outcome here --
-     * a question that could not be answered never reaches this method, and the
-     * row stays held.
+     * `paid` is the Clock's verdict, decided from an AuthorizationUsed log and
+     * the Transfer in the same transaction. There is no third outcome here --
+     * a question that could not be answered, or one whose authorisation can
+     * still be spent, never reaches this method and the row stays held.
      *
-     * A promoted row carries NO paymentTx. The transfer was the facilitator's
-     * and this service never saw its hash; inventing one would put a fiction in
-     * the place the receipt lives. The nonce is how the transfer is found.
+     * `paymentTx` is that transfer, which the settlement itself never reported.
+     * It is COALESCEd rather than assigned so a late settlement's own receipt
+     * is never overwritten by one found afterwards.
      *
      * Returns what moved, or null when the row was no longer held.
      */
-    resolveUnresolvedPayment(payNonce, { paid }) {
+    resolveUnresolvedPayment(payNonce, { paid, paymentTx = null }) {
       if (!payNonce) return null;
       return this.transact(() => {
         if (paid) {
-          const mint = s.settleUnresolvedMint.get(payNonce);
+          const mint = s.settleUnresolvedMint.get(paymentTx, payNonce);
           if (mint) {
             // The token row moves with its mint row, exactly as settleByNonce
             // does: a queued mint beside an awaiting-payment token is a state
@@ -685,7 +719,7 @@ export function queries(db) {
             s.settleMintToken.run(mint.tokenId);
             return { kind: "mint", tokenId: mint.tokenId };
           }
-          const order = s.settleUnresolvedMarkOrder.get(payNonce);
+          const order = s.settleUnresolvedMarkOrder.get(paymentTx, payNonce);
           return order ? { kind: "mark", tokenId: order.tokenId, upgradeId: order.upgradeId } : null;
         }
         const mint = s.unresolvedMintForNonce.get(payNonce);
@@ -773,28 +807,58 @@ export function queries(db) {
     },
 
     /**
-     * Clear reservations nobody ever paid for.
+     * Move reservations whose settlement never reported back into
+     * 'payment-unresolved', where the Clock decides them against the chain.
      *
      * Called before each new reservation rather than on a timer: the only thing
-     * a dead row can actually harm is the next agent to want its slot in the
-     * unique index, so that is exactly when it is worth removing. No background
-     * sweeper, no clock.
+     * such a row can harm is the next agent to want its slot in the unique
+     * index, so that is when it is worth looking at.
      *
-     * A mint's token row goes with it. mint.mjs writes both inside one
-     * transaction precisely because a token with no mint record holds a
-     * supply-cap slot no mint will ever claim; undoing half of that would
-     * recreate the orphan it exists to prevent.
+     * IT DOES NOT DELETE, and the difference is money. A row reaches this
+     * function only by surviving its whole window as 'awaiting-payment', and
+     * the sole way that happens is a crash or restart between the handler
+     * returning and the settlement answer arriving -- the one case where the
+     * EIP-3009 transfer may already be mined. The old behaviour deleted it, so
+     * the agent's authorisation stayed claimed in `pay_nonces` and its retry
+     * was refused `payment-already-used`.
+     *
+     * The mint's token row therefore stays too: both halves are one fact, and
+     * the row is still unwritable by the Clock, which reads only 'queued'.
+     *
+     * Returns the rows it moved, so the caller can say out loud that money is
+     * in doubt.
      */
-    dropExpiredReservations(before = Date.now() - RESERVATION_TTL_MS) {
+    sweepExpiredReservations(before = Date.now() - RESERVATION_TTL_MS) {
       return this.transact(() => {
-        const dead = s.expiredMints.all(before);
-        for (const { tokenId } of dead) {
-          s.dropMintToken.run(tokenId);
-          s.dropMint.run(tokenId);
-        }
-        const marks = s.dropExpiredMarkOrders.run(before).changes;
-        return { mints: dead.length, marks };
+        const mints = s.expiredMints.all(before);
+        for (const { tokenId } of mints) s.holdExpiredMint.run(tokenId);
+        const marks = s.expiredMarkOrders.all(before);
+        for (const { tokenId, upgradeId } of marks) s.holdExpiredMarkOrder.run(tokenId, upgradeId);
+        return { mints, marks };
       });
+    },
+
+    /**
+     * Record what the chain will later be shown, against one reservation.
+     *
+     * WHY AT RESERVATION AND NOT AT THE MOMENT OF DOUBT. The gateway that
+     * learns a settlement went unknown holds the payment payload; the expiry
+     * sweep, which covers a process that died before that point, holds nothing
+     * at all. Only one of the two can write these, so neither does: the handler
+     * writes them while the payload is still in its hand.
+     *
+     * A call carrying nothing but the nonce writes nothing, which keeps a test
+     * double that reserves without a payment payload from blanking a real row.
+     *
+     * NO TRANSACTION OF ITS OWN. node:sqlite has no nested transaction, and
+     * mint.mjs calls this inside the one that writes the row itself.
+     */
+    setPaymentFacts({ payNonce, payer = null, asset = null, payTo = null, amount = null, validBefore = null, block = null } = {}) {
+      if (!payNonce) return null;
+      if (payer === null && asset === null && payTo === null && amount === null) return null;
+      const args = [payer, asset, payTo, amount === null ? null : String(amount), validBefore, block, payNonce];
+      if (s.factsForMint.run(...args).changes) return { kind: "mint" };
+      return s.factsForMarkOrder.run(...args).changes ? { kind: "mark" } : null;
     },
     /**
      * Every Mark this token has RESERVED, in the same bitmask shape

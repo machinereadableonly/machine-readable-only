@@ -148,10 +148,13 @@ test("CONTROL: a paid tool that succeeds settles the payment", async () => {
   const { result, settled, verified } = await callAndPay(throughGateway(async () => ({ ok: true, tokenId: 3 })));
   assert.equal(verified, 1);
   assert.equal(settled, 1, "a successful paid call must take the money");
-  // The wrapper hands a plain handler value straight back and attaches the
-  // receipt to `_meta`; it is warden/src/mcp/server.mjs that turns it into a
-  // tool result afterwards. So this asserts on the value, not on MCP shape.
-  assert.equal(result.ok, true);
+  // THE RECEIPT HAS TO SURVIVE THE TRIP. @x402/mcp hands the plain handler
+  // value back with the receipt on `_meta`, and mcp/server.mjs used to wrap
+  // that whole value -- receipt and all -- inside `structuredContent`, one
+  // level below where the protocol document tells an agent to look. The
+  // gateway builds the tool result itself now, so `_meta` stays at the top.
+  assert.ok(Array.isArray(result.content));
+  assert.equal(result.structuredContent.ok, true);
   assert.equal(result._meta["x402/payment-response"].success, true);
 });
 

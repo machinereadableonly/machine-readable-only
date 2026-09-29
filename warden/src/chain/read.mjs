@@ -404,6 +404,25 @@ export function makeChainReader({
     },
 
     /**
+     * The chain's current head, or null when it could not be read.
+     *
+     * Recorded against a paid reservation so a settlement that later goes
+     * unknown has a bounded window of blocks to search for its transfer. The
+     * public RPC caps eth_getLogs at a thousand blocks and has moved that cap
+     * without notice, so "search from the reservation" is the difference
+     * between one request and a night's worth.
+     */
+    async blockNumber() {
+      const res = await rpcCall("eth_blockNumber", []);
+      if (!res.ok) {
+        noteTransportFailure();
+        return null;
+      }
+      const n = Number(BigInt(res.result));
+      return Number.isSafeInteger(n) ? n : null;
+    },
+
+    /**
      * How many more tokens the chain will mint to an address.
      *
      * Returns the remaining allowance (0 when full), or null when either read

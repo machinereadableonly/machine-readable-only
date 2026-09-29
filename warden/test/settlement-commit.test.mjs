@@ -88,6 +88,43 @@ async function fakeFacilitator({ settle = "ok" } = {}) {
             payer: PAY_TO,
           });
         }
+        // THE SHAPE THAT WAS BEING RELEASED. @x402/evm returns exactly this
+        // when the receipt wait times out AFTER the transfer was broadcast:
+        // `success: false`, and a transaction hash beside it. The money can
+        // still land.
+        if (settle === "pending") {
+          return send({
+            success: false,
+            errorReason: "settlement_pending",
+            errorMessage: "timed out waiting for receipt",
+            transaction: SETTLE_TX,
+            network: NETWORK,
+            payer: PAY_TO,
+          });
+        }
+        // The other one: a MINED transfer whose events did not validate. Also
+        // `success: false` with a hash, and also not a decline.
+        if (settle === "event-mismatch") {
+          return send({
+            success: false,
+            errorReason: "invalid_exact_evm_transfer_event_mismatch",
+            transaction: SETTLE_TX,
+            network: NETWORK,
+            payer: PAY_TO,
+          });
+        }
+        // A reason this build has never seen, with no hash. `errorReason` is a
+        // free string in @x402/core, so this is what a facilitator release or a
+        // different implementation looks like from here.
+        if (settle === "unknown-reason") {
+          return send({
+            success: false,
+            errorReason: "some_reason_invented_after_this_build",
+            transaction: "",
+            network: NETWORK,
+            payer: PAY_TO,
+          });
+        }
         // A facilitator that answers with something unparseable: the client
         // throws rather than returning success:false.
         if (settle === "malformed") return send({ nonsense: true });
@@ -176,11 +213,28 @@ async function mintPaying({ settle }) {
 test("CONTROL: a settled mint is queued for the Clock and carries its receipt", async () => {
   const { result, q, settled } = await mintPaying({ settle: "ok" });
   assert.equal(settled, 1, "a successful mint must take the money");
-  assert.equal(result.ok, true);
 
-  const mint = q.getMint(result.tokenId);
+  // OVER THE WIRE, which is where the receipt has to be. A settled success is a
+  // complete MCP tool result, so mcp/server.mjs passes it through untouched and
+  // `_meta` stays at the top level -- the address the protocol document tells
+  // an agent to read it from. Returning the plain value instead put the whole
+  // thing, receipt included, one level down inside structuredContent.
+  assert.ok(Array.isArray(result.content), "a settled call answers in MCP's own shape");
+  assert.equal(result.structuredContent.ok, true);
+  assert.equal(result.structuredContent._meta, undefined, "the receipt is not buried in the value");
+  assert.equal(result._meta["x402/payment-response"].transaction, SETTLE_TX, "the receipt the agent was promised");
+
+  const mint = q.getMint(result.structuredContent.tokenId);
   assert.equal(mint.status, "queued", "the Clock writes rows with status 'queued'");
   assert.equal(mint.paymentTx, SETTLE_TX, "the settlement receipt is what proves this row was paid for");
+
+  // AND THE FACTS THE CHAIN WOULD BE ASKED WITH, written at reservation. They
+  // are useless on a settled row and indispensable on a held one, and only the
+  // handler ever sees the payload they come from.
+  assert.match(mint.payTo, /^0x[0-9a-fA-F]{40}$/, "the treasury this service demanded");
+  assert.ok(Number(mint.payAmount) > 0, "the amount it demanded");
+  assert.ok(mint.validBefore > 0, "and the deadline the authorisation carries");
+  assert.ok(mint.reservedBlock > 0, "the head the reservation was made at bounds the log search");
 });
 
 // THE DEFECT. Settlement fails, and today the row is queued anyway: the Clock
@@ -193,6 +247,39 @@ test("a mint whose settlement FAILS is never written on chain", async () => {
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM tokens").get().n, 0, "and its token row goes with it");
   assert.deepEqual(q.pendingMints(), [], "so the Clock has nothing to write for an unpaid mint");
   assert.deepEqual(q.stuckMints(), [], "and nothing is reported as stuck -- it was unpaid, not broken");
+});
+
+// A `success: false` IS NOT A DECLINE ON ITS OWN, and this is the finding that
+// makes the difference expensive. The installed reference facilitator answers
+// `success: false` WITH a broadcast transaction hash on two paths -- the
+// receipt wait timing out, and a mined transfer failing event validation -- and
+// the transfer can land afterwards in both. Releasing them debited the agent up
+// to $1,250.00 for a row that no longer existed, its nonce still claimed.
+for (const settle of ["pending", "event-mismatch"]) {
+  test(`a settlement refused WITH a transaction hash (${settle}) is held, not released`, async () => {
+    const { db, q } = await mintPaying({ settle });
+
+    const row = db.prepare("SELECT tokenId, status, payTo, payAmount, validBefore, reservedBlock FROM mints").get();
+    assert.ok(row, "the row must survive: the transfer carries a hash and may be mined");
+    assert.equal(row.status, "payment-unresolved");
+    assert.deepEqual(q.pendingMints(), [], "and nothing unpaid reaches the chain meanwhile");
+    assert.deepEqual(q.unresolvedPayments().map((r) => r.tokenId), [row.tokenId]);
+
+    // EVERYTHING THE CLOCK WILL ASK WITH. Without these the row can only ever
+    // be judged by the forgeable question, which the resolver refuses to put.
+    assert.match(row.payTo, /^0x[0-9a-fA-F]{40}$/);
+    assert.ok(Number(row.payAmount) > 0);
+    assert.ok(row.validBefore > 0);
+    assert.ok(row.reservedBlock > 0);
+  });
+}
+
+// AND THE ALLOWLIST DIRECTION. `errorReason` is a free string, so an unknown
+// one has two readings and they are not symmetrical: read as a decline it
+// releases money that may have moved, read as unknown it costs a night.
+test("a refusal this build does not recognise is held rather than released", async () => {
+  const { db } = await mintPaying({ settle: "unknown-reason" });
+  assert.equal(db.prepare("SELECT status FROM mints").get().status, "payment-unresolved");
 });
 
 // THE OTHER FAILURE PATH, AND IT IS NOT THE SAME FAILURE. A facilitator that
@@ -228,7 +315,7 @@ test("a settlement whose outcome is UNKNOWN holds the reservation for a human", 
 
   // THE SWEEP MUST NOT UNDO THIS. Leaving the row 'awaiting-payment' would
   // have delayed the same deletion by ten minutes, not prevented it.
-  q.dropExpiredReservations(Date.now() + 1);
+  q.sweepExpiredReservations(Date.now() + 1);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM mints").get().n, 1, "the expiry sweep leaves it alone");
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM tokens").get().n, 1, "and its token row with it");
 });
@@ -273,7 +360,8 @@ async function upgradePaying({ settle }) {
 
 test("CONTROL: a settled Mark is queued for the Clock and carries its receipt", async () => {
   const { result, q, db } = await upgradePaying({ settle: "ok" });
-  assert.equal(result.ok, true);
+  assert.equal(result.structuredContent.ok, true);
+  assert.equal(result._meta["x402/payment-response"].transaction, SETTLE_TX, "the receipt reaches the agent");
   assert.deepEqual(q.pendingMarkOrders().map((o) => ({ ...o })), [{ tokenId: 1, upgradeId: 3, variant: 0 }]);
   assert.equal(db.prepare("SELECT paymentTx FROM mark_orders").get().paymentTx, SETTLE_TX);
 });
@@ -311,10 +399,22 @@ test("a reservation left behind by a crash is still unwritable, however complete
   assert.deepEqual(q.pendingMints(), [], "an unsettled reservation is invisible to the Clock");
   assert.deepEqual(q.stuckMints(), []);
 
-  // And the sweep is what eventually clears it. `before` is passed explicitly
-  // rather than waiting out the real ten minutes.
-  assert.deepEqual(q.dropExpiredReservations(Date.now() + 1), { mints: 1, marks: 0 });
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM tokens").get().n, 0, "the token row goes too");
+  // AND THE SWEEP HOLDS IT RATHER THAN DELETING IT. A row only survives its
+  // window when the process stopped between the handler and the settlement
+  // answer, which is exactly when the transfer may already be mined -- so the
+  // sweep hands it to the Clock instead of throwing it away. `before` is passed
+  // explicitly rather than waiting out the real ten minutes.
+  const swept = q.sweepExpiredReservations(Date.now() + 1);
+  assert.deepEqual(swept.mints.map((r) => r.tokenId), [9]);
+  assert.deepEqual(swept.marks, []);
+  assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 9").get().status, "payment-unresolved");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM tokens").get().n, 1, "the token row stays with it");
+  assert.deepEqual(q.pendingMints(), [], "and it is still nothing the Clock will write");
+  assert.deepEqual(
+    q.unresolvedPayments().map((r) => r.tokenId),
+    [9],
+    "the Clock is the one that decides it, against the chain"
+  );
 });
 
 // The other half of the same defect, and the one that turns a bug into a
@@ -325,4 +425,44 @@ test("a reservation left behind by a crash is still unwritable, however complete
 test("a key whose settlement FAILED can mint again", async () => {
   const { q } = await mintPaying({ settle: "declined" });
   assert.equal(q.hasMinted(KEY_ID), false, "a reservation nobody paid for must not consume the one mint per key");
+});
+
+// THE SWEEP RAN AFTER THE CHECK IT EXISTS TO PROTECT. `hasMinted` counts any
+// row for the key, so a key holding its own orphan was refused before it could
+// reach the sweep -- and it could not trigger the sweep itself. It waited on
+// some stranger's paid call. The sweep runs first now, so a key's own retry is
+// what moves its orphan into the state the Clock decides.
+test("a key's own retry sweeps its own orphaned reservation", async () => {
+  const fac = await fakeFacilitator({ settle: "ok" });
+  try {
+    const db = openDb(":memory:");
+    const q = queries(db);
+    q.transact(() => {
+      q.insertMint({ tokenId: 9, toAddress: TO, keyId: KEY_ID, payNonce: "0x" + "ef".repeat(32) });
+      q.insertToken({ tokenId: 9, keyId: KEY_ID, owner: TO, lastDay: 20_700, mintDay: 20_700 });
+      q.setTokenAwaitingPayment(9);
+    });
+    db.prepare("UPDATE mints SET reservedAt = ? WHERE tokenId = 9").run(Date.now() - 20 * 60 * 1000);
+
+    const said = [];
+    const tool = makeMintTool({
+      q, chain: openChain(), paid: gatewayAgainst(fac.url, q),
+      today: () => 20_700, alert: (m) => said.push(m),
+    });
+    const again = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: undefined } } });
+
+    assert.equal(
+      db.prepare("SELECT status FROM mints WHERE tokenId = 9").get().status,
+      "payment-unresolved",
+      "the caller's own orphan is moved by its own call"
+    );
+    assert.match(said.join(" "), /HELD for the Clock to resolve/);
+    // AND IT IS STILL REFUSED, which is the correct answer rather than a
+    // regression: the money is in doubt, so selling this key a second token
+    // would be the loss the hold exists to prevent. The Clock frees it tonight.
+    assert.equal(again.ok, false);
+    assert.equal(again.reason, "already-minted");
+  } finally {
+    await fac.close();
+  }
 });

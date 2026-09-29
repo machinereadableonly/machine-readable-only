@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adaptContext, makePaymentGateway, warmUp, bootDecisionFor, MINT_PRICE, MINT_RESOURCE } from "../src/pay/x402.mjs";
+import { adaptContext, makePaymentGateway, warmUp, bootDecisionFor, isDeclined, MINT_PRICE, MINT_RESOURCE } from "../src/pay/x402.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeUpgradeTool } from "../src/mcp/tools/upgrade.mjs";
@@ -514,6 +514,71 @@ test("a handler is given the nonce that will settle it, and refuses without one"
   assert.equal(refused.isError, true);
   assert.equal(refused.structuredContent.reason, "payment-unavailable");
   assert.equal(refused.structuredContent.detail, "no-nonce");
+});
+
+// WHICH REFUSALS MAY RELEASE A RESERVATION. Only the ones that can only have
+// happened before a transfer was broadcast: releasing anything else is how an
+// agent is debited for a row that no longer exists.
+test("a decline is a named pre-broadcast reason with no transaction, and nothing else", () => {
+  assert.equal(isDeclined({ success: false, errorReason: "invalid_exact_evm_signature", transaction: "" }), true);
+  assert.equal(isDeclined({ success: false, errorReason: "invalid_exact_evm_nonce_already_used" }), true);
+
+  // A HASH SETTLES IT ON ITS OWN, whatever reason came with it.
+  assert.equal(
+    isDeclined({ success: false, errorReason: "invalid_exact_evm_signature", transaction: "0x" + "ab".repeat(32) }),
+    false,
+    "a broadcast transaction can still be mined"
+  );
+  assert.equal(isDeclined({ success: false, errorReason: "settlement_pending", transaction: "0xabc" }), false);
+  // Decided from a receipt, so a transfer was sent.
+  assert.equal(isDeclined({ success: false, errorReason: "invalid_exact_evm_transfer_event_mismatch", transaction: "" }), false);
+  // A reason this build has never seen has two readings, and only one of them
+  // is safe.
+  assert.equal(isDeclined({ success: false, errorReason: "invented_later", transaction: "" }), false);
+  assert.equal(isDeclined({ success: false, transaction: "" }), false);
+  assert.equal(isDeclined(undefined), false);
+});
+
+// PERMIT2 IS REFUSED, DELIBERATELY. @x402/evm's exact scheme can carry a
+// Permit2 envelope, and its nonce is 32 bytes just like an EIP-3009 one -- so
+// a held row signed that way passes every shape check the resolver makes and
+// then has the wrong authorisation looked up on the asset. A payer who
+// cancelled an unrelated EIP-3009 nonce beforehand would be handed a free
+// token. Nothing is charged: the refusal carries isError, so the
+// authorisation is never submitted.
+test("a payment carrying no EIP-3009 authorisation is refused before the handler runs", async () => {
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/",
+    network: "eip155:84532",
+    payTo: "0xdead",
+    build: async () => fakeServer(),
+    wrapFactory: fakeWrap(),
+    alert: () => {},
+  });
+
+  let handlerRan = false;
+  const refused = await paid(async () => { handlerRan = true; return { ok: true }; }, "$0.10")(
+    {},
+    {
+      mcpCtx: {
+        mcpReq: {
+          _meta: {
+            "x402/payment": {
+              x402Version: 2,
+              scheme: "exact",
+              network: "eip155:84532",
+              payload: { permit2Authorization: { nonce: "0x" + "ab".repeat(32) }, signature: "0x00" },
+            },
+          },
+        },
+      },
+    }
+  );
+
+  assert.equal(handlerRan, false, "nothing may be reserved against a payment this service cannot resolve later");
+  assert.equal(refused.isError, true, "and isError is what stops it being settled anyway");
+  assert.equal(refused.structuredContent.reason, "payment-unavailable");
+  assert.equal(refused.structuredContent.detail, "unsupported-authorisation");
 });
 
 test("warmUp reports readiness and never rejects when the facilitator is down", async () => {
