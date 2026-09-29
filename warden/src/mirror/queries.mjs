@@ -330,6 +330,9 @@ export function queries(db) {
     stuckCredits: db.prepare(
       "SELECT tokenId, day FROM credits WHERE status = 'failed' ORDER BY day ASC, tokenId ASC"
     ),
+    writtenCreditCount: db.prepare(
+      "SELECT COUNT(*) AS n FROM credits WHERE tokenId = ? AND status = 'written'"
+    ),
     markOrderWritten: db.prepare(
       "UPDATE mark_orders SET status = 'written' WHERE tokenId = ? AND upgradeId = ?"
     ),
@@ -959,6 +962,11 @@ export function queries(db) {
     /// Credits waiting for a human. The `stuckMints` / `stuckMarkOrders`
     /// pattern, applied to the one queue that lacked it.
     stuckCredits: () => s.stuckCredits.all(),
+
+    /// How many of this token's days the mirror believes the chain holds. With
+    /// the chain's own `level` it says how many landed days the mirror has not
+    /// marked yet, which is what bounds the Clock's heal.
+    writtenCreditCount: (tokenId) => s.writtenCreditCount.get(tokenId).n,
 
     /// A Mark landed. The bit is set here rather than by the Warden, because
     /// until the chain has it the token does not really carry the Mark.

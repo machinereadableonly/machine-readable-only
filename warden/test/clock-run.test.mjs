@@ -1054,6 +1054,45 @@ test("a chain that cannot be read sends no heartbeat and does not stop the run",
   assert.ok(summary.reconciled, "and the run still reconciled");
 });
 
+// THE RUN'S OWN CHUNK LOOP MUST STOP. Proving `stop` in writeCheckInChunk is
+// not enough: the defect is that a LATER chunk lands a newer day for a token
+// whose day the exhausted chunk left unsent, and only this loop can do that.
+test("a chunk that judged nothing stops the night's remaining chunks", async () => {
+  const { db, q } = mirror();
+  for (let id = 1; id <= 15; id += 1) {
+    queueMint(q, db, id);
+    db.exec(`UPDATE mints SET status = 'written' WHERE tokenId = ${id}`);
+    q.insertCredit(id, TODAY - 1, `sig${id}`);
+  }
+
+  // Every call condemns the lowest id it was handed, so the first chunk of 14
+  // spends its whole shrink budget and never judges the rest.
+  const writer = okWriter({
+    async send(fn, args, opts) {
+      this.sent.push({ functionName: fn, args, label: opts?.label });
+      if (fn !== "batchCheckIn") return { ok: true, hash: "0x1" };
+      const ids = [];
+      for (let i = 2; i < args[0].length; i += 8) ids.push(parseInt(args[0].slice(i, i + 8), 16));
+      return { ok: false, reason: "reverted-on-simulate", errorName: "NoSuchToken", errorArgs: [String(ids[0])] };
+    },
+  });
+  await runClock({ ...baseArgs(q), writer, chunkSize: 14, alert: () => {} });
+
+  const idsSent = writer.sent
+    .filter((s) => s.functionName === "batchCheckIn")
+    .flatMap((s) => {
+      const ids = [];
+      for (let i = 2; i < s.args[0].length; i += 8) ids.push(parseInt(s.args[0].slice(i, i + 8), 16));
+      return ids;
+    });
+  assert.equal(idsSent.includes(15), false, "the second chunk must not be sent");
+  assert.equal(
+    db.prepare("SELECT status FROM credits WHERE tokenId = 15").get().status,
+    "queued",
+    "and its row waits for a night that can judge it",
+  );
+});
+
 // A PAUSE IS THE ONE ABORT THE HEARTBEAT MUST SURVIVE. The contract leaves
 // `heartbeat()` without whenNotPaused precisely so a long pause cannot force
 // the ending -- and one row queued before the pause aborted the run before the

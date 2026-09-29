@@ -45,6 +45,10 @@ export const CONFIRMATIONS = 12;
 /// three nights running is not going to fix itself.
 export const STALE_AFTER_RUNS = 3;
 
+/// Drop reasons that are NOT a condemnation: the chain never judged these
+/// entries, so the rows stay queued for a run that can offer them.
+const STAYS_QUEUED = new Set(["attempts-exhausted", "not-accounted-on-chain"]);
+
 /**
  * Run the Clock once.
  *
@@ -531,6 +535,16 @@ export async function runClock({
     return life;
   };
 
+  // How many landed days the mirror has not marked yet: the chain credits one
+  // level per day above the one every token is created with. It is what stops
+  // a day nobody sent being healed as written the moment a later day lands.
+  // Null when the level cannot be read, which is "could not ask" as ever.
+  const healRoomOf = async (tokenId) => {
+    const level = await chainLevel({ publicClient, contract, tokenId });
+    if (!Number.isInteger(level)) return null;
+    return level - 1 - q.writtenCreditCount(tokenId);
+  };
+
   // Nothing is sent once a write phase has aborted -- see the mints loop for
   // why the run continues to reconcile anyway.
   const pending = summary.aborted ? [] : q.pendingCredits(today - 1);
@@ -571,7 +585,7 @@ export async function runClock({
   // writeCheckInChunk re-imposes the same order on whatever is left of a chunk
   // after a heal or a bisect has reordered it.
   for (const entries of chunk(sendable, chunkSize)) {
-    const result = await writeCheckInChunk(writer, entries, { log, lastDayOf, levelOf });
+    const result = await writeCheckInChunk(writer, entries, { log, lastDayOf, levelOf, healRoomOf });
     for (const entry of result.written) {
       q.markCreditWritten(entry.tokenId, entry.day);
       summary.credited.push(entry);
@@ -595,8 +609,12 @@ export async function runClock({
       // forever is how a real problem becomes a line somebody learns to scroll
       // past. `attempts-exhausted` is the exception: that entry was never
       // judged, only rationed, so it stays queued for tomorrow.
-      if (drop.reason === "attempts-exhausted") {
-        alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was not attempted (${drop.reason}) and stays queued`);
+      // NOT EVERY DROP IS A JUDGEMENT. These two were never offered to the
+      // chain at all -- rationed by the attempt budget, or a day the chain's
+      // level does not account for -- so condemning them would report a lost
+      // day as decided, and marking them written would hide it entirely.
+      if (STAYS_QUEUED.has(drop.reason)) {
+        alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was not written (${drop.reason}) and stays queued`);
         continue;
       }
       // F7. A CREDIT IS NOT CONDEMNED FOR ITS MINT BEING LATE. `NoSuchToken`
@@ -622,6 +640,14 @@ export async function runClock({
       q.failCredit(drop.entry.tokenId, drop.entry.day);
       summary.stuckCredits.push(drop);
       alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was refused (${drop.reason}) and needs a human`);
+    }
+    // NO FURTHER CHUNK AFTER ONE THAT JUDGED NOTHING. A later chunk can carry
+    // a NEWER day for a token whose day this chunk left unsent, and landing it
+    // puts the skipped day permanently below the chain's lastDay -- where the
+    // next night reads it as already written. The rest of the run goes on.
+    if (result.stop) {
+      alert(`clock: check-ins stopped after a chunk that judged nothing (${result.stop}); the rest stay queued`);
+      break;
     }
     if (result.aborted) {
       summary.aborted = result.aborted;
