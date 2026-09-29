@@ -20,22 +20,37 @@ export function toRequestLike(req, domain) {
 /**
  * Reduce a request target to a URL on OUR origin, whatever it claimed to be.
  *
- * THE TWO-STEP IS THE WHOLE POINT. Node passes the request target through
- * verbatim, and a target may carry its own authority: "//evil.example/mcp" is
- * protocol-relative and "http://evil.example/mcp" is absolute-form. Parsed
- * against a base, that authority WINS -- measured 2026-08-30, both produced
- * @authority = evil.example while pathname stayed /mcp. So the router still
- * dispatched to /mcp while the signature was verified against somebody else's
- * host, and a signature minted for any site at path /mcp was admitted here.
+ * Node passes the request target through verbatim, and a target may carry its
+ * own authority: "//evil.example/mcp" is protocol-relative and
+ * "http://evil.example/mcp" is absolute-form. Parsed against a base, that
+ * authority WINS, so the router dispatched /mcp while the signature was
+ * verified against somebody else's host -- and a signature minted for any site
+ * at path /mcp was admitted here. Only origin-form is accepted for that reason:
+ * exactly one leading slash, nothing that can name a host.
  *
- * Reducing to pathname + search first, then rebuilding on the configured
- * origin, leaves nothing for a target to override. Pinning at the CALL SITES
- * is what allowed this: it is done here, once, so no caller can forget.
+ * DOT SEGMENTS PUT THE AUTHORITY BACK. "/.//evil.example/mcp" is origin-form,
+ * but WHATWG dot-segment removal reduces it to the path "//evil.example/mcp",
+ * and re-parsing THAT string against a base makes it protocol-relative again.
+ * "/%2e//", "/a/..//" and "/..//" all arrive at the same place. So the path is
+ * assigned through the setter, which cannot reach the host, rather than being
+ * concatenated into a string and parsed a second time.
+ *
+ * Pinning at the CALL SITES is what allowed the original bypass: it is done
+ * here, once, so no caller can forget.
  */
 export function pinnedUrl(target, domain) {
+  if (typeof target !== "string" || target[0] !== "/" || target[1] === "/") {
+    throw new Error("request target is not origin-form");
+  }
   const origin = `https://${domain}`;
   const claimed = new URL(target, origin);
-  return new URL(claimed.pathname + claimed.search, origin);
+  const url = new URL(origin);
+  url.pathname = claimed.pathname;
+  url.search = claimed.search;
+  // The setters above cannot move the host; this refuses to hand back a URL
+  // that somehow left our origin rather than trusting that they never will.
+  if (url.host !== domain) throw new Error("request target escaped the configured domain");
+  return url;
 }
 
 /**

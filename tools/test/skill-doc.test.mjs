@@ -103,6 +103,25 @@ test("the protocol copy inside the skill is the protocol document", () => {
   assert.equal(copy, original, "re-copy docs/2026-09-01-mro-raw-protocol.md into the skill");
 });
 
+// A remedy that names the WRONG components is worse than none: the agent does
+// exactly what it is told and is refused again, with no way to tell that the
+// instruction was the problem. The list lives in one place in the door, so the
+// row is pinned to it rather than to a number somebody has to remember.
+test("the `components` remedy names exactly the components the door requires", () => {
+  const verify = readFileSync(join(root, "warden/src/door/verify.mjs"), "utf8");
+  const declared = verify.match(/^const REQUIRED = \[(.*)\];$/m);
+  assert.ok(declared, "verify.mjs no longer declares REQUIRED where this test reads it");
+  const required = [...declared[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(required.length >= 4, `parsed only ${required.length} required components`);
+
+  const doc = readFileSync(join(skill, "references/refusals.md"), "utf8");
+  const row = doc.split("\n").find((line) => line.startsWith("| `components` |"));
+  assert.ok(row, "refusals.md no longer has a `components` row");
+
+  const named = [...row.split("|")[2].matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+  assert.deepEqual(named.sort(), [...required].sort(), "the remedy and the door disagree");
+});
+
 test("the skill's frontmatter carries the four out-of-band values", () => {
   const body = readFileSync(join(skill, "SKILL.md"), "utf8");
   assert.ok(body.startsWith("---\n"), "frontmatter must open on the first line");

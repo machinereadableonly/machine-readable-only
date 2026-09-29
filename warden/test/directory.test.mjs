@@ -15,6 +15,36 @@ test("a registered key can be looked up by its thumbprint", async () => {
   assert.ok(q.getKey(r.keyId));
 });
 
+test("only the three members the thumbprint is made of are stored", async () => {
+  // Everything else a caller sends was kept verbatim and served from the
+  // public directory, so padding one key bloated every render of it.
+  const q = queries(openDb(":memory:"));
+  const padded = { ...JWK, kid: "B".repeat(512), junk: "A".repeat(32 * 1024), use: "sig" };
+  const r = await registerKey(q, padded, 1000);
+  assert.equal(r.ok, true);
+  assert.deepEqual(JSON.parse(q.getKey(r.keyId).jwk), { kty: "OKP", crv: "Ed25519", x: JWK.x });
+
+  // The id is the RFC 7638 thumbprint, which is made of those three members
+  // alone -- so trimming cannot move it.
+  assert.equal(r.keyId, await jwkToKeyID(JWK, async (b) => crypto.subtle.digest("SHA-256", b),
+    (u) => Buffer.from(u).toString("base64url")));
+  assert.equal(renderDirectory(q).includes("A".repeat(100)), false);
+});
+
+test("a key that is not an Ed25519 OKP key is refused", async () => {
+  const q = queries(openDb(":memory:"));
+  for (const jwk of [
+    { kty: "EC", crv: "P-256", x: JWK.x, y: JWK.x },
+    { kty: "OKP", crv: "X25519", x: JWK.x },
+    { kty: "OKP", crv: "Ed25519" },
+  ]) {
+    const r = await registerKey(q, jwk, 1000);
+    assert.equal(r.ok, false, JSON.stringify(jwk));
+    assert.equal(r.reason, "invalid-jwk");
+  }
+  assert.equal(q.allKeys().length, 0);
+});
+
 test("the directory renders every registered key as a JWKS", async () => {
   const q = queries(openDb(":memory:"));
   await registerKey(q, JWK, 1000);
@@ -396,9 +426,10 @@ test("outbound directory fetches are capped process-wide, and the refusal is hon
   const lookup = makeLookup(q, async () => { fetches += 1; await gate; return { keys: [] }; },
     "warden.example.com", new Map());
 
-  // Eight different hosts saturate the ceiling; sharing per URL cannot bound a
-  // caller that names a thousand of them.
-  const held = Array.from({ length: 8 }, (_, i) => lookup("k", `"https://h${i}.example.com/"`));
+  // Eight different DOMAINS saturate the ceiling; sharing per URL cannot bound
+  // a caller that names a thousand of them. Eight subdomains of one domain no
+  // longer can -- see the per-domain cap below.
+  const held = Array.from({ length: 8 }, (_, i) => lookup("k", `"https://h${i}.example/"`));
   await assert.rejects(
     () => lookup("k", '"https://ninth.example.com/"'),
     /could not be fetched/,
@@ -639,4 +670,89 @@ test("CONTROL: a key that is not in the third party's directory is not admitted"
   const lookup = makeLookup(q, async () => ({ keys: [jwk] }), "warden.example.com", new Map());
   const found = await lookup("a-thumbprint-of-some-other-key", '"https://agent.example.com/"');
   assert.equal(found, null, "a directory holding one key must not answer for another");
+});
+
+// -- a slow directory cannot hold its slot for ever -------------------------
+
+import { createServer as httpServer, request as httpRequest } from "node:http";
+
+/// A stand-in for https.request that connects to a local trickling server, so
+/// the deadline is exercised against a live socket rather than a stub. The
+/// pinned lookup is driven the way a real connection would, and `timeout` is
+/// passed through: the point is that the IDLE timeout never fires.
+function trickleRequest(port) {
+  return (opts, cb) => {
+    const req = httpRequest(
+      { hostname: "127.0.0.1", port, path: opts.path, method: "GET", timeout: opts.timeout },
+      cb
+    );
+    opts.lookup("host.example", { all: true }, () => {});
+    return req;
+  };
+}
+
+/// One byte at a time, for ever. Never idle, so an idle timeout never fires.
+function startTrickler(everyMs = 50) {
+  const server = httpServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    const iv = setInterval(() => res.write(" "), everyMs);
+    req.on("close", () => clearInterval(iv));
+  });
+  return new Promise((r) =>
+    server.listen(0, "127.0.0.1", () => r({ server, port: server.address().port })));
+}
+
+// The runner timeout is the guard for the defect itself: with no deadline the
+// fetch never returns at all, and a hung test is not a failing one.
+test("a trickling directory is destroyed at the absolute deadline", { timeout: 5000 }, async () => {
+  const { server, port } = await startTrickler();
+  try {
+    const started = Date.now();
+    await assert.rejects(
+      () => guardedFetchDirectory("https://slow.example/x", {
+        request: trickleRequest(port),
+        lookup: publicLookup,
+        deadlineMs: 300,
+      }),
+      /too long/i,
+      "a host that keeps sending one byte must still be cut off"
+    );
+    const took = Date.now() - started;
+    assert.ok(took < 3000, `the fetch should end at its deadline, took ${took} ms`);
+  } finally {
+    server.close();
+  }
+});
+
+test("CONTROL: a directory that answers promptly is not cut off by the deadline", async () => {
+  // A deadline that fired on everything would pass the test above without
+  // bounding anything.
+  const jwks = await guardedFetchDirectory("https://example.com/x", {
+    request: stubRequest(JSON.stringify({ keys: [JWK] })),
+    lookup: publicLookup,
+    deadlineMs: 300,
+  });
+  assert.equal(jwks.keys[0].x, JWK.x);
+});
+
+// -- one domain cannot take every in-flight slot ----------------------------
+
+test("subdomains of one domain cannot hold every directory slot", async () => {
+  // Sharing a promise per URL bounds a caller naming ONE host. Eight
+  // subdomains of a host it controls are eight URLs, and they took the whole
+  // process-wide ceiling between them.
+  const dialled = [];
+  const hung = (url) => { dialled.push(url); return new Promise(() => {}); };
+  const lookup = makeLookup({ getKey: () => null }, hung, "warden.example", new Map(), new Map());
+
+  for (let i = 0; i < 8; i++) lookup("k", `"https://slow${i}.evil.test/"`).catch(() => {});
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(dialled.length, 2, "one domain may hold two slots, not all eight");
+
+  lookup("k", '"https://honest.test/"').catch(() => {});
+  await new Promise((r) => setTimeout(r, 20));
+  assert.ok(
+    dialled.some((u) => u.includes("honest.test")),
+    "an honest third-party host must still be looked up"
+  );
 });

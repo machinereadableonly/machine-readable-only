@@ -45,18 +45,39 @@ test("the configured domain wins over a forged Host header", () => {
   assert.equal(like.url, "https://example.com/mcp");
 });
 
-test("pinnedUrl reduces a protocol-relative target's authority to the configured domain", () => {
-  // "//evil.example/mcp" is protocol-relative; parsed against a base its
-  // authority wins over the base's. pinnedUrl must not let that survive.
-  const url = pinnedUrl("//evil.example/mcp", "example.com");
-  assert.equal(url.host, "example.com");
-  assert.equal(url.pathname, "/mcp");
+test("pinnedUrl refuses a target that carries its own authority", () => {
+  // "//evil.example/mcp" is protocol-relative and "http://evil.example/mcp" is
+  // absolute-form; parsed against a base, either authority wins over the
+  // base's. Neither is origin-form, so neither is accepted at all.
+  for (const target of ["//evil.example/mcp", "http://evil.example/mcp", "https://evil.example/mcp"]) {
+    assert.throws(() => pinnedUrl(target, "example.com"), /origin-form/, target);
+  }
 });
 
-test("pinnedUrl reduces an absolute-form target's authority to the configured domain", () => {
-  const url = pinnedUrl("http://evil.example/mcp", "example.com");
+test("pinnedUrl keeps a dot-segment target on the configured domain", () => {
+  // Each of these IS origin-form, and each reduces to the path
+  // "//evil.example/mcp" -- which re-parsing against a base would turn back
+  // into an authority. The host must survive all of them.
+  for (const target of [
+    "/.//evil.example/mcp",
+    "/%2e//evil.example/mcp",
+    "/a/..//evil.example/mcp",
+    "/..//evil.example/mcp",
+    "/%2e%2e//evil.example/mcp",
+  ]) {
+    const url = pinnedUrl(target, "example.com");
+    assert.equal(url.host, "example.com", target);
+    assert.notEqual(url.pathname, "/mcp", `${target} must not also be dispatched as /mcp`);
+  }
+});
+
+test("CONTROL: pinnedUrl passes an ordinary target through", () => {
+  // A pin that refused everything would satisfy the two tests above without
+  // being a pin at all.
+  const url = pinnedUrl("/t/1?refresh=1", "example.com");
   assert.equal(url.host, "example.com");
-  assert.equal(url.pathname, "/mcp");
+  assert.equal(url.pathname, "/t/1");
+  assert.equal(url.search, "?refresh=1");
 });
 
 // -- challengeBody ------------------------------------------------------------
@@ -836,24 +857,73 @@ test("a fully signed and answered POST /mcp reaches the mcp handler", async () =
 
 // -- CRITICAL: the authority pin cannot be defeated by the request target ---
 
-test("a signature minted for https://evil.example/mcp, sent with a protocol-relative target, is refused", async () => {
+test("a signature minted for https://evil.example/mcp, sent with a target that names a host, is refused", async () => {
+  // Neither target is origin-form, so the router refuses both before anything
+  // dispatches or verifies -- the same 400 a malformed target already earns.
   const { server, base } = await startServer();
   try {
     const { privateJwk } = await registerFreshKey(base);
     const { headers } = await signFor(privateJwk, "https://evil.example/mcp");
-    const res = await rawRequest(base, { method: "POST", path: "//evil.example/mcp", headers });
-    assert.equal(res.status, 401, `expected the forged authority to be refused, got ${res.status}: ${res.text}`);
+    for (const path of ["//evil.example/mcp", "http://evil.example/mcp"]) {
+      const res = await rawRequest(base, { method: "POST", path, headers });
+      assert.equal(res.status, 400, `expected the forged authority to be refused, got ${res.status}: ${res.text}`);
+      assert.equal(JSON.parse(res.text).reason, "target");
+    }
   } finally {
     server.close();
   }
 });
 
-test("a signature minted for https://evil.example/mcp, sent with an absolute-form target, is refused", async () => {
+// The dot-segment variants are origin-form, so they DO reach the router. They
+// must arrive as a path on this domain, which no signature minted elsewhere
+// verifies against, and which dispatches nowhere.
+for (const path of [
+  "/.//evil.example/mcp",
+  "/%2e//evil.example/mcp",
+  "/a/..//evil.example/mcp",
+  "/..//evil.example/mcp",
+  "/%2e%2e//evil.example/mcp",
+]) {
+  test(`a signature minted for https://evil.example/mcp, sent with the target ${path}, is refused`, async () => {
+    let mcpReached = false;
+    const { server, base } = await startServer({
+      mcp: { nodeHandler: (req, res) => { mcpReached = true; res.writeHead(200); res.end("mcp-reached"); } },
+    });
+    try {
+      const { privateJwk } = await registerFreshKey(base);
+      const { headers, keyId } = await signFor(privateJwk, "https://evil.example/mcp");
+      const knock = await rawRequest(base, { method: "POST", path: "/mcp", headers: {} });
+      const { challenge } = JSON.parse(knock.text);
+      const answer = createHash("sha256").update(challenge + keyId).digest("hex");
+      const res = await rawRequest(base, {
+        method: "POST",
+        path,
+        headers: { ...headers, challenge, "challenge-response": answer },
+      });
+      assert.notEqual(res.status, 200, `BYPASS: an evil.example signature was admitted via ${path}`);
+      assert.equal(mcpReached, false, "a forged authority must never reach the MCP handler");
+    } finally {
+      server.close();
+    }
+  });
+}
+
+test("CONTROL: the same evil.example signature at a plain /mcp target is refused too", async () => {
+  // Without this, the five tests above could be passing because the signature
+  // was never valid here in the first place -- which is the point, but it has
+  // to be the SIGNATURE that refuses it, not an accident of the target.
   const { server, base } = await startServer();
   try {
     const { privateJwk } = await registerFreshKey(base);
-    const { headers } = await signFor(privateJwk, "https://evil.example/mcp");
-    const res = await rawRequest(base, { method: "POST", path: "http://evil.example/mcp", headers });
+    const { headers, keyId } = await signFor(privateJwk, "https://evil.example/mcp");
+    const knock = await rawRequest(base, { method: "POST", path: "/mcp", headers: {} });
+    const { challenge } = JSON.parse(knock.text);
+    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
+    const res = await rawRequest(base, {
+      method: "POST",
+      path: "/mcp",
+      headers: { ...headers, challenge, "challenge-response": answer },
+    });
     assert.equal(res.status, 401, `expected the forged authority to be refused, got ${res.status}: ${res.text}`);
   } finally {
     server.close();

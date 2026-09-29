@@ -479,6 +479,60 @@ test("a tool REFUSAL exits non-zero, so a cron job can see it", async () => {
   assert.equal(broken.code, 1, "a missing argument is still the client's own failure");
 });
 
+// The same failure one layer up. `rpc` read only 401, so a 429 or a 500 --
+// both JSON with no `result` -- made callTool return undefined, report print
+// "status: undefined", and the process exit 0. The door meters a verified key
+// AFTER admitting it, so this is what a throttled agent actually meets.
+test("an HTTP refusal from the site exits non-zero, not 0 with `undefined`", async () => {
+  // A second Warden over the SAME mirror, so the identity is already known
+  // and the only difference is that every tool call is over budget.
+  const throttled = createServer({
+    stateDbPath: join(dir, "mirror.db"), domain: DOMAIN,
+    challengeSecret: SECRET, tokenView, mcp: { nodeHandler: () => {} },
+    allowRegistration: () => true, allowToolCall: () => false,
+    contract: "0x00000000000000000000000000000000000C0DE0", chainId: 84532,
+  });
+  const at = await new Promise((r) =>
+    throttled.listen(0, "127.0.0.1", () => r(`http://127.0.0.1:${throttled.address().port}`)));
+  try {
+    const { code, out } = await cli("status", "--site", `https://${DOMAIN}`, "--endpoint", at, "--key", keyPath);
+    assert.notEqual(code, 0, `a throttled call must not look like success: ${out}`);
+    assert.doesNotMatch(out, /undefined/, "an absent answer must not be printed as a value");
+    assert.match(out, /429/);
+  } finally {
+    await new Promise((done) => throttled.close(done));
+  }
+});
+
+// A tool result carrying `isError` and no `ok` field. Only `ok: false` was
+// read, so a site that refused in the MCP vocabulary still exited 0.
+test("a tool result marked isError exits non-zero even with no `ok` field", async () => {
+  const canned = (result) => (req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
+  };
+  const cases = [
+    { name: "isError", result: { isError: true, structuredContent: { note: "refused" }, content: [] } },
+    { name: "no result at all", result: undefined },
+  ];
+  for (const { name, result } of cases) {
+    const site = createServer({
+      stateDbPath: join(dir, "mirror.db"), domain: DOMAIN,
+      challengeSecret: SECRET, tokenView, mcp: { nodeHandler: canned(result) },
+      allowRegistration: () => true,
+      contract: "0x00000000000000000000000000000000000C0DE0", chainId: 84532,
+    });
+    const at = await new Promise((r) =>
+      site.listen(0, "127.0.0.1", () => r(`http://127.0.0.1:${site.address().port}`)));
+    try {
+      const { code, out } = await cli("status", "--site", `https://${DOMAIN}`, "--endpoint", at, "--key", keyPath);
+      assert.notEqual(code, 0, `${name} must not look like success: ${out}`);
+    } finally {
+      await new Promise((done) => site.close(done));
+    }
+  }
+});
+
 // The control: a successful call still exits 0, or the exit code says nothing.
 test("CONTROL: a successful call still exits 0", async () => {
   const { code } = await cli("status", "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath);
