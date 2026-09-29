@@ -33,6 +33,7 @@ import { runClock } from "../src/clock/run.mjs";
 import { utcDay } from "../src/mcp/tools/checkin.mjs";
 import { MRO_ABI } from "../src/clock/abi.mjs";
 import { LADDER } from "../src/mcp/ladder.mjs";
+import { CODE_BYTES, CODE_HEX_CHARS } from "./code-bytes.mjs";
 
 const CONTRACT = process.env.MRO_CONTRACT_ADDRESS;
 const RPC = process.env.BASE_RPC_URL;
@@ -42,7 +43,7 @@ const BITMAP = readFileSync(process.argv[2], "utf8").trim();
 
 if (!KEY) throw new Error("CLOCK_PRIVATE_KEY is not set: run through tools/mark-rehearse.sh");
 if (CHAIN_ID !== 84_532) throw new Error(`this rehearsal is Base Sepolia only, got chain ${CHAIN_ID}`);
-if (BITMAP.length !== 344) throw new Error(`the bitmap must be 172 bytes, got ${BITMAP.length / 2}`);
+if (BITMAP.length !== CODE_HEX_CHARS) throw new Error(`the bitmap must be ${CODE_BYTES} bytes, got ${BITMAP.length / 2}`);
 
 const TOKEN = Number(process.argv[3] ?? 1);
 const HUSH = 1;

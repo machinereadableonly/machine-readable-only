@@ -12,7 +12,7 @@ import { heartMaskBytes } from "../heart-mask.mjs";
 import { renderSvg, ACHE, HUSH, BEAT, AURA, VESSEL } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 import { tokenBitmap, SIZE } from "../token-bitmap.mjs";
-import { gateSolve, GATE_SIZES, gateStates, robustSolveFor, renderGateState } from "../robust-solve.mjs";
+import { gateSolve, GATE_SIZES, gateStates, robustSolveFor, renderGateState, gateTarget } from "../robust-solve.mjs";
 
 const DOMAIN = "example.com";
 const want = () => unpackModules(heartMaskBytes(), SIZE);
@@ -118,7 +118,7 @@ test("the banded gate states actually draw the digit band, at its declared size"
   // An inert state passes exactly like a working one. `ordinal` has to travel
   // through renderGateState into renderSvg, or these render unbanded and the
   // gate checks the old picture while reading as stricter.
-  const target = unpackModules(heartMaskBytes(), 37);
+  const target = unpackModules(heartMaskBytes(), SIZE);
   const solve = robustSolveFor(DOMAIN, 1);
   const banded = gateStates().filter(s => s.ordinal);
   assert.equal(banded.length, 2, "expected two banded states in the gate");
@@ -140,7 +140,7 @@ test("the child gate states actually draw an echo ring", () => {
   // So render each child state twice -- once as it is, once with the echo
   // removed -- and require the two to differ. That is the ring, and nothing
   // else in these states can account for a difference.
-  const target = unpackModules(heartMaskBytes(), 37);
+  const target = unpackModules(heartMaskBytes(), SIZE);
   const solve = robustSolveFor(DOMAIN, 1);
   const children = gateStates().filter(s => s.echo);
   assert.equal(children.length, 4, "expected four child states in the gate, the fourth banded");
@@ -156,4 +156,13 @@ test("the child gate states actually draw an echo ring", () => {
       `"${state.label}" renders identically with and without its echo -- the state is inert`
     );
   }
+});
+
+test("the gate's own target covers every module of the code", () => {
+  // This is the target every production solve is judged against:
+  // warden/src/solve/worker.mjs calls robustSolveFor with no target of its own.
+  // Cut to the version-5 side it left two thirds of the code outside the heart
+  // and the gate still passed, because renderSvg read `undefined` past the end
+  // and painted the rest in the noise ink.
+  assert.equal(gateTarget().length, SIZE * SIZE);
 });

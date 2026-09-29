@@ -18,6 +18,10 @@
 //
 // It also REPORTS, without failing, what the writer says about a chunk past
 // EIP-7825's cap -- the case the halving backstop was written for.
+//
+// CHECKIN_CHUNK IS STALE UNTIL THIS IS RUN AGAIN: the finish logic landed in
+// `_credit` after the figure was measured, and the tool could not run at all
+// while it minted the wrong code length.
 import assert from "node:assert/strict";
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -26,6 +30,7 @@ import { MRO_ABI } from "../src/clock/abi.mjs";
 import { makeWriter, MAX_TX_GAS } from "../src/clock/write.mjs";
 import { writeCheckInChunk, packIds } from "../src/clock/batch.mjs";
 import { CHECKIN_CHUNK } from "../src/clock/run.mjs";
+import { CODE_BYTES } from "./code-bytes.mjs";
 
 const RPC = process.env.RPC_URL;
 const CONTRACT = process.env.CONTRACT;
@@ -70,7 +75,7 @@ const read = (functionName, args = []) =>
 // The artwork is irrelevant to what a check-in costs: mint checks only its
 // length, and batchCheckIn never reads it. One address per token, because
 // walletCap is 20; one key per token, because a key mints once.
-const QR = "0x" + "ab".repeat(172);
+const QR = "0x" + "ab".repeat(CODE_BYTES);
 // The day each mint is "paid" on: the chain's today, read once. mint takes it
 // as its fifth argument since the first-day fix (2026-09-11).
 const MINT_DAY = Number(await read("today"));

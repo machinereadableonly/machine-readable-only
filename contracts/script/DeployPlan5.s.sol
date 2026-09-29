@@ -7,7 +7,8 @@ import {Ladder} from "../src/Ladder.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 
-/// @notice Deploy the pair and write all ten Marks. Modelled on DeployPlan1.s.sol.
+/// @notice Deploy the pair and write the ladder: ten paid Marks and the five
+/// finisher records. Modelled on DeployPlan1.s.sol.
 contract DeployPlan5 is MroScript {
     function run() external {
         // FIRST, before anything is read or sent: the operator has to have
@@ -25,6 +26,11 @@ contract DeployPlan5 is MroScript {
         // only setWarden can correct a wrong value afterwards, and this
         // contract is meant to outlive the person running the script.
         uint256 key = deployerKey();
+        // The Warden signs no owner call and the owner signs no Warden call.
+        // Only setWarden could correct this afterwards, and on mainnet the
+        // deployer is the permanent owner. SetClockWarden enforces the same
+        // separation; the deploy did not.
+        require(warden != vm.addr(key), "WARDEN_ADDRESS must not be the deployer");
         vm.startBroadcast(key);
         Renderer r = new Renderer();
         MachineReadableOnly t = new MachineReadableOnly(address(r), warden);

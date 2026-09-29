@@ -59,7 +59,8 @@ done
 
 # And prove the pair works end to end, not merely that it deployed. The bitmap
 # comes from the same generator the tests use; its CLI takes <tokenId> [domain]
-# and prints the 344 hex characters alone on stdout.
+# and prints the bitmap's hex, at whatever length the QR version makes it,
+# alone on stdout.
 # shellcheck source=/dev/null
 . "$HOME/.nvm/nvm.sh"
 CODE=0x$(cd ../tools && node token-bitmap.mjs 1 example.com 2>/dev/null)

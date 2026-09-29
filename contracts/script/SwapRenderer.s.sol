@@ -44,9 +44,15 @@ contract SwapRenderer is MroScript {
         require(address(next).code.length > 0, "the new renderer has no code");
 
         // One real read through the new renderer, so a swap that broke drawing
-        // fails here rather than on the first viewer.
-        string memory uri = mro.tokenURI(1);
-        console.log("tokenURI(1) length", bytes(uri).length);
-        require(bytes(uri).length > 0, "tokenURI(1) came back empty");
+        // fails here rather than on the first viewer. Skipped on an empty
+        // collection, where tokenURI(1) reverts through _requireOwned and would
+        // fail a swap that worked.
+        if (mro.totalMinted() == 0) {
+            console.log("no token minted yet; skipping the tokenURI read-back");
+        } else {
+            string memory uri = mro.tokenURI(1);
+            console.log("tokenURI(1) length", bytes(uri).length);
+            require(bytes(uri).length > 0, "tokenURI(1) came back empty");
+        }
     }
 }

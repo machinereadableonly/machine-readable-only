@@ -28,11 +28,12 @@ import { DEPLOY_BLOCK } from "../src/clock/reconcile.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
+import { CODE_BYTES } from "../tools/code-bytes.mjs";
 
 const FLOOR = DEPLOY_BLOCK[84532];
 const TODAY = 20_700;
-/// 172 bytes, which is CODE_BYTES. A shorter one is what BadCodeLength is for.
-const QR = "ab".repeat(172);
+/// The length the contract accepts. A shorter one is what BadCodeLength is for.
+const QR = "ab".repeat(CODE_BYTES);
 const PARENT_OWNER = "0x" + "11".repeat(20);
 const CHILD_OWNER = "0x" + "22".repeat(20);
 

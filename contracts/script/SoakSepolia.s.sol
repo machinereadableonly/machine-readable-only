@@ -15,8 +15,8 @@ import {SoakStates} from "./SoakStates.sol";
 ///
 /// @dev One token per state rather than one token cycled, because each token's
 /// code encodes its OWN url -- reusing a bitmap would weaken the "decoded to its
-/// own url" check to nothing. Twenty-six bitmaps come from
-/// tools/spike-bitmaps.mjs.
+/// own url" check to nothing. SpikeBitmaps must therefore carry one bitmap per
+/// SoakStates entry; tools/spike-bitmaps.sh reads the count from SoakStates.
 ///
 /// The key is read here with vm.envUint rather than passed as --private-key, so
 /// it never travels through a shell.
@@ -28,6 +28,10 @@ import {SoakStates} from "./SoakStates.sol";
 ///   forge script script/SoakSepolia.s.sol:SoakSepolia --sig "closeThePiece(address)" <token> \
 ///     --rpc-url base_sepolia --broadcast
 contract SoakSepolia is MroScript {
+    /// @dev MROSpikeToken's ERC721 name. The real collection's is different,
+    /// which is what makes it usable as a "this is the throwaway" check.
+    string internal constant SPIKE_NAME = "MRO Spike (throwaway)";
+
     function run() external returns (address renderer, address token) {
         // FIRST, before anything is read or sent: the operator has to have
         // stated which chain this is, and been right. See MroScript.
@@ -73,9 +77,19 @@ contract SoakSepolia is MroScript {
 
     /// @notice The one state that cannot share a batch with the others.
     /// @dev Sunset is piece-wide and irreversible. Called inside `run` it would
-    /// freeze all twenty-six tokens and every state read afterwards would be
-    /// wrong, so it is applied only once the rest have been verified.
+    /// freeze every soak token and each state read afterwards would be wrong,
+    /// so it is applied only once the rest have been verified.
+    /// @dev THREE GUARDS, because `deployerKey()` returns the owner key on Base
+    /// mainnet: one wrong address or `--rpc-url` would close the real piece for
+    /// good. The name check is the one that catches a right-chain, wrong-address
+    /// call, which no chain guard can see.
     function closeThePiece(address token) external {
+        guardChain();
+        require(block.chainid == BASE_SEPOLIA, "closeThePiece is Base Sepolia only");
+        require(
+            keccak256(bytes(MROSpikeToken(token).name())) == keccak256(bytes(SPIKE_NAME)),
+            "that address is not the throwaway spike token"
+        );
         vm.startBroadcast(deployerKey());
         MROSpikeToken(token).sunset();
         vm.stopBroadcast();
