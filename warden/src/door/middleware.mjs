@@ -20,22 +20,10 @@ export function toRequestLike(req, domain) {
 /**
  * Reduce a request target to a URL on OUR origin, whatever it claimed to be.
  *
- * Node passes the request target through verbatim, and a target may carry its
- * own authority: "//evil.example/mcp" is protocol-relative and
- * "http://evil.example/mcp" is absolute-form. Parsed against a base, that
- * authority WINS, so the router dispatched /mcp while the signature was
- * verified against somebody else's host -- and a signature minted for any site
- * at path /mcp was admitted here. Only origin-form is accepted for that reason:
- * exactly one leading slash, nothing that can name a host.
- *
- * DOT SEGMENTS PUT THE AUTHORITY BACK. "/.//evil.example/mcp" is origin-form,
- * but WHATWG dot-segment removal reduces it to the path "//evil.example/mcp",
- * and re-parsing THAT string against a base makes it protocol-relative again.
- * "/%2e//", "/a/..//" and "/..//" all arrive at the same place. So the path is
- * assigned through the setter, which cannot reach the host, rather than being
- * concatenated into a string and parsed a second time.
- *
- * Pinning at the CALL SITES is what allowed the original bypass: it is done
+ * A target that names a host ("//x/mcp", "http://x/mcp", or "/.//x/mcp" after
+ * dot-segment removal) would otherwise have the signature verified against
+ * that host while the router serves /mcp. So only origin-form is accepted, and
+ * the path goes in through the setter, which cannot reach the host. Pinned
  * here, once, so no caller can forget.
  */
 export function pinnedUrl(target, domain) {
@@ -47,8 +35,6 @@ export function pinnedUrl(target, domain) {
   const url = new URL(origin);
   url.pathname = claimed.pathname;
   url.search = claimed.search;
-  // The setters above cannot move the host; this refuses to hand back a URL
-  // that somehow left our origin rather than trusting that they never will.
   if (url.host !== domain) throw new Error("request target escaped the configured domain");
   return url;
 }
