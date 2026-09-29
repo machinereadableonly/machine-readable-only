@@ -15,6 +15,7 @@
 // A method whose controls fail is measuring nothing.
 import { createPublicClient, http } from "viem";
 import { baseSepolia } from "viem/chains";
+import { CODE_BYTES } from "./code-bytes.mjs";
 
 const address = process.argv[2];
 const rpc = process.argv[3] ?? "https://sepolia.base.org";
@@ -52,7 +53,7 @@ const view = (gap, extra = {}) => ({
   tokenId: 1n, level: 1, streak: 1, lastDay: 1000, mintDay: 1000, generation: 0,
   seedsGiven: 0, parent: 0n, echo: 0, resting: false, sunset: false, sunsetDay: 0,
   fellRun: 0, fellDay: 0, marks: 0n,
-  agentKeyId: "0x" + "00".repeat(32), code: "0x" + "00".repeat(172),
+  agentKeyId: "0x" + "00".repeat(32), code: "0x" + "00".repeat(CODE_BYTES),
   today: 1000 + gap, ...extra,
 });
 
