@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- quality -- The Clock, the mirror and chain reads</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- quality -- The Clock, the mirror and chain reads</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Read:</strong> <code>warden/src/clock/{run,main,reconcile,batch,write,unresolved,heartbeat,cursor,redact,builder-code}.mjs</code>; <code>warden/src/mirror/{schema.sql,db.mjs,queries.mjs}</code>; <code>warden/src/chain/{read,preflight}.mjs</code>; <code>warden/src/pay/x402.mjs</code>; <code>warden/src/day.mjs</code>; <code>warden/src/mcp/tools/checkin.mjs</code> (lines 36-225); <code>warden/deploy/mro-clock.{service,timer}</code>; <code>warden/.env.example</code>; <code>warden/ecosystem.config.cjs</code>; <code>.claude/rules/warden.md</code>; <code>contracts/src/MachineReadableOnly.sol</code> (lines 125-205, 278-305, 395-544); <code>warden/tools/{run-clock-now.sh,which-contract.sh,gen-abi.mjs,check-deployed-abi.mjs,mirror-snapshot.mjs,mirror-contents.mjs,mirror-reset-chain.mjs,derive-address.mjs,chunk-rehearsal.mjs,chunk-rehearsal.sh,absence-on-chain.mjs,mainnet-fork-clock.mjs}</code>; parts of <code>warden/test/{clock-reconcile,clock-run,clock-unresolved,clock-heal,clock-resilience}.test.mjs</code>; installed <code>@x402/core</code>, <code>@x402/evm</code> and <code>viem</code> sources for three defaults.</p>
+<h2>Findings</h2>
+<p><strong>Critical:</strong> none found.</p>
+<h3>[HIGH] [BLOCKS MAINNET] A held payment can be released while its authorisation is still spendable</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/unresolved.mjs:55-91</code> and <code>:111-113</code>; <code>warden/src/mirror/queries.mjs:192-195</code>, <code>:691-697</code>; <code>warden/tools/run-clock-now.sh:7-10</code>
+<strong>What:</strong> The resolve pass asks <code>authorizationState</code> about every <code>payment-unresolved</code> row the moment a run starts, with no minimum age. <code>reservedAt</code> is selected at <code>queries.mjs:193</code> and used by nothing, and the authorisation&#39;s <code>validBefore</code> is never stored. A <code>false</code> answer deletes both rows, and it is reported through <code>log</code>, not <code>alert</code>.
+<strong>Why it matters:</strong> <code>false</code> means &quot;not spent yet&quot;, not &quot;never will be&quot;. <code>x402.mjs:376-381</code> passes no timeout, so the installed default of 300 seconds applies (<code>@x402/core/dist/esm/chunk-H7ETXA5T.mjs:1062</code>, <code>@x402/evm/dist/esm/chunk-TTRSMFXP.mjs:34</code>). A settlement that goes unknown shortly before the 00:05 run, or before any manual <code>run-clock-now.sh</code> run, is asked inside that window. If the transfer then lands, the agent is debited up to $1,250.00, holds nothing, and the mirror has no row left. This is the loss the header at <code>unresolved.mjs:17-21</code> says the design prevents.
+<strong>Fix:</strong> Store <code>validBefore</code> when the row is held. Release on <code>false</code> only once chain time is past <code>validBefore</code> plus a confirmation margin; until then count the row as still unresolved. Promote on <code>true</code> at any age. Report a release through <code>alert</code>. Add a test for a row younger than its window.</p>
+<h3>[MEDIUM] Healing a landed chunk takes two RPC calls per token and saves nothing until the chunk returns</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/batch.mjs:80-99</code>, <code>:323-339</code>; <code>warden/src/clock/run.mjs:573-589</code>; <code>warden/deploy/mro-clock.service:31</code>
+<strong>What:</strong> After a lost receipt, each <code>DayNotAdvanced</code> revert names one token, so recovery is one simulate plus one <code>viewOf</code> per token, in sequence. Healed entries are marked written only after <code>writeCheckInChunk</code> returns. The 1,400 <code>markCreditWritten</code> calls at <code>run.mjs:575-578</code> are also separate commits rather than one transaction.
+<strong>Why it matters:</strong> A full chunk of 1,400 needs about 2,800 round trips against a 600-second unit timeout. If the unit is killed, none of the heal progress is saved and the next night starts from zero. Every token in that chunk then stops being credited until a human intervenes.
+<strong>Fix:</strong> On the first <code>DayNotAdvanced</code>, read <code>lastDay</code> for every distinct token in the chunk (batched) and heal in one step. Persist heals as they are found. Wrap the per-chunk marking in one <code>q.transact</code>.</p>
+<h3>[MEDIUM] The heartbeat is skipped while the contract is paused, and is never told about sunset</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:727-733</code>, <code>:753</code>; <code>warden/src/clock/heartbeat.mjs:41-53</code>; <code>contracts/src/MachineReadableOnly.sol:166-169</code>
+<strong>What:</strong> The heartbeat block runs only when <code>!summary.aborted</code>. With any row queued during a pause, the first write reverts <code>EnforcedPause</code>, the run aborts, and no heartbeat is sent. <code>heartbeatDue</code> has a <code>sunset</code> parameter that <code>run.mjs:753</code> never passes. <code>wroteThisRun</code> counts <code>healed</code> entries, which this run did not write.
+<strong>Why it matters:</strong> The contract leaves <code>heartbeat()</code> without <code>whenNotPaused</code> so a long pause cannot force the ending. The Clock defeats that whenever one check-in was queued before the pause. After sunset with an empty queue, the Clock pays for a heartbeat every 30 days forever, which <code>heartbeat.mjs:50-53</code> says must not happen.
+<strong>Fix:</strong> Send the heartbeat when the abort reason is <code>EnforcedPause</code>. Read <code>isSunset</code> beside <code>lastWardenDay</code> and pass it in. Drop <code>healed</code> from <code>wroteThisRun</code>. Add tests for all three.</p>
+<h3>[MEDIUM] A day that never landed can be recorded as &quot;already on chain&quot;</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/batch.mjs:96-98</code>, <code>:233-236</code>; <code>warden/src/clock/run.mjs:598-601</code>
+<strong>What:</strong> The heal treats every queued entry with <code>day &lt;= lastDay</code> as landed. That proves only that the day can no longer be written. When a chunk returns <code>attempts-exhausted</code>, <code>run.mjs</code> keeps going, so with a multi-day backlog a later chunk can land a later day for the same token.
+<strong>Why it matters:</strong> The skipped earlier day is then permanently unwritable. The next night it is marked written, with an alert saying the mirror was behind, and the run exits 0. A day of the artwork is lost while the mirror reports it kept. <code>batch.mjs:72-75</code> names this as the outcome to avoid.
+<strong>Fix:</strong> Stop sending further chunks after an <code>attempts-exhausted</code> result. In the heal, mark as healed only when the chain&#39;s <code>level</code> accounts for the entry; otherwise fail it with its own reason.</p>
+<h3>[MEDIUM] Reconcile&#39;s <code>Minted</code> closes a paid mint without checking it is the same mint</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/reconcile.mjs:209-212</code>; <code>warden/src/clock/run.mjs:325-351</code>; <code>warden/src/mirror/queries.mjs:321</code>
+<strong>What:</strong> The mint pass checks owner and key before marking a row written on <code>TokenExists</code>, and leaves a row held by a different token for a human. <code>applyEvents</code> marks the mint written for any <code>Minted</code> whose id the mirror holds. It ignores the event&#39;s <code>keyId</code>, and the update has no status guard.
+<strong>Why it matters:</strong> If another token takes a reserved id, the mint pass alerts correctly and then reconcile closes the paid row as written. The alerts stop and the agent has paid for a token that does not exist.
+<strong>Fix:</strong> Compare <code>event.args.keyId</code> with <code>keyIdToBytes32(token.keyId)</code>. On mismatch count it as skipped and alert. Restrict the update to <code>status = &#39;queued&#39;</code>.</p>
+<h3>[MEDIUM] Reconcile is all-or-nothing, so a long backlog can never be worked off</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:963-974</code>; <code>warden/src/clock/reconcile.mjs:66-91</code>; <code>warden/src/clock/cursor.mjs:79-82</code>; <code>warden/deploy/mro-clock.service:31</code>
+<strong>What:</strong> <code>readEvents</code> reads every page into memory, events are applied only after the last page, and the cursor moves only on full completion. One failed page discards the night&#39;s reading. The span is fixed at 1,000 with no fallback if the provider lowers its cap again.
+<strong>Why it matters:</strong> A day is about 44 pages. After months of downtime the backlog is thousands of sequential calls, which does not fit in 600 seconds, and every night restarts from the same cursor. <code>Rested</code>, <code>Transfer</code> and <code>Rebound</code> then never reach the mirror again.
+<strong>Fix:</strong> Apply events and write the cursor per page or per small batch. Cap pages per run. Halve the span and retry on a range-limit error.</p>
+<h3>[MEDIUM] Every Clock alert is a line in a log file; nothing notifies anyone</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:217</code>; <code>warden/deploy/mro-clock.service:77-78</code>
+<strong>What:</strong> <code>alert</code> is <code>console.error</code>, appended to <code>mro-clock.log</code>. The unit has no <code>OnFailure=</code>, and a search of the repository for <code>OnFailure</code> found none. The only <code>mro-clock</code> lines in <code>DEPLOY.md</code> are the stop and start commands.
+<strong>Why it matters:</strong> &quot;Needs a human&quot;, unresolved payments and a refused heartbeat all depend on somebody opening a log. The 30-day heartbeat margin assumes a broken Clock gets noticed.
+<strong>Fix:</strong> Add <code>OnFailure=</code> to the unit, pointing at a small notifier unit that sends the last log lines through the operator&#39;s existing alert channel.</p>
+<h3>[MEDIUM] A condemned credit fails the run for one night only, and the mirror&#39;s level is never corrected</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:622-624</code>; <code>warden/src/mirror/queries.mjs:329</code>, <code>:961</code>; <code>warden/src/clock/cursor.mjs:118</code>; <code>warden/src/mcp/tools/checkin.mjs:193-215</code>
+<strong>What:</strong> <code>failCredit</code> changes only the credit row. The Warden already advanced <code>tokens.level</code>, <code>streak</code>, <code>lastDay</code> and <code>bestRun</code> at check-in time, and nothing rolls that back or compares it with <code>viewOf</code>. <code>q.stuckCredits()</code> has no caller in <code>warden/</code> outside <code>queries.mjs</code>, so from the second night the failed credit is not reported and the run exits 0. Failed mark orders, by contrast, are re-read every run (<code>run.mjs:648</code>).
+<strong>Why it matters:</strong> <code>status</code> and <code>/t/&lt;id&gt;</code> overstate the token permanently, and the only signal is a single night&#39;s log.
+<strong>Fix:</strong> Collect <code>q.stuckCredits()</code> into the summary every run. Add a nightly comparison of <code>level</code> and <code>lastDay</code> against <code>viewOf</code> for tokens touched that day, alerting on disagreement.</p>
+<h3>[MEDIUM] Three ops tools still build 172-byte artwork; the contract requires 407</h3>
+<p><strong>Where:</strong> <code>warden/tools/chunk-rehearsal.mjs:73</code>; <code>warden/tools/mark-rehearsal.mjs:45</code>; <code>warden/tools/absence-on-chain.mjs:55</code>; <code>contracts/src/MachineReadableOnly.sol:105</code>; <code>warden/src/clock/run.mjs:24-37</code>
+<strong>What:</strong> <code>chunk-rehearsal.sh</code> deploys the current contract, then the script mints with a 172-byte code. <code>CODE_BYTES</code> is 407, so the first mint should revert <code>BadCodeLength</code>. I did not run it.
+<strong>Why it matters:</strong> <code>CHECKIN_CHUNK = 1,400</code> cites a 2026-09-11 measurement and says to re-run when <code>_credit</code> changes. <code>_credit</code> now carries the finish logic, and the tool that measures it cannot run. A chunk that is too large is halved, so the result would be extra transactions, not lost days.
+<strong>Fix:</strong> Derive the code length from one shared constant, re-run the rehearsal, and update the figure. Correct <code>warden/test/clock-seed.test.mjs:34</code>, which still says 172 is <code>CODE_BYTES</code>.</p>
+<h3>[LOW] A failed <code>lastDay</code> read turns a recoverable row into a terminal failure</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/batch.mjs:85-94</code>; <code>warden/src/clock/run.mjs:622</code>; <code>warden/src/mirror/queries.mjs:953-955</code>
+<strong>What:</strong> When <code>viewOf</code> cannot be read, the named entry is dropped as <code>DayNotAdvanced</code> and <code>run.mjs</code> sends it to <code>failCredit</code>. <code>queries.mjs:953-955</code> says <code>failCredit</code> is not for a day the chain already holds, which is what that error usually means.
+<strong>Why it matters:</strong> One RPC blip marks a landed day as failed, with no way back.
+<strong>Fix:</strong> Leave it queued, as <code>attempts-exhausted</code> is, and retry the read next run.</p>
+<h3>[LOW] A gas stop returns before reconcile and the stale-row check, and exits 0</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:282-287</code>; <code>warden/src/clock/cursor.mjs:113-127</code>
+<strong>What:</strong> The gas guard returns early, skipping reconcile, stale rows and the heartbeat decision.
+<strong>Why it matters:</strong> During a long stretch of high gas the mirror stops learning about <code>Rested</code>, <code>Transfer</code> and <code>Rebound</code>, with no failure signal. The pause case was already fixed for this reason (<code>run.mjs:394-400</code>).
+<strong>Fix:</strong> Skip only the write passes, then fall through to the stale check and reconcile.</p>
+<h3>[LOW] The reconcile cursor is not atomic, not floored, and not tied to a contract</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/cursor.mjs:39</code>, <code>:51-54</code>; <code>warden/src/clock/run.mjs:960</code>; <code>warden/tools/mirror-reset-chain.mjs:26</code>; <code>contracts/script/adopt-deployment.sh:255-261</code>
+<strong>What:</strong> <code>writeCursor</code> writes in place, and an empty file reads as a first run. <code>from</code> is <code>cursor + 1</code> with no clamp to <code>DEPLOY_BLOCK</code>. The file holds no address or chain id, and the redeploy steps never reset it.
+<strong>Why it matters:</strong> A stale cursor survives a redeploy or chain change unnoticed. An emptied file on mainnet means a re-read from the deploy block, which is the stall <code>cursor.mjs:31-36</code> describes.
+<strong>Fix:</strong> Write to a temp file and rename. Store <code>{chainId, contract, block}</code> and refuse a mismatch. Use <code>max(floor, cursor + 1)</code>. Treat an empty file as corruption.</p>
+<h3>[LOW] A rebind to an unregistered key leaves the mirror&#39;s binding stale permanently</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/reconcile.mjs:194-204</code>
+<strong>What:</strong> The log says the binding is stale &quot;until that key registers&quot;. <code>setKeyId</code> is called only at <code>reconcile.mjs:192</code>, so nothing re-applies the binding when the key later registers.
+<strong>Why it matters:</strong> <code>status</code> lists tokens by the mirror&#39;s key (<code>warden/src/mcp/tools/status.mjs:34</code>), so the new holder never sees the token there. Each check-in also costs an extra chain read (<code>checkin.mjs:75-88</code>).
+<strong>Fix:</strong> On key registration, or nightly for mismatched tokens, read <code>boundKeyOf</code> and update. Correct the log text.</p>
+<h3>[LOW] An unknown receipt on a mint, seed or Mark does not stop later sends</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:393</code>, <code>:933-935</code>; <code>warden/src/clock/batch.mjs:279-281</code>
+<strong>What:</strong> Check-ins abort the run on <code>receipt-unknown</code>. The other three passes treat it as an ordinary failure and keep sending on the next nonce.
+<strong>Why it matters:</strong> If the first transaction is stuck, each later one waits out viem&#39;s 180-second receipt timeout (<code>viem/_esm/actions/public/waitForTransactionReceipt.js:53</code>) and the run hits the unit timeout.
+<strong>Fix:</strong> Add <code>receipt-unknown</code> and <code>reverted-on-chain</code> to the conditions that stop the write passes.</p>
+<h3>[LOW] A leftover lock file blocks every later run</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/main.mjs:94-106</code>
+<strong>What:</strong> The lock is an empty file with no process id or timestamp. After a SIGKILL or power loss it stays, and each night refuses to start.
+<strong>Why it matters:</strong> One bad night becomes every night until a human deletes the file, and the only signal is the log.
+<strong>Fix:</strong> Write the process id and start time into the file, and take over a lock whose process is gone.</p>
+<h3>[LOW] Dead code, duplication, and comments that contradict the code</h3>
+<p><strong>Where and what:</strong></p>
+<ul>
+<li><code>warden/src/clock/main.mjs:13-14</code>: <code>readFileSync</code>, <code>writeFileSync</code>, <code>mkdirSync</code> and <code>dirname</code> are unused since the cursor moved out.</li>
+<li><code>warden/src/clock/main.mjs:23</code>: <code>utcDay</code> is imported from the Warden&#39;s check-in tool; it lives in <code>src/day.mjs</code>.</li>
+<li><code>warden/src/mirror/queries.mjs:306-308</code>: <code>staleCredits</code> is the same SQL as <code>pendingCredits</code> at <code>:296-298</code>.</li>
+<li><code>warden/src/chain/preflight.mjs:22-43</code>, <code>warden/src/chain/read.mjs:153-182</code>, <code>:184-224</code>: three hand-written JSON-RPC fetchers.</li>
+<li><code>warden/src/chain/read.mjs:4-5</code> says a client library is avoided; <code>:47</code> imports viem. <code>:27-29</code> names a superseded contract address.</li>
+<li><code>warden/src/clock/reconcile.mjs:49-51</code> says ids 11-15 are unwritten; <code>:54-58</code> and the contract say otherwise.</li>
+<li><code>warden/src/mirror/db.mjs:48-49</code> says nothing is deployed yet.</li>
+<li><code>warden/src/clock/write.mjs:109-113</code>: the documented results omit <code>gas-estimate-failed</code> and <code>receipt-unknown</code>.</li>
+<li>Detached doc blocks: <code>warden/src/clock/run.mjs:48-61</code>, <code>warden/src/chain/read.mjs:128-135</code>, <code>warden/src/mirror/queries.mjs:701-714</code>.</li>
+<li><code>warden/src/clock/unresolved.mjs:87</code> falls back to <code>err.message</code>, which <code>redact.mjs</code> says carries the RPC url. <code>safeErrorText</code> is the project&#39;s own fix.</li>
+<li><code>warden/test/clock-reconcile.test.mjs:260</code>: the title says Rebound is never written, but <code>reconcile.mjs:190-193</code> writes it for a registered key.</li>
+<li><code>warden/test/clock-run.test.mjs:786</code>: the title says the cursor is not dragged back, but the assertion at <code>:808-811</code> accepts a lower <code>to</code>, which <code>main.mjs:168-169</code> then writes.</li>
+</ul>
+<h3>[INFO] <code>schema.sql</code> follows its own rule in this snapshot</h3>
+<p><strong>Where:</strong> <code>warden/src/mirror/schema.sql:94</code>, <code>:137</code>; <code>warden/src/mirror/db.mjs:154-155</code>, <code>:169</code>, <code>:186</code>
+<strong>What:</strong> The only two indexes in <code>schema.sql</code> name original columns. Every index on a migrated column is created in <code>migrate()</code>. No defect found.</p>
+<h3>[INFO] Comment volume conflicts with the project&#39;s comment rule</h3>
+<p><strong>Where:</strong> for example <code>warden/src/clock/run.mjs:10-11</code>, <code>:794-914</code>
+<strong>What:</strong> The files carry dated history, review finding numbers and past-bug stories. The repository is public and the standing rule is no history in source. Several Low items above are stale comments of this kind.</p>
+<h2>Questions</h2>
+<ol>
+<li><code>warden/src/clock/main.mjs</code> runs none of the Warden&#39;s boot checks (<code>verifyChainId</code>, <code>verifyDecoder</code>). Is viem&#39;s chain assertion on send the intended guard, given that <code>today()</code> and reconcile are read before any send?</li>
+<li><code>warden/src/clock/run.mjs:42</code>: can a lagging replica return an empty <code>getLogs</code> for blocks it has not imported? If so, 12 blocks does not stop the cursor passing unseen events. Would checking that the node holds block <code>to</code> before trusting an empty page be acceptable?</li>
+<li><code>warden/src/pay/x402.mjs:56-59</code> accepts a Permit2 nonce, but <code>unresolved.mjs</code> can only ask the EIP-3009 question. Can a Permit2 payment reach <code>payment-unresolved</code> with the current scheme registration?</li>
+<li><code>warden/src/clock/write.mjs:96-99</code> checks gas price once per run and sends set no fee cap. Is a per-transaction cap wanted for mainnet?</li>
+<li><code>warden/src/clock/batch.mjs:38</code>: <code>FutureDay</code> fails every entry for that day permanently, though it means &quot;not yet&quot;. Should it leave them queued?</li>
+</ol>
+<h2>Out of scope</h2>
+<ul>
+<li><code>warden/src/mcp/tools/upgrade.mjs:34-35</code> and <code>warden/src/mcp/tools/seed.mjs:59</code> compare the mirror&#39;s <code>token.level</code>, which can run ahead of the chain; I did not read far enough to see whether a chain read follows.</li>
+</ul>
+<h2>Coverage</h2>
+<p>Read in full: all of <code>warden/src/clock/</code> except the generated <code>abi.mjs</code>, all of <code>warden/src/mirror/</code> and <code>warden/src/chain/</code>, <code>pay/x402.mjs</code>, <code>day.mjs</code>, the Clock&#39;s service and timer units, and the tools listed at the top.</p>
+<p>Partly read: the contract (heartbeat, absence, creation-day and check-in sections only) and <code>checkin.mjs</code>. For the tests I read every test title in the clock, mirror, chain-read, preflight, redact, abi, settlement and seed-mirror suites, and the bodies of sections in five files.</p>
+<p>Grep only: <code>adopt-deployment.sh</code>, <code>DEPLOY.md</code>, <code>mark-rehearsal.mjs</code>.</p>
+<p>Not read: <code>mainnet-fork-rehearsal.sh</code>, <code>warden/tools/year/</code>, <code>rehearse-*.sh</code>, the remaining test bodies, and the images, which do not bear on this subsystem.</p>
+<p>Nothing was executed. Every finding comes from reading, including the claim that the chunk rehearsal fails against <code>CODE_BYTES = 407</code>. The timing figures in the heal and reconcile findings are estimates from call counts, not measurements.</p>
+</body>
+</html>

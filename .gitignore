@@ -25,3 +25,5 @@ tools/out/
 
 # SDD scratch workspace (ledgers, briefs, review packages) -- not part of the piece
 .superpowers/
+
+.claude/worktrees/

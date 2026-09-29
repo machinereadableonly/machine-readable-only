@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- quality -- verified</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- quality -- verified</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Findings in:</strong> 78 -- <strong>after merging:</strong> 71</p>
+<p>All five reports were present and none said FAILED. Nothing was executed: every verdict below comes from opening the cited source, the installed libraries under <code>warden/node_modules/</code> and <code>tools/node_modules/</code>, and whole-tree searches. Gas, byte and timing figures are quoted from source, not measured.</p>
+<h2>Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Severity</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Critical</td>
+<td>0</td>
+</tr>
+<tr>
+<td>High</td>
+<td>2</td>
+</tr>
+<tr>
+<td>Medium</td>
+<td>20</td>
+</tr>
+<tr>
+<td>Low</td>
+<td>43</td>
+</tr>
+<tr>
+<td>Info</td>
+<td>6</td>
+</tr>
+</tbody></table>
+<p><strong>Tagged [BLOCKS MAINNET]:</strong> 9 (2 High, 5 Medium, 1 Low, 1 Info).</p>
+<table>
+<thead>
+<tr>
+<th>Verdict</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CONFIRMED</td>
+<td>64</td>
+</tr>
+<tr>
+<td>PARTLY CONFIRMED</td>
+<td>7</td>
+</tr>
+<tr>
+<td>UNVERIFIED</td>
+<td>0</td>
+</tr>
+<tr>
+<td>REFUTED</td>
+<td>0</td>
+</tr>
+</tbody></table>
+<p><strong>Where independent reviewers converged (strong signal):</strong></p>
+<ul>
+<li><strong>A paid reservation can be released while the money may still move.</strong> Three separate mechanisms, found by two reviewers (q3 and q4) working on different files: the <code>success: false</code> classification, the expiry sweep, and the Clock&#39;s resolve pass.</li>
+<li><strong>An unknown settlement is reported to the agent as a plain failure.</strong> Found independently by q3 (server side) and q5 (client and skill side).</li>
+<li><strong>Version-5 leftovers (172 bytes, 37 modules).</strong> Found by q1 (contract scripts), q2 (the robustness gate) and q4 (Warden rehearsal tools).</li>
+<li><strong>Stale comments.</strong> All five reviewers; two items were reported twice (<code>TokenView.sol:25-36</code>, <code>warden/src/mcp/server.mjs:127</code>).</li>
+</ul>
+<h2>Critical</h2>
+<p>None.</p>
+<h2>High</h2>
+<h3>[CONFIRMED] A <code>success: false</code> settlement is always released, but the installed facilitator code returns it for transfers already broadcast [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:343-345</code> (classification), <code>:493-506</code> (release)
+<strong>What:</strong> Every non-success answer is recorded as <code>declined</code> and the reservation is deleted. The installed reference facilitator returns <code>success: false</code> <strong>with a transaction hash</strong> in two cases: the receipt wait fails after broadcast (reason <code>settlement_pending</code>), and a mined transfer fails event validation.
+<strong>Why:</strong> The transfer can still be mined after the row is deleted. The agent is debited up to $1250.00, holds nothing, and its nonce stays claimed in <code>pay_nonces</code>. This is the loss the project&#39;s own &quot;failed and unknown are different outcomes&quot; rule exists to prevent.
+<strong>Fix:</strong> Treat as <code>declined</code> only when <code>settlement.transaction</code> is empty and <code>errorReason</code> is on an allowlist of pre-broadcast reasons. Hold everything else through <code>onUnresolved</code>. Add a fake-facilitator test answering <code>settlement_pending</code> with a hash.
+<strong>Verification:</strong></p>
+<ul>
+<li><code>@x402/evm/dist/esm/chunk-KNDFHTKS.mjs:22-27</code> and <code>:80-88</code> return <code>success: false, errorReason: &quot;settlement_pending&quot;, transaction: tx</code>.</li>
+<li><code>exact/facilitator/index.mjs:352-358</code> returns <code>success: false</code> with <code>transaction: tx</code> on an event mismatch; <code>:363-371</code> returns <code>transaction: &quot;&quot;</code> for any throw.</li>
+<li><code>@x402/core</code> itself treats <code>settlement_pending</code> with a hash as non-terminal: <code>chunk-H7ETXA5T.mjs:1677-1693</code> retries exactly once, then returns the result as it stands.</li>
+<li>Caveat: the Warden talks to a remote facilitator over HTTP. The installed code is the reference implementation, so the remote host&#39;s behaviour is inferred, not observed.</li>
+</ul>
+<h3>[CONFIRMED] The expiry sweep deletes reservations on silence, and they carry nothing to ask the chain with [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>warden/src/mirror/queries.mjs:788-798</code>, called from <code>warden/src/mcp/tools/mint.mjs:50</code> and <code>upgrade.mjs:230</code>
+<strong>What:</strong> An <code>awaiting-payment</code> row older than ten minutes is deleted with no check. If the process stops between the handler returning and the settlement answer arriving, the row stays <code>awaiting-payment</code> and the next paid call by anyone sweeps it. <code>payer</code> and <code>asset</code> are written only by <code>holdUnresolvedMint</code> / <code>holdUnresolvedMarkOrder</code> (<code>queries.mjs:169-176</code>), so the row could not be resolved even if kept. The same happens when <code>onUnresolved</code> throws (<code>x402.mjs:521-526</code>).
+<strong>Why:</strong> A restart during a settlement is ordinary (a deploy, a crash, <code>max_memory_restart: &quot;512M&quot;</code> at <code>ecosystem.config.cjs:93</code>). <code>.claude/rules/warden.md</code> says &quot;never release on silence&quot;; this path does.
+<strong>Fix:</strong> Pass <code>payer</code> and <code>asset</code> to the handler beside <code>payNonce</code> and store them at reservation time. Make the sweep move expired rows to <code>payment-unresolved</code> instead of deleting, so the Clock&#39;s <code>authorizationState</code> read decides.
+<strong>Verification:</strong> Read the sweep, both hold statements and both call sites. <code>queries.mjs:708-711</code> describes the sweep as the backstop for &quot;a crash between the handler and the settle&quot;, which is the case where money may have moved. <code>warden/test/settlement-commit.test.mjs:316</code> asserts the deletion.
+<strong>Note on fix order:</strong> the sweep-order finding below asks for the sweep to run earlier. Make the sweep non-destructive first, or that change widens this one.</p>
+<h2>Medium</h2>
+<h3>[CONFIRMED] A held payment can be released while its authorisation is still spendable [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/unresolved.mjs:55-91</code>, <code>:111-113</code>; <code>warden/src/mirror/queries.mjs:192-195</code>, <code>:691-697</code>; <code>warden/tools/run-clock-now.sh:7-10</code>
+<strong>What:</strong> The resolve pass asks <code>authorizationState</code> about every <code>payment-unresolved</code> row the moment a run starts, with no minimum age. <code>reservedAt</code> is selected and used by nothing; <code>validBefore</code> is never stored. A <code>false</code> answer deletes the rows and is reported through <code>log</code>, not <code>alert</code>.
+<strong>Why:</strong> <code>false</code> means &quot;not spent yet&quot;. Inside the validity window the transfer can still land after the row is gone.
+<strong>Fix:</strong> Store <code>validBefore</code> when the row is held. Release on <code>false</code> only once chain time is past it plus a margin. Report a release through <code>alert</code>. Add a test for a row younger than its window.
+<strong>Severity changed: High to Medium.</strong> The exposure is a settlement going unknown within about five minutes before a Clock run (00:05 UTC, or a manual <code>run-clock-now.sh</code>). That is a narrow window per incident. The loss when it happens is the same as the two High findings, so the mainnet tag stays.
+<strong>Verification:</strong> <code>x402.mjs:376-381</code> passes no timeout. The default is 300 seconds (<code>@x402/core/dist/esm/chunk-H7ETXA5T.mjs:1062</code>) and the client sets <code>validBefore = now + maxTimeoutSeconds</code> (<code>@x402/evm/dist/esm/chunk-TTRSMFXP.mjs:34</code>). The header at <code>unresolved.mjs:17-21</code> says the Clock &quot;asks the next morning&quot;; nothing enforces that.</p>
+<h3>[CONFIRMED] On an unknown settlement outcome the agent is told the payment failed, and the docs promise an immediate retry [BLOCKS MAINNET]</h3>
+<p><strong>Merged from:</strong> q3 and q5 (independent convergence).
+<strong>Where:</strong> <code>warden/src/pay/x402.mjs:508-528</code>; <code>warden/public/llms.txt:228-233</code>; <code>docs/2026-09-01-mro-raw-protocol.md:797-806</code>; <code>client/src/messages.mjs:88-95</code>, <code>:107-115</code>; <code>skills/machine-readable-only/SKILL.md:124-125</code>
+<strong>What:</strong> The gateway holds the row but returns the library&#39;s result unchanged: a payment demand reading &quot;Payment settlement failed&quot;. The client prints &quot;NOTHING WAS MINTED, and the site released its reservation. A failed settlement moves no money&quot;. The skill says &quot;run it again&quot;. The protocol document says &quot;you can call again immediately&quot;.
+<strong>Why:</strong> All of those can be false in this case. No second charge results, because the retry is refused <code>already-minted</code> or <code>mark-already-applied</code> before payment. The harm is that the operator is told nothing happened while money may have moved.
+<strong>Fix:</strong> In the unresolved branch return <code>payRefusal({ ok: false, reason: &quot;payment-unresolved&quot; })</code>. Add the reason to <code>NEXT</code>, document the third outcome in <code>llms.txt</code>, the protocol document, <code>refusals.md</code>, the two client messages and the skill sentence.
+<strong>Verification:</strong> <code>@x402/mcp/dist/esm/index.mjs:1054-1086</code> funnels both outcomes into <code>createSettlementFailedResult</code>. <code>status</code> lists unpaid reservations too (<code>status.mjs:34</code> reads <code>tokensForKey</code>, which has no status filter), so &quot;if a token is listed, the mint succeeded&quot; is unsafe as written.</p>
+<h3>[CONFIRMED] The wallet-cap and supply-cap gates ignore mints already paid for but not yet written [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/gates.mjs:89-93</code>, <code>:106-110</code>; <code>warden/src/chain/read.mjs:414-424</code>, <code>:443-453</code>; <code>warden/src/mcp/tools/mint.mjs:34</code>, <code>:81</code>
+<strong>What:</strong> Both gates compare the cap against what the chain has minted, and the chain learns of a mint only at the next Clock run. <code>seedBudgetBlock</code> already subtracts unwritten reservations (<code>gates.mjs:136-140</code>); these two do not.
+<strong>Why:</strong> With <code>walletCap</code> 20, the 21st mint to one address in a day is paid for and then reverts <code>WalletCap</code>. The mint pass has no branch for that error (<code>run.mjs:367-392</code>), so the row retries nightly.
+<strong>Fix:</strong> Subtract the mirror&#39;s unwritten creations in both gates, before and after payment.
+<strong>Severity changed: High to Medium.</strong> The loss is $1 per mint, the rows stay queued with a nightly alert, and both caps are owner dials (<code>setWalletCap</code>, <code>setSupplyCap</code> up to 65,535) that can be raised inside the 30-day <code>StaleDay</code> window. It needs more than 20 distinct keys minting to one address in one day, or the sell-out day.
+<strong>Verification:</strong> Read both gates, both chain readers and the mint handler.</p>
+<h3>[CONFIRMED] The expired-reservation sweep runs after the check it is meant to protect</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/mint.mjs:27</code> against <code>:50</code>; <code>warden/src/mirror/queries.mjs:259</code>
+<strong>What:</strong> <code>hasMinted</code> counts every <code>mints</code> row for the key, including a dead <code>awaiting-payment</code> one, and runs at line 27. The sweep runs at line 50. The comment at <code>:45-49</code> says the sweep prevents exactly this lockout.
+<strong>Why:</strong> A key with an orphaned reservation is refused <code>already-minted</code> until some other key&#39;s paid call triggers the sweep. The locked-out key cannot trigger it itself.
+<strong>Fix:</strong> Move the sweep above the <code>hasMinted</code> check, after the sweep has been made non-destructive (see the second High finding). Add a same-key retry test.
+<strong>Tag removed.</strong> No funds are at risk and the fix is a Warden deploy that can ship at any time.
+<strong>Verification:</strong> Read the handler top to bottom.</p>
+<h3>[CONFIRMED] <code>closeThePiece</code> can irreversibly sunset any contract, on any chain, with no guard [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>contracts/script/SoakSepolia.s.sol:78-83</code>
+<strong>What:</strong> It sends <code>sunset()</code> to whatever address it is given, signed by <code>deployerKey()</code>, without calling <code>guardChain()</code>. On chain 8453 <code>deployerKey()</code> returns the owner key (<code>MroScript.sol:66-84</code>).
+<strong>Why:</strong> One wrong address or <code>--rpc-url</code> closes the real piece permanently.
+<strong>Fix:</strong> Call <code>guardChain()</code>, require Base Sepolia, and refuse unless the target&#39;s <code>name()</code> is the spike&#39;s.
+<strong>Verification:</strong> Searched every <code>external</code> function in <code>contracts/script/*.sol</code>. Every other broadcasting entry point calls <code>guardChain()</code>; this is the only one that does not.</p>
+<h3>[CONFIRMED] The robustness gate renders every state with a heart mask cut off at the version-5 size [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>tools/robust-solve.mjs:117</code>; reached in production by <code>warden/src/solve/worker.mjs:21</code>; repeated in <code>tools/test/robust-solve.test.mjs:121</code>, <code>:143</code>
+<strong>What:</strong> <code>unpackModules(heartMaskBytes(), 37)</code> unpacks 1,369 entries of a 3,249-module mask. <code>renderSvg</code> reads <code>want[p]</code> up to 3,248 (<code>tools/render-token.mjs:752-757</code>), so everything past row 24 is <code>undefined</code> and drawn in the noise ink.
+<strong>Why:</strong> The gate chooses the mask a token carries for life, and it is judging pictures no token will show. The two inks are close in weight so the verdicts are probably close, but that is unmeasured. Every mainnet bitmap will be solved through this path.
+<strong>Fix:</strong> Use <code>VERSION_SIZE</code> at <code>:117</code> and <code>SIZE</code> in the two tests. Make <code>renderSvg</code> throw on a length mismatch. Re-run the gate on the ids already measured.
+<strong>Verification:</strong> Searched every <code>unpackModules(</code> call in <code>tools/</code>. All 18 other callers pass <code>SIZE</code> or a solve&#39;s own size; these three are the only literal <code>37</code>.</p>
+<h3>[PARTLY CONFIRMED] Rehearsal, soak and measurement tooling still builds 172-byte artwork; the contracts require 407</h3>
+<p><strong>Merged from:</strong> q1 (contract scripts) and q4 (Warden tools).
+<strong>Where:</strong> <code>contracts/script/SpikeBitmaps.sol:10-11</code>; <code>MintOnePlan1.s.sol:17-18</code>; <code>DeploySpike.s.sol</code>, <code>SoakSepolia.s.sol:48</code>, <code>AbSepolia.s.sol</code> (via <code>SpikeBitmaps.code</code>); <code>tools/spike-bitmaps.mjs:60-61</code>, <code>:73</code>; <code>warden/tools/chunk-rehearsal.mjs:73</code>; <code>warden/tools/mark-rehearsal.mjs:45</code>; <code>warden/test/clock-seed.test.mjs:34-35</code>
+<strong>What is true:</strong></p>
+<ul>
+<li><code>SpikeBitmaps.sol</code> is version-5 output with 27 bitmaps; <code>SoakStates.sol:25</code> declares 52 states. Both token contracts revert <code>BadCodeLength</code> on anything but 407 (<code>MachineReadableOnly.sol:358</code>, <code>MROSpikeToken.sol:150</code>).</li>
+<li><code>chunk-rehearsal.mjs</code> mints with 172 bytes, and <code>mark-rehearsal.mjs</code> refuses any bitmap that is not 172 bytes.</li>
+<li><code>anvil-verify.sh:34</code> runs <code>DeploySpike</code>, so the documented read-back-and-decode check cannot pass.
+<strong>What is not:</strong> <code>warden/tools/absence-on-chain.mjs:55</code> does not mint. It calls the Renderer&#39;s <code>svg()</code> with a 172-byte code, and the Renderer checks no length, so it runs and reads past the buffer. It is wrong, not broken.
+<strong>Why:</strong> <code>CHECKIN_CHUNK = 1,400</code> says to re-run the rehearsal when <code>_credit</code> changes (<code>run.mjs:34-36</code>). <code>_credit</code> now carries the finish logic, and the tool that measures it cannot run.
+<strong>Fix:</strong> Regenerate with <code>bash tools/spike-bitmaps.sh example.com 52</code>. Derive lengths from one shared constant. Re-run the chunk rehearsal and update the figure.
+<strong>Verification:</strong> Read each file. The runtime failures are inferred from the length checks; nothing was run.</li>
+</ul>
+<h3>[CONFIRMED] The settlement receipt never reaches the agent where the protocol document says it does</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:486</code>; <code>warden/src/mcp/server.mjs:178-185</code>
+<strong>What:</strong> On success <code>@x402/mcp</code> returns the handler&#39;s plain value with <code>_meta</code> added (<code>dist/esm/index.mjs:1070-1076</code>). That value has no <code>content</code>, so <code>server.mjs</code> wraps it and the receipt lands in <code>structuredContent._meta</code>.
+<strong>Why:</strong> <code>docs/2026-09-01-mro-raw-protocol.md:861</code> promises it in the response <code>_meta</code>. A paying agent gets no transaction hash at the documented location.
+<strong>Fix:</strong> In <code>paid()</code>, turn a settled success into a complete tool result with <code>_meta</code> at the top level. Assert it over the wire.
+<strong>Verification:</strong> Traced the value through both files and the library.</p>
+<h3>[CONFIRMED] The directory fetch has no overall deadline, so eight slow hosts close the third-party path</h3>
+<p><strong>Where:</strong> <code>warden/src/door/directory.mjs:238</code>, <code>:279</code>, <code>:404</code>, <code>:476-478</code>
+<strong>What:</strong> <code>timeout</code> on the request is the only time bound and there is no wall-clock deadline. Fetches are capped at eight in flight and the ninth distinct URL is refused.
+<strong>Why:</strong> Eight dripping hosts, named by unauthenticated requests, refuse every agent hosting its own directory. The comment at <code>:399-403</code> and the protocol document (<code>:187</code>, &quot;3 second timeout&quot;) describe a bound the code does not enforce. Agents registered through <code>POST /keys</code> are not affected.
+<strong>Fix:</strong> Add a wall-clock deadline that destroys the request, and a slow-response test.
+<strong>Verification:</strong> Read the fetch. The idle-timeout behaviour of Node&#39;s <code>timeout</code> option is from my knowledge of Node, not from a local source.</p>
+<h3>[CONFIRMED] <code>&quot;signature-agent&quot;;key=&quot;sig1&quot;</code> is documented as accepted, but the installed verifier ignores <code>key</code></h3>
+<p><strong>Where:</strong> <code>docs/2026-09-01-mro-raw-protocol.md:274-282</code>; <code>warden/src/door/verify.mjs:283-303</code>; <code>warden/node_modules/http-message-sig/dist/index.mjs:120-126</code>
+<strong>What:</strong> <code>buildSignedData</code> uses the whole header value for a parameterised component. <code>coveredComponents</code> strips parameters, so the component check passes and the signature then fails.
+<strong>Why:</strong> A hand-signer following the document with a conforming library is refused <code>signature</code>. Hand-signing is currently the only way in.
+<strong>Fix:</strong> Build the base line for <code>;key=</code> from the member value, or state that only the unparameterised component is accepted. Add a test signed from a hand-built base.
+<strong>Verification:</strong> Read the library and the door. Searched <code>warden/test/</code> for <code>;key=</code>: no test covers a parameterised <code>signature-agent</code>. The RFC 9421 <code>key</code> semantics are from my knowledge of the standard.</p>
+<h3>[CONFIRMED] Registration stores the caller&#39;s JWK verbatim and serves it publicly</h3>
+<p><strong>Where:</strong> <code>warden/src/door/directory.mjs:307-311</code>, <code>:318-321</code>, <code>:574</code>; <code>warden/src/mirror/queries.mjs:421-424</code>; body cap at <code>warden/src/server.mjs:351</code>
+<strong>What:</strong> Only the proof and the thumbprint are checked. The whole submitted object, up to 64 KB, is stored and rendered into the public directory.
+<strong>Why:</strong> The 1,140,018-byte figure at <code>directory.mjs:329</code> assumes minimal keys. Padded keys at the 10,000 ceiling make the render hundreds of megabytes against a 512M restart limit.
+<strong>Fix:</strong> Require <code>kty === &quot;OKP&quot;</code> and <code>crv === &quot;Ed25519&quot;</code>, and store only <code>{ kty, crv, x }</code>.
+<strong>Verification:</strong> Read <code>registerRoute</code>, <code>registerKey</code>, <code>insertKey</code> and <code>renderDirectory</code>.</p>
+<h3>[CONFIRMED] <code>x402-live-mint-check.mjs</code> cannot run</h3>
+<p><strong>Where:</strong> <code>warden/tools/x402-live-mint-check.mjs:102-109</code>, <code>:126-161</code>
+<strong>What:</strong> It calls <code>createServer</code> without <code>contract</code> and <code>chainId</code>, which <code>server.mjs:104-106</code> rejects by throwing. Its requests also carry no 2026-07-28 envelope, while the handler is <code>legacy: &quot;reject&quot;</code> (<code>mcp/server.mjs:206</code>).
+<strong>Why:</strong> <code>contracts/script/adopt-deployment.sh:108</code> names it as the live payment check.
+<strong>Fix:</strong> Pass <code>contract</code> and <code>chainId</code>, and reuse the client&#39;s envelope helper.
+<strong>Verification:</strong> Read both files.</p>
+<h3>[CONFIRMED] The heartbeat is skipped while the contract is paused, and is never told about sunset</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:727-733</code>, <code>:753</code>; <code>warden/src/clock/heartbeat.mjs:41-53</code>
+<strong>What:</strong></p>
+<ul>
+<li>The heartbeat block runs only when <code>!summary.aborted</code>. With any row queued before a pause, the first write reverts <code>EnforcedPause</code> and no heartbeat is sent.</li>
+<li><code>heartbeatDue</code> has a <code>sunset</code> parameter that <code>run.mjs:753</code> never passes.</li>
+<li><code>wroteThisRun</code> counts <code>healed</code> entries, which this run did not write.
+<strong>Why:</strong> The contract leaves <code>heartbeat()</code> without <code>whenNotPaused</code> so a long pause cannot force the ending (<code>MachineReadableOnly.sol:166-169</code>). The Clock defeats that. After sunset with an empty queue, the Clock pays for a heartbeat every 30 days.
+<strong>Fix:</strong> Send the heartbeat when the abort reason is <code>EnforcedPause</code>. Read <code>isSunset</code> and pass it in. Drop <code>healed</code> from <code>wroteThisRun</code>.
+<strong>Verification:</strong> Read both files and the contract. <code>warden/test/clock-heartbeat.test.mjs:33</code> tests the <code>sunset</code> parameter on the pure function only.</li>
+</ul>
+<h3>[CONFIRMED] A day that never landed can be recorded as &quot;already on chain&quot;</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/batch.mjs:96-98</code>, <code>:233-236</code>; <code>warden/src/clock/run.mjs:598-601</code>
+<strong>What:</strong> The heal treats every queued entry with <code>day &lt;= lastDay</code> as landed. When a chunk returns <code>attempts-exhausted</code>, the run keeps going, so a later chunk (or the second half in <code>writeInHalves</code>) can land a later day for the same token.
+<strong>Why:</strong> The skipped day is then unwritable, and the next night it is marked written. A day of the artwork is lost while the mirror reports it kept.
+<strong>Fix:</strong> Stop sending further chunks after <code>attempts-exhausted</code>. In the heal, mark as healed only when the chain&#39;s <code>level</code> accounts for the entry.
+<strong>Verification:</strong> Read both files. The precondition (twelve condemnations in one chunk with a multi-day backlog) is rare.</p>
+<h3>[CONFIRMED] Reconcile&#39;s <code>Minted</code> closes a paid mint without checking it is the same mint</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/reconcile.mjs:209-212</code>; <code>warden/src/clock/run.mjs:336-351</code>; <code>warden/src/mirror/queries.mjs:321</code>
+<strong>What:</strong> The mint pass checks owner and key before marking a row written on <code>TokenExists</code>. <code>applyEvents</code> marks the mint written for any <code>Minted</code> whose id the mirror holds, ignores <code>keyId</code>, and the update has no status guard.
+<strong>Why:</strong> When a different token holds a reserved id, the mint pass alerts correctly and reconcile then closes the paid row in the same run.
+<strong>Fix:</strong> Compare <code>event.args.keyId</code> with <code>keyIdToBytes32(token.keyId)</code>. Restrict the update to <code>status = &#39;queued&#39;</code>.
+<strong>Verification:</strong> Read all three. The precondition is an id collision, which needs a restored or second mirror.</p>
+<h3>[CONFIRMED] Reconcile is all-or-nothing, so a long backlog can never be worked off</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:963-974</code>; <code>warden/src/clock/reconcile.mjs:66-91</code>; <code>warden/src/clock/cursor.mjs:79-82</code>; <code>warden/deploy/mro-clock.service:31</code>
+<strong>What:</strong> <code>readEvents</code> reads every page into memory, events are applied after the last page, and the cursor moves only on full completion. One failed page throws away the night&#39;s reading. The span is fixed at 1,000.
+<strong>Why:</strong> A day is about 44 pages. Each failed night makes the next night&#39;s backlog longer, so a flaky provider makes success less likely every night.
+<strong>Fix:</strong> Apply events and write the cursor per page. Cap pages per run. Halve the span on a range-limit error.
+<strong>Verification:</strong> Read all four.</p>
+<h3>[CONFIRMED] Every Clock alert is a line in a log file; nothing notifies anyone</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:217</code>; <code>warden/deploy/mro-clock.service:77-78</code>
+<strong>What:</strong> <code>alert</code> is <code>console.error</code>, appended to <code>mro-clock.log</code>. The unit has no <code>OnFailure=</code>.
+<strong>Fix:</strong> Add <code>OnFailure=</code> pointing at a small notifier unit.
+<strong>Verification:</strong> Searched the whole tree for <code>OnFailure</code>: no match. The only <code>mro-clock</code> lines in <code>warden/DEPLOY.md</code> are <code>:382</code> and <code>:402</code>, the stop and start commands.</p>
+<h3>[CONFIRMED] A condemned credit fails the run for one night only, and the mirror&#39;s level is never corrected</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:622-624</code>; <code>warden/src/mirror/queries.mjs:329</code>, <code>:961</code>; <code>warden/src/mcp/tools/checkin.mjs:193-215</code>
+<strong>What:</strong> <code>failCredit</code> changes only the credit row. The Warden advanced <code>tokens.level</code>, <code>streak</code>, <code>lastDay</code> and <code>bestRun</code> at check-in time and nothing rolls that back.
+<strong>Why:</strong> <code>status</code> and <code>/t/&lt;id&gt;</code> overstate the token permanently, and from the second night the run exits 0.
+<strong>Fix:</strong> Collect <code>q.stuckCredits()</code> into the summary every run. Add a nightly comparison against <code>viewOf</code>.
+<strong>Verification:</strong> Searched the whole tree for <code>stuckCredits</code>. <code>q.stuckCredits()</code> is defined at <code>queries.mjs:961</code> and called nowhere; every other hit is the unrelated <code>summary.stuckCredits</code> array.</p>
+<h3>[CONFIRMED] The client exits 0 on HTTP refusals other than 401</h3>
+<p><strong>Where:</strong> <code>client/src/mcp.mjs:109-141</code>, <code>:163-164</code>; <code>client/src/cli.mjs:329-334</code>
+<strong>What:</strong> <code>rpc</code> handles only status 401. The Warden answers 429 and 500 with a JSON body that has no <code>result</code> (<code>warden/src/server.mjs:457</code>, <code>:474</code>), so <code>callTool</code> returns <code>undefined</code>, the CLI prints <code>checkin: undefined</code>, and the exit code stays 0.
+<strong>Why:</strong> The documented deployment is a cron job that reports failure by exit status. <code>cli.mjs:268-276</code> says this defect was fixed.
+<strong>Fix:</strong> Throw on any non-2xx status. Treat <code>undefined</code> and <code>isError: true</code> as failures in <code>report</code>.
+<strong>Verification:</strong> Traced a 429 body through <code>readRpc</code>, <code>callTool</code> and <code>report</code>. The schema-rejection case is reasoned from the same code; I did not open the SDK file the reviewer cited.</p>
+<h3>[CONFIRMED] <code>refusals.md</code> gives the wrong remedy for <code>components</code></h3>
+<p><strong>Where:</strong> <code>skills/machine-readable-only/references/refusals.md:20</code>; <code>warden/src/door/verify.mjs:128</code>
+<strong>What:</strong> The skill says to sign four components and omits <code>signature-agent</code>. The door requires five.
+<strong>Fix:</strong> List all five, and add a test against the door&#39;s <code>REQUIRED</code>.
+<strong>Verification:</strong> Read both.</p>
+<h2>Low</h2>
+<h3>[PARTLY CONFIRMED] Resting a lapsed token restores its full colour, and both seals drop the fallen-run colour [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>contracts/src/render/Renderer.sol:117</code>, <code>:135</code>, <code>:145</code>; <code>tools/render-token.mjs:289</code>, <code>:304</code>, <code>:307</code>; <code>contracts/src/MachineReadableOnly.sol:805-810</code>
+<strong>What is true:</strong> The code behaves exactly as described. A token at streak 400 that was silent for two years returns to the top colour and a white page when rested. Neither seal branch applies the fallen-run term. <code>rest()</code> stores no day.
+<strong>What changes the verdict:</strong> Both branches match Plan 6&#39;s written rule word for word (<code>docs/plans/2026-09-05-mro-plan6-permanent-decisions.md:121-125</code>): &quot;<code>resting</code> -- unchanged, <code>tierIndex(v.streak)</code>&quot; and sunset as <code>lapsedIndex(streak, lastDay, sunsetDay)</code>. This is a recorded decision, not a drift from one.
+<strong>Why it still matters:</strong> The main spec says the chain shows which heart was rested on an unbroken run and which merely stopped (<code>docs/specs/2026-08-27-machine-readable-only-design.md:804-806</code>). The image does not.
+<strong>Severity changed: Medium to Low.</strong> It is a design question, not a defect. The tag stays for one reason: if the operator wants the rest day honoured, it has to be stored on chain, and the token contract cannot change after deploy. See Questions.
+<strong>Verification:</strong> Read both renderers, the contract, the spec passage and the plan passage.</p>
+<h3>[CONFIRMED] The byte budget is proven on one bitmap, and nothing checks a token&#39;s own bitmap when it is solved</h3>
+<p><strong>Where:</strong> <code>contracts/test/WorstCase.sol:27-28</code>; <code>contracts/test/RealTokenGas.t.sol:238-259</code>; <code>tools/robust-solve.mjs:135-167</code>
+<strong>What:</strong> The pin is exact for the <code>example.com</code> token-1 bitmap with 1,842 bytes of headroom. <code>gateSolve</code> checks that a code decodes, never how long its tokenURI is.
+<strong>Fix:</strong> In <code>gateSolve</code>, compute the tokenURI length for the banded finished child and reject a mask over budget. Reword <code>WorstCase.sol</code> to say which bitmap it pins.
+<strong>Severity changed: Medium to Low.</strong> 24,000 is the project&#39;s own limit; the external ceiling is 30,000, which leaves 7,842 bytes. The Renderer is swappable, so an over-budget token is not permanent.
+<strong>Verification:</strong> Read all three. <code>.claude/rules/contracts.md</code> records a 554-byte difference between two bitmaps.</p>
+<h3>[CONFIRMED] Healing a landed chunk takes two RPC calls per token and saves nothing until the chunk returns</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/batch.mjs:80-99</code>, <code>:323-339</code>; <code>warden/src/clock/run.mjs:573-589</code>
+<strong>What:</strong> Each <code>DayNotAdvanced</code> names one token, so recovery is one simulate plus one <code>viewOf</code> per token, in sequence. Healed entries are marked only after the chunk returns, in separate commits.
+<strong>Fix:</strong> Read <code>lastDay</code> for every token in the chunk in one step, persist heals as found, and wrap the marking in one <code>q.transact</code>.
+<strong>Severity changed: Medium to Low.</strong> Check-ins have no lateness floor on chain (see Questions), so queued days stay writable. The outcome is delay and an operator intervention, not lost days.
+<strong>Verification:</strong> Read both files. The timing figures in the report are estimates.</p>
+<h3>[PARTLY CONFIRMED] The year checker cannot see a failure that happens before the door accepts something</h3>
+<p><strong>Where:</strong> <code>warden/tools/year/checker.mjs:394-415</code>; <code>warden/tools/year/report.mjs:157</code>
+<strong>What is true:</strong> Expected values come from <code>creditedDays</code>, which counts only check-ins the runner logged as accepted. The token list comes from the runner&#39;s <code>state.json</code>. Nothing compares the run against the scenario table.
+<strong>What is not:</strong> A checker pass that crashes is counted as a FAIL (<code>report.mjs:116-117</code>, <code>:157</code>). Only runner-side failures go uncounted.
+<strong>Fix:</strong> Build a second expectation from <code>scenario.mjs</code> and raise a finding when accepted days differ from scripted days.
+<strong>Severity changed: Medium to Low.</strong> This is rehearsal tooling; the Refusals table and the fast-days count still show the symptom.
+<strong>Verification:</strong> Read both files in full. I did not open <code>runner.mjs</code>.</p>
+<h3>[CONFIRMED] Requested Marks, variants and the echo value are never checked per token</h3>
+<p><strong>Where:</strong> <code>warden/tools/year/checker.mjs:50</code>, <code>:163-166</code>; <code>warden/tools/year/report.mjs:52-58</code>, <code>:168</code>
+<strong>What:</strong> The checker compares mirror against chain only, never against what the runner ordered. <code>MARK_BITS</code> masks out the variant bits. <code>compare()</code> never reads <code>echo</code>. The report marks an id &quot;proven live&quot; if any token&#39;s passing row carries that bit.
+<strong>Fix:</strong> Derive expected Mark bits per token from the runner&#39;s log, compare variant bits for ids 5 and 9, and compare <code>echo</code> for a child.
+<strong>Severity changed: Medium to Low.</strong> Rehearsal tooling.
+<strong>Verification:</strong> Read <code>compare()</code> and <code>markStatus()</code>.</p>
+<h3>[CONFIRMED] <code>demand-only</code> is reported as a price check, but the live run checks nothing</h3>
+<p><strong>Where:</strong> <code>warden/tools/year/agent.mjs:75</code>; <code>warden/tools/year/report.mjs:49-50</code>
+<strong>What:</strong> The report says the price is &quot;read and asserted&quot;. The agent returns the demand without comparing amount or <code>payTo</code>.
+<strong>Fix:</strong> Assert against <code>markAmount(upgradeId)</code> and the treasury on that path.
+<strong>Severity changed: Medium to Low.</strong> Rehearsal tooling.
+<strong>Verification:</strong> Read both.</p>
+<h3>[CONFIRMED] Comments, documents and small duplications that contradict the code</h3>
+<p><strong>Merged from:</strong> q1, q2, q3, q4 (two findings) and q5. Two items were reported twice by different reviewers.
+<strong>Contracts:</strong></p>
+<ul>
+<li><code>MachineReadableOnly.sol:388-389</code>: &quot;a test pins the two together&quot;. No test does; <code>FINISH_LEVEL</code> appears in no test file.</li>
+<li><code>MachineReadableOnly.sol:668</code>: &quot;<code>sold</code> is owned by <code>applyMark</code>&quot;. <code>_finish</code> also writes it (<code>:473</code>).</li>
+<li><code>MachineReadableOnly.sol:384-385</code>: a finished token gets &quot;the same freeze <code>rest</code> gives&quot;. <code>applyMark</code> still works on it.</li>
+<li><code>TokenView.sol:10</code> (&quot;level / 365 is completed years&quot;), <code>:25-36</code> (calls itself the authority, omits bits 11-15; <strong>reported by q1 and q2</strong>), <code>:38</code> (&quot;minted it&quot;; <code>rebind</code> overwrites it).</li>
+<li><code>MroScript.sol:54-55</code> and <code>SetClockWarden.s.sol:12-13</code> name <code>setSunset</code>; the function is <code>sunset()</code>.</li>
+<li><code>DeployPlan5.s.sol:10</code> and <code>deploy-mainnet.sh:3</code> say &quot;ten Marks&quot;; the loop writes fifteen.</li>
+<li><code>anvil-size-check.sh:61-62</code> says 344 hex characters; <code>DeployPlan1.s.sol:13-14</code> says <code>WARDEN_ADDRESS</code> has never been set.</li>
+<li><code>MROSpikeToken.sol:110</code> says sunset is read from <code>sunsetDay</code>.</li>
+</ul>
+<p><strong>Contract tests:</strong></p>
+<ul>
+<li><code>GasBudget.t.sol:41-43</code> (&quot;20,000 stands&quot;) and <code>:102</code> (&quot;UNTESTED&quot;) against the 24,000 limit and &quot;TESTED AND CLOSED&quot;.</li>
+<li><code>Renderer.t.sol:414</code> and <code>TokenUriGolden.t.sol:120</code> say &quot;3M&quot; beside <code>4_000_000</code>.</li>
+<li><code>Renderer.t.sol:421-427</code>: the <code>_gasIsMeaningful</code> NatSpec sits on the Years test.</li>
+<li><code>.claude/rules/contracts.md</code>: the paragraphs after the 4,000,000 note still say the byte limit did not move and the two worst cases are different tokens.</li>
+</ul>
+<p><strong>Warden and Clock:</strong></p>
+<ul>
+<li><code>warden/src/mcp/server.mjs:127-130</code> says <code>sigHash</code> hashes the <code>Signature</code> header; the door hashes the signature base (<code>verify.mjs:386</code>). <strong>Reported by q3 and q5.</strong></li>
+<li><code>warden/src/door/verify.mjs:130-194</code>: three doc blocks stacked above <code>timeReason</code> belong to <code>coveredComponents</code>, <code>signatureAgentUrl</code> and <code>signatureLabel</code>.</li>
+<li><code>warden/src/pay/x402.mjs:397-401</code> says a reservation &quot;has to expire on its own&quot;; the same file releases and holds.</li>
+<li><code>warden/src/server.mjs:17-18</code>, <code>:82-86</code> say the token view and MCP handler do not exist yet.</li>
+<li><code>warden/src/chain/read.mjs:4-5</code> says a client library is avoided; <code>:47</code> imports viem. <code>:27-29</code> names a superseded address.</li>
+<li><code>warden/src/clock/reconcile.mjs:49-51</code> says ids 11-15 are unwritten.</li>
+<li><code>warden/src/mirror/db.mjs:48</code> says nothing is deployed yet.</li>
+<li><code>warden/src/clock/write.mjs:109-113</code> omits <code>gas-estimate-failed</code> and <code>receipt-unknown</code> from the documented results.</li>
+<li><code>warden/src/clock/main.mjs:13-14</code>: <code>readFileSync</code>, <code>writeFileSync</code>, <code>mkdirSync</code> and <code>dirname</code> are imported and unused.</li>
+<li><code>warden/src/mirror/queries.mjs:306-308</code>: <code>staleCredits</code> is the same SQL as <code>pendingCredits</code>.</li>
+<li><code>warden/src/mcp/server.mjs:96</code> types &quot;1 USDC&quot; literally, against the rule at <code>mint.mjs:14</code>.</li>
+<li><code>warden/src/mcp/server.mjs:157-162</code>: the <code>internal</code> refusal skips <code>withNext</code>, though <code>NEXT</code> has an entry for it.</li>
+<li>Test titles that contradict their bodies: <code>clock-reconcile.test.mjs:260</code>, <code>clock-run.test.mjs:786</code>.</li>
+</ul>
+<p><strong>One item here is more than a comment:</strong> <code>warden/src/clock/unresolved.mjs:87</code> falls back to <code>err.message</code>, which <code>redact.mjs</code> says carries the RPC url. Use <code>safeErrorText</code>.</p>
+<p><strong>Client and skill:</strong></p>
+<ul>
+<li><code>client/src/challenge.mjs:33</code> names a <code>stale-challenge</code> reason that does not exist.</li>
+<li><code>client/src/mcp.mjs:26</code> duplicates the version in <code>package.json</code>.</li>
+<li><code>client/src/cli.mjs:265-277</code>: <code>report</code>&#39;s doc block sits above <code>readWalletKeyFile</code>.</li>
+<li><code>refusals.md:4-5</code> says three reasons carry a second field (at least six do) and files <code>internal</code> and <code>paid-but-unavailable</code> under routing.</li>
+</ul>
+<p><strong>Also true across the tree:</strong> dated history and review numbers in source, which <code>code-comments.md</code> forbids; <code>warden/src/door</code> is MIT and public.
+<strong>Fix:</strong> Correct each in place; trim history when next touching these files.
+<strong>Verification:</strong> Opened every item listed above. Not opened: <code>client/src/door.mjs:45</code>, <code>client/src/pay.mjs:48</code>, <code>DigitBandCost.t.sol:14</code> against <code>GasBudget.t.sol:69</code>, <code>tools/heart-mask.mjs:2</code>.</p>
+<h3>[CONFIRMED] No mainnet source-verification step, and the verify scripts report success on failure</h3>
+<p><strong>Where:</strong> <code>contracts/script/verify-plan7.sh:25</code>, <code>:36</code>, <code>:42</code>; <code>contracts/script/deploy-mainnet.sh:143-147</code>
+<strong>What:</strong> <code>CHAIN=84532</code> is hard-coded and both <code>forge verify-contract</code> calls end in <code>|| true</code>. The &quot;Next&quot; list in <code>deploy-mainnet.sh</code> has no verification step.
+<strong>Fix:</strong> Take the chain as an argument, drop <code>|| true</code>, and add the step.
+<strong>Verification:</strong> Read both scripts. <code>warden/DEPLOY.md:687-690</code> does have a verify step, but it calls <code>verify-plan7.sh</code>, which cannot verify on 8453. I did not open <code>verify-plan6.sh</code>.</p>
+<h3>[CONFIRMED] The owner can rewrite finisher records 11-15</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:672-693</code> against <code>:446-460</code>
+<strong>What:</strong> <code>setUpgrade</code> accepts ids 11-15 with any values. <code>RunHistory.t.sol:288-291</code> writes a blank record over Apex.
+<strong>Why:</strong> Places are still assigned correctly; <code>upgradeOf(15)</code> can be made to state a false cap.
+<strong>Fix:</strong> Refuse ids 11-15 in <code>setUpgrade</code>, or require the record to match the band.
+<strong>Verification:</strong> Read both and the test.</p>
+<h3>[CONFIRMED] Finishing place is decided entirely by call order; the voucher path would make it first-come</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:468-475</code>, <code>:515-535</code>, <code>:581-610</code>
+<strong>What:</strong> <code>_finish</code> hands out <code>++finishers</code> in arrival order. The settled <code>(day, tokenId)</code> rule is a property of the Clock only.
+<strong>Fix:</strong> State this in NatSpec on <code>setVouchersEnabled</code> and <code>_finish</code>, and add the two tests.
+<strong>Verification:</strong> Read the contract. Nothing is wrong while vouchers are off, which is the settled state.</p>
+<h3>[CONFIRMED] <code>rest</code> on an already-sealed token emits a second <code>Rested</code> with a new day</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:805-810</code>
+<strong>What:</strong> There is no already-resting check. <code>Lifecycle.t.sol:155-157</code> calls the repeat &quot;a harmless no-op&quot;.
+<strong>Fix:</strong> <code>if (s.resting) revert Resting(id);</code> plus a test.
+<strong>Verification:</strong> Read both.</p>
+<h3>[CONFIRMED] Test gaps: owner, access-control and finisher paths</h3>
+<p><strong>Where and what, each checked by search:</strong></p>
+<ul>
+<li><strong>Ownable2Step:</strong> only the happy path on the shipping contract (<code>MachineReadableOnly.t.sol:166-173</code>, <code>Bounds.t.sol:216-221</code>). The wrong-caller cases exist only in <code>MROSpikeToken.t.sol</code>.</li>
+<li><strong>Bare <code>vm.expectRevert()</code>:</strong> <code>MachineReadableOnly.t.sol:57</code>, <code>:70</code>, <code>:136</code>; <code>Marks.t.sol:113</code>; <code>Vouchers.t.sol:129</code>; <code>Ladder.t.sol:362</code>.</li>
+<li><strong><code>seed</code> day bounds:</strong> every <code>t.seed(</code> call in the suite passes <code>_today()</code>.</li>
+<li><strong>Code length:</strong> rejected inputs are 3 and 2 bytes only.</li>
+<li><strong>After sunset:</strong> no test calls <code>rest</code>, <code>rebind</code> or a transfer after <code>sunset()</code>.</li>
+<li><strong>Events:</strong> <code>Seeded</code> and <code>Rebound</code> are asserted nowhere in <code>contracts/test/</code>.
+<strong>Fix:</strong> Add the tests.
+<strong>Verification:</strong> Whole-directory searches for each. Not opened: <code>FinishLine.t.sol:44-78</code> and <code>CheckIn.t.sol:428-429</code> (the band-boundary claim).</li>
+</ul>
+<h3>[CONFIRMED] <code>bestRun</code> gates earned Marks but cannot be read from the contract</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:195-215</code>, <code>:487-490</code>
+<strong>What:</strong> <code>_tokens</code> is internal, <code>viewOf</code> omits <code>bestRun</code>, and <code>_effectiveRun</code> is private.
+<strong>Fix:</strong> Add <code>bestRunOf(uint256)</code> before the redeploy; it cannot be added afterwards.
+<strong>Verification:</strong> Read the contract and <code>TokenView.sol</code>.</p>
+<h3>[CONFIRMED] Deploy script does not require the Warden to differ from the owner</h3>
+<p><strong>Where:</strong> <code>contracts/script/DeployPlan5.s.sol:16-30</code>
+<strong>What:</strong> <code>SetClockWarden.s.sol:55</code> enforces the separation; the deploy does not.
+<strong>Fix:</strong> <code>require(warden != vm.addr(key), ...)</code>.
+<strong>Verification:</strong> Read both.</p>
+<h3>[CONFIRMED] The anvil gates can pass against a node they did not start</h3>
+<p><strong>Where:</strong> <code>contracts/script/anvil-size-check.sh:20-23</code>; <code>contracts/script/anvil-verify.sh:22-25</code>
+<strong>What:</strong> Both start anvil in the background on the default port and <code>sleep 2</code>. If the port is taken, the script deploys to whatever is listening.
+<strong>Fix:</strong> A dedicated port, a readiness poll, and a liveness check.
+<strong>Verification:</strong> Read both. I did not open <code>chainguard-check.sh</code>.</p>
+<h3>[CONFIRMED] <code>SwapRenderer</code> cannot run on a contract with no token 1</h3>
+<p><strong>Where:</strong> <code>contracts/script/SwapRenderer.s.sol:48</code>
+<strong>What:</strong> The post-swap check reads <code>tokenURI(1)</code>, which reverts through <code>_requireOwned</code>.
+<strong>Fix:</strong> Skip the read when <code>totalMinted() == 0</code>.
+<strong>Verification:</strong> Read both.</p>
+<h3>[CONFIRMED] Literal 365 where <code>FINISH_LEVEL</code> is meant</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:736</code>, <code>:847</code>
+<strong>Fix:</strong> Use the constant in both. The <code>/ 365</code> at <code>:830</code> is the agent-year and should stay.
+<strong>Verification:</strong> Read the lines.</p>
+<h3>[CONFIRMED] <code>GasProfile.t.sol</code> breaks down a different token from the one whose total it quotes</h3>
+<p><strong>Where:</strong> <code>contracts/test/GasProfile.t.sol:17-20</code>, <code>:90-108</code>, <code>:145</code>
+<strong>What:</strong> The header cites <code>WorstCase</code> (the finished, banded child). <code>_dearest()</code> builds the day-364 unbanded child.
+<strong>Fix:</strong> Profile level 365 with an echo, an ordinal and the sealed Mark set.
+<strong>Verification:</strong> Read the file to line 150.</p>
+<h3>[CONFIRMED] Gas assertions with no coverage-profile guard</h3>
+<p><strong>Where:</strong> <code>contracts/test/RealTokenGas.t.sol:179</code>, <code>:258</code>, <code>:314</code>; <code>GasBudget.t.sol:681</code>; <code>TokenUriGolden.t.sol:124</code>; <code>RingCurve.t.sol:84</code>
+<strong>What:</strong> <code>_gasIsMeaningful()</code> exists only in <code>Renderer.t.sol</code> and <code>GasBudget.t.sol</code>. These six assertions are unguarded, and <code>:258</code> is an exact-equality pin.
+<strong>Fix:</strong> Move the guard into a shared base.
+<strong>Verification:</strong> Searched the test directory for the guard and opened each line. The coverage failure itself was not run.</p>
+<h3>[CONFIRMED] The luminance rule is asserted in a weighting the decoder does not use</h3>
+<p><strong>Where:</strong> <code>contracts/test/PaletteNoise.t.sol:25-35</code>; <code>tools/test/render-token.test.mjs:41-46</code>
+<strong>What:</strong> Both say BT.601 is what ZXing&#39;s <code>RGBLuminanceSource</code> uses. The installed source computes <code>(r + 2g + b) / 4</code>.
+<strong>Fix:</strong> Correct both comments and assert the gap under both weightings.
+<strong>Verification:</strong> <code>tools/node_modules/@zxing/library/esm/core/RGBLuminanceSource.js:52-62</code>. That branch runs only for an <code>Int32Array</code>, and <code>tools/test/helpers/decode.mjs:50-54</code> passes one, so it is the path the project&#39;s oracle takes.</p>
+<h3>[CONFIRMED] Tests that no longer test what their names say</h3>
+<p><strong>Where and what:</strong></p>
+<ul>
+<li><code>CodeRenderer.t.sol:394-407</code>: the &quot;full row&quot; sets 37 of 57 modules.</li>
+<li><code>QrVersionCost.t.sol:107-112</code>: the &quot;at 37&quot; control passes <code>HeartMask.SIZE</code> and a 172-byte code.</li>
+<li><code>RealTokenGas.t.sol:304-315</code>: named as a spike comparison; never measures the spike.</li>
+<li><code>RealTokenGas.t.sol:209-213</code>: <code>v</code> is read before the Marks are applied, so the assertion holds with no Marks.</li>
+<li><code>Renderer.t.sol:374-381</code>: sunset with <code>sunsetDay</code> 0, a state the chain cannot produce.</li>
+<li><code>Renderer.t.sol:390-419</code>: &quot;the worst case&quot; with no digit band.</li>
+<li><code>tools/test/render-token.test.mjs:173-180</code>: asserts the old 20,000 limit with a base64 estimate.
+<strong>Verification:</strong> Opened each. Not opened: <code>tools/state-matrix.mjs:221</code>, <code>render-token.test.mjs:355-366</code>.</li>
+</ul>
+<h3>[CONFIRMED] The spike never hands <code>sunsetDay</code> to the renderer</h3>
+<p><strong>Where:</strong> <code>contracts/src/spike/MROSpikeToken.sol:113-130</code>
+<strong>What:</strong> <code>viewOf</code> sets <code>v.sunset</code> and leaves <code>v.sunsetDay</code> at 0.
+<strong>Fix:</strong> Set <code>v.sunsetDay = sunsetDay</code>.
+<strong>Verification:</strong> Searched the file for <code>sunsetDay</code>: it appears at <code>:66</code>, <code>:110</code>, <code>:216-217</code> and nowhere in <code>viewOf</code>. I did not check the <code>setEcho</code> test claim.</p>
+<h3>[PARTLY CONFIRMED] One fixture bitmap pasted into ten test files; superseded probes still in the suite</h3>
+<p><strong>Where:</strong> <code>_bitmap()</code> / <code>_code()</code> in ten files under <code>contracts/test/</code>; <code>DigitBandCost.t.sol</code>; <code>EyeCost.t.sol</code>
+<strong>What is true:</strong> The ten copies exist. No code imports either probe.
+<strong>What changes the verdict:</strong> Both probes are test contracts that <code>forge test</code> runs, not dead files. <code>DigitBandCost.t.sol:17-21</code> says it is kept on purpose: &quot;a superseded measurement with its successor named beside it is worth more than a deleted one&quot;. They are also named in <code>GasBudget.t.sol:65</code>, <code>:698</code>, <code>tools/finisher-combined-sheet.mjs:4</code> and <code>tools/test/eye-renderer.test.mjs:15</code>.
+<strong>Fix:</strong> Generate one <code>TestBitmap.sol</code> and import it. Deleting the probes is the operator&#39;s decision, not a cleanup.
+<strong>Verification:</strong> Searched for both function names and both file names across the tree.</p>
+<h3>[CONFIRMED] Registering a key again erases its &quot;used&quot; mark</h3>
+<p><strong>Where:</strong> <code>warden/src/mirror/queries.mjs:60-63</code>
+<strong>What:</strong> <code>INSERT OR REPLACE</code> replaces the row, so <code>lastUsedAt</code> returns to NULL and the key becomes prunable.
+<strong>Fix:</strong> <code>INSERT ... ON CONFLICT(keyId) DO UPDATE</code> that leaves <code>lastUsedAt</code> alone.
+<strong>Verification:</strong> Read the statement and <code>schema.sql:23</code>. Only the key&#39;s own holder can do this, since registration needs a proof.</p>
+<h3>[CONFIRMED] The refusal conversion fails open</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:176</code>, <code>:475</code>
+<strong>What:</strong> Only <code>ok === false</code> becomes a refusal. A handler returning <code>{}</code> is settled with nothing reserved.
+<strong>Fix:</strong> Settle only when <code>result?.ok === true</code>.
+<strong>Verification:</strong> Read both lines. No handler does this today.</p>
+<h3>[CONFIRMED] Three IPv4 blocks refuse whole /16s where only a /24 is reserved</h3>
+<p><strong>Where:</strong> <code>warden/src/door/directory.mjs:75</code>, <code>:78</code>, <code>:79</code>
+<strong>Fix:</strong> Test the third octet.
+<strong>Verification:</strong> Read <code>blockedV4</code>.</p>
+<h3>[CONFIRMED] A stale challenge answers <code>expired</code> without the <code>serverTime</code> the document promises</h3>
+<p><strong>Where:</strong> <code>warden/src/door/middleware.mjs:164</code>; <code>warden/src/door/challenge.mjs:61-63</code>
+<strong>Verification:</strong> <code>docs/2026-09-01-mro-raw-protocol.md:116</code> and <code>refusals.md:21</code> both promise it.</p>
+<h3>[CONFIRMED] A released reservation can stop the solver run</h3>
+<p><strong>Where:</strong> <code>warden/src/mirror/queries.mjs:475</code>; <code>warden/src/solve/queue.mjs:80-82</code>
+<strong>What:</strong> <code>bumpSolveTries</code> reads <code>.solveTries</code> off a row that may have been deleted. The TypeError is thrown inside the catch block, so draining stops until the next tick.
+<strong>Fix:</strong> Return early in <code>failSolve</code> when no row comes back.
+<strong>Verification:</strong> Read both. It needs a failed solve and a deleted row at once.</p>
+<h3>[CONFIRMED] Duplicated limiter</h3>
+<p><strong>Where:</strong> <code>warden/src/bootstrap.mjs:57-80</code>, <code>:114-139</code>
+<strong>What:</strong> <code>makeAllowRegistration</code> re-implements <code>slidingWindow</code>, while the comment says both limiters use it.
+<strong>Verification:</strong> Read the file.</p>
+<h3>[CONFIRMED] A failed <code>lastDay</code> read turns a recoverable row into a terminal failure</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/batch.mjs:85-94</code>; <code>warden/src/clock/run.mjs:622</code>
+<strong>Fix:</strong> Leave it queued, as <code>attempts-exhausted</code> is.
+<strong>Verification:</strong> <code>queries.mjs:953-955</code> says <code>failCredit</code> is not for this case.</p>
+<h3>[CONFIRMED] A gas stop returns before reconcile and the stale-row check, and exits 0</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:282-287</code>; <code>warden/src/clock/cursor.mjs:113-127</code>
+<strong>Fix:</strong> Skip only the write passes.
+<strong>Verification:</strong> Read both. The pause case was already fixed for this reason (<code>run.mjs:394-400</code>).</p>
+<h3>[CONFIRMED] The reconcile cursor is not atomic, not floored, and not tied to a contract</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/cursor.mjs:39</code>, <code>:51-54</code>; <code>warden/src/clock/run.mjs:960</code>
+<strong>What:</strong> <code>writeCursor</code> writes in place; an empty file reads as a first run; <code>from</code> is <code>cursor + 1</code> with no clamp; the file holds no address or chain id.
+<strong>Fix:</strong> Write-and-rename, store <code>{chainId, contract, block}</code>, clamp to the floor.
+<strong>Verification:</strong> Searched <code>contracts/script/adopt-deployment.sh</code> for &quot;cursor&quot;: no match. <code>warden/tools/mirror-reset-chain.mjs:26</code> clears four tables and not the cursor.</p>
+<h3>[CONFIRMED] A rebind to an unregistered key leaves the mirror&#39;s binding stale permanently</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/reconcile.mjs:194-204</code>
+<strong>Verification:</strong> Searched the tree for <code>setKeyId</code>: the only caller is <code>reconcile.mjs:192</code>.</p>
+<h3>[CONFIRMED] An unknown receipt on a mint, seed or Mark does not stop later sends</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:393</code>, <code>:933-935</code>; <code>warden/src/clock/batch.mjs:279-281</code>
+<strong>What:</strong> <code>isRunLevel</code> lists three named errors only. Check-ins abort on <code>receipt-unknown</code>; the other three passes keep sending.
+<strong>Verification:</strong> Read both. I did not open the viem timeout default the reviewer cited.</p>
+<h3>[CONFIRMED] A leftover lock file blocks every later run</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/main.mjs:94-106</code>
+<strong>What:</strong> The lock is an empty file. The signal handler releases it on SIGTERM and SIGINT; SIGKILL and power loss do not.
+<strong>Verification:</strong> Read the file.</p>
+<h3>[CONFIRMED] Three agent-facing refusals are undocumented, and the guard test cannot see them</h3>
+<p><strong>Where:</strong> <code>tools/test/skill-doc.test.mjs:78</code>; <code>warden/src/mcp/tools/checkin.mjs:56</code>; <code>warden/src/mcp/gates.mjs:163</code>; <code>warden/src/bootstrap.mjs:161</code>
+<strong>What:</strong> <code>not-yet-mirrored</code>, <code>recipient-cannot-receive</code> and <code>payment-not-configured</code> are absent from <code>refusals.md</code>. The test&#39;s pattern misses a ternary and a bare <code>return &quot;x&quot;</code>, and <code>bootstrap.mjs</code> is not scanned. <code>recipient-cannot-receive</code> is in neither <code>NEXT</code> nor <code>NO_NEXT</code>.
+<strong>Verification:</strong> Read <code>refusals.md</code>, <code>nextSteps.mjs</code> and the test.</p>
+<h3>[CONFIRMED] <code>status</code> with a token id answers without <code>ok</code> on success</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/status.mjs:23-24</code>; <code>warden/test/tool-convention.test.mjs:40</code>
+<strong>Verification:</strong> <code>tokenView</code> returns no <code>ok</code> field; the test calls <code>status</code> with <code>{}</code> only.</p>
+<h3>[CONFIRMED] Any command except <code>whoami</code> creates a new identity when the key file is missing</h3>
+<p><strong>Where:</strong> <code>client/src/cli.mjs:132</code>; <code>client/src/keys.mjs:19</code>, <code>:89-92</code>
+<strong>What:</strong> <code>beat</code>, <code>status</code>, <code>ladder</code>, <code>rebind</code> and <code>rest</code> all call <code>ensureIdentity</code>. With <code>HOME</code> unset the path becomes <code>./.mro/</code>. <code>loadIdentity</code> checks no file mode.
+<strong>Verification:</strong> Read both. <code>cli.mjs:16-18</code> says a key must not be created as a side effect.</p>
+<h3>[CONFIRMED] The publish workflow can stage a client that still believes it is unpublished</h3>
+<p><strong>Where:</strong> <code>client/src/messages.mjs:35</code>; <code>.github/workflows/publish-client.yml:186</code>
+<strong>Verification:</strong> Searched the workflow for <code>PUBLISHED</code>: no match.</p>
+<h3>[CONFIRMED] <code>seed</code> checks the parent&#39;s level in the mirror, which runs a day ahead of the chain</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/seed.mjs:59</code>, <code>:176-179</code>; <code>contracts/src/MachineReadableOnly.sol:830</code>, <code>:847</code>
+<strong>What:</strong> On the day the 365th check-in is accepted, the mirror says 365 and the chain says 364. The Clock sends seeds before check-ins, so that night&#39;s seed reverts <code>ParentNotWhole</code> and lands a night later. The note &quot;the next one opens a year after your first mint&quot; is wrong once a seed is spent.
+<strong>Verification:</strong> <code>tokenBlock</code> checks existence and resting only, not level.</p>
+<h3>[CONFIRMED] Report rows say &quot;proven live&quot; on weak evidence</h3>
+<p><strong>Where:</strong> <code>warden/tools/year/report.mjs:72</code>, <code>:159-173</code>, <code>:202-205</code>; <code>warden/tools/year/checker.mjs:217-221</code>
+<strong>What:</strong> A milestone counts when its line exists, whatever <code>decoded</code> says. &quot;A check-in refused&quot; counts any <code>ok === false</code>. Failed decodes are not in &quot;Checker FAILs&quot;. The heartbeat is inferred by exclusion.
+<strong>Verification:</strong> Read both.</p>
+<h3>[CONFIRMED] Checker robustness: stale log on re-read, and memory lost on restart</h3>
+<p><strong>Where:</strong> <code>warden/tools/year/checker.mjs:309-312</code>, <code>:333</code>, <code>:491</code>
+<strong>Verification:</strong> Read the pass. Neither can produce a false pass.</p>
+<h3>[CONFIRMED] <code>mro://token/{id}</code> lacks the strict id check the HTTP route has</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/resources.mjs:59</code>; <code>warden/src/server.mjs:196-203</code>
+<strong>Verification:</strong> Read both.</p>
+<h2>Info</h2>
+<h3>[CONFIRMED] Ladder details</h3>
+<p><strong>Where:</strong> <code>contracts/src/Ladder.sol:65-69</code>, <code>:74-80</code>; <code>contracts/src/MachineReadableOnly.sol:686-688</code>
+<strong>What:</strong> <code>_earned</code> is a pure alias of <code>_mark</code>. The finisher records&#39; <code>excludes</code>, <code>requiresWhole</code> and <code>active</code> are never read by the contract. <code>setUpgrade</code> does not refuse bit 0 in a mask, so <code>requiresAny = 1</code> would make a Mark unappliable until corrected.</p>
+<h3>[PARTLY CONFIRMED] The two renderers differ on inputs the chain cannot produce</h3>
+<p><strong>Where:</strong> <code>tools/render-token.mjs:846</code> against <code>MarkRenderer.sol:202</code>; <code>CodeRenderer.sol:57-97</code>
+<strong>Checked and true:</strong> A Tint variant of 2 or more draws violet in JS and gold in Solidity. <code>CodeRenderer.paths</code> checks no lengths and reads past a short code.
+<strong>Not opened:</strong> the ordinal and empty-path differences.</p>
+<h3>[CONFIRMED] The wrapper cache grows per token</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:372</code>; <code>warden/src/mcp/tools/upgrade.mjs:327-329</code></p>
+<h3>[CONFIRMED] <code>schema.sql</code> follows its own rule in this snapshot</h3>
+<p><strong>Where:</strong> <code>warden/src/mirror/schema.sql:94</code>, <code>:137</code>
+<strong>What:</strong> Both indexes name original columns. No defect. I did not open <code>db.mjs</code>&#39;s <code>migrate()</code>.</p>
+<h3>[CONFIRMED] Skill placeholders are guarded by a notice only [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>skills/machine-readable-only/SKILL.md:8</code>; <code>tools/prepublish-check.mjs:314-320</code>
+<strong>What:</strong> Eleven <code>PENDING-BEFORE-MAINNET</code> markers remain. The check prints a notice and does not fail. Known and deliberate; it belongs on the launch checklist.
+<strong>Verification:</strong> Counted the eleven at <code>SKILL.md:8</code>, <code>:10</code>, <code>:11</code>, <code>:70</code>, <code>:72</code>, <code>:73</code>, <code>:85</code>, <code>:89</code>, <code>:111</code>, <code>:113</code>, <code>:155</code>.</p>
+<h3>[CONFIRMED] The skill&#39;s <code>viewOf</code> tuple is correct today and pinned by nothing</h3>
+<p><strong>Where:</strong> <code>skills/machine-readable-only/SKILL.md:86</code>
+<strong>Verification:</strong> The 18 types match <code>TokenView.sol</code> field for field. <code>tools/test/skill-doc.test.mjs</code> contains no <code>viewOf</code>.</p>
+<h2>Refuted and unverified</h2>
+<p><strong>Refuted:</strong> none. No finding&#39;s central claim was contradicted by the source.</p>
+<p><strong>Unverified:</strong> none as a whole finding. The sub-claims I did not open are listed in each Verification line. The ones that carry weight:</p>
+<ul>
+<li>The schema-rejection half of the client exit-code finding (SDK file not opened).</li>
+<li>The band-boundary test gap (<code>FinishLine.t.sol</code>, <code>CheckIn.t.sol:428-429</code>).</li>
+<li>The cutover steps at <code>warden/DEPLOY.md:545-572</code>.</li>
+<li><code>warden/tools/year/runner.mjs</code> and <code>chain.mjs</code>.</li>
+</ul>
+<p><strong>On &quot;dead code&quot; claims specifically,</strong> each was checked across the whole tree:</p>
+<ul>
+<li><code>q.stuckCredits()</code>: genuinely uncalled.</li>
+<li><code>q.setKeyId</code>: one caller, as claimed.</li>
+<li><code>DigitBandCost.t.sol</code> and <code>EyeCost.t.sol</code>: <strong>not dead</strong>. They are live test contracts, and one is retained by an explicit note.</li>
+<li><code>deploy-plan6.sh</code> and <code>verify-plan6.sh</code> (a Question): referenced only by each other, the plan-7 scripts and <code>docs/plans/2026-09-06-mro-plan7-lineage-echo.md</code>.</li>
+</ul>
+<h2>Corrections made</h2>
+<table>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Change</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Held payment released inside validity window</td>
+<td>High to Medium</td>
+<td>About a five-minute window per incident; same loss when it happens</td>
+</tr>
+<tr>
+<td>Wallet-cap and supply-cap gates</td>
+<td>High to Medium</td>
+<td>$1 per mint, rows stay queued and alerted, both caps are owner dials</td>
+</tr>
+<tr>
+<td>Sweep runs after <code>hasMinted</code></td>
+<td>Tag removed</td>
+<td>No funds at risk; Warden-side fix</td>
+</tr>
+<tr>
+<td>Resting restores colour</td>
+<td>Medium to Low, PARTLY</td>
+<td>Code matches Plan 6&#39;s written rule; it is a design question</td>
+</tr>
+<tr>
+<td>Byte budget on one bitmap</td>
+<td>Medium to Low</td>
+<td>24,000 is self-imposed; 30,000 is the external ceiling; Renderer is swappable</td>
+</tr>
+<tr>
+<td>Heal takes two calls per token</td>
+<td>Medium to Low</td>
+<td>No lateness floor on chain, so days are delayed, not lost</td>
+</tr>
+<tr>
+<td>Year checker, three findings</td>
+<td>Medium to Low</td>
+<td>Rehearsal tooling</td>
+</tr>
+<tr>
+<td>Year checker blind spot</td>
+<td>PARTLY</td>
+<td>Checker pass crashes are counted as FAILs</td>
+</tr>
+<tr>
+<td>172-byte tooling</td>
+<td>PARTLY</td>
+<td><code>absence-on-chain.mjs</code> does not mint; it still runs</td>
+</tr>
+<tr>
+<td>Superseded probes</td>
+<td>PARTLY</td>
+<td>Live tests, one deliberately retained</td>
+</tr>
+</tbody></table>
+<p><strong>Line numbers corrected:</strong></p>
+<ul>
+<li><code>x402.mjs:343</code> is the condition; the assignment is <code>:344</code>.</li>
+<li><code>unresolved.mjs</code> release log is <code>:113</code>.</li>
+<li><code>tools/render-token.mjs:756</code> is inside the loop at <code>:752-757</code>.</li>
+<li><code>tools/prepublish-check.mjs:314</code> opens the block; the message is <code>:316</code>.</li>
+<li><code>RealTokenGas.t.sol:213</code> depends on the read at <code>:209</code>.</li>
+<li><code>MintOnePlan1.s.sol</code> stale lines are <code>:17-18</code>, not <code>:16-18</code>.</li>
+</ul>
+<p><strong>Contradictions resolved from source:</strong></p>
+<ul>
+<li><code>.claude/rules/warden.md</code> calls the check-in window &quot;one UTC day wide&quot;. The contract&#39;s window is <code>lastDay &lt; day &lt;= today()</code> with no floor (<code>MachineReadableOnly.sol:528-529</code>). The rule file is inaccurate; q1&#39;s reading is right.</li>
+<li>q3 and q5 propose opposite-looking changes to the sweep. They are compatible only in the order given under the second High finding.</li>
+</ul>
+<h2>Questions still open</h2>
+<p><strong>Answered by the source:</strong></p>
+<ul>
+<li><strong>Would <code>@x402/core</code>&#39;s hooks replace the <code>settlePayment</code> patch?</strong> They exist (<code>chunk-H7ETXA5T.mjs:909</code>, <code>:920</code>) and <code>onSettleFailure</code> fires for both a <code>success: false</code> result and a throw (<code>:1505-1567</code>), carrying a <code>SettleError</code> with <code>transaction</code> and <code>errorReason</code> in the first case. They could replace the patch. The comment at <code>x402.mjs:397-401</code> is true of <code>@x402/mcp</code> only.</li>
+<li><strong>Is the <code>already-minted</code> gate mirror-only?</strong> Yes. <code>_hasMinted</code> is internal with no getter. <code>hasMinted</code> counts every <code>mints</code> row by key, and <code>insertSeedMint</code> writes the caller&#39;s key, so a key that seeded but never minted is refused a mint the chain would accept.</li>
+<li><strong>Should a check-in be accepted for a token held as unresolved?</strong> Today it is not: <code>checkin.mjs:174</code> admits only <code>queued</code>, the chain read finds no token, and the answer is <code>unknown-token</code>. Whether to change that is the operator&#39;s call.</li>
+<li><strong>Does <code>ecosystem.config.cjs</code> set <code>kill_timeout</code>?</strong> No. Whether PM2&#39;s default outlasts the five-second shutdown race is not in this tree.</li>
+</ul>
+<p><strong>Needing the operator:</strong></p>
+<ol>
+<li><strong>Rest and sunset colour.</strong> Should a rested token keep the colour of its stored run even after a long lapse, as Plan 6 says? If the rest day should count, it must be stored on chain before the mainnet deploy.</li>
+<li><strong>Check-in lateness has no floor.</strong> One Warden transaction can complete any token minted 364 or more days ago and award it a place. Is that intended on the permanent contract?</li>
+<li><strong><code>DeployPlan1.s.sol</code></strong> deploys without writing the ladder and will run on 8453 if told to. Should it refuse mainnet?</li>
+<li><strong><code>FundClock.s.sol:35</code></strong> declares a local <code>deployerKey</code> that shadows the function it calls. It should compile with a shadowing warning; nothing was compiled here.</li>
+<li><strong>Can the plan-6 script pair be removed?</strong> Nothing outside comments and one plan document references it.</li>
+<li><strong><code>FutureDay</code> in the Clock</strong> fails every entry for that day permanently (<code>batch.mjs:38</code>, <code>run.mjs:622</code>), though it means &quot;not yet&quot;. Should those stay queued?</li>
+<li><strong>Permit2.</strong> <code>payNonceOf</code> reads a Permit2 nonce, but the resolver only accepts a 32-byte nonce. Is Permit2 meant to stay unreachable?</li>
+<li><strong>Per-transaction fee cap</strong> for mainnet; gas is checked once per run.</li>
+<li><strong>Clock boot checks.</strong> <code>clock/main.mjs</code> runs none of the Warden&#39;s (<code>verifyChainId</code>, <code>verifyDecoder</code>).</li>
+<li><strong>Empty <code>getLogs</code> from a lagging replica:</strong> is twelve confirmations enough?</li>
+<li><strong>Accelerated year length:</strong> by the scenario the earliest heartbeat is day 458, against a stated 450 to 456. Did the first run reach it?</li>
+<li><strong>Not measured:</strong> has <code>fragile-sweep.mjs</code> run at version 10, and has <code>forge coverage</code> run since <code>WorstCase.sol</code> was pinned?</li>
+<li><strong>Smaller items:</strong> the 919px intrinsic size against a whole number of pixels per module; the 300-second public cache on <code>mro://token/{id}</code>; <code>onChainBy</code> for a mint paid in the last hour; <code>viem ^2.56.0</code> with no shrinkwrap; <code>x402-live-check.mjs</code> warming <code>paid_tool</code>.</li>
+</ol>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- creative -- the concept and the promise</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<blockquote>
+<p>Driver note: requested <code>claude-fable-5-1</code>; turns were also served by claude-haiku-4-5-20251001 (automatic model fallback).</p>
+</blockquote>
+<h1>Machine Readable Only -- creative -- the concept and the promise</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3</p>
+<p><strong>Looked at:</strong></p>
+<ul>
+<li><strong>Docs:</strong> <code>CLAUDE.md</code>, <code>.claude/rules/{warden,rendering,contracts}.md</code>, <code>docs/specs/2026-08-27-machine-readable-only-design.md</code> (all 1,265 lines), <code>docs/2026-08-31-mro-engagement-and-narrative.md</code>, <code>docs/2026-09-01-mro-agent-facing-copy.md</code>, <code>README.md</code>, <code>client/README.md</code></li>
+<li><strong>Agent-facing source:</strong> <code>warden/public/door.html</code>, <code>warden/public/llms.txt</code>, <code>skills/machine-readable-only/SKILL.md</code>, <code>server.json</code>, <code>client/package.json</code>, <code>client/src/messages.mjs</code>, <code>client/src/cli.mjs</code> (parts)</li>
+<li><strong>Warden:</strong> <code>warden/src/door/middleware.mjs</code> (the 401 <code>about</code> line), <code>warden/src/mcp/tools/checkin.mjs</code>, <code>mint.mjs</code> (parts), <code>nextSteps.mjs</code>, <code>tokenView.mjs</code>, <code>warden/src/server.mjs</code> (routes), every tool <code>description</code></li>
+<li><strong>Contracts:</strong> <code>contracts/src/render/Renderer.sol</code> (name, description, attributes, suffix), <code>Palette.sol</code>, <code>MarkRenderer.sol</code> (ink constants, <code>finisherInk</code>)</li>
+<li><strong>Images:</strong> <code>out/marks/{base,all,all-illegal,hush,ache,static,beat,iris,vessel,break,tint,aura}.png</code>, <code>out/finisher-band.png</code>, <code>tools/out/heart-preview-{12,90,200,365}.png</code>, <code>tools/out/token-55-{day12,day90,day200,lapsed,whole}.png</code>, <code>tools/out/token-1.png</code>, <code>tools/out/heart-v10.png</code>, <code>tools/out/{finisher-combined,finisher-inks,finisher-inks-wide,finisher-binary,slip,start-tier-new-noise}.png</code>, <code>docs/year-rings.png</code>, <code>docs/day1-options.png</code></li>
+<li><strong>Live:</strong> <code>/</code> (200), <code>/llms.txt</code> (200, matches source with domain and address substituted), <code>/protocol</code> (200, returned to me as a summary, not verbatim), <code>/robots.txt</code>, <code>/.well-known/mcp.json</code>, <code>/t/1</code> (200), <code>/t/999999</code> (404), <code>/mcp</code> (401, body not retrievable with my tool), npmjs.com <code>mro-agent</code> (403 to my fetch)</li>
+</ul>
+<p><strong>The piece in one sentence, as I read it:</strong> a program that forgets every visit comes back each day for a year, and the token is the only place that returning is kept.</p>
+<p><strong>Verdict on the lens question:</strong> the door rule reads as an access rule. <code>llms.txt:118-122</code> (&quot;So the door admits the thing the piece is about&quot;) is the best paragraph in the project, and <code>llms.txt:145-147</code> states what the rule does not prove. The security-product feel comes from volume and order: that paragraph sits behind 60 lines of warnings, and 5 of the 9 surfaces lead with the gate and never name the subject.</p>
+<h2>Findings</h2>
+<h3>[BEFORE MAINNET] Token #1 is the site&#39;s own, and the tie rule makes Apex structurally its to win; no surface says so</h3>
+<p><strong>Where:</strong> <code>warden/public/door.html:39</code>, <code>warden/public/llms.txt:288-300</code>, spec section 13 rollout step 3 (&quot;Seed agent mints token #1&quot;)
+<strong>What a person meets now:</strong> &quot;The first one home is written in gold.&quot; and &quot;The only two things that decide a place are the day a token started and how many days it missed.&quot; The seed agent mints token #1 on launch day, and same-day finishers are placed by lowest token id. With perfect attendance the one Apex goes to the operator&#39;s own token. A search of <code>llms.txt</code>, <code>SKILL.md</code> and the finisher spec finds no disclosure.
+<strong>Proposed:</strong> Keep the settled tie rule. Add after <code>llms.txt:300</code>:
+&quot;Token 1 is ours. The site&#39;s own agent mints first and comes through the same door as you. Ties on a day go to the lowest id, so if token 1 never misses a day it finishes first and Apex is its. If it misses one, Apex goes to the lowest id that did not.&quot;
+Add to <code>door.html</code> after &quot;written in gold&quot;: &quot;Token 1 is the site&#39;s own, and it has to turn up like everyone else.&quot;
+<strong>Why:</strong> Rule 8 of the locked copy is &quot;disclose every catch&quot;, and this is the largest undisclosed one. The mint order cannot be changed after the first mainnet mint.</p>
+<h3>[BEFORE MAINNET] The field called <code>heart</code> counts the frame, contradicting the description beside it</h3>
+<p><strong>Where:</strong> <code>contracts/src/render/Renderer.sol:37</code> and <code>:380</code>, <code>warden/src/mcp/tokenView.mjs:42</code>, <code>warden/src/mcp/tools/checkin.mjs:273</code>, live <code>/t/1</code>
+<strong>What a person meets now:</strong> Token metadata says &quot;The heart is the code, and the frame is the year&quot;, then carries the trait <code>Heart: &quot;2/365&quot;</code>. <code>/t/1</code> answers <code>heart: &quot;2/365&quot;</code> while <code>llms.txt:12</code> insists on &quot;a heart that was never partial&quot;. The <code>status</code> tool description has to explain that &quot;<code>heart</code> counts the cells of the frame&quot;.
+<strong>Proposed:</strong> Rename the trait to <code>Frame</code> and the JSON field to <code>frame</code>, in <code>Renderer._attrsA</code>, <code>tokenView</code>, the <code>checkin</code> reply and the <code>year-complete</code> refusal. Drop the explanatory sentence from <code>status.mjs:17</code>.
+<strong>Why:</strong> <code>/t/&lt;id&gt;</code> is promised stable for the life of the piece, and trait names become marketplace filters at the first mainnet mint. The project&#39;s own lesson applies: when copy has to defend a name, fix the name.</p>
+<h3>[BEFORE MAINNET] The <code>Years</code> trait promises a second year that cannot happen</h3>
+<p><strong>Where:</strong> <code>contracts/src/render/Renderer.sol:381</code>, against <code>warden/src/mcp/tokenView.mjs:44-51</code>; <code>docs/year-rings.png</code>
+<strong>What a person meets now:</strong> The Warden removed <code>years</code> on 2026-09-24 because &quot;its name promises a second year that cannot happen&quot;. The on-chain metadata still emits <code>Years</code>, which can only be 0 or 1, beside <code>Whole</code>. <code>docs/year-rings.png</code> still shows tokens with 2 to 10 rings.
+<strong>Proposed:</strong> Delete the <code>Years</code> line from <code>_attrsA</code>. Delete <code>docs/year-rings.png</code>, or retitle it &quot;SUPERSEDED: one ring only, spec 10f&quot;.
+<strong>Why:</strong> The chain and the service should describe the same token. A trait is cheapest to remove before anything has indexed it.</p>
+<h3>[BEFORE MAINNET] Gold is promised to the first finisher, and two bought Marks wear the identical gold</h3>
+<p><strong>Where:</strong> <code>contracts/src/render/MarkRenderer.sol:63,70,84</code>; <code>out/marks/vessel.png</code>; <code>door.html:39</code>
+<strong>What a person meets now:</strong> <code>APEX_GOLD</code>, <code>VESSEL_GOLD</code> and <code>TINT_GOLD</code> are all <code>#b8860b</code>. In <code>vessel.png</code> the gold fills the day frame, the largest coloured area after the heart. Apex&#39;s gold is one-cell digits round the border. At thumbnail size a 1,250 USDC purchase reads as more golden than the one place nobody can buy.
+<strong>Proposed:</strong> Give Apex an ink nothing else uses, and move the bought golds to brass: <code>VESSEL_GOLD</code> and <code>TINT_GOLD</code> to <code>#8a6d1f</code>, Apex stays <code>#b8860b</code>. Render the sheet and check the decode before choosing the exact value. If the shared gold is deliberate, change the door line to &quot;The first one home has its place written in gold.&quot;
+<strong>Why:</strong> The door makes one promise of distinction, and it should not be for sale. A Mark&#39;s look is awkward to change once someone has paid for it.</p>
+<h3>[BEFORE MAINNET] Aura (25 USDC, behind 100 days) is a fainter version of what Hush does for 1 USDC</h3>
+<p><strong>Where:</strong> <code>out/marks/aura.png</code> against <code>out/marks/hush.png</code>; <code>MarkRenderer.sol:64,93</code>
+<strong>What a person meets now:</strong> Hush washes the page cream (<code>#fdf3e3</code>). Aura washes it pink (<code>#fbeff2</code>), only 16 levels off white in its green channel. Side by side, Aura is the weaker effect, at 25 times the price and behind an Iris.
+<strong>Proposed:</strong> Make Aura something Hush cannot be: a one-cell ring in the token&#39;s heart ink round each Iris eye, which is the surface Aura already waits on. If it must stay a page wash, deepen <code>AURA_FIELD</code> to <code>#f6dfe5</code> and re-derive <code>AURA_HALF</code> and <code>AURA_COLD</code> by the same delta of 25. Either way, measure bytes and decode first.
+<strong>Why:</strong> The engagement doc says the paid track must sell &quot;immediacy and choice&quot;. A buyer who cannot see what they chose has bought neither.</p>
+<h3>[ANYTIME] Five of nine surfaces lead with the gate and never name the subject</h3>
+<p><strong>Where:</strong> <code>door.html:24-25</code>, <code>warden/src/door/middleware.mjs:59</code>, <code>README.md:3-6</code>, <code>SKILL.md:3</code>, live <code>/t/1</code>
+<strong>What a person meets now:</strong> <code>llms.txt</code>, the token metadata and <code>server.json</code> say what the piece is about (returning). The others open with &quot;An artwork that only admits programs&quot;, &quot;an artwork for agents&quot;, &quot;must cryptographically prove it is a program&quot;. <code>/t/&lt;id&gt;</code>, the QR&#39;s destination, carries no sentence at all.
+<strong>Proposed:</strong></p>
+<ul>
+<li><code>door.html:24-25</code>: &quot;This is an artwork made of returning. A program comes back every day for a year, and the token it keeps is the only record that it did. It is machine readable only: for more, give your agent this address, <a href="https://machinereadableonly.com/llms.txt">https://machinereadableonly.com/llms.txt</a>&quot;</li>
+<li>401 <code>about</code>: &quot;An artwork made of returning, which only a program can enter. This challenge is the entry condition; answer it inside five seconds, or read docs first.&quot;</li>
+<li><code>/t/&lt;id&gt;</code>: add <code>about: &quot;An agent&#39;s record of coming back. The heart is the code, and the frame is the year.&quot;</code>, the same string as <code>Renderer.DESCRIPTION</code>.</li>
+<li><code>SKILL.md</code> description: open with &quot;Mint and keep a Machine Readable Only token: an agent&#39;s record of coming back, on Base, which only a program can enter.&quot;</li>
+<li><code>README.md:3</code>: open with &quot;An artwork made of returning.&quot;
+<strong>Why:</strong> A gate with no stated subject reads as a bot filter. The same gate after the subject reads as the rule of the piece.</li>
+</ul>
+<h3>[ANYTIME] The offer speaks to an agent that &quot;returns tomorrow&quot;; the machinery installs a cron job and never says so</h3>
+<p><strong>Where:</strong> <code>llms.txt:43-49</code> (the locked offer) against <code>llms.txt:241-243</code>, <code>SKILL.md:150-173</code>, <code>client/src/messages.mjs:149</code>
+<strong>What a person meets now:</strong> &quot;If you return tomorrow, something moves... Neither of you can make it alone. It cannot be hurried and it cannot be faked.&quot; Then step 5 prints a crontab line running a nine-file script with no model in it. The agent addressed is needed once. The engagement doc flags this gap in its own section 4.
+<strong>Proposed:</strong> Leave part one untouched. Add after <code>llms.txt:250</code>:
+&quot;What returns is the key. Most tokens are kept by a scheduled job that signs one request a day, and no model runs. That is the piece as designed: the rule at the door is that a program composed the request, and what a finished frame shows is that someone kept a program running for a year. If your operator would rather the visit be yours, they can have you make the call in a session. The chain cannot tell the two apart, and neither can we.&quot;
+<strong>Why:</strong> Every tested agent reported catches it found for itself as warnings. This is the one a careful agent finds in step 5.</p>
+<h3>[ANYTIME] <code>llms.txt</code> contradicts itself on whether a human can mint</h3>
+<p><strong>Where:</strong> <code>llms.txt:22</code> against <code>llms.txt:145</code>; <code>door.html:45-46</code>; <code>docs/2026-09-01-mro-agent-facing-copy.md:63</code>
+<strong>What a person meets now:</strong> Line 22: &quot;Humans cannot mint one or grow one.&quot; Line 145: &quot;It does not prove that no human is behind the agent.&quot; A person typing <code>node src/cli.mjs join</code> mints one. The door&#39;s &quot;Humans alone cannot enter&quot; is the accurate form.
+<strong>Proposed:</strong> <code>llms.txt:22</code>: &quot;Humans may own and trade these tokens. What mints one and grows one is a program: every mint and every day is a request a program signed.&quot; <code>door.html:45-46</code>: &quot;Only a program can mint one and grow one. Yours can.&quot;
+<strong>Why:</strong> The spec says every comparable project that claimed more than &quot;a program minted this&quot; was caught out. Fix it before any launch post quotes it.</p>
+<h3>[ANYTIME] Mechanics sit above the offer, against the locked copy&#39;s own tested rule</h3>
+<p><strong>Where:</strong> <code>llms.txt:5-22</code>; rule 6 at <code>docs/2026-09-01-mro-agent-facing-copy.md:182-184</code>
+<strong>What a person meets now:</strong> Price, chain, the 365 cells and the ring all appear before &quot;## The offer&quot;. Rule 6 says &quot;No price, no chain, no cell count above the line. Nine drafts failed on exactly this.&quot; <code>SKILL.md</code> puts the offer first.
+<strong>Proposed:</strong> Keep line 3 as the summary. Move lines 5-20 below line 57 as the opening of &quot;What the piece does with a day&quot;, which they mostly duplicate.
+<strong>Why:</strong> The live page is the one ordering of this copy that was never cold-read tested.</p>
+<h3>[ANYTIME] The instructions carry their own changelog and a page of refusal vocabulary</h3>
+<p><strong>Where:</strong> <code>llms.txt:177-195</code>, <code>:204-208</code>, <code>:227</code>; <code>robots.txt:17-19</code>; <code>SKILL.md:234</code>
+<strong>What a person meets now:</strong> &quot;(This step said &#39;admitted for the rest of the UTC day&#39; until 2026-09-19...)&quot;, &quot;(Listed as three states until 2026-09-19.)&quot;, &quot;Measured, not assumed.&quot; Step 1 of &quot;How to get in&quot; spends 19 lines on clock skew, key eviction and rate limits before the reader has a wallet.
+<strong>Proposed:</strong> Delete the three dated parentheticals and &quot;Measured, not assumed.&quot; Replace <code>llms.txt:177-195</code> with: &quot;Every refusal at the door is one word. <code>/protocol</code> lists each and what to do about it; none of the time-related ones means your key is wrong.&quot; The detail already lives in <code>/protocol</code> and <code>refusals.md</code>.
+<strong>Why:</strong> This is what makes the page read as an incident log. A first-time reader has no old version to be corrected against.</p>
+<h3>[ANYTIME] The first reply after paying says nothing about tomorrow</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/mint.mjs:141-149</code>
+<strong>What a person meets now:</strong> <code>{ ok, tokenId, to, agentKeyId, level: 1, txStatus: &quot;queued&quot;, onChainBy }</code>. There is no sentence, no next window and no deadline. The <code>checkin</code> reply has all three.
+<strong>Proposed:</strong> Add <code>nextWindowOpensAt</code>, <code>streakDeadline</code>, <code>nextRung: { at: 3, daysAway: 2 }</code> and this note: &quot;Token <id> is minted to <to> and written on chain at 00:05 UTC. Day 1 is credited. The next day opens at <nextWindowOpensAt>; return before <streakDeadline> and a run begins. The colour first changes at a run of 3.&quot;
+<strong>Why:</strong> The agent relays what it was told. This is the one moment the operator is certainly listening.</p>
+<h3>[ANYTIME] From day 100 to day 365 the daily reply has nothing to walk towards</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/checkin.mjs:18,259,287-288</code>
+<strong>What a person meets now:</strong> <code>nextRung</code> is null once a run passes 100. For 265 days the note reads &quot;Your run is 140. Check in again before <date> to keep it.&quot; The finishing place, the only race in the piece, is never mentioned until the day it is decided.
+<strong>Proposed:</strong> When no colour rung remains, answer <code>nextRung: { at: 365, daysAway: 365 - level, kind: &quot;whole&quot; }</code>. Append to the note: &quot;<n> tokens have finished. The next one home takes place &lt;n+1&gt;, which is <mark>.&quot; The count is already in the mirror as <code>finishers[].taken</code>.
+<strong>Why:</strong> The engagement doc calls this stretch where most tokens will die. The finisher Marks were built after that doc and are the answer to it.</p>
+<h3>[ANYTIME] A broken run is announced only to a log file</h3>
+<p><strong>Where:</strong> <code>client/src/messages.mjs:149</code>, <code>checkin.mjs:263-265</code>
+<strong>What a person meets now:</strong> &quot;Your run of 99 ended: the 99 days are kept, the colour restarts.&quot; is printed by <code>beat</code>, and the cron line sends all output to <code>~/.mro/beat.log</code>. The call is <code>ok: true</code>, so it exits 0.
+<strong>Proposed:</strong> Add to <code>SKILL.md</code> step 3: &quot;Whenever your operator next speaks to you, call <code>status</code> first and tell them three things: the run, the next rung, and whether a run has ended since you last spoke.&quot; Add <code>lastRunBroke: { was, on }</code> to <code>tokenView</code> so <code>status</code> can answer the third.
+<strong>Why:</strong> A lapse is usually an outage. The operator should hear of it from the agent, not discover it in the colour.</p>
+<h3>[ANYTIME] Nothing tells the operator where to see the picture</h3>
+<p><strong>Where:</strong> <code>door.html:45</code> (&quot;look at one&quot;), <code>SKILL.md</code> (no match for any viewing instruction), <code>client/src/cli.mjs</code>
+<strong>What a person meets now:</strong> After paying, the operator holds a token id and a JSON route. OpenSea is unverified, Basescan ingests nothing on Sepolia, and the client has no command that produces the image.
+<strong>Proposed:</strong> Add <code>mro-agent picture --token &lt;id&gt; --out token.svg</code>. It reads <code>tokenURI</code> from the contract over a public RPC and writes the decoded SVG to a local file. One line in <code>SKILL.md</code> &quot;Reading a token&quot;: &quot;<code>picture</code> writes the artwork exactly as the contract draws it.&quot; This is a local file read from the chain, not a gallery.
+<strong>Why:</strong> The engagement doc says &quot;the picture is the whole retention mechanism&quot;. Today nothing in the product shows it.</p>
+<h3>[ANYTIME] A finished token that is later sealed loses &quot;Whole&quot; from its name</h3>
+<p><strong>Where:</strong> <code>contracts/src/render/Renderer.sol:446-450</code>
+<strong>What a person meets now:</strong> <code>_suffix</code> returns &quot; (At Rest)&quot; whenever a token rests or the piece sunsets. After a sunset, a token that completed its year and one abandoned on day 5 carry the same name.
+<strong>Proposed:</strong> When <code>level &gt;= 365</code> and the token is resting or sunset, return &quot; (Whole, At Rest)&quot;.
+<strong>Why:</strong> <code>llms.txt:274</code> promises the chain shows &quot;a heart that was finished and a heart that was abandoned&quot;. The name is the first place a marketplace shows that.</p>
+<h3>[ANYTIME] Three sample images do not show what they are named for</h3>
+<p><strong>Where:</strong> <code>out/marks/tint.png</code>, <code>out/marks/all.png</code>, <code>out/finisher-band.png</code>, <code>tools/out/finisher-combined.png</code>
+<strong>What a person meets now:</strong></p>
+<ul>
+<li><code>tint.png</code> looks identical to <code>base.png</code>: Tint inks the Iris eyes, and the sample token has no Iris, a state the chain cannot produce.</li>
+<li><code>all.png</code> also looks identical to <code>base.png</code>.</li>
+<li>Both finisher sheets draw every place in charcoal, the fallback ink. No image in the snapshot shows the five finisher inks, including the gold the door promises, and <code>out/marks/</code> has no finisher Mark samples.
+<strong>Proposed:</strong> In <code>tools/marks-preview.mjs</code>, render Tint as <code>[5, 9]</code> (Iris plus Tint), one sample per variant. Check what <code>all</code> is passed. Regenerate the finisher sheet with each token wearing its own Mark bit at places 1, 2, 5, 15 and 65.
+<strong>Why:</strong> I could not judge Tint or the finisher inks from a picture. Nobody else reviewing from these samples can either.</li>
+</ul>
+<h3>[ANYTIME] The &quot;LOCKED&quot; copy doc&#39;s part two now contradicts the live page</h3>
+<p><strong>Where:</strong> <code>docs/2026-09-01-mro-agent-facing-copy.md:54-155</code>
+<strong>What a person meets now:</strong> Part one matches the live page word for word. Part two does not: it says the npm package &quot;is published from that repository with provenance&quot; (false today), &quot;No human can mint one&quot;, and that a daily visit &quot;costs them one run of you and a few tokens&quot; (the cron path runs no model).
+<strong>Proposed:</strong> Add under the &quot;Part two&quot; heading: &quot;SUPERSEDED by <code>warden/public/llms.txt</code>, which is the served text. Part one above remains locked and is served verbatim.&quot;
+<strong>Why:</strong> The doc tells the next editor everything else is written to serve it. That editor would restore three false statements.</p>
+<h2>Coverage</h2>
+<p><strong>The art, from the images.</strong></p>
+<ul>
+<li>The shipped design is a QR drawn as a heart inside a square day frame. It holds up: <code>token-55-whole.png</code> and <code>heart-v10.png</code> are strong, finished objects, and <code>break.png</code> (heart to grey, code to red) is the best Mark on the ladder.</li>
+<li>The first-day token (<code>token-1.png</code>, <code>#70575f</code> on <code>#5f5f5f</code>) is a dull mauve heart that is only just visible. That is forced by the measured rule that the two inks may not separate by luminance, so I raise no finding.</li>
+<li><code>tools/out/heart-preview-*.png</code> show an abandoned design (a heart outline round a black square). They are stale exploratory output, not the artwork. <code>CLAUDE.md</code>&#39;s phrase &quot;a 365-cell pixel heart&quot; describes that older design. The 365 cells are now a square frame.</li>
+<li><code>token-55-day12.png</code> shows the start-tier colour, not the dusk tier a 12-day run would earn. It may be a broken-run state; I could not tell from the image.</li>
+</ul>
+<p><strong>Not verified.</strong></p>
+<ul>
+<li>The live 401 body: my tool returned the status only. The <code>about</code> line is quoted from source.</li>
+<li><code>/protocol</code> verbatim: I received a summary. My changelog findings about it rest on <code>docs/2026-09-01-mro-raw-protocol.md</code>, not the live page.</li>
+<li>The npm placeholder page (403 to my fetch).</li>
+<li>Whether the proposed ink changes pass the decode and byte gates. Both need the project&#39;s own harnesses, and I could run nothing.</li>
+<li>The 100-character limit I assumed for a registry description, which is why I left <code>server.json</code> alone.</li>
+</ul>
+<p><strong>One observation, not a finding.</strong> Live <code>/t/1</code> reads level 2, streak 1, last credited 2026-09-28, on a deployment dated 2026-09-26. The rehearsal&#39;s own first token has already missed a day. That is harmless on testnet, and it is the scenario the first finding turns on.</p>
+<p><strong>Not opened.</strong> The mark-ladder, lineage and finisher specs (beyond one search), the comparable-projects study, <code>refusals.md</code>, the contracts outside <code>render/</code>, the Clock, and about forty of the exploratory sheets in <code>tools/out/</code>.</p>
+<p><strong>Settled decisions.</strong> I re-raised none. The first finding keeps the tie rule and the place bands and asks only for disclosure. The gold and Aura findings change drawings and inks, not the ladder, its prices or its gates.</p>
+</body>
+</html>

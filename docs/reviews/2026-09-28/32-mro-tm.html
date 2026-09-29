@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- threat model</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- threat model</h1>
+<p>Snapshot <code>8d2a0d27e3</code>. This is a map of the system, not a list of findings. Where an item below suggests a bug, it is a question for the reviewers, grounded in the file it cites. Nothing here re-opens a settled decision. Two items touch settled ground, and the question each asks is noted where it appears: whether a trust assumption behind the decision holds in the code as built.</p>
+<h2>1. Assets</h2>
+<table>
+<thead>
+<tr>
+<th>Asset</th>
+<th>Where it lives</th>
+<th>Why it matters</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Owner key</strong> (<code>Ownable2Step</code> owner)</td>
+<td>Deployer EOA. <code>MAINNET_DEPLOYER_KEY</code> is read from <code>contracts/.env</code> on the VPS (<code>contracts/script/deploy-mainnet.sh:86-93</code>, <code>script/MroScript.sol:66-80</code>). Moving ownership to a Safe or hardware wallet is written as &quot;prefer&quot;, not enforced (<code>deploy-mainnet.sh:28-31</code>).</td>
+<td>It can swap the renderer (every image), <code>setWarden</code>, <code>pause</code>, <code>sunset</code> (irreversible), <code>setUpgrade</code>, both caps and <code>setVouchersEnabled</code>. It cannot renounce (<code>MachineReadableOnly.sol:265</code>).</td>
+</tr>
+<tr>
+<td><strong>Clock key</strong> (the on-chain <code>warden</code> role)</td>
+<td><code>CLOCK_PRIVATE_KEY</code> in <code>warden/.env</code>. The Clock reads it (<code>clock/main.mjs:35</code>). The Warden loads the same file (<code>ecosystem.config.cjs:44</code>) and deletes the key from its own <code>process.env</code> (<code>main.mjs:69</code>). Both run as the same Unix user.</td>
+<td>It can <code>mint</code>, <code>seed</code>, <code>batchCheckIn</code>, <code>applyMark</code> and <code>heartbeat</code>, and its signature makes vouchers valid (<code>:598</code>). It pays all gas.</td>
+</tr>
+<tr>
+<td><strong>USDC revenue</strong></td>
+<td>Paid by agents through x402 to <code>TREASURY_ADDRESS</code> (<code>main.mjs:85-142</code>). Settlement is done by the facilitator: x402.org on testnet, CDP on mainnet with <code>CDP_API_KEY_*</code>.</td>
+<td>$1 per mint; Marks cost $1 to $1,250.</td>
+</tr>
+<tr>
+<td><strong>Paid-but-unwritten obligations</strong></td>
+<td>Mirror rows in <code>mints</code> / <code>mark_orders</code>: <code>awaiting-payment</code>, <code>payment-unresolved</code> and <code>queued</code> (<code>mirror/schema.sql:96-177</code>), plus <code>pay_nonces</code> (<code>:216</code>).</td>
+<td>An agent can pay and receive nothing, or receive something without paying.</td>
+</tr>
+<tr>
+<td><strong>Integrity of the entry rule</strong></td>
+<td>The door: <code>door/verify.mjs</code>, <code>door/middleware.mjs</code>, <code>door/challenge.mjs</code>, and <code>CHALLENGE_SECRET</code>.</td>
+<td>The artwork&#39;s meaning is &quot;a program did this&quot;.</td>
+</tr>
+<tr>
+<td><strong>Integrity of each token&#39;s record</strong></td>
+<td><code>_tokens</code>, <code>_marks</code>, <code>_codeOf</code>, <code>_echo</code> and <code>finishers</code> on chain. They are permanent, and everything is written by the Warden (<code>MachineReadableOnly.sol:64-97</code>).</td>
+<td>These fields <em>are</em> the artwork: return visits, streaks, finishing place (Apex is unique) and the permanent QR bitmap.</td>
+</tr>
+<tr>
+<td><strong>Agent identity keys</strong></td>
+<td>Ed25519 JWKs on agent machines (<code>client/src/keys.mjs:54-86</code>). The operator&#39;s own seed agent keeps one at <code>~/.mro/seed-identity.jwk.json</code> (<code>deploy/mro-seed.service:53</code>).</td>
+<td>Whoever holds a key controls check-ins, Marks and seeds for tokens bound to it.</td>
+</tr>
+<tr>
+<td><strong>Agent wallet keys</strong></td>
+<td><code>MRO_WALLET_KEY</code> env, or <code>--wallet-key-file</code> (<code>client/src/cli.mjs:176</code>).</td>
+<td>They sign EIP-3009 authorisations.</td>
+</tr>
+<tr>
+<td><strong>The mirror</strong></td>
+<td>SQLite <code>STATE_DB_PATH</code> plus the WAL. The reconcile cursor and run lock sit beside it.</td>
+<td>Source of what agents are told, and of what the Clock writes.</td>
+</tr>
+<tr>
+<td><strong>Availability and reputation</strong></td>
+<td>Domain <code>machinereadableonly.com</code>, and <code>/t/&lt;id&gt;</code>, which every QR resolves to permanently. The RPC provider key sits inside <code>BASE_RPC_URL</code>.</td>
+<td>If the domain lapses or is hijacked, the permanent QRs point wherever the new holder chooses.</td>
+</tr>
+</tbody></table>
+<h2>2. Actors</h2>
+<ul>
+<li><strong>Anonymous visitor.</strong> Unsigned access to <code>/</code>, <code>/llms.txt</code>, <code>/protocol</code>, <code>/robots.txt</code>, the MCP cards, <code>/t/&lt;id&gt;</code>, the key directory, <code>GET /keys/nonce</code> and <code>POST /keys</code> (<code>server.mjs:195-408</code>). It can also make the Warden fetch any HTTPS host by naming it in <code>Signature-Agent</code> (<code>door/directory.mjs:426-503</code>), and it can call <code>sunsetByAbsence()</code> after 365 quiet days (<code>MachineReadableOnly.sol:294</code>).</li>
+<li><strong>Agent (signed key).</strong> After the door it can reach 9 MCP tools on <code>/mcp</code> (<code>mcp/server.mjs:61-66</code>), limited to 60 calls a minute per key (<code>bootstrap.mjs:49-50</code>). Keys are free to mint, and registration is limited only by the nginx limiter (<code>nginx.conf.example:63</code>) plus a 10,000-key cap (<code>bootstrap.mjs:24</code>).</li>
+<li><strong>Paying wallet.</strong> Signs EIP-3009 authorisations. It may differ from both the recipient and the agent key (<code>pay/x402.mjs:72</code>).</li>
+<li><strong>Token holder (owner wallet).</strong> On chain directly: <code>rebind</code> to any bytes32, <code>rest</code> (irreversible), and transfers. None of these pass through the Warden (<code>MachineReadableOnly.sol:793-810</code>).</li>
+<li><strong>Operator / owner.</strong> Holds the owner key and the VPS, and edits <code>.env</code> files.</li>
+<li><strong>Clock (systemd timer, 00:05 UTC).</strong> The only chain writer. It is sandboxed (<code>deploy/mro-clock.service:33-75</code>) but has write access to the whole <code>warden/</code> directory (<code>:38</code>).</li>
+<li><strong>Warden (PM2).</strong> Internet-facing through nginx on 127.0.0.1:3006. It has no sandbox directives (<code>ecosystem.config.cjs</code>) and runs as the same user as the Clock.</li>
+<li><strong>Solver child processes.</strong> Spawned per token with <code>(domain, tokenId)</code> (<code>bootstrap.mjs:189-209</code>, <code>solve/worker.mjs</code>).</li>
+<li><strong>Seed agent.</strong> The operator&#39;s own <code>client</code> runs daily from the same box (<code>deploy/mro-seed.service</code>).</li>
+<li><strong>Third parties:</strong><ul>
+<li>the x402 facilitator (verifies and settles payments);</li>
+<li>the Base RPC provider (every gate read and the Clock&#39;s view of the chain);</li>
+<li>the USDC contract (<code>authorizationState</code> is used as the payment oracle);</li>
+<li>Cloudflare (proxy; the origin lock is off, <code>nginx.conf.example:75-84</code>);</li>
+<li>third-party JWKS hosts;</li>
+<li>Alchemy (the only proven metadata consumer);</li>
+<li>npm, which holds the <code>mro-agent</code> name (future supply chain for agents&#39; clients).</li>
+</ul>
+</li>
+</ul>
+<h2>3. Trust boundaries</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Boundary</th>
+<th>Crossing</th>
+<th>Cite</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>B1</td>
+<td>Internet to nginx to Warden</td>
+<td>Host is forwarded, and the signature authority is pinned to <code>MRO_DOMAIN</code>. Only <code>/keys*</code> is rate limited, and it is keyed on the CF edge IP.</td>
+<td><code>nginx.conf.example:63,111-143</code>; <code>middleware.mjs:35-39</code>; <code>server.mjs:183</code></td>
+</tr>
+<tr>
+<td>B2</td>
+<td>Unsigned public routes</td>
+<td><code>/t/&lt;id&gt;</code> renders from the mirror; the directory is rendered from stored JWKs.</td>
+<td><code>server.mjs:195-203,319-334</code></td>
+</tr>
+<tr>
+<td>B3</td>
+<td>Key registration</td>
+<td>Ed25519 proof over a server HMAC nonce. The <strong>whole caller JWK JSON is stored and republished</strong> (<code>INSERT OR REPLACE</code>).</td>
+<td><code>directory.mjs:532-575</code>; <code>mirror/queries.mjs:60-63,421-430</code></td>
+</tr>
+<tr>
+<td>B4</td>
+<td>Third-party key lookup</td>
+<td>The caller-chosen <code>Signature-Agent</code> URL makes the Warden fetch out. Guards: SSRF check, pinned lookup, 64 KB cap, 8 fetches in flight, success cached 1 h, failure cached 45 s.</td>
+<td><code>directory.mjs:103-283,426-503</code></td>
+</tr>
+<tr>
+<td>B5</td>
+<td>Door admission</td>
+<td>RFC 9421 components, a 5-minute window, 60 s skew, sigHash replay set, content-digest, and an HMAC challenge bound to the keyid. The Warden reimplements web-bot-auth&#39;s checks.</td>
+<td><code>verify.mjs:80-110,128,312-408</code>; <code>middleware.mjs:90-183</code>; <code>challenge.mjs:49-89</code></td>
+</tr>
+<tr>
+<td>B6</td>
+<td>Door to MCP identity</td>
+<td><code>keyId</code> / <code>sigHash</code> pass through <code>req.auth</code> into <code>authInfo</code>, and are never taken from tool arguments.</td>
+<td><code>server.mjs:468</code>; <code>mcp/server.mjs:125-131,220-236</code></td>
+</tr>
+<tr>
+<td>B7</td>
+<td>MCP tools to chain reads</td>
+<td>Every contract gate is read live over JSON-RPC. <code>null</code> means refuse. Binding is checked both ways for <code>upgrade</code>/<code>seed</code>, one way for <code>checkin</code> (decided).</td>
+<td><code>mcp/gates.mjs:28-227</code>; <code>chain/read.mjs</code>; <code>tools/checkin.mjs:75-88</code></td>
+</tr>
+<tr>
+<td>B8</td>
+<td>Payment: agent to Warden to facilitator</td>
+<td>Verify happens before the handler and settle after it. An <code>isError</code> result cancels. Reservations are keyed by EIP-3009 nonce. The settlement outcome is observed by monkey-patching <code>settlePayment</code>.</td>
+<td><code>pay/x402.mjs:173-207,321-355,405-420,434-530</code>; <code>@x402/mcp dist/esm/index.mjs:811-883</code></td>
+</tr>
+<tr>
+<td>B9</td>
+<td>Settlement to mirror</td>
+<td><code>onSettled</code> / <code>onUnsettled</code> / <code>onUnresolved</code> map to <code>settleByNonce</code> / <code>releaseReservation</code> / <code>holdUnresolvedPayment</code>. <code>dropExpiredReservations</code> uses a 10-minute TTL.</td>
+<td><code>main.mjs:252-282</code>; <code>queries.mjs:49,645-798</code></td>
+</tr>
+<tr>
+<td>B10</td>
+<td>Mirror to Clock to chain</td>
+<td>Queued rows become <code>mint</code> / <code>seed</code> / <code>batchCheckIn</code> / <code>applyMark</code> / <code>heartbeat</code>, with explicit nonces and a receipt-status check. <strong>Binding is not re-checked at write time.</strong></td>
+<td><code>clock/run.mjs:302-771</code>; <code>clock/write.mjs:84-212</code>; <code>clock/batch.mjs</code></td>
+</tr>
+<tr>
+<td>B11</td>
+<td>Chain to mirror (reconcile)</td>
+<td>Logs are filtered by address and read 12 blocks behind the head. <code>Rebound</code> is mapped through <code>keyIdHash</code>; <code>Transfer</code> sets the owner.</td>
+<td><code>clock/reconcile.mjs:66-266</code>; <code>run.mjs:944-975</code></td>
+</tr>
+<tr>
+<td>B12</td>
+<td>USDC oracle to mirror</td>
+<td><code>authorizationState(payer, nonce)</code> promotes or releases a held payment.</td>
+<td><code>clock/unresolved.mjs:53-118</code>; <code>queries.mjs:676-699</code></td>
+</tr>
+<tr>
+<td>B13</td>
+<td>Contract access control</td>
+<td><code>onlyWarden</code> (also stamps <code>lastWardenDay</code>), <code>onlyOwner</code>, <code>onlyTokenOwner</code>, and a voucher signature checked against the current <code>warden</code>.</td>
+<td><code>MachineReadableOnly.sol:146-151,238-278,581-610,783-810</code></td>
+</tr>
+<tr>
+<td>B14</td>
+<td>Renderer</td>
+<td><code>tokenURI</code> STATICCALLs <code>renderer</code>. The current renderer is <code>pure</code>. The only check on a swap is <code>code.length &gt; 0</code>.</td>
+<td><code>MachineReadableOnly.sol:224-227,303-311</code>; <code>render/Renderer.sol:40</code></td>
+</tr>
+<tr>
+<td>B15</td>
+<td>Secrets and environment</td>
+<td>One <code>.env</code> for Warden and Clock, loaded with <code>--env-file</code>. PM2&#39;s <code>filter_env</code> strips inherited shell secrets. RPC URLs are redacted in logs.</td>
+<td><code>ecosystem.config.cjs:44,90</code>; <code>mro-clock.service:27</code>; <code>clock/redact.mjs</code></td>
+</tr>
+<tr>
+<td>B16</td>
+<td>Client to site</td>
+<td>Before signing, the client checks <code>payTo</code> and <code>amount</code> against out-of-band expectations. <code>asset</code> and <code>network</code> are optional. The EIP-712 domain name, version and chainId come from the demand.</td>
+<td><code>client/src/pay.mjs:100-130,144-194</code>; <code>cli.mjs:197-201</code></td>
+</tr>
+<tr>
+<td>B17</td>
+<td>Deploy pipeline</td>
+<td><code>forge script</code> signs with a hot key from <code>.env</code>. <code>setUpgrade</code> 1-15 is sent in the same broadcast. <code>adopt-deployment.sh</code> rewrites <code>DEPLOY_BLOCK</code> and <code>CLAUDE.md</code>.</td>
+<td><code>deploy-mainnet.sh</code>; <code>DeployPlan5.s.sol:27-33</code>; <code>reconcile.mjs:47</code></td>
+</tr>
+</tbody></table>
+<h2>4. Permanent vs changeable</h2>
+<p><strong>Fixed in the MRO bytecode</strong>, which has no proxy (it lands at the redeploy before token #1):</p>
+<ul>
+<li><code>CODE_BYTES = 407</code>, <code>MAX_MARK_ID = 15</code>, <code>FIRST_FINISHER_MARK = 11</code></li>
+<li>the <code>finisherMark</code> bands 1 / 4 / 14 / 64</li>
+<li><code>FINISH_LEVEL = 365</code>, <code>ABSENCE_DAYS = 365</code>, <code>MAX_CREATION_LAG = 30</code></li>
+<li>the voucher typehash and EIP-712 domain (<code>&quot;MachineReadableOnly&quot;,&quot;1&quot;</code>)</li>
+<li>one mint per key, forever; the seed budget formula <code>(today-first)/365 - spent</code></li>
+<li><code>heartbeat</code> is not paused; renounce is disabled; the supply-cap ceiling is 65,535</li>
+<li><code>rest</code> and <code>sunset</code> are one-way</li>
+<li>the check-in window rule <code>lastDay &lt; day &lt;= today()</code></li>
+<li>which functions are gated by which modifier. <code>rebind</code>, <code>rest</code> and transfers are <strong>not</strong> pausable.</li>
+</ul>
+<p><strong>Permanent per token once written:</strong></p>
+<ul>
+<li>the <code>code</code> bitmap (which encodes the domain URL)</li>
+<li><code>mintDay</code>, <code>echo</code>, the finisher ordinal and Mark, the earned-Iris run, the variant bits</li>
+<li>every credited day (level never falls)</li>
+<li><code>_hasMinted</code> / <code>_firstMintDay</code> / <code>_seedsSpent</code> per key</li>
+</ul>
+<p><strong>Owner-changeable on chain:</strong></p>
+<ul>
+<li><code>renderer</code> (changes every token&#39;s image; could also brick it)</li>
+<li><code>warden</code></li>
+<li><code>supplyCap</code> (can be set below <code>totalMinted</code>)</li>
+<li><code>walletCap</code> (no upper bound)</li>
+<li><code>paused</code></li>
+<li><code>vouchersEnabled</code></li>
+<li>every Upgrade record (<code>active</code>, <code>maxSupply</code>, <code>minLevel</code>, <code>minStreak</code>, <code>requiresWhole</code>, <code>excludes</code>, <code>requiresAny</code>), including after purchases. Pair symmetry is not enforced on chain (<code>:680-685</code>).</li>
+<li><code>sunset()</code></li>
+</ul>
+<p><strong>Off-chain, changeable any time:</strong></p>
+<ul>
+<li><code>MINT_PRICE</code> and the Mark prices (<code>pay/x402.mjs:20</code>, <code>mcp/ladder.mjs</code>)</li>
+<li>treasury, facilitator and CDP credentials</li>
+<li>door policy, rate limits, reservation TTL, gas cap</li>
+<li>the solver</li>
+<li>which gates the Warden checks</li>
+<li>the domain registration, which is renewal-dependent</li>
+</ul>
+<h2>5. Top risks to examine (ranked)</h2>
+<ol>
+<li><strong>Key custody and blast radius.</strong><ul>
+<li>The Warden is unsandboxed, internet-facing, runs as the same user as the Clock, and loads the file holding <code>CLOCK_PRIVATE_KEY</code>. Does any Warden compromise (a dependency, the solver, a path bug) yield the warden role?</li>
+<li>Is the mainnet owner a hot EOA in <code>contracts/.env</code> on the same box?</li>
+<li>What does each key allow, irreversibly: permanent arbitrary QR bitmaps via <code>mint</code>/<code>seed</code>; back-filling missed days (<code>batchCheckIn</code> accepts any <code>lastDay &lt; day &lt;= today</code>); free <code>applyMark</code>; taking the Apex place; enabling and signing vouchers; <code>sunset</code>; <code>setRenderer</code>?</li>
+<li>Files: <code>main.mjs:54-69</code>, <code>ecosystem.config.cjs</code>, <code>mro-clock.service:38</code>, <code>deploy-mainnet.sh:28-31,86-93</code>, <code>MachineReadableOnly.sol:238-278,499-544,700-761</code>.</li>
+</ul>
+</li>
+<li><strong>The held-payment oracle.</strong> <code>authorizationState</code> is also <code>true</code> for an authorisation cancelled via USDC <code>cancelAuthorization</code>, and it means nothing for a Permit2 payload, which <code>payNonceOf</code> / <code>payerOf</code> accept (<code>pay/x402.mjs:56-75</code>).<ul>
+<li>Can a payer force the &quot;unresolved&quot; branch (settle throws or times out), cancel its own authorisation, and have the Clock promote the row to <code>queued</code>, giving a free mint or a free $1,250 Mark?</li>
+<li>Files: <code>pay/x402.mjs:321-353,485-527</code>, <code>clock/unresolved.mjs:66-91</code>, <code>queries.mjs:676-699</code>.</li>
+</ul>
+</li>
+<li><strong>The x402 seam, end to end.</strong><ul>
+<li>Does <code>findMatchingRequirements</code> bind amount, payTo, asset and network to the server&#39;s <code>accepts</code>?</li>
+<li><code>getPaymentFlow</code> is chosen from the <em>client&#39;s payload</em> (<code>@x402/mcp index.mjs:847</code>). Can a payload select a flow that settles before the handler, or skip the handler?</li>
+<li>Is <code>isError</code> cancellation reliable on every refusal path?</li>
+<li>What happens on a restart between the handler and the hook, on a 10-minute TTL sweep that races a slow settlement (<code>queries.mjs:49,788</code>), and on <code>settled</code>/<code>outcomes</code> state that lives only in process memory?</li>
+</ul>
+</li>
+<li><strong>The door as an entry rule.</strong> This is a reimplementation of web-bot-auth verification (<code>verify.mjs:80-110</code>).<ul>
+<li>Check: the required components, <code>lastIndexOf</code> parsing of <code>@signature-params</code>, the <code>Signature-Agent</code> dictionary vs legacy form, keyid-to-JWK thumbprint equality for both lookup paths (<code>directory.mjs:443-500</code>), sigHash replay across the 60 s skew, challenge binding to <code>keyId</code>, and <code>pinnedUrl</code> against absolute-form targets.</li>
+<li>Can a request be admitted under a keyid whose JWK is not the one that verified?</li>
+</ul>
+</li>
+<li><strong>Binding drift between request and write.</strong><ul>
+<li><code>upgrade</code> (earned route, free and forecloses the paired Mark), <code>seed</code> and <code>checkin</code> check the chain binding at request time. The Clock sends <code>applyMark</code> / <code>seed</code> up to 24 h later with no key check, and the contract has none.</li>
+<li>Can a seller queue a Break (or spend a seed) and then transfer and rebind, so that it lands on the buyer&#39;s token?</li>
+<li>Files: <code>tools/upgrade.mjs:175-203</code>, <code>tools/seed.mjs:103-159</code>, <code>clock/run.mjs:439-695</code>.</li>
+</ul>
+</li>
+<li><strong>Warden-controlled history and fairness.</strong><ul>
+<li>Can a mirror credit row for a day the agent did not visit reach the chain?</li>
+<li>Is the finisher order across chunks, retries and bisection (<code>batch.mjs</code>, <code>run.mjs:566-636</code>) really <code>(day, tokenId)</code>?</li>
+<li>What about backdating <code>mint</code> / <code>seed</code> by up to 30 days, and Warden box-clock <code>utcDay</code> against chain <code>today()</code> (<code>tools/checkin.mjs:90</code>)?</li>
+</ul>
+</li>
+<li><strong>Clock write correctness.</strong><ul>
+<li>Nonce handling after <code>send-failed</code> / <code>receipt-unknown</code> (<code>write.mjs:164-202</code>) and the heal path (<code>batch.mjs</code>).</li>
+<li>Paid mints stuck for good, and whether they alert: <code>StaleDay</code>, and <code>AlreadyMinted</code> after a mirror reset (<code>_hasMinted</code> has no getter, so it cannot be checked before payment, <code>mint.mjs:27</code>).</li>
+<li>The <code>isFinalMark</code> / <code>isFinalSeed</code> allowlists (<code>run.mjs:821-928</code>).</li>
+<li>The heartbeat decision on RPC failure (<code>run.mjs:727-771</code>).</li>
+</ul>
+</li>
+<li><strong>Reconcile trust.</strong> Address filtering, 12-block confirmation depth, <code>Rebound</code> resolution through <code>keyIdHash</code>, <code>Transfer</code> → <code>setOwner</code>, the missing mainnet <code>DEPLOY_BLOCK</code> (boot throws, <code>clock/main.mjs:62</code>), and cursor advance rules (<code>clock/cursor.mjs</code>).</li>
+<li><strong>Unauthenticated resource cost.</strong><ul>
+<li><code>POST /keys</code> stores and republishes the whole JWK (up to 64 KB, with arbitrary extra members), so the public directory can grow to about 640 MB across 10k keys (<code>queries.mjs:421-430</code>, <code>directory.mjs:318-357</code>).</li>
+<li>The nginx limiter buckets by CF edge IP while the origin lock is off.</li>
+<li>Also check: in-memory <code>seen</code> / <code>spent</code> / <code>seenNonces</code> sets, the x402 <code>wrappers</code> Map keyed by a description that includes the token id (<code>pay/x402.mjs:371-424</code>), the directory-fetch reflector, and free-tool RPC load starving the paid gates.</li>
+</ul>
+</li>
+<li><strong>Client money path.</strong><ul>
+<li><code>asset</code> and <code>network</code> expectations are optional, and the EIP-712 <code>name</code> / <code>version</code> / chainId / <code>verifyingContract</code> come from the demand (<code>pay.mjs:111-128,171-180</code>). Can a hostile or spoofed site get the matching base-unit amount signed on a pricier asset or another chain?</li>
+<li>Also: signature validity window, key-file modes, and <code>MRO_WALLET_KEY</code> in the environment.</li>
+</ul>
+</li>
+<li><strong>Admin dials after launch.</strong><ul>
+<li><code>setUpgrade</code> can change gates and masks on Marks already sold, and pair symmetry is enforced only off chain.</li>
+<li><code>setSupplyCap</code> can go below <code>totalMinted</code>.</li>
+<li><code>setRenderer</code> checks only <code>code.length</code>, so a reverting renderer bricks all metadata.</li>
+<li>Pause does not stop <code>rebind</code> / <code>rest</code>.</li>
+<li>The voucher path, once enabled: vouchers carry no expiry, and they stay valid until <code>setWarden</code> (<code>MachineReadableOnly.sol:246-278,558-610,672-693</code>). Rotating the warden also invalidates every outstanding voucher.</li>
+</ul>
+</li>
+<li><strong>Permanence of the artwork input.</strong><ul>
+<li><code>code</code> comes from the solver (<code>solve/worker.mjs</code>, <code>tools/robust-solve.mjs</code>) using <code>MRO_DOMAIN</code> and is immutable. What guards a wrong domain, a tampered <code>tools/</code> tree, or a solver bug before <code>mint</code> writes it for ever?</li>
+<li>Does renderer output escape every field it writes into JSON/SVG (<code>render/Renderer.sol</code>, <code>DigitBand.sol</code>)?</li>
+</ul>
+</li>
+<li><strong>Mainnet cutover pipeline.</strong><ul>
+<li><code>deploy-mainnet.sh</code> / <code>DeployPlan5</code> from a hot key.</li>
+<li>The handover to Ownable2Step is a manual follow-up.</li>
+<li>The fail-closed boot guards on treasury, CDP credentials and chain id (<code>main.mjs:104-179,202-221</code>).</li>
+<li><code>adopt-deployment.sh</code> editing <code>DEPLOY_BLOCK</code> and <code>CLAUDE.md</code>.</li>
+<li>The Builder Code is <code>null</code>.</li>
+</ul>
+</li>
+<li><strong>Secret leakage.</strong> RPC-key redaction coverage (<code>clock/redact.mjs</code>, <code>chain/read.mjs:109-117</code>), PM2 <code>filter_env</code> completeness, log file modes, SQLite / WAL / backup permissions, and error text returned to callers (<code>mcp/server.mjs:150-162</code>, <code>server.mjs:471-474</code>).</li>
+<li><strong>Distribution supply chain.</strong><ul>
+<li>The <code>mro-agent</code> npm name currently holds a placeholder. Future agents will run it with wallet keys.</li>
+<li>The seed unit plans to switch to <code>npx --yes mro-agent@&lt;version&gt;</code> (<code>mro-seed.service:34-53</code>).</li>
+<li>Question for reviewers: who can publish to that name, and is provenance or 2FA enforced?</li>
+</ul>
+</li>
+</ol>
+</body>
+</html>

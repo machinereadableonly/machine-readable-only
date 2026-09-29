@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- quality -- on-chain renderer, byte and gas budget, JS parity</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- quality -- on-chain renderer, byte and gas budget, JS parity</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Read:</strong> <code>.claude/rules/{rendering,contracts}.md</code>; <code>contracts/foundry.toml</code>; <code>contracts/src/render/{Renderer,RendererUnsized,IRenderer,TokenView,DigitBand,FrameRenderer,CodeRenderer,PathWriter,MarkRenderer,EyeRenderer,Palette}.sol</code> (constants only of generated <code>FrameGeometry.sol</code>, <code>HeartMask.sol</code>); <code>contracts/src/spike/MROSpikeToken.sol</code>; <code>contracts/src/MachineReadableOnly.sol</code> (viewOf, dials, sunset, <code>_credit</code>, <code>_finish</code>, applyMark, rest); <code>contracts/test/{WorstCase,RealTokenGas.t,GasBudget.t,GasProfile.t,RenderMatrix.t,Renderer.t,DigitBand.t,DigitBandRender.t,DigitBandCost.t,TokenUriGolden.t,MROSpikeToken.t,ContractSize.t,CodeRenderer.t,FrameRenderer.t,IntrinsicSize.t,QrVersionCost.t,EyeCost.t,EyeRenderer.t,CombinationMatrix.t,PaletteNoise.t,PaletteBoundaries.t,EchoRing.t,RingCurve.t,MroTestBase}.sol</code>, <code>RunHistory.t.sol:100-349</code>, <code>MarkRenderer.t.sol:1-140</code>, <code>helpers/PathParser.sol</code>; <code>tools/{render-token,robust-solve,qart,token-bitmap,payload-length-check,heart-target,heart-mask,svg-to-png,frame-geometry,render-fixture,state-matrix,byte-gate-bitmap,echo-decode-check}.mjs</code>; <code>tools/test/{render-token,robust-solve,token-bitmap,qart,frame-geometry,echo-ring,eye-renderer,decode-strict,verify-tokenuri}.test.mjs</code>, <code>tools/test/helpers/decode.mjs</code>; <code>warden/src/solve/worker.mjs</code>; installed <code>tools/node_modules/@zxing/library/esm/core/RGBLuminanceSource.js</code>; plan 6 and the main spec (rest, sunset and rung sections); <code>out/finisher-band.png</code>; the slither lead file.</p>
+<p>Nothing was run: this pass is read-only, so every gas and byte figure below is quoted from the source, not re-measured.</p>
+<h2>Findings</h2>
+<p>Critical: none. High: none.</p>
+<h3>[MEDIUM] [BLOCKS MAINNET] The robustness gate renders every state with a heart mask cut off at the version-5 size</h3>
+<p><strong>Where:</strong> <code>tools/robust-solve.mjs:117</code> (used as the default target at <code>:135</code> and <code>:180</code>); reached in production by <code>warden/src/solve/worker.mjs:21</code>; repeated in <code>tools/test/robust-solve.test.mjs:121</code> and <code>:143</code>
+<strong>What:</strong> <code>unpackModules(heartMaskBytes(), 37)</code> unpacks 1,369 entries of a 3,249-module mask. <code>renderSvg</code> indexes <code>want[p]</code> up to 3,248 (<code>tools/render-token.mjs:756</code>), so everything past row 24 is <code>undefined</code> and is drawn as noise. Every other caller in <code>tools/</code> passes <code>SIZE</code>; this is the only literal left from version 5.
+<strong>Why it matters:</strong> The gate chooses the mask a token carries for life, and it is judging pictures no token will show: a heart cut off after 24 of 57 rows, with Beat&#39;s gradient stretched over that stump in five of the ten gate states. The two inks are close in weight, so the verdicts are likely close to the true ones, but that is unmeasured. Every mainnet bitmap will be solved through this path.
+<strong>Fix:</strong></p>
+<ul>
+<li>Use <code>VERSION_SIZE</code> at <code>robust-solve.mjs:117</code> and <code>SIZE</code> at both test lines.</li>
+<li>Make <code>renderSvg</code> throw when <code>modules.length</code> or <code>want.length</code> is not <code>size * size</code>.</li>
+<li>Re-run the gate on the ids already measured and record whether any shipped mask moves.</li>
+</ul>
+<h3>[MEDIUM] [BLOCKS MAINNET] Resting a lapsed token restores its full colour, and both seals drop the fallen-run colour</h3>
+<p><strong>Where:</strong> <code>contracts/src/render/Renderer.sol:117</code>, <code>:135</code>, <code>:145</code>; <code>tools/render-token.mjs:289</code>, <code>:304</code>, <code>:307</code>; <code>contracts/src/MachineReadableOnly.sol:805-810</code>
+<strong>What:</strong> The resting branch returns <code>tierIndex(v.streak)</code> and an absence of 0, and <code>rest()</code> stores no day. A token at streak 400 that was silent for two years (start colour, cold page) returns to the top colour and a white page the moment its owner rests it. Both the resting and sunset branches also skip <code>fellRun</code>, so a token that slipped and came back drops from rung 3 to rung 0 at the seal, while one that simply stopped keeps its colour.
+<strong>Why it matters:</strong></p>
+<ul>
+<li>The spec says the chain shows which heart was rested on an unbroken run and which merely stopped (<code>docs/specs/2026-08-27-machine-readable-only-design.md:804-806</code>). The renderer draws them identically.</li>
+<li>Plan 6 called the same behaviour a defect for sunset (&quot;Today a sunset un-pales a two-year-old lapse&quot;, <code>docs/plans/2026-09-05-mro-plan6-permanent-decisions.md:125</code>).</li>
+<li>The seal reverses Plan 6&#39;s own rule that coming back must not look worse than stopping. <code>RunHistory.t.sol:124</code> asserts that rule for live tokens only.</li>
+<li>The two renderers agree with each other, so no differential test can see it.</li>
+</ul>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Sunset is renderer-only: apply the fallen-run rule with the clock stopped at <code>sunsetDay</code>, in both renderers and in <code>RunHistory.t.sol:334</code>.</li>
+<li>Rest needs the rest day stored on chain. The <code>Rested</code> event carries it and storage does not, and the token contract cannot be changed after deploy, which is why this blocks mainnet.</li>
+<li>If today&#39;s behaviour is intended, correct <code>Renderer.sol:133-135</code>: &quot;the stored run IS that moment&quot; is false for a lapsed token.</li>
+</ul>
+<h3>[MEDIUM] The byte budget is proven on one bitmap, and nothing checks a token&#39;s own bitmap when it is solved</h3>
+<p><strong>Where:</strong> <code>contracts/test/WorstCase.sol:27-28</code>; <code>contracts/test/RealTokenGas.t.sol:238-259</code> (parent and child both use <code>MroTestBase.sol:25</code>); <code>tools/robust-solve.mjs:135-167</code>
+<strong>What:</strong> The pin is exact for the <code>example.com</code> token-1 bitmap and leaves 1,842 bytes of headroom. <code>.claude/rules/contracts.md:79-82</code> records a 554-byte difference between just two bitmaps. The gate checks that a code decodes, never how long its tokenURI is.
+<strong>Why it matters:</strong> A code with more runs lands over 24,000 with nothing reporting it, permanently. &quot;The largest token the shipping contract can produce&quot; describes the fixture, not the collection.
+<strong>Fix:</strong></p>
+<ul>
+<li>In <code>gateSolve</code>, compute <code>tokenUri(...).length</code> for the banded finished child in the maximal Mark set and reject a mask over budget. The JS renderer is byte-identical to Solidity, so this costs one render.</li>
+<li>Sweep a batch of ids to learn the spread.</li>
+<li>Reword <code>WorstCase.sol</code> to say which bitmap it pins.</li>
+</ul>
+<h3>[LOW] <code>GasProfile.t.sol</code> breaks down a different token from the one whose total it quotes</h3>
+<p><strong>Where:</strong> <code>contracts/test/GasProfile.t.sol:17-20</code>, <code>:90-108</code>, <code>:145</code>
+<strong>What:</strong> The header and constants cite <code>WorstCase</code> (the finished, banded child). <code>_dearest()</code> builds the day-364 unbanded child with the default Iris shape, and its comment says this is the token &quot;as RealTokenGas.t.sol defines it&quot;.
+<strong>Why it matters:</strong> This is one figure quoted against another. The digit band, the largest component added (871,911 gas, <code>GasBudget.t.sol:69</code>), appears nowhere in the breakdown meant to guide headroom decisions.
+<strong>Fix:</strong> Profile level 365 with an echo, an ordinal and <code>MAX_MARKS</code> in leaf shape, and add a <code>DigitBand</code> harness line.</p>
+<h3>[LOW] Gas assertions with no coverage-profile guard</h3>
+<p><strong>Where:</strong> <code>contracts/test/RealTokenGas.t.sol:179</code>, <code>:258</code>, <code>:314</code>; <code>GasBudget.t.sol:681</code>; <code>TokenUriGolden.t.sol:124</code>; <code>RingCurve.t.sol:84</code>
+<strong>What:</strong> <code>GasBudget.t.sol:445</code> and <code>Renderer.t.sol:448</code> skip gas ceilings under the coverage profile, because that build costs about two and a half times as much. These six assertions do not, and the exact-equality pin at <code>RealTokenGas.t.sol:258</code> cannot hold in an unoptimised build.
+<strong>Why it matters:</strong> By the file&#39;s own arithmetic <code>forge coverage</code> reports failures, and the project rule is that coverage tooling must actually run.
+<strong>Fix:</strong> Move <code>_gasIsMeaningful()</code> into a shared base and guard all six.</p>
+<h3>[LOW] The luminance rule is asserted in a weighting the decoder does not use</h3>
+<p><strong>Where:</strong> <code>contracts/test/PaletteNoise.t.sol:25-35</code>; <code>tools/test/render-token.test.mjs:41-46</code>
+<strong>What:</strong> Both say BT.601 is &quot;the weighting ZXing&#39;s RGBLuminanceSource uses&quot;. The installed source computes <code>(r + 2g + b) / 4</code> (<code>RGBLuminanceSource.js:57-61</code>). Under that weighting <code>#c8102e</code> reads 69 against its noise <code>#4a4a4a</code> at 74, and Beat&#39;s violet <code>#2000ff</code> reads 72 where BT.601 gives 39.
+<strong>Why it matters:</strong> The &quot;gap of at most 1&quot; test can stay green while the gap the decoder sees grows, most of all for blue-heavy inks. Today&#39;s palette is still proven by the decode tests.
+<strong>Fix:</strong> Correct both comments, and assert the gap under both weightings with thresholds taken from measurement.</p>
+<h3>[LOW] Tests that no longer test what their names say</h3>
+<p><strong>Where and what:</strong></p>
+<ul>
+<li><code>contracts/test/CodeRenderer.t.sol:394-407</code> -- the &quot;full row&quot; sets 37 of 57 modules and asserts <code>h37</code>.</li>
+<li><code>contracts/test/QrVersionCost.t.sol:107-112</code> -- the &quot;at 37&quot; control passes size 57 and a 172-byte code to both sides, so both read past the buffer and agree only through identical memory layout.</li>
+<li><code>contracts/test/RealTokenGas.t.sol:304-315</code> -- named as a comparison with the spike; it never measures the spike.</li>
+<li><code>contracts/test/RealTokenGas.t.sol:213</code> -- <code>v</code> is read before the Marks are applied, so the assertion holds with no Marks at all.</li>
+<li><code>contracts/test/Renderer.t.sol:374-381</code> and <code>tools/state-matrix.mjs:221</code> -- sunset with <code>sunsetDay</code> 0, a state the chain cannot produce, passing through the backwards-clock guard.</li>
+<li><code>contracts/test/Renderer.t.sol:390</code> and <code>tools/test/render-token.test.mjs:355-366</code> -- &quot;the worst case&quot; with no digit band; the JS one also wears Static and Beat together.</li>
+<li><code>tools/test/render-token.test.mjs:173-180</code> -- asserts the old 20,000 limit with an estimate that base64-encodes the JSON, which ships as plain utf-8.</li>
+</ul>
+<p><strong>Why it matters:</strong> Each reads as coverage that is not there.
+<strong>Fix:</strong> Derive from <code>SIZE</code>, give sunset cases a real <code>sunsetDay</code>, add the band to the worst-case tests, and delete or rewrite the rest.</p>
+<h3>[LOW] The spike never hands <code>sunsetDay</code> to the renderer</h3>
+<p><strong>Where:</strong> <code>contracts/src/spike/MROSpikeToken.sol:113-130</code> (comment at <code>:110</code>)
+<strong>What:</strong> <code>viewOf</code> sets <code>v.sunset</code> and leaves <code>v.sunsetDay</code> at 0, so a sunset spike token renders with its lapse undone. The comment says the value is read from <code>sunsetDay</code>. <code>setEcho</code> (<code>:187</code>) also has no happy-path or wrong-caller test, although <code>MROSpikeToken.t.sol:14</code> says every owner function has one.
+<strong>Why it matters:</strong> Soak and third-party checks run on the spike, and they see a sunset picture the real contract never draws.
+<strong>Fix:</strong> Set <code>v.sunsetDay = sunsetDay</code>, and add the two <code>setEcho</code> tests.</p>
+<h3>[LOW] Comments that contradict the code or each other, in a public repo</h3>
+<p><strong>Where and what:</strong></p>
+<ul>
+<li><code>contracts/src/render/TokenView.sol:25-36</code> -- calls itself the authority on the packing and lists bits 1-10, omitting the finisher Marks at 11-15.</li>
+<li><code>contracts/test/GasBudget.t.sol:41-43</code> -- &quot;20,000 stands&quot;, beside <code>BYTE_LIMIT = 24_000</code> at <code>:110</code>.</li>
+<li><code>contracts/test/GasBudget.t.sol:102-106</code> -- &quot;UNTESTED ... MUST be run&quot;, against &quot;TESTED AND CLOSED&quot; in <code>.claude/rules/contracts.md:59</code>.</li>
+<li><code>.claude/rules/contracts.md:101-107</code> -- says the byte limit did not move and the two worst cases are different tokens, against <code>:85-92</code> of the same file.</li>
+<li><code>contracts/test/Renderer.t.sol:414</code> and <code>TokenUriGolden.t.sol:120</code> -- &quot;3M&quot; beside <code>4_000_000</code>.</li>
+<li><code>contracts/test/Renderer.t.sol:421-427</code> -- the <code>_gasIsMeaningful</code> NatSpec sits on the Years test.</li>
+<li><code>contracts/test/DigitBandCost.t.sol:14</code> -- 906,968 / 4,800 for the shipped band, against 871,911 / 4,636 at <code>GasBudget.t.sol:69</code>.</li>
+<li><code>contracts/test/GasBudget.t.sol:98-100</code> and <code>:152</code> -- hand copies of the <code>WorstCase</code> figures.</li>
+<li>Stale counts: <code>MROSpikeToken.t.sol:25</code> and <code>tools/heart-mask.mjs:2</code> (172 bytes), <code>tools/token-bitmap.mjs:17-18</code> (eight states), <code>RunHistory.t.sol:323</code> (64 states).</li>
+</ul>
+<p><strong>Why it matters:</strong> The project treats a comment that contradicts the code as a bug, and <code>WorstCase.sol</code> exists because copied numbers go stale.
+<strong>Fix:</strong> Correct or delete each. Move the dated history into commit messages and docs, as <code>code-comments.md</code> requires.</p>
+<h3>[LOW] One fixture bitmap pasted into ten test files; superseded probes still in the suite</h3>
+<p><strong>Where:</strong> <code>_bitmap()</code> / <code>_code()</code> in <code>Renderer.t.sol:19</code>, <code>RenderMatrix.t.sol:27</code>, <code>CombinationMatrix.t.sol:37</code>, <code>GasBudget.t.sol:218</code>, <code>GasProfile.t.sol:125</code>, <code>IntrinsicSize.t.sol:26</code>, <code>DigitBandRender.t.sol:29</code>, <code>CodeRenderer.t.sol:52</code>, <code>MROSpikeToken.t.sol:27</code>, <code>MroTestBase.sol:25</code>; <code>DigitBandCost.t.sol</code>; <code>EyeCost.t.sol</code>
+<strong>What:</strong> <code>MroTestBase.sol:10-12</code> says the bitmap is shared rather than copied; the renderer tests each carry their own copy. <code>DigitBandCost</code> prices a design that was not built, and <code>EyeCost</code> duplicates what <code>EyeRenderer</code> now ships and asserts against a headroom figure from Phase 0.
+<strong>Why it matters:</strong> The mainnet re-solve regenerates every fixture, and a missed paste fails as a confusing hash mismatch.
+<strong>Fix:</strong> Generate one <code>TestBitmap.sol</code> from <code>tools/</code> and import it; delete the two probes. A whole-tree search found no code importing them, only docs naming them.</p>
+<h3>[INFO] The two renderers differ on inputs the chain cannot produce</h3>
+<p><strong>Where:</strong> <code>tools/render-token.mjs:846</code> against <code>MarkRenderer.sol:202</code>; <code>render-token.mjs:457</code> against <code>DigitBand.sol:155</code>; <code>CodeRenderer.sol:72-77</code> against <code>render-token.mjs:780-781</code>; <code>CodeRenderer.sol:88-96</code>
+<strong>What:</strong></p>
+<ul>
+<li>A Tint variant of 2 or more draws violet in JS and gold in Solidity.</li>
+<li>An ordinal above 65,535 shows its top 16 bits in JS and its low 16 in Solidity.</li>
+<li>An empty heart or noise set emits an empty <code>&lt;path&gt;</code> in Solidity and nothing in JS.</li>
+<li><code>CodeRenderer.paths</code> checks no lengths and reads past a short code.</li>
+</ul>
+<p><strong>Why it matters:</strong> All are unreachable today: <code>applyMark</code> bounds the variant, <code>setSupplyCap</code> stops at 65,535 (<code>MachineReadableOnly.sol:246-248</code>), and <code>mint</code> enforces 407 bytes. <code>render-token.mjs:1013-1020</code> says this class of drift matters, and a swapped renderer inherits it.
+<strong>Fix:</strong> Align the fallbacks and add a length <code>require</code>.</p>
+<h2>Questions</h2>
+<ol>
+<li><code>Renderer._intrinsic</code> (<code>Renderer.sol:336-343</code>) declares 919px for a 747-unit banded canvas, so a module is 11.07px. The banded canvas is a whole number of modules (83 or 89). Was declaring a whole number of pixels per module measured against the current rule?</li>
+<li><code>tools/test/robust-solve.test.mjs:92</code> is a <code>todo</code>: at version 10 no token is pinned where the gate rejects the best-matching mask. Has <code>fragile-sweep.mjs</code> been run since, so the gate is shown to change an outcome?</li>
+<li>Has <code>FOUNDRY_PROFILE=coverage forge coverage</code> run since <code>WorstCase.sol</code> was pinned on 2026-09-26?</li>
+</ol>
+<h2>Out of scope</h2>
+<ul>
+<li>The Warden&#39;s mint-time solver (<code>warden/src/solve/worker.mjs</code>) inherits the heart-mask defect in the first finding.</li>
+</ul>
+<h2>Coverage</h2>
+<p>Read in full: every hand-written file in <code>contracts/src/render/</code>, the spike token, both gas harnesses, <code>WorstCase.sol</code>, the render, digit-band, echo-ring, frame and code tests, and the JS renderer with its solver, gate, bitmap and geometry modules and their tests.</p>
+<p>Not reached:</p>
+<ul>
+<li><code>Palette.t.sol</code>, <code>FrameGeometry.t.sol</code>, <code>TokenView.t.sol</code>, and <code>MarkRenderer.t.sol</code> past line 140.</li>
+<li>The bodies of generated fixtures and their generators, other than <code>render-fixture.mjs</code>.</li>
+<li><code>tools/verify-tokenuri.mjs</code> itself; the ladder, skill-doc, plugin-manifest, prepublish and rendered-docs tests.</li>
+<li>The exploratory sheet scripts. One sample image was opened; the rest were not.</li>
+</ul>
+<p>Not measured: the coverage-profile failures and the size of the gate defect&#39;s effect on mask choice are reasoned from the source.</p>
+<p>Confirmed sound: <code>WorstCase.sol</code> does pin exactly what <code>RealTokenGas.t.sol</code> measures. <code>GasBudget.t.sol</code> labels its figures as the spike&#39;s. The digit-band geometry (band 29 or 30 units, 83 or 89 modules, pad 10 or 13, buffer bound 384 runs) checks out by hand. The two renderers agree on every lapse, slip, finish, rest and sunset branch.</p>
+</body>
+</html>

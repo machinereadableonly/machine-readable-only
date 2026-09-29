@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- security -- payment path (x402 settlement and the MCP gate)</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<p>I&#39;ve finished tracing every path and checked the one remaining detail (how a settlement that was sent but never confirmed is reported back). Here is the report.</p>
+<h1>Machine Readable Only -- security -- payment path (x402 settlement and the MCP gate)</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Read:</strong> <code>reports/32-mro-tm.md</code>; <code>CLAUDE.md</code>; <code>.claude/rules/warden.md</code>; <code>warden/src/pay/x402.mjs</code>, <code>warden/src/pay/cdp.mjs</code>; <code>warden/src/main.mjs</code>; <code>warden/src/mcp/server.mjs</code>, <code>mcp/gates.mjs</code>, <code>mcp/ladder.mjs</code>, <code>mcp/tools/mint.mjs</code>, <code>mcp/tools/upgrade.mjs</code>; <code>warden/src/server.mjs:400-477</code>; <code>warden/src/mirror/queries.mjs:1-260, 500-840</code>; <code>warden/src/mirror/schema.sql</code> (grep for the payment columns); <code>warden/src/clock/unresolved.mjs</code>; <code>warden/src/clock/run.mjs:880-928</code>; <code>warden/src/chain/read.mjs:300-475</code>; <code>warden/test/settlement-commit.test.mjs:1-329</code>; <code>warden/test/paid-refusal-settlement.test.mjs:1-80</code>; <code>warden/test/pay.test.mjs</code> (test names only). Installed libraries: <code>@x402/mcp dist/esm/index.mjs:740-1135</code>; <code>@x402/core dist/esm/chunk-H7ETXA5T.mjs:205-279, 304, 415-640, 1200-1669, 1677-1693, 2007-2020</code>; <code>@x402/core dist/esm/facilitator/index.mjs:275-344</code>; <code>@x402/evm dist/esm/exact/server/index.mjs:1-140</code>, <code>exact/facilitator/index.mjs:88-373, 760-822</code>, <code>chunk-KNDFHTKS.mjs</code>; <code>@x402/evm dist/cjs/exact/v1/facilitator/index.js</code> (grep).</p>
+<h2>Findings</h2>
+<h3>[HIGH] A held payment is treated as paid if its nonce was cancelled or used for a different transfer, which gives out free mints and Marks [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/unresolved.mjs:76-91</code>, <code>warden/src/mirror/queries.mjs:676-690</code>, <code>warden/src/pay/x402.mjs:341-352</code> and <code>:508-526</code>. Supporting library code: <code>@x402/core chunk-H7ETXA5T.mjs:513-525</code> and <code>:1548-1567</code>.</p>
+<p><strong>Attacker story:</strong></p>
+<ul>
+<li><strong>Who:</strong> any agent with a registered key (keys are free) and a wallet holding the price for as long as the verify step takes. That is 1 USDC for a mint, or up to $1,250 for a Vessel on a token that qualifies.</li>
+<li><strong>What they send:</strong><ol>
+<li>A normal EIP-3009 authorisation (to the treasury, for the correct amount, nonce N).</li>
+<li>After the Warden has verified it, but before settlement, they spend nonce N themselves on chain. There are two ways:<ul>
+<li>USDC <code>cancelAuthorization(payer, N, sig)</code>; or</li>
+<li>a second <code>transferWithAuthorization</code> they signed with the same N, sending 0.000001 USDC to themselves. Anyone can submit it.</li>
+</ul>
+</li>
+<li>The window is the handler&#39;s run between verify and settle: <code>paidWriteBlock</code> (five parallel reads), <code>freeIdFrom</code> (up to 32 more reads), then the second <code>paidWriteBlock</code>. Base produces blocks every 2 s, so the attacker can retry this cheaply.</li>
+</ol>
+</li>
+<li><strong>What they gain:</strong> once settlement fails in the &quot;unknown&quot; way (below), the row is held as <code>payment-unresolved</code>. At 00:05 the Clock asks USDC <code>authorizationState(payer, N)</code>. That returns <code>true</code>, because USDC sets the same flag on use and on cancel. The Clock then promotes the row to <code>queued</code> and writes it. The result is a free token, or a free Mark worth up to $1,250.00. A free Mark also permanently closes its pair partner.</li>
+<li><strong>Precondition:</strong> the failed settle has to reach the gateway as a <em>throw</em>, not as <code>success: false</code>. <code>HTTPFacilitatorClient.settle</code> throws <code>SettleError</code> for any non-2xx reply that carries a <code>success</code> field (<code>chunk-H7ETXA5T.mjs:513-525</code>). <code>settlePayment</code> then rethrows it (<code>:1548-1567</code>). The Warden&#39;s observer records a throw as <code>unresolved</code> (<code>x402.mjs:347-351</code>). So whether this is exploitable depends on how the facilitator&#39;s HTTP layer reports a reverted <code>transferWithAuthorization</code>. The tests never check that: the fake facilitator only ever answers 200 (<code>settlement-commit.test.mjs:62-90</code>), even though that file&#39;s own header (<code>:20-24</code>) names <code>cancelAuthorization</code> as the attack. Mainnet uses CDP, a different facilitator from the one ever measured. A transport error or timeout that happens to coincide produces the same state.</li>
+</ul>
+<p><strong>Why it works:</strong></p>
+<ul>
+<li><code>authorizationState</code> answers &quot;was this nonce consumed?&quot;, not &quot;did this payer pay this treasury this amount?&quot;.</li>
+<li>The comment at <code>unresolved.mjs:13-15</code> (&quot;records every authorisation it has ever spent&quot;) and the docstring at <code>queries.mjs:664-666</code> (&quot;true means this exact authorisation was spent&quot;) are both wrong for FiatToken. They are also wrong for the second route, where N is spent on a different recipient and amount.</li>
+<li>The held row stores <code>payer</code> and <code>asset</code> but not <code>payTo</code> or <code>amount</code>, so the Clock cannot check either.</li>
+</ul>
+<p><strong>Variant:</strong> the Warden also accepts a Permit2 payload. <code>payNonceOf</code> and <code>payerOf</code> read <code>permit2Authorization.*</code> (<code>x402.mjs:56-75</code>), and the facilitator chooses EIP-3009 or Permit2 from the payload&#39;s shape, not from the requirement (<code>exact/facilitator/index.mjs:773-821</code>). The facilitator parses the Permit2 nonce with <code>BigInt</code>, so it may be written as a 0x-prefixed 64-digit hex string. That string passes the Clock&#39;s <code>BYTES32</code> check (<code>unresolved.mjs:66</code>). An attacker can therefore cancel EIP-3009 nonce X in advance, then pay by Permit2 with nonce &quot;X&quot;, and the Clock&#39;s question is answered <code>true</code> by the earlier cancel.</p>
+<p><strong>Fix:</strong></p>
+<ol>
+<li>When a row is held, also store <code>payTo</code> and <code>amount</code> (taken from <code>paymentRequirements</code>).</li>
+<li>In the Clock, replace the <code>authorizationState</code> read with a log check. Find <code>AuthorizationUsed(payer, N)</code> emitted by <code>asset</code>, and require the same transaction to contain <code>Transfer(payer, payTo, amount)</code> from <code>asset</code>. An <code>AuthorizationCanceled</code> log, or a transfer to anyone else or for another amount, counts as unpaid.</li>
+<li>In <code>withNonce</code> (<code>x402.mjs:468-473</code>), refuse any payload without <code>payload.authorization</code> (i.e. refuse Permit2), unless Permit2 is deliberately supported with its own settlement check.</li>
+<li>Add a test where the fake facilitator answers settle with 400 plus a <code>SettleResponse</code> body, and the chain stub reports the nonce as cancelled.</li>
+</ol>
+<h3>[HIGH] A settlement whose transaction was sent but not confirmed is treated as a known decline, so the reservation is deleted while the money may have moved [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:343-345</code> and <code>:493-505</code>. Supporting library code: <code>@x402/evm chunk-KNDFHTKS.mjs:23-27, 80-88</code>, <code>@x402/core chunk-H7ETXA5T.mjs:1677-1693</code>.</p>
+<p><strong>Attacker story:</strong> no attacker is needed.</p>
+<ol>
+<li>An agent pays for any mint or Mark (up to $1,250.00).</li>
+<li>The facilitator broadcasts <code>transferWithAuthorization</code>, but its <code>waitForTransactionReceipt</code> fails (RPC hiccup, congestion). It then returns <code>{ success: false, errorReason: &quot;settlement_pending&quot;, transaction: &lt;hash&gt; }</code>.</li>
+<li><code>@x402/core</code> retries once. If the second attempt is still pending, it <em>returns</em> that <code>success: false</code>.</li>
+<li>The observer records any <code>!settlement.success</code> as <code>declined</code> (<code>x402.mjs:343-345</code>). <code>releaseReservation</code> then deletes the mint or Mark row (<code>queries.mjs:761-773</code>).</li>
+<li>The transfer mines anyway. The agent is told &quot;Payment settlement failed&quot;, and the <code>pay_nonces</code> claim stays in place, so retrying the same authorisation answers <code>payment-already-used</code>.</li>
+</ol>
+<p>This is exactly the loss the <code>payment-unresolved</code> design (<code>queries.mjs:715-736</code>) exists to prevent, arriving by a different route.</p>
+<p><strong>Why it works:</strong> the declined-or-unknown split is keyed only on throw versus return. A returned failure that carries a broadcast transaction hash is not a &quot;known failed&quot; payment.</p>
+<p><strong>Fix:</strong> in <code>observeSettlement</code>, record <code>declined</code> only when the failure carries no <code>transaction</code> and <code>errorReason !== &quot;settlement_pending&quot;</code>. Record anything carrying a transaction hash as <code>unresolved</code>. This must land together with the fix above, because it sends more rows to the Clock&#39;s oracle.</p>
+<h3>[MEDIUM] Wallet-cap and supply-cap checks ignore mints paid today but not yet written, so over-cap mints are charged and then refused [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/gates.mjs:89-110</code>, <code>warden/src/chain/read.mjs:414-453</code>, <code>warden/src/mcp/tools/mint.mjs:34</code> and <code>:81</code>.</p>
+<p><strong>Attacker story:</strong></p>
+<ul>
+<li>Mints are written once a day at 00:05. Until then, every paid mint sits in the mirror as <code>queued</code>.</li>
+<li><code>walletRoomFor(to)</code> and <code>supplyRoom()</code> read only the chain&#39;s <code>mintedTo</code> and <code>totalMinted</code>. So every agent that mints to the same <code>to</code> on one UTC day sees the same room. Near sell-out, the whole day&#39;s mints all see the same remaining supply. Seeds share the supply count, and <code>seed</code> has the same blind spot.</li>
+<li>Every mint beyond the real room settles its payment, then reverts <code>WalletCap</code> / <code>SupplyCap</code> at the Clock. The Clock keeps it as non-final (<code>run.mjs:900-903</code>) and there is no refund path (<code>run.mjs:238, 422</code>).</li>
+<li>The same happens to the whole day&#39;s queue if the owner lowers <code>setSupplyCap</code>.</li>
+<li>A griefer who knows a victim operator&#39;s public owner address can fill its remaining wallet room with one $1 mint queued ahead of the victim&#39;s.</li>
+</ul>
+<p><strong>Why it works:</strong> <code>seedBudgetBlock</code> already subtracts unwritten reservations (<code>gates.mjs:136-140</code>). The two money gates in front of a paid mint do not.</p>
+<p><strong>Fix:</strong> subtract the mirror&#39;s unwritten rows from both reads:</p>
+<ul>
+<li>For the wallet cap: count <code>mints</code> rows for that <code>toAddress</code> in <code>awaiting-payment</code> / <code>payment-unresolved</code> / <code>queued</code>, plus unwritten seeds to that address.</li>
+<li>For the supply cap: all unwritten mints plus unwritten seeds.</li>
+</ul>
+<p>Do this in the pre-payment gate and again in the post-verify gate.</p>
+<h3>[LOW] The expiry sweep deletes possibly-paid reservations after a crash or restart without asking the chain</h3>
+<p><strong>Where:</strong> <code>warden/src/mirror/queries.mjs:788-798</code>, <code>:49</code>.</p>
+<p><strong>Attacker story:</strong> none; this is an operational fault.</p>
+<ol>
+<li>The Warden process dies (PM2 restart, deploy, out-of-memory) after <code>settle</code> was sent but before <code>onAfterSettlement</code> promotes the row.</li>
+<li>The row stays <code>awaiting-payment</code>. Ten minutes later any agent&#39;s paid call runs <code>dropExpiredReservations</code>, which deletes it.</li>
+<li>The payer has been debited and holds nothing.</li>
+</ol>
+<p><strong>Why it works:</strong> the sweep treats &quot;old and unpromoted&quot; as &quot;unpaid&quot;. The payer is not stored at reservation time, so the row cannot be sent to the Clock&#39;s check.</p>
+<p><strong>Fix:</strong> store <code>payer</code> / <code>asset</code> / <code>payTo</code> / <code>amount</code> in <code>insertMint</code> / <code>reserveMarkPaid</code>. Have the sweep move expired rows to <code>payment-unresolved</code> instead of deleting them. This depends on the corrected Clock check from the first finding.</p>
+<h3>[LOW] The gates are re-read before settlement, but the chain write happens up to 24 hours later, with no refund path</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/upgrade.mjs:249-255</code>, <code>mint.mjs:81-85</code>; <code>.claude/rules/warden.md</code> (&quot;a money gate is re-read AFTER settlement&quot;).
+<strong>Attacker story:</strong> after a paid Mark settles, the token owner calls <code>rest(id)</code>, or the operator pauses the piece, before 00:05. <code>applyMark</code> then reverts and the payer&#39;s money stays with the treasury. The owner and the bound agent are normally the same party, so this is mostly self-harm or an operator action.
+<strong>Why it works:</strong> the re-read happens between verify and settle (correctly described in <code>mint.mjs:53-61</code>). The project rule claims it happens <em>after</em> settlement, which it does not.
+<strong>Fix:</strong> correct the rule text. Keep a written manual-refund runbook for <code>failed</code> paid rows, since <code>isFinalMark</code> makes them permanent.</p>
+<h3>[INFO] Origin check also accepts <code>http://&lt;domain&gt;</code></h3>
+<p><strong>Where:</strong> <code>warden/src/server.mjs:435-438</code>.
+The check runs before the door on every signed route, including <code>/mcp</code>, and refuses foreign origins, so the MCP MUST is met. Accepting the plain-HTTP origin only matters to someone who can inject a page on the HTTP version of the site, and the door still requires a signature. <strong>Fix:</strong> allow only <code>https://${domain}</code>.</p>
+<h3>[INFO] The pre-payment <code>already-minted</code> check runs before the expiry sweep</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/mint.mjs:27</code> vs <code>:50</code>.
+An expired reservation for this key makes <code>hasMinted</code> true until some <em>other</em> agent&#39;s paid call sweeps it. This contradicts the comment at <code>:45-49</code>. No money is at risk. <strong>Fix:</strong> sweep first.</p>
+<h3>[INFO] x402 v1 payloads are matched only on scheme and network</h3>
+<p><strong>Where:</strong> <code>@x402/core chunk-H7ETXA5T.mjs:1646-1652</code>; <code>@x402/evm cjs/exact/v1/facilitator/index.js:841</code>.
+For v1, the amount and payee are not compared on the Warden side. Safety rests on the facilitator failing on the missing <code>maxAmountRequired</code> (<code>BigInt(undefined)</code> throws, and the handler never runs). <strong>Fix:</strong> refuse <code>paymentPayload.x402Version !== 2</code> in <code>withNonce</code>.</p>
+<h2>Questions</h2>
+<ol>
+<li>What HTTP status does CDP&#39;s <code>/platform/v2/x402/settle</code> return when <code>transferWithAuthorization</code> reverts, or when the nonce is already used or cancelled: 200 with <code>success: false</code>, or a 4xx with a <code>SettleResponse</code> body? The same question applies to x402.org. The first finding&#39;s exploitability depends on the answer. The fix does not, and should land either way.</li>
+<li>Is Permit2 meant to be accepted? The server never advertises <code>assetTransferMethod</code>, but the facilitator routes by payload shape (<code>exact/facilitator/index.mjs:773-821</code>), so a Permit2 USDC payment verifies and settles today. Nothing in <code>pay.test.mjs</code> exercises it.</li>
+<li><code>pay_nonces</code> is keyed on the nonce alone (<code>schema.sql:216-217</code>), not on (payer, nonce), and EIP-3009 and Permit2 nonces share that space. With client-random nonces I found no practical collision, but is keying it per payer intended?</li>
+<li>The <code>wrappers</code> cache key includes the token id and variant (<code>x402.mjs:372</code>, <code>upgrade.mjs:327-329</code>), so it grows by one entry per (token, Mark, variant) that passes the gates. That is bounded by tokens bound to callers, so it is not an outside-attacker issue. Is that growth accepted?</li>
+</ol>
+<h2>Out of scope</h2>
+<ul>
+<li>The door (RFC 9421 verification, challenge), binding drift between request and Clock write (TM #5), Clock nonce and heal logic, reconcile, the client&#39;s signing checks (TM #10), contract access control. Only read where the payment path touches them.</li>
+<li>Settled decisions: the USDC-only price, <code>MINT_PRICE</code> as a Warden constant, the <code>$1250.00</code> demand string, and the ladder shape. The price guards, <code>assertLadderSane</code> and the per-call price were checked and found sound.</li>
+</ul>
+<h2>Coverage</h2>
+<p><strong>Checked and found sound:</strong></p>
+<ul>
+<li><p><strong>Price binding:</strong> v2 <code>findMatchingRequirements</code> compares the whole accepted requirement (amount, asset, payTo, network) against the server&#39;s own requirement (<code>chunk-H7ETXA5T.mjs:2007-2020</code>). The facilitator then checks <code>value == requirements.amount</code> and <code>to == payTo</code> (<code>exact/facilitator/index.mjs:166-194</code>). The price is per call, taken from <code>LADDER</code> / <code>MINT_PRICE</code> and rejected if malformed (<code>x402.mjs:439-442</code>, <code>upgrade.mjs:209-212</code>).</p>
+</li>
+<li><p><strong>Payment flow:</strong> chosen from the server&#39;s requirement, not the client payload (<code>getPaymentFlow</code> ignores <code>_payload</code>, <code>chunk-H7ETXA5T.mjs:1318-1330</code>). It resolves to <code>authorization</code>: verify before the handler, settle after it.</p>
+</li>
+<li><p><strong>Refusals carry <code>isError</code>:</strong> checked on every path. That includes:</p>
+<ul>
+<li><code>cancelSettlementOnRefusal</code> for each <code>ok: false</code> inside <code>paid()</code>;</li>
+<li>the gateway&#39;s own <code>no-price</code> / <code>payment-unavailable</code> refusals;</li>
+<li><code>no-nonce</code> and <code>payment-already-used</code>;</li>
+<li>handler throws (the library cancels, <code>index.mjs:943-961</code>);</li>
+<li>wrapper-internal errors (<code>index.mjs:770-778</code>);</li>
+<li><code>mcp/server.mjs</code> passing complete results through (<code>:178</code>).</li>
+</ul>
+<p>No refusal reaches settlement.</p>
+</li>
+<li><p><strong>Double settlement and reuse:</strong> the <code>pay_nonces</code> claim is made inside the reservation transaction, and a reuse is refused before settlement. The same Mark on the same token is blocked by a unique index. The paired Mark (the other side of a pair) is re-read synchronously before insert.</p>
+</li>
+<li><p><strong>Treasury address:</strong> checked for shape, EIP-55 checksum and placeholders off Sepolia (<code>main.mjs:84-142</code>). The network is derived from the chain id and checked against the RPC. The facilitator must be HTTPS. Missing CDP credentials refuse boot. CDP JWTs are per path and expire after 120 s.</p>
+</li>
+</ul>
+<p><strong>Not reviewed in depth:</strong> <code>gates.test.mjs</code> and <code>cdp.test.mjs</code> (not opened), and the body of <code>pay.test.mjs</code> (names only).</p>
+</body>
+</html>

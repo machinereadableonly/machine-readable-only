@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- creative -- the token as an object</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<blockquote>
+<p>Driver note: requested <code>claude-fable-5-1</code>; turns were also served by claude-haiku-4-5-20251001 (automatic model fallback).</p>
+</blockquote>
+<h1>Machine Readable Only -- creative -- the token as an object</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3</p>
+<p><strong>Looked at:</strong></p>
+<ul>
+<li>Images, all opened with Read:<ul>
+<li><code>out/marks/*.png</code> (all 12) and <code>out/finisher-band.png</code></li>
+<li><code>tools/out/heart-preview-{12,90,200,365}.png</code> and <code>heart-v{5,6,8,10}.png</code></li>
+<li><code>tools/out/token-55-{day12,day90,day200,whole,lapsed}.png</code> and <code>token-{1,2,7,12,19,26}.png</code></li>
+<li><code>tools/out/slip.png</code>, <code>start-tier-new-noise.png</code>, <code>noise-{a,b,c}-*.png</code></li>
+<li><code>tools/out/finisher-{binary,combined,clasps,glyphs,inks,inks-wide,inks-wide-0,inks-wide-4,inks-wide-8,rings}.png</code></li>
+<li><code>tools/out/ring-{0,1,3,4,5}-*.png</code>, <code>clasp-c1-gold.png</code>, <code>clasp-c4-pale.png</code></li>
+<li><code>docs/*.png</code> (all 7)</li>
+</ul>
+</li>
+<li>Source, used only to explain what an image showed: <code>contracts/src/render/{Renderer,Palette,MarkRenderer,FrameRenderer,DigitBand,IRenderer}.sol</code>, <code>tools/{marks-preview,preview,finisher-band-sheet}.mjs</code>, <code>warden/src/mcp/{tokenView,nextSteps}.mjs</code>, the three specs, <code>.claude/rules/*</code>.</li>
+<li>Live: <code>https://machinereadableonly.com/</code>, <code>/llms.txt</code>, <code>/t/1</code>, and the Blockscout API record for token 1 on the live Base Sepolia pair.</li>
+</ul>
+<h2>Findings</h2>
+<h3>[BEFORE MAINNET] Almost every image is the old picture; nobody can see the shipping token yet</h3>
+<p><strong>Where:</strong> <code>out/marks/*.svg</code> (each declares <code>viewBox=&quot;0 0 51 51&quot;</code>), <code>tools/out/token-*.png</code>, <code>out/finisher-band.png</code>, <code>tools/preview.mjs:13-19</code>, <code>tools/marks-preview.mjs:26,43-51</code></p>
+<p><strong>What a person meets now:</strong> The shipping code is QR version 10 (57 modules). Every Mark render, every <code>token-*.png</code> and every <code>docs/*.png</code> sheet is version 5 (37 modules). Only three images show version 10: <code>heart-v10.png</code> (bare code, no frame), <code>out/finisher-band.png</code> and <code>finisher-combined.png</code>. Four of the renders show something other than what they are named for:</p>
+<ul>
+<li><code>tint.png</code> and <code>all.png</code> are pixel-identical to <code>base.png</code>. Tint only draws on Iris eyes, and the row has no Iris.</li>
+<li><code>iris.png</code> shows dull mauve eyes on a rose token. The two Iris rows share one filename, so the earned one overwrites the bought one, and it is drawn with run 0. The chain only grants it at run 100, where the eyes would be red.</li>
+<li><code>token-55-whole.png</code> and <code>token-55-lapsed.png</code> are whole tokens with no digit band. Every finished token now carries one, so these show an object the chain cannot produce.</li>
+<li><code>out/finisher-band.png</code> has near-black digits for places 1, 42, 365, 43690 and 65535. The script at HEAD draws 1, 3, 9, 42 and 365 in the Mark inks, so this sheet predates it.</li>
+</ul>
+<p><strong>Proposed:</strong></p>
+<ul>
+<li>In <code>marks-preview.mjs</code>, write <code>iris-bought.png</code> and <code>iris-earned.png</code> (state <code>streak: 100, irisRun: 100</code>).</li>
+<li>Add <code>tint-violet.png</code> and <code>tint-gold.png</code> with marks <code>[5, 9]</code> and <code>tintVariant</code> 0 and 1.</li>
+<li>Delete the stale <code>all.png</code>.</li>
+<li>In <code>preview.mjs</code>, give the two <code>level: 365</code> states an <code>ordinal</code> and the matching finisher Mark.</li>
+<li>Re-run both tools, plus <code>finisher-marks-sheet.mjs</code> and one child token for the echo ring, with <code>MRO_DOMAIN=machinereadableonly.com</code>, at 256 px as well as the current width.</li>
+</ul>
+<p><strong>Why:</strong> The project&#39;s own rule is that a look is decided from a rendered sheet. There is no sheet of a version 10 token at day 1, mid-year, lapsed, or wearing any of the ten Marks.</p>
+<h3>[BEFORE MAINNET] Iris and Tint were priced on eyes that are now less than half the size</h3>
+<p><strong>Where:</strong> <code>out/marks/iris.png</code> and <code>all-illegal.png</code> (version 5) against <code>out/finisher-band.png</code> (version 10); spec <code>2026-09-20-mro-finisher-marks-design.md</code> section 10k</p>
+<p><strong>What a person meets now:</strong> In <code>iris.png</code> each round eye is about a fifth of the code&#39;s width and is the first thing the eye lands on. In <code>finisher-band.png</code> the same three corner squares are about 12% of the code&#39;s width and recede behind the heart. Iris (25 USDC) and Tint (250 USDC) draw on nothing else.</p>
+<p><strong>Proposed:</strong> Re-run <code>eye-shape-sheet.mjs</code> and <code>tint-on-green-sheet.mjs</code> at version 10 and judge them at 256 px. If the three shapes cannot be told apart at that size, offer one shape. Set Tint&#39;s price from that sheet; it is a <code>setUpgrade</code> dial, so no redeploy.</p>
+<p><strong>Why:</strong> The shapes, inks and prices were fixed on 2026-09-02 and version 10 was chosen on 2026-09-21. The premise of the earlier decision (eye size) changed, so this is a re-raise on a changed premise, not on taste.</p>
+<h3>[BEFORE MAINNET] &quot;Heart 2/365&quot; counts the frame; the heart is full on day one</h3>
+<p><strong>Where:</strong> <code>token-55-day12.png</code>, <code>token-1.png</code>; <code>Renderer.sol:380,433</code>; <code>warden/src/mcp/tokenView.mjs:42</code>; <code>warden/src/mcp/nextSteps.mjs:53,77</code>; live <code>/t/1</code> returns <code>heart: &quot;2/365&quot;</code></p>
+<p><strong>What a person meets now:</strong> At day 12 the heart is completely drawn and the frame has a 12-cell tab at the top. The metadata says <code>Heart: 12/365</code>. The token&#39;s own description says &quot;The heart is the code, and the frame is the year&quot;, and <code>/llms.txt</code> says the heart &quot;is there in full from the first day&quot;. The <code>status</code> tool has to explain that &quot;<code>heart</code> counts the cells of the frame&quot;.</p>
+<p><strong>Proposed:</strong></p>
+<ul>
+<li>Rename the trait <code>Heart</code> to <code>Frame</code> with the value unchanged (<code>&quot;212/365&quot;</code>).</li>
+<li>Rename the Warden field <code>heart</code> to <code>frame</code>.</li>
+<li><code>nextSteps.mjs:53</code> becomes &quot;A token may only seed a child once its year is finished: 365 credited days.&quot;</li>
+<li><code>nextSteps.mjs:77</code> becomes &quot;This Mark needs a finished year: 365 credited days.&quot;</li>
+</ul>
+<p><strong>Why:</strong> Agents will key on these names, so the rename is cheap now and a breaking change later. The settled wording &quot;a 365-cell heart&quot; is false in the code: <code>FrameRenderer.sol:12-18</code> fills a square frame, and the heart is static. I am re-raising the words only, not the art.</p>
+<h3>[ANYTIME] On Blockscout the live token has no picture, name or traits</h3>
+<p><strong>Where:</strong> Blockscout API record for token 1 of the live pair (fetched 2026-09-29); <code>Renderer.sol:43</code></p>
+<p><strong>What a person meets now:</strong> The record returns <code>metadata: null</code> and <code>image_url: null</code>. The contract emits the prefix <code>data:application/json;utf-8,</code>. Blockscout&#39;s <code>metadata_retriever.ex</code> on master was reported to me by a summarising fetch, not read line by line. It matches only <code>data:application/json;utf8,</code>, <code>data:application/json,</code> and <code>;base64,</code>.</p>
+<p><strong>Proposed:</strong> Change the prefix to <code>data:application/json,</code>. Re-run <code>tools/alchemy-byte-check.mjs</code> and <code>tools/third-party-check.mjs</code> on a Sepolia spike to confirm Alchemy still parses it, then confirm the Blockscout record fills in. Update the pinned prefix in <code>Renderer.t.sol:315</code>, <code>IntrinsicSize.t.sol:122-123</code>, <code>MROSpikeToken.t.sol:95</code>, <code>tools/render-token.mjs:1069</code> and <code>tools/verify-tokenuri.mjs:24</code>. The comment at <code>warden/tools/mark-rehearsal.mjs:161</code> already says <code>utf8</code>, which the contract does not emit.</p>
+<p><strong>Why:</strong> The explorer is where an owner first looks up what they hold, and it shows a blank.</p>
+<h3>[BEFORE MAINNET] The collection has no description or image of its own</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:172</code>; no <code>contractURI</code> anywhere in <code>contracts/src</code></p>
+<p><strong>What a person meets now:</strong> A marketplace or wallet gets a name (&quot;Machine Readable Only&quot;) and a symbol (&quot;MRO&quot;) and nothing else at collection level.</p>
+<p><strong>Proposed:</strong> Add an ERC-7572 collection record to the token contract: <code>string public contractURI</code>, <code>setContractURI(string) onlyOwner</code>, emitting <code>ContractURIUpdated()</code>. Seed it with the name, the on-chain description sentence, and <code>external_link: &quot;https://machinereadableonly.com/llms.txt&quot;</code>. Also add <code>&quot;external_url&quot;:&quot;https://machinereadableonly.com/t/&lt;id&gt;&quot;</code> to each token&#39;s JSON, about 60 of the 1,842 spare bytes.</p>
+<p><strong>Why:</strong> The token contract has no upgrade path, so this function exists at the mainnet deploy or never.</p>
+<h3>[BEFORE MAINNET] A 30-day run and a 100-day run are the same red</h3>
+<p><strong>Where:</strong> <code>tools/out/finisher-inks.png</code> top row, tiles 1 and 2; <code>slip.png</code>; <code>Palette.sol:22-23</code></p>
+<p><strong>What a person meets now:</strong> <code>#c8102e</code> (100+) beside <code>#bd2242</code> (30-99) cannot be told apart without the two side by side. It is the smallest step on the ladder and costs the most days.</p>
+<p><strong>Proposed:</strong> Rung 4 <code>#e0002a</code> with noise <code>#484848</code> (luma 72). Rung 3 <code>#c41c3c</code> with noise <code>#525252</code> (luma 82). Contrast against white is 5.0 and 5.9, both above the 4.5 floor in <code>render-token.mjs</code>. Re-derive Static&#39;s two greens with <code>green-violet-sheet.mjs</code>, decide whether Aorta&#39;s red follows, and run the decode sweep. The thresholds 3 / 7 / 30 / 100 do not move.</p>
+<p><strong>Why:</strong> Colour is the only thing on the base token that says how long the agent kept returning. Beat and the earned Iris mark the same milestones, but only if claimed and not excluded by a bought Mark. I cannot render, so this must be judged from a sheet.</p>
+<h3>[BEFORE MAINNET] Static puts a red heart on green at matched brightness</h3>
+<p><strong>Where:</strong> <code>out/marks/static.png</code>; <code>Palette.sol:51-57</code>; ladder spec section 7.2</p>
+<p><strong>What a person meets now:</strong> A red heart in green noise with green corner squares. It is the loudest bought Mark, and it reads as a strawberry. The two inks are matched in brightness by rule and differ by red against green only, which is the pair red-green colour-blind viewers (about 1 in 12 men) confuse. The docs never mention colour vision.</p>
+<p><strong>Proposed:</strong> Add deuteranopia and protanopia columns to <code>tools/static-hue-sheet.mjs</code>. If the heart separates from the noise less than on the bare token, move Static&#39;s direction from <code>[0,124,8]</code> toward teal, starting at <code>[0,118,84]</code>. Re-derive per rung and judge on the same sheet.</p>
+<p><strong>Why:</strong> Green was chosen for holding chroma at dark rungs, which is sound. But a paid Mark should not make the heart vanish for the buyer. Static opens at level 30, so the ink is free to change until then.</p>
+<h3>[ANYTIME] Aura makes the unearned frame disappear</h3>
+<p><strong>Where:</strong> <code>out/marks/aura.png</code> against <code>base.png</code>; <code>MarkRenderer.sol:131-133</code></p>
+<p><strong>What a person meets now:</strong> Aura&#39;s pink page (<code>#fbeff2</code>) is almost the same colour as an unearned frame cell (<code>#f4eef0</code>). In <code>aura.png</code> the bottom half of the frame is gone and the token reads as an arch. The page tint itself is hard to see.</p>
+<p><strong>Proposed:</strong> In <code>MarkRenderer.ghost</code>, return <code>#ecdde2</code> when the token wears Aura without Ache. Ache&#39;s <code>#e3ccd3</code> stays deeper. It is the same length, so zero bytes.</p>
+<p><strong>Why:</strong> A 25 USDC Mark should not erase the year ahead. No token can wear Aura before level 100, so nothing held changes if this lands in the first 100 days.</p>
+<h3>[ANYTIME] Vessel&#39;s gold reads as mustard</h3>
+<p><strong>Where:</strong> <code>out/marks/vessel.png</code>, <code>tools/out/ring-3-mark13-gold.png</code>, <code>ring-4-mark14-doubled.png</code>; <code>MarkRenderer.sol:63</code></p>
+<p><strong>What a person meets now:</strong> The frame in flat <code>#b8860b</code> beside a rose heart looks ochre-brown. This is the 1,250 USDC Mark.</p>
+<p><strong>Proposed:</strong> Set <code>VESSEL_GOLD = &quot;#d4af37&quot;</code> for the frame only. Leave <code>TINT_GOLD</code> and <code>APEX_GOLD</code> at <code>#b8860b</code>: eyes and one-module digit strokes need the darker ink. Render both values side by side at 256 px and run the decode sweep.</p>
+<p><strong>Why:</strong> Vessel needs a finished year, so no token can wear it for 365 days after launch.</p>
+<h3>[BEFORE MAINNET] Three traits tell a person nothing</h3>
+<p><strong>Where:</strong> <code>Renderer.sol:381,388-389</code></p>
+<p><strong>What a person meets now:</strong> <code>Years</code> can only be 0 or 1 and repeats <code>Whole</code>. <code>Mint Day: 20700</code> and <code>Last Day: 20724</code> are day counts.</p>
+<p><strong>Proposed:</strong> Delete the <code>Years</code> line; the Warden already dropped it (<code>tokenView.mjs:44-47</code>). Emit the two days as <code>{&quot;display_type&quot;:&quot;date&quot;,&quot;trait_type&quot;:&quot;Minted&quot;,&quot;value&quot;:&lt;mintDay*86400&gt;}</code> and the same for <code>Last Return</code>.</p>
+<p><strong>Why:</strong> Trait names are an interface agents filter on, so the set should be final before launch.</p>
+<h2>Coverage</h2>
+<p><strong>Would anyone keep it?</strong></p>
+<ul>
+<li>The finished version 10 token: yes. In <code>out/finisher-band.png</code> the heart has real lobes and a point, and the row of 0s and 1s reads like stamp perforations.</li>
+<li>The day-one token (<code>token-1.png</code>, <code>slip.png</code>): a grey code with a faintly mauve heart and one stray cell. It is the weakest image and the one every minter gets. It was chosen from <code>docs/day1-options.png</code>, so I am not re-raising it.</li>
+</ul>
+<p><strong>Thumbnail size:</strong> The heart and frame read at 159 px in <code>docs/scan-test.png</code> tile 8 (version 5). No version 10 image at thumbnail size exists in the snapshot.</p>
+<p><strong>Looked at, no finding:</strong></p>
+<ul>
+<li>The single completion ring reads as a pinstripe and survives at 159 px.</li>
+<li>The lapse steps: a whole token paled to mauve (<code>token-55-lapsed.png</code>) looks finished, not broken.</li>
+<li>Hush, Ache and Beat each read clearly.</li>
+<li>Break turns the heart grey, as designed.</li>
+<li>The symmetric top-down frame fill.</li>
+<li>The <code>heart-preview-*.png</code> images show an abandoned heart-shaped frame, not the shipping art.</li>
+</ul>
+<p><strong>Not judged, because no image exists:</strong></p>
+<ul>
+<li>The child&#39;s dashed echo ring. It uses the same pale ink as the unearned frame, so check it at 256 px.</li>
+<li>The squircle and leaf Iris shapes, and Tint gold.</li>
+<li>The five finisher inks on the digits.</li>
+<li>The cooled page after a long absence.</li>
+<li>Any Mark at version 10.</li>
+<li>The Blockscout token page itself, which is drawn by script.</li>
+</ul>
+<p><strong>Not opened:</strong> <code>clasp-c0</code>, <code>c2</code>, <code>c3</code>, <code>c5</code>; <code>ring-2</code>; <code>token-3</code> to <code>6</code>, <code>8</code> to <code>11</code>, <code>13</code> to <code>18</code>, <code>20</code> to <code>25</code>.</p>
+</body>
+</html>

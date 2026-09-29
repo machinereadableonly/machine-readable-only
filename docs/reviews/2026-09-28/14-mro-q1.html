@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- quality -- token contract, Ladder and finisher places</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- quality -- token contract, Ladder and finisher places</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Read:</strong> <code>contracts/src/MachineReadableOnly.sol</code>, <code>contracts/src/Ladder.sol</code>, <code>contracts/src/render/TokenView.sol</code>, <code>contracts/src/spike/MROSpikeToken.sol</code> (lines 70-160), <code>contracts/foundry.toml</code>; tests <code>MroTestBase.sol</code>, <code>MachineReadableOnly.t.sol</code>, <code>FinishLine.t.sol</code>, <code>CheckIn.t.sol</code>, <code>Lifecycle.t.sol</code>, <code>Marks.t.sol</code>, <code>Ladder.t.sol</code>, <code>Bounds.t.sol</code>, <code>AccessControlGaps.t.sol</code>, <code>Vouchers.t.sol</code>, <code>Heartbeat.t.sol</code>, <code>SunsetByAbsence.t.sol</code>, <code>MintDay.t.sol</code>, <code>RunHistory.t.sol</code>, <code>Lineage.t.sol</code>, <code>DialEvents.t.sol</code>, <code>FastDays.t.sol</code>, <code>ContractSize.t.sol</code>, <code>TokenView.t.sol</code>, <code>WorstCase.sol</code>, <code>BuilderCodeSuffix.t.sol</code>, <code>RealTokenGas.t.sol</code> (first 120 lines); every file in <code>contracts/script/</code> except the bodies of the two generated bitmap libraries; <code>tools/spike-bitmaps.mjs</code>; <code>warden/DEPLOY.md</code> lines 520-720; <code>.claude/rules/*.md</code>.</p>
+<p>Nothing was executed. There is no shell in this review, so every finding comes from reading, not from a <code>forge</code> run.</p>
+<h2>Findings</h2>
+<p><strong>Critical: none found. High: none found.</strong></p>
+<p>The contract has no upgrade path, so any finding in <code>contracts/src/</code> that is accepted has to land before the mainnet deploy or not at all. Only finding 2 carries the mainnet tag, because it is the only one where doing nothing risks an irreversible loss.</p>
+<h3>[MEDIUM] 1. Four scripts mint with 172-byte bitmaps that both contracts now refuse</h3>
+<p><strong>Where:</strong> <code>contracts/script/SpikeBitmaps.sol:11</code>, <code>contracts/script/MintOnePlan1.s.sol:31</code>, <code>contracts/script/DeploySpike.s.sol:51</code>, <code>contracts/script/SoakSepolia.s.sol:48</code>, <code>contracts/script/AbSepolia.s.sol:73</code>, <code>tools/spike-bitmaps.mjs:60-74</code>
+<strong>What:</strong> <code>SpikeBitmaps.sol</code> is still the version-5 output (<code>BYTES = 172</code>). <code>MachineReadableOnly.sol:358</code> and <code>MROSpikeToken.sol:150</code> both revert <code>BadCodeLength</code> on anything but 407. It also holds 27 bitmaps while <code>SoakStates.sol:25</code> declares 52 states, so the soak scripts would hit <code>NoBitmapFor(28)</code> even after a same-size regeneration.
+<strong>Why it matters:</strong> <code>DeploySpike</code>, <code>SoakSepolia</code>, <code>AbSepolia</code> and <code>MintOnePlan1</code> all revert on their first mint. <code>anvil-verify.sh:34</code> runs <code>DeploySpike</code>, so the documented read-back-and-decode check over RPC cannot pass.
+<strong>Fix:</strong> Regenerate with <code>bash tools/spike-bitmaps.sh example.com 52</code>. In the generator, replace the hard-coded &quot;37x37 grid, 172 bytes&quot; comment (<code>tools/spike-bitmaps.mjs:73</code>) and the <code>slice(0, 172)</code> split with values derived from the row. Correct <code>MintOnePlan1.s.sol:16-18</code>, which still says <code>CODE_BYTES (172)</code> and that the domain is undecided.</p>
+<h3>[MEDIUM] 2. <code>closeThePiece</code> can irreversibly sunset any contract, on any chain, with no guard [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>contracts/script/SoakSepolia.s.sol:78-83</code>
+<strong>What:</strong> It is the only broadcasting entry point in <code>contracts/script/</code> that does not call <code>guardChain()</code>. It sends <code>sunset()</code> to whatever address it is given, signed by <code>deployerKey()</code>. That selector is identical on <code>MachineReadableOnly</code> (<code>MachineReadableOnly.sol:273</code>), and on chain 8453 <code>deployerKey()</code> returns the owner key (<code>MroScript.sol:67-80</code>).
+<strong>Why it matters:</strong> One wrong address or <code>--rpc-url</code> closes the real piece permanently. The same is true today for the live Sepolia pair, whose owner is the key this script reads.
+<strong>Fix:</strong> Call <code>guardChain()</code> first, add <code>require(block.chainid == BASE_SEPOLIA)</code>, and refuse unless the target&#39;s <code>name()</code> is the spike&#39;s <code>&quot;MRO Spike (throwaway)&quot;</code>.</p>
+<h3>[LOW] 3. No mainnet source-verification step, and the verify scripts report success on failure</h3>
+<p><strong>Where:</strong> <code>contracts/script/verify-plan7.sh:25</code>, <code>:36</code>, <code>:42</code>; <code>contracts/script/verify-plan6.sh:20</code>, <code>:31</code>, <code>:37</code>; <code>contracts/script/deploy-mainnet.sh:143-147</code>
+<strong>What:</strong> Both verify scripts hard-code <code>CHAIN=84532</code> and end each <code>forge verify-contract</code> with <code>|| true</code>. The &quot;Next&quot; list printed by <code>deploy-mainnet.sh</code> and the cutover steps in <code>warden/DEPLOY.md:545-572</code> contain no verification step.
+<strong>Why it matters:</strong> A failed verification exits 0, and the mainnet checklist never asks for one. It can be done after deploy, so it does not block the deploy itself.
+<strong>Fix:</strong> Take the chain as an argument (84532 or 8453), drop <code>|| true</code>, exit non-zero on failure, and add the step to <code>deploy-mainnet.sh</code> and DEPLOY.md section 10.</p>
+<h3>[LOW] 4. The owner can rewrite finisher records 11-15, so <code>upgradeOf</code> can contradict the constant place table</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:672-693</code> against <code>:446-460</code>
+<strong>What:</strong> <code>finisherMark</code> is constant &quot;because a table the owner could edit is a promise that can be broken&quot;. But <code>setUpgrade</code> accepts ids 11-15 with any <code>maxSupply</code>, <code>active</code> or <code>requiresWhole</code>. <code>RunHistory.t.sol:288-291</code> does exactly this, writing a blank record over Apex.
+<strong>Why it matters:</strong> Places are still assigned correctly. What breaks is the reader-facing record: an agent reading <code>upgradeOf(15)</code> can be told a cap that is false, which <code>FinishLine.t.sol:99-100</code> names as the thing to prevent.
+<strong>Fix:</strong> In <code>setUpgrade</code>, for <code>upgradeId &gt;= FIRST_FINISHER_MARK</code>, require the record to match the band (cap 0/50/10/3/1, price 0). Alternatively write the five records in the constructor and refuse those ids in <code>setUpgrade</code>.</p>
+<h3>[LOW] 5. Finishing place is decided entirely by call order; the voucher path would make it first-come</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:468-475</code>, <code>:515-535</code>, <code>:581-610</code>
+<strong>What:</strong> <code>_finish</code> hands out <code>++finishers</code> in the order credits arrive. <code>batchCheckIn</code> accepts entries in any day order, and <code>checkInWithVoucher</code> can be submitted by anyone at any time. The settled <code>(day, tokenId)</code> rule is therefore a property of the Clock only. The finisher spec does not mention vouchers (no match in <code>docs/specs/2026-09-20-mro-finisher-marks-design.md</code>).
+<strong>Why it matters:</strong> Nothing is wrong while vouchers are off. If <code>setVouchersEnabled(true)</code> is ever called while any of the 64 scarce places remain, a place goes to whoever lands first.
+<strong>Fix:</strong> State this on <code>setVouchersEnabled</code> and <code>_finish</code> in NatSpec. Add a test for a voucher credit that reaches 365 and one for finishers across separate batches (see finding 8).</p>
+<h3>[LOW] 6. <code>rest</code> on an already-sealed token emits a second <code>Rested</code> with a new day</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:805-810</code>
+<strong>What:</strong> There is no already-resting check. <code>Lifecycle.t.sol:155-157</code> calls the repeat &quot;a harmless no-op&quot;, but it emits <code>Rested(id, today(), ...)</code> and <code>MetadataUpdate</code> again.
+<strong>Why it matters:</strong> The log then holds two sealing days for one token. The mirror is unaffected today because <code>warden/src/clock/reconcile.mjs:162-166</code> ignores the day.
+<strong>Fix:</strong> <code>if (s.resting) revert Resting(id);</code> before the write, plus a test.</p>
+<h3>[LOW] 7. NatSpec and comments that contradict enforced behaviour</h3>
+<p><strong>Where and what:</strong></p>
+<ul>
+<li><code>MachineReadableOnly.sol:384-385</code>: a finished token gets &quot;the same freeze <code>rest</code> gives&quot;. It does not: <code>applyMark</code> still works on it (<code>Ladder.t.sol:336-356</code> applies five Marks after <code>_makeWhole</code>), while <code>rest</code> blocks Marks.</li>
+<li><code>MachineReadableOnly.sol:388-389</code>: &quot;a test pins the two together&quot; (<code>FINISH_LEVEL</code> and <code>FrameGeometry.DAY_CELLS</code>). No test compares them; <code>FINISH_LEVEL</code> appears in no test file.</li>
+<li><code>MachineReadableOnly.sol:394-396</code>: says the creation floor stops a year of history being fabricated in one night. Check-ins have no floor, so that holds only for new tokens (see Questions).</li>
+<li><code>MachineReadableOnly.sol:668</code>: &quot;<code>sold</code> is owned by <code>applyMark</code>&quot;. <code>_finish</code> also writes it (<code>:473</code>).</li>
+<li><code>TokenView.sol:10</code>: &quot;level / 365 is completed years&quot;. Level stops at 365. <code>TokenView.t.sol:79-86</code> still asserts on level 1095.</li>
+<li><code>TokenView.sol:25-36</code>: declares itself &quot;THE AUTHORITY on the packing&quot; but lists only bits 1-10; bits 11-15 are missing.</li>
+<li><code>TokenView.sol:38</code>: &quot;which agent key minted it&quot;. <code>rebind</code> overwrites it (<code>MachineReadableOnly.sol:797</code>).</li>
+<li><code>MroScript.sol:54-55</code> and <code>SetClockWarden.s.sol:12-13</code>: list <code>setSunset</code> as an owner power. No such function exists; it is <code>sunset()</code>.</li>
+<li><code>DeployPlan5.s.sol:10</code>, <code>deploy-mainnet.sh:3</code>, <code>deploy-plan7.sh:3</code>, <code>fast/DeployFast.s.sol:12</code>, <code>fast/deploy-fast.sh:3</code>: &quot;ten Marks&quot;. The loop writes fifteen (<code>DeployPlan5.s.sol:32</code>).</li>
+<li><code>anvil-size-check.sh:61-62</code>: &quot;344 hex characters&quot;. <code>tools/token-bitmap.mjs:12</code> says 814.</li>
+<li><code>DeployPlan1.s.sol:13-14</code>: &quot;WARDEN_ADDRESS ... has never been set&quot;.</li>
+</ul>
+<p><strong>Why it matters:</strong> The token contract&#39;s comments are public, verified source, and the project treats a contradicting comment as a finding.
+<strong>Fix:</strong> Correct each line. For the <code>FINISH_LEVEL</code> pin, add a test that asserts finishing happens at exactly <code>FrameGeometry.DAY_CELLS</code>.</p>
+<h3>[LOW] 8. Test gaps: owner, access-control and finisher paths</h3>
+<p><strong>Where and what:</strong></p>
+<ul>
+<li><strong>Ownable2Step on the shipping contract.</strong> Only the happy path is tested (<code>MachineReadableOnly.t.sol:166-173</code>, <code>Bounds.t.sol:216-221</code>). <code>transferOwnership</code> by a non-owner and <code>acceptOwnership</code> by the wrong account are tested on the spike (<code>MROSpikeToken.t.sol:306-329</code>) but not on the real contract.</li>
+<li><strong>Bare <code>vm.expectRevert()</code></strong> still guards non-owner <code>setRenderer</code>, <code>setWarden</code>, <code>unpause</code>, <code>setUpgrade</code> and <code>setVouchersEnabled</code> (<code>MachineReadableOnly.t.sol:57</code>, <code>:70</code>, <code>:136</code>; <code>Marks.t.sol:113</code>; <code>Vouchers.t.sol:129</code>). <code>AccessControlGaps.t.sol:144-157</code> names the selector for only three dials. <code>Ladder.t.sol:362</code> is also bare.</li>
+<li><strong><code>seed</code> day bounds.</strong> <code>FutureDay</code> and <code>StaleDay</code> are tested on <code>mint</code> only (<code>MintDay.t.sol:47-59</code>); every <code>t.seed(</code> call in the suite passes <code>_today()</code>.</li>
+<li><strong>Code length.</strong> Rejected inputs are 3 and 2 bytes (<code>MachineReadableOnly.t.sol:241-245</code>, <code>AccessControlGaps.t.sol:107-114</code>). Nothing tests 406, 408 or the old 172. <code>FastDays.t.sol:48</code> has only the accepting case.</li>
+<li><strong>Finisher bands through real finishes.</strong> Mark bits are asserted for places 1 and 2 only (<code>FinishLine.t.sol:44-78</code>). The 175-finisher test checks the last ordinal (<code>CheckIn.t.sol:428-429</code>) but no Mark bit and no <code>sold</code> count at the 4/5, 14/15 or 64/65 boundaries.</li>
+<li><strong>No test</strong> for a finish reached through a voucher, for places across separate batches, or that <code>setUpgrade</code> on 11-15 preserves <code>sold</code>.</li>
+<li><strong>After sunset and under pause.</strong> <code>MachineReadableOnly.sol:262-264</code> promises transfers and <code>rebind</code> survive sunset; no test calls <code>rest</code>, <code>rebind</code> or a transfer after <code>sunset()</code>, and none calls <code>rest</code> or <code>rebind</code> while paused.</li>
+<li><strong>Events.</strong> <code>Seeded</code> and <code>Rebound</code> are never asserted anywhere in <code>contracts/test/</code>.</li>
+</ul>
+<p><strong>Why it matters:</strong> These are the highest-consequence functions in a contract that cannot be patched.
+<strong>Fix:</strong> Add the tests above. The 175-finisher test can carry the band and <code>sold</code> assertions at no extra setup cost.</p>
+<h3>[LOW] 9. <code>bestRun</code> gates earned Marks but cannot be read from the contract</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:195-215</code>, <code>:487-490</code>
+<strong>What:</strong> <code>_tokens</code> is internal, <code>viewOf</code> omits <code>bestRun</code>, and <code>_effectiveRun</code> is private. <code>RunHistory.t.sol:56-57</code> notes it can only be proven through the gate.
+<strong>Why it matters:</strong> No one can read the value that decides Ache, Beat, the earned Iris and Break except by raw storage slot. No funds are at risk, since earned Marks are free.
+<strong>Fix:</strong> Add <code>bestRunOf(uint256)</code> returning <code>_effectiveRun</code>, before the redeploy.</p>
+<h3>[LOW] 10. Deploy script does not require the Warden to differ from the owner</h3>
+<p><strong>Where:</strong> <code>contracts/script/DeployPlan5.s.sol:16-30</code>
+<strong>What:</strong> <code>SetClockWarden.s.sol:55</code> enforces &quot;warden and owner must be separate&quot;. The deploy that <code>deploy-mainnet.sh</code> runs does not; <code>--warden</code> is only checked for EIP-55 form.
+<strong>Why it matters:</strong> Passing the deployer&#39;s own address would give the nightly cron key the owner&#39;s powers, which is what the separation exists to prevent. It is recoverable with <code>setWarden</code>.
+<strong>Fix:</strong> <code>require(warden != vm.addr(key), ...)</code> before <code>startBroadcast</code>.</p>
+<h3>[LOW] 11. The anvil gates can pass against a node they did not start</h3>
+<p><strong>Where:</strong> <code>contracts/script/anvil-size-check.sh:20-23</code>, <code>contracts/script/anvil-verify.sh:22-25</code>
+<strong>What:</strong> Both start <code>anvil --silent</code> in the background on the default port and <code>sleep 2</code>. If 8545 is already taken, the new anvil dies silently and the script deploys to whatever is listening.
+<strong>Why it matters:</strong> If that node runs with the size limit disabled, the deployability gate passes falsely.
+<strong>Fix:</strong> Use the pattern already in <code>chainguard-check.sh:9-16</code>: a dedicated port, a readiness poll, and a check that the started process is still alive.</p>
+<h3>[LOW] 12. <code>SwapRenderer</code> cannot run on a contract with no token 1</h3>
+<p><strong>Where:</strong> <code>contracts/script/SwapRenderer.s.sol:48</code>
+<strong>What:</strong> The post-swap check reads <code>tokenURI(1)</code>, which reverts if token 1 does not exist, failing the whole simulation.
+<strong>Why it matters:</strong> A renderer swap between the mainnet deploy and the mint of token #1 is impossible with this script.
+<strong>Fix:</strong> Skip the read when <code>totalMinted() == 0</code>, or take the id as an argument.</p>
+<h3>[LOW] 13. Literal 365 where <code>FINISH_LEVEL</code> is meant</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:736</code>, <code>:847</code>
+<strong>What:</strong> <code>requiresWhole</code> and <code>ParentNotWhole</code> compare against <code>365</code>; <code>_credit</code> uses the constant.
+<strong>Fix:</strong> Use <code>FINISH_LEVEL</code> in both. The <code>/ 365</code> at <code>:830</code> is the agent-year, a different quantity, and should stay.</p>
+<h3>[INFO] 14. Ladder details</h3>
+<p><strong>Where:</strong> <code>contracts/src/Ladder.sol:65-69</code>, <code>:74-80</code>; <code>contracts/src/MachineReadableOnly.sol:686-688</code>
+<strong>What:</strong> <code>_earned</code> is a pure alias of <code>_mark</code>. The finisher records&#39; <code>excludes</code>, <code>requiresWhole</code> and <code>active</code> are never read by the contract, because <code>applyMark</code> refuses the range at <code>:712</code>. <code>setUpgrade</code> does not refuse bit 0 in a mask, so <code>requiresAny = 1</code> would make a Mark unappliable until the owner corrects it.</p>
+<h3>What was checked and holds</h3>
+<ul>
+<li><strong>Ids 11-15</strong> are written by <code>_finish</code> only, reached only from <code>_credit</code> at <code>level == 365</code> (<code>:442</code>). <code>applyMark</code> refuses them before any state is read, and both check-in paths refuse a finished token.</li>
+<li><strong>Code length.</strong> <code>mint</code> (<code>:358</code>) and <code>seed</code> (<code>:853</code>) both check <code>CODE_BYTES</code>; the fast variant overrides only <code>today()</code> and inherits both checks.</li>
+<li><strong>Pair-exclusion packing.</strong> Masks are 16-bit, so the variant bits at 16 and above cannot alias an exclusion; the literal-number test (<code>Ladder.t.sol:74-109</code>) pins all fifteen masks.</li>
+<li><strong>Rest and Sunset.</strong> Neither flag has a clearing write anywhere in the contract.</li>
+</ul>
+<h2>Questions</h2>
+<ol>
+<li><strong>Check-in lateness has no floor.</strong> The window is <code>lastDay &lt; day &lt;= today()</code>, and <code>CheckIn.t.sol:463-465</code> and <code>:513-520</code> pin that as deliberate. Creation is bounded to 30 days for the stated reason that a year must not be fabricated in one night. Is unbounded lateness for check-ins intended on the permanent contract, given that one Warden transaction can complete any token minted 364 or more days ago and award it a place?</li>
+<li><strong><code>deploy-plan6.sh</code> and <code>verify-plan6.sh</code></strong> are referenced only by comments in the plan-7 scripts and by <code>docs/plans/</code>. <code>deploy-plan6.sh</code> lacks the build and ABI pin that <code>deploy-plan7.sh:68-80</code> added. Can the pair be removed?</li>
+<li><strong><code>DeployPlan1.s.sol</code></strong> deploys without writing the ladder and is used only by <code>chainguard-check.sh:26</code>. It will run against mainnet if pointed there. Should it refuse chain 8453?</li>
+<li><strong><code>FundClock.s.sol:35</code></strong> declares a local <code>deployerKey</code> that shadows the inherited function it calls on the same line. Does this compile without a warning on solc 0.8.35?</li>
+</ol>
+<h2>Out of scope</h2>
+<ul>
+<li><code>warden/src/clock/run.mjs:358</code>: a paid mint delayed past 30 days is refused <code>StaleDay</code> by the contract and needs manual recovery.</li>
+<li><code>.claude/rules/warden.md</code> describes the check-in window as &quot;one UTC day wide&quot;, which does not match the late-write behaviour the contract tests pin.</li>
+</ul>
+<h2>Coverage</h2>
+<p><strong>Read in full:</strong> the three subsystem source files, the 21 test files listed above, and every script in <code>contracts/script/</code> apart from generated bitmap data.</p>
+<p><strong>Not read:</strong></p>
+<ul>
+<li><code>GasBudget.t.sol</code>, <code>GasProfile.t.sol</code>, <code>MROSpikeToken.t.sol</code>, <code>TokenUriGolden.t.sol</code>, <code>CombinationMatrix.t.sol</code> and the render tests.</li>
+<li><code>RealTokenGas.t.sol</code> past line 120.</li>
+<li>The hex bodies of <code>SpikeBitmaps.sol</code> and <code>ByteGateBitmap.sol</code>.</li>
+<li><code>tools/spike-bitmaps.sh</code>.</li>
+<li>The finisher and ladder specs, beyond searching them.</li>
+</ul>
+<p><strong>Not verified:</strong> the ladder mirror hash, any gas or size figure, and the runtime failure in finding 1, which is inferred from the two length checks and the 172-byte constant.</p>
+</body>
+</html>

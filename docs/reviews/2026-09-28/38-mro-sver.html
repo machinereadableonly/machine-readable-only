@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- security -- verified</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- security -- verified</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Findings in:</strong> 43 -- <strong>after merging:</strong> 40</p>
+<p>Inputs: the threat model (32) and all five area reports (33-37) were present, and none said FAILED. The <code>node_modules</code> trees are <strong>not in this snapshot</strong>. That covers <code>@x402/*</code>, <code>@noble/curves</code>, <code>http-message-sig</code>, <code>web-bot-auth</code> and PM2. So I could not open any claim that rests on library internals. Where a verdict depends on one, it says so, and it uses the project&#39;s own tests as evidence instead.</p>
+<h2>Summary</h2>
+<ul>
+<li><strong>Severity after corrections:</strong> Critical 0, High 5, Medium 4, Low 17, Info 14.</li>
+<li><strong>[BLOCKS MAINNET]:</strong> 7. These are the seed binding drift, the door dot-segment bypass, the held-payment oracle, the settlement-pending release, the cap gates ignoring unwritten mints, the Clock key reachable from the Warden, and the hot owner key.</li>
+<li><strong>Verdicts:</strong> CONFIRMED 34, PLAUSIBLE 5, UNVERIFIED 1, REFUTED 0.</li>
+<li><strong>Merges:</strong><ul>
+<li>33-H1 + 36-M1 (seed spends the write-time key).</li>
+<li>35-H1 + 36-H1 (cancelled authorisation treated as paid).</li>
+<li>36-H2 + the Clock-key half of 37-M1. The owner-key half of 37-M1 converges with 36-H3 and is noted there.</li>
+</ul>
+</li>
+<li><strong>One settled decision re-raised, and the premise is false in the code.</strong> The <code>rebind</code> acceptance rests on &quot;the Warden re-checks the signature against the current on-chain binding&quot;. That check happens at request time. The Clock&#39;s <code>seed</code> write happens up to a day later and re-checks nothing, and the contract reads the binding at write time (see High 1).</li>
+</ul>
+<h2>Critical</h2>
+<p>None.</p>
+<h2>High</h2>
+<h3>[CONFIRMED] <code>seed</code> spends the seed of whichever key is bound when the Clock writes, not the key that asked [BLOCKS MAINNET]</h3>
+<p><em>(merged: 33 High 1, 36 Medium 1)</em></p>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:839-884</code>:</p>
+<ul>
+<li>budget check <code>:854</code> via <code>seedsAvailable</code> <code>:826-833</code>;</li>
+<li>key read <code>:857</code>;</li>
+<li>charge <code>:875</code>;</li>
+<li><code>rebind</code> at <code>:793-800</code>.</li>
+</ul>
+<p>Off chain:</p>
+<ul>
+<li><code>warden/src/clock/run.mjs:439-451</code> sends <code>seed</code> with no key argument and no re-read.</li>
+<li><code>warden/src/mcp/tools/seed.mjs:53-58,103-110</code> checks binding and budget only when the request is made.</li>
+<li><code>warden/src/mirror/queries.mjs:278</code> selects <code>agentKeyId</code> for the seed pass, and nothing uses it.</li>
+</ul>
+<p><strong>Attacker story:</strong></p>
+<ol>
+<li>The owner of a whole token P (bound to key KA, with one seed open) calls <code>seed</code> signed by KA. Every gate passes and a child row is reserved.</li>
+<li>Before 00:05 UTC, the owner calls <code>rebind(P, KB)</code>. KB is any victim key with an open seed; all keys are public through <code>viewOf(id).agentKeyId</code>.</li>
+<li>The Clock sends <code>seed(child, P, to, code, day)</code>. The contract charges <code>_seedsSpent[KB]</code> and gives the child KB.</li>
+<li>The attacker rebinds P, and the child, back to KA.</li>
+</ol>
+<p>After that:</p>
+<ul>
+<li>KA&#39;s on-chain budget is untouched, and the row is <code>written</code>, so <code>seedBudgetBlock</code> (<code>gates.mjs:136-140</code>: chain <code>seedsAvailable</code> minus unwritten rows) passes again the next day.</li>
+<li>The attacker gets one free child per day. Each victim loses its once-a-year seed.</li>
+<li>An honest sale in the same window does the same to a buyer.</li>
+<li>The attack is latent until some key passes its first anniversary.</li>
+</ul>
+<p><strong>Fix:</strong> Add <code>bytes32 expectedKeyId</code> to <code>seed</code> and revert on <code>_agentKeyOf[parentId] != expectedKeyId</code>. Have the Clock pass the reservation&#39;s key, and add the new error to <code>isFinalSeed</code>. It has to go into the bytecode at the redeploy that is already planned. A Clock-side pre-read of <code>viewOf(parentId).agentKeyId</code> is a useful interim guard, but it leaves a window of seconds at a predictable 00:05. Add the test: request, rebind, write must revert.</p>
+<ul>
+<li><strong>Reachability:</strong> Holds. Opened the contract <code>seed</code> / <code>rebind</code> / <code>seedsAvailable</code>, <code>run.mjs:439-451</code>, <code>seed.mjs</code> and <code>gates.mjs</code>. The seed pass reads nothing about the binding before sending.</li>
+<li><strong>Impact:</strong> Holds. <code>_seedsSpent[key]</code> is keyed on the write-time key (<code>:857,:875</code>), and <code>unwrittenSeeds</code> (<code>queries.mjs:93-96</code>) stops counting once the row is written.</li>
+<li><strong>Defences:</strong> None. <code>rebind</code> is <code>onlyTokenOwner</code> and not pausable, and there is no key argument anywhere on the write path.</li>
+</ul>
+<h3>[CONFIRMED] A dot-segment request target gets past the domain pin, so a signature made for another site verifies here [BLOCKS MAINNET]</h3>
+<p><em>(35 High 1)</em></p>
+<p><strong>Where:</strong> <code>warden/src/door/middleware.mjs:35-39</code> (<code>pinnedUrl</code>), used at <code>:17</code>, <code>:109</code>, <code>warden/src/server.mjs:183</code> and <code>:468</code>.</p>
+<p><strong>Attacker story:</strong></p>
+<ol>
+<li>A site operator (&quot;evil.example&quot;) gets an agent to sign <code>POST https://evil.example/mcp</code> covering the five required components.</li>
+<li>They forward it within its window to the Warden with target <code>/.//evil.example/mcp</code> (or <code>/%2e//...</code>, <code>/a/..//...</code>), plus a fresh <code>challenge</code> / <code>challenge-response</code> pair. Both are free and neither is signed.</li>
+<li><code>new URL(&quot;/.//evil.example/mcp&quot;, origin).pathname</code> is <code>//evil.example/mcp</code> (WHATWG dot-segment removal). Rebuilding it with <code>new URL(pathname, origin)</code> makes it protocol-relative, so the host becomes <code>evil.example</code> and the path <code>/mcp</code>.</li>
+<li>The router dispatches <code>/mcp</code> while the signature is checked against <code>@authority: evil.example</code>.</li>
+<li>Key lookup succeeds either way:<ul>
+<li>If <code>Signature-Agent</code> names evil.example, the Warden fetches the attacker&#39;s directory, which can republish the victim&#39;s public JWK. This site&#39;s own directory is public.</li>
+<li>Otherwise the victim&#39;s registered key is read from the mirror.</li>
+</ul>
+</li>
+<li>The worst in-body effect is a <code>seed</code> with an attacker <code>to</code> (spending the victim&#39;s year), or a free earned Mark that closes its pair.</li>
+<li>A paid call does not move money: the payload&#39;s <code>payTo</code> would not match.</li>
+</ol>
+<p><strong>Fix:</strong></p>
+<ul>
+<li><p>Build from the origin and assign the path through the setter (<code>u = new URL(origin); u.pathname = ...; u.search = ...</code>). Then assert <code>u.host === domain</code>, and refuse any target that does not start with exactly one <code>/</code>.</p>
+</li>
+<li><p>Add tests for <code>/.//x/mcp</code>, <code>/%2e//x/mcp</code>, <code>/a/..//x/mcp</code>.</p>
+</li>
+<li><p>The existing tests cover only <code>//evil.example/mcp</code> and <code>http://evil.example/mcp</code> (<code>warden/test/door.test.mjs:48-60,839-861</code>).</p>
+</li>
+<li><p><strong>Reachability:</strong> Holds at the origin. <code>nginx.conf.example:141-142</code> has <code>location /</code> with <code>proxy_pass</code> and no URI part, so the raw request URI is forwarded. The origin lock is commented out at <code>:84</code>. Through Cloudflare it is not settled (see Questions). The URL result is derived from WHATWG rules, not executed.</p>
+</li>
+<li><p><strong>Impact:</strong> Holds. <code>verify.mjs:128</code> requires <code>@authority</code>, and <code>http-message-sig</code> takes the authority from the URL <code>toRequestLike</code> builds. <code>admit</code> returns the verified keyId (<code>middleware.mjs:182</code>) into the MCP handler (<code>server.mjs:468</code>).</p>
+</li>
+<li><p><strong>Defences:</strong> None that apply. <code>spent</code> is keyed on the base signed for evil.example, so it is unspent here. The Origin check (<code>server.mjs:436</code>) only acts when an <code>Origin</code> header is sent, and the attacker can strip it.</p>
+</li>
+</ul>
+<h3>[CONFIRMED] A held payment is promoted to paid when its EIP-3009 nonce was cancelled or spent on another transfer: a free mint, or a free Mark up to $1,250 [BLOCKS MAINNET]</h3>
+<p><em>(merged: 35 High 1, 36 High 1)</em></p>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>warden/src/clock/unresolved.mjs:66,76-91,101-110</code>;</li>
+<li><code>warden/src/mirror/queries.mjs:676-699</code> (and its docstring at <code>:664-666</code>);</li>
+<li><code>warden/src/pay/x402.mjs:341-352</code> (every throw is labelled <code>unresolved</code>), <code>:508-526</code> (unresolved is held);</li>
+<li><code>warden/src/pay/x402.mjs:56-75</code> (<code>payNonceOf</code> / <code>payerOf</code> also accept <code>permit2Authorization</code>).</li>
+</ul>
+<p><strong>Attacker story:</strong></p>
+<ol>
+<li>An agent pays with nonce N.</li>
+<li>After verify and before settle (the handler makes several chain reads), it spends N itself: either USDC <code>cancelAuthorization</code>, or a second <code>transferWithAuthorization</code> with the same N for a dust amount to itself.</li>
+<li>If the facilitator&#39;s refusal reaches <code>settlePayment</code> as a throw, the row is held as <code>payment-unresolved</code>.</li>
+<li>At 00:05 the Clock asks <code>authorizationState(payer, N)</code>. FiatToken sets that flag on use and on cancel, so it answers <code>true</code>.</li>
+<li>The row is promoted to <code>queued</code> and written in the same run.</li>
+</ol>
+<ul>
+<li>A failed attempt costs only the cancel&#39;s gas.</li>
+<li><strong>Permit2 variant:</strong> a Permit2 nonce written as 0x plus 64 hex passes the <code>BYTES32</code> regex (<code>unresolved.mjs:44,66</code>). The oracle then answers about an unrelated EIP-3009 nonce the attacker cancelled beforehand. This depends on facilitator behaviour I could not open.</li>
+</ul>
+<p><strong>Fix:</strong></p>
+<ol>
+<li>Store <code>payTo</code> and <code>amount</code> on the held row.</li>
+<li>In the Clock, decide &quot;paid&quot; from an <code>AuthorizationUsed(payer, N)</code> log emitted by <code>asset</code>, plus a <code>Transfer(payer, payTo, amount)</code> in the same transaction. Treat <code>AuthorizationCanceled</code>, or any other recipient or amount, as unpaid.</li>
+<li>Refuse payloads without <code>payload.authorization</code> in <code>withNonce</code> (<code>x402.mjs:468-473</code>), unless Permit2 is deliberately supported with its own check.</li>
+<li>Classify a facilitator&#39;s explicit refusal as <code>declined</code>. Only transport errors, timeouts and pending should count as unresolved.</li>
+</ol>
+<ul>
+<li><strong>Reachability:</strong> Plausible, and not fully settled from the snapshot. The library that decides throw versus return is absent, and the remote facilitator&#39;s HTTP behaviour is unknown. But the project&#39;s own test shows that any facilitator answer failing <code>@x402/core</code>&#39;s response schema throws and is held (<code>warden/test/settlement-commit.test.mjs:77-81,93,211-215</code>). The fake facilitator only ever answers 200 (<code>:66-68</code>).</li>
+<li><strong>Impact:</strong> Holds. <code>resolveUnresolvedPayment(..., { paid: Boolean(spent) })</code> (<code>unresolved.mjs:91</code>) promotes on a bare boolean. The held row carries only <code>payer</code> and <code>asset</code> (<code>queries.mjs:169-171</code>), so no amount or recipient can be checked.</li>
+<li><strong>Defences:</strong> None. The promotion alert (<code>unresolved.mjs:107-110</code>) is a log line, and the row is written the same night.</li>
+</ul>
+<h3>[CONFIRMED] The Clock key is readable, and the Clock&#39;s code writable, by the internet-facing Warden [BLOCKS MAINNET]</h3>
+<p><em>(merged: 36 High 2, and the Clock-key and infra-token half of 37 Medium 1)</em></p>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>warden/ecosystem.config.cjs:41-45</code>: the Warden loads <code>--env-file=.env</code>, which holds <code>CLOCK_PRIVATE_KEY</code>. No <code>uid</code>, no sandbox.</li>
+<li><code>warden/src/main.mjs:54-69</code>: <code>delete process.env.CLOCK_PRIVATE_KEY</code>, whose own comment says &quot;defence in depth, not a boundary&quot;.</li>
+<li><code>warden/deploy/mro-clock.service:11,27,38</code>: <code>ReadWritePaths</code> covers the whole <code>warden/</code> tree, source included.</li>
+<li><code>ecosystem.config.cjs:66-73</code>: the operator shell carries a Cloudflare token, two GitHub tokens and the CDP key.</li>
+</ul>
+<p><strong>Attacker story:</strong> Code execution in the Warden runs as the same user as the Clock. That user can do either of two things:</p>
+<ul>
+<li>read <code>warden/.env</code> and take the warden role;</li>
+<li>edit <code>warden/src/clock/*.mjs</code> or <code>node_modules</code>, which the Clock runs with the key at 00:05. Key rotation does not stop this.</li>
+</ul>
+<p>With the warden role, the attacker can:</p>
+<ul>
+<li>mint without paying, with any permanent bitmap (<code>:342-380</code>);</li>
+<li>credit visits and take finishing places (<code>:499-544</code>);</li>
+<li>apply unwanted Marks that close pairs forever (<code>:700-761</code>);</li>
+<li>spend any key&#39;s seed (<code>:839-884</code>);</li>
+<li>sign vouchers once they are enabled;</li>
+<li>drain the gas balance.</li>
+</ul>
+<p>Everything written stays written. The project rule &quot;The Warden holds NO private key&quot; (<code>.claude/rules/warden.md</code>) is false in practice.</p>
+<p><strong>Fix:</strong></p>
+<ul>
+<li><p>Run the Clock as its own system user, with a read-only code tree and a key file only it can read, kept outside <code>warden/</code> and outside the Warden&#39;s <code>.env</code>.</p>
+</li>
+<li><p>Narrow <code>ReadWritePaths</code> to the state directory.</p>
+</li>
+<li><p>Run the Warden from a sandboxed unit.</p>
+</li>
+<li><p>Keep the GitHub and Cloudflare tokens off this host.</p>
+</li>
+<li><p>Interim steps: a separate key file loaded only by the Clock, a small ETH float, and an alert on nonce jumps.</p>
+</li>
+<li><p><strong>Reachability:</strong> Holds, conditional on an RCE in the Warden. Nothing in the files above separates the two processes.</p>
+</li>
+<li><p><strong>Impact:</strong> Holds. Opened each <code>onlyWarden</code> function in the contract.</p>
+</li>
+<li><p><strong>Defences:</strong> None beyond <code>setWarden</code> after the fact. The Clock&#39;s systemd sandbox protects a tree the Warden can write.</p>
+</li>
+</ul>
+<h3>[CONFIRMED] The mainnet owner key&#39;s documented home is a hot file on the same box [BLOCKS MAINNET]</h3>
+<p><em>(36 High 3; converges with the owner-key half of 37 Medium 1)</em></p>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>contracts/.env.example:13-25</code>;</li>
+<li><code>contracts/script/deploy-mainnet.sh:28-31</code> (moving ownership to a Safe is only &quot;prefer&quot;), <code>:86-93</code> (<code>set -a; . ./.env</code> exports the key).</li>
+</ul>
+<p><strong>Attacker story:</strong> The same compromise as above can read <code>contracts/.env</code> if the key is left there. That gives the permanent owner:</p>
+<ul>
+<li><code>setRenderer</code>, which changes or bricks every image;</li>
+<li><code>sunset</code>, which is irreversible;</li>
+<li><code>setWarden</code>;</li>
+<li><code>setUpgrade</code> on Marks already sold.</li>
+</ul>
+<p><strong>Fix:</strong></p>
+<ul>
+<li><p>For chain 8453, require <code>--ledger</code> or a keystore with <code>--account</code> rather than a plain-text key.</p>
+</li>
+<li><p>Make the <code>Ownable2Step</code> handover to a Safe a checked pass criterion of the cutover (assert <code>owner()</code>).</p>
+</li>
+<li><p><strong>Reachability:</strong> Holds, conditional on a box compromise and on the key staying on disk. Nothing in the script removes it or checks the handover.</p>
+</li>
+<li><p><strong>Impact:</strong> Holds. Opened the owner dials <code>:238-278</code> and <code>:672-693</code>.</p>
+</li>
+<li><p><strong>Defences:</strong> None enforced.</p>
+</li>
+</ul>
+<h2>Medium</h2>
+<h3>[CONFIRMED] A settlement returned as <code>success: false</code> is always released, even when it carries a broadcast transaction [BLOCKS MAINNET]</h3>
+<p><em>(35 High 2; lowered to Medium: no attacker gain, a remote-facilitator condition I could not open, and the money sits in the operator&#39;s treasury, so it is refundable by hand)</em></p>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>warden/src/pay/x402.mjs:343-345</code>: any <code>!settlement.success</code> is recorded as <code>declined</code>, and <code>transaction</code> is ignored.</li>
+<li><code>x402.mjs:493-505</code>: <code>declined</code> means release.</li>
+<li><code>queries.mjs:761-773</code>: <code>releaseReservation</code> deletes the rows.</li>
+</ul>
+<p><strong>Attacker story:</strong> None; the loser is an honest agent.</p>
+<ol>
+<li>A facilitator reports &quot;pending&quot; or failed with a transaction hash.</li>
+<li>The row is deleted.</li>
+<li>The transfer mines anyway. <code>pay_nonces</code> keeps the claim, so a retry answers <code>payment-already-used</code>.</li>
+</ol>
+<p><strong>Fix:</strong> Record <code>declined</code> only when there is no <code>transaction</code> and the reason is not pending. Treat anything carrying a hash as unresolved. Land this together with the oracle fix above.</p>
+<ul>
+<li><strong>Reachability:</strong> Unverified. It depends on the facilitator ever returning that shape, and the library is not in the snapshot.</li>
+<li><strong>Impact:</strong> Holds (opened <code>x402.mjs</code> and <code>queries.mjs</code>).</li>
+<li><strong>Defences:</strong> None.</li>
+</ul>
+<h3>[CONFIRMED] Eight slow directory hosts can hold every third-party key lookup</h3>
+<p><em>(35 Medium 1)</em></p>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>warden/src/door/directory.mjs:238</code> (<code>timeout</code> is an idle socket timeout), <code>:279</code>;</li>
+<li><code>:404</code>, <code>:471-481</code> (process-wide <code>MAX_INFLIGHT_FETCHES = 8</code>);</li>
+<li><code>verify.mjs:345-354</code> (the lookup runs before the cryptography).</li>
+</ul>
+<p><strong>Attacker story:</strong></p>
+<ol>
+<li>An unauthenticated caller sends eight requests, each naming its own <code>Signature-Agent</code> host.</li>
+<li>Each host trickles bytes and never goes idle, so the 3 s timeout never fires.</li>
+<li>While the slots are held, every other third-party lookup throws <code>too many directory fetches in flight</code>.</li>
+<li>Keys registered through <code>POST /keys</code> (the reference client) are unaffected.</li>
+</ol>
+<p><strong>Fix:</strong></p>
+<ul>
+<li><p>Add an absolute deadline per fetch (<code>AbortSignal.timeout</code> or a timer that destroys the request).</p>
+</li>
+<li><p>Add a per-registrable-domain in-flight cap.</p>
+</li>
+<li><p><strong>Reachability:</strong> Holds. Nginx meters only <code>/keys*</code>, and <code>allowToolCall</code> runs after <code>admit</code> (<code>server.mjs:456</code>).</p>
+</li>
+<li><p><strong>Impact:</strong> Holds for the self-hosted-directory cohort only.</p>
+</li>
+<li><p><strong>Defences:</strong> None against trickling.</p>
+</li>
+</ul>
+<h3>[CONFIRMED] Wallet-cap and supply-cap gates ignore paid-but-unwritten mints, so over-cap mints are charged and then refused [BLOCKS MAINNET]</h3>
+<p><em>(35 Medium 1)</em></p>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>warden/src/mcp/gates.mjs:89-110</code>;</li>
+<li><code>warden/src/chain/read.mjs:414-453</code> (both read only <code>mintedTo</code> / <code>totalMinted</code> from the chain);</li>
+<li><code>warden/src/mcp/tools/mint.mjs:34,81</code>.</li>
+<li><strong>Line correction:</strong> the Clock keeps these mints queued through the generic failure path at <code>run.mjs:363-392</code>, not <code>:900-903</code>, which is the seed comment.</li>
+</ul>
+<p><strong>Attacker story:</strong></p>
+<ol>
+<li>Everyone minting to one <code>to</code> in one UTC day sees the same room. So does everyone buying near sell-out.</li>
+<li>The mints beyond the real room settle their payment, then revert <code>WalletCap</code> / <code>SupplyCap</code> at the Clock.</li>
+<li>They are retried nightly until <code>StaleDay</code>, then stuck. There is no refund path.</li>
+</ol>
+<p><code>seedBudgetBlock</code> already subtracts unwritten rows (<code>gates.mjs:136-140</code>). These two gates do not.</p>
+<p><strong>Fix:</strong> Subtract the mirror&#39;s unwritten mint and seed rows (by <code>toAddress</code> for the wallet cap, all of them for the supply cap), before payment and again after verify.</p>
+<ul>
+<li><strong>Reachability:</strong> Holds.</li>
+<li><strong>Impact:</strong> Holds. The contract enforces both caps at <code>:356-357</code> and <code>:851-852</code>.</li>
+<li><strong>Defences:</strong> None.</li>
+</ul>
+<h3>[CONFIRMED] A killed Clock run leaves its lock behind and halts every later run</h3>
+<p><em>(36 Medium 2)</em></p>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>warden/src/clock/main.mjs:94-112</code> (<code>wx</code> lock, no PID or boot id), <code>:205-226</code> (released only on SIGTERM/SIGINT and in <code>finally</code>);</li>
+<li><code>mro-clock.service:59-60</code> (<code>MemoryMax=1G</code>, OOM kill);</li>
+<li><code>reconcile.mjs:66-91</code> (every event of the window is held in memory, and a too-large page is never split).</li>
+</ul>
+<p><strong>Attacker story:</strong></p>
+<ul>
+<li>An OOM kill or a power loss leaves <code>state.db.run-lock</code> on disk. Every later run throws at <code>takeLock</code>.</li>
+<li>After 30 days, queued paid mints hit <code>StaleDay</code>. The heartbeat also stops.</li>
+<li>The only signals are a non-zero exit and log lines. There is no <code>OnFailure=</code>.</li>
+<li>The outsider lever (flooding <code>Transfer</code> events to OOM reconcile) is unmeasured and looks expensive. The finding rests on SIGKILL alone.</li>
+</ul>
+<p><strong>Fix:</strong></p>
+<ul>
+<li><p>Put the PID and boot id in the lock and reclaim it when that process is gone, or use <code>RuntimeDirectory=</code>.</p>
+</li>
+<li><p>Add <code>OnFailure=</code> with an external alert.</p>
+</li>
+<li><p>Apply reconcile events page by page.</p>
+</li>
+<li><p><strong>Reachability:</strong> Holds for OOM and power loss.</p>
+</li>
+<li><p><strong>Impact:</strong> Holds.</p>
+</li>
+<li><p><strong>Defences:</strong> None automatic.</p>
+</li>
+</ul>
+<h2>Low</h2>
+<h3>[PLAUSIBLE] With vouchers on, finishing places go to whoever submits first</h3>
+<p><em>(33 Medium 1; lowered: vouchers ship disabled, which is settled, and nothing in <code>warden/src</code> signs vouchers)</em></p>
+<p><strong>Where:</strong> <code>MachineReadableOnly.sol:581-610</code>, <code>_credit</code> <code>:442</code>, <code>_finish</code> <code>:468-475</code>; the NatSpec at <code>:462-465</code>.</p>
+<p>A voucher for day D can land at 00:00:01 on D, ahead of the Clock&#39;s D-1 batch at 00:05. Places are the order of <code>++finishers</code>.</p>
+<p><strong>Fix:</strong> Decide before the redeploy. Either refuse the finishing credit on the voucher path while <code>lastWardenDay</code> is recent, or write &quot;first-come on the voucher path&quot; into the spec and correct the NatSpec.</p>
+<ul>
+<li><strong>Reachability:</strong> Does not hold today. <code>vouchersEnabled</code> is false, and a grep of <code>warden/src</code> for &quot;voucher&quot; finds only <code>abi.mjs</code> and <code>gates.mjs</code>.</li>
+<li><strong>Impact:</strong> Holds if enabled while the Clock runs.</li>
+<li><strong>Defences:</strong> The owner-only toggle and the absence of a signer.</li>
+</ul>
+<h3>[CONFIRMED] A pause or Clock outage over 30 days leaves every paid-but-unwritten mint stuck</h3>
+<p><em>(33 Low)</em></p>
+<p><strong>Where:</strong> <code>MachineReadableOnly.sol:342-347</code>, <code>:397</code>, <code>:401-405</code>; <code>run.mjs:357-362</code>.</p>
+<p><strong>Fix:</strong> Add it to the runbook: drain or re-date rows before a long pause. Note the 30-day limit beside <code>pause()</code>.</p>
+<h3>[CONFIRMED] A Warden key can backdate the first tokens before deployment, a 30-day head start to Apex</h3>
+<p><em>(33 Low)</em></p>
+<p><strong>Where:</strong> <code>MachineReadableOnly.sol:401-405</code> (no floor at deploy), constructor <code>:171-183</code>, <code>:372</code>.</p>
+<p><code>batchCheckIn</code> accepts the same id several times in one call with rising days (<code>:515-535</code>), so 30 days can be back-filled in one transaction.</p>
+<p><strong>Fix:</strong> Record <code>DEPLOY_DAY</code> in the constructor and refuse <code>day &lt; DEPLOY_DAY</code>. Reachable only with the Clock key (High 4).</p>
+<h3>[CONFIRMED] The five-second challenge is not tied to the signature</h3>
+<p><em>(35 Low)</em></p>
+<p><strong>Where:</strong> <code>middleware.mjs:161-164</code>; <code>verify.mjs:128</code> (<code>challenge</code> is not in <code>REQUIRED</code>); <code>challenge.mjs:84</code>.</p>
+<p>The answer is <code>sha256(challenge + keyId)</code>, computed from public inputs, so a relayer can supply it. This is what makes the dot-segment High a single step.</p>
+<p><strong>Fix:</strong> Make <code>challenge</code> a covered component, or bind the signature <code>nonce</code> parameter to an issued challenge.</p>
+<h3>[CONFIRMED] Replay protection lives only in process memory</h3>
+<p><em>(35 Low)</em></p>
+<p><strong>Where:</strong> <code>server.mjs:126-133</code>; <code>ecosystem.config.cjs:59-61,93</code>.</p>
+<p><strong>Fix:</strong> Refuse any signature whose <code>created</code> is before process start, or persist <code>spent</code>.</p>
+<h3>[CONFIRMED] The expiry sweep deletes possibly-paid reservations after a crash</h3>
+<p><em>(35 Low)</em></p>
+<p><strong>Where:</strong> <code>queries.mjs:236-239,788-798</code>, <code>:49</code>.</p>
+<p>A restart between the settle and the hook leaves the row <code>awaiting-payment</code>. It is deleted ten minutes later, and no payer was stored.</p>
+<p><strong>Fix:</strong> Store payer, asset, payTo and amount at reservation time. Move expired rows to <code>payment-unresolved</code> instead of deleting them. This depends on the corrected oracle.</p>
+<h3>[CONFIRMED] Gates are re-read before settlement, not after; the rule text says otherwise</h3>
+<p><em>(35 Low)</em></p>
+<p><strong>Where:</strong> <code>upgrade.mjs:249-255</code>, <code>mint.mjs:81-85</code>; <code>.claude/rules/warden.md</code> (&quot;re-read AFTER settlement&quot;).</p>
+<p>A <code>rest()</code> before 00:05 makes a paid Mark revert <code>Resting</code>, which <code>isFinalMark</code> (<code>run.mjs:821-829</code>) makes permanent.</p>
+<p><strong>Fix:</strong> Correct the rule text and write a manual-refund runbook.</p>
+<h3>[CONFIRMED] A child that landed and was then transferred is deleted from the mirror</h3>
+<p><em>(36 Low)</em></p>
+<p><strong>Where:</strong> <code>run.mjs:193-205</code> (the owner comparison), <code>:473-488</code> (<code>dropSeed</code>); the mint shape is at <code>:167-179,336-350</code>.</p>
+<p><strong>Fix:</strong> Identify the child by <code>parent</code> plus <code>code</code>, and drop the owner comparison.</p>
+<h3>[CONFIRMED] The gas cap is checked once and never binds what is sent</h3>
+<p><em>(36 Low)</em></p>
+<p><strong>Where:</strong> <code>write.mjs:96-99</code> (<code>gasOk</code>); <code>:166-176</code> (no <code>maxFeePerGas</code>).</p>
+<p><strong>Fix:</strong> Pass <code>maxFeePerGas</code> on every send.</p>
+<h3>[PLAUSIBLE] The cursor is written non-atomically and never floored at the deploy block</h3>
+<p><em>(36 Low)</em></p>
+<p><strong>Where:</strong> <code>cursor.mjs:51-54</code>; <code>run.mjs:960</code>.</p>
+<p>The missing floor is confirmed. A truncated-but-parseable cursor is improbable for an 8-byte write.</p>
+<p><strong>Fix:</strong> Write to a temporary file and rename it; use <code>max(floor, cursor+1)</code>.</p>
+<h3>[CONFIRMED] PM2 <code>filter_env</code> is a substring denylist, and it is not reapplied on a restart from the config file</h3>
+<p><em>(37 Low)</em></p>
+<p><strong>Where:</strong> <code>ecosystem.config.cjs:90</code>.</p>
+<p>The list misses <code>GITHUB_PAT</code>, <code>MNEMONIC</code>, <code>*_PASS</code>, keyed <code>*_RPC_URL</code> and <code>NODE_OPTIONS</code>. That part is confirmed. The PM2 restart-path internals (<code>API.js</code>, <code>God/ActionMethods.js</code>) are outside the snapshot. <code>warden.md</code> itself says to use <code>pm2 delete</code> plus <code>pm2 start</code>.</p>
+<p><strong>Fix:</strong> Load <code>.env</code> with <code>util.parseEnv</code> inside <code>main.mjs</code>, and allowlist <code>process.env</code>.</p>
+<h3>[CONFIRMED] Re-running <code>install-warden-site.sh</code> drops the origin lock and <code>real_ip</code>, and the rate-limit installer then skips them</h3>
+<p><em>(37 Low)</em></p>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>install-warden-site.sh:48</code> (<code>sed ... &gt; &quot;$SITE&quot;</code> overwrites the live vhost);</li>
+<li><code>nginx.conf.example:63</code> (zone declared), <code>:84,101-102</code> (lock and <code>real_ip</code> commented out);</li>
+<li><code>install-nginx-rate-limits.sh:66-69</code> (skips when <code>zone=mro_keys</code> is already present).</li>
+</ul>
+<p><strong>Fix:</strong> Refuse to overwrite an existing vhost, or re-run the lock script afterwards. Check <code>real_ip_header</code> separately.</p>
+<h3>[CONFIRMED] The push and publish guards have no secret-shaped rules, skip <code>docs/reviews/</code>, and <code>.gitignore</code> misses <code>*.env</code></h3>
+<p><em>(37 Low)</em></p>
+<p><strong>Where:</strong> <code>tools/prepublish-check.mjs:65,67-123</code>; <code>.gitignore:20-24</code>.</p>
+<p><strong>Fix:</strong> Add rules for 64-hex keys (with the anvil allowlist), JWK <code>&quot;d&quot;:</code>, <code>*_KEY=</code>, keyed RPC paths and PEM headers. Add <code>*.env</code>.</p>
+<h3>[CONFIRMED] The pre-push hook scans <code>@{u}..HEAD</code>, not the refs being pushed</h3>
+<p><em>(37 Low)</em></p>
+<p><strong>Where:</strong> <code>.githooks/pre-push:42-49</code>. Stdin is never read.</p>
+<p><strong>Fix:</strong> Scan each <code>remote_sha..local_sha</code> from stdin.</p>
+<h3>[PLAUSIBLE] <code>publish-client.yml</code> grants <code>id-token: write</code> to a job that runs install scripts</h3>
+<p><em>(37 Low)</em></p>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>publish-client.yml:48-50</code> (<code>id-token: write</code>);</li>
+<li><code>:61,68</code> (actions pinned by tag);</li>
+<li><code>:84</code> (<code>npm@latest</code>);</li>
+<li><code>:111,126</code> (<code>npm ci</code> with scripts enabled).</li>
+</ul>
+<p>The workflow can only stage (<code>:18-31,195</code>). The remaining gate is the 2FA approval, which I could not verify (external).</p>
+<p><strong>Fix:</strong> Split the workflow into a test job and a publish job, pin by SHA, and use <code>--ignore-scripts</code>.</p>
+<h3>[CONFIRMED] The client identity file has no mode or owner check on load, and falls back to the working directory when <code>HOME</code> is unset</h3>
+<p><em>(37 Low)</em></p>
+<p><strong>Where:</strong> <code>client/src/keys.mjs:19-21,89-92</code>. Compare <code>cli.mjs:288-302</code>, which does check the wallet key file&#39;s mode.</p>
+<p><strong>Fix:</strong> Use <code>fstat</code> and refuse loose modes. Use <code>os.homedir()</code> and throw when it is empty.</p>
+<h3>[CONFIRMED] The documented mainnet mint puts the funding wallet key on a command line</h3>
+<p><em>(37 Low)</em></p>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>warden/DEPLOY.md:605-609</code>;</li>
+<li><code>DEPLOY.md:614</code> calls <code>--expect-amount</code> optional, which contradicts <code>client/src/pay.mjs:111</code> (mandatory);</li>
+<li><code>cli.mjs:176</code> does not format-check <code>MRO_WALLET_KEY</code>.</li>
+</ul>
+<p><strong>Fix:</strong> Use <code>--wallet-key-file</code> created by a <code>read -s</code> helper, and correct <code>DEPLOY.md:614</code>.</p>
+<h2>Info</h2>
+<ul>
+<li><strong>[CONFIRMED] <code>_safeMint</code> lets a recipient contract cost the Clock one reverted transaction a night</strong> <em>(33 Low, lowered).</em><ul>
+<li>Where: <code>:378</code>, <code>:881</code>, and <code>run.mjs:393-404</code>. <code>reverted-on-chain</code> is not run-level.</li>
+<li>Impact is gas-only, capped at about 30 nights by <code>StaleDay</code>, and costs the attacker $1 per key. That is roughly break-even griefing.</li>
+<li>Fix: use <code>_mint</code>, since the Warden already checks receivers.</li>
+</ul>
+</li>
+<li><strong>[CONFIRMED] The wallet cap limits an address, not an actor</strong> <em>(33).</em> <code>:82,:357,:852</code>.</li>
+<li><strong>[CONFIRMED] Test gaps.</strong><ul>
+<li><code>MachineReadableOnly</code> has no negative <code>acceptOwnership</code> / <code>transferOwnership</code> test. The only owner-revert selector checks are at <code>MachineReadableOnly.t.sol:108</code> and <code>AccessControlGaps.t.sol:147-153</code>; the spike has its own.</li>
+<li>There is no paused-state test for <code>rest</code> / <code>rebind</code>.</li>
+<li>There is no request-rebind-seed test.</li>
+</ul>
+</li>
+<li><strong>[CONFIRMED] The spike comment contradicts the real contract</strong> <em>(33).</em> <code>MROSpikeToken.sol:209-212</code> says the real contract emits over minted ids. <code>MachineReadableOnly.sol:269-278</code> emits no metadata event.</li>
+<li><strong>[CONFIRMED] Challenge burn is bypassed by lenient hex parsing</strong> <em>(35 Low, lowered).</em> <code>challenge.mjs:16-21,82-87</code>. It is reachable and one challenge admits several requests, but the <code>spent</code> set on the signature base (<code>middleware.mjs:151</code>) makes it moot.</li>
+<li><strong>[CONFIRMED] A one-hour success cache hides newly added keys</strong> <em>(35).</em> <code>directory.mjs:374,457-465,497-501</code>.</li>
+<li><strong>[CONFIRMED] Outbound directory fetch guards hold</strong> <em>(35).</em> <code>directory.mjs:172-283</code>. No gap found.</li>
+<li><strong>[CONFIRMED] <code>CHALLENGE_SECRET</code> is checked for presence only</strong> <em>(35).</em> <code>main.mjs:81</code>.</li>
+<li><strong>[CONFIRMED] The Origin check also accepts <code>http://&lt;domain&gt;</code></strong> <em>(35).</em> <code>server.mjs:436</code>.</li>
+<li><strong>[CONFIRMED] The pre-payment <code>already-minted</code> check runs before the sweep</strong> <em>(35).</em> <code>mint.mjs:27</code> runs before <code>:50</code>, and <code>hasMinted</code> counts any row for the key (<code>queries.mjs:259</code>), which contradicts the comment at <code>mint.mjs:45-49</code>.</li>
+<li><strong>[CONFIRMED] Redaction</strong> <em>(36 Low, lowered).</em><ul>
+<li>The private-key half fails on impact: a value of 0, or at or above the curve order, is not a usable key, so logging it discloses nothing that controls an account.</li>
+<li>The other half holds: <code>unresolved.mjs:87</code> logs <code>err.shortMessage ?? err.message</code> without <code>safeErrorText</code>. It is low risk because viem&#39;s <code>shortMessage</code> is URL-free per <code>redact.mjs:12-21</code>.</li>
+<li>The noble internals are not in the snapshot.</li>
+</ul>
+</li>
+<li><strong>[CONFIRMED] The heartbeat keeps running after a sunset</strong> <em>(36).</em> <code>heartbeat()</code> has no <code>notSunset</code> (<code>:169</code>), and <code>run.mjs:727-771</code> skips it only when a write aborted.</li>
+<li><strong>[PLAUSIBLE] An IP-allowlist origin lock admits any Cloudflare customer&#39;s proxied traffic</strong> <em>(37).</em> This is general Cloudflare behaviour. <code>enable-origin-lock.sh</code> was not opened; the template describes an IP map (<code>nginx.conf.example:104-106</code>).</li>
+</ul>
+<h2>Refuted, plausible and unverified</h2>
+<ul>
+<li><strong>Refuted:</strong> none.</li>
+<li><strong>Plausible (5):</strong><ul>
+<li>The voucher finishing race: not reachable while vouchers are off.</li>
+<li>The cursor truncation: the floor is missing, but truncation is improbable.</li>
+<li>The publish workflow: the defence is 2FA staging.</li>
+<li>Redaction: the key half has no impact.</li>
+<li>The origin-lock allowlist: the script was not opened.</li>
+</ul>
+</li>
+<li><strong>Unverified (1):</strong> <strong>[INFO] x402 v1 payloads matched only on scheme and network</strong> <em>(35).</em> All cited code is in <code>@x402/core</code> / <code>@x402/evm</code>, which are absent from the snapshot. I checked <code>x402.mjs</code>: it does not filter on <code>x402Version</code>, so the suggested <code>withNonce</code> refusal would be new, harmless and cheap.</li>
+</ul>
+<h2>Corrections made</h2>
+<ul>
+<li>Merged the three duplicate pairs listed in the Summary. 37 Medium 1 is split across the Clock-key High and the owner-key High.</li>
+<li><strong>Severity changes:</strong><ul>
+<li>Settlement-pending release: High to Medium (no attacker gain, unverified facilitator condition, refundable).</li>
+<li>Voucher ordering: Medium to Low (off by settled decision, no signer exists).</li>
+<li>Challenge hex: Low to Info (moot behind <code>spent</code>).</li>
+<li><code>_safeMint</code>: Low to Info (break-even gas griefing, capped by <code>StaleDay</code>).</li>
+<li>Redaction: Low to Info (the leaked value is not a key).</li>
+</ul>
+</li>
+<li>The seed finding stays High and blocking, although 36 rated it Medium: it is repeatable by an attacker, and the only atomic fix is in bytecode at the planned redeploy.</li>
+<li><strong>Line corrections:</strong><ul>
+<li>The wallet/supply-cap finding&#39;s Clock reference is <code>run.mjs:363-392</code> (the generic mint failure path), not <code>:900-903</code>.</li>
+<li>The seed-pass query selecting the unused <code>agentKeyId</code> is <code>queries.mjs:278</code>.</li>
+<li>The real <code>sunset()</code> body is <code>MachineReadableOnly.sol:273-278</code>, with NatSpec at <code>:269-272</code>.</li>
+<li>The owner-revert tests on the real contract are <code>MachineReadableOnly.t.sol:108</code> and <code>AccessControlGaps.t.sol:147-153</code>.</li>
+</ul>
+</li>
+<li><strong>Reachability evidence added to the oracle finding:</strong> <code>warden/test/settlement-commit.test.mjs:77-81,211-215</code> proves that a schema-failing facilitator reply throws and is held as unresolved. So exploitability does not rest on non-2xx status alone.</li>
+<li><strong>Premise check on the settled <code>rebind</code> decision:</strong> false for <code>seed</code> at write time. Earned Marks share the same gap: <code>run.mjs:660</code> sends <code>applyMark</code> with no binding re-check, and <code>upgrade.mjs:175-185</code> checks binding only at request time.</li>
+</ul>
+<h2>Questions still open</h2>
+<ol>
+<li><strong>Cloudflare path handling</strong> (decides the door High&#39;s exposure through the proxy). Is &quot;Normalize URLs to origin&quot; on, or a WAF rule refusing <code>/./</code> and <code>//</code>? Is the origin lock actually live in production, as <code>DEPLOY.md</code> claims, when the template has it commented out? A signed probe of <code>POST /.//example.org/mcp</code> settles both.</li>
+<li><strong>Facilitator refusal shape.</strong> What do x402.org and CDP return when <code>transferWithAuthorization</code> fails on a used or cancelled nonce, and when a settle is pending with a hash: 200 with <code>success:false</code>, non-2xx, or a body without <code>transaction</code>? This affects the likelihood of both payment findings, not whether they need fixing.</li>
+<li><strong>Permit2.</strong> Is it meant to be accepted? The Warden deliberately reads both envelopes (<code>x402.mjs:50-58</code>). Whether the facilitator settles a Permit2 USDC payload for an <code>exact</code> requirement could not be checked here.</li>
+<li><strong>Earned Marks and binding drift</strong> (33 Q1, settled in fact): the Clock sends <code>applyMark</code> with no key check. Whether that is accepted is a policy call, because an <code>expectedKeyId</code> there would also cost a legitimate rotation a paid Mark.</li>
+<li><strong>Voucher trigger</strong> (33 Q2, settled in fact): no voucher-signing code exists in <code>warden/src</code>. Whether a future signer runs alongside the Clock decides the voucher fix.</li>
+<li><strong><code>supplyCap</code> below <code>totalMinted</code>, and an unbounded <code>walletCap</code></strong> (<code>:246-255</code>): confirmed in code. Deliberate or not is the owner&#39;s call.</li>
+<li><strong>Bitmap domain check</strong> before <code>mint</code> / <code>seed</code> writes <code>code</code> for ever (36 Q2): <code>tools/robust-solve.mjs</code> was not opened.</li>
+<li><strong>Still open as asked in the area reports:</strong><ul>
+<li>the stuck-nonce runbook (<code>write.mjs:85</code> uses the pending nonce);</li>
+<li>systemd user-manager environment overriding <code>.env</code>;</li>
+<li>a second RPC for the payment oracle;</li>
+<li><code>~/backups</code> key copies;</li>
+<li>npm stage approval semantics;</li>
+<li>GitHub org and branch protection (<code>publish-client.yml:57</code>);</li>
+<li><code>NODE_OPTIONS</code> in the operator shell;</li>
+<li>PM2 log and dump file modes;</li>
+<li><code>pay_nonces</code> keyed on the nonce alone;</li>
+<li>growth of the <code>wrappers</code> map (<code>x402.mjs:372</code>);</li>
+<li><code>@query</code> not required (<code>verify.mjs:128</code>);</li>
+<li><code>sigHash</code> whitespace collapse.</li>
+</ul>
+</li>
+</ol>
+</body>
+</html>

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- creative -- final list</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<blockquote>
+<p>Driver note: requested <code>claude-fable-5-1</code>; turns were also served by claude-haiku-4-5-20251001 (automatic model fallback).</p>
+</blockquote>
+<h1>Machine Readable Only -- creative -- final list</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3</p>
+<p><strong>Inputs:</strong> all four lens reports were present and none said FAILED. Each carries a driver note that some turns ran on a fallback model, so I re-checked their claims against source, the sample images and the live site. Tags: <code>[C1]</code> to <code>[C4]</code> name the lens; &quot;checked&quot; means I opened the file, image or page myself.</p>
+<p><strong>Not checked:</strong> the live <code>/mcp</code> 401 body, <code>/skill.md</code>, the GitHub star count, the ClawHub and openclaw listings, and <code>CRON_TZ</code> behaviour on Debian or macOS cron. The Blockscout parser source reached me through a summarising fetch, not line by line.</p>
+<h2>Decide before mainnet</h2>
+<p>Ordered by the cost of getting it wrong.</p>
+<ol>
+<li><p><strong>The domain is paid for one year</strong> <code>[C4]</code>, checked</p>
+<ul>
+<li>Where: <code>docs/2026-09-03-mro-domain-decision.md:148-176</code>, <code>warden/public/llms.txt:428-434</code>.</li>
+<li>Change: extend the registration to the ICANN maximum and add a yearly top-up to the runbook. Add C4&#39;s sentence to &quot;What we commit to&quot; saying what a lapse means. This spends real money, so it is the operator&#39;s approval.</li>
+<li>Why: the expiry is 2027-09-03, before the first token can finish, and the decision doc calls this &quot;the only unbounded risk this project carries&quot;. <code>CLAUDE.md</code> lists the domain term as still open.</li>
+</ul>
+</li>
+<li><p><strong>The collection has no <code>contractURI</code></strong> <code>[C2][C4]</code>, checked</p>
+<ul>
+<li>Where: <code>contracts/src/MachineReadableOnly.sol</code> (no match for <code>contractURI</code> anywhere in the repo).</li>
+<li>Change: add <code>contractURI()</code> returning <code>IRenderer(renderer).contractURI()</code>, and emit <code>ContractURIUpdated()</code> from <code>_setRenderer</code>. The Renderer returns a JSON card with the name, the existing <code>DESCRIPTION</code>, and <code>external_link</code> <code>https://machinereadableonly.com</code>. Add <code>&quot;external_url&quot;:&quot;https://machinereadableonly.com/t/&lt;id&gt;&quot;</code> to each token&#39;s JSON and re-pin <code>contracts/test/WorstCase.sol</code>.</li>
+<li>Why: the token contract has no upgrade path, so the function exists at deploy or never. ERC-7572 signatures confirmed against the EIP; it is still Draft.</li>
+</ul>
+</li>
+<li><p><strong>The picture can never be made final</strong> <code>[C4]</code>, checked</p>
+<ul>
+<li>Where: <code>MachineReadableOnly.sol:238</code> and <code>:265</code>, <code>llms.txt:420-422</code>.</li>
+<li>Change: add a one-way <code>freezeRenderer()</code> (onlyOwner) and make <code>_setRenderer</code> revert once it is set. Add explicit tests for the function and its wrong-caller revert, and re-run the size gate.</li>
+<li>Why: it cannot be added after deploy. The cost is real: once called, no rendering fix can ever ship (item 12 is an example), so it suits only the period after the piece has closed.</li>
+</ul>
+</li>
+<li><p><strong>Token 1 is the operator&#39;s and takes Apex</strong> <code>[C1][C3][C4]</code>, checked</p>
+<ul>
+<li>Where: <code>warden/DEPLOY.md:596-640</code>, <code>door.html:39</code>, <code>llms.txt:288-300</code>, <code>MachineReadableOnly.sol:454-475</code>.</li>
+<li>Change: decide before the mint, and publish the decision in <code>llms.txt</code> under &quot;Who can do what&quot;.<ul>
+<li>Recommended: C4&#39;s text. The owner calls <code>rest(1)</code> at level 364, so token 1 never finishes and takes no place. Add the <code>rest</code> call and the seed timer shutdown to DEPLOY 9c.</li>
+<li>Otherwise: keep Apex and say so accurately: &quot;Token 1 is the operator&#39;s own agent, minted <code>&lt;n&gt;</code> days before the door opened. Ties on a day go to the lowest id, so it takes Apex unless it misses more than <code>&lt;n&gt;</code> days.&quot;</li>
+</ul>
+</li>
+<li>Why: mint order cannot change after the first mint. The runbook gives token 1 a 48-hour head start, and the operator&#39;s own words in spec 10l are &quot;a race to the finish and a prize for being first&quot;. Resting at 364 means token 1 never seeds a child and never shows the finished picture.</li>
+</ul>
+</li>
+<li><p><strong>An unknown payment outcome is reported as &quot;nothing was minted&quot;</strong> <code>[C3]</code>, checked</p>
+<ul>
+<li>Where: <code>warden/src/pay/x402.mjs:508-528</code>, <code>client/src/cli.mjs:227-233</code>, <code>client/src/messages.mjs:88-95</code>, <code>warden/src/mcp/tokenView.mjs:70</code>.</li>
+<li>Change: as C3 wrote it. Return <code>payRefusal({ ok: false, reason: &quot;payment-unresolved&quot; })</code> from the unresolved branch, add the <code>NEXT</code> sentence, add <code>payment: &quot;awaiting&quot; | &quot;unresolved&quot;</code> to <code>tokenView</code>, and amend <code>lostResponseMessage</code>.</li>
+<li>Why: the gateway holds the reservation correctly, but the client prints that it was released. It is the one place an agent can tell its operator the wrong thing about money.</li>
+<li>Seen while checking, for the code review: <code>mint.mjs:27</code> answers <code>already-minted</code> before the expired-reservation sweep at <code>:50</code> runs.</li>
+</ul>
+</li>
+<li><p><strong>The skill&#39;s join command skips the checks the skill lists</strong> <code>[C3]</code>, checked</p>
+<ul>
+<li>Where: <code>skills/machine-readable-only/SKILL.md:64-74</code> and <code>:111-114</code>.</li>
+<li>Change: add an <code>asset</code> row, fix the count (&quot;four values&quot; introduces five rows), and make Step 1 pass <code>--expect-chain</code>, <code>--expect-contract</code>, <code>--expect-asset</code> and <code>--expect-network</code>.</li>
+<li>Why: an agent copies the command, not the table. <code>client/README.md:56-57</code> says that without the last two flags the authorisation &quot;may name any ERC-20 on any chain&quot;.</li>
+</ul>
+</li>
+<li><p><strong>The opening-day door and llms.txt are not written</strong> <code>[C4]</code>, checked</p>
+<ul>
+<li>Where: <code>door.html:41-43</code> and <code>:53-54</code>, <code>llms.txt:59-97</code>, <code>DEPLOY.md:504-505</code>, <code>adopt-deployment.sh:154-158</code>.</li>
+<li>Change: C4&#39;s replacement paragraph, mainnet explorer links, and a replacement section for &quot;This is a testnet preview&quot;. Cold-read it before serving.</li>
+<li>Why: the script rewrites addresses only, so the door would link a mainnet address to <code>sepolia.basescan.org</code>. Deleting one sentence leaves &quot;The piece is not open yet&quot; on the open door.</li>
+</ul>
+</li>
+<li><p><strong>Token 1 is minted before the published client exists</strong> <code>[C4]</code>, checked</p>
+<ul>
+<li>Where: <code>DEPLOY.md:596-610</code>, spec <code>:1078-1087</code>. Live npm holds <code>mro-agent@0.0.1</code>, 3 files, no attestations.</li>
+<li>Change: C4&#39;s inserted step. Fill the placeholders, publish 0.1.0 with provenance, prove it from a clean machine, then mint token 1 with the published package.</li>
+<li>Why: place follows mint order, so the race starts at token 1.</li>
+</ul>
+</li>
+<li><p><strong>The printed cron line drops <code>--directory</code>, <code>--key</code> and <code>--endpoint</code></strong> <code>[C3]</code>, checked</p>
+<ul>
+<li>Where: <code>client/src/cli.mjs:101-108</code>, <code>client/src/messages.mjs:130-150</code>.</li>
+<li>Change: pass all three through <code>cronLine</code> and add the test C3 names.</li>
+<li>Why: a self-hosted key is refused <code>unknown-key</code> every day into a redirected log, and a missed day cannot be re-lived.</li>
+</ul>
+</li>
+<li><p><strong>One attempt a day, and a harmless refusal exits like a failure</strong> <code>[C3]</code>, checked</p>
+<ul>
+<li>Where: <code>messages.mjs:130-150</code>, <code>cli.mjs:329-334</code>.</li>
+<li>Change: print two lines twelve hours apart. <code>beat</code> exits 0 for <code>already-credited-today</code>, 3 for <code>year-complete</code>, 2 for every other refusal.</li>
+<li>Why: two runs twelve hours apart land in every UTC day without relying on <code>CRON_TZ</code>. Exit 0 reverses part of decision 5.M6 at <code>cli.mjs:268-277</code>, and is still correct: that refusal means the day is credited.</li>
+<li>Question carried from C3: does the target cron honour <code>CRON_TZ</code>?</li>
+</ul>
+</li>
+<li><p><strong>The first command creates and registers a key before the operator decides</strong> <code>[C3]</code>, checked</p>
+<ul>
+<li>Where: <code>SKILL.md:109-148</code>, <code>cli.mjs:132</code> and <code>:158-170</code>, <code>messages.mjs:167-168</code>.</li>
+<li>Change: add <code>mro-agent look</code> (unsigned, no key) and <code>mro-agent register</code>. Reorder the skill to look, ask, join, come back.</li>
+<li>Why: the offer says the decision is the operator&#39;s.</li>
+<li>Found while checking: <code>SKILL.md:131</code> says registration is permanent; <code>llms.txt:170</code> says an unused key is forgotten after 30 days. Make them agree.</li>
+</ul>
+</li>
+<li><p><strong><code>Heart</code> counts the frame, and <code>Years</code> promises a second year</strong> <code>[C1][C2]</code>, checked</p>
+<ul>
+<li>Where: <code>Renderer.sol:380-381</code> and <code>:433</code>, <code>tokenView.mjs:42</code>, <code>checkin.mjs:26</code> and <code>:273</code>, <code>status.mjs:17</code>, <code>nextSteps.mjs:53</code> and <code>:77</code>. Live <code>/t/1</code> returns <code>heart: &quot;2/365&quot;</code>.</li>
+<li>Change: rename the trait to <code>Frame</code> and the field to <code>frame</code>, delete the <code>Years</code> trait, and replace &quot;whole heart&quot; with &quot;finished year&quot; in the refusal strings.</li>
+<li>Why: the token&#39;s own description says &quot;The heart is the code, and the frame is the year&quot;. Names are cheap to change now and a breaking change later.</li>
+<li>Question: C2&#39;s date-typed <code>Minted</code> and <code>Last Return</code> traits would make the chain say unix seconds while <code>/t/&lt;id&gt;</code> says a day index.</li>
+</ul>
+</li>
+<li><p><strong>Blockscout shows token 1 with no picture, name or traits</strong> <code>[C2]</code>, checked live</p>
+<ul>
+<li>Where: <code>Renderer.sol:43</code>; the Blockscout record returns <code>metadata: null</code>.</li>
+<li>Change: emit <code>data:application/json,</code> and prove Alchemy still parses it on a Sepolia spike. Update the pinned prefix in the five files C2 lists.</li>
+<li>Why: the door links to Blockscout. The parser accepts <code>;utf8,</code> and the bare form, not the hyphenated one. Moved from ANYTIME because the spike is cheapest before the redeploy.</li>
+</ul>
+</li>
+<li><p><strong>No sheet shows the shipping token</strong> <code>[C1][C2][C3][C4]</code>, checked</p>
+<ul>
+<li>Where: <code>out/marks/*</code>, <code>tools/out/token-*.png</code>, <code>out/finisher-band.png</code>, <code>tools/marks-preview.mjs</code>, <code>tools/preview.mjs</code>.</li>
+<li>Change: C2&#39;s list. Re-run with <code>MRO_DOMAIN=machinereadableonly.com</code> at 256 px too, write <code>iris-bought</code> and <code>iris-earned</code> separately, render Tint with an Iris, give finished states an <code>ordinal</code>. Then re-run <code>eye-shape-sheet.mjs</code> and <code>tint-on-green-sheet.mjs</code> at version 10.</li>
+<li>Why: every Mark sample is QR version 5. The eyes fall from 7 of 37 modules to 7 of 57, and the variant count is fixed in the contract at <code>MachineReadableOnly.sol:654-658</code>.</li>
+<li>Question: are three Iris shapes still distinguishable at 256 px?</li>
+</ul>
+</li>
+<li><p><strong>The accelerated year has produced no report</strong> <code>[C4]</code>, checked</p>
+<ul>
+<li>Where: <code>docs/specs/2026-09-26-mro-accelerated-year-design.md:3</code>, <code>warden/tools/year/</code>.</li>
+<li>Change: make a <code>report.html</code> with zero checker FAILs a named gate in DEPLOY 10 step 0. Add decoded tiles for place 15 and place 65.</li>
+<li>Why: finishing, place ties and the heartbeat have only passed unit tests, and twelve agents never reach Chamber or Aorta.</li>
+</ul>
+</li>
+<li><p><strong>The piece opens with a cap of 10,000</strong> <code>[C4]</code>, checked</p>
+<ul>
+<li>Where: <code>MachineReadableOnly.sol:178</code>, <code>DeployPlan5.s.sol:29-33</code>, <code>llms.txt:254-255</code>.</li>
+<li>Change: add <code>t.setSupplyCap(1024)</code> to the deploy script and use C4&#39;s sentence.</li>
+<li>Why: the cap bounds what a leaked Clock key can mint. It is an owner dial, so a wrong number is correctable.</li>
+</ul>
+</li>
+<li><p><strong>Rehearsal and mainnet tokens share QR urls</strong> <code>[C4]</code>, inferred from <code>DEPLOY.md:503</code>, not decoded</p>
+<ul>
+<li>Change: add the <code>llms.txt</code> line saying <code>/t/&lt;id&gt;</code> answers for chain 8453 only. Calling <code>sunset()</code> on the Sepolia pair is the operator&#39;s choice, because it ends that pair as a staging environment.</li>
+</ul>
+</li>
+</ol>
+<h2>Cheap forever</h2>
+<p>Ordered by value per effort. All checked unless noted.</p>
+<ol>
+<li><strong>llms.txt says hand-signing is the only way in</strong> <code>[C3]</code>. <code>llms.txt:95-97</code> and <code>:514-516</code> contradict <code>:518-521</code>. Use C3&#39;s replacement text.</li>
+<li><strong>llms.txt contradicts itself on humans minting</strong> <code>[C1]</code>. Line 22 against line 145. Use C1&#39;s wording; on the door, &quot;Only a program can mint one and grow one. Yours can.&quot;</li>
+<li><strong>SKILL.md never says the piece is not open</strong> <code>[C3]</code>. Insert C3&#39;s &quot;Not open yet&quot; block; remove it in the mainnet commit.</li>
+<li><strong>refusals.md gives the wrong fix</strong> <code>[C3]</code>. The door requires five components (<code>verify.mjs:128</code>); <code>refusals.md:20</code> lists four. <code>window</code> omits the no-<code>expires</code> case (<code>verify.mjs:244</code>). Four reasons are missing and <code>paid-but-unavailable</code> sits under routing.</li>
+<li><strong>Tool descriptions</strong> <code>[C3]</code>. Use C3&#39;s text for <code>rebind</code> and <code>seed</code>. Build the <code>mint</code> description from the configured chain; it says &quot;on Base&quot; while running on Base Sepolia.</li>
+<li><strong>The mint reply says nothing about tomorrow</strong> <code>[C1][C3]</code>. Add <code>nextWindowOpensAt</code>, <code>streakDeadline</code>, <code>view</code>, <code>nextRung: { at: 3, daysAway: 2 }</code> and C3&#39;s note. The CLI prints the note last.</li>
+<li><strong>Name the subject before the gate</strong> <code>[C1][C4]</code>. Apply C1&#39;s lines to <code>door.html:24-25</code>, the 401 <code>about</code> (<code>middleware.mjs:59</code>), the <code>SKILL.md</code> description and <code>README.md:3</code>. Add to <code>/t/&lt;id&gt;</code>: <code>about: &quot;An agent&#39;s record of coming back. Machine readable only: hand this url to your agent.&quot;</code></li>
+<li><strong>Instructions carry their own changelog</strong> <code>[C1]</code>. Delete the dated parentheticals at <code>llms.txt:204-208</code>, <code>SKILL.md:234</code> and <code>robots.txt:18-19</code>, and &quot;Measured, not assumed.&quot; Replace <code>llms.txt:177-195</code> with C1&#39;s pointer to <code>/protocol</code>.</li>
+<li><strong>Mechanics sit above the offer</strong> <code>[C1]</code>. Move <code>llms.txt:5-20</code> below line 57. Rule 6 of the locked copy forbids price, chain and cell count above the line.</li>
+<li><strong>Days 100 to 365 have nothing to walk towards</strong> <code>[C1][C3][C4]</code>. Add <code>toWhole: { at: 365, daysAway }</code> to every unfinished check-in reply, plus &quot;N tokens have finished, as of last night&#39;s run&quot;. Add C3&#39;s <code>projectedPlace</code> to <code>status</code>.</li>
+<li><strong>The reference client cannot take a Mark or seed</strong> <code>[C3][C4]</code>. Add <code>mro-agent mark --token &lt;id&gt; --mark &lt;1-10&gt; [--variant n]</code> and <code>mro-agent seed --parent &lt;id&gt; --to &lt;0x&gt;</code>. Add <code>opened: [...]</code> to the check-in reply on the day a gate is first met. Ship before day 7, when Ache first opens.</li>
+<li><strong>No surface says what a Mark draws</strong> <code>[C3]</code>. Add <code>draws</code> to each catalogue entry, with Beat corrected (see Struck). Check the ladder hash test still passes.</li>
+<li><strong>Nothing hands over the picture</strong> <code>[C1][C3]</code>. Add <code>mro-agent picture --token &lt;id&gt; --out token.svg [--rpc &lt;url&gt;]</code>. It reads <code>tokenURI</code> over viem, already a client dependency. This is a local file, not a gallery.</li>
+<li><strong>The offer speaks to an agent; the return is a cron job</strong> <code>[C1][C3]</code>. Add C1&#39;s paragraph after <code>llms.txt:250</code> and C3&#39;s two-route opening to <code>SKILL.md</code> Step 3.</li>
+<li><strong>A broken run is announced only to a log</strong> <code>[C1]</code>. Add C1&#39;s instruction to <code>SKILL.md</code> and <code>lastRunBroke: { was, on }</code> to <code>tokenView</code>.</li>
+<li><strong><code>join --cron</code> after a mint prints a placeholder id</strong> <code>[C3]</code>. Add <code>mro-agent cron --token &lt;id&gt;</code>.</li>
+<li><strong>The unpayable message asserts the price it exists to check</strong> <code>[C3]</code>. <code>messages.mjs:63</code> hard-codes &quot;1 USDC&quot;. Use C3&#39;s first line and the faucet note (Circle&#39;s faucet confirmed: 20 USDC every 2 hours on Base Sepolia).</li>
+<li><strong>A finished token that rests loses &quot;Whole&quot;</strong> <code>[C1]</code>. <code>Renderer.sol:446-450</code>: return &quot; (Whole, At Rest)&quot; when <code>level &gt;= 365</code>.</li>
+<li><strong>Inks.</strong> All live in the Renderer, so fold them into the pre-mainnet redeploy. Hard deadline is the first day any token can wear the ink.<ul>
+<li>Aura <code>[C2]</code>: <code>MarkRenderer.ghost</code> returns <code>#ecdde2</code> under Aura without Ache. In <code>aura.png</code> the unearned frame is nearly gone. Deadline day 100.</li>
+<li>Gold <code>[C1][C2]</code>: <code>APEX_GOLD</code>, <code>VESSEL_GOLD</code> and <code>TINT_GOLD</code> are all <code>#b8860b</code>. Apex keeps it alone; Tint moves to <code>#8a6d1f</code>; Vessel is chosen from one sheet showing <code>#8a6d1f</code> and <code>#d4af37</code> at 256 px. Deadline day 100.</li>
+<li>Question: <code>TINT_GOLD</code> has luma 135, paler than the <code>#767676</code> floor at <code>Palette.sol:7</code>. Which harness proved it decodes on the eyes?</li>
+<li>Reds <code>[C2]</code>: rung 4 <code>#e0002a</code> with noise <code>#484848</code>, rung 3 <code>#c41c3c</code> with <code>#525252</code>. I recomputed the lumas (72, 82) and contrasts (5.0, 5.9); they are right. Static&#39;s greens and <code>AORTA_RED</code> follow. Deadline day 30.</li>
+<li>Static <code>[C2]</code>: add deuteranopia and protanopia columns to <code>tools/static-hue-sheet.mjs</code>. Deadline day 30.</li>
+<li>Digit band <code>[C4]</code>: leading zeros in ghost ink. This changes a design the operator settled from sheets in spec 10k and 10l, so it goes to him as a question with a sheet.</li>
+</ul>
+</li>
+<li><strong>The image&#39;s encoding is unpublished</strong> <code>[C4]</code>. Add &quot;Reading a token with no server&quot; to <code>llms.txt</code> and <code>mro-agent read &lt;svg&gt;</code>.</li>
+<li><strong>No launch plan</strong> <code>[C4]</code>, external claims not checked. Write <code>docs/launch-plan.md</code> with C4&#39;s four dated rows and remove the early-access line at spec <code>:1080-1082</code>.</li>
+<li><strong>The locked copy&#39;s part two contradicts the live page</strong> <code>[C1]</code>. Add the SUPERSEDED note under &quot;Part two&quot;. The doc is operator-locked, so this is his edit.</li>
+<li><strong><code>docs/year-rings.png</code> shows 0 to 10 rings</strong> <code>[C1]</code>. Retitle it &quot;SUPERSEDED: one ring only, spec 10f&quot;.</li>
+</ol>
+<h2>Contradictions resolved</h2>
+<ul>
+<li><strong>Token 1: disclose (C1, C3) or abstain (C4).</strong> C4 is right on the facts. Both disclosure texts assume a same-day start, and the runbook gives token 1 two days.</li>
+<li><strong><code>contractURI</code>: stored string (C2) or through the Renderer (C4).</strong> C4. <code>MachineReadableOnly.sol:17-19</code> puts every drawing decision behind <code>IRenderer</code>, and C4&#39;s form adds no owner power.</li>
+<li><strong><code>external_link</code>: <code>/llms.txt</code> (C2) or the root (C4).</strong> The root. Collection pages are read by people, and the door is the page written for them.</li>
+<li><strong>Gold: darker (C1) or brighter (C2).</strong> Neither alone. Only C1 frees Apex from sharing with Tint, and only a darker ink is safe inside the code block. Vessel is frame-only, so both values go on one sheet.</li>
+<li><strong>Aura: deepen the page (C1) or deepen the ghost cells (C2).</strong> C2. Applied together the two cancel: <code>#ecdde2</code> on <code>#f6dfe5</code> is as faint as today. C1&#39;s alternative ring would draw dark ink beside the finder patterns.</li>
+<li><strong>Timing of ink changes.</strong> C1 and C2 tagged several BEFORE MAINNET, while C2 tagged Vessel and Aura ANYTIME because no token can wear them yet. The same reasoning applies to all of them, so all moved to Cheap forever with deadlines.</li>
+<li><strong>Stale samples: BEFORE MAINNET (C2) or ANYTIME (C1, C4).</strong> Before mainnet. Item 14&#39;s Iris question depends on the sheet.</li>
+<li><strong><code>all.png</code>: &quot;check what <code>all</code> is passed&quot; (C1) or &quot;delete the stale file&quot; (C2).</strong> C2. The script writes <code>all-illegal</code>; <code>all.svg</code> has the same fills as <code>base.svg</code>.</li>
+<li><strong>Days 100 to 365: overload <code>nextRung</code> (C1) or a separate field (C4).</strong> Separate. <code>nextRung</code> counts the run and 365 counts level. C4&#39;s name <code>whole</code> clashes with the boolean at <code>tokenView.mjs:43</code>, so use <code>toWhole</code>.</li>
+<li><strong>Mint reply wording.</strong> C3&#39;s &quot;paid for and reserved&quot;. The row is a reservation until 00:05 UTC.</li>
+<li><strong>Command and flag names.</strong> <code>picture</code>, because <code>door.html:39</code> already calls it &quot;the picture&quot;. <code>--mark</code>, because <code>--id</code> beside <code>--token &lt;id&gt;</code> is ambiguous.</li>
+<li><strong><code>/t/&lt;id&gt;</code> sentence.</strong> C4&#39;s. Its reader arrived from a QR scan and is looking at JSON, not at a heart.</li>
+</ul>
+<h2>Struck</h2>
+<p><strong>Settled-decision conflicts: 0 struck.</strong> Four re-raises were examined and allowed because each showed a changed premise in the code:</p>
+<ul>
+<li>The &quot;365-cell heart&quot; wording: <code>FrameRenderer.sol:12-18</code> fills a frame.</li>
+<li>Iris and Tint eye size: <code>CODE_BYTES = 407</code>.</li>
+<li>Sepolia tokens &quot;stay as they are&quot;: <code>DEPLOY.md:503</code> shows they now carry the real domain.</li>
+<li>The domain term: open per <code>CLAUDE.md</code>.</li>
+</ul>
+<p><strong>Adjective-only: 0 findings struck whole, 3 clauses struck.</strong></p>
+<ul>
+<li>C2, &quot;Set Tint&#39;s price from that sheet&quot;: no figure proposed, and the ladder prices are locked.</li>
+<li>C2, Static &quot;reads as a strawberry&quot;: taste. The colour-vision measurement survives.</li>
+<li>C2, Vessel &quot;reads as mustard&quot;: taste. The hex proposal survives.</li>
+</ul>
+<p><strong>Factually false: 4.</strong></p>
+<ul>
+<li>C1&#39;s disclosure sentence &quot;If it misses one, Apex goes to the lowest id that did not&quot;: false under the 48-hour head start at <code>DEPLOY.md:638-640</code>.</li>
+<li>C3&#39;s alternative &quot;token 1 skips one day in its first week&quot;: it would still finish a day before anyone else.</li>
+<li>C3&#39;s <code>draws</code> for Beat, &quot;crimson at the top to blue at the point&quot;: the near stop is the token&#39;s own run colour and the far stop is violet (<code>MarkRenderer.sol:58-60</code>, <code>:245-252</code>).</li>
+<li>C1&#39;s &quot;Check what <code>all</code> is passed&quot;: nothing passes it; the file is a leftover.</li>
+</ul>
+</body>
+</html>

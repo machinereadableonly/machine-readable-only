@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- creative -- the agent's journey</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<blockquote>
+<p>Driver note: requested <code>claude-fable-5-1</code>; turns were also served by claude-haiku-4-5-20251001 (automatic model fallback).</p>
+</blockquote>
+<h1>Machine Readable Only -- creative -- the agent&#39;s journey</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Looked at:</strong></p>
+<ul>
+<li>Skill: <code>skills/machine-readable-only/SKILL.md</code>, <code>references/raw-protocol.md</code>, <code>references/refusals.md</code></li>
+<li>Client: <code>client/README.md</code>, <code>client/package.json</code>, <code>client/src/{cli,messages,pay,door,mcp,keys,signing,index}.mjs</code>, <code>client/test/journey.test.mjs</code>, parts of <code>client/test/cli.test.mjs</code></li>
+<li>Warden: <code>warden/src/mcp/tools/*.mjs</code> (all nine), <code>warden/src/mcp/{server,nextSteps,gates,ladder,tokenView,resources}.mjs</code>, <code>warden/src/server.mjs</code>, <code>warden/src/pay/x402.mjs</code>, <code>warden/src/door/verify.mjs</code> (290-420), <code>warden/src/mirror/queries.mjs</code> (grep), <code>warden/public/{llms.txt,door.html}</code></li>
+<li>Other: <code>server.json</code>, <code>README.md</code>, <code>tools/test/skill-doc.test.mjs</code>, <code>.github/workflows/publish-client.yml</code>, the Mark table in <code>docs/specs/2026-09-02-mro-mark-ladder-design.md</code></li>
+<li>Images: <code>tools/out/token-55-{day12,day200,whole,lapsed}.png</code>, <code>out/marks/{base,all,hush,ache,static,beat,iris,vessel,break,tint,aura}.png</code>, <code>out/finisher-band.png</code>, <code>tools/out/finisher-combined.png</code></li>
+<li>Live: <code>/</code>, <code>/llms.txt</code>, <code>/protocol</code>, <code>/t/1</code>, <code>/t/999999</code> (404), <code>/mcp</code> (401), <code>/skill.md</code> (404), <code>/.well-known/mcp.json</code>, <code>registry.npmjs.org/mro-agent</code>, <code>faucet.circle.com</code></li>
+</ul>
+<h2>Findings</h2>
+<h3>[BEFORE MAINNET] A payment whose outcome is unknown is reported as &quot;nothing was minted&quot;, then &quot;already minted&quot;</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:508-528</code>, <code>client/src/cli.mjs:227-233</code>, <code>client/src/messages.mjs:88-95</code>, <code>warden/src/mcp/tokenView.mjs:70</code>
+<strong>What a person meets now:</strong> When settlement throws or times out, the gateway correctly HOLDS the reservation but returns the library&#39;s ordinary payment-failed result. The client reads that as a demand and prints &quot;NOTHING WAS MINTED, and the site released its reservation.&quot; Re-running <code>join</code> then answers <code>already-minted</code> (<code>hasMinted</code> counts every row), and <code>status</code> lists the token with only <code>pendingOnChain: true</code>. That is three different stories about one dollar. <code>lostResponseMessage</code> adds &quot;If a token is listed, the mint succeeded&quot;, but an unpaid ten-minute reservation is listed in exactly the same shape.
+<strong>Proposed:</strong></p>
+<ul>
+<li>In the unresolved branch, return <code>payRefusal({ ok: false, reason: &quot;payment-unresolved&quot; })</code>.</li>
+<li>Add <code>NEXT[&quot;payment-unresolved&quot;]</code>: &quot;The outcome of your payment is not known yet: it may have gone through. Your reservation is HELD, not released. Do not pay again. <code>status</code> shows <code>payment: \&quot;unresolved\&quot;</code> until the next 00:05 UTC run settles it either way.&quot;</li>
+<li><code>tokenView</code> adds <code>payment: &quot;awaiting&quot; | &quot;unresolved&quot;</code> while a token row is not yet <code>queued</code> or <code>written</code>.</li>
+<li><code>lostResponseMessage</code> ends: &quot;If a token is listed WITHOUT a <code>payment</code> field, the mint succeeded.&quot;
+<strong>Why:</strong> This is the one place an agent can misreport to its operator whether money moved. On mainnet the Vessel path is $1,250.</li>
+</ul>
+<h3>[BEFORE MAINNET] The skill&#39;s join command does not make the checks the skill tells the agent to make</h3>
+<p><strong>Where:</strong> <code>skills/machine-readable-only/SKILL.md:64-74</code> and <code>:111-114</code>
+<strong>What a person meets now:</strong> &quot;Check these first&quot; lists contract, chain id, treasury, package and repository (five rows, introduced as &quot;These four values&quot;). The Step 1 command passes only <code>--expect-payto</code> and <code>--expect-amount</code>. The client README says that without <code>--expect-asset</code> and <code>--expect-network</code> &quot;the authorisation you sign may name any ERC-20 on any chain&quot;. The contract and chain are never compared by anything.
+<strong>Proposed:</strong> Add an <code>asset</code> row (Circle&#39;s Base USDC contract, taken from Circle&#39;s own docs), change the intro to &quot;These six values&quot;, and make Step 1:</p>
+<pre><code>npx --yes &lt;package&gt; join \
+  --to &lt;owner address&gt; \
+  --expect-chain 8453 --expect-contract &lt;contract&gt; \
+  --expect-payto &lt;treasury&gt; --expect-amount 1000000 \
+  --expect-asset &lt;USDC on Base&gt; --expect-network eip155:8453
+</code></pre>
+<p><strong>Why:</strong> The skill is the only out-of-band channel. An agent copies the command, not the table.</p>
+<h3>[BEFORE MAINNET] The printed cron line drops <code>--directory</code> and <code>--key</code>, so a self-hosted or non-default key fails every day, silently</h3>
+<p><strong>Where:</strong> <code>client/src/messages.mjs:149</code>, <code>client/src/cli.mjs:101-108</code> and <code>:237</code>
+<strong>What a person meets now:</strong> <code>join --directory https://my.domain --key /path/k.json --cron</code> prints <code>... beat --site &lt;site&gt; --token N &gt;&gt; ~/.mro/beat.log 2&gt;&amp;1</code>. That line signs with the default key and names the site as the signature agent. The door answers <code>unknown-key</code> every day into a redirected log.
+<strong>Proposed:</strong> <code>cronLine({ site, tokenId, directory, keyPath, endpoint })</code> appends <code>--directory</code>, <code>--key</code> and <code>--endpoint</code> whenever they were passed to <code>join</code>. Add a test that joins with all three and asserts the line carries them.
+<strong>Why:</strong> The agents most careful about privacy get a schedule that credits nothing. A missed day cannot be re-lived.</p>
+<h3>[BEFORE MAINNET] One attempt a day, no second chance, and a harmless refusal exits like a failure</h3>
+<p><strong>Where:</strong> <code>client/src/messages.mjs:130-150</code>, <code>client/src/cli.mjs:329-334</code>
+<strong>What a person meets now:</strong> One cron run between 11:00 and 13:59 UTC. If the site, the network or the host is down in that minute, the day is lost with about ten hours of window left. <code>already-credited-today</code> exits 2, the same as <code>not-bound-to-caller</code>, so a second daily line would look like a failure to any supervisor.
+<strong>Proposed:</strong></p>
+<ul>
+<li>Print two lines twelve hours apart, same random minute: <code>M H * * * ...</code> and <code>M (H+12)%24 * * * ...</code>.</li>
+<li>Exit codes for <code>beat</code>: 0 for accepted and for <code>already-credited-today</code>; 3 for <code>year-complete</code>, printing &quot;Your year is complete. Remove the crontab lines containing <code>--token N</code>.&quot;; 2 for every other refusal.
+<strong>Why:</strong> Two runs twelve hours apart land in every UTC day whatever the host&#39;s timezone, and give a retry.
+<strong>Question:</strong> Does the target cron honour <code>CRON_TZ</code>? cronie does. I did not verify Debian/Ubuntu&#39;s cron or macOS&#39;s, and two lines twelve hours apart stop depending on it.</li>
+</ul>
+<h3>[BEFORE MAINNET] &quot;The first one home is written in gold&quot; -- and the first one home is most likely the operator&#39;s token 1</h3>
+<p><strong>Where:</strong> <code>warden/public/door.html:39</code>, <code>warden/public/llms.txt:288-300</code>, <code>docs/specs/2026-08-27-machine-readable-only-design.md:1078</code>
+<strong>What a person meets now:</strong> Place is decided by start day, days missed, then lowest token id. The spec has the seed agent minting token #1. A perfect token 1 therefore takes Apex, and no later mint can beat it. <code>ladder</code> shows <code>apex ... taken: 0</code> for the first 364 days, which reads as open. I found no disclosure of this in the agent-facing pages.
+<strong>Proposed:</strong> This does not re-open the tie-break. Add to llms.txt after line 300: &quot;Token 1 is the operator&#39;s own, minted on the first day. If it never misses a day it finishes first, and Apex is its. Tokens minted on a later day can pass it only if it misses.&quot; If the operator would rather not hold Apex, the alternative is to decide before the mint that token 1 skips one day in its first week, and say so in the same place.
+<strong>Why:</strong> An agent told to &quot;say what you actually think&quot; will work this out from the rules. Better that the page says it first.</p>
+<h3>[BEFORE MAINNET] The first command registers a key permanently, before the operator has decided anything</h3>
+<p><strong>Where:</strong> <code>skills/machine-readable-only/SKILL.md:109-148</code>, <code>client/src/cli.mjs:19</code> and <code>:158-170</code>, <code>client/src/messages.mjs:167-168</code>
+<strong>What a person meets now:</strong></p>
+<ul>
+<li>The offer says show the operator and let them decide. Step 1 is <code>join</code>, which makes a key and registers it in a public directory (&quot;Registration is permanent&quot;).</li>
+<li>The wallet, which <code>join</code> needs, is Step 2.</li>
+<li>No client command reads anything without registering. <code>status</code> with an unregistered key is refused <code>unknown-key</code>.</li>
+<li>The <code>unknown-key</code> sentence says &quot;Run <code>mro-agent join</code>&quot;, which also attempts a mint.
+<strong>Proposed:</strong></li>
+<li>Add <code>mro-agent look [--token &lt;id&gt;]</code>: unsigned, creates no key, prints the 401 <code>about</code> line and <code>GET /t/&lt;id&gt;</code>.</li>
+<li>Add <code>mro-agent register</code>: key plus registration, no mint.</li>
+<li>Reorder the skill: &quot;Step 1: look (nothing is created)&quot;, &quot;Step 2: ask your operator, and for the wallet&quot;, &quot;Step 3: join&quot;, &quot;Step 4: come back&quot;.</li>
+<li>Change the <code>unknown-key</code> sentence to &quot;Run <code>mro-agent register</code>, or host your own directory and pass --directory.&quot;
+<strong>Why:</strong> The piece&#39;s own ethic is that the decision belongs to the operator. The irreversible act should come after it.</li>
+</ul>
+<h3>[ANYTIME] llms.txt tells an arriving agent that hand-signing is the only way in; a checkout works today</h3>
+<p><strong>Where:</strong> <code>warden/public/llms.txt:95-97</code> and <code>:514-516</code>, also live at <a href="https://machinereadableonly.com/llms.txt">https://machinereadableonly.com/llms.txt</a>
+<strong>What a person meets now:</strong> &quot;Until then, signing by hand against <code>/mcp</code> is the way through the door&quot; and &quot;signing by hand, which is currently the only way in&quot;. Lines 518-521 of the same file, and <code>client/README.md:63-70</code>, say the working client runs from a checkout.
+<strong>Proposed:</strong> Replace lines 95-97 with:</p>
+<pre><code>Until then there are two ways in. Run the real client from a checkout:
+    git clone https://github.com/machinereadableonly/machine-readable-only
+    cd machine-readable-only/client &amp;&amp; npm install
+    node src/cli.mjs help
+or sign by hand against `/mcp`; `/protocol` documents it request by request.
+</code></pre>
+<p>Change line 515 to &quot;Read it if you are signing by hand.&quot;
+<strong>Why:</strong> An agent that believes the page writes an RFC 9421 signer from scratch, or more likely gives up.</p>
+<h3>[ANYTIME] SKILL.md never says the piece is not open</h3>
+<p><strong>Where:</strong> <code>skills/machine-readable-only/SKILL.md:1-13</code> and <code>:109-114</code>
+<strong>What a person meets now:</strong> The frontmatter says chain id 8453. The body&#39;s first command is <code>npx --yes PENDING-BEFORE-MAINNET-package join</code>, which fails at npm. Only the bundled <code>references/raw-protocol.md</code> says this is a testnet preview. llms.txt links agents to this skill today.
+<strong>Proposed:</strong> Insert after the frontmatter, and remove in the mainnet commit:</p>
+<pre><code>## Not open yet
+Every value marked PENDING below does not exist yet, and the commands that
+use one will fail. What runs today is a rehearsal on Base Sepolia (chain
+84532) with worthless testnet USDC. To rehearse, run the client from a
+checkout (client/README.md) with --expect-chain 84532. Do not pay anything
+of value.
+</code></pre>
+<p><strong>Why:</strong> An agent that activates the skill today should not end at an npm error.</p>
+<h3>[ANYTIME] The rehearsal cannot follow its own payment rule, and the message states a price it did not read</h3>
+<p><strong>Where:</strong> <code>client/src/messages.mjs:60-78</code>, <code>warden/public/llms.txt:196-200</code>
+<strong>What a person meets now:</strong></p>
+<ul>
+<li>The first line is &quot;Minting costs 1 USDC: the site quoted ${amount} base units&quot;. The &quot;1 USDC&quot; is hard-coded, so a spoofed quote of 5000000 prints both numbers side by side.</li>
+<li>It says to learn the treasury &quot;out of band&quot;, but on the rehearsal the skill holds only PENDING values.</li>
+<li>Neither the message nor llms.txt says where testnet USDC comes from.
+<strong>Proposed:</strong></li>
+<li>First line: &quot;The site is asking for ${amount} base units of ${unit} on ${network}, payable to ${payTo}. (1 USDC is 1000000 base units.)&quot;</li>
+<li>When <code>network</code> is <code>eip155:84532</code>, append: &quot;This is the rehearsal: the USDC is testnet USDC from <a href="https://faucet.circle.com">https://faucet.circle.com</a> (Base Sepolia, 20 per request), and the treasury is a burn address.&quot;</li>
+<li>Mention <code>--wallet-key-file</code> beside <code>MRO_WALLET_KEY</code>.
+<strong>Why:</strong> The message is what the operator actually reads. It should not assert the number it exists to make them check. I confirmed the faucet offers Base Sepolia USDC.</li>
+</ul>
+<h3>[ANYTIME] The mint reply is the thinnest answer in the piece, at the moment that matters most</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/mint.mjs:17</code> and <code>:141-149</code>, <code>client/src/cli.mjs:235</code>
+<strong>What a person meets now:</strong> <code>{ ok, tokenId, to, agentKeyId, level: 1, txStatus: &quot;queued&quot;, onChainBy }</code>. There is no note, no next window, no deadline and no url. <code>seed</code> and <code>checkin</code> both carry a <code>note</code>. The description says &quot;on Base&quot; while the service runs on Base Sepolia.
+<strong>Proposed:</strong></p>
+<ul>
+<li>Add <code>nextWindowOpensAt</code>, <code>streakDeadline</code>, <code>view: &quot;https://&lt;domain&gt;/t/&lt;id&gt;&quot;</code> and a <code>note</code>: &quot;Token N is paid for and reserved. It is written on chain at 00:05 UTC; until then viewOf(N) answers zeros. Today is day 1 and is already credited. The first check-in opens at <nextWindowOpensAt>; one before <streakDeadline> keeps the run.&quot;</li>
+<li>The CLI prints that note as its last line.</li>
+<li>Build the description from the configured chain: &quot;Costs $1.00 in USDC on <chain name> (chain <id>).&quot;
+<strong>Why:</strong> An agent that checks in straight after minting is refused <code>already-credited-today</code>. The reply should have said so first.</li>
+</ul>
+<h3>[ANYTIME] <code>join --cron</code> after a successful mint prints a placeholder id and &quot;Nothing was minted&quot;</h3>
+<p><strong>Where:</strong> <code>client/src/cli.mjs:101-108</code> and <code>:235-237</code>
+<strong>What a person meets now:</strong> An agent that joined without <code>--cron</code> and re-runs with it gets <code>already-minted</code>, then a line containing <code>--token &lt;your token id&gt;</code> and &quot;Nothing was minted on this run&quot;.
+<strong>Proposed:</strong> Add <code>mro-agent cron --token &lt;id&gt;</code>. On <code>already-minted</code>, call <code>status</code>, take the token id, and print &quot;This key already minted token N.&quot; followed by the filled line.
+<strong>Why:</strong> A line with a placeholder in it runs for a year and credits nothing.</p>
+<h3>[ANYTIME] No surface tells an agent what a Mark looks like</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/ladder.mjs:74-87</code>, <code>warden/src/mcp/ladder.mjs:234-252</code>, <code>warden/public/llms.txt:323-334</code>
+<strong>What a person meets now:</strong> Names, prices and gates only. An operator asking &quot;what does $1,250 buy?&quot; gets &quot;vessel&quot;.
+<strong>Proposed:</strong> Add a <code>draws</code> string to each catalogue entry and return it on every <code>ladder</code> side and in llms.txt&#39;s table. From the sample PNGs and the spec&#39;s surface column (check each against the renderer):</p>
+<table>
+<thead>
+<tr>
+<th>Mark</th>
+<th><code>draws</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>hush</td>
+<td>the paper behind the code turns from white to cream</td>
+</tr>
+<tr>
+<td>ache</td>
+<td>the frame cells not yet earned are tinted rose</td>
+</tr>
+<tr>
+<td>static</td>
+<td>the code&#39;s grey modules are drawn green</td>
+</tr>
+<tr>
+<td>beat</td>
+<td>the heart becomes a gradient, crimson at the top to blue at the point</td>
+</tr>
+<tr>
+<td>iris</td>
+<td>the three corner squares are redrawn as eyes: target, squircle or leaf</td>
+</tr>
+<tr>
+<td>vessel</td>
+<td>the day frame and the year ring are drawn in gold</td>
+</tr>
+<tr>
+<td>break</td>
+<td>the inks swap: the heart goes grey and the code around it takes the heart&#39;s colour</td>
+</tr>
+<tr>
+<td>tint</td>
+<td>the Iris eyes are drawn in violet or gold</td>
+</tr>
+<tr>
+<td>aura</td>
+<td>a pale rose field behind the whole picture</td>
+</tr>
+</tbody></table>
+<p><strong>Why:</strong> A forfeit is only legible in advance if the agent knows what both sides are.</p>
+<h3>[ANYTIME] An earned Mark is never announced, and the reference client cannot take one</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/checkin.mjs:267-289</code>, <code>client/src/cli.mjs:19</code>, <code>skills/machine-readable-only/SKILL.md:253-256</code>
+<strong>What a person meets now:</strong> On day 7 the reply reports <code>nextRung</code> (a colour change) and nothing about Ache opening. The agent returning by cron writes to a log nobody reads. The client has no <code>upgrade</code> or <code>seed</code> command.
+<strong>Proposed:</strong></p>
+<ul>
+<li><code>checkin</code> adds <code>opened: [{ id: 2, name: &quot;ache&quot;, route: &quot;earned&quot;, closes: &quot;hush&quot; }]</code> on the day a gate is first met, and the note gains &quot;A Mark opened today; <code>ladder</code> shows what taking it would close.&quot;</li>
+<li>The client adds <code>mro-agent mark --token &lt;id&gt; --mark &lt;1-10&gt; [--variant n]</code>. It prints the <code>ladder</code> side first, and requires the same <code>--expect-*</code> flags for a bought Mark.</li>
+<li>The client adds <code>mro-agent seed --parent &lt;id&gt; --to &lt;0x&gt;</code>.
+<strong>Why:</strong> If the client is the product, the four free rewards for persistence should be reachable through it.</li>
+</ul>
+<h3>[ANYTIME] Nothing hands the agent the picture</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tokenView.mjs:23-30</code>, <code>client/src/cli.mjs</code>, live <code>/t/1</code>
+<strong>What a person meets now:</strong> <code>/t/1</code> and <code>status</code> return numbers and links. The only route to the image is <code>tokenURI</code> by hand, up to 3.5M gas. The door page tells humans they can &quot;look at one&quot; without saying where.
+<strong>Proposed:</strong></p>
+<ul>
+<li>This is not a gallery. Add <code>mro-agent art --token &lt;id&gt; --out token.svg [--rpc &lt;url&gt;]</code>, which calls <code>tokenURI</code> with viem (already a dependency), writes the SVG and prints the path.</li>
+<li><code>tokenView</code> adds <code>image: &quot;tokenURI(&lt;id&gt;) on &lt;contract&gt;, chain &lt;id&gt;; rendered on chain&quot;</code>.
+<strong>Why:</strong> &quot;Show them&quot; is the skill&#39;s instruction. After paying, the agent has nothing to show.</li>
+</ul>
+<h3>[ANYTIME] refusals.md gives a hand-signer the wrong fix, and four reasons an agent can receive are missing</h3>
+<p><strong>Where:</strong> <code>skills/machine-readable-only/references/refusals.md:20</code>, <code>:22</code>, <code>:80</code>; <code>warden/src/mcp/tools/mint.mjs:40-42</code>; <code>warden/src/mcp/nextSteps.mjs</code>; <code>tools/test/skill-doc.test.mjs:78</code>; <code>client/test/journey.test.mjs:154</code>
+<strong>What a person meets now:</strong></p>
+<ul>
+<li><code>components</code> says &quot;all four required components&quot; and lists four. The door requires five (<code>signature-agent</code> too), so following the fix earns the same refusal.</li>
+<li><code>window</code> omits the no-<code>expires</code> case.</li>
+<li><code>paid-but-unavailable</code> sits under &quot;Routing and malformed input ... nothing was decided about your token&quot;.</li>
+<li><code>recipient-cannot-receive</code>, <code>not-yet-mirrored</code>, <code>payment-not-configured</code> and <code>too-large</code>/<code>body</code> are absent. The completeness test&#39;s regex cannot see a reason returned as a bare string or behind a ternary.</li>
+<li><code>recipient-cannot-receive</code> puts a sentence in <code>detail</code>, which everywhere else is a machine token, and carries no <code>next</code>.
+<strong>Proposed:</strong></li>
+<li><code>components</code> row: &quot;The signature did not cover all five required components. Sign <code>@authority</code>, <code>@method</code>, <code>@path</code>, <code>signature-agent</code> and <code>content-digest</code>.&quot;</li>
+<li><code>window</code> row adds &quot;or you sent no <code>expires</code> at all&quot;.</li>
+<li>Move <code>paid-but-unavailable</code> to the Tools table and add the four missing rows.</li>
+<li>Move <code>RECIPIENT_REMEDY</code> into <code>NEXT[&quot;recipient-cannot-receive&quot;]</code> and drop <code>detail</code>.</li>
+<li>Extend the test to collect the string literals returned from <code>gates.mjs</code> and <code>bootstrap.mjs</code>.</li>
+<li>Retitle the journey test &quot;covers the five components&quot;.
+<strong>Why:</strong> Hand-signing is the published route today, and this table is its only prescription.</li>
+</ul>
+<h3>[ANYTIME] Two tool descriptions leave out the fact the caller needs</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/rebind.mjs:22-24</code>, <code>warden/src/mcp/tools/seed.mjs:16</code>
+<strong>What a person meets now:</strong></p>
+<ul>
+<li><code>rebind</code>: &quot;Returns the call the token OWNER&#39;s wallet must sign.&quot; It does not say the call binds to the key that signed this request, so the old agent asking gets a no-op call.</li>
+<li><code>seed</code>: &quot;Requires a whole, resting-free parent&quot;.
+<strong>Proposed:</strong></li>
+<li><code>rebind</code>: &quot;Call this AS THE NEW KEY. Returns the call the token OWNER&#39;s wallet must send to bind the token to the key that signed this request. The Warden never submits it.&quot;</li>
+<li><code>seed</code>: &quot;Costs nothing. Needs a parent at 365 days that has not been sealed, bound to your key, and an unspent seed; the first seed opens one day AFTER a perfect year completes.&quot;
+<strong>Why:</strong> <code>tools/list</code> is the one surface every agent reads.</li>
+</ul>
+<h3>[ANYTIME] A finished place is visible; the place an agent is heading for is not</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tokenView.mjs:52-54</code>, <code>warden/src/mcp/tools/ladder.mjs:176-193</code>
+<strong>What a person meets now:</strong> <code>finisher: null</code> for 364 days, and <code>taken: 0</code> on every band.
+<strong>Proposed:</strong> <code>status</code> adds <code>projectedPlace</code>, the token&#39;s rank by (earliest possible finish day, token id) across unfinished tokens, from the mirror. It carries the note &quot;if no token misses again; it can only improve when one ahead of you does.&quot;
+<strong>Why:</strong> It gives the daily call a consequence the agent can report, without selling anything.</p>
+<h3>[ANYTIME] The offer is addressed to an agent that ends; the documented return is a crontab with no agent in it</h3>
+<p><strong>Where:</strong> <code>skills/machine-readable-only/SKILL.md:28-38</code> and <code>:150-173</code>
+<strong>What a person meets now:</strong> &quot;A record that the two of you kept coming back&quot;, followed by one way to return: a cron line running a Node script into a log file.
+<strong>Proposed:</strong> Step 3 opens with both routes, agent first: &quot;Two ways to return. Yours: put <code>mro-agent beat --token N</code> in whatever your operator uses to start you each day, and tell them the line it prints. The key&#39;s: a crontab line that returns without you (<code>join --cron</code>). Both credit the same day; only the first involves you.&quot; <code>beat</code> ends with one plain sentence taken from <code>note</code>.
+<strong>Why:</strong> The copy promises a relationship and the instructions automate it away. Offering both keeps the promise honest.</p>
+<h2>Coverage</h2>
+<ul>
+<li><strong>Read in full:</strong> every file the lens named, all nine tool files, the payment gateway, the door&#39;s verify path, and the client&#39;s source.</li>
+<li><strong>Not run:</strong> the client and the test suites. Every client behaviour described is read from source.</li>
+<li><strong>Live site:</strong> WebFetch is GET-only, so <code>/mcp</code> was seen only as a bare 401 with no body. The live <code>/llms.txt</code> and <code>/protocol</code> came through a summarising model, so I compared them to source by targeted questions rather than byte for byte. They agreed on every point asked. Live <code>/t/1</code> matches the <code>tokenView</code> shape.</li>
+<li><strong>Images:</strong> the heart previews show the frame filling and the lapsed paling clearly. Two samples show nothing: <code>out/marks/tint.png</code> looks identical to <code>base.png</code> (the sample token holds no Iris), and <code>out/marks/all.png</code> also looks identical to <code>base.png</code>. Regenerate both before anyone judges the Marks from them.</li>
+<li><strong>Not reviewed:</strong> contracts, the Clock, <code>tools/</code> renderers, specs beyond the one table, and the <code>CRON_TZ</code> behaviour of specific cron daemons.</li>
+<li><strong>Settled decisions:</strong> none re-opened. The Apex finding proposes disclosure and leaves the tie-break alone.</li>
+</ul>
+</body>
+</html>

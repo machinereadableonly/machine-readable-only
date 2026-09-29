@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- security -- client key handling, public surfaces, secrets and infrastructure</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- security -- client key handling, public surfaces, secrets and infrastructure</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Read:</strong> <code>reports/32-mro-tm.md</code>; <code>client/src/keys.mjs</code>, <code>signing.mjs</code>, <code>cli.mjs</code>, <code>pay.mjs</code>, <code>door.mjs</code>, <code>mcp.mjs</code>, <code>messages.mjs</code>, <code>client/package.json</code>; <code>warden/public/llms.txt</code>, <code>door.html</code>, <code>robots.txt</code>; <code>server.json</code>, <code>plugin.json</code>, <code>README.md</code>, <code>LICENSING.md</code>, <code>skills/machine-readable-only/SKILL.md</code>; <code>warden/src/server.mjs</code>, <code>warden/src/main.mjs</code>, <code>warden/src/mcp/tools/rebind.mjs</code>; <code>warden/.env.example</code>, <code>contracts/.env.example</code>, <code>.gitignore</code>, <code>warden/.gitignore</code>; <code>warden/nginx.conf.example</code>, <code>warden/ecosystem.config.cjs</code>, <code>warden/DEPLOY.md</code>; <code>warden/deploy/install-warden-site.sh</code>, <code>install-nginx-rate-limits.sh</code>, <code>enable-origin-lock.sh</code>, <code>set-domain.sh</code>, <code>set-contract-address.sh</code>, <code>relocate-env-backups.sh</code>, <code>install-seed-agent.sh</code>, <code>install-clock-logging.sh</code>, <code>mro-clock.service</code>, <code>mro-seed.service</code>, <code>mro-seed.env.example</code>; <code>scripts/make-clock-key.sh</code>, <code>scripts/install-hooks.sh</code>, <code>.githooks/pre-push</code>, <code>tools/prepublish-check.mjs</code>, <code>.github/workflows/publish-client.yml</code>; <code>contracts/script/deploy-mainnet.sh:1-110</code>. From the installed PM2 7.0.1: <code>~/.nvm/versions/node/v24.14.1/lib/node_modules/pm2/lib/Common.js:154-185,565-614</code>, <code>API.js:455-520,900-1089,1298-1394</code>, <code>God/ActionMethods.js:380-425</code>. I also searched the tree for secrets (64-hex keys, token prefixes, keyed provider URLs).</p>
+<h2>Findings</h2>
+<h3>[MEDIUM] One Unix account holds the internet-facing Warden, the Clock key, the permanent owner key and the operator&#39;s infra tokens [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>warden/ecosystem.config.cjs:11-45</code>: PM2, no <code>uid</code>, no sandbox.</li>
+<li><code>warden/src/main.mjs:54-69</code>: the source says itself that deleting the key is &quot;defence in depth, not a boundary&quot;.</li>
+<li><code>warden/deploy/mro-clock.service:27,38</code>: <code>ReadWritePaths</code> covers the whole <code>warden/</code> tree, source included.</li>
+<li><code>contracts/.env.example:13-25</code> and <code>contracts/script/deploy-mainnet.sh:28-31,86-93</code>: <code>MAINNET_DEPLOYER_KEY</code> is a hot key in <code>contracts/.env</code>. Moving ownership to a Safe is only &quot;prefer&quot;.</li>
+<li><code>warden/DEPLOY.md:36-39</code> (the Cloudflare DNS-edit token is on the box) and <code>:389-396</code> (key rotation assumes the owner key is on the box).</li>
+<li><code>warden/ecosystem.config.cjs:66-73</code> (the shell carries a Cloudflare token, two GitHub tokens and the CDP key).</li>
+</ul>
+<p><strong>Attacker story:</strong> An outsider gets code running in the Warden. The routes to that are a compromised dependency (for example <code>web-bot-auth</code> 0.1.3, <code>@x402/*</code>, the MCP SDK or <code>zod</code>), a parser bug, or the solver child. No privilege escalation is needed after that. The attacker then:</p>
+<ul>
+<li>reads <code>warden/.env</code>, which holds <code>CLOCK_PRIVATE_KEY</code>. That allows every irreversible action in DEPLOY.md 9b.</li>
+<li>reads <code>contracts/.env</code>, which holds <code>MAINNET_DEPLOYER_KEY</code>, the Ownable owner. That allows <code>setRenderer</code>, <code>setWarden</code>, <code>sunset</code> and <code>setUpgrade</code>, i.e. admin control seized.</li>
+<li>reads the infra secrets file. The Cloudflare DNS token lets them repoint <code>machinereadableonly.com</code>, which every QR encodes for good. The GitHub tokens let them push to the public repo, including <code>SKILL.md</code>. That file is the &quot;out-of-band&quot; treasury source that <code>llms.txt:79-82</code> tells agents to trust. One compromise therefore beats both halves of the payment check.</li>
+<li>or rewrites <code>warden/src/clock/*.mjs</code>, which the sandboxed Clock runs next at 00:05 with the key loaded.</li>
+</ul>
+<p><strong>Why it works:</strong> Every one of these files and tokens is readable or writable by the same uid that serves port 3006. The Clock&#39;s sandbox does not help, because the thing it protects is the source tree the Warden can write.</p>
+<p><strong>Fix:</strong></p>
+<ol>
+<li>Before mainnet, the owner must be a hardware wallet or Safe. Make <code>transferOwnership</code> + <code>acceptOwnership</code> a required step in <code>deploy-mainnet.sh</code> and DEPLOY.md section 10. <code>MAINNET_DEPLOYER_KEY</code> must not stay on the VPS after deploy. Section 9b&#39;s rotation should then be signed off-box.</li>
+<li>Run the Warden under its own system user from a systemd unit with <code>ProtectHome=</code>/<code>InaccessiblePaths=</code>, so it cannot read <code>contracts/.env</code>, the Clock&#39;s credential or the infra file.</li>
+<li>Give the Clock its key through <code>LoadCredential=</code> from a root-owned 0600 file.</li>
+<li>Narrow the Clock&#39;s <code>ReadWritePaths</code> to the state directory only.</li>
+<li>Keep GitHub and Cloudflare tokens off the host that serves the piece.</li>
+</ol>
+<h3>[LOW] The <code>filter_env</code> scrub is bypassed by <code>pm2 start|restart|reload ecosystem.config.cjs</code> on a running app, and a name denylist misses common secret names</h3>
+<p><strong>Where:</strong> <code>warden/ecosystem.config.cjs:90</code>. In PM2 7.0.1: <code>API.js:329</code> (<code>start</code> on a config file goes through <code>_startJson(..., &#39;restartProcessId&#39;)</code>), <code>API.js:1075</code> (<code>env.updateEnv = true</code>), <code>API.js:1363-1371</code> (<code>new_env = Object.assign({}, process.env)</code>, the whole CLI shell, unfiltered) and <code>God/ActionMethods.js:405</code> (merged into the running app&#39;s env). <code>filterEnv</code> in <code>Common.js:165-182</code> runs only on the first-start path.</p>
+<p><strong>Attacker story:</strong> No attacker is needed. The operator changes the ecosystem file and re-runs <code>pm2 start ecosystem.config.cjs</code> without <code>pm2 delete</code> first. <code>pm2 restart ecosystem.config.cjs</code> or <code>--update-env</code> has the same effect. The Warden then silently receives the full shell environment: the Cloudflare token, GitHub tokens and CDP key. Because Node lets the environment win over <code>--env-file</code>, a stale shell <code>CDP_API_KEY_*</code> or another project&#39;s <code>BASE_RPC_URL</code> replaces the file&#39;s value. A following <code>pm2 save</code> writes all of it into <code>~/.pm2/dump.pm2</code>.</p>
+<p>Even on the documented path, the substring list lets through <code>GITHUB_PAT</code>, <code>*_APIKEY</code>, <code>MNEMONIC</code>, <code>*_PASS</code>, <code>*_RPC_URL</code> with a key in the path (for example <code>ALCHEMY_BASE_MAINNET_RPC_URL</code>, which <code>contracts/.env.example:33-34</code> suggests exists) and <code>NODE_OPTIONS</code>.</p>
+<p><strong>Why it works:</strong> PM2 applies <code>filter_env</code> only when it builds a new app. The JSON restart path merges <code>process.env</code> directly.</p>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Stop relying on PM2 for environment hygiene. Start PM2 from a clean environment (<code>env -i HOME=... PATH=... pm2 start</code>), or better, run the Warden from systemd (see the finding above).</li>
+<li>In <code>main.mjs</code>, read <code>.env</code> with <code>fs.readFileSync</code> + <code>util.parseEnv</code> and take configuration only from that object, so the shell cannot override it.</li>
+<li>Refuse to boot if <code>process.env</code> holds names outside an allowlist.</li>
+</ul>
+<h3>[LOW] Re-running <code>install-warden-site.sh</code> silently removes the origin lock and <code>real_ip</code>, and the rate-limit installer then skips re-adding <code>real_ip</code></h3>
+<p><strong>Where:</strong> <code>warden/deploy/install-warden-site.sh:48</code> overwrites the live vhost from the template. In <code>warden/nginx.conf.example:84,101-102</code> the lock and <code>real_ip</code> are commented out, while <code>:63</code> already declares <code>zone=mro_keys</code>. <code>warden/deploy/install-nginx-rate-limits.sh:66-69</code> skips editing when <code>zone=mro_keys</code> is present, and its proof at <code>:264-283</code> runs over loopback, so it passes either way. <code>warden/DEPLOY.md:283-285</code> states the lock &quot;already is&quot; enabled.</p>
+<p><strong>Attacker story:</strong> The script is described as idempotent, so the operator re-runs it (for example after a certificate problem). The origin then answers direct connections to the VPS IP, which bypasses every Cloudflare setting. The <code>/keys</code> limiter goes back to bucketing by edge IP. Every script still reports success.</p>
+<p><strong>Why it works:</strong> The template does not match production. The rate-limit script uses the zone line as its &quot;already installed&quot; marker for two independent edits.</p>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Make the template carry production&#39;s state, or have <code>install-warden-site.sh</code> refuse to overwrite an existing vhost (or re-run <code>enable-origin-lock.sh</code> afterwards).</li>
+<li>In the rate-limit script, check for <code>real_ip_header</code> separately from the zone line.</li>
+</ul>
+<h3>[LOW] The push and publish guards have no secret-shaped rules, skip <code>docs/reviews/</code>, and <code>.gitignore</code> misses <code>*.env</code></h3>
+<p><strong>Where:</strong> <code>tools/prepublish-check.mjs:65,67-123</code> (identity patterns only; <code>docs/reviews/</code> skipped), <code>.githooks/pre-push:45-76</code>, <code>.github/workflows/publish-client.yml:104-107</code>, <code>.gitignore:20-24</code>.</p>
+<p><strong>Attacker story:</strong> An agent or the operator pastes a <code>CLOCK_PRIVATE_KEY=0x...</code> line or a keyed RPC URL into a doc or review note. Or they copy an identity <code>.jwk.json</code>, which carries the private <code>d</code>, into the tree. Or they create <code>warden/deploy/mro-seed.env</code> / <code>clock.env</code> in place from an example. <code>.env.*</code> does not match <code>*.env</code>. Both guards pass and the public repo publishes the secret. DEPLOY.md 9b says a Clock key leak is permanent damage within minutes.</p>
+<p><strong>Why it works:</strong> Every rule targets personal identifiers. Nothing matches key material.</p>
+<p><strong>Fix:</strong> Add rules for:</p>
+<ul>
+<li><code>0x[0-9a-f]{64}</code>, with an explicit allowlist of the two anvil test keys the tests use;</li>
+<li><code>&quot;d&quot;\s*:</code> inside JSON;</li>
+<li><code>(PRIVATE_KEY|_SECRET|_TOKEN)=\S</code>;</li>
+<li><code>/v2/[A-Za-z0-9_-]{16,}</code> and <code>-----BEGIN</code>.</li>
+</ul>
+<p>Scan <code>docs/reviews/</code> for secrets even if it stays exempt from identity rules. Add <code>*.env</code> to <code>.gitignore</code>, keeping the <code>!*.env.example</code> exception.</p>
+<h3>[LOW] The pre-push hook scans <code>@{u}..HEAD</code>, not the refs actually being pushed</h3>
+<p><strong>Where:</strong> <code>.githooks/pre-push:42-49</code>. The hook never reads the <code>&lt;local ref&gt; &lt;local sha&gt; &lt;remote ref&gt; &lt;remote sha&gt;</code> lines git passes on stdin.</p>
+<p><strong>Attacker story:</strong> The operator is on an up-to-date <code>main</code> and runs <code>git push origin feature</code> or <code>git push --tags</code>. The range is empty and the HEAD tree is clean, so <code>feature</code>&#39;s leaking blobs are published unchecked.</p>
+<p><strong>Fix:</strong> For each stdin line, scan <code>remote_sha..local_sha</code> (or <code>local_sha --not --remotes</code> for a new ref), plus the tree of <code>local_sha</code>. Do the same in <code>id-scan.mjs</code>.</p>
+<h3>[LOW] <code>publish-client.yml</code> grants <code>id-token: write</code> to a job that runs third-party install scripts</h3>
+<p><strong>Where:</strong> <code>.github/workflows/publish-client.yml:48-50</code> (job-wide <code>id-token: write</code>), <code>:61,68</code> (actions pinned by mutable tag), <code>:84</code> (<code>npm install -g npm@latest</code>), <code>:109-126</code> (<code>npm ci</code> in <code>client/</code> and <code>warden/</code>, lifecycle scripts enabled).</p>
+<p><strong>Attacker story:</strong> Someone compromises any package in either lockfile tree, the unpinned npm, or an action tag. Their code runs with <code>ACTIONS_ID_TOKEN_REQUEST_*</code> in its environment. It can mint the OIDC token npm&#39;s trusted publisher accepts and stage its own <code>mro-agent</code> tarball. The client is what agents run with <code>MRO_WALLET_KEY</code> set. The remaining gate is a person approving the correct stage id with 2FA.</p>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Split the workflow into a <code>test</code> job (no <code>id-token</code>) that runs <code>npm ci --ignore-scripts</code>, runs the tests and <code>npm pack</code>s an artifact, and a <code>publish</code> job with <code>id-token: write</code> that only downloads that tarball and stages it.</li>
+<li>Pin actions by SHA and npm by exact version.</li>
+<li>Gate the publish job behind a protected GitHub environment with required reviewers.</li>
+</ul>
+<h3>[LOW] Client identity file: no mode or owner check on load, and a cwd fallback when <code>HOME</code> is unset</h3>
+<p><strong>Where:</strong> <code>client/src/keys.mjs:19-21</code> (<code>process.env.HOME ?? &quot;.&quot;</code>), <code>:89-92</code> (<code>loadIdentity</code> trusts any file), <code>:95-100</code> (permissions are only tightened on creation). Compare <code>client/src/cli.mjs:288-302</code>, which does refuse a group- or world-readable wallet key file.</p>
+<p><strong>Attacker story:</strong></p>
+<ul>
+<li>An identity restored from a backup or copied at 0644 is used silently and stays readable to other local users. Whoever reads it can check in, spend seeds and take free earned Marks for the bound token.</li>
+<li>With <code>HOME</code> unset (some system units and minimal cron environments), the key path becomes <code>./.mro/identity.jwk.json</code> relative to cwd. In a shared directory such as <code>/tmp</code>, another local user can plant an identity whose private key they know, and the client adopts it without complaint.</li>
+</ul>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>In <code>loadIdentity</code>, <code>fstat</code> the file and refuse (or tighten and warn) when <code>mode &amp; 0o077</code> is non-zero or the owner is not the current uid. Refuse a group- or world-writable parent directory.</li>
+<li>Use <code>os.homedir()</code> and throw if it is empty rather than falling back to <code>.</code>.</li>
+<li>Open with <code>O_NOFOLLOW</code> when writing.</li>
+</ul>
+<h3>[LOW] The documented mainnet mint puts the funding wallet key on a command line</h3>
+<p><strong>Where:</strong> <code>warden/DEPLOY.md:604-609</code> (<code>MRO_WALLET_KEY=&lt;the funding wallet&#39;s key&gt; node src/cli.mjs join ...</code>). Also <code>client/src/messages.mjs:66-67</code> and <code>skills/machine-readable-only/SKILL.md:137-139</code>, which tell agents to use the environment variable.</p>
+<p><strong>Attacker story:</strong> The operator&#39;s workflow types commands at the Claude <code>!</code> prompt. The inline assignment then lands in shell history and in the session transcript, which is exactly what <code>cli.mjs:280-287</code> exists to prevent. An LLM agent following the SKILL text will usually set the variable inline in a tool call, with the same result in its own transcript.</p>
+<p><strong>Why it works:</strong> The environment variable is described as &quot;preferred&quot;, and the only file path offered is typed by hand. <code>MRO_WALLET_KEY</code> is also not format-checked (<code>cli.mjs:176</code>), unlike the file.</p>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Rewrite DEPLOY.md section 10 step 6 to use <code>--wallet-key-file</code> created by a <code>read -s</code> helper script.</li>
+<li>Accept <code>--wallet-key-file -</code> (stdin).</li>
+<li>Recommend the file first in <code>unpayableMessage</code> and SKILL.md.</li>
+<li>Validate the environment value with the same regex as the file.</li>
+<li>DEPLOY.md:613-615 also still calls <code>--expect-amount</code> optional, which contradicts <code>pay.mjs:111</code>. Correct it.</li>
+</ul>
+<h3>[INFO] An IP-allowlist origin lock admits any Cloudflare-proxied traffic, not just this zone&#39;s</h3>
+<p><strong>Where:</strong> <code>warden/deploy/enable-origin-lock.sh:6-9</code>, <code>install-nginx-rate-limits.sh:120-154</code>.</p>
+<p>Any Cloudflare customer can point their own proxied hostname at the origin IP. That traffic arrives from Cloudflare ranges with a Cloudflare-set <code>CF-Connecting-IP</code>, so the lock passes it while this zone&#39;s WAF and bot settings never apply. The header cannot be forged, so the limiter keying stays sound. <strong>Fix:</strong> Cloudflare Authenticated Origin Pulls (mTLS to the origin), with <code>ssl_verify_client on</code> in the TLS block.</p>
+<h2>Questions</h2>
+<ol>
+<li><strong>npm staging.</strong> Does <code>npm stage publish</code> actually block publication until a 2FA <code>npm stage approve</code> (<code>publish-client.yml:18-31</code>)? When a staged entry appears that CI did not create, does the approver see anything that tells the two apart? The LOW finding above assumes yes to both. If either is false, it is a direct-publish supply-chain path and should be at least MEDIUM.</li>
+<li><strong>GitHub repo protection.</strong> Is <code>machinereadableonly/machine-readable-only</code> (named in <code>server.json:8</code>, <code>plugin.json:11</code>, <code>llms.txt:460</code>, <code>SKILL.md:12</code>) an organisation the project alone controls? Is branch protection with required review on <code>main</code> enforced? SKILL.md is the stated out-of-band source of the mainnet treasury, so an unreviewed push there has the same effect as replacing the site.</li>
+<li><strong><code>NODE_OPTIONS</code>.</strong> Does the operator&#39;s login shell set <code>NODE_OPTIONS</code> (for example <code>--inspect</code> or <code>--require</code>)? It passes <code>filter_env</code>, and it would apply to the Warden.</li>
+<li><strong>Log file modes.</strong> What mode do <code>~/logs/mro-warden.{out,err}.log</code> and <code>~/.pm2/dump.pm2</code> get? The Clock and seed units force <code>UMask=0077</code>; nothing does the same for PM2&#39;s files on a box shared with other projects.</li>
+</ol>
+<h2>Out of scope</h2>
+<ul>
+<li>The door&#39;s own verification logic (<code>warden/src/door/**</code>), including the fact that the challenge answer is a public function of public inputs. Also x402 settlement, contracts and the Clock&#39;s write logic. These belong to other areas.</li>
+<li>The client&#39;s clock-skew retry trusting <code>serverTime</code> from the endpoint (<code>client/src/mcp.mjs:129-137</code>). The endpoint is chosen by the user and the body is bound by content-digest, so I found no gain for an attacker.</li>
+<li>The <code>rebind</code>/<code>rest</code> tools return <code>{contract, function, args}</code> rather than raw calldata (<code>warden/src/mcp/tools/rebind.mjs:30</code>). I found no phishing path for arbitrary calldata through the client.</li>
+</ul>
+<h2>Coverage</h2>
+<ul>
+<li><p><strong>Discovery surface:</strong> every URL the discovery documents name on the site&#39;s own origin is served by a route in <code>warden/src/server.mjs</code>, backed by a tracked file:</p>
+<ul>
+<li><code>/llms.txt</code>, <code>/</code>, <code>/robots.txt</code> from <code>warden/public/</code>;</li>
+<li><code>/protocol</code> from <code>docs/2026-09-01-mro-raw-protocol.md</code>;</li>
+<li>the four <code>/.well-known/mcp*</code> paths from <code>server.json</code> (parsed at boot, <code>main.mjs:348-349</code>);</li>
+<li>the key directory from the mirror;</li>
+<li><code>/t/&lt;id&gt;</code> and <code>/mcp</code>.</li>
+</ul>
+<p><code>/client.mjs</code> and <code>/skill.md</code> answer 404 <code>not-built-yet</code>, as disclosed in <code>llms.txt:517-525</code>. <code>/.well-known/x402</code> is deliberately not served. External names (the GitHub org, npm <code>mro-agent</code>, the Sepolia explorers) cannot be verified from the tree (see Question 2).</p>
+</li>
+<li><p><strong>Secrets in the tree:</strong> no real secrets in tracked files. Every 64-hex value found is either one of anvil&#39;s two published test keys or a transaction hash or topic.</p>
+</li>
+<li><p><strong>Client key handling:</strong> the client never logs private material. It prints only <code>keyId</code> and the path, and errors print <code>err.message</code>. Private keys never go into argv.</p>
+</li>
+<li><p><strong>Loopback binding:</strong> the Warden&#39;s 127.0.0.1 bind is hardcoded (<code>main.mjs:78</code>).</p>
+</li>
+<li><p><strong>Not read:</strong> <code>check-real-ip.sh</code>, <code>mro-*.timer</code>, the logrotate examples, <code>scripts/setup-clock.sh</code>, <code>scripts/rehearse-clock-key.sh</code>, <code>client/src/challenge.mjs</code> and <code>index.mjs</code>, <code>warden/src/clock/redact.mjs</code> (its use is confirmed in <code>chain/read.mjs:49</code> and <code>preflight.mjs:13</code>), and the body of the raw-protocol doc.</p>
+</li>
+</ul>
+</body>
+</html>

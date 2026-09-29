@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- security -- the door (RFC 9421 Web Bot Auth and the challenge)</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- security -- the door (RFC 9421 Web Bot Auth and the challenge)</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Read:</strong> <code>reports/32-mro-tm.md</code>; <code>CLAUDE.md</code>; <code>.claude/rules/warden.md</code>; <code>warden/src/door/verify.mjs</code>, <code>middleware.mjs</code>, <code>challenge.mjs</code>, <code>directory.mjs</code>; <code>warden/src/server.mjs</code>; <code>warden/src/mcp/server.mjs</code> (lines 40-239); <code>warden/src/main.mjs</code> (env loading, via grep); <code>warden/nginx.conf.example</code>; <code>warden/ecosystem.config.cjs</code>; <code>warden/package.json</code>; <code>warden/test/door.test.mjs</code>, <code>verify.test.mjs</code>, <code>challenge.test.mjs</code>, <code>directory.test.mjs</code> (test list only); <code>client/src/signing.mjs</code>, and <code>client/src/door.mjs</code> / <code>cli.mjs</code> / <code>messages.mjs</code> via grep; installed <code>http-message-sig/dist/index.mjs</code> (whole file), <code>web-bot-auth/dist/chunk-VXDWK3MV.mjs</code> (the signers and verifiers), <code>@modelcontextprotocol/node/dist/index.mjs:320-370</code>.</p>
+<h2>Findings</h2>
+<h3>[HIGH] A dot-segment request target gets past the domain pin, so a signature made for another site is accepted here [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>warden/src/door/middleware.mjs:35-39</code> (<code>pinnedUrl</code>), used at <code>middleware.mjs:17,109</code> and <code>warden/src/server.mjs:183,468</code>.</p>
+<p><strong>Attacker story:</strong></p>
+<ul>
+<li><strong>Who:</strong> the operator of any HTTPS site (&quot;evil.example&quot;) that serves an endpoint at <code>/mcp</code> and asks signers for the same five components the door requires.</li>
+<li><strong>What they need:</strong> a victim agent that signs a request to evil.example with its Web Bot Auth key. That can be the reference client pointed at the wrong site with <code>--site</code>, or any agent whose key also signs requests to other sites.</li>
+<li><strong>What they send:</strong> within the signature&#39;s window (60 s for <code>mro-agent</code>, up to 5 min plus 60 s skew for others), the attacker forwards the victim&#39;s request to the real Warden unchanged. Only two things differ:<ul>
+<li>the request line uses the target <code>/.//evil.example/mcp</code> (or <code>/%2e//evil.example/mcp</code>, or <code>/a/..//evil.example/mcp</code>);</li>
+<li>it carries a fresh <code>challenge</code> / <code>challenge-response</code> pair. Both are free and not covered by the signature.</li>
+</ul>
+</li>
+<li><strong>What they gain:</strong> the Warden admits the request as the victim&#39;s key id and runs the tool call in the victim&#39;s body. A malicious MCP server can shape that body through its own tool names and descriptions. For example, <code>seed</code> with <code>to</code> set to the attacker&#39;s address spends the victim&#39;s one seed for that agent-year on a child token the attacker owns (<code>tools/seed.mjs:17-19</code>). Or <code>upgrade</code> on the free earned route takes a Mark the victim did not choose and permanently closes its pair.</li>
+<li><strong>What it breaks:</strong> the door&#39;s promise that &quot;this key id signed a request for this site&quot; no longer holds.</li>
+</ul>
+<p><strong>Why it works:</strong></p>
+<ol>
+<li><code>pinnedUrl</code> parses the target against our origin. <code>/.//evil.example/mcp</code> is an ordinary path, but WHATWG dot-segment removal leaves <code>pathname = &quot;//evil.example/mcp&quot;</code> with our host.</li>
+<li>It then rebuilds with <code>new URL(claimed.pathname + claimed.search, origin)</code>. A string starting with <code>//</code> is protocol-relative, so the host becomes <code>evil.example</code> and the pathname becomes <code>/mcp</code>.</li>
+<li>As a result:<ul>
+<li>the router (<code>server.mjs:183</code>) dispatches on <code>/mcp</code>;</li>
+<li><code>toRequestLike</code> hands <code>https://evil.example/mcp</code> to <code>http-message-sig</code>, which takes <code>@authority</code> from <code>new URL(message.url)</code> (<code>http-message-sig/dist/index.mjs:41-58</code>) and gets <code>evil.example</code>;</li>
+<li>the victim&#39;s signature over <code>@authority: evil.example</code> and <code>@path: /mcp</code> therefore verifies.</li>
+</ul>
+</li>
+<li>The signature is unspent here because it was never presented here.</li>
+<li>The key lookup succeeds either way. Our directory is used when the victim registered with us. Otherwise the victim&#39;s own directory is fetched and matched by thumbprint.</li>
+<li>The MCP adapter builds <code>http://&lt;host&gt;&lt;req.url&gt;</code>, which is a valid URL (<code>@modelcontextprotocol/node/dist/index.mjs:342</code>), so nothing downstream refuses it.</li>
+</ol>
+<p><strong>Can it be reached in production?</strong></p>
+<ul>
+<li>nginx sends the raw request URI upstream, because <code>proxy_pass http://127.0.0.1:3006;</code> has no URI part (<code>nginx.conf.example:141-142</code>).</li>
+<li>The origin lock is off (<code>nginx.conf.example:84</code>), so an attacker who knows the origin IP can skip Cloudflare entirely.</li>
+<li>Whether Cloudflare normalises the path before forwarding (&quot;Normalize URLs to origin&quot;) is not visible in the repo. See Questions.</li>
+</ul>
+<p><strong>Why the tests miss it:</strong> the existing tests cover only <code>//evil.example/mcp</code> and <code>http://evil.example/mcp</code> (<code>door.test.mjs:48-60, 839-861</code>). No dot-segment form is tested.</p>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Make <code>pinnedUrl</code> unable to change the host. Build from the origin and set the path through the setter: <code>const u = new URL(origin); u.pathname = claimed.pathname; u.search = claimed.search;</code>. Then check <code>u.host === domain</code> and throw otherwise; <code>server.mjs:185</code> already turns a throw into a 400 <code>target</code>.</li>
+<li>Also refuse any target that does not start with exactly one <code>/</code>.</li>
+<li>Add tests for <code>/.//x/mcp</code>, <code>/%2e//x/mcp</code>, <code>/a/..//x/mcp</code> and <code>/./\x/mcp</code>.</li>
+<li>Defence in depth (see the Low finding on the challenge below): require the <code>challenge</code> header to be a covered component. A signature made for another site could then never carry our challenge.</li>
+</ul>
+<h3>[MEDIUM] Eight slow directory hosts can close the door to every agent that hosts its own key directory</h3>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>warden/src/door/directory.mjs:17,238,279</code> (a 3 s <em>idle</em> timeout only);</li>
+<li><code>directory.mjs:404,471-481</code> (a process-wide limit of 8 fetches in flight);</li>
+<li><code>warden/src/door/verify.mjs:345-354</code> (the lookup runs before any cryptography).</li>
+</ul>
+<p><strong>Attacker story:</strong></p>
+<ul>
+<li><strong>Who and what they need:</strong> an anonymous caller with no key, and a server under their control on port 443.</li>
+<li><strong>What they send:</strong> eight unsigned-in-effect requests to <code>/mcp</code>. Each has a well-formed <code>Signature-Input</code> (the five components, <code>tag=&quot;web-bot-auth&quot;</code>, a window under 5 min, any keyid), a garbage <code>Signature</code>, and a <code>Signature-Agent</code> naming a different hostname they control (<code>a.attacker.tld</code> ... <code>h.attacker.tld</code>).</li>
+<li><strong>How the slots stay full:</strong> their servers accept TLS and then trickle one byte every ~2.5 s. With a 64 KB body cap that holds each fetch for roughly 45 hours. Each fetch also keeps its place in <code>inFlight</code> until it settles.</li>
+<li><strong>What they gain:</strong> while all 8 slots are held, every other third-party lookup throws <code>DirectoryUnavailableError(&quot;too many directory fetches in flight&quot;)</code> and is refused <code>directory</code>. Agents that sign with their own domain (the Cloudflare signed-agent group) cannot check in, seed or mint.</li>
+<li><strong>What it does not affect:</strong> keys registered through <code>POST /keys</code> use the local database and are unaffected. That includes the reference client (<code>client/src/door.mjs:23</code>).</li>
+<li><strong>Cost to the attacker:</strong> nothing meters <code>/mcp</code> before admission. nginx meters only <code>/keys*</code>, and <code>allowToolCall</code> runs after <code>admit</code>.</li>
+</ul>
+<p><strong>Why it works:</strong> Node&#39;s <code>request({ timeout })</code> sets <code>socket.setTimeout</code>, which fires only after that long with <em>no activity</em>. There is no overall deadline, so a server that trickles keeps it from ever firing.</p>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Put a hard total deadline on each fetch: a <code>setTimeout(() =&gt; req.destroy(...), 3000)</code> started when the request is made and cleared on settle, or <code>AbortSignal.timeout(3000)</code> passed as <code>signal</code>.</li>
+<li>Also cap response headers and body time.</li>
+<li>Consider a per-registrable-domain in-flight limit, so one attacker domain cannot hold every slot.</li>
+</ul>
+<h3>[LOW] &quot;Burn after use&quot; on challenges can be sidestepped, because the hex check is lenient</h3>
+<p><strong>Where:</strong> <code>warden/src/door/challenge.mjs:16-21</code> (<code>sameDigest</code>), <code>:56</code>, <code>:82-87</code>; the same machinery for registration nonces at <code>server.mjs:388-392</code>.</p>
+<p><strong>Attacker story:</strong> an admitted agent (or anyone) takes one issued challenge. Within its 5 s it presents it several times, each time with a different spelling of the HMAC part: uppercase hex, or a trailing non-hex character or odd nibble. Every spelling passes the HMAC check but is a different string, so <code>seen.has(challenge)</code> never matches. The result is that one challenge admits any number of distinctly signed requests.</p>
+<p><strong>Why it works:</strong> <code>Buffer.from(x, &quot;hex&quot;)</code> accepts uppercase, and it stops quietly at the first non-hex character or odd trailing digit. The HMAC comparison is done on bytes, but the burn set is keyed on the raw string.</p>
+<p><strong>Impact:</strong> limited. The real replay control is the <code>spent</code> set on the signature base, and the challenge is openly not a second factor (<code>middleware.mjs:123-129</code>). For registration, the proof signs the exact nonce string, so a captured triple still cannot be replayed. This is a broken control rather than a working attack.</p>
+<p><strong>Fix:</strong> check the format first: <code>/^[0-9a-f]{64}$/</code> for the HMAC part and the answer, and a strict shape for the nonce and timestamp. Better still, key <code>seen</code> on the canonical <code>${nonce}.${ts}</code> rather than on the string presented.</p>
+<h3>[LOW] The five-second challenge is not tied to the signature</h3>
+<p><strong>Where:</strong> <code>warden/src/door/middleware.mjs:161-164</code>; <code>warden/src/door/verify.mjs:128</code> (<code>REQUIRED</code> does not include <code>challenge</code>).</p>
+<p><strong>Attacker story:</strong> whoever relays a signed request computes <code>sha256(challenge + keyId)</code> from public inputs and attaches it. So the signer never has to see the challenge. A signature can be made up to 6 minutes earlier, by any means, and &quot;answered inside five seconds&quot; is proved by whoever relays it, not by the key holder. This is also what makes the High finding above one step long: the attacker adds our challenge to someone else&#39;s signature.</p>
+<p><strong>Fix:</strong> require <code>challenge</code> as a covered component, or require the signature&#39;s <code>nonce</code> parameter to equal an unexpired challenge issued here and keyed to this keyid. Either way the signer must sign after the challenge exists and within its 5 s. <code>mro-agent</code> already fetches the challenge before signing each call (<code>client/src/door.mjs</code>), so the client change is small. This keeps proof-of-agent an access rule. It only makes the rule attach to the key that is admitted.</p>
+<h3>[LOW] Replay protection lives only in process memory and is lost on every restart</h3>
+<p><strong>Where:</strong> <code>warden/src/server.mjs:126-133</code> (<code>seen</code>, <code>seenNonces</code>, <code>spent</code> are in-memory); <code>warden/ecosystem.config.cjs:59-61,93</code> (autorestart, <code>max_memory_restart: &quot;512M&quot;</code>).</p>
+<p><strong>Attacker story:</strong> someone holding a captured signed request (a TLS-terminating proxy, request logs, a compromised agent host) replays it right after the Warden restarts: a deploy, a crash, or a memory-limit restart. That reopens up to 6 minutes of replay for signatures still in their window. Content-digest limits the damage to repeating the exact same tool call, and paid calls are further protected by <code>pay_nonces</code>. So this is defence in depth.</p>
+<p><strong>Fix:</strong> keep <code>spent</code> in the SQLite mirror with an index on expiry and a periodic delete. Or, on boot, refuse any signature whose <code>created</code> is before the process start time; that is simple, stateless, and costs honest agents at most one re-sign.</p>
+<h3>[INFO] Directory cache: a one-hour success entry hides newly added keys, and anyone can pre-fill it</h3>
+<p><strong>Where:</strong> <code>warden/src/door/directory.mjs:374,457-465,497-501</code>.</p>
+<p>A cached success is trusted for an hour. A key the agent added to its own directory during that hour is refused <code>unknown-key</code> until the entry expires, and an unauthenticated caller can pre-fill the entry just before a rotation. The reverse case, a removed key still verifying for an hour, is documented and deliberate. Suggested change: on a thumbprint miss against a cached success older than about 60 s, re-fetch once, through the same in-flight limit.</p>
+<h3>[INFO] What the outbound fetch can reach</h3>
+<p><strong>Where:</strong> <code>warden/src/door/directory.mjs:103-154,172-283,448</code>.</p>
+<p>The destination is fixed to <code>GET https://&lt;host&gt;:443/.well-known/http-message-signatures-directory</code>. The protections are:</p>
+<ul>
+<li>the path is overwritten by <code>new URL(path, agent)</code>;</li>
+<li>no credentials, no redirects, no non-443 ports;</li>
+<li>a literal IP is checked, and every resolved address is checked inside the socket&#39;s own lookup;</li>
+<li>all of <code>::/8</code>, 6to4, Teredo, ULA, link-local and the private and CGNAT IPv4 ranges are refused.</li>
+</ul>
+<p>Nothing from the response reaches the caller except &quot;key found&quot; or &quot;not found&quot;, plus timing. The box&#39;s own public address and other public vhosts are reachable, but only that fixed read-only path. I found no gap in the blocklist.</p>
+<h3>[INFO] <code>CHALLENGE_SECRET</code> is checked for presence only</h3>
+<p><strong>Where:</strong> <code>warden/src/main.mjs:81</code>.</p>
+<p>A short or guessable secret would let challenges and registration nonces be forged. Neither is a security factor on its own (registration still needs proof of the key), so this is Info. Suggested change: refuse to start below 32 bytes.</p>
+<h2>Questions</h2>
+<ol>
+<li><strong>Cloudflare path handling (decides how exposed the High finding is through the proxy).</strong> Is &quot;Normalize URLs to origin&quot; on for this zone? And does any WAF rule reject <code>/./</code> or <code>//</code> paths? Either way, the origin can be reached directly while the origin lock (<code>nginx.conf.example:84</code>) is off. A live probe of <code>POST /.//example.org/mcp</code> with a correctly signed request for <code>example.org</code> would settle it.</li>
+<li><strong>Which agents reuse keys across sites?</strong> The High finding assumes a victim&#39;s key signs requests to other sites with all five components. For <code>mro-agent</code> that happens through <code>--site</code> (<code>client/src/cli.mjs:36</code>). Is the client meant to warn or refuse when <code>--site</code> is not <code>DEFAULT_SITE</code>, or when the <code>Signature-Agent</code> it would send differs from the site it registered with?</li>
+<li><strong><code>@query</code> is not required and <code>pinnedUrl</code> keeps <code>search</code>.</strong> The router and <code>toWebRequest</code> ignore the query today. Is that a stated invariant for MCP revision 2026-07-28 in the installed <code>@modelcontextprotocol/server</code> 2.0.0? If a future handler reads query parameters, they would be unsigned.</li>
+<li><strong>Header whitespace.</strong> <code>http-message-sig</code>&#39;s <code>extractHeader</code> collapses whitespace in covered header values (<code>index.mjs:32</code>). Two wire requests that differ only in whitespace produce the same base and the same <code>sigHash</code>, so replay detection holds. Is it intended that <code>credits.sigHash</code> evidence cannot tell them apart?</li>
+</ol>
+<h2>Out of scope</h2>
+<ul>
+<li><code>POST /keys</code> storing and republishing the whole caller JWK, directory size, and the nginx limiter keyed on the Cloudflare edge IP: the key-registration and resource-cost area (threat model item 9).</li>
+<li>MCP tool-level binding checks (<code>seed</code> / <code>upgrade</code> / <code>checkin</code> gates) and binding drift at Clock write time.</li>
+<li>x402 payment handling, reached only after admission.</li>
+</ul>
+<h2>Coverage</h2>
+<ul>
+<li><strong>Checked:</strong><ul>
+<li>how components are parsed (<code>coveredComponents</code> uses an RFC 8941 parser and <code>lastIndexOf</code>; <code>http-message-sig</code> refuses more than one signature and non-string components, so the label cannot mismatch);</li>
+<li>the required set;</li>
+<li><code>created</code> / <code>expires</code> handling (a missing value throws and is refused; skew is one-way, 60 s; window 5 min);</li>
+<li><code>tag</code> and <code>keyid</code>;</li>
+<li>keyid-to-JWK thumbprint equality on both lookup paths (a registered JWK passed WebCrypto Ed25519 import, and <code>verifierFromJWK</code> uses only <code>kty</code>/<code>crv</code>/<code>x</code> or <code>kty</code>/<code>e</code>/<code>n</code>);</li>
+<li>the replay identity being the signature base (label renaming defeated);</li>
+<li>the spent check-and-set having no <code>await</code> between check and set, so it cannot race;</li>
+<li>the content-digest comparison being made after verification, over the raw bytes;</li>
+<li>challenge minting, expiry, key binding and burning;</li>
+<li>dictionary vs legacy <code>Signature-Agent</code>;</li>
+<li>the <code>isOurs</code> exact-hostname check;</li>
+<li>the SSRF guard, redirect refusal, body cap, and failure and success caches;</li>
+<li>the Origin check;</li>
+<li>body read before the door.</li>
+</ul>
+</li>
+<li><strong>Not opened:</strong> <code>warden/test/vectors/web_bot_auth_architecture_v1.json</code>, which holds encoded signatures; I read how <code>verify.test.mjs</code> uses it. <code>directory.test.mjs</code> beyond its test names.</li>
+<li><strong>Not run:</strong> nothing was executed. The URL-parsing result behind the High finding is derived from the WHATWG URL parsing rules that Node&#39;s parser follows, and it is not covered by any existing test. A failing unit test calling <code>pinnedUrl(&quot;/.//evil.example/mcp&quot;, &quot;example.com&quot;)</code> would confirm it directly.</li>
+</ul>
+</body>
+</html>

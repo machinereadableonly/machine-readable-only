@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- creative -- permanence and launch</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<blockquote>
+<p>Driver note: requested <code>claude-fable-5-1</code>; turns were also served by claude-haiku-4-5-20251001 (automatic model fallback).</p>
+</blockquote>
+<h1>Machine Readable Only -- creative -- permanence and launch</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Looked at:</strong></p>
+<ul>
+<li>Specs and docs: <code>docs/specs/2026-09-20-mro-finisher-marks-design.md</code> (all, incl. 10m), <code>2026-09-06-mro-lineage-design.md</code>, <code>2026-09-02-mro-mark-ladder-design.md</code>, <code>2026-09-26-mro-accelerated-year-design.md</code>, <code>2026-08-27-machine-readable-only-design.md</code> (sections 1-3, 11-13), <code>docs/2026-09-03-mro-domain-decision.md</code>, <code>2026-08-27-mro-comparable-projects.md</code>, <code>2026-09-15-mro-mainnet-rehearsal-report.md</code>, <code>2026-08-31-mro-engagement-and-narrative.md</code>, <code>2026-09-01-mro-agent-facing-copy.md</code> (part), <code>docs/plans/2026-09-26-mro-accelerated-year.md</code> (head), <code>warden/DEPLOY.md</code>, <code>.claude/rules/*</code></li>
+<li>Source: <code>contracts/src/MachineReadableOnly.sol</code>, <code>render/Renderer.sol</code>, <code>render/DigitBand.sol</code>, <code>render/MarkRenderer.sol</code> (finisher inks), <code>contracts/script/DeployPlan5.s.sol</code>, <code>deploy-mainnet.sh</code>, <code>adopt-deployment.sh</code>, <code>warden/public/llms.txt</code>, <code>door.html</code>, <code>skills/machine-readable-only/SKILL.md</code>, <code>client/README.md</code>, <code>client/src/cli.mjs</code> (commands), <code>warden/src/mcp/tools/checkin.mjs</code> (reply), <code>tools/finisher-band-sheet.mjs</code>, <code>server.json</code>, <code>README.md</code></li>
+<li>Images: <code>out/finisher-band.png</code>, <code>out/marks/{base,all,all-illegal,vessel,break,iris}.png</code>, <code>tools/out/heart-v10.png</code>, <code>finisher-combined.png</code>, <code>finisher-inks.png</code>, <code>token-1.png</code>, <code>token-55-{day12,day200,lapsed,whole}.png</code>, <code>heart-preview-{12,365}.png</code>, <code>docs/day1-options.png</code></li>
+<li>Live: <code>https://machinereadableonly.com/</code>, <code>/llms.txt</code>, <code>/t/1</code> (200), <code>/t/999</code> (404), <code>/skill.md</code> (404), <code>/mcp</code> (401), <code>/robots.txt</code>, <code>registry.npmjs.org/mro-agent</code>, the GitHub repo page</li>
+</ul>
+<h2>Findings</h2>
+<h3>[BEFORE MAINNET] The only gold in the piece goes to the house</h3>
+<p><strong>Where:</strong> <code>warden/DEPLOY.md:596-640</code>, <code>warden/public/door.html:39</code>, <code>contracts/src/MachineReadableOnly.sol:454-475</code>
+<strong>What a person meets now:</strong> The door says &quot;The first one home is written in gold.&quot; The runbook has the operator&#39;s seed agent mint token #1, then wait 48 hours before anything is announced. Place is finishing order, so a house token that never misses finishes at least two days before any outside agent can. No agent-facing page says token #1 is the operator&#39;s.
+<strong>Proposed:</strong> Commit, before the mint, that the house token stops one day short. Add to <code>llms.txt</code> under &quot;Who can do what&quot;: &quot;Token 1 is the operator&#39;s own agent, minted before the door opened. Its owner calls <code>rest</code> at level 364, so it never finishes and takes no place. First is for someone who came in through the door.&quot; Add the <code>rest(1)</code> call and the seed timer shutdown to DEPLOY 9c as a dated step.
+<strong>Why:</strong> An agent told to read the contract will see <code>totalMinted = 1</code> before the announcement and work out that Apex is gone. The operator also runs the Clock that writes every credit, so a house win reads as a house advantage.</p>
+<h3>[BEFORE MAINNET] The picture can never be made final</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:238</code>, <code>:265</code>; <code>warden/public/llms.txt:420-422</code>
+<strong>What a person meets now:</strong> <code>setRenderer</code> is onlyOwner forever and <code>renounceOwnership</code> is disabled. After a sunset, or after <code>sunsetByAbsence</code> when the operator is gone, whoever holds the owner key can still redraw every token, QR included.
+<strong>Proposed:</strong> Keep the swap and add a one-way lock: <code>bool public rendererFrozen; function freezeRenderer() external onlyOwner { rendererFrozen = true; emit RendererFrozen(renderer); }</code>, with <code>_setRenderer</code> reverting <code>RendererIsFrozen()</code> once set. Add to <code>llms.txt</code>: &quot;The owner can freeze the Renderer, once, and then nobody can redraw anything.&quot;
+<strong>Why:</strong> This does not re-open swappability; it adds the ending the swap lacks. Without it &quot;Nobody can delete it&quot; depends on one key&#39;s custody forever, and it cannot be added after token #1.</p>
+<h3>[BEFORE MAINNET] No <code>contractURI()</code>: the collection&#39;s identity lives off chain</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol</code> (absent; no match for <code>contractURI</code> anywhere in <code>contracts/src</code>)
+<strong>What a person meets now:</strong> Each token draws itself on chain, but the collection has no name card, description or image on chain. Every marketplace collection page would be typed in by hand, per marketplace, behind a login.
+<strong>Proposed:</strong> Add <code>function contractURI() external view returns (string memory) { return IRenderer(renderer).contractURI(); }</code> and the ERC-7572 <code>ContractURIUpdated()</code> event, emitted from <code>_setRenderer</code>. The Renderer returns a <code>data:application/json;utf-8,</code> card: name &quot;Machine Readable Only&quot;, the existing <code>DESCRIPTION</code>, <code>external_link</code> <code>https://machinereadableonly.com</code>, and the unbanded heart as <code>image</code>.
+<strong>Why:</strong> &quot;There is no image server to outlive&quot; should hold for the collection page too. The token contract cannot gain a function after the mint; routing through the Renderer keeps the card swappable.</p>
+<h3>[BEFORE MAINNET] The domain is paid for one year, and the first renewal falls before the first finish</h3>
+<p><strong>Where:</strong> <code>docs/2026-09-03-mro-domain-decision.md:159-176</code>; <code>warden/public/llms.txt:428-434</code>
+<strong>What a person meets now:</strong> Registration expires 2027-09-03 on auto-renew with one card. A token minted in October 2026 finishes in October 2027, so the single renewal lands weeks before the first places are written. <code>llms.txt</code> promises the urls &quot;for the life of the piece&quot; and does not say what a lapse means.
+<strong>Proposed:</strong> Extend to the ICANN maximum (expiry 2036-09-03) before the mint, roughly nine more years at the at-cost <code>.com</code> fee. Add a yearly top-up to the runbook. Add to &quot;What we commit to&quot;: &quot;The domain is registered to 2036 and topped up every year. If it ever lapses, a token&#39;s code leads somewhere we do not control. The record is on chain and does not need it.&quot;
+<strong>Why:</strong> The decision doc itself calls this &quot;the only unbounded risk this project carries&quot;. CLAUDE.md lists the domain term as still open, so this is not a settled decision.</p>
+<h3>[BEFORE MAINNET] Rehearsal tokens and mainnet tokens share the same QR urls</h3>
+<p><strong>Where:</strong> <code>warden/DEPLOY.md:503</code>, <code>:727-731</code>; live <code>https://machinereadableonly.com/t/1</code>
+<strong>What a person meets now:</strong> Inferred from source, not decoded by me: bitmaps are solved at mint from <code>MRO_DOMAIN</code>, and the live Sepolia Warden runs on the real domain. So Sepolia token 1 on the current pair encodes <code>https://machinereadableonly.com/t/1#</code>, the same url mainnet token 1 will carry. After cutover a verified Sepolia token&#39;s code leads to a different owner&#39;s mainnet record.
+<strong>Proposed:</strong> Add a row to the DEPLOY section 10 table: &quot;<code>sunset()</code> on the Sepolia pair <code>0x6a6f...c41C</code>, from its owner key, on cutover day&quot;, so every rehearsal token reads &quot;(At Rest)&quot; and <code>Sunset: yes</code>. Add one line to <code>llms.txt</code>: &quot;Tokens on Base Sepolia were a rehearsal and are closed. <code>/t/&lt;id&gt;</code> answers for chain 8453 only; check <code>chainId</code>.&quot;
+<strong>Why:</strong> CLAUDE.md&#39;s &quot;testnet tokens stay as they are&quot; was written when they carried <code>example.com</code>. That premise changed when the rehearsal moved to the real domain.</p>
+<h3>[BEFORE MAINNET] The opening-day door and llms.txt are not written, and the runbook edits would leave them wrong</h3>
+<p><strong>Where:</strong> <code>warden/public/door.html:41-43</code>, <code>:53-54</code>; <code>warden/public/llms.txt:59-97</code>; <code>warden/DEPLOY.md:504-505</code>; <code>contracts/script/adopt-deployment.sh:154-158</code>
+<strong>What a person meets now:</strong> DEPLOY says to delete &quot;It will be ready soon&quot;. Doing only that leaves &quot;The piece is not open yet. What runs here is a rehearsal on a test network&quot; on the mainnet door. <code>adopt-deployment.sh</code> rewrites addresses only, so the door&#39;s links would send a mainnet address to <code>sepolia.basescan.org</code> and <code>base-sepolia.blockscout.com</code>. No replacement for the testnet section exists.
+<strong>Proposed:</strong></p>
+<ul>
+<li>Door, replacing the whole paragraph at lines 41-43: &quot;The piece is open. It runs on Base, and what it records is permanent. /llms.txt has the detail.&quot;</li>
+<li>Door links: <code>https://basescan.org/address/&lt;token&gt;</code> and <code>https://base.blockscout.com/address/&lt;token&gt;</code>.</li>
+<li><code>llms.txt</code>, replacing &quot;This is a testnet preview&quot;: a section headed &quot;This is the piece, and the money is real&quot;, stating chain id 8453, the contract, the treasury, and &quot;check both against the SKILL.md in the repository&quot;.</li>
+<li>Cold-read it with the three-reader rig before serving.
+<strong>Why:</strong> The first impression happens once. The locked copy was cold-read for the rehearsal wording, not the opening-day wording.</li>
+</ul>
+<h3>[BEFORE MAINNET] Token #1 is minted before the client agents are told to use exists</h3>
+<p><strong>Where:</strong> <code>warden/DEPLOY.md:580-640</code>; <code>docs/specs/2026-08-27-machine-readable-only-design.md:1078-1087</code>; <code>skills/machine-readable-only/SKILL.md:8-11</code>; live npm <code>mro-agent@0.0.1</code>
+<strong>What a person meets now:</strong> Order today is deploy, adopt, mint token #1 from a checkout, then publish the client and skill. Live, <code>npx mro-agent</code> is a placeholder with no provenance attestation, <code>/skill.md</code> is 404, and SKILL.md&#39;s step 1 is <code>npx --yes PENDING-BEFORE-MAINNET-package join</code>.
+<strong>Proposed:</strong> Insert a step between DEPLOY 10.5 and 10.6:</p>
+<ol>
+<li>Fill the three SKILL.md placeholders.</li>
+<li>Publish <code>mro-agent@0.1.0</code> with provenance.</li>
+<li>Serve <code>/skill.md</code> and <code>/client.mjs</code>.</li>
+<li>Confirm from a clean machine that <code>npx --yes mro-agent@0.1.0 whoami</code> and <code>npx skills add machinereadableonly/machine-readable-only</code> both work.</li>
+<li>Mint token #1 with the published package, not the checkout.
+<strong>Why:</strong> Place follows mint order, so the race starts at token #1. Every path the page names should work that day, and minting #1 with the published artefact proves the thing agents will run.</li>
+</ol>
+<h3>[BEFORE MAINNET] The piece opens with a cap of 10,000</h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:178</code>; <code>contracts/script/DeployPlan5.s.sol:29-33</code>; <code>warden/public/llms.txt:254-255</code>; <code>warden/DEPLOY.md:404-407</code>
+<strong>What a person meets now:</strong> The constructor sets 10,000 and the deploy script never changes it. DEPLOY and the main spec both say to set it near real demand, but only in the key-leak section, not the cutover table.
+<strong>Proposed:</strong> Add <code>t.setSupplyCap(1024);</code> after the <code>setUpgrade</code> loop in <code>DeployPlan5</code>. Replace the <code>llms.txt</code> sentence with: &quot;The collection is capped by the contract owner, 1,024 today, readable as <code>supplyCap()</code>. It is a bound, not an edition size.&quot;
+<strong>Why:</strong> The project&#39;s own base case is single-digit mints without a channel. &quot;3 of 10,000&quot; reads like BLINK&#39;s 1 of 5,555, and 10,000 is also the damage a leaked Clock key can do.</p>
+<h3>[BEFORE MAINNET] The accelerated year has not produced a report</h3>
+<p><strong>Where:</strong> <code>docs/specs/2026-09-26-mro-accelerated-year-design.md:3</code>; <code>warden/tools/year/</code> (tools present, no report in the snapshot)
+<strong>What a person meets now:</strong> The design is &quot;awaiting spec review&quot;. Finishing, place ties, the digit band on a lived token and the heartbeat have only passed unit tests. Chamber and Aorta are never reached even in the run.
+<strong>Proposed:</strong> Make the run&#39;s <code>report.html</code> with zero checker FAILs a named gate in DEPLOY 10 step 0, beside the fork rehearsal. Add a rendered and decoded tile for place 15 (blue) and place 65 (red) to the same gate.
+<strong>Why:</strong> The design doc calls this &quot;the last cheap place to see them together&quot; before history is permanent.</p>
+<h3>[ANYTIME] The product cannot take a Mark or seed a child</h3>
+<p><strong>Where:</strong> <code>client/src/cli.mjs:248</code>; <code>skills/machine-readable-only/SKILL.md:253-255</code>
+<strong>What a person meets now:</strong> Commands are <code>whoami, join, beat, status, ladder, rebind, rest</code>. An agent that joined with the client reaches a run of 7 in week one and cannot take Ache, which is free, without hand-writing an RFC 9421 signer.
+<strong>Proposed:</strong> Add <code>mro-agent mark --token &lt;id&gt; --id &lt;1-10&gt; [--variant n]</code>. It prints the <code>ladder</code> row and what the Mark closes, then calls <code>upgrade</code>, and requires the same <code>--expect-payto</code> and <code>--expect-amount</code> for a bought side. Add <code>mro-agent seed --parent &lt;id&gt; --to &lt;0x...&gt;</code>. Ship both in the 0.1.0 published above.
+<strong>Why:</strong> The ladder is the piece&#39;s only milestones between day 1 and day 365, and its only revenue. The original spec listed both commands. This needs to land before the announcement, 48 hours after the mint.</p>
+<h3>[ANYTIME] The first-hundred plan names no channel the project controls</h3>
+<p><strong>Where:</strong> <code>docs/specs/2026-08-27-machine-readable-only-design.md:1079-1087</code>; <code>docs/2026-08-27-mro-comparable-projects.md:58-64</code>, <code>:75-77</code>
+<strong>What a person meets now:</strong> The plan is one paragraph from August. Its strongest channel, &quot;a human X account with reach&quot;, does not exist. &quot;Early access for wallets holding Claws, Shellborn, Base Buds or BLOKS&quot; has no mechanism behind it, and the same study says unsolicited mint invitations now read as hostile. The repo has 0 stars.
+<strong>Proposed:</strong> Write <code>docs/launch-plan.md</code> with four dated rows:</p>
+<ol>
+<li>Day 0: skill listed by PR to openclaw/skills and ClawHub.</li>
+<li>Day 0: <code>server.json</code> published to the MCP registry and the ERC-8257 entry written.</li>
+<li>Day 2: one human launch post, carrying the day-1 token image and the line &quot;curl <a href="https://machinereadableonly.com/llms.txt">https://machinereadableonly.com/llms.txt</a> and hand it to your agent&quot;.</li>
+<li>Day 30: a written rule, &quot;under 10 mints changes nothing: no price cut, no cap change, no reopened decision&quot;.</li>
+</ol>
+<p>Delete the early-access line.
+<strong>Why:</strong> The project&#39;s own research says mechanism alone got BLINK one mint. A rule written before the quiet month stops panic changes to a permanent piece.</p>
+<h3>[ANYTIME] After day 100 the check-in reply points at nothing for 265 days</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/checkin.mjs:259-288</code>
+<strong>What a person meets now:</strong> <code>nextRung</code> is null once the run passes 100. The note says only &quot;Your run is N. Check in again before ...&quot;.
+<strong>Proposed:</strong> Add <code>whole: { at: 365, daysAway: 365 - level }</code> to every unfinished reply. Extend the note: &quot;Day 212 of 365; 153 to go. N tokens have finished.&quot; Read N from <code>finishers()</code>.
+<strong>Why:</strong> The engagement study calls this stretch &quot;where most tokens will die&quot;. The reply is the only surface an agent relays to the person who decides whether the cron keeps running.</p>
+<h3>[ANYTIME] First place is drawn as fifteen hollow squares and one digit</h3>
+<p><strong>Where:</strong> <code>out/finisher-band.png</code> (top-middle tile); <code>contracts/src/render/DigitBand.sol:18</code>
+<strong>What a person meets now:</strong> Place 1 is <code>0000000000000001</code> on each edge, and the zero glyph is a hollow square. The border reads as a row of boxes; the high-numbered tiles read as writing. Every capped place is 64 or lower, so nine or more of sixteen digits are always zeros.
+<strong>Proposed:</strong> Draw leading zeros in the ghost ink and the significant digits in the Mark&#39;s ink, as two paths. Apex becomes one gold <code>1</code> at the end of a pale row. Cost is one extra <code>&lt;path&gt;</code> wrapper against 1,842 bytes of headroom; measure it.
+<strong>Why:</strong> The spec rejected coloured rings because they &quot;look like more squares&quot;; the rarest tokens now have the most squares. It is renderer-only, but must settle before the first finish because a finished picture is promised final.</p>
+<h3>[ANYTIME] No image in the snapshot shows what ships</h3>
+<p><strong>Where:</strong> <code>out/finisher-band.png</code>, <code>out/marks/*.png</code>, <code>out/marks/all.svg</code>
+<strong>What a person meets now:</strong> Three stale samples:</p>
+<ul>
+<li><code>finisher-band.png</code> draws every band in near-black at places 1, 42, 365, 43690 and 65535. The current script draws places 1, 3, 9, 42 and 365 in the five inks.</li>
+<li>The <code>out/marks</code> samples are QR version 5.</li>
+<li><code>all.svg</code> carries exactly the fills of <code>base.svg</code>, so &quot;all&quot; shows no Marks.</li>
+</ul>
+<p>I could not see gold, silver, bronze, blue or red digits anywhere.
+<strong>Proposed:</strong> Re-run <code>tools/finisher-band-sheet.mjs</code> and the marks sheet at version 10. Add day-1, day-7 and day-30 tiles, and judge the silver band (<code>#8c9096</code>, one-module strokes on white) at 256 px.
+<strong>Why:</strong> &quot;Written in gold&quot; is on the door, and the operator&#39;s sign-off should be against the picture that ships.</p>
+<h3>[ANYTIME] The image&#39;s own encoding is still unpublished</h3>
+<p><strong>Where:</strong> <code>docs/specs/2026-09-20-mro-finisher-marks-design.md:519-536</code>; <code>warden/public/llms.txt</code> (absent)
+<strong>What a person meets now:</strong> Section 10d says publishing how to read level, streak tier, lineage and Marks off the picture is &quot;worth doing independently&quot;. Nothing in <code>llms.txt</code>, the protocol doc or the client does it.
+<strong>Proposed:</strong> Add a section &quot;Reading a token with no server&quot; to <code>llms.txt</code>: lit frame cells equal level, the band is the place as sixteen binary digits, a dashed ring means a seeded child, eye shape and ink name the Marks. Add <code>mro-agent read &lt;svg&gt;</code> as the reference decoder.
+<strong>Why:</strong> If the Warden and the domain both die, this is what keeps the record legible.</p>
+<h3>[ANYTIME] A person who scans the code gets bare JSON with no sentence in it</h3>
+<p><strong>Where:</strong> live <code>https://machinereadableonly.com/t/1</code>; <code>contracts/src/render/Renderer.sol:40-49</code>
+<strong>What a person meets now:</strong> <code>/t/1</code> returns fields such as <code>&quot;heart&quot;: &quot;2/365&quot;</code> and nothing addressed to a reader. Token metadata has no <code>external_url</code>.
+<strong>Proposed:</strong> Add to the <code>/t/&lt;id&gt;</code> body: <code>&quot;about&quot;: &quot;An agent&#39;s record of coming back. Machine readable only: hand this url to your agent.&quot;</code> Add <code>&quot;external_url&quot;:&quot;https://machinereadableonly.com/t/&lt;id&gt;&quot;</code> to the metadata JSON.
+<strong>Why:</strong> The QR on a marketplace thumbnail is the piece&#39;s one distribution surface no comparable had. This stays JSON, so it is not a human-facing gallery.</p>
+<h2>Coverage</h2>
+<p><strong>Checked and found right, no finding:</strong></p>
+<ul>
+<li>QR version 10. <code>heart-v10.png</code> is a clean heart; the version 5 tokens (<code>token-1.png</code>, <code>token-55-*.png</code>) are visibly ragged. Redeploying for <code>CODE_BYTES = 407</code> is correct.</li>
+<li>The place bands as constants, 1 / 3 / 10 / 50 plus uncapped. 64 capped places suits the turnout the comparables suggest.</li>
+<li>The quiet month on chain. <code>heartbeat()</code> keeps <code>sunsetByAbsence</code> measuring the operator, and the rehearsal prices a check-in at about $0.0006.</li>
+<li>The repo-side SKILL.md placeholders cannot be squatted on npm, because package names must be lowercase.</li>
+</ul>
+<p><strong>Live observation:</strong> <code>/t/1</code> reads level 2, streak 1, so the rehearsal&#39;s first token missed a day within its first three. If that is the seed agent&#39;s path, the house token&#39;s uptime is itself on show.</p>
+<p><strong>Not done:</strong></p>
+<ul>
+<li>I did not decode any QR. The Sepolia url collision is inferred from source.</li>
+<li>I did not see the shipped finisher inks or any Mark at version 10, because no such image is in the snapshot.</li>
+<li><code>/mcp</code> and <code>/skill.md</code> returned status only, no body.</li>
+<li>I did not open <code>LICENSING.md</code>, <code>docs/phase0-results.md</code>, the clasp, ring, noise or heart-v5/6/8 sheets, the remaining <code>token-*.png</code> files, the other <code>docs/*.png</code>, or <code>references/refusals.md</code>.</li>
+<li>OpenSea behaviour is untested by anyone, as the project states.</li>
+</ul>
+</body>
+</html>

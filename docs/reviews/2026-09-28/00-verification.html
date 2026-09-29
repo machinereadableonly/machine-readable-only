@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>2026-09-28 review: verification against the code</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>2026-09-28 review: verification against the code</h1>
+<p>Every finding tagged BLOCKS MAINNET or High, plus the redeploy-only
+decisions, checked at 8d2a0d2 by EXECUTION where possible (throwaway repro
+tests in isolated worktrees; nothing in the tree changed). Libraries ARE
+installed: report 38&#39;s &quot;node_modules absent&quot; was wrong, and its PLAUSIBLE and
+UNVERIFIED items were re-judged against the real code.</p>
+<p><strong>Result: every checked finding is real. None was already fixed, none was
+wrong.</strong> Two creative items are stale: the domain term (declined 2026-09-20)
+and &quot;the accelerated year has no report&quot; (finished 2026-09-29).</p>
+<h2>Door</h2>
+<table>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Verdict</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Dot-segment target defeats the domain pin</td>
+<td>REAL, LIVE through Cloudflare</td>
+<td>Signature made for evil.example reaches <code>/mcp</code> (200; control at <code>/mcp</code> 401). Cloudflare forwards <code>/.//x/...</code> verbatim; <code>/.//example.org/llms.txt</code> is byte-identical to <code>/llms.txt</code> live</td>
+</tr>
+<tr>
+<td>Challenge not bound to the signature</td>
+<td>REAL, a recorded design position</td>
+<td>A relayer computes the answer from public values</td>
+</tr>
+<tr>
+<td>Replay set is process memory only</td>
+<td>REAL, known and disclosed</td>
+<td>A replayed signature is accepted after a restart</td>
+</tr>
+<tr>
+<td>Directory fetch has no deadline</td>
+<td>REAL</td>
+<td>A 1 byte/s server completes after 9 s against a 3 s timeout; 8 stalled hosts refuse a 9th honest one</td>
+</tr>
+<tr>
+<td>JWK stored verbatim</td>
+<td>REAL</td>
+<td>32 KB of padding accepted and served</td>
+</tr>
+<tr>
+<td><code>signature-agent;key=</code></td>
+<td>REAL</td>
+<td>The installed library is non-conforming to RFC 9421 2.1.2; a conforming signer is refused</td>
+</tr>
+<tr>
+<td><code>refusals.md</code> lists four components</td>
+<td>REAL</td>
+<td>The door requires five</td>
+</tr>
+<tr>
+<td>Client exits 0 on 429/500</td>
+<td>REAL</td>
+<td><code>status: undefined</code>, exit 0</td>
+</tr>
+</tbody></table>
+<p>Origin lock IS live (direct IPv4/IPv6 -&gt; 403), though the template has it
+commented out.</p>
+<h2>Payments (no redeploy needed)</h2>
+<p>The HTTP status the facilitator chooses decides the branch:
+<code>HTTPFacilitatorClient.settle</code> throws only on non-2xx or an unparseable body.</p>
+<table>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>success:false</code> with a tx hash is released</td>
+<td>REAL, reachable whenever the facilitator answers 200</td>
+</tr>
+<tr>
+<td>Cancelled/spent nonce promoted to paid</td>
+<td>REAL oracle defect (<code>authorizationState</code> is true on cancel too); attacker path needs a non-2xx refusal</td>
+</tr>
+<tr>
+<td>Expiry sweep deletes on silence</td>
+<td>REAL; acknowledged before, never decided acceptable</td>
+</tr>
+<tr>
+<td>Held row released inside its validity window</td>
+<td>REAL (released 3 ms after hold, through <code>log</code>)</td>
+</tr>
+<tr>
+<td>Unknown outcome told as &quot;nothing was minted&quot;</td>
+<td>REAL; the fix touches locked agent-facing copy</td>
+</tr>
+<tr>
+<td>Sweep runs after <code>hasMinted</code></td>
+<td>REAL, low impact</td>
+</tr>
+<tr>
+<td>Receipt in <code>structuredContent._meta</code></td>
+<td>REAL</td>
+</tr>
+<tr>
+<td>warden.md &quot;never release on silence&quot;, &quot;re-read after settlement&quot;</td>
+<td>BOTH FALSE</td>
+</tr>
+</tbody></table>
+<p>Fix order: the paid/unpaid oracle first (log-based, with payTo/amount stored),
+then the classification, then a non-destructive sweep, then the sweep move,
+then messages, receipt and rules. Fixing the others first widens the free-mint
+hole.</p>
+<h2>Contract (redeploy)</h2>
+<table>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Verdict</th>
+<th>Runtime bytes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>seed</code> charges the key bound at write time</td>
+<td>REAL (forge repro). The 2026-08-30 rebind decision&#39;s premise is false at write time; the fix is on <code>seed</code>, not <code>rebind</code></td>
+<td>+58</td>
+</tr>
+<tr>
+<td>Same drift on <code>applyMark</code></td>
+<td>Design question: no third party is charged</td>
+<td>+58 if wanted</td>
+</tr>
+<tr>
+<td><code>closeThePiece</code> has no chain guard</td>
+<td>REAL</td>
+<td>0 (script)</td>
+</tr>
+<tr>
+<td>Owner key as plain text</td>
+<td>REAL; <code>deploy-mainnet.sh</code> hard-fails without it, so the recommended Ledger path does not exist</td>
+<td>0 (script)</td>
+</tr>
+<tr>
+<td>contractURI / freezeRenderer / bestRunOf</td>
+<td>absent</td>
+<td>+148 (+159 Renderer) / +168 / +57</td>
+</tr>
+<tr>
+<td>Rest day not stored</td>
+<td>true</td>
+<td>+71 (+19 Renderer)</td>
+</tr>
+<tr>
+<td>No DEPLOY_DAY floor</td>
+<td>REAL: 30 days back-filled in one tx</td>
+<td>+138</td>
+</tr>
+<tr>
+<td>No lateness floor</td>
+<td>REAL: a token silent 500 days went 0 -&gt; 365 in one tx and took place 1</td>
+<td>~+30</td>
+</tr>
+<tr>
+<td>rest() re-emits / setUpgrade 11-15 / heartbeat after sunset</td>
+<td>all REAL</td>
+<td>+33 / +1 / +19</td>
+</tr>
+<tr>
+<td><code>_safeMint</code> -&gt; <code>_mint</code></td>
+<td>true</td>
+<td>-295</td>
+</tr>
+</tbody></table>
+<p>All together: net about +398 bytes against 8,535 of margin. Bytes are not a
+constraint. The Blockscout <code>metadata: null</code> is the Renderer&#39;s
+<code>;utf-8,</code> prefix and is fixable by a renderer swap at any time.</p>
+<h2>Clock and operations</h2>
+<table>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Clock key readable, Clock code writable, by the Warden</td>
+<td>REAL: same Unix user, shared <code>warden/.env</code>, <code>ReadWritePaths</code> covers source. The live Warden environment does NOT carry the key</td>
+</tr>
+<tr>
+<td>Wallet/supply cap ignores unwritten mints</td>
+<td>REAL (repro: the last slot sells twice)</td>
+</tr>
+<tr>
+<td>Leftover lock halts every run; no OnFailure</td>
+<td>REAL</td>
+</tr>
+<tr>
+<td>Heartbeat skipped while paused; sunset not passed</td>
+<td>REAL</td>
+</tr>
+<tr>
+<td>A day that never landed healed as written</td>
+<td>REAL</td>
+</tr>
+<tr>
+<td>Reconcile Minted ignores keyId</td>
+<td>REAL</td>
+</tr>
+<tr>
+<td>Reconcile all-or-nothing; cursor not atomic or floored</td>
+<td>REAL</td>
+</tr>
+<tr>
+<td>Condemned credit never rolls back the mirror</td>
+<td>REAL</td>
+</tr>
+<tr>
+<td>robust-solve unpacks the mask at 37, not 57</td>
+<td>REAL: 1,066 of 2,154 heart modules seen; every mainnet bitmap passes through it</td>
+</tr>
+<tr>
+<td>Rehearsal tooling builds 172-byte codes</td>
+<td>REAL</td>
+</tr>
+<tr>
+<td>Gas stop skips reconcile</td>
+<td>REAL; exit 0 is documented</td>
+</tr>
+<tr>
+<td>warden.md &quot;the Warden holds NO private key&quot;</td>
+<td>FALSE as written</td>
+</tr>
+</tbody></table>
+<p>The &quot;rebound to an UNREGISTERED key&quot; line in the 2026-09-29 Clock log is
+expected: the test agent wallet, token 1&#39;s owner, rebound it on 2026-09-28.
+It exposes the Low finding that the mirror&#39;s binding stays stale.</p>
+<h2>Decisions for the operator</h2>
+<ol>
+<li>Key custody: a separate Unix user for the Clock, and the owner key on a
+Ledger or Safe (a VPS change, not code).</li>
+<li><code>expectedKeyId</code> on <code>applyMark</code> too, or accept the drift.</li>
+<li>Which redeploy-only additions go in: contractURI, freezeRenderer,
+bestRunOf, the rest day, DEPLOY_DAY floor, lateness floor.</li>
+<li>Bind the challenge to the signature (a recorded position; it is what makes
+the door finding one step).</li>
+<li><code>signature-agent;key=</code>: fix the door, or narrow the documented promise.</li>
+<li>New agent-facing sentences for an unresolved payment (the copy is locked).</li>
+<li>A live probe of the x402.org facilitator&#39;s refusal shape (an outside call).</li>
+<li>Permit2: accepted or refused.</li>
+<li>Token 1 and Apex (creative item 4).</li>
+</ol>
+</body>
+</html>

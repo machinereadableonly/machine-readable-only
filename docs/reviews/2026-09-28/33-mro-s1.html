@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- security -- contracts and permanent bytecode</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- security -- contracts and permanent bytecode</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Read:</strong> <code>contracts/src/MachineReadableOnly.sol</code> (all), <code>contracts/src/Ladder.sol</code>, <code>contracts/src/spike/MROSpikeToken.sol</code>, <code>contracts/src/render/Renderer.sol</code>, <code>CodeRenderer.sol</code> (20-98), <code>FrameRenderer.sol</code> (32-67, 95-286), <code>PathWriter.sol</code> (20-134), plus a grep of <code>MarkRenderer.sol</code> for the bit decoders; <code>contracts/test/AccessControlGaps.t.sol</code>, <code>ContractSize.t.sol</code>, <code>Vouchers.t.sol</code>, <code>MachineReadableOnly.t.sol</code> (40-288), <code>Lifecycle.t.sol</code> (20-149), and every <code>expectRevert</code> / dial call across <code>contracts/test/</code>; <code>.claude/rules/contracts.md</code>; the threat model; the Slither leads. I also read a few Warden and Clock files, only to check whether a contract behaviour can be reached: <code>warden/src/clock/run.mjs</code> (100-520, 933-935), <code>clock/batch.mjs</code> (1-140), <code>clock/write.mjs</code> (84-213), <code>clock/reconcile.mjs</code> (event handling), <code>mirror/queries.mjs</code> (mint/seed statements), <code>mcp/tools/seed.mjs</code>, and <code>docs/specs/2026-09-20-mro-finisher-marks-design.md</code> (190-250). I built nothing and ran no tests.</p>
+<h2>Findings</h2>
+<h3>[HIGH] <code>seed</code> charges whichever key is bound when the Clock writes, not the key that asked -- one agent can spend other agents&#39; yearly seeds, again and again <strong>[BLOCKS MAINNET]</strong></h3>
+<p><strong>Where:</strong> <code>contracts/src/MachineReadableOnly.sol:839-884</code> (key read at <code>:857</code>, budget checked at <code>:854</code> via <code>seedsAvailable</code> <code>:826-833</code>, charged at <code>:875</code>); <code>rebind</code> at <code>:793-800</code>. For reachability: <code>warden/src/clock/run.mjs:440-451</code> sends <code>seed</code> with no key argument, and <code>warden/src/mcp/tools/seed.mjs:53-58,103-107</code> checks the binding and budget only when the request is made.</p>
+<p><strong>Attacker story:</strong> The attacker is the owner of a whole token P, bound to their key KA, which has one seed available.</p>
+<ol>
+<li>The attacker calls the <code>seed</code> tool, signed by KA. Every gate passes and a child is reserved (<code>seed.mjs:144-151</code>).</li>
+<li>Before 00:05 UTC, the owner wallet calls <code>rebind(P, KB)</code> directly on chain. KB is any victim key whose seed budget is open. Every key is readable on chain through <code>viewOf(id).agentKeyId</code>, and in year two that covers every year-one minter that has not seeded yet.</li>
+<li>At 00:05 the Clock calls <code>seed(child, P, to, code, day)</code>. The contract reads <code>_agentKeyOf[P] == KB</code>, sees KB has a seed, marks KB&#39;s seed as spent (<code>_seedsSpent[KB] += 1</code>) and gives the child KB.</li>
+<li>The attacker rebinds P, and the child, back to KA.</li>
+</ol>
+<p>KA&#39;s on-chain budget was never touched and the reservation row is now &quot;written&quot;. So the next day the Warden&#39;s budget check (<code>seedBudgetBlock</code>: chain <code>seedsAvailable(P)</code> minus unwritten reservations) passes again, and the attacker repeats with a new victim.</p>
+<ul>
+<li><strong>Gain:</strong> one free token per day, for as long as victim keys have budget. Each child also uses up <code>supplyCap</code>, which moves toward blocking paid mints for everyone.</li>
+<li><strong>Victim&#39;s loss:</strong> each victim loses its once-a-year seed for good. Their own later request is refused <code>NoSeedAvailable</code>.</li>
+<li><strong>The same thing without malice:</strong> a seller asks for a seed, sells P, and the buyer rebinds. The buyer&#39;s seed is spent and the child goes to the seller&#39;s <code>to</code>.</li>
+<li><strong>Preconditions:</strong> a whole token with its own budget open (year two onward), plus two <code>rebind</code> transactions per theft.</li>
+</ul>
+<p><strong>Why it works:</strong> The settled <code>rebind</code> decision rests on the premise that &quot;the Warden re-checks the signature against the current on-chain binding&quot;. That premise is false for <code>seed</code> as built. The Warden checks at request time, but the contract reads the binding at write time, up to about 24 hours later, and neither the Clock nor <code>seed</code> compares the two. I am not re-opening <code>rebind</code>. The gap is between checking and using.</p>
+<p><strong>Fix:</strong> Add <code>bytes32 expectedKeyId</code> to <code>seed</code> and revert (for example <code>KeyMismatch</code>) when <code>_agentKeyOf[parentId] != expectedKeyId</code>. Have the Clock pass the reservation&#39;s <code>keyId</code> (already stored by <code>insertSeed</code>), and add <code>KeyMismatch</code> to <code>isFinalSeed</code> so the row is dropped. A Clock-only re-read before sending still leaves a window of a few seconds at a predictable 00:05. The atomic check has to live in the bytecode, and the redeploy before token #1 is the only chance to add it. Add a test: request, rebind, then write must revert.</p>
+<h3>[MEDIUM] When vouchers are on, finishing places go to whoever submits first, which breaks the published &quot;(day, lowest token id)&quot; rule</h3>
+<p><strong>Where:</strong> <code>MachineReadableOnly.sol:581-610</code> (anyone may submit, from the start of day <code>day</code>), <code>_credit</code> <code>:442</code>, <code>_finish</code> <code>:468-475</code>. The NatSpec at <code>:462-465</code> says places are given &quot;across days by day&quot;. Published rule: <code>docs/specs/2026-09-20-mro-finisher-marks-design.md:211-214</code>, applied in <code>warden/src/clock/batch.mjs:44-55</code>.</p>
+<p><strong>Attacker story:</strong> The attacker holds a token at level 364 and a Warden-signed voucher for its finishing day D. This needs the owner to have called <code>setVouchersEnabled(true)</code> and the Warden to be signing vouchers.</p>
+<ol>
+<li>They submit <code>checkInWithVoucher</code> at 00:00:01 on day D. <code>_finish</code> runs at once and <code>++finishers</code> gives them the next ordinal.</li>
+<li>Every token that finished on day D-1 is still waiting in the Clock&#39;s batch, which lands at 00:05 on day D. Every lower-id token that finishes on day D lands at 00:05 on D+1. The attacker places ahead of all of them.</li>
+</ol>
+<p>With the first cohort, that is Apex (unique, gold) or a capped band that is permanent in the image. In a voucher-only mode where the Clock no longer batches, every place becomes a submission-latency race. The spec rejects exactly that at <code>:216-221</code>.</p>
+<p><strong>Why it works:</strong> The place is the transaction order of <code>++finishers</code>, and the voucher path is a second writer that is not bound by the Clock&#39;s sort. The contract does not record or enforce the finishing day.</p>
+<p><strong>Fix:</strong> Decide this before the redeploy, because the voucher path cannot be changed afterwards. The simplest on-chain option: in <code>checkInWithVoucher</code>, refuse the credit that would finish a token (<code>s.level + 1 == FINISH_LEVEL</code>) while the Warden is live (for example <code>today() - lastWardenDay &lt; N</code>), so that while the Clock runs, only the Clock gives places. If places on the voucher path are accepted as first-come, write that into the spec and fix the NatSpec at <code>:462-465</code>. Either way the Warden should never sign a finishing-day voucher while the Clock is running.</p>
+<h3>[LOW] A pause, or any Clock outage, longer than 30 days leaves every paid-but-unwritten mint stuck</h3>
+<p><strong>Where:</strong> <code>MachineReadableOnly.sol:342-347</code> (<code>whenNotPaused</code>), <code>:397</code>, <code>:401-405</code>; the Clock&#39;s response is at <code>warden/src/clock/run.mjs:357-362</code>.</p>
+<p><strong>Attacker story:</strong> No outsider is needed. The owner pauses, or the Clock stops, for more than <code>MAX_CREATION_LAG</code> days. Each queued mint carries the day it was paid, and after 30 days that day is refused <code>StaleDay</code> on every later run. Agents who paid 1 USDC get nothing until a human re-dates the row, and a re-dated mint loses its first-day credit.</p>
+<p><strong>Why it works:</strong> The 30-day bound on backdating is permanent, and <code>pause</code> stops <code>mint</code> but not the clock that ages each row.</p>
+<p><strong>Fix:</strong> No contract change is needed. Write in the runbook that a pause over about 25 days must first drain the mint queue, or re-date stuck rows to <code>today() - 30</code> (allowed at <code>:404</code>). Put the 30-day limit next to <code>pause()</code> in the NatSpec.</p>
+<h3>[LOW] <code>mint</code> and <code>seed</code> hand control to the recipient&#39;s own contract (<code>_safeMint</code>)</h3>
+<p><strong>Where:</strong> <code>MachineReadableOnly.sol:378</code>, <code>:881</code>; Clock handling at <code>run.mjs:393-404</code>, <code>:933-935</code>; <code>write.mjs:203-207</code>.</p>
+<p><strong>Attacker story:</strong> An agent pays 1 USDC with <code>to</code> set to a contract whose <code>onERC721Received</code> behaves differently in <code>eth_call</code> than when mined. For example it reads <code>block.basefee</code> or keys off <code>block.number</code>. It passes the Warden&#39;s pre-payment check, the simulate and the estimate, then reverts on chain. <code>reverted-on-chain</code> is not treated as run-level, so the run continues. But the row stays queued, and the Clock pays for one reverted transaction (up to <code>MAX_TX_GAS</code>) every night until <code>StaleDay</code>, about 30 nights. Each extra key costs another 1 USDC. The effect is gas griefing only: state is written before the callback (CEI holds), and no warden function can be re-entered by the recipient.</p>
+<p><strong>Fix:</strong> Use <code>_mint</code> in both functions. The Warden already refuses recipients that cannot hold an ERC-721 before taking payment (<code>chain/read.mjs canReceiveERC721</code>), so the callback adds risk without adding protection. If <code>_safeMint</code> stays, have the Clock park a mint row after one <code>reverted-on-chain</code>.</p>
+<h3>[LOW] A Warden key can backdate the first tokens to before the contract existed, giving a 30-day head start to Apex</h3>
+<p><strong>Where:</strong> <code>MachineReadableOnly.sol:401-405</code> (no lower bound other than <code>today() - 30</code>), constructor <code>:171-183</code>; also <code>_firstMintDay</code> at <code>:372</code>, which drives the seed budget.</p>
+<p><strong>Attacker story:</strong> Someone holding the Clock key (the threat model&#39;s risk #1: the Warden and Clock share a user and an env file) mints on launch day L with <code>day = L-30</code>. They then back-fill 30 days in one <code>batchCheckIn</code>, reach level 365 on L+334, and take Apex, and whichever capped places they want, 30 days before any honest token can finish. The token&#39;s <code>mintDay</code> and <code>_firstMintDay</code> also predate the collection, so its seed budget opens early too.</p>
+<p><strong>Fix:</strong> Record <code>uint32 immutable DEPLOY_DAY = today()</code> in the constructor and refuse <code>day &lt; DEPLOY_DAY</code> in <code>_checkCreationDay</code>. This costs nothing and closes the only moment when the 30-day lag decides a place. It does not limit a compromised Warden in any other way.</p>
+<h3>[INFO] The wallet cap does not limit an actor</h3>
+<p><strong>Where:</strong> <code>MachineReadableOnly.sol:82</code>, <code>:357</code>, <code>:852</code>.</p>
+<p><code>mintedTo</code> counts only mints and seeds sent directly to an address. A fresh <code>to</code> per mint gets around it, and so does receiving tokens by transfer, which is never counted. Keys are free, so one actor can hold any number of tokens. It works as a per-address courtesy limit. If a per-actor limit was intended, no on-chain design here provides one. Documenting it is enough.</p>
+<h3>[INFO] Test gaps against the project&#39;s own rule (&quot;every access-control revert gets one&quot;)</h3>
+<ul>
+<li><p><strong>Ownable2Step failure paths are untested.</strong> Only the success path is covered (<code>MachineReadableOnly.t.sol:166-173</code>, <code>Bounds.t.sol:216-219</code>). There is no test that <code>acceptOwnership</code> from a non-pending account reverts <code>OwnableUnauthorizedAccount</code>, that <code>transferOwnership</code> from a non-owner reverts, or that a second <code>transferOwnership</code> replaces the pending owner.</p>
+</li>
+<li><p><strong>Non-owner tests that still accept any revert:</strong></p>
+<ul>
+<li><code>setRenderer</code> -- <code>MachineReadableOnly.t.sol:55-59</code></li>
+<li><code>setWarden</code> -- <code>:68-72</code></li>
+<li><code>setSupplyCap(1)</code> -- <code>:81-85</code></li>
+<li><code>unpause</code> -- <code>:133-140</code></li>
+<li><code>setUpgrade</code> -- <code>Marks.t.sol:112-114</code></li>
+<li><code>setVouchersEnabled</code> -- <code>Vouchers.t.sol:127-131</code></li>
+</ul>
+<p><code>AccessControlGaps.t.sol:142-157</code> says it fixed &quot;nine non-owner tests&quot; but names the selector for only three (plus the oversized <code>setSupplyCap</code> at <code>MachineReadableOnly.t.sol:106-110</code>).</p>
+</li>
+<li><p><strong>Only transfer is tested as working while paused</strong> (<code>:281-287</code>). No test asserts that <code>rest</code> and <code>rebind</code> also still work while paused (TM section 4 lists them as not pausable).</p>
+</li>
+<li><p><strong>No test covers the two ordering and binding findings above:</strong> request, rebind, then seed; and a voucher finish racing the batch.</p>
+</li>
+</ul>
+<h3>[INFO] A comment in the spike contradicts the real contract</h3>
+<p><code>contracts/src/spike/MROSpikeToken.sol:209-212</code> says &quot;The real contract emits over the ids it actually minted&quot; on sunset. The real <code>sunset()</code> emits no metadata event at all (<code>MachineReadableOnly.sol:269-278</code>). The spike is not a mainnet artefact, but the project treats a comment that contradicts the code as a finding.</p>
+<h2>Questions</h2>
+<ol>
+<li><strong>Earned Marks and binding drift.</strong> <code>applyMark</code> (<code>:700-761</code>) takes no key and no owner. A seller who controls the key can queue a free earned Mark shortly before a sale. It lands after the sale and permanently shuts the paired bought Mark on the buyer&#39;s token (for example Break shuts Vessel). Is that accepted? An <code>expectedKeyId</code> argument here would also make a legitimate key rotation lose a paid Mark, so this is a trade-off, unlike <code>seed</code>.</li>
+<li><strong>The voucher trigger.</strong> Does the Warden intend to sign vouchers while the Clock is still running, or only after it stops? Finding 2&#39;s fix depends on the answer. I found no voucher-signing code in <code>warden/src</code>.</li>
+<li><strong>Leaving <code>supplyCap</code> able to go below <code>totalMinted</code>, and <code>walletCap</code> unbounded (<code>:246-255</code>).</strong> Is that deliberate? It is owner-only, and both simply stop creation.</li>
+</ol>
+<h2>Out of scope</h2>
+<ul>
+<li>Owner-key custody, and the hot <code>MAINNET_DEPLOYER_KEY</code> / manual Ownable2Step handover in <code>deploy-mainnet.sh</code>: deploy pipeline area.</li>
+<li>Clock heal and bisect correctness (I read it only to confirm that a <code>rest()</code> racing the batch is handled per entry: <code>Resting</code> is a named entry error at <code>batch.mjs:32-39</code>, so it costs at most one reverted chunk), the x402 and settlement oracle, and the door.</li>
+<li>Settled items I checked and did not re-raise:<ul>
+<li><code>heartbeat</code> is not <code>whenNotPaused</code>.</li>
+<li><code>rebind</code> has no proof of possession (only its interaction with <code>seed</code> is raised).</li>
+<li>The ERC-4906 choices, the renderer swap, the 4M / 24 KB budget.</li>
+<li>Vouchers ship off.</li>
+</ul>
+</li>
+</ul>
+<h2>Coverage</h2>
+<ul>
+<li><p><strong>Access control:</strong> Every external function in <code>MachineReadableOnly.sol</code> was checked for its modifier. <code>onlyOwner</code>: all dials, <code>pause</code>/<code>unpause</code>, <code>sunset</code>, <code>setUpgrade</code>, <code>setVouchersEnabled</code>. <code>onlyWarden</code> (which also stamps <code>lastWardenDay</code>): <code>mint</code>, <code>batchCheckIn</code>, <code>applyMark</code>, <code>seed</code>, <code>heartbeat</code>. <code>onlyTokenOwner</code>: <code>rebind</code>, <code>rest</code>. Open to anyone: <code>checkInWithVoucher</code> (signature-gated) and <code>sunsetByAbsence</code>. Renounce is disabled, and <code>transferOwnership(0)</code> cannot be accepted, so ownership cannot be abandoned.</p>
+</li>
+<li><p><strong>Irreversibility:</strong> <code>rest</code> and <code>sunset</code> / <code>sunsetByAbsence</code> have no path that clears them. <code>sunsetByAbsence</code> cannot underflow (<code>lastWardenDay &lt;= today()</code>).</p>
+</li>
+<li><p><strong>Pause gate:</strong> it covers <code>mint</code>, <code>batchCheckIn</code>, <code>checkInWithVoucher</code>, <code>applyMark</code> and <code>seed</code>, and not <code>heartbeat</code>, <code>rebind</code>, <code>rest</code> or transfers, which matches the threat model.</p>
+</li>
+<li><p><strong>Mark bit packing:</strong> Marks sit in bits 1-15, Iris shape in 16-23 (variant &lt; 3), Tint ink in 24-31 (&lt; 2), Iris run in 32-63, ordinal in 64-95. The exclusion masks are <code>uint16</code>, so they only ever read bits 0-15. Bit 0 is never set. Ids 11-15 are refused at <code>:712</code>, and a token finishes at most once (<code>:419</code>). The ordinal is capped at 65,535 through <code>supplyCap</code> (<code>:247</code>). I found no overlap or aliasing.</p>
+</li>
+<li><p><strong>Reentrancy:</strong> the contract moves no ETH and no tokens. The only outward calls are the <code>_safeMint</code> callback (after all state is written), the <code>SignatureChecker</code> staticcall, and the renderer staticcall inside a view. Nothing exploitable.</p>
+</li>
+<li><p><strong>Renderer:</strong> every string written into JSON or SVG is a number, a constant, or hex of the key, so there is no injection. The assembly reads (<code>_rowBits</code>, <code>_localRow</code>, <code>_fill</code>) stay within the fixed 407-byte code and constant tables. Coordinates stay under the 1000 limit because the canvas is at most 57 cells.</p>
+</li>
+<li><p><strong>Slither triage (all 36 results):</strong></p>
+<ul>
+<li><code>encode-packed-collision</code>: dismissed -- strings are built, never hashed.</li>
+<li><code>divide-before-multiply</code> on <code>MAX_RUNS</code>: dismissed -- an intentional ceiling on a constant.</li>
+<li><code>incorrect-equality</code> on <code>seedsAvailable == 0</code>: dismissed -- the function floors at 0.</li>
+<li><code>uninitialized-local</code> <code>out</code> at <code>FrameRenderer.sol:177</code>: dismissed -- an intentionally empty <code>bytes</code>.</li>
+<li><code>unused-return</code> in <code>_eyes</code>: dismissed -- only the base ink is needed.</li>
+<li><code>timestamp</code>: dismissed -- day indices are the design, and the sequencer&#39;s leeway is seconds.</li>
+<li><code>assembly</code>: reviewed as above; no issue.</li>
+<li><code>costly-loop</code> on <code>++finishers</code>: dismissed -- it runs once per finishing token.</li>
+<li><code>dead-code</code> on <code>pxPerCell</code>: false positive -- it is used at <code>Renderer.sol:337</code> and overridden in <code>RendererUnsized</code>.</li>
+<li><code>too-many-digits</code>: dismissed -- generated constants.</li>
+<li><code>unindexed-event-address</code>: Info only.</li>
+</ul>
+<p>The wrapper&#39;s &quot;build FAILED 255&quot; came after Slither had printed all its results, so I treated them as complete.</p>
+</li>
+<li><p><strong>Size and deployability:</strong> <code>ContractSize.t.sol</code> measures the Renderer, the spike and the real contract against 24,576 bytes. The anvil half (<code>script/anvil-size-check.sh</code>) was not read or run.</p>
+</li>
+</ul>
+</body>
+</html>

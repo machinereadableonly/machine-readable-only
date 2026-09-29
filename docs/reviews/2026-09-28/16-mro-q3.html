@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- quality -- the door and the payment path</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- quality -- the door and the payment path</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Read:</strong> <code>warden/src/door/{middleware,challenge,verify,directory}.mjs</code>, <code>warden/src/pay/{x402,cdp}.mjs</code>, <code>warden/src/{server,main,bootstrap,day}.mjs</code>, <code>warden/src/solve/{worker,queue}.mjs</code>, <code>warden/src/mcp/tools/{mint,upgrade}.mjs</code>, <code>warden/src/mcp/{server,nextSteps}.mjs</code>, <code>warden/src/clock/unresolved.mjs</code>, <code>warden/src/mirror/queries.mjs</code> (lines 1-834), <code>warden/ecosystem.config.cjs</code>, <code>warden/nginx.conf.example</code>, <code>.claude/rules/warden.md</code>, <code>warden/public/{llms.txt,door.html}</code>, <code>docs/2026-09-01-mro-raw-protocol.md</code>, <code>warden/test/{pay,settlement-commit,paid-refusal-settlement}.test.mjs</code> in full, parts of <code>door.test.mjs</code>, <code>verify.test.mjs</code>, <code>directory.test.mjs</code>, <code>warden/tools/{x402-live-check,x402-live-mint-check,cdp-live-check}.mjs</code> in full, <code>protocol-transcript.mjs</code> lines 76-184. Installed libraries: <code>http-message-sig</code> 0.2.0 <code>dist/index.mjs</code> (whole), <code>@x402/mcp</code> 2.24.0 <code>dist/esm/index.mjs</code> (530-664, 790-1150), <code>@x402/core</code> <code>chunk-H7ETXA5T.mjs</code> (485-534, 1368-1570, 1655-1693), <code>@x402/evm</code> <code>exact/facilitator/index.mjs</code> (180-373) and <code>chunk-KNDFHTKS.mjs</code>.</p>
+<p>Nothing was executed; every finding is from reading. No Critical findings.</p>
+<h2>Findings</h2>
+<h3>[HIGH] [BLOCKS MAINNET] A <code>success: false</code> settlement is always released, but the installed facilitator returns it for transfers already broadcast</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:343</code> (classification), <code>warden/src/pay/x402.mjs:493</code> (release)
+<strong>What:</strong> Every non-success answer is recorded as <code>declined</code> and the reservation is deleted. The installed reference facilitator returns <code>success: false</code> with a transaction hash when the receipt wait fails after broadcast (<code>@x402/evm/dist/esm/chunk-KNDFHTKS.mjs:22-27</code>, <code>80-88</code>, reason <code>settlement_pending</code>). It does the same when a mined transfer fails event validation (<code>exact/facilitator/index.mjs:347-358</code>). Its catch-all at <code>exact/facilitator/index.mjs:363-371</code> returns <code>transaction: &quot;&quot;</code> for any throw, including one from the send itself.
+<strong>Why it matters:</strong> The transfer can still be mined after the row is deleted. The agent is debited up to $1250.00, holds nothing, and its nonce stays claimed in <code>pay_nonces</code>. This is the loss the unknown-versus-failed rule exists to prevent, reached through the branch the code treats as safe.
+<strong>Fix:</strong> Treat as <code>declined</code> only when <code>settlement.transaction</code> is empty and <code>errorReason</code> is on an allowlist of pre-broadcast verification reasons. Hold everything else through <code>onUnresolved</code>. Add a fake-facilitator case to <code>settlement-commit.test.mjs</code> answering <code>settlement_pending</code> with a hash; the existing <code>declined</code> case only covers an empty transaction (line 82-89).</p>
+<h3>[HIGH] [BLOCKS MAINNET] The expiry sweep deletes reservations on silence, and they carry nothing to ask the chain with</h3>
+<p><strong>Where:</strong> <code>warden/src/mirror/queries.mjs:788</code>, called from <code>warden/src/mcp/tools/mint.mjs:50</code> and <code>upgrade.mjs:230</code>; <code>warden/src/main.mjs:439</code>
+<strong>What:</strong> An <code>awaiting-payment</code> row older than ten minutes is deleted with no check. If the process stops between the handler returning and the settlement answer arriving, the row stays <code>awaiting-payment</code> and the next paid call by anyone sweeps it. <code>payer</code> and <code>asset</code> are written only by <code>holdUnresolvedMint</code> (<code>queries.mjs:169-176</code>), so the row could not be resolved even if kept. The same happens when <code>onUnresolved</code> throws (<code>x402.mjs:521-526</code>).
+<strong>Why it matters:</strong> A restart during a settlement is ordinary: a deploy, a crash, or <code>max_memory_restart: &quot;512M&quot;</code> (<code>ecosystem.config.cjs:93</code>). <code>settlement-commit.test.mjs:298-318</code> pins the deletion as correct.
+<strong>Fix:</strong> Pass <code>payer</code> and <code>asset</code> to the handler beside <code>payNonce</code> and store them at reservation time. Make the sweep move expired rows to <code>payment-unresolved</code> instead of deleting, so the Clock&#39;s <code>authorizationState</code> read decides.</p>
+<h3>[MEDIUM] [BLOCKS MAINNET] On an unknown outcome the agent is told the payment failed, and the docs promise an immediate retry</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:513-528</code>; <code>warden/public/llms.txt:228-233</code>; <code>docs/2026-09-01-mro-raw-protocol.md:797-806</code>
+<strong>What:</strong> The gateway holds the row but returns the library&#39;s result unchanged, which is a payment demand reading &quot;Payment settlement failed&quot;. Both documents say a failed settlement leaves the agent its money and that it can call again straight away. Neither mentions the held state.
+<strong>Why it matters:</strong> The agent may have been charged while being told it was not. Its retry is refused <code>already-minted</code> (or <code>mark-already-applied</code>) with copy saying it owns a token. No second charge results, because both refusals come before payment.
+<strong>Fix:</strong> In the unresolved branch return <code>payRefusal({ ok: false, reason: &quot;payment-unresolved&quot; })</code>. Add the reason to <code>NEXT</code> in <code>nextSteps.mjs</code> and document the third outcome in both files.</p>
+<h3>[MEDIUM] The settlement receipt never reaches the agent where the protocol document says it does</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:486</code>; <code>warden/src/mcp/server.mjs:178-185</code>
+<strong>What:</strong> On success <code>@x402/mcp</code> returns the handler&#39;s plain value with <code>_meta</code> added (<code>dist/esm/index.mjs:1070-1076</code>). That value has no <code>content</code>, so <code>mcp/server.mjs</code> wraps it and the receipt lands in <code>structuredContent._meta</code>. The protocol document promises it in the response <code>_meta</code> (line 861-862), which is where the official client reads it (<code>dist/esm/index.mjs:558-563</code>).
+<strong>Why it matters:</strong> A paying agent gets no transaction hash at the documented location. The only assertion on the receipt checks the value before wrapping (<code>paid-refusal-settlement.test.mjs:151-155</code>).
+<strong>Fix:</strong> In <code>paid()</code>, turn a settled success into a complete tool result with <code>_meta</code> at the top level. Assert it over the wire in <code>test/e2e/join.test.mjs</code>.</p>
+<h3>[MEDIUM] The directory fetch has no overall deadline, so eight slow hosts close the third-party path</h3>
+<p><strong>Where:</strong> <code>warden/src/door/directory.mjs:238</code>, <code>:279</code>, <code>:404</code>, <code>:476</code>
+<strong>What:</strong> <code>timeout</code> on <code>https.request</code> is an idle timeout. A host sending one byte every few seconds stays open until the 64 KB cap. Fetches are capped at eight in flight, and the ninth distinct URL is refused.
+<strong>Why it matters:</strong> Eight dripping hosts, named by unauthenticated requests, refuse every agent hosting its own directory with <code>directory</code> for as long as the drip lasts. The comment at <code>:399-403</code> and the protocol document (line 187) both describe a 3-second bound that the code does not enforce.
+<strong>Fix:</strong> Add a wall-clock deadline that destroys the request. Add a slow-response test; <code>directory.test.mjs</code> has none.</p>
+<h3>[MEDIUM] <code>&quot;signature-agent&quot;;key=&quot;sig1&quot;</code> is documented as accepted, but the installed verifier ignores <code>key</code></h3>
+<p><strong>Where:</strong> <code>docs/2026-09-01-mro-raw-protocol.md:276-282</code>; <code>warden/src/door/verify.mjs:283-303</code>; <code>warden/node_modules/http-message-sig/dist/index.mjs:120-126</code>
+<strong>What:</strong> <code>buildSignedData</code> uses the whole header value for a parameterised component. RFC 9421 section 2.1.2 signs only the named dictionary member. <code>coveredComponents</code> strips parameters, so the component check passes and the signature then fails.
+<strong>Why it matters:</strong> A hand-signer following the document with a conforming library is refused <code>signature</code>. Hand-signing is currently the only way in. The dictionary test signs the unparameterised component (<code>door.test.mjs:1132-1147</code>), and the vectors are the older bare-string form.
+<strong>Fix:</strong> Build the base line for <code>;key=</code> from the member value before calling the library, or state in the document that only the unparameterised component is accepted. Add a test signed by a base built by hand.</p>
+<h3>[MEDIUM] Registration stores the caller&#39;s JWK verbatim and serves it publicly</h3>
+<p><strong>Where:</strong> <code>warden/src/door/directory.mjs:307-311</code>, <code>:318-321</code>, <code>:574</code>; <code>warden/src/mirror/queries.mjs:421-424</code>
+<strong>What:</strong> Only the proof and the thumbprint are checked. The whole submitted object is stored, including any extra members, up to the 64 KB body cap, and rendered into the public directory.
+<strong>Why it matters:</strong> The 1,140,018-byte figure at <code>directory.mjs:329</code> assumes minimal keys. Padded keys at the 10,000 ceiling make the render hundreds of megabytes, against a 512M restart limit. A failed render is not cached, so every GET retries it. nginx&#39;s 10 per minute limit slows this and does not prevent it. The site also serves caller-chosen content under its own name.
+<strong>Fix:</strong> Require <code>kty === &quot;OKP&quot;</code> and <code>crv === &quot;Ed25519&quot;</code>, and store only <code>{ kty, crv, x }</code>.</p>
+<h3>[MEDIUM] <code>x402-live-mint-check.mjs</code> cannot run</h3>
+<p><strong>Where:</strong> <code>warden/tools/x402-live-mint-check.mjs:102-109</code>, <code>:126-161</code>
+<strong>What:</strong> It calls <code>createServer</code> without <code>contract</code> and <code>chainId</code>, which <code>server.mjs:104-106</code> rejects by throwing. Its requests also omit the 2026-07-28 envelope, while the handler is <code>legacy: &quot;reject&quot;</code> (<code>mcp/server.mjs:206</code>).
+<strong>Why it matters:</strong> <code>contracts/script/adopt-deployment.sh:108</code> names it as the live payment check. It fails before it measures anything.
+<strong>Fix:</strong> Pass <code>contract: CONTRACT, chainId: CHAIN_ID</code> and reuse the envelope helper <code>protocol-transcript.mjs</code> uses.</p>
+<h3>[LOW] Registering a key again erases its &quot;used&quot; mark</h3>
+<p><strong>Where:</strong> <code>warden/src/mirror/queries.mjs:60-63</code>; <code>warden/src/door/directory.mjs:574</code>
+<strong>What:</strong> <code>INSERT OR REPLACE</code> replaces the row, so <code>lastUsedAt</code> returns to NULL. If the key then stays away 30 days, it is pruned.
+<strong>Why it matters:</strong> <code>llms.txt:170-173</code> and <code>queries.mjs:413-416</code> both promise a used key is kept for good. No test covers it.
+<strong>Fix:</strong> Use <code>INSERT ... ON CONFLICT(keyId) DO UPDATE</code> that leaves <code>lastUsedAt</code> alone.</p>
+<h3>[LOW] The refusal conversion fails open</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:176</code>, <code>:475</code>
+<strong>What:</strong> Only <code>ok === false</code> is converted to a refusal. A handler returning <code>{}</code> or a value without <code>ok</code> is settled, with nothing reserved and nothing tracked.
+<strong>Why it matters:</strong> No handler does this today. The direction is wrong for a money path.
+<strong>Fix:</strong> Settle only when <code>result?.ok === true</code>.</p>
+<h3>[LOW] Three IPv4 blocks refuse whole /16s where only a /24 is reserved</h3>
+<p><strong>Where:</strong> <code>warden/src/door/directory.mjs:75</code>, <code>:78</code>, <code>:79</code>
+<strong>What:</strong> <code>192.0.x.x</code>, <code>198.51.x.x</code> and <code>203.0.x.x</code> are blocked entirely. The reserved ranges are 192.0.0.0/24, 192.0.2.0/24, 198.51.100.0/24 and 203.0.113.0/24.
+<strong>Why it matters:</strong> An agent whose directory resolves to public space in the rest of those /16s is refused <code>directory</code> with no remedy.
+<strong>Fix:</strong> Test the third octet, which <code>blockedV4</code> already receives. Add neighbouring addresses to the allowed list in <code>directory.test.mjs:53</code>.</p>
+<h3>[LOW] A stale challenge answers <code>expired</code> without the <code>serverTime</code> the document promises</h3>
+<p><strong>Where:</strong> <code>warden/src/door/middleware.mjs:164</code>; <code>warden/src/door/challenge.mjs:61-63</code>
+<strong>What:</strong> The protocol document (line 116) says <code>expired</code> covers a stale challenge and carries <code>serverTime</code>. Only the signature path attaches it.
+<strong>Fix:</strong> Pass <code>{ serverTime }</code> on that refusal, or give the challenge case its own reason.</p>
+<h3>[LOW] A released reservation can stop the solver run</h3>
+<p><strong>Where:</strong> <code>warden/src/mirror/queries.mjs:475</code>; <code>warden/src/solve/queue.mjs:80-82</code>
+<strong>What:</strong> <code>bumpSolveTries</code> reads <code>.solveTries</code> off a row that may have been deleted during the solve. The TypeError is thrown inside <code>runSolver</code>&#39;s catch block, so the run rejects and draining stops until the next tick.
+<strong>Fix:</strong> Return early in <code>failSolve</code> when no row is returned.</p>
+<h3>[LOW] Duplicated limiter</h3>
+<p><strong>Where:</strong> <code>warden/src/bootstrap.mjs:57-80</code>, <code>:114-139</code>
+<strong>What:</strong> <code>makeAllowRegistration</code> re-implements <code>slidingWindow</code> line for line, while the comment at <code>:57-60</code> says both limiters use it.
+<strong>Fix:</strong> Build it on <code>slidingWindow</code> with the key-count check in front.</p>
+<h3>[LOW] Comments that contradict the code</h3>
+<p><strong>Where and what:</strong></p>
+<ul>
+<li><code>warden/src/door/verify.mjs:130-213</code>: three doc blocks are stacked above <code>timeReason</code>, which they do not describe. They belong to <code>coveredComponents</code> (<code>:283</code>), <code>signatureAgentUrl</code> (<code>:259</code>) and <code>signatureLabel</code> (<code>:248</code>), which have none.</li>
+<li><code>warden/src/mcp/server.mjs:127-130</code> says <code>sigHash</code> is a hash of the <code>Signature</code> header. The door hashes the signature base (<code>verify.mjs:386</code>).</li>
+<li><code>warden/src/pay/x402.mjs:397-401</code> says a reservation &quot;has to expire on its own rather than be cancelled&quot;. The same file releases and holds.</li>
+<li><code>warden/src/server.mjs:17-18</code> and <code>:82-86</code> say the token view and MCP handler do not exist yet. They do.</li>
+<li><code>warden/src/door/directory.mjs:116-131</code> carries two overlapping explanations of one branch.</li>
+<li><code>warden/src/door/middleware.mjs:185-201</code> and much of the subsystem hold dated history, which <code>code-comments.md</code> forbids. <code>warden/src/door</code> is MIT and public.</li>
+</ul>
+<p><strong>Fix:</strong> Move each block to its function, correct the four statements, and trim the history when next touching these files.</p>
+<h3>[INFO] The wrapper cache grows per token</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:372</code>; <code>warden/src/mcp/tools/upgrade.mjs:327-329</code>
+<strong>What:</strong> The cache key includes a description naming the token id, so there is one entry per token, Mark and variant, never evicted. The entries are small.</p>
+<h2>Questions</h2>
+<ul>
+<li><code>@x402/core</code>&#39;s resource server exposes <code>onSettleFailure</code> and <code>onAfterSettle</code> (<code>chunk-H7ETXA5T.mjs:899-921</code>, <code>1505-1567</code>). Would those replace the patch of <code>settlePayment</code> at <code>x402.mjs:333-353</code>? The patch separates a thrown HTTP error from an explicit decline more exactly, so it may be deliberate.</li>
+<li><code>payNonceOf</code> reads a Permit2 nonce (<code>x402.mjs:58</code>), but the Clock only asks about 32-byte EIP-3009 nonces (<code>clock/unresolved.mjs:44</code>, <code>:66</code>). The default USDC requirement carries no <code>assetTransferMethod</code> (<code>exact/server/index.mjs:111-123</code>), so Permit2 looks unreachable. Is that intended to stay so?</li>
+<li><code>main.mjs:448</code> allows five seconds for shutdown and <code>ecosystem.config.cjs</code> sets no <code>kill_timeout</code>. Does PM2 7.0.1 wait that long before SIGKILL? If not, <code>db.close()</code> may not run.</li>
+<li><code>x402-live-check.mjs:66</code> warms the default resource name <code>paid_tool</code>, not the mint resource <code>main.mjs</code> warms. Is the difference intended?</li>
+</ul>
+<h2>Out of scope</h2>
+<ul>
+<li><code>warden/src/mirror/queries.mjs:788</code> is the sweep behind the second High finding; the fix lands in the mirror and in the Clock&#39;s resolver.</li>
+</ul>
+<h2>Coverage</h2>
+<p>Read in full: every source file in the subsystem, both paid tools, the MCP wrapper, the three settlement tests, the three live-check tools, and the three public documents.</p>
+<p>Read in part: <code>door.test.mjs</code>, <code>verify.test.mjs</code> and <code>directory.test.mjs</code> (every test title, the bodies relevant to a finding), <code>protocol-transcript.mjs</code>, <code>queries.mjs</code>, <code>db.mjs</code> and <code>schema.sql</code>.</p>
+<p>Not read: the bodies of <code>challenge</code>, <code>bootstrap</code>, <code>solve</code>, <code>day</code>, <code>cdp</code> and <code>static</code> tests, <code>test/e2e/join.test.mjs</code>, <code>mcp/gates.mjs</code>, <code>chain/preflight.mjs</code>, <code>chain/read.mjs</code>, the <code>client/</code> tree beyond two greps, and <code>warden/DEPLOY.md</code> beyond one grep. No images were opened; none bear on this subsystem.</p>
+<p>Two points rest on my knowledge of the standard or of Node, not on a local source: the RFC 9421 <code>key</code> semantics, and <code>timeout</code> being an idle timeout. Both are worth a one-line confirmation before acting.</p>
+</body>
+</html>

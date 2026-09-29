@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- security -- the Clock, cron, chain writes and key handling</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- security -- the Clock, cron, chain writes and key handling</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Read:</strong> <code>reports/32-mro-tm.md</code>; <code>CLAUDE.md</code>; <code>.claude/rules/{warden,contracts,rendering}.md</code>; <code>warden/src/clock/{main,run,write,batch,reconcile,cursor,unresolved,heartbeat,redact,builder-code}.mjs</code>; <code>warden/src/mirror/{schema.sql,db.mjs,queries.mjs}</code>; <code>warden/src/chain/{read,preflight}.mjs</code>; <code>warden/src/main.mjs:1-120</code>; <code>warden/src/pay/x402.mjs:40-99,300-359,434-530</code>; <code>warden/src/mcp/tools/seed.mjs:90-183</code>; <code>warden/src/solve/worker.mjs</code>; <code>warden/ecosystem.config.cjs</code>; <code>warden/.env.example</code>; <code>warden/.gitignore</code>; <code>.gitignore</code>; <code>warden/deploy/{mro-clock.service,mro-clock.timer,install-clock-logging.sh,mro-clock-logrotate.conf.example,relocate-env-backups.sh}</code>; <code>warden/deploy/set-contract-address.sh</code> (grep); <code>warden/tools/derive-address.mjs</code>; <code>scripts/{make-clock-key,rehearse-clock-key,setup-clock}.sh</code>; <code>contracts/.env.example</code>; <code>contracts/script/deploy-mainnet.sh:1-110</code>; <code>contracts/src/MachineReadableOnly.sol:130-259,330-885</code>; installed library source: <code>@x402/core dist/esm/chunk-H7ETXA5T.mjs:402-532,1372-1569,1677-1693</code> and <code>chunk-P3DFEIO7.mjs:20-39</code>, <code>@x402/evm dist/esm/chunk-7KWSWAVE.mjs:225-331</code>, <code>@noble/curves</code> 1.9.1 <code>esm/abstract/{weierstrass.js:252-275,utils.js:70-195}</code>, <code>viem/_esm/accounts/privateKeyToAccount.js</code>.</p>
+<h2>Findings</h2>
+<h3>[HIGH] [BLOCKS MAINNET] The held-payment check treats a cancelled authorisation as paid, so a payer can get a mint or a $1,250 Mark free</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/unresolved.mjs:76-91,101-110</code>; <code>warden/src/mirror/queries.mjs:676-690</code>. The path into it: <code>warden/src/pay/x402.mjs:347-351,508-514</code>, and <code>@x402/core chunk-H7ETXA5T.mjs:513-525</code> plus <code>:1548-1567</code>.</p>
+<p><strong>Attacker story:</strong> Any agent with a wallet and enough USDC to pass verification (for example $1,250 for Vessel, or $250 for Tint).</p>
+<ol>
+<li>The agent signs an EIP-3009 authorisation with nonce N. It also signs a <code>cancelAuthorization</code> for (itself, N).</li>
+<li>It calls <code>upgrade</code> (or <code>mint</code>) and, at the same moment, submits the cancel to USDC.</li>
+<li>Verification passes, because the nonce is unused at that moment (<code>@x402/evm chunk-7KWSWAVE.mjs:238-249</code>). The handler then reserves the row.</li>
+<li>The cancel lands before the facilitator&#39;s <code>transferWithAuthorization</code>, so settlement fails with &quot;authorization is used or canceled&quot; (<code>:289</code>).</li>
+<li>If the facilitator answers that refusal with a non-2xx status and a <code>{success:false}</code> body, the payment is held as <code>payment-unresolved</code>.</li>
+<li>At 00:05 the Clock reads <code>authorizationState(payer, N)</code>. It returns <code>true</code>, because USDC sets that same flag on cancel. The row is promoted to <code>queued</code>, and <code>applyMark</code> or <code>mint</code> is written in the same run.</li>
+</ol>
+<p>The agent keeps its USDC. A failed attempt costs only the cancel&#39;s gas, so the race can be retried.</p>
+<p><strong>Why it works:</strong></p>
+<ul>
+<li><code>HTTPFacilitatorClient.settle</code> throws <code>SettleError</code> for any non-2xx reply whose body has <code>success</code> (<code>:523-524</code>), and <code>settlePayment</code> re-throws it (<code>:1567</code>).</li>
+<li>The Warden&#39;s wrapper labels every throw as <code>&quot;unresolved&quot;</code> (<code>x402.mjs:350</code>), so an explicit refusal and a lost answer end up in the same place.</li>
+<li><code>resolveUnresolvedPayment</code> then promotes on <code>paid: Boolean(spent)</code> (<code>unresolved.mjs:91</code>), and <code>spent</code> is true for both &quot;used&quot; and &quot;cancelled&quot;.</li>
+</ul>
+<p><strong>Fix (both parts):</strong></p>
+<ol>
+<li>In <code>unresolved.mjs</code>, decide &quot;paid&quot; from USDC&#39;s <code>AuthorizationUsed(authorizer, nonce)</code> event (both fields are indexed) rather than <code>authorizationState</code>. Search the block window from <code>reservedAt</code> to now, paged at 1,000 blocks. Also require a USDC <code>Transfer(payer → treasury, price)</code> in that transaction. Treat <code>AuthorizationCanceled</code> as unpaid.</li>
+<li>In <code>x402.mjs:347-351</code>, classify a <code>SettleError</code> (the facilitator answered explicitly) as <code>&quot;declined&quot;</code>. Only transport errors, timeouts and <code>SETTLEMENT_PENDING_REASON</code> should count as unknown.</li>
+</ol>
+<h3>[HIGH] [BLOCKS MAINNET] The Clock key is readable, and the Clock&#39;s code is writable, by the internet-facing Warden</h3>
+<p><strong>Where:</strong></p>
+<ul>
+<li><code>warden/ecosystem.config.cjs:41-45</code> (the Warden loads <code>.env</code>)</li>
+<li><code>warden/src/main.mjs:54-69</code> (the key is deleted from <code>process.env</code> only, and the comment admits &quot;not a boundary&quot;)</li>
+<li><code>warden/deploy/mro-clock.service:11,27,38</code></li>
+<li><code>scripts/make-clock-key.sh:115-126</code></li>
+</ul>
+<p><strong>Attacker story:</strong> Anyone who gets code execution in the Warden gets the warden role. Possible routes include a dependency in the x402, MCP or web-bot-auth tree, the solver child, or a path bug. The Warden has no sandbox and runs as the same Unix user as the Clock. That user can do two things:</p>
+<ul>
+<li>read <code>warden/.env</code>, which holds <code>CLOCK_PRIVATE_KEY</code>;</li>
+<li>rewrite <code>warden/src/clock/*.mjs</code> or <code>node_modules</code>, which the Clock runs with the key at the next 00:05. Rotating the key does not stop this.</li>
+</ul>
+<p>With the key, the attacker can:</p>
+<ul>
+<li><strong>Mint without paying.</strong> Up to <code>supplyCap</code>, to any address, with any key ID and any permanent bitmap (<code>MachineReadableOnly.sol:342-380</code>).</li>
+<li><strong>Forge visits.</strong> Credit today to any token that is not resting, including to take finishing places (<code>:499-544</code>).</li>
+<li><strong>Change other people&#39;s tokens for good.</strong> Write unwanted Marks onto strangers&#39; tokens, which permanently closes off each Mark&#39;s pair partner (<code>:700-761</code>; Marks are never cleared).</li>
+<li><strong>Spend other agents&#39; seeds.</strong> Spend any whole token&#39;s key&#39;s seed and send the child to themselves (<code>:839-884</code>).</li>
+<li><strong>Sign vouchers.</strong> Once vouchers are enabled, these never expire (<code>:581-600</code>).</li>
+<li><strong>Drain</strong> the gas ETH.</li>
+</ul>
+<p><code>setWarden</code> stops further damage, but everything already written is permanent. The comment at <code>make-clock-key.sh:117-120</code> also misstates the key&#39;s powers: it leaves out <code>heartbeat</code> and voucher signing.</p>
+<p><strong>Why it works:</strong> One file, one Unix user and one writable code tree serve both processes. <code>delete process.env.CLOCK_PRIVATE_KEY</code> guards against leaking the environment, not against reading the file.</p>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Run the Clock as a dedicated system user (a system unit with <code>User=</code>). Give it a read-only code tree and a key file it alone can read (mode 0400, outside <code>warden/</code>, never in the Warden&#39;s <code>.env</code>). Share only the mirror directory, through a group.</li>
+<li>An alternative is a remote signer or KMS.</li>
+<li>Interim step: move the key to its own file, loaded only by the Clock unit through a second <code>--env-file</code>. Keep only a small ETH float on the Clock address, and alert on any warden-signed transaction the Clock did not send (for example, a nonce jump against the last run).</li>
+<li>Correct the comment.</li>
+</ul>
+<h3>[HIGH] [BLOCKS MAINNET] The mainnet owner key&#39;s default home is a hot file on the same box</h3>
+<p><strong>Where:</strong> <code>contracts/.env.example:13-25</code>; <code>contracts/script/deploy-mainnet.sh:28-31,86-93</code></p>
+<p><strong>Attacker story:</strong> The same Warden compromise as above. If <code>MAINNET_DEPLOYER_KEY</code> is still in <code>contracts/.env</code> after the deploy, the attacker also holds the permanent owner. That allows <code>setSunset</code> (irreversible), <code>setRenderer</code> (which can break every image), <code>setWarden</code>, and <code>setUpgrade</code> on Marks already sold.</p>
+<p><strong>Why it works:</strong></p>
+<ul>
+<li>The script sources <code>./.env</code> with <code>set -a</code>, which exports every variable to <code>forge</code> and all its child processes.</li>
+<li>Moving ownership to a Safe or hardware wallet is written as &quot;prefer&quot;, and nothing checks that it happened.</li>
+</ul>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Remove the plain-text key path for chain 8453. Require <code>--ledger</code>, or <code>--account</code> with a keystore and a password prompt, so no owner key is ever written to disk on the VPS.</li>
+<li>Make the <code>Ownable2Step</code> handover part of the cutover&#39;s pass criteria: a check that <code>owner()</code> equals the Safe address.</li>
+</ul>
+<h3>[MEDIUM] A queued seed spends whichever key the parent is bound to at 00:05, not the key that asked for it</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:439-451</code>; <code>warden/src/mirror/queries.mjs:275-282</code> (<code>agentKeyId</code> is selected and never used); contract <code>:854-857</code></p>
+<p><strong>Attacker story:</strong></p>
+<ol>
+<li>The owner A of a whole token P asks for a seed late in the day, with <code>to</code> set to A&#39;s own wallet. The Warden checks the binding at that moment (<code>seed.mjs:106</code>).</li>
+<li>Before 00:05, A sells P. The buyer B rebinds P to key KB, a key with its first mint at least a year back and a seed available.</li>
+<li>The Clock sends <code>seed(child, P, A_wallet, …)</code>. The contract charges <code>seedsAvailable(P)</code> on KB (<code>_agentKeyOf[parentId]</code> at write time).</li>
+</ol>
+<p>Result: B loses the seed they earn once a year. A receives a tradeable child token bound to B&#39;s key. If B asked for their own seed the same day, it is refused as <code>NoSeedAvailable</code> and dropped (<code>run.mjs:504-511</code>).</p>
+<p>This cannot happen until some key reaches its first anniversary, so the risk is latent at launch.</p>
+<p><strong>Why it works:</strong> The seed pass re-reads nothing about the parent&#39;s binding or owner before it writes.</p>
+<p><strong>Fix:</strong> Before each <code>seed</code>, read <code>viewOf(parentId).agentKeyId</code> and compare it with <code>keyIdToBytes32(s.agentKeyId)</code>, and check <code>ownerOf(parentId)</code>. On a mismatch, drop the row (which hands the year back to the original key) and alert. Apply the same key check to the free, earned Mark orders before <code>applyMark</code>, since an earned Mark can close off a partner Mark a new owner wanted to buy.</p>
+<h3>[MEDIUM] A killed run leaves its lock behind and halts every later run; reconcile&#39;s memory and page handling make that kill reachable</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/main.mjs:94-112,205-226</code>; <code>warden/deploy/mro-clock.service:59-60</code> (<code>OOMPolicy=continue</code>, <code>MemoryMax=1G</code>); <code>warden/src/clock/reconcile.mjs:66-91</code>; <code>warden/src/clock/cursor.mjs:79-82</code></p>
+<p><strong>Attacker story:</strong></p>
+<ul>
+<li><strong>The lock.</strong> A SIGKILL leaves <code>state.db.run-lock</code> in place. Causes include the out-of-memory killer at 1 GB, a reboot or power loss, or systemd&#39;s final kill. The lock sits beside the database, so it survives a reboot. Every later run throws at <code>takeLock</code>, before the payment check, mints, credits and heartbeat.</li>
+<li><strong>The consequences.</strong> After 30 days, queued paid mints can never land (<code>StaleDay</code>, <code>run.mjs:357-362</code>; contract <code>:397-405</code>). The heartbeat stops. There is no <code>OnFailure=</code>, and the &quot;alerts&quot; are lines in the same log file.</li>
+<li><strong>The outsider&#39;s lever.</strong> A token holder can emit many <code>Transfer</code> events cheaply, for example by moving their own token back and forth through a helper contract. <code>readEvents</code> holds every event of the whole catch-up window in memory before applying any of them. It also never splits a page that the provider refuses as too large, so a bad window is re-read every night and the cursor never moves.</li>
+</ul>
+<p>I did not measure the cost of the attack. The stale-lock behaviour itself is certain.</p>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Record the PID and <code>/proc/sys/kernel/random/boot_id</code> in the lock, and reclaim it when that process is gone. Alternatively, move the lock to <code>RuntimeDirectory=</code>, which is cleared at reboot.</li>
+<li>Add <code>OnFailure=</code> with an external alert.</li>
+<li>Apply events and advance the cursor page by page, and halve the span when a response-size error comes back.</li>
+</ul>
+<h3>[LOW] A child that landed and was then transferred is deleted from the mirror</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:193-205,473-488</code> (the same shape applies to mints at <code>:167-179,336-350</code>)</p>
+<p><strong>Attacker story:</strong> No attacker is needed; this is a failure mode an agent can trigger by accident.</p>
+<ol>
+<li>A <code>seed</code> returns <code>receipt-unknown</code> (or the run is killed after broadcast), but the transaction lands.</li>
+<li>The agent moves the child to another wallet before the next run.</li>
+<li><code>seedIsOnChain</code> compares the current owner with <code>s.toAddress</code>, gets <code>false</code>, and <code>dropSeed</code> deletes both rows. After that, <code>/t/&lt;child&gt;</code> returns 404 permanently.</li>
+</ol>
+<p>For mints, the same situation raises a false &quot;DIFFERENT token&quot; alert that needs a human.</p>
+<p><strong>Fix:</strong> Identify the token by facts that cannot change: <code>view.parent == parentId</code> and <code>view.code == 0x${qr}</code> (the bitmap encodes its own ID&#39;s URL). For mints, add <code>agentKeyId</code>. Drop the owner comparison.</p>
+<h3>[LOW] <code>redact.mjs</code> blocks only URLs, not a whitelist, and one error path can print the private key</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/redact.mjs:29,66-68</code>; <code>warden/src/clock/main.mjs:121,221</code>; <code>warden/src/clock/unresolved.mjs:87</code>; <code>@noble/curves esm/abstract/weierstrass.js:273</code>, <code>utils.js:193-194</code></p>
+<p><strong>Attacker story:</strong> Nobody external. If <code>CLOCK_PRIVATE_KEY</code> holds a 32-byte value that is 0 or at least the curve order (for example, a hash pasted by mistake), noble&#39;s range check throws <code>expected valid private key: 1 &lt;= n &lt; N, got &lt;key in decimal&gt;</code>. <code>safeErrorText</code> does not redact it, and the value fits inside the 300-character cap, so the key goes into <code>~/logs/mro-clock.log</code>. Hex format errors, by contrast, are masked (<code>weierstrass.js:268-269</code>).</p>
+<p>Separately, <code>unresolved.mjs:87</code> logs <code>err.shortMessage ?? err.message</code> without <code>safeErrorText</code>, so a non-viem error there could carry the RPC URL.</p>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>In <code>makeWriter</code>, wrap <code>privateKeyToAccount</code> in its own <code>try</code> and print a fixed message, as <code>derive-address.mjs:39-45</code> already does.</li>
+<li>Route <code>unresolved.mjs:87</code> through <code>safeErrorText</code>.</li>
+<li>Also redact any <code>0x</code> followed by 64 hex characters, and any run of more than 70 digits.</li>
+</ul>
+<h3>[LOW] The gas cap is checked once and never binds what is sent</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/write.mjs:96-99,166-176</code></p>
+<p><strong>Attacker story:</strong> Nobody external. <code>gasOk</code> compares <code>getGasPrice()</code> with the cap once per run. Each later <code>writeContract</code> (bisection, many chunks, a run of up to 10 minutes) uses viem&#39;s own EIP-1559 fees with no <code>maxFeePerGas</code>, so a fee spike during the run is paid in full.</p>
+<p><strong>Fix:</strong> Pass <code>maxFeePerGas: maxGasWei</code> (and a matching priority fee) on every send, and treat an underpriced refusal as <code>gasStopped</code>.</p>
+<h3>[LOW] The cursor is written non-atomically and never floored at the deploy block</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/cursor.mjs:51-54</code>; <code>warden/src/clock/run.mjs:960</code></p>
+<p><strong>Attacker story:</strong> Nobody external. A crash during <code>writeFileSync</code> can leave a truncated number that still parses, such as <code>4732</code>. Reconcile then pages from far before the deploy block, times out at 600 seconds, and never advances. This is the silent stall that <code>cursor.mjs:31-36</code> exists to prevent.</p>
+<p><strong>Fix:</strong> Write to a temporary file and <code>rename</code> it into place. Use <code>from = max(floor, cursor + 1)</code>.</p>
+<h3>[INFO] The heartbeat keeps running after a sunset</h3>
+<p><strong>Where:</strong> <code>warden/src/clock/run.mjs:753</code> (no <code>sunset</code> argument is passed); <code>heartbeat.mjs:45,53</code>; contract <code>:169</code></p>
+<p><code>heartbeat</code> has no <code>notSunset</code> check. After a sunset, a quiet Clock therefore sends one every 30 days indefinitely. Pass <code>sunset</code> from <code>viewOf(...).sunset</code> or <code>isSunset()</code>.</p>
+<h2>Questions</h2>
+<ol>
+<li><strong>What HTTP status do the facilitators return for a refused settle?</strong> Ask this of both x402.org and CDP. A 4xx with a <code>{success:false}</code> body makes the first finding reachable today. A 200 limits it to real timeouts that happen to coincide with a cancel.</li>
+<li><strong>Does anything check that a bitmap encodes <code>https://&lt;MRO_DOMAIN&gt;/t/&lt;id&gt;#</code> before it becomes permanent?</strong> <code>worker.mjs:21</code> trusts <code>robustSolveFor</code>, and the Clock writes <code>qr</code> without any check (<code>run.mjs:316</code>). I did not read <code>tools/robust-solve.mjs</code>.</li>
+<li><strong>Is there a runbook for a stuck nonce?</strong> <code>startRun</code> uses the <code>pending</code> nonce (<code>write.mjs:85</code>). A <code>receipt-unknown</code> transaction that never mines (because it was underpriced) blocks every later send, and nothing in the Clock replaces it.</li>
+<li><strong>Can the systemd user manager&#39;s environment override <code>.env</code>?</strong> Node lets the environment win over <code>--env-file</code>. Unlike the Warden&#39;s <code>filter_env</code> under PM2, the Clock unit filters nothing. Does <code>environment.d</code> or <code>import-environment</code> carry any variable the Clock reads (<code>BASE_RPC_URL</code>, <code>STATE_DB_PATH</code>, <code>MAX_GAS_GWEI</code>, <code>CLOCK_*</code>)?</li>
+<li><strong>Should the money check use a second RPC?</strong> The payment check and every simulation trust a single <code>BASE_RPC_URL</code>. Is an independent provider worth it for <code>authorizationState</code> and the <code>AuthorizationUsed</code> lookup, before a row is promoted?</li>
+<li><strong>Should the key copies in <code>~/backups</code> expire?</strong> <code>set-contract-address.sh:31-35</code> copies the whole <code>.env</code>, key included, into <code>~/backups</code> on every run. After a key rotation, the old keys stay there.</li>
+</ol>
+<h2>Out of scope</h2>
+<ul>
+<li>The classification logic in <code>pay/x402.mjs</code> belongs to the payment area. It is cited above only because it is how rows reach the Clock.</li>
+<li>The door, the MCP tools&#39; gates, renderer escaping, and the deploy pipeline beyond the owner-key default.</li>
+<li><code>abi.mjs</code> (generated), <code>contracts/lib/**</code> and <code>node_modules</code> beyond the specific library functions cited.</li>
+</ul>
+<h2>Coverage</h2>
+<ul>
+<li><strong>SQL:</strong> every statement in <code>queries.mjs:52-345</code> is prepared with <code>?</code> placeholders. <code>db.mjs</code> runs fixed DDL only. I found no path from caller input into SQL text.</li>
+<li><strong>Poisoned mirror rows:</strong><ul>
+<li>The chain limits every Clock write on its own: one mint per key, supply and wallet caps, <code>CODE_BYTES</code>, a creation day within 30 days, the check-in window, and the Mark gates.</li>
+<li>Payment status (<code>queued</code>) is recorded only in the mirror, by design.</li>
+<li>The Clock does read the chain for <code>today()</code>, <code>lastWardenDay</code>, the heal and trim decisions (<code>lastDay</code>, <code>level</code>) and the TokenExists identity check. It does not read the chain for the seed and Mark bindings (finding above).</li>
+</ul>
+</li>
+<li><strong>Key handling:</strong><ul>
+<li><code>cast wallet new</code> generates the key, and it never reaches argv: <code>printf</code> is a shell builtin and derivation reads stdin.</li>
+<li>The file is set to 0600 before the key is written, and <code>setup-clock.sh</code> sets <code>umask 077</code>.</li>
+<li><code>.env</code>, <code>.env.*</code> and backup files are gitignored.</li>
+<li>The rehearsal fixture is anvil&#39;s well-known public key.</li>
+<li>The Clock log is 0600 through <code>UMask=0077</code>, and <code>copytruncate</code> keeps that mode across rotation.</li>
+<li>Nothing on the Warden side imports <code>write.mjs</code>.</li>
+<li><code>chain/read.mjs</code> and <code>preflight.mjs</code> are read-only, and their error text goes through <code>safeErrorText</code> or carries none.</li>
+</ul>
+</li>
+<li><strong>Restart mid-batch:</strong><ul>
+<li>Nonces are explicit, and a <code>send-failed</code> does not advance them.</li>
+<li><code>receipt-unknown</code> stops the check-in pass rather than resending, and the next run heals through <code>DayNotAdvanced</code> or <code>TokenExists</code>.</li>
+<li>The <code>markMintWritten</code> and <code>markOrderWritten</code> pairs are transactional.</li>
+<li>SIGTERM releases the lock. SIGKILL does not (finding above).</li>
+</ul>
+</li>
+<li><strong>Reconcile:</strong> logs are filtered by address in the client as well as by the node. Reads trail the head by 12 blocks. The cursor advances only on a completed reconcile. <code>MarkApplied</code> and <code>Finished</code> arguments are range-checked.</li>
+</ul>
+</body>
+</html>

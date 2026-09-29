@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- quality -- MCP tool surface, reference client, skill, accelerated year</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- quality -- MCP tool surface, reference client, skill, accelerated year</h1>
+<p><strong>Snapshot:</strong> 8d2a0d27e3
+<strong>Read:</strong> <code>warden/src/mcp/**</code> (all 16 files), <code>warden/src/pay/x402.mjs</code>, <code>client/src/**</code> (all 9), <code>client/README.md</code>, <code>client/package.json</code>, <code>.github/workflows/publish-client.yml</code>, <code>skills/machine-readable-only/SKILL.md</code>, <code>skills/.../references/refusals.md</code>, <code>warden/tools/year/</code> (<code>checker</code>, <code>runner</code>, <code>report</code>, <code>chain</code>, <code>agent</code>, <code>decide</code>, <code>tally</code>, <code>scenario</code>, <code>wallets</code>, <code>year.config.cjs</code>, <code>start.sh</code>, <code>stop.sh</code>, <code>setup.sh</code>, <code>clock-loop.sh</code>), <code>.claude/rules/warden.md</code>. For verification only: <code>warden/src/chain/read.mjs</code>, <code>warden/src/clock/run.mjs</code>, <code>warden/src/clock/heartbeat.mjs</code>, <code>warden/src/server.mjs</code>, parts of <code>warden/src/mirror/queries.mjs</code>, parts of <code>contracts/src/MachineReadableOnly.sol</code>, and the installed <code>@x402/mcp</code>, <code>@modelcontextprotocol/server</code>, <code>viem</code> and <code>@noble/curves</code> sources.</p>
+<p>Nothing was executed. Every finding is from reading the code and tracing it by hand.</p>
+<h2>Findings</h2>
+<h3>[HIGH] The wallet-cap and supply-cap gates ignore mints already paid for but not yet written [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/gates.mjs:89</code>, <code>warden/src/mcp/gates.mjs:106</code>, <code>warden/src/chain/read.mjs:414</code>, <code>warden/src/chain/read.mjs:443</code>, <code>warden/src/mcp/tools/mint.mjs:34</code>, <code>warden/src/mcp/tools/mint.mjs:81</code>
+<strong>What:</strong> Both gates compare the cap against what the chain has minted, and the chain learns of a mint only at the next 00:05 run. Mints paid during the day are not subtracted, so every mint to one address passes the gate until the Clock runs. The seed budget already handles this same problem by subtracting <code>q.unwrittenSeeds</code> (<code>gates.mjs:136</code>); the two caps do not.
+<strong>Why it matters:</strong> <code>walletCap</code> is 20 and one key mints one token, so an operator with 25 agents minting to one wallet in a day pays 25 times and 5 mints revert <code>WalletCap</code>. The Clock has no branch for that error (<code>warden/src/clock/run.mjs:367</code>), so the paid rows retry nightly until they go stale and need a manual refund. The same happens to every surplus mint on the day the collection sells out.
+<strong>Fix:</strong> Subtract the mirror&#39;s unwritten creations in both gates, as <code>seedBudgetBlock</code> does: mints and seeds with <code>status != &#39;written&#39;</code> for that <code>toAddress</code> (wallet cap) and in total (supply cap). Apply it to the pre-payment check and the post-payment re-check.</p>
+<h3>[MEDIUM] The expired-reservation sweep runs after the check it is meant to protect [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/mint.mjs:27</code>, <code>warden/src/mcp/tools/mint.mjs:50</code>, <code>warden/src/mirror/queries.mjs:259</code>
+<strong>What:</strong> <code>hasMinted</code> counts every <code>mints</code> row for the key, including a dead <code>awaiting-payment</code> one, and it runs at line 27. The sweep that removes dead rows runs at line 50, so a key with a dead reservation is refused <code>already-minted</code> before the sweep is reached. The comment at <code>mint.mjs:45</code> says the sweep prevents exactly this.
+<strong>Why it matters:</strong> A key whose reservation was orphaned (process died between reserving and settling) stays locked out until some other key&#39;s mint or a paid upgrade triggers the sweep. On a quiet site that could be a long time.
+<strong>Fix:</strong> Move <code>q.dropExpiredReservations()</code> above the <code>q.hasMinted</code> check, and add a test where the same key retries after the expiry time.</p>
+<h3>[MEDIUM] A settlement with an unknown outcome looks like a plain payment failure to the agent [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>warden/src/pay/x402.mjs:508</code>, <code>warden/node_modules/@x402/mcp/dist/esm/index.mjs:1077</code>, <code>client/src/messages.mjs:88</code>, <code>client/src/messages.mjs:107</code>, <code>skills/machine-readable-only/SKILL.md:124</code>
+<strong>What:</strong> When settlement throws or times out, the Warden correctly holds the reservation, but returns the library&#39;s result unchanged: a fresh payment demand reading &quot;Payment settlement failed&quot;. The client then prints &quot;NOTHING WAS MINTED, and the site released its reservation. A failed settlement moves no money&quot;, and the skill says &quot;run it again&quot;. In this case all three statements can be false.
+<strong>Why it matters:</strong> A second payment from the same key is blocked (<code>already-minted</code>, <code>mark-already-applied</code>), so this is wrong information rather than a double charge. But the operator is told nothing happened while money may have moved and a token may appear the next night. The related &quot;if a token is listed, the mint succeeded&quot; advice is also unsafe, because <code>status</code> lists unpaid reservations (<code>warden/src/mcp/tools/status.mjs:34</code>, <code>queries.mjs:58</code>).
+<strong>Fix:</strong> In the unresolved branch, replace the result with the Warden&#39;s own refusal, for example <code>{ ok: false, reason: &quot;payment-unresolved&quot; }</code> with a <code>next</code> saying not to pay again and that <code>status</code> will show the outcome after the next run. Add a payment-state field to <code>tokenView</code> and correct the two client messages and the skill sentence.</p>
+<h3>[MEDIUM] The client exits 0 on HTTP refusals other than 401</h3>
+<p><strong>Where:</strong> <code>client/src/mcp.mjs:141</code>, <code>client/src/mcp.mjs:163</code>, <code>client/src/cli.mjs:329</code>
+<strong>What:</strong> <code>rpc</code> handles only status 401 specially. The Warden answers 429, 403 and 500 with a JSON body that has no <code>result</code> (<code>warden/src/server.mjs:457</code>, <code>:474</code>), so <code>callTool</code> returns <code>undefined</code>, the CLI prints <code>checkin: undefined</code>, and the exit code stays 0. A schema rejection has the same effect: the SDK returns plain text with <code>isError: true</code> and no <code>structuredContent</code> (<code>mcp-D7GmuPnv.cjs:1408</code>), and <code>report</code> checks only <code>ok === false</code>.
+<strong>Why it matters:</strong> The documented deployment is a cron job that reports failure by exit status. A rate-limited or failing <code>beat</code> looks healthy while the streak breaks, which is the defect <code>cli.mjs:268</code> says was fixed. No client test covers a non-401 error status.
+<strong>Fix:</strong> In <code>rpc</code>, throw on any non-2xx status using the body&#39;s <code>reason</code>. In <code>report</code>, treat <code>result === undefined</code> and <code>result.isError === true</code> as failures. Add tests for 429, 500 and a schema rejection.</p>
+<h3>[MEDIUM] The checker cannot see a failure that happens before the door accepts something</h3>
+<p><strong>Where:</strong> <code>warden/tools/year/checker.mjs:394</code>, <code>warden/tools/year/runner.mjs:216</code>, <code>warden/tools/year/report.mjs:157</code>
+<strong>What:</strong> The checker&#39;s chain reads are independent, but its expected values come from <code>creditedDays</code>, which counts only check-ins the runner logged as accepted. Its token list comes from the runner&#39;s <code>state.json</code>. Nothing compares the run against the scenario table.
+<strong>Why it matters:</strong> If the Warden wrongly refuses check-ins, or the run pauses on day 5, or passes crash, expected and actual fall together and the report reads &quot;Checker FAILs: 0&quot;. The only trace is the Refusals table and low heart counts.
+<strong>Fix:</strong> Build a second expectation from <code>scenario.mjs</code> and <code>state.startDay</code>, and raise a separate finding when accepted days differ from scripted days. Add <code>run-paused</code>, <code>pass-failed</code> and <code>missed-deadline</code> counts to the report&#39;s summary row.</p>
+<h3>[MEDIUM] Requested Marks, variants and the echo value are never checked per token</h3>
+<p><strong>Where:</strong> <code>warden/tools/year/checker.mjs:50</code>, <code>warden/tools/year/checker.mjs:163</code>, <code>warden/tools/year/report.mjs:52</code>, <code>warden/tools/year/report.mjs:168</code>, <code>warden/tools/year/chain.mjs:39</code>
+<strong>What:</strong> For Marks 1-10 the checker compares mirror against chain only, never against what the runner ordered. The report marks an id &quot;proven live&quot; if any token&#39;s passing row carries that bit. <code>MARK_BITS</code> masks out the variant bits, and <code>echo</code> is decoded but never compared.
+<strong>Why it matters:</strong> A Mark ordered for A2 that never lands is hidden if A1&#39;s landed. A5&#39;s Iris variant 2 and the child&#39;s echo of 365 could be wrong on chain with no FAIL. <code>report.mjs:44</code> names an unwritten ordered Mark as the failure this run exists to catch.
+<strong>Fix:</strong> In <code>compare</code>, derive expected Mark bits per token from the runner&#39;s <code>applied-queued</code> lines with one Clock run of allowance, compare the variant bits for ids 5 and 9, and compare <code>echo</code> for a child.</p>
+<h3>[MEDIUM] <code>demand-only</code> is reported as a price check, but the live run checks nothing</h3>
+<p><strong>Where:</strong> <code>warden/tools/year/agent.mjs:75</code>, <code>warden/tools/year/runner.mjs:581</code>, <code>warden/tools/year/report.mjs:49</code>
+<strong>What:</strong> The report says <code>demand-only</code> is &quot;the price read and asserted with nothing paid&quot;. On that path the agent returns the demand without comparing amount or <code>payTo</code>, and the runner logs <code>ok: true</code>. The only assertion is in a unit test against a stub (<code>warden/test/year-agent.test.mjs:113</code>).
+<strong>Why it matters:</strong> The Marks left <code>demand-only</code> are the dearest ones. A Vessel quoted at $1.00 would pass the year unnoticed.
+<strong>Fix:</strong> On the <code>demand-only</code> path, run <code>chooseAccepted</code> and <code>assertExpected</code> against <code>markAmount(upgradeId)</code> and the treasury, and log a refusal on mismatch.</p>
+<h3>[MEDIUM] <code>refusals.md</code> gives the wrong remedy for <code>components</code></h3>
+<p><strong>Where:</strong> <code>skills/machine-readable-only/references/refusals.md:20</code>, <code>warden/src/door/verify.mjs:128</code>, <code>client/src/signing.mjs:26</code>
+<strong>What:</strong> The skill says to sign four components and omits <code>signature-agent</code>. The door requires five, and the raw-protocol document in the same bundle lists five.
+<strong>Why it matters:</strong> Hand-signing is currently the only way in. An agent refused <code>components</code> that follows this remedy stays refused.
+<strong>Fix:</strong> List all five in <code>refusals.md</code>, and add a test that checks the list against the door&#39;s <code>REQUIRED</code>.</p>
+<h3>[LOW] Three agent-facing refusals are undocumented, and the guard test cannot see them</h3>
+<p><strong>Where:</strong> <code>tools/test/skill-doc.test.mjs:78</code>, <code>warden/src/mcp/tools/checkin.mjs:56</code>, <code>warden/src/mcp/gates.mjs:163</code>, <code>warden/src/bootstrap.mjs:161</code>
+<strong>What:</strong> <code>not-yet-mirrored</code>, <code>recipient-cannot-receive</code> and <code>payment-not-configured</code> are absent from <code>refusals.md</code>. The test&#39;s pattern matches only <code>reason: &quot;x&quot;</code> written literally, so reasons from a ternary or a bare <code>return &quot;x&quot;</code> are invisible, and <code>bootstrap.mjs</code> is not scanned. <code>recipient-cannot-receive</code> is also in neither <code>NEXT</code> nor <code>NO_NEXT</code>.
+<strong>Why it matters:</strong> The test passes while the surface it guards has gaps.
+<strong>Fix:</strong> Document the three, and have the test collect every string literal from <code>gates.mjs</code>, the tool files and <code>bootstrap.mjs</code>.</p>
+<h3>[LOW] <code>status</code> with a token id answers without <code>ok</code> on success</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/status.mjs:23</code>, <code>warden/src/mcp/tokenView.mjs:38</code>, <code>warden/test/tool-convention.test.mjs:40</code>
+<strong>What:</strong> The view carries no <code>ok</code> field. The convention test calls <code>status</code> with <code>{}</code> only, so this path is unchecked.
+<strong>Why it matters:</strong> A client branching on <code>result.ok</code> reads a successful lookup as a failure.
+<strong>Fix:</strong> Return <code>{ ok: true, ...view }</code> from the tool only, leaving <code>/t/&lt;id&gt;</code> unchanged, and add the case to the test.</p>
+<h3>[LOW] Any command except <code>whoami</code> creates a new identity when the key file is missing</h3>
+<p><strong>Where:</strong> <code>client/src/cli.mjs:132</code>, <code>client/src/keys.mjs:19</code>, <code>client/src/keys.mjs:89</code>
+<strong>What:</strong> <code>beat</code>, <code>status</code>, <code>ladder</code>, <code>rebind</code> and <code>rest</code> all call <code>ensureIdentity</code>, so a mistyped <code>--key</code> or a different <code>HOME</code> silently makes a fresh key. With <code>HOME</code> unset the default path becomes <code>./.mro/</code> in the current directory. <code>loadIdentity</code> also accepts a world-readable file, unlike the wallet key file.
+<strong>Why it matters:</strong> A cron <code>beat</code> under the wrong <code>HOME</code> generates a stray private key and fails <code>unknown-key</code>. The file&#39;s own comment at <code>cli.mjs:16</code> says a key must not be created as a side effect.
+<strong>Fix:</strong> Create an identity only in <code>join</code>. Use <code>os.homedir()</code>. Refuse or tighten an identity file with group or other permissions.</p>
+<h3>[LOW] The publish workflow can stage a client that still believes it is unpublished</h3>
+<p><strong>Where:</strong> <code>client/src/messages.mjs:35</code>, <code>client/src/messages.mjs:45</code>, <code>.github/workflows/publish-client.yml:186</code>
+<strong>What:</strong> Nothing requires <code>PUBLISHED</code> to be <code>true</code> before staging. With it <code>false</code>, a client run through <code>npx</code> prints a cron line naming its own path inside the npx cache.
+<strong>Why it matters:</strong> That path disappears when the cache is cleared, and the failure goes only to <code>~/.mro/beat.log</code>.
+<strong>Fix:</strong> Add a workflow step before &quot;Stage for approval&quot; that fails unless <code>PUBLISHED === true</code>.</p>
+<h3>[LOW] <code>seed</code> checks the parent&#39;s level in the mirror, which runs a day ahead of the chain</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/tools/seed.mjs:59</code>, <code>warden/src/clock/run.mjs:439</code>, <code>contracts/src/MachineReadableOnly.sol:847</code>, <code>warden/src/mcp/tools/seed.mjs:176</code>
+<strong>What:</strong> On the day the 365th check-in is accepted, the mirror says 365 and the chain says 364. The Clock sends seeds before check-ins, so that night&#39;s seed reverts <code>ParentNotWhole</code> and lands a night later. This affects an agent that missed days, whose key is already a year old. Separately, the note &quot;the next one opens a year after your first mint&quot; is wrong once a seed is spent; the contract opens one per anniversary (<code>:830</code>).
+<strong>Why it matters:</strong> The agent is promised an <code>onChainBy</code> that is missed by a day, and an operator alert fires for a normal event.
+<strong>Fix:</strong> Add a chain-level gate using the <code>lifecycleOf</code> record <code>tokenBlock</code> already fetches, or report the later date. Reword the note to &quot;on the next anniversary of your first mint&quot;.</p>
+<h3>[LOW] Report rows say &quot;proven live&quot; on weak evidence</h3>
+<p><strong>Where:</strong> <code>warden/tools/year/report.mjs:202</code>, <code>warden/tools/year/report.mjs:72</code>, <code>warden/tools/year/checker.mjs:217</code>, <code>warden/tools/year/checker.mjs:378</code>
+<strong>What:</strong> A milestone path is &quot;proven live&quot; if the line exists, even when <code>decoded</code> is <code>false</code> or the decode never ran. &quot;A check-in refused&quot; counts transport errors and <code>missed-deadline</code>. The heartbeat is inferred by exclusion, so a mint or Mark written more than a day after it was ordered reads as a heartbeat.
+<strong>Why it matters:</strong> These are the narrow places where a failure can appear as a pass on the page. Decode failures do show in the summary, but are not in &quot;Checker FAILs&quot;.
+<strong>Fix:</strong> Require <code>decoded === true</code> for art-bearing milestones, count only door-issued reasons as refusals, include failed decodes in the FAIL total, and widen the heartbeat&#39;s window using the Clock log.</p>
+<h3>[LOW] Checker robustness: stale log on re-read, and memory lost on restart</h3>
+<p><strong>Where:</strong> <code>warden/tools/year/checker.mjs:311</code>, <code>warden/tools/year/checker.mjs:333</code>, <code>warden/tools/year/checker.mjs:491</code>
+<strong>What:</strong> The re-read after the 20-second pause reuses the runner log and <code>today</code> captured at the start of the pass. Milestone memory lives only in the process, so a PM2 restart drops any crossing that happened across it.
+<strong>Why it matters:</strong> The first produces a false FAIL if a runner retry lands in between; the second produces a false &quot;not reached&quot;. Neither can produce a false pass.
+<strong>Fix:</strong> Re-read the log and <code>today</code> for the second judgement, and rebuild memory from <code>checker.jsonl</code> on start.</p>
+<h3>[LOW] <code>mro://token/{id}</code> lacks the strict id check the HTTP route has</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/resources.mjs:59</code>, <code>warden/src/server.mjs:196</code>
+<strong>What:</strong> The resource uses <code>Number(id)</code>, so <code>0x1</code> reads token 1 and an empty id reads token 0. The <code>/t/</code> route refuses both. Its refusal also skips <code>withNext</code> and the chain fallback.
+<strong>Why it matters:</strong> Two routes to the same view disagree on what an id is.
+<strong>Fix:</strong> Apply the same <code>/^[0-9]+$/</code> test.</p>
+<h3>[LOW] Comments and documents that contradict the code</h3>
+<p><strong>Where:</strong> <code>warden/src/mcp/server.mjs:127</code>, <code>client/src/challenge.mjs:33</code>, <code>warden/src/mcp/server.mjs:96</code>, <code>warden/src/mcp/server.mjs:157</code>, <code>skills/machine-readable-only/references/refusals.md:4</code>, <code>client/src/mcp.mjs:26</code>
+<strong>What:</strong></p>
+<ul>
+<li><code>server.mjs:127</code> says <code>sigHash</code> is a hash of the Signature header; <code>checkin.mjs:202</code> and <code>door/middleware.mjs:185</code> say that was replaced by the signature base.</li>
+<li><code>challenge.mjs:33</code> names a <code>stale-challenge</code> reason that does not exist; the code retries on <code>expired</code> and <code>challenge</code>.</li>
+<li><code>server.mjs:96</code> types &quot;1 USDC&quot; literally, against the rule at <code>mint.mjs:14</code>.</li>
+<li>The <code>internal</code> refusal from a thrown handler skips <code>withNext</code>, though <code>NEXT</code> has an entry for it.</li>
+<li><code>refusals.md</code> says three reasons carry a second field (at least six do) and files <code>internal</code> and <code>paid-but-unavailable</code> under routing.</li>
+<li><code>CLIENT_INFO.version</code> duplicates <code>package.json</code>.</li>
+<li>Doc blocks sit above the wrong function at <code>cli.mjs:265</code>, <code>door.mjs:45</code> and <code>pay.mjs:48</code>.</li>
+</ul>
+<p><strong>Why it matters:</strong> The project&#39;s own rule treats a contradicting comment as a bug.
+<strong>Fix:</strong> Correct each in place.</p>
+<h3>[INFO] Skill placeholders are guarded by a notice only [BLOCKS MAINNET]</h3>
+<p><strong>Where:</strong> <code>skills/machine-readable-only/SKILL.md:8</code>, <code>tools/prepublish-check.mjs:314</code>
+<strong>What:</strong> Eleven <code>PENDING-BEFORE-MAINNET</code> markers remain, and the skill already states chain id 8453. The check prints a notice and does not fail. This is known and deliberate; it is recorded so the launch checklist carries it.</p>
+<h3>[INFO] The skill&#39;s <code>viewOf</code> tuple is correct today and pinned by nothing</h3>
+<p><strong>Where:</strong> <code>skills/machine-readable-only/SKILL.md:86</code>, <code>warden/src/clock/abi.mjs:1008</code>
+<strong>What:</strong> The 18 types match the ABI. <code>tools/test/skill-doc.test.mjs</code> has no check for it, and <code>read.mjs:31</code> records that this struct has changed before.</p>
+<p>No Critical findings.</p>
+<h2>Questions</h2>
+<ol>
+<li><strong>Can the year reach its heartbeat in the stated run length?</strong> By the scenario, A9 finishes on run day 427, the last write lands on day 428, and <code>HEARTBEAT_AFTER_DAYS</code> is 30, so the earliest heartbeat is day 458. <code>runner.mjs:151</code> says 450 days and <code>start.sh:7</code> says 38 hours (456 days). Did the first run reach it?</li>
+<li><strong>Is the <code>already-minted</code> gate meant to be mirror-only?</strong> It mirrors <code>revert AlreadyMinted</code> but I found no public getter for it in the ABI. It also counts seed rows (<code>queries.mjs:131</code>), so a rebound-in key that seeded but never minted is refused a mint the chain would accept.</li>
+<li><strong>Does pinning <code>mro-agent@&lt;version&gt;</code> pin what runs?</strong> <code>client/package.json:30</code> has <code>viem ^2.56.0</code> and there is no shrinkwrap, so the dependency tree floats on each install.</li>
+<li><strong>Is a 300-second public cache right for <code>mro://token/{id}</code>?</strong> The hint at <code>server.mjs:115</code> covers every resource read, and a token&#39;s view changes when a check-in is accepted.</li>
+<li><strong>What does <code>onChainBy</code> mean for a mint paid in the last hour before 00:05?</strong> The description says solving takes up to an hour and the Clock writes only solved mints.</li>
+<li><strong>Should a check-in be accepted for a token whose payment is held as unresolved?</strong> <code>checkin.mjs:174</code> admits only <code>queued</code>, so it answers <code>unknown-token</code> and the day is lost even if the payment resolves as paid that night.</li>
+</ol>
+<h2>Out of scope</h2>
+<ul>
+<li><code>warden/src/clock/run.mjs:367</code> -- a paid mint refused <code>WalletCap</code> or <code>SupplyCap</code> has no named handling and retries nightly until <code>StaleDay</code>.</li>
+</ul>
+<h2>Coverage</h2>
+<p>Read in full: everything listed under <strong>Read</strong>.</p>
+<p>Read in part or by search only: <code>warden/src/mirror/queries.mjs</code> (two ranges), the contract (three ranges plus a search of reverts and events), <code>door/verify.mjs</code> and <code>door/middleware.mjs</code>, the client tests and <code>warden/test/year-*.test.mjs</code> (one excerpt of the checker test), and <code>references/raw-protocol.md</code> (a test pins it as a byte-identical copy of the docs file).</p>
+<p>Not reached: <code>warden/tools/year/fund.mjs</code>, the client and year tests line by line, <code>warden/public/llms.txt</code>, <code>server.json</code>, and the images, which do not bear on this subsystem.</p>
+<p>I checked one suspicion and dropped it: a malformed wallet key does not reach the client&#39;s error output, because the installed <code>@noble/curves</code> reports only the type, the length or one character.</p>
+</body>
+</html>
