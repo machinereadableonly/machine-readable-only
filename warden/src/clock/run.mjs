@@ -304,20 +304,28 @@ export async function runClock({
   //    another day.
   Object.assign(summary, await resolveUnresolvedPayments({ q, publicClient, alert, log }));
 
-  // 1. THE GAS GUARD, BEFORE ANYTHING IS SENT. Stopping the whole run rather
-  //    than skipping individual writes is deliberate: a run that wrote the
-  //    mints and abandoned the check-ins leaves the mirror half-applied, and
-  //    waiting costs nothing at all. A pending row keeps its own day number, so
-  //    levels and streaks come out identical whenever the write lands.
+  // 1. THE GAS GUARD, BEFORE ANYTHING IS SENT. It stops every WRITE pass and
+  //    not the run: skipping one write and making another would leave the
+  //    mirror half-applied, but returning here stopped the mirror LEARNING as
+  //    well -- no reconcile, so a token its owner sealed went on telling
+  //    /t/<id> it was alive, and no queue was scanned for a row needing a
+  //    human. The same rule the pause abort already follows (4.L9).
+  //
+  //    Waiting costs nothing: a pending row keeps its own day number, so levels
+  //    and streaks come out identical whenever the write lands. That is why a
+  //    gas stop on its own is not a failure -- see exitCodeFor.
   const gas = await writer.gasOk();
   if (!gas.ok) {
     summary.gasStopped = true;
     alert(`clock: gas is ${writer.formatGas(gas.gasPrice)}, above the cap of ${writer.formatGas(gas.capWei)} -- nothing written`);
-    return summary;
+  } else {
+    log(`clock: gas ${writer.formatGas(gas.gasPrice)}, under the cap`);
+    await writer.startRun();
   }
-  log(`clock: gas ${writer.formatGas(gas.gasPrice)}, under the cap`);
 
-  await writer.startRun();
+  /// Nothing is SENT once the gas guard or a write pass has stopped the run.
+  /// Read-only work carries on.
+  const noWrites = () => summary.gasStopped || Boolean(summary.aborted);
 
   // 2. A MINT WHOSE ARTWORK NEVER SOLVED CAN NEVER BE WRITTEN. The contract
   //    takes `code` once and keeps it forever, so minting a placeholder makes a
@@ -329,7 +337,7 @@ export async function runClock({
   }
 
   // 3. MINTS.
-  for (const mint of q.pendingMints()) {
+  for (const mint of noWrites() ? [] : q.pendingMints()) {
     const result = await writer.send(
       "mint",
       // The mirror stores the RFC 7638 thumbprint as base64url; the contract
@@ -466,7 +474,7 @@ export async function runClock({
 
   // Nothing is sent once a write phase has aborted: NotWarden, Sunset and
   // EnforcedPause refuse `seed` for exactly the reasons they refuse `mint`.
-  for (const s of summary.aborted ? [] : q.pendingSeeds()) {
+  for (const s of noWrites() ? [] : q.pendingSeeds()) {
     // FOUR arguments, and NO key id among them. The child inherits the parent's
     // agent key on chain (`_agentKeyOf[childId] = key`), so unlike `mint` there
     // is no bytes32 here for keyIdToBytes32 to get wrong -- but the address and
@@ -573,7 +581,7 @@ export async function runClock({
 
   // Nothing is sent once a write phase has aborted -- see the mints loop for
   // why the run continues to reconcile anyway.
-  const pending = summary.aborted ? [] : q.pendingCredits(today - 1);
+  const pending = noWrites() ? [] : q.pendingCredits(today - 1);
 
   // 15.8. ONE BAD ROW IS ONE ROW'S PROBLEM. packIds throws on an id that will
   // not fit in four bytes, it is called with no `try`, and the throw
@@ -712,7 +720,7 @@ export async function runClock({
       summary.stuckMarks.map((o) => `${o.upgradeId} on ${o.tokenId}`).join(", "));
   }
 
-  for (const order of summary.aborted ? [] : q.pendingMarkOrders()) {
+  for (const order of noWrites() ? [] : q.pendingMarkOrders()) {
     // THREE arguments. The variant is the shape or ink the agent chose and paid
     // for, and it exists nowhere else -- the contract writes it into the token's
     // own word, permanently. Dropping it would silently hand out the default.
@@ -805,7 +813,8 @@ export async function runClock({
   //     back: one row queued before the pause reverts EnforcedPause on the
   //     first write and the operator falls silent on chain. Every other abort
   //     is a reason the heartbeat would fail for too.
-  if (!summary.aborted || summary.aborted === "EnforcedPause") {
+  //     A heartbeat is a WRITE, so a gas stop skips it like any other.
+  if (!summary.gasStopped && (!summary.aborted || summary.aborted === "EnforcedPause")) {
     // A HEAL IS NOT A WRITE. It is the discovery that a day landed on some
     // earlier night, and it sends no transaction, so it cannot have stamped
     // `lastWardenDay` -- counting it made a night of pure healing look busy

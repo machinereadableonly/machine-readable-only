@@ -111,6 +111,41 @@ test("gas above the cap writes nothing at all", async () => {
   assert.match(alerts[0], /above the cap/);
 });
 
+// A GAS STOP IS ABOUT WRITING. Returning before the read-only passes meant a
+// dear night also stopped the mirror LEARNING -- no reconcile, so a token its
+// owner sealed went on telling /t/<id> it was alive, and nothing scanned the
+// queues for a row that needs a human.
+test("a gas stop skips the writes and still reconciles and scans", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1, { solveState: "failed" });
+  const asked = [];
+  const chain = {
+    async getBlockNumber() { return FLOOR + 100n; },
+    async getLogs({ fromBlock, toBlock }) { asked.push([fromBlock, toBlock]); return []; },
+  };
+  const writer = okWriter({
+    async gasOk() { return { ok: false, gasPrice: 900_000_000n, capWei: 50_000_000n }; },
+  });
+  const summary = await runClock({ ...baseArgs(q), publicClient: chain, writer, alert: () => {} });
+
+  assert.equal(summary.gasStopped, true);
+  assert.equal(writer.sent.length, 0, "not one transaction was sent");
+  assert.deepEqual(summary.stuck, [1], "the paid mint that needs a human is still reported");
+  assert.equal(asked.length, 1, "and the night still read the chain");
+  assert.ok(summary.reconciled);
+  assert.ok(summary.stale, "the three-run scan still runs");
+});
+
+test("a gas stop on its own is not a failure: the same rows go out tomorrow", async () => {
+  const { q } = mirror();
+  const writer = okWriter({
+    async gasOk() { return { ok: false, gasPrice: 900_000_000n, capWei: 50_000_000n }; },
+  });
+  const summary = await runClock({ ...baseArgs(q), writer, alert: () => {} });
+
+  assert.equal(exitCodeFor(summary), 0);
+});
+
 test("a solved, paid mint is written and both rows move to written", async () => {
   const { db, q } = mirror();
   queueMint(q, db, 1);
