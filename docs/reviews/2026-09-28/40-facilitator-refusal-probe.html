@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>docs/reviews/2026-09-28/40-facilitator-refusal-probe.html</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>How x402.org and CDP refuse a settlement, measured</h1>
+<p>Ruling 7 of the 2026-09-28 review. Measured 2026-09-30 on Base Sepolia
+(<code>eip155:84532</code>) with <code>warden/tools/facilitator-refusal-probe.mjs</code>, which calls
+the Warden&#39;s own resource server (<code>initResourceServer</code>) and prints what its
+<code>settlePayment</code> returned or threw.</p>
+<h2>The three cases</h2>
+<p>Each is signed by the real client signer and none can move money:</p>
+<ul>
+<li><strong>expired</strong> -- <code>validBefore</code> a day in the past; USDC itself refuses it.</li>
+<li><strong>overdrawn</strong> -- asks for 1,000,000 USDC from a wallet holding a few.</li>
+<li><strong>bad-signature</strong> -- one byte of <code>s</code> flipped, so the signer does not recover.</li>
+</ul>
+<p>Every payment named the burn address as <code>payTo</code>.</p>
+<h2>What came back</h2>
+<table>
+<thead>
+<tr>
+<th>Facilitator</th>
+<th>Case</th>
+<th>Returned or thrown</th>
+<th>HTTP</th>
+<th>errorReason</th>
+<th>Transaction</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>x402.org</td>
+<td>expired</td>
+<td>returned <code>success: false</code></td>
+<td>200</td>
+<td><code>invalid_exact_evm_payload_authorization_valid_before</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td>x402.org</td>
+<td>overdrawn</td>
+<td>returned <code>success: false</code></td>
+<td>200</td>
+<td><code>invalid_exact_evm_insufficient_balance</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td>x402.org</td>
+<td>bad-signature</td>
+<td>returned <code>success: false</code></td>
+<td>200</td>
+<td><code>invalid_exact_evm_signature</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td>CDP</td>
+<td>expired</td>
+<td>threw <code>SettleError</code></td>
+<td>400</td>
+<td><code>invalid_exact_evm_payload_authorization_valid_before</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td>CDP</td>
+<td>overdrawn</td>
+<td>threw <code>SettleError</code></td>
+<td>400</td>
+<td><code>invalid_payload</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td>CDP</td>
+<td>bad-signature</td>
+<td>threw <code>SettleError</code></td>
+<td>400</td>
+<td><code>invalid_exact_evm_payload_signature</code></td>
+<td>none</td>
+</tr>
+</tbody></table>
+<p>CDP was reached pinned to IPv4, as the Warden runs.</p>
+<h2>What it means</h2>
+<ul>
+<li><strong>x402.org refuses with a 200.</strong> The Warden already reads that correctly:
+no hash and a known pre-broadcast reason is a decline, released at once.</li>
+<li><strong>CDP refuses with a 400, which @x402/core throws as a <code>SettleError</code>.</strong> The
+Warden treated every throw as unknown, so on CDP -- the mainnet facilitator
+-- every plain refusal would have held the agent&#39;s reservation until the
+next 00:05 UTC. Plan C Task 3 judges a thrown <code>SettleError</code> exactly as a
+returned answer.</li>
+<li><strong>CDP spells two reasons differently.</strong> <code>invalid_exact_evm_payload_signature</code>
+is a bad signature, which can never move money, so it joins the
+pre-broadcast allowlist. <code>invalid_payload</code> is generic (here it wrapped a
+reverted balance simulation), so it stays unknown and is held: a wrong
+release could lose an agent&#39;s payment, while a wrong hold costs one night.</li>
+<li>These are Base Sepolia answers. CDP&#39;s mainnet answers are assumed to take the
+same shape and have not been measured.</li>
+</ul>
+</body>
+</html>
