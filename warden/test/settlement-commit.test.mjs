@@ -136,6 +136,15 @@ async function fakeFacilitator({ settle = "ok" } = {}) {
           return send({ success: false, errorReason: "invalid_exact_evm_transfer_event_mismatch",
             transaction: SETTLE_TX, network: NETWORK, payer: PAY_TO }, 400);
         }
+        // THE HASH ALONE HAS TO DECIDE IT. `hash-4xx` above carries a reason
+        // that is not on the pre-broadcast allowlist, so it is held on the
+        // reason and would stay held with the hash check deleted. This one
+        // pairs an ALLOWLISTED reason with a broadcast hash: the only thing
+        // standing between it and a released reservation is the hash.
+        if (settle === "allowlisted-reason-with-hash-4xx") {
+          return send({ success: false, errorReason: "invalid_exact_evm_signature",
+            transaction: SETTLE_TX, network: NETWORK, payer: PAY_TO }, 400);
+        }
         if (settle === "unknown-4xx") {
           return send({ success: false, errorReason: "some_reason_invented_after_this_build",
             transaction: "", network: NETWORK, payer: PAY_TO }, 400);
@@ -334,6 +343,28 @@ for (const settle of ["hash-4xx", "unknown-4xx", "gateway-502", "cdp-invalid-pay
     assert.equal(db.prepare("SELECT status FROM mints").get().status, "payment-unresolved");
   });
 }
+
+// AND THE HASH ON ITS OWN, which is what none of the cases above actually test.
+// Every held non-2xx up there carries a reason that is not on the pre-broadcast
+// allowlist, so each is held on the REASON -- delete the hash check in
+// `isDeclined` and they all stay green. A facilitator can send both: a
+// recognised pre-broadcast reason beside a transaction it did broadcast. The
+// hash wins, because a hash means the transfer exists and the money can still
+// move, whatever reason came with it.
+test("an allowlisted refusal that nonetheless carries a transaction hash is held", async () => {
+  const { result, db, q } = await mintPaying({ settle: "allowlisted-reason-with-hash-4xx" });
+
+  const row = db.prepare("SELECT tokenId, status FROM mints").get();
+  assert.ok(row, "the row must survive: a broadcast transfer can still land");
+  assert.equal(row.status, "payment-unresolved", "the hash decides it, not the reason");
+  assert.deepEqual(q.unresolvedPayments().map((r) => r.tokenId), [row.tokenId]);
+  assert.deepEqual(q.pendingMints(), [], "and nothing unpaid reaches the chain meanwhile");
+
+  // AND THE AGENT IS TOLD NOT TO PAY AGAIN, which is the whole point of the
+  // distinction: a released reservation invites the one retry that can debit a
+  // payer twice for a transfer that is already on chain.
+  assert.equal(result.structuredContent.reason, "payment-unresolved");
+});
 
 // THE OTHER FAILURE PATH, AND IT IS NOT THE SAME FAILURE. A facilitator that
 // answers with something @x402/core cannot parse makes settlePaymentResult
