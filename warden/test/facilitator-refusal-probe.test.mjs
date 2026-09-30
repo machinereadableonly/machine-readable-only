@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generatePrivateKey } from "viem/accounts";
+import { recoverTypedDataAddress } from "viem";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+// The same types the client signer uses, from the same package, so a recovery
+// here cannot pass by disagreeing with how the authorisation was signed.
+import { authorizationTypes } from "@x402/evm";
 import { refusalCases } from "../tools/facilitator-refusal-probe.mjs";
 
 const REQUIREMENT = {
@@ -11,8 +15,31 @@ const REQUIREMENT = {
 };
 const NOW = 1_790_000_000;
 
+function signerOf(kase) {
+  const a = kase.payload.payload.authorization;
+  return recoverTypedDataAddress({
+    types: authorizationTypes,
+    primaryType: "TransferWithAuthorization",
+    domain: {
+      name: kase.requirement.extra.name,
+      version: kase.requirement.extra.version,
+      chainId: Number(String(kase.requirement.network).split(":")[1]),
+      verifyingContract: kase.requirement.asset,
+    },
+    message: {
+      ...a,
+      value: BigInt(a.value),
+      validAfter: BigInt(a.validAfter),
+      validBefore: BigInt(a.validBefore),
+    },
+    signature: kase.payload.payload.signature,
+  });
+}
+
 test("the probe builds three refusals, each unable to move money", async () => {
-  const cases = await refusalCases({ requirement: REQUIREMENT, walletPrivateKey: generatePrivateKey(), now: NOW });
+  const walletPrivateKey = generatePrivateKey();
+  const wallet = privateKeyToAccount(walletPrivateKey).address;
+  const cases = await refusalCases({ requirement: REQUIREMENT, walletPrivateKey, now: NOW });
   assert.deepEqual(cases.map((c) => c.name), ["expired", "overdrawn", "bad-signature"]);
 
   const auth = (c) => c.payload.payload.authorization;
@@ -25,7 +52,10 @@ test("the probe builds three refusals, each unable to move money", async () => {
 
   const bad = cases[2];
   assert.match(bad.payload.payload.signature, /^0x[0-9a-f]{130}$/);
-  assert.notEqual(bad.payload.payload.signature, cases[0].payload.payload.signature);
+  // The CONTROL first: an untouched signature recovers to the wallet, so a
+  // failed recovery below is the tampering and not a broken recovery here.
+  assert.equal(await signerOf(expired), wallet, "an untouched authorisation recovers to its signer");
+  assert.notEqual(await signerOf(bad), wallet, "a tampered authorisation must not recover to the wallet");
 
   const nonces = new Set(cases.map((c) => auth(c).nonce));
   assert.equal(nonces.size, 3, "one nonce per case, so no case can spend another's");
