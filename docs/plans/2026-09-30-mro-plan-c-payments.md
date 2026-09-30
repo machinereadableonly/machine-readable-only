@@ -279,13 +279,13 @@ agent wallet as payer, three refusals per facilitator, nothing moves.
 
 - [ ] **Step 1: Probe x402.org**
 
-Run from `warden/`: `MRO_PROBE_KEY_FILE=$HOME/.mro-test-wallet/wallet.key node tools/facilitator-refusal-probe.mjs`
+Run from `warden/`: `MRO_PROBE_KEY_FILE=<test agent wallet key file> node tools/facilitator-refusal-probe.mjs`
 Expected: three lines, one per case. Each is either `"threw":true` with a
 `statusCode`, or `"threw":false` with `"success":false`.
 
 - [ ] **Step 2: Probe CDP, pinned to IPv4**
 
-Run from `warden/`: `MRO_PROBE_KEY_FILE=$HOME/.mro-test-wallet/wallet.key node --dns-result-order=ipv4first --no-network-family-autoselection --env-file=.env tools/facilitator-refusal-probe.mjs https://api.cdp.coinbase.com/platform/v2/x402`
+Run from `warden/`: `MRO_PROBE_KEY_FILE=<test agent wallet key file> node --dns-result-order=ipv4first --no-network-family-autoselection --env-file=.env tools/facilitator-refusal-probe.mjs https://api.cdp.coinbase.com/platform/v2/x402`
 Expected: three lines as above.
 If `initResourceServer` throws "no supported payment kinds", CDP does not offer
 Base Sepolia: **STOP** and report to the operator. Probing mainnet is a

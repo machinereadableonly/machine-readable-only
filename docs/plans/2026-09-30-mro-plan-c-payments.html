@@ -383,13 +383,13 @@ agent wallet as payer, three refusals per facilitator, nothing moves.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 1: Probe x402.org</strong></li>
 </ul>
-<p>Run from <code>warden/</code>: <code>MRO_PROBE_KEY_FILE=$HOME/.mro-test-wallet/wallet.key node tools/facilitator-refusal-probe.mjs</code>
+<p>Run from <code>warden/</code>: <code>MRO_PROBE_KEY_FILE=&lt;test agent wallet key file&gt; node tools/facilitator-refusal-probe.mjs</code>
 Expected: three lines, one per case. Each is either <code>&quot;threw&quot;:true</code> with a
 <code>statusCode</code>, or <code>&quot;threw&quot;:false</code> with <code>&quot;success&quot;:false</code>.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 2: Probe CDP, pinned to IPv4</strong></li>
 </ul>
-<p>Run from <code>warden/</code>: <code>MRO_PROBE_KEY_FILE=$HOME/.mro-test-wallet/wallet.key node --dns-result-order=ipv4first --no-network-family-autoselection --env-file=.env tools/facilitator-refusal-probe.mjs https://api.cdp.coinbase.com/platform/v2/x402</code>
+<p>Run from <code>warden/</code>: <code>MRO_PROBE_KEY_FILE=&lt;test agent wallet key file&gt; node --dns-result-order=ipv4first --no-network-family-autoselection --env-file=.env tools/facilitator-refusal-probe.mjs https://api.cdp.coinbase.com/platform/v2/x402</code>
 Expected: three lines as above.
 If <code>initResourceServer</code> throws &quot;no supported payment kinds&quot;, CDP does not offer
 Base Sepolia: <strong>STOP</strong> and report to the operator. Probing mainnet is a
