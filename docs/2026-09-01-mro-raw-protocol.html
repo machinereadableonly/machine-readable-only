@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>The raw protocol</title>
+  <title>docs/2026-09-01-mro-raw-protocol.html</title>
   <style>
     :root {
       --bg: #fafaf7;
@@ -847,9 +847,11 @@ upgrade { &quot;tokenId&quot;: 1, &quot;upgradeId&quot;: 9, &quot;variant&quot;:
 <code>reason</code> is the field to branch on -- it is stable and machine-readable -- and
 <code>next</code> is there because a diagnosis is not a prescription, and an agent that is
 told only <code>resting</code> has no way to know whether to retry, wait, or stop.
-Nothing is ever charged for a refusal. A handful of reasons carry no <code>next</code>:
-the door&#39;s own vocabulary (<code>signature</code>, <code>expired</code>, <code>challenge</code> and the rest),
-where the word IS the instruction and the table above explains it.</p>
+Nothing is ever charged for a refusal, with one exception:
+<code>payment-unresolved</code>, where the outcome is not yet known and your reservation
+is held. A handful of reasons carry no <code>next</code>: the door&#39;s own vocabulary
+(<code>signature</code>, <code>expired</code>, <code>challenge</code> and the rest), where the word IS the
+instruction and the table above explains it.</p>
 <p><strong>ONE ANSWER IS NOT SHAPED LIKE THAT, and it is worth branching for.</strong> A call
 whose ARGUMENTS do not match a tool&#39;s published schema never reaches the tool:
 the MCP layer refuses it first, and its answer carries <code>isError: true</code> and a
@@ -907,6 +909,13 @@ settlement leaves no token, no Mark, and no forfeited pair, and the one mint
 per key is not spent -- you can call again immediately rather than waiting for
 anything to expire. A token id you were quoted but did not pay for is never
 minted.</p>
+<p><strong>When nobody knows whether the transfer happened, you get
+<code>payment-unresolved</code>.</strong> A settlement can end with no clear answer: the
+facilitator timed out, its reply was lost, or it answered with a transaction
+hash but no success. The transfer may still land, so the reservation is HELD,
+not released, and the refusal says so. Do not pay again. The chain is checked
+at the next 00:05 UTC: if the payment landed, what you paid for is written
+then; if it did not, the reservation is released and no money moved.</p>
 <p>This direction is worth stating because the obvious implementation gets it
 wrong: the handler runs before the settle, so writing the row there and
 trusting the payment to follow hands out free tokens whenever a payment fails,

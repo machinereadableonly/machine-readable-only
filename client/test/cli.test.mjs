@@ -22,7 +22,7 @@ import { openDb } from "../../warden/src/mirror/db.mjs";
 import { queries } from "../../warden/src/mirror/queries.mjs";
 import { utcDay } from "../../warden/src/mcp/tools/checkin.mjs";
 import { openChain } from "../../warden/test/chain-stub.mjs";
-import { adaptContext } from "../../warden/src/pay/x402.mjs";
+import { adaptContext, unresolvedRefusal } from "../../warden/src/pay/x402.mjs";
 import { loadIdentity } from "../src/keys.mjs";
 import { VERSION, PUBLISHED, cronLine, invocation, unpayableMessage, doorMessage, DOOR_REASONS } from "../src/messages.mjs";
 
@@ -49,6 +49,10 @@ const DEMAND = {
 const SETTLEMENT_FAILED = { ...DEMAND, error: "Payment settlement failed: invalid_exact_evm_transaction_failed" };
 
 let dir, server, endpoint, keyPath, q;
+
+/// Which answer the `paid` double gives a PAYING call. node:test runs this
+/// file's tests one after another, so a test may flip it and reset in `finally`.
+let paidAnswer = "failed";
 
 /// An anvil account nobody funds, for the tests that exercise the paid path.
 /// IT GOES IN THE ENVIRONMENT, never in argv: `--wallet-key <0x>` was removed
@@ -103,6 +107,7 @@ before(async () => {
     // deeper than it looks) -- so this double cannot drift from the real path.
     paid: () => async (_args, ctx) => {
       const paying = adaptContext(ctx?.mcpCtx)._meta?.["x402/payment"];
+      if (paying && paidAnswer === "unresolved") return unresolvedRefusal("mint");
       const body = paying ? SETTLEMENT_FAILED : DEMAND;
       return {
         structuredContent: body,
@@ -355,6 +360,24 @@ test("a payment that fails to settle exits non-zero and says nothing was minted"
   assert.equal(code, 2, `a failed payment must not look like success: ${out}`);
   assert.match(out, /Payment settlement failed: invalid_exact_evm_transaction_failed/);
   assert.match(out, /NOTHING WAS MINTED/);
+});
+
+test("a payment whose outcome is unknown exits non-zero and says do not pay again", async () => {
+  paidAnswer = "unresolved";
+  try {
+    const { code, out } = await withWallet(
+      "join", "--site", `https://${DOMAIN}`, "--endpoint", endpoint,
+      "--key", join(dir, "payer4.json"), "--to", "0x" + "a2".repeat(20),
+      "--expect-payto", TREASURY, "--expect-amount", "1000000"
+    );
+    assert.equal(code, 2, out);
+    assert.match(out, /The payment's outcome is not known yet/);
+    assert.match(out, /Do not pay again/);
+    assert.match(out, /Check after 00:05 UTC: mro-agent status --site https:\/\/example\.com/);
+    assert.doesNotMatch(out, /NOTHING WAS MINTED/);
+  } finally {
+    paidAnswer = "failed";
+  }
 });
 
 test("a signature over the wrong origin is refused at the door, in a sentence", async () => {
