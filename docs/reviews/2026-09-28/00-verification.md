@@ -101,3 +101,21 @@ It exposes the Low finding that the mirror's binding stays stale.
 7. A live probe of the x402.org facilitator's refusal shape (an outside call).
 8. Permit2: accepted or refused.
 9. Token 1 and Apex (creative item 4).
+
+## Rulings (the operator, 2026-09-30)
+
+1. Both, before mainnet: the owner moves to a Safe or Ledger right after
+   deploy (Ownable2Step), and the Clock gets its own Unix user.
+2. Accept the drift on `applyMark`. `seed` still gets `expectedKeyId`.
+3. All six additions go in: contractURI (with a per-token `external_url`),
+   freezeRenderer (not to be called yet), bestRunOf, the stored rest day,
+   the DEPLOY_DAY floor, and a 30-day lateness floor on check-ins.
+4. Bind the challenge to the signature before the client is released.
+5. Fix the door: build the `;key=` base line from the dictionary member.
+6. Approved wording for an unresolved payment: the outcome is not known, the
+   reservation is held, do not pay again, the chain is checked at the next
+   00:05 UTC.
+7. Run the refusal probe against both x402.org and CDP on Base Sepolia.
+8. Permit2 stays refused.
+9. Token 1 races on equal terms: the seed agent skips check-ins until the day
+   after the door opens, disclosed in `llms.txt`.

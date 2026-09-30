@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>2026-09-28 review: verification against the code</title>
+  <title>docs/reviews/2026-09-28/00-verification.html</title>
   <style>
     :root {
       --bg: #fafaf7;
@@ -319,6 +319,24 @@ the door finding one step).</li>
 <li>A live probe of the x402.org facilitator&#39;s refusal shape (an outside call).</li>
 <li>Permit2: accepted or refused.</li>
 <li>Token 1 and Apex (creative item 4).</li>
+</ol>
+<h2>Rulings (the operator, 2026-09-30)</h2>
+<ol>
+<li>Both, before mainnet: the owner moves to a Safe or Ledger right after
+deploy (Ownable2Step), and the Clock gets its own Unix user.</li>
+<li>Accept the drift on <code>applyMark</code>. <code>seed</code> still gets <code>expectedKeyId</code>.</li>
+<li>All six additions go in: contractURI (with a per-token <code>external_url</code>),
+freezeRenderer (not to be called yet), bestRunOf, the stored rest day,
+the DEPLOY_DAY floor, and a 30-day lateness floor on check-ins.</li>
+<li>Bind the challenge to the signature before the client is released.</li>
+<li>Fix the door: build the <code>;key=</code> base line from the dictionary member.</li>
+<li>Approved wording for an unresolved payment: the outcome is not known, the
+reservation is held, do not pay again, the chain is checked at the next
+00:05 UTC.</li>
+<li>Run the refusal probe against both x402.org and CDP on Base Sepolia.</li>
+<li>Permit2 stays refused.</li>
+<li>Token 1 races on equal terms: the seed agent skips check-ins until the day
+after the door opens, disclosed in <code>llms.txt</code>.</li>
 </ol>
 </body>
 </html>
