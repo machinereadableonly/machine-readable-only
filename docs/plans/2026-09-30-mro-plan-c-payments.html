@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>docs/plans/2026-09-30-mro-plan-c-payments.html</title>
+  <title>Plan C: payments -- the refusal probe and the unresolved-payment answer</title>
   <style>
     :root {
       --bg: #fafaf7;
@@ -408,7 +408,9 @@ facilitator urls, the three cases and why none can move money, a table of the
 six outcomes exactly as printed (threw, name, statusCode, errorReason), and one
 paragraph on what it means for Task 3: which facilitator (if any) sends an
 explicit refusal as a non-2xx. No payer address, no key id, no local path.
-Render with <code>node ~/scripts/render-md-to-html.js &lt;md&gt; &lt;html&gt;</code>.</p>
+Render with <code>node ~/scripts/render-md-to-html.js &lt;md&gt;</code>, the input path ALONE:
+the renderer always writes <code>&lt;input&gt;.html</code>, and a second argument is taken as
+the page TITLE, so passing the output path there puts it in the <code>&lt;title&gt;</code>.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
 </ul>
@@ -743,7 +745,8 @@ then; if it did not, the reservation is released and no money moved.
 </code></pre>
 <p>Then copy the file byte for byte:
 <code>cp docs/2026-09-01-mro-raw-protocol.md skills/machine-readable-only/references/raw-protocol.md</code>,
-and re-render the HTML: <code>node ~/scripts/render-md-to-html.js docs/2026-09-01-mro-raw-protocol.md docs/2026-09-01-mro-raw-protocol.html</code>.</p>
+and re-render the HTML with the input path alone, so the page takes its title
+from the heading: <code>node ~/scripts/render-md-to-html.js docs/2026-09-01-mro-raw-protocol.md</code>.</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 7: Run all four suites, then commit</strong></li>
 </ul>

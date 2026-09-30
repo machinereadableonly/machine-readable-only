@@ -304,7 +304,9 @@ facilitator urls, the three cases and why none can move money, a table of the
 six outcomes exactly as printed (threw, name, statusCode, errorReason), and one
 paragraph on what it means for Task 3: which facilitator (if any) sends an
 explicit refusal as a non-2xx. No payer address, no key id, no local path.
-Render with `node ~/scripts/render-md-to-html.js <md> <html>`.
+Render with `node ~/scripts/render-md-to-html.js <md>`, the input path ALONE:
+the renderer always writes `<input>.html`, and a second argument is taken as
+the page TITLE, so passing the output path there puts it in the `<title>`.
 
 - [ ] **Step 5: Commit**
 
@@ -674,7 +676,8 @@ then; if it did not, the reservation is released and no money moved.
 
 Then copy the file byte for byte:
 `cp docs/2026-09-01-mro-raw-protocol.md skills/machine-readable-only/references/raw-protocol.md`,
-and re-render the HTML: `node ~/scripts/render-md-to-html.js docs/2026-09-01-mro-raw-protocol.md docs/2026-09-01-mro-raw-protocol.html`.
+and re-render the HTML with the input path alone, so the page takes its title
+from the heading: `node ~/scripts/render-md-to-html.js docs/2026-09-01-mro-raw-protocol.md`.
 
 - [ ] **Step 7: Run all four suites, then commit**
 
