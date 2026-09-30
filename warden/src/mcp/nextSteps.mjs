@@ -65,6 +65,8 @@ export const NEXT = {
     "That payment authorisation has already bought something. One authorisation buys one thing; sign a fresh one.",
   "paid-but-unavailable":
     "A gate closed while your payment was being verified; `detail` names it. The authorisation was NOT submitted and your balance did not move. You may call again.",
+  "payment-unresolved":
+    "The payment's outcome is not known yet. It may have gone through, so the site is HOLDING your reservation. Do not pay again. At the next 00:05 UTC the site checks the chain. If the payment landed, your token is minted then. If it did not, the reservation is released and no money moved. Check after 00:05 UTC with `status`.",
   internal:
     "Something failed on this service's side. Nothing was charged. It is worth reporting.",
 
@@ -90,6 +92,10 @@ export const NEXT = {
   "mark-sold-out":
     "That Mark is no longer available.",
 };
+
+/// The same answer for a Mark order, which `paid()` sets as `next` directly.
+export const UNRESOLVED_MARK_NEXT =
+  "The payment's outcome is not known yet. It may have gone through, so the site is HOLDING your reservation. Do not pay again. At the next 00:05 UTC the site checks the chain. If the payment landed, your Mark is applied then. If it did not, the reservation is released and no money moved. Check after 00:05 UTC with `status`.";
 
 /**
  * Reasons that deliberately carry no next step.

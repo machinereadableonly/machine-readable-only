@@ -14,7 +14,7 @@
 import { createPaymentWrapper, extractPaymentFromMeta } from "@x402/mcp";
 import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
-import { withNext } from "../mcp/nextSteps.mjs";
+import { withNext, UNRESOLVED_MARK_NEXT } from "../mcp/nextSteps.mjs";
 
 /// What a mint costs. One place, because the tool's own description quotes it.
 export const MINT_PRICE = "$1.00";
@@ -290,6 +290,22 @@ function payRefusal(value) {
     structuredContent: answered,
     isError: true,
   };
+}
+
+/**
+ * What an agent is told when nobody knows whether its payment moved.
+ *
+ * The library's own settlement-failed answer says the call failed, which a
+ * client reasonably reads as "nothing happened, pay again" -- the one action
+ * that can debit an agent twice for a transfer that may already be mined. The
+ * reservation is HELD, so the answer has to say so.
+ */
+export function unresolvedRefusal(tool) {
+  return payRefusal({
+    ok: false,
+    reason: "payment-unresolved",
+    ...(tool === "upgrade" ? { next: UNRESOLVED_MARK_NEXT } : {}),
+  });
 }
 
 /**
@@ -668,6 +684,10 @@ export function makePaymentGateway({
               `Check whether nonce ${reservedNonce} was spent before this row expires`
           );
         }
+        // Both paths answer the same way. The library's result says the call
+        // failed; the reservation is held, and a hold that could not be written
+        // is still not a release.
+        return unresolvedRefusal(tool);
       }
       return result;
     };

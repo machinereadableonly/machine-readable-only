@@ -519,3 +519,59 @@ test("a key's own retry sweeps its own orphaned reservation", async () => {
     await fac.close();
   }
 });
+
+// WHAT THE AGENT IS TOLD WHEN NOBODY KNOWS. The state above is right and the
+// answer was not: @x402/mcp's own settlement-failed demand reached the agent,
+// and a client reading it reported that nothing was minted and the reservation
+// released -- both false, and an invitation to pay a second time for a payment
+// that may already have moved.
+test("an agent whose payment outcome is unknown is told so, and told not to pay again", async () => {
+  const { result } = await mintPaying({ settle: "malformed" });
+  assert.equal(result.isError, true);
+  assert.equal(result.structuredContent.reason, "payment-unresolved");
+  const next = result.structuredContent.next;
+  assert.match(next, /outcome is not known yet/);
+  assert.match(next, /HOLDING your reservation/);
+  assert.match(next, /Do not pay again/);
+  assert.match(next, /your token is minted then/);
+  assert.doesNotMatch(JSON.stringify(result), /released its reservation/);
+});
+
+test("a Mark whose payment outcome is unknown says Mark, not token", async () => {
+  const { result } = await upgradePaying({ settle: "malformed" });
+  assert.equal(result.structuredContent.reason, "payment-unresolved");
+  assert.match(result.structuredContent.next, /your Mark is applied then/);
+  assert.doesNotMatch(result.structuredContent.next, /token is minted/);
+});
+
+// The hold itself can fail -- a full disk, a locked database -- and that is the
+// one moment the agent most needs the true answer. The alert already says a
+// human must check it; the agent must not be told anything different.
+test("when even the hold fails, the answer is still unresolved, never released", async () => {
+  const fac = await fakeFacilitator({ settle: "malformed" });
+  try {
+    const db = openDb(":memory:");
+    const q = queries(db);
+    const gateway = makePaymentGateway({
+      facilitatorUrl: fac.url, network: NETWORK, payTo: PAY_TO,
+      onSettled: (n, tx) => q.settleByNonce(n, tx),
+      onUnsettled: (n) => q.releaseReservation(n),
+      onUnresolved: () => { throw new Error("disk full"); },
+      alert: () => {},
+      build: async () => {
+        const server = registerExactEvmScheme(
+          new x402ResourceServer(new HTTPFacilitatorClient({ url: fac.url })), { networks: [NETWORK] });
+        await server.initialize();
+        return server;
+      },
+    });
+    const tool = makeMintTool({ q, chain: openChain(), paid: gateway, supplyCap: 100, today: () => 20_700, alert: () => {} });
+    const demand = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: undefined } } });
+    const meta = await payFor({ result: demand, expected: { payTo: PAY_TO, amount: readDemand(demand).accepts[0].amount },
+      walletPrivateKey: generatePrivateKey() });
+    const result = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: meta } } });
+    assert.equal(result.structuredContent.reason, "payment-unresolved");
+  } finally {
+    await fac.close();
+  }
+});
