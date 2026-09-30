@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>docs/plans/2026-09-30-mro-rulings-roadmap.html</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>The nine rulings: build roadmap</h1>
+<blockquote>
+<p>After completing any operator-only step, tell Claude so it can update memory
+immediately. Operator-only steps in this roadmap: creating the Clock&#39;s Unix
+user (needs sudo), and creating the Safe or setting up the Ledger that will
+own the mainnet contract.</p>
+</blockquote>
+<h2>Why</h2>
+<p>The 2026-09-28 review ended with nine decisions only the operator could make.
+He made all nine on 2026-09-30 (the &quot;Rulings&quot; section of
+<code>docs/reviews/2026-09-28/00-verification.md</code>). Each ruling now needs building,
+and every one of them must land BEFORE the mainnet deploy: the token contract
+cannot change after it, the reference client is staged on npm but not yet
+released, and token 1&#39;s first day is written at its mint.</p>
+<p>Nothing in this roadmap spends real funds or touches Base mainnet. The only
+chain writes are on Base Sepolia.</p>
+<h2>One correction to ruling 9, found while planning</h2>
+<p>A mint credits its own day, and same-day finishers are placed by lowest token
+id. A token minted on day M that misses k days finishes on day M + 364 + k; a
+perfect agent minted on opening day O finishes on O + 364. Token 1 is strictly
+behind that agent only when k is at least (O - M) + 1, which means its first
+check-in after the mint must be on <strong>day O + 2, two days after the door opens</strong>
+-- whatever the head start. Resuming the day after opening, as first worded,
+leaves an exact tie that token 1 wins on its id. The plan builds O + 2.</p>
+<h2>Five plans, in this order</h2>
+<p>The rulings touch five separate parts of the system, so each gets its own plan,
+its own tests and its own review. Small, independent work goes first; the one
+Sepolia redeploy comes after the code it must carry; the Clock&#39;s move to its
+own user comes last because it relocates the thing the redeploy exercises.</p>
+<table>
+<thead>
+<tr>
+<th>Plan</th>
+<th>Rulings</th>
+<th>What it builds</th>
+<th>Redeploy?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>C. Payments</strong></td>
+<td>7, 6</td>
+<td>The live refusal probe against x402.org and CDP on Base Sepolia first, because its result decides the classification. Then: an explicit facilitator refusal is <code>declined</code> if the probe shows refusals arrive non-2xx; the unresolved branch returns reason <code>payment-unresolved</code>; the client prints the approved wording for it; the plain-refusal text stays.</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>B. Door and client</strong></td>
+<td>4, 5</td>
+<td><code>challenge-response</code> becomes a required signed component, so only the key holder can answer. The door builds a <code>&quot;signature-agent&quot;;key=</code> base line from the named dictionary member (RFC 9421 section 2.1.2), with a test signed from a hand-built base. <code>mro-agent</code>, the raw-protocol doc, <code>refusals.md</code> and SKILL.md change in the same plan.</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>D. Token 1 on equal terms</strong></td>
+<td>9</td>
+<td>A <code>--not-before &lt;YYYY-MM-DD&gt;</code> guard on <code>mro-agent beat</code>, so the seed agent cannot check in early whatever the timer does; <code>MRO_SEED_NOT_BEFORE</code> in the seed agent&#39;s settings; the disclosure line in <code>llms.txt</code>; DEPLOY.md section 9c. A guard in code, not a runbook step, because a convention is not a guard.</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>A. The contract redeploy</strong></td>
+<td>3, 2</td>
+<td><code>seed</code> takes <code>expectedKeyId</code>; contractURI (ERC-7572) and a per-token <code>external_url</code>; <code>freezeRenderer</code> (built, not called); <code>bestRunOf</code>; the stored rest day; a <code>DEPLOY_DAY</code> floor; a 30-day lateness floor on check-ins. The Warden and Clock follow: the Clock passes the key to <code>seed</code>, and drops and flags a credit older than 30 days instead of letting it revert a whole batch. Then the size gate, a strict-limit anvil deploy, and a Base Sepolia redeploy with <code>adopt-deployment.sh</code>. <code>applyMark</code> is untouched (ruling 2).</td>
+<td><strong>Yes, Sepolia</strong></td>
+</tr>
+<tr>
+<td><strong>E. Key custody</strong></td>
+<td>1</td>
+<td>The Clock under its own Unix user: its own settings file split from <code>warden/.env</code>, a code copy the Warden cannot write, a shared group for the mirror database and its SQLite side files, new unit and log paths. The owner handover right after deploy (Ownable2Step), and <code>SwapRenderer</code> / <code>SetClockWarden</code> reworked to sign through the chosen device. DEPLOY.md 9b rewritten for a Safe-or-Ledger owner.</td>
+<td>No</td>
+</tr>
+</tbody></table>
+<h2>What cannot be undone</h2>
+<ul>
+<li><strong>Plan A&#39;s Sepolia redeploy supersedes the live pair.</strong> Every Sepolia token,
+including token 1 and the test agent&#39;s daily cron that keeps it alive, stays
+on the old pair and stops being the live one. That is testnet and expected;
+the cron is re-pointed in the same plan.</li>
+<li>Nothing else in this roadmap is irreversible. Every push still waits for the
+operator.</li>
+</ul>
+<h2>Open question for Plan E only</h2>
+<p><strong>Safe or Ledger for the mainnet owner?</strong> A Ledger is one hardware device and
+works with Foundry directly (<code>--ledger</code>). A Safe is a contract wallet approved
+in the Safe web app, and can require more than one device. The scripts differ,
+so Plan E is written after this is answered. It blocks nothing before Plan E.</p>
+<h2>How each plan is written</h2>
+<p>Each plan is its own file in <code>docs/plans/</code>, in the house format (numbered
+tasks, the failing test first, exact files, all four suites green before
+every commit), rendered to HTML, and reviewed by the operator before it runs.</p>
+</body>
+</html>
