@@ -51,7 +51,8 @@ Loaded only when working under `warden/` or `client/`.
   message. The difference exists only at the call, so `src/pay/x402.mjs` wraps
   `settlePayment` to see it, and refuses a resource server it cannot wrap.
   Declined means no transaction hash AND a pre-broadcast `errorReason`
-  (`isDeclined` in `x402.mjs`); anything else is HELD as `payment-unresolved`,
+  (`isDeclined` in `x402.mjs`) -- whether it is returned as a 200 or thrown as a
+  `SettleError` for a non-2xx; anything else is HELD as `payment-unresolved`,
   and so is a reservation that expires. The Clock decides a held row from an
   `AuthorizationUsed` log plus a matching `Transfer(payer, payTo, amount)` in
   the same transaction -- never `authorizationState`, which is also true after
@@ -66,7 +67,10 @@ Loaded only when working under `warden/` or `client/`.
   key. **The key WORKS over IPv4 and is refused over IPv6** (2026-09-12, three
   rounds each way) -- this box prefers IPv6, so the Warden runs pinned to IPv4
   (`node_args` in `ecosystem.config.cjs`). When CDP refuses, vary the route
-  before blaming the key.
+  before blaming the key. **CDP refuses a settlement with a 400 where x402.org
+  uses a 200, and spells two reasons its own way**: `invalid_exact_evm_payload_signature`
+  is a bad signature and is on the pre-broadcast allowlist; `invalid_payload` is
+  generic and stays unknown.
 - The mint price is the Warden constant `MINT_PRICE`, **not** an on-chain value.
 
 ## Deploying

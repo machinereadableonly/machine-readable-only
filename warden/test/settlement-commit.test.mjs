@@ -63,8 +63,8 @@ async function fakeFacilitator({ settle = "ok" } = {}) {
   const calls = [];
   const server = createServer((req, res) => {
     calls.push(req.url);
-    const send = (body) => {
-      res.writeHead(200, { "content-type": "application/json" });
+    const send = (body, status = 200) => {
+      res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify(body));
     };
     if (req.url === "/supported") {
@@ -124,6 +124,35 @@ async function fakeFacilitator({ settle = "ok" } = {}) {
             network: NETWORK,
             payer: PAY_TO,
           });
+        }
+        // EXPLICIT REFUSALS SENT AS ERRORS. @x402/core throws a SettleError
+        // for a non-2xx whose body has `success`, carrying the body's reason
+        // and hash. The answer is the same answer; only the envelope differs.
+        if (settle === "declined-4xx") {
+          return send({ success: false, errorReason: "invalid_exact_evm_payload_authorization_valid_before",
+            transaction: "", network: NETWORK, payer: PAY_TO }, 400);
+        }
+        if (settle === "hash-4xx") {
+          return send({ success: false, errorReason: "invalid_exact_evm_transfer_event_mismatch",
+            transaction: SETTLE_TX, network: NETWORK, payer: PAY_TO }, 400);
+        }
+        if (settle === "unknown-4xx") {
+          return send({ success: false, errorReason: "some_reason_invented_after_this_build",
+            transaction: "", network: NETWORK, payer: PAY_TO }, 400);
+        }
+        if (settle === "gateway-502") {
+          res.writeHead(502, { "content-type": "text/html" });
+          return res.end("<html>bad gateway</html>");
+        }
+        // CDP's own spellings, measured. A bad signature can never have moved
+        // money; `invalid_payload` is generic and must stay unknown.
+        if (settle === "cdp-bad-signature-4xx") {
+          return send({ success: false, errorReason: "invalid_exact_evm_payload_signature",
+            transaction: "", network: NETWORK, payer: PAY_TO }, 400);
+        }
+        if (settle === "cdp-invalid-payload-4xx") {
+          return send({ success: false, errorReason: "invalid_payload",
+            transaction: "", network: NETWORK, payer: PAY_TO }, 400);
         }
         // A facilitator that answers with something unparseable: the client
         // throws rather than returning success:false.
@@ -281,6 +310,30 @@ test("a refusal this build does not recognise is held rather than released", asy
   const { db } = await mintPaying({ settle: "unknown-reason" });
   assert.equal(db.prepare("SELECT status FROM mints").get().status, "payment-unresolved");
 });
+
+// THE STATUS CODE IS AN ENVELOPE, NOT AN ANSWER. x402.org refuses with a 200
+// and CDP -- the mainnet facilitator -- refuses the same payment with a 400,
+// which @x402/core throws as a SettleError carrying that same body. Judging the
+// throw as unknown held every plain CDP refusal until the next 00:05 UTC.
+test("an explicit refusal sent as a non-2xx is released, like the same refusal sent as a 200", async () => {
+  const { db, settled } = await mintPaying({ settle: "declined-4xx" });
+  assert.equal(settled, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM mints").get().n, 0, "a plain no frees the key at once");
+});
+
+// CDP spells a bad signature its own way, and a signature that does not recover
+// can never have moved money.
+test("CDP's own bad-signature refusal is released too", async () => {
+  const { db } = await mintPaying({ settle: "cdp-bad-signature-4xx" });
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM mints").get().n, 0);
+});
+
+for (const settle of ["hash-4xx", "unknown-4xx", "gateway-502", "cdp-invalid-payload-4xx"]) {
+  test(`a non-2xx that is not a plain refusal (${settle}) is held`, async () => {
+    const { db } = await mintPaying({ settle });
+    assert.equal(db.prepare("SELECT status FROM mints").get().status, "payment-unresolved");
+  });
+}
 
 // THE OTHER FAILURE PATH, AND IT IS NOT THE SAME FAILURE. A facilitator that
 // answers with something @x402/core cannot parse makes settlePaymentResult

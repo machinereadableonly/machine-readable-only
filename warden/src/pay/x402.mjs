@@ -120,7 +120,8 @@ export function payerOf(paymentPayload) {
  *
  * Deliberately absent, though they look like they belong: `transaction_failed`
  * and `transfer_event_mismatch` are decided from a receipt, so a transfer was
- * broadcast, and `settlement_pending` carries a hash by definition.
+ * broadcast, and `settlement_pending` carries a hash by definition. So is CDP's
+ * `invalid_payload`: it is generic and says nothing about broadcast.
  */
 export const PRE_BROADCAST_REASONS = new Set([
   "asset_not_deployed_contract",
@@ -129,6 +130,9 @@ export const PRE_BROADCAST_REASONS = new Set([
   "invalid_exact_evm_missing_eip712_domain",
   "invalid_exact_evm_recipient_mismatch",
   "invalid_exact_evm_signature",
+  // CDP's spelling of the same refusal. A signature that does not recover can
+  // never have moved money, whichever facilitator names it.
+  "invalid_exact_evm_payload_signature",
   "invalid_exact_evm_payload_authorization_valid_before",
   "invalid_exact_evm_payload_authorization_valid_after",
   "invalid_exact_evm_authorization_value",
@@ -458,9 +462,12 @@ export function makePaymentGateway({
         }
         return settlement;
       } catch (err) {
-        // THE CASE THIS WHOLE FILE TURNS ON. By here the transfer may already
-        // be mined; what failed may only be the news of it coming back.
-        if (payNonce) outcomes.set(payNonce, { ...where, kind: "unresolved", detail: err?.message ?? null });
+        // A non-2xx whose body is a settlement answer reaches here as a
+        // SettleError carrying that answer, and is judged exactly as a returned
+        // one is. Every other throw -- a timeout, a dropped response, a proxy
+        // page -- may follow a mined transfer, and stays unknown.
+        const kind = err?.name === "SettleError" && isDeclined(err) ? "declined" : "unresolved";
+        if (payNonce) outcomes.set(payNonce, { ...where, kind, detail: err?.errorReason ?? err?.message ?? null });
         throw err;
       }
     };
