@@ -19,6 +19,7 @@ import { readEvents, applyEvents, DEPLOY_BLOCK, MAX_LOG_SPAN } from "./reconcile
 import { heartbeatDue } from "./heartbeat.mjs";
 import { MRO_ABI } from "./abi.mjs";
 import { keyIdToBytes32 } from "../mcp/keyId.mjs";
+import { sweep } from "../mcp/sweep.mjs";
 import { resolveUnresolvedPayments } from "./unresolved.mjs";
 
 /// How many check-ins go in one batchCheckIn. MEASURED 2026-09-11 against a
@@ -305,6 +306,16 @@ export async function runClock({
   //    is the only step that can hand an agent back something it paid for, and
   //    a payment resolved here is written by the same run rather than waiting
   //    another day.
+  //
+  //    THE SWEEP COMES FIRST. A row whose hold could not be written keeps its
+  //    'awaiting-payment' status, which the resolver does not read -- and the
+  //    two paid tools are the only other thing that sweeps, so on a piece
+  //    nobody mints from again the one reservation whose money is in doubt is
+  //    looked at by nothing at all. Sweeping here moves it to
+  //    'payment-unresolved' and the same run decides it against the chain. It
+  //    touches only reservations past their window, so a settlement still in
+  //    flight is left alone.
+  sweep(q, "clock", alert);
   Object.assign(summary, await resolveUnresolvedPayments({ q, publicClient, alert, log }));
 
   // 1. THE GAS GUARD, BEFORE ANYTHING IS SENT. It stops every WRITE pass and

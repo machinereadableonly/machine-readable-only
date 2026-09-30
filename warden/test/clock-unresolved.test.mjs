@@ -332,15 +332,9 @@ test("a held MARK order is resolved the same way, and its Mark stays taken until
   assert.deepEqual(summary.unresolvedPayments, []);
 });
 
-// THE CALL SITE. The resolver above is useless unless the nightly run actually
-// calls it -- and a call site nothing tests is the one that ships broken (see
-// the a-test-that-cannot-see-the-failure memory). This drives the REAL runClock.
-test("the nightly run resolves held payments", async () => {
-  const { db, q } = heldMint();
-  db.exec("UPDATE mints SET solveState = 'pending' WHERE tokenId = 1");
-  const chain = chainWith({ logs: settlementLogs() });
-
-  const summary = await runClock({
+/// One real Clock run against a chain that answers the resolver's questions.
+function nightlyRun(q, chain) {
+  return runClock({
     q,
     writer: {
       formatGas: (w) => `${w} wei`,
@@ -363,8 +357,101 @@ test("the nightly run resolves held payments", async () => {
     log: () => {},
     alert: () => {},
   });
+}
+
+// THE CALL SITE. The resolver above is useless unless the nightly run actually
+// calls it -- and a call site nothing tests is the one that ships broken (see
+// the a-test-that-cannot-see-the-failure memory). This drives the REAL runClock.
+test("the nightly run resolves held payments", async () => {
+  const { db, q } = heldMint();
+  db.exec("UPDATE mints SET solveState = 'pending' WHERE tokenId = 1");
+
+  const summary = await nightlyRun(q, chainWith({ logs: settlementLogs() }));
 
   assert.deepEqual(summary.resolvedPaid, [1], "the run must ask the chain about a held payment");
   assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued");
+  assert.deepEqual(summary.unresolvedPayments, []);
+});
+
+// ---------------------------------------------------------------------------
+// THE PATH THAT REACHED NOBODY: A HOLD THAT COULD NOT BE WRITTEN.
+//
+// The gateway holds a doubtful row by calling `onUnresolved`, and that call can
+// throw -- a locked database, a crash between the settle and the hold. The row
+// then keeps its 'awaiting-payment' status, which the resolver does not read.
+// Only the expiry sweep moves such a row, and the sweep ran on the two paid
+// tools alone: a piece nobody mints from again never sweeps, so the one
+// reservation whose money is in doubt sat untouched forever.
+//
+// The Clock sweeps first and resolves second, so both happen in one run.
+// ---------------------------------------------------------------------------
+
+/// A reservation that is still 'awaiting-payment': the shape left behind when a
+/// hold could not be written, or when the process died before the settlement
+/// answer arrived.
+function awaitingMint({ reservedAt = RESERVED_AT, validBefore = VALID_BEFORE } = {}) {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.transact(() => {
+    q.insertToken({ tokenId: 1, keyId: KEY_ID, owner: TO, lastDay: 20_700, mintDay: 20_700 });
+    q.insertMint({ tokenId: 1, toAddress: TO, keyId: KEY_ID, payNonce: NONCE, now: reservedAt });
+    q.setPaymentFacts({
+      payNonce: NONCE,
+      payer: PAYER,
+      asset: USDC,
+      payTo: TREASURY,
+      amount: AMOUNT,
+      validBefore,
+      block: BLOCK,
+    });
+  });
+  db.exec("UPDATE mints SET solveState = 'pending' WHERE tokenId = 1");
+  assert.equal(
+    db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status,
+    "awaiting-payment",
+    "the row must start in the state a failed hold leaves behind"
+  );
+  return { db, q };
+}
+
+test("the nightly run sweeps an expired reservation and resolves it in the same run", async () => {
+  const { db, q } = awaitingMint();
+
+  const summary = await nightlyRun(q, chainWith({ logs: settlementLogs() }));
+
+  assert.deepEqual(
+    summary.resolvedPaid,
+    [1],
+    "the sweep must run BEFORE the resolver, or the row is invisible for another day"
+  );
+  assert.equal(
+    db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status,
+    "queued",
+    "the money moved, so the agent gets what it paid for"
+  );
+  assert.deepEqual(summary.unresolvedPayments, []);
+});
+
+// THE CONTROL, and it is not decoration: a sweep that took every reservation
+// would break the live one. A payment being made right now is 'awaiting-payment'
+// for the seconds its settlement takes, and moving it would hand the Clock a row
+// whose answer is still on its way.
+test("a reservation younger than its window is untouched by the nightly run", async () => {
+  const now = Date.now();
+  const { db, q } = awaitingMint({
+    reservedAt: now,
+    validBefore: Math.floor(now / 1000) + 300,
+  });
+
+  const summary = await nightlyRun(q, chainWith({ logs: settlementLogs() }));
+
+  assert.equal(
+    db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status,
+    "awaiting-payment",
+    "a settlement still in flight must be left alone"
+  );
+  assert.deepEqual(summary.resolvedPaid, []);
+  assert.deepEqual(summary.resolvedUnpaid, []);
+  assert.deepEqual(summary.deferredPayments, []);
   assert.deepEqual(summary.unresolvedPayments, []);
 });
