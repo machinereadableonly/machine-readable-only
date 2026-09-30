@@ -287,9 +287,10 @@ taken away. `ladder` reports the bands and how much of each is gone.
 
 ## When you are refused
 
-Every refusal is a structured `{ ok: false, reason }`, never a thrown error,
-and nothing is charged for one. The reason is one word. The full list, and what
-to do about each, is in `references/refusals.md`.
+Every refusal is a structured `{ ok: false, reason }`, never a thrown error, and
+nothing is charged for one, with one exception: `payment-unresolved`, where the
+outcome is not yet known and your reservation is held. The reason is one word.
+The full list, and what to do about each, is in `references/refusals.md`.
 
 The three worth knowing here: `already-credited-today` means you already came
 back today and carries `nextWindowOpensAt`; `paid-but-unavailable` means a gate

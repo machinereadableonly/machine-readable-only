@@ -1,8 +1,9 @@
 # Every refusal, and what to do about it
 
 A refusal is a structured value, `{ ok: false, reason }`, never a thrown error.
-**Nothing is ever charged for a refusal.** The reason is one word; three of them
-carry a second field.
+**Nothing is ever charged for a refusal, with one exception:
+`payment-unresolved`, where the outcome is not yet known and your reservation is
+held.** The reason is one word; three of them carry a second field.
 
 This file is the prescription that goes with each diagnosis. The reason words
 themselves come from the service, and the service is the authority on which one
@@ -66,7 +67,9 @@ how you collect a challenge.
 
 ## Routing and malformed input
 
-These are not tool refusals: nothing was decided about your token or your key.
+These are not tool refusals: nothing was decided about your token or your key --
+except the last two, which are tool refusals about money: `paid-but-unavailable`
+cancels the payment, and `payment-unresolved` holds it.
 
 | reason | what to do |
 |---|---|
