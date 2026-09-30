@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>docs/plans/2026-09-30-mro-plan-c-payments.html</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan C: payments -- the refusal probe and the unresolved-payment answer</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<blockquote>
+<p>After completing any operator-only step, tell Claude so it can update memory
+immediately. This plan has none: the live probe (Task 2) was approved by the
+operator on 2026-09-30 and runs on Base Sepolia only.</p>
+</blockquote>
+<p><strong>Goal:</strong> Learn how both facilitators refuse a payment, treat an explicit
+refusal as declined whatever HTTP status it arrives with, and tell an agent the
+truth when a payment&#39;s outcome is unknown.</p>
+<p><strong>Why:</strong> Rulings 7 and 6 of the 2026-09-28 review. Today every thrown settle is
+&quot;unknown&quot;, so a facilitator that refuses with a non-2xx makes an agent wait a
+night for an answer that was already &quot;no&quot;. And when the outcome really is
+unknown, the agent is told &quot;NOTHING WAS MINTED, and the site released its
+reservation&quot; -- both false since the 2026-09-28 fixes, and the sentence that
+invites paying twice. The client is staged on npm and not yet released, so
+this must land before it is.</p>
+<p><strong>Architecture:</strong> The gateway&#39;s <code>settlePayment</code> observer already classifies a
+returned <code>success: false</code> with <code>isDeclined</code>. It gains the same judgement for a
+thrown <code>SettleError</code>, which carries the facilitator&#39;s own answer. The unresolved
+branch of <code>paid()</code> stops returning @x402/mcp&#39;s settlement-failed demand and
+returns a refusal of its own, reason <code>payment-unresolved</code>, whose <code>next</code> carries
+the approved wording. The client prints the approved message for that reason.</p>
+<p><strong>Tech Stack:</strong> Node 24.14.1, <code>node:test</code>, <code>@x402/core</code> / <code>@x402/mcp</code> /
+<code>@x402/evm</code> as installed, viem.</p>
+<p><strong>Spec:</strong> <code>docs/reviews/2026-09-28/00-verification.md</code> (Payments table and
+Rulings 6 and 7); roadmap <code>docs/plans/2026-09-30-mro-rulings-roadmap.md</code>.</p>
+<h2>Global Constraints</h2>
+<ul>
+<li>Plain ASCII only in code, comments and docs.</li>
+<li>All four suites green before every commit: <code>cd contracts &amp;&amp; forge test</code>, and
+<code>npm test</code> in <code>tools/</code>, <code>warden/</code>, <code>client/</code>. Heavy runs go through
+<code>~/scripts/safe-build.sh</code>. Never pipe a gate into anything.</li>
+<li>Use <code>/bin/grep</code>, never bare <code>grep</code>. Node needs <code>source ~/.nvm/nvm.sh</code>.</li>
+<li>The repository is PUBLIC: no absolute paths, no key ids, no secrets, no AI
+attribution in files or commit messages.</li>
+<li>New files take the licence LICENSING.md assigns their directory
+(<code>warden/tools</code> is PolyForm Noncommercial; nothing new here is agent-run).</li>
+<li>Never print a secret. The probe reads keys itself and prints none of them.</li>
+<li>The approved mint wording, verbatim (ruling 6):
+&quot;The payment&#39;s outcome is not known yet. It may have gone through, so the
+site is HOLDING your reservation. Do not pay again. At the next 00:05 UTC the
+site checks the chain. If the payment landed, your token is minted then. If
+it did not, the reservation is released and no money moved. Check after
+00:05 UTC: mro-agent status --site <site>&quot;. For a Mark: &quot;your Mark is applied
+then&quot;. The Warden&#39;s <code>next</code> says &quot;Check after 00:05 UTC with <code>status</code>&quot; instead
+of the <code>mro-agent</code> line, because an MCP caller may not be running mro-agent.</li>
+<li>The plain-refusal text (<code>paymentFailedMessage</code>) stays exactly as it is.</li>
+</ul>
+<h2>Review Focus</h2>
+<ol>
+<li><strong>A non-2xx refusal carrying a transaction hash</strong> must stay HELD: a hash
+means a transfer was broadcast. Pinned in Task 3.</li>
+<li><strong>A non-2xx refusal with a reason this build has never seen</strong> must stay
+HELD. Pinned in Task 3.</li>
+<li><strong>A thrown error that is not a SettleError</strong> (timeout, 502 with an HTML
+body, a dropped socket) must stay HELD. Pinned in Task 3.</li>
+<li><strong>The hold itself failing</strong> (the database write throws) must still answer
+<code>payment-unresolved</code>, never the old &quot;released&quot; demand: the money is unknown
+either way. Pinned in Task 4.</li>
+<li><strong>A Mark order held unresolved</strong> must say &quot;Mark&quot;, not &quot;token&quot;. Pinned in
+Task 4.</li>
+</ol>
+<h2>Files</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>warden/src/pay/x402.mjs</code></td>
+<td>Export <code>initResourceServer</code>; classify a thrown <code>SettleError</code>; export <code>unresolvedRefusal(tool)</code>; the unresolved branch returns it</td>
+</tr>
+<tr>
+<td><code>warden/src/mcp/nextSteps.mjs</code></td>
+<td><code>NEXT[&quot;payment-unresolved&quot;]</code> (mint wording) and <code>UNRESOLVED_MARK_NEXT</code></td>
+</tr>
+<tr>
+<td><code>warden/tools/facilitator-refusal-probe.mjs</code></td>
+<td>New: the live probe, with a pure <code>refusalCases()</code></td>
+</tr>
+<tr>
+<td><code>warden/test/facilitator-refusal-probe.test.mjs</code></td>
+<td>New: offline test of <code>refusalCases()</code></td>
+</tr>
+<tr>
+<td><code>warden/test/settlement-commit.test.mjs</code></td>
+<td>Non-2xx facilitator modes; unresolved answers</td>
+</tr>
+<tr>
+<td><code>client/src/messages.mjs</code>, <code>client/src/index.mjs</code></td>
+<td><code>unresolvedPaymentMessage(site)</code></td>
+</tr>
+<tr>
+<td><code>client/src/cli.mjs</code></td>
+<td>Print it for <code>payment-unresolved</code>, exit 2</td>
+</tr>
+<tr>
+<td><code>client/test/cli.test.mjs</code></td>
+<td>The unresolved path through the real CLI</td>
+</tr>
+<tr>
+<td><code>skills/machine-readable-only/references/refusals.md</code></td>
+<td>A <code>payment-unresolved</code> row</td>
+</tr>
+<tr>
+<td><code>docs/2026-09-01-mro-raw-protocol.md</code> + skill copy</td>
+<td>The unknown-outcome paragraph</td>
+</tr>
+<tr>
+<td><code>docs/reviews/2026-09-28/40-facilitator-refusal-probe.md</code></td>
+<td>New: what both facilitators answered</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>Task 1: The refusal probe tool</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/pay/x402.mjs:191</code> (<code>async function initResourceServer</code> -&gt; <code>export async function initResourceServer</code>)</li>
+<li>Create: <code>warden/tools/facilitator-refusal-probe.mjs</code></li>
+<li>Test: <code>warden/test/facilitator-refusal-probe.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>refusalCases({ requirement, walletPrivateKey, now }) -&gt; Promise&lt;Array&lt;{ name, requirement, payload }&gt;&gt;</code>, three cases named <code>expired</code>, <code>overdrawn</code>, <code>bad-signature</code>, each with its own nonce.</li>
+<li>Consumes: <code>signAuthorization</code> and <code>paymentMeta</code> from <code>client/src/pay.mjs</code> (the real signer, so the probe signs exactly as an agent does).</li>
+</ul>
+<p>None of the three can move money: <code>expired</code> has <code>validBefore</code> in the past,
+<code>overdrawn</code> asks for a million USDC from a wallet holding a few, and
+<code>bad-signature</code> fails signature recovery.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<pre><code class="language-js">// warden/test/facilitator-refusal-probe.test.mjs
+import { test } from &quot;node:test&quot;;
+import assert from &quot;node:assert/strict&quot;;
+import { generatePrivateKey } from &quot;viem/accounts&quot;;
+import { refusalCases } from &quot;../tools/facilitator-refusal-probe.mjs&quot;;
+
+const REQUIREMENT = {
+  scheme: &quot;exact&quot;, network: &quot;eip155:84532&quot;, amount: &quot;1000000&quot;,
+  asset: &quot;0x036CbD53842c5426634e7929541eC2318f3dCF7e&quot;,
+  payTo: &quot;0x000000000000000000000000000000000000dEaD&quot;, maxTimeoutSeconds: 300,
+  extra: { name: &quot;USDC&quot;, version: &quot;2&quot; },
+};
+const NOW = 1_790_000_000;
+
+test(&quot;the probe builds three refusals, each unable to move money&quot;, async () =&gt; {
+  const cases = await refusalCases({ requirement: REQUIREMENT, walletPrivateKey: generatePrivateKey(), now: NOW });
+  assert.deepEqual(cases.map((c) =&gt; c.name), [&quot;expired&quot;, &quot;overdrawn&quot;, &quot;bad-signature&quot;]);
+
+  const auth = (c) =&gt; c.payload.payload.authorization;
+  const expired = cases[0];
+  assert.ok(Number(auth(expired).validBefore) &lt; NOW, &quot;an expired authorisation is dead on arrival&quot;);
+
+  const overdrawn = cases[1];
+  assert.equal(overdrawn.requirement.amount, &quot;1000000000000&quot;, &quot;a million USDC&quot;);
+  assert.equal(auth(overdrawn).value, overdrawn.requirement.amount, &quot;signed for exactly what is asked&quot;);
+
+  const bad = cases[2];
+  assert.match(bad.payload.payload.signature, /^0x[0-9a-f]{130}$/);
+  assert.notEqual(bad.payload.payload.signature, cases[0].payload.payload.signature);
+
+  const nonces = new Set(cases.map((c) =&gt; auth(c).nonce));
+  assert.equal(nonces.size, 3, &quot;one nonce per case, so no case can spend another&#39;s&quot;);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it to verify it fails</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; node --test test/facilitator-refusal-probe.test.mjs</code>
+Expected: FAIL, <code>Cannot find module &#39;../tools/facilitator-refusal-probe.mjs&#39;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Export <code>initResourceServer</code></strong></li>
+</ul>
+<p>In <code>warden/src/pay/x402.mjs</code> change <code>async function initResourceServer(</code> to
+<code>export async function initResourceServer(</code>. Nothing else in the function changes.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Write the probe</strong></li>
+</ul>
+<pre><code class="language-js">// warden/tools/facilitator-refusal-probe.mjs
+// How does a facilitator say &quot;no&quot; to a settlement?
+//
+//   MRO_PROBE_KEY_FILE=&lt;wallet key file&gt; node tools/facilitator-refusal-probe.mjs [facilitator url]
+//
+// For CDP, pinned to IPv4 as the Warden runs, with the key from .env:
+//   MRO_PROBE_KEY_FILE=&lt;wallet key file&gt; node --dns-result-order=ipv4first \
+//     --no-network-family-autoselection --env-file=.env \
+//     tools/facilitator-refusal-probe.mjs https://api.cdp.coinbase.com/platform/v2/x402
+//
+// Base Sepolia only. Each case is refused before any transfer can happen, so
+// nothing moves. It prints what the Warden&#39;s own resource server saw: a
+// returned settlement, or a thrown error with its status and reason.
+import { readFileSync } from &quot;node:fs&quot;;
+import { fileURLToPath } from &quot;node:url&quot;;
+import { privateKeyToAccount } from &quot;viem/accounts&quot;;
+import { initResourceServer, MINT_PRICE } from &quot;../src/pay/x402.mjs&quot;;
+import { isCdpFacilitator, makeCdpAuthHeaders } from &quot;../src/pay/cdp.mjs&quot;;
+import { signAuthorization, paymentMeta, PAYMENT_META_KEY } from &quot;../../client/src/pay.mjs&quot;;
+
+const NETWORK = &quot;eip155:84532&quot;;
+const PAY_TO = &quot;0x000000000000000000000000000000000000dEaD&quot;;
+const RESOURCE = { url: &quot;mcp://tool/refusal-probe&quot; };
+
+async function payloadFor(requirement, walletPrivateKey, now) {
+  const payload = await signAuthorization({ accepted: requirement, walletPrivateKey, now });
+  return paymentMeta({ demand: { x402Version: 2, resource: RESOURCE }, accepted: requirement, payload })[PAYMENT_META_KEY];
+}
+
+export async function refusalCases({ requirement, walletPrivateKey, now = Math.floor(Date.now() / 1000) }) {
+  // A day in the past: validBefore = now - 86400 + window, well before now.
+  const expired = await payloadFor(requirement, walletPrivateKey, now - 86_400);
+
+  const bigAsk = { ...requirement, amount: &quot;1000000000000&quot; };
+  const overdrawn = await payloadFor(bigAsk, walletPrivateKey, now);
+
+  const tampered = await payloadFor(requirement, walletPrivateKey, now);
+  const sig = tampered.payload.signature;
+  const flipped = (parseInt(sig.slice(-4, -2), 16) ^ 0xff).toString(16).padStart(2, &quot;0&quot;);
+  tampered.payload.signature = `${sig.slice(0, -4)}${flipped}${sig.slice(-2)}`;
+
+  return [
+    { name: &quot;expired&quot;, requirement, payload: expired },
+    { name: &quot;overdrawn&quot;, requirement: bigAsk, payload: overdrawn },
+    { name: &quot;bad-signature&quot;, requirement, payload: tampered },
+  ];
+}
+
+function describe(outcome) {
+  if (outcome.threw) {
+    const e = outcome.error;
+    return { threw: true, name: e?.name ?? null, statusCode: e?.statusCode ?? null,
+      errorReason: e?.errorReason ?? null, transaction: e?.transaction || null, message: e?.message ?? null };
+  }
+  const s = outcome.settlement;
+  return { threw: false, success: s?.success ?? null, errorReason: s?.errorReason ?? null,
+    transaction: s?.transaction || null };
+}
+
+async function main() {
+  const facilitatorUrl = process.argv[2] ?? &quot;https://x402.org/facilitator&quot;;
+  const keyFile = process.env.MRO_PROBE_KEY_FILE;
+  if (!keyFile) {
+    console.error(&quot;set MRO_PROBE_KEY_FILE to a Base Sepolia wallet key file&quot;);
+    process.exit(2);
+  }
+  const walletPrivateKey = readFileSync(keyFile, &quot;utf8&quot;).trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(walletPrivateKey)) {
+    console.error(`${keyFile} does not hold a 32-byte hex private key`);
+    process.exit(2);
+  }
+
+  let createAuthHeaders;
+  if (isCdpFacilitator(facilitatorUrl)) {
+    const keyId = process.env.CDP_API_KEY_ID;
+    const secret = process.env.CDP_API_KEY_SECRET;
+    if (!keyId || !secret) {
+      console.error(&quot;CDP needs CDP_API_KEY_ID and CDP_API_KEY_SECRET (use --env-file=.env)&quot;);
+      process.exit(2);
+    }
+    createAuthHeaders = makeCdpAuthHeaders({ keyId, secret, facilitatorUrl });
+  }
+
+  // Throws if the facilitator does not offer exact on Base Sepolia. That is a
+  // result, not a crash: stop and report it rather than trying another chain.
+  const server = await initResourceServer(facilitatorUrl, NETWORK, createAuthHeaders);
+  const [requirement] = await server.buildPaymentRequirements({ scheme: &quot;exact&quot;, payTo: PAY_TO, price: MINT_PRICE, network: NETWORK });
+
+  console.log(`facilitator : ${facilitatorUrl}`);
+  console.log(`payer       : ${privateKeyToAccount(walletPrivateKey).address}`);
+  for (const c of await refusalCases({ requirement, walletPrivateKey })) {
+    let outcome;
+    try {
+      outcome = { threw: false, settlement: await server.settlePayment(c.payload, c.requirement) };
+    } catch (error) {
+      outcome = { threw: true, error };
+    }
+    console.log(`${c.name.padEnd(13)} ${JSON.stringify(describe(outcome))}`);
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; node --test test/facilitator-refusal-probe.test.mjs</code>
+Expected: PASS. Importing the file ran nothing: <code>main()</code> sits behind the entry guard.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Run all four suites, then commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/src/pay/x402.mjs warden/tools/facilitator-refusal-probe.mjs warden/test/facilitator-refusal-probe.test.mjs
+git commit -m &quot;feat(tools): a probe of how a facilitator refuses a settlement&quot;
+</code></pre>
+<hr>
+<h3>Task 2: Run the probe against both facilitators and record it</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>docs/reviews/2026-09-28/40-facilitator-refusal-probe.md</code> (+ <code>.html</code> via the renderer)</li>
+</ul>
+<p>This is the outside call the operator approved. Base Sepolia only, the test
+agent wallet as payer, three refusals per facilitator, nothing moves.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Probe x402.org</strong></li>
+</ul>
+<p>Run from <code>warden/</code>: <code>MRO_PROBE_KEY_FILE=$HOME/.mro-test-wallet/wallet.key node tools/facilitator-refusal-probe.mjs</code>
+Expected: three lines, one per case. Each is either <code>&quot;threw&quot;:true</code> with a
+<code>statusCode</code>, or <code>&quot;threw&quot;:false</code> with <code>&quot;success&quot;:false</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Probe CDP, pinned to IPv4</strong></li>
+</ul>
+<p>Run from <code>warden/</code>: <code>MRO_PROBE_KEY_FILE=$HOME/.mro-test-wallet/wallet.key node --dns-result-order=ipv4first --no-network-family-autoselection --env-file=.env tools/facilitator-refusal-probe.mjs https://api.cdp.coinbase.com/platform/v2/x402</code>
+Expected: three lines as above.
+If <code>initResourceServer</code> throws &quot;no supported payment kinds&quot;, CDP does not offer
+Base Sepolia: <strong>STOP</strong> and report to the operator. Probing mainnet is a
+separate approval.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Stop conditions</strong></li>
+</ul>
+<p>STOP and report instead of continuing to Task 3 if any case shows a
+<code>transaction</code> hash, or <code>success: true</code>. Either means a refusal case was not a
+refusal, and the plan&#39;s premise is wrong.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Write the record</strong></li>
+</ul>
+<p><code>docs/reviews/2026-09-28/40-facilitator-refusal-probe.md</code>: the date, the two
+facilitator urls, the three cases and why none can move money, a table of the
+six outcomes exactly as printed (threw, name, statusCode, errorReason), and one
+paragraph on what it means for Task 3: which facilitator (if any) sends an
+explicit refusal as a non-2xx. No payer address, no key id, no local path.
+Render with <code>node ~/scripts/render-md-to-html.js &lt;md&gt; &lt;html&gt;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add docs/reviews/2026-09-28/40-facilitator-refusal-probe.md docs/reviews/2026-09-28/40-facilitator-refusal-probe.html
+git commit -m &quot;docs(review): how x402.org and CDP refuse a settlement, measured&quot;
+</code></pre>
+<hr>
+<h3>Task 3: An explicit refusal is declined whatever its status</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/pay/x402.mjs:460-464</code> (the <code>catch</code> in <code>observeSettlement</code>)</li>
+<li>Test: <code>warden/test/settlement-commit.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: <code>isDeclined(settlement)</code> (x402.mjs:154), which reads only <code>transaction</code> and <code>errorReason</code> -- both present on a <code>SettleError</code>.</li>
+</ul>
+<p>This change is correct whatever Task 2 found: a <code>SettleError</code> IS the
+facilitator&#39;s own answer. Task 2 says whether the path is live.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Give the fake facilitator a status code</strong></li>
+</ul>
+<p>In <code>fakeFacilitator</code>, change <code>send</code> to take a status, and add four modes before
+the <code>malformed</code> line:</p>
+<pre><code class="language-js">    const send = (body, status = 200) =&gt; {
+      res.writeHead(status, { &quot;content-type&quot;: &quot;application/json&quot; });
+      res.end(JSON.stringify(body));
+    };
+</code></pre>
+<pre><code class="language-js">        // EXPLICIT REFUSALS SENT AS ERRORS. @x402/core throws a SettleError
+        // for a non-2xx whose body has `success`, carrying the body&#39;s reason
+        // and hash. The answer is the same answer; only the envelope differs.
+        if (settle === &quot;declined-4xx&quot;) {
+          return send({ success: false, errorReason: &quot;invalid_exact_evm_payload_authorization_valid_before&quot;,
+            transaction: &quot;&quot;, network: NETWORK, payer: PAY_TO }, 400);
+        }
+        if (settle === &quot;hash-4xx&quot;) {
+          return send({ success: false, errorReason: &quot;invalid_exact_evm_transfer_event_mismatch&quot;,
+            transaction: SETTLE_TX, network: NETWORK, payer: PAY_TO }, 400);
+        }
+        if (settle === &quot;unknown-4xx&quot;) {
+          return send({ success: false, errorReason: &quot;some_reason_invented_after_this_build&quot;,
+            transaction: &quot;&quot;, network: NETWORK, payer: PAY_TO }, 400);
+        }
+        if (settle === &quot;gateway-502&quot;) {
+          res.writeHead(502, { &quot;content-type&quot;: &quot;text/html&quot; });
+          return res.end(&quot;&lt;html&gt;bad gateway&lt;/html&gt;&quot;);
+        }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Write the failing tests</strong></li>
+</ul>
+<p>Append after the <code>unknown-reason</code> test:</p>
+<pre><code class="language-js">test(&quot;an explicit refusal sent as a non-2xx is released, like the same refusal sent as a 200&quot;, async () =&gt; {
+  const { db, settled } = await mintPaying({ settle: &quot;declined-4xx&quot; });
+  assert.equal(settled, 1);
+  assert.equal(db.prepare(&quot;SELECT COUNT(*) AS n FROM mints&quot;).get().n, 0, &quot;a plain no frees the key at once&quot;);
+});
+
+for (const settle of [&quot;hash-4xx&quot;, &quot;unknown-4xx&quot;, &quot;gateway-502&quot;]) {
+  test(`a non-2xx that is not a plain refusal (${settle}) is held`, async () =&gt; {
+    const { db } = await mintPaying({ settle });
+    assert.equal(db.prepare(&quot;SELECT status FROM mints&quot;).get().status, &quot;payment-unresolved&quot;);
+  });
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run them to verify the first fails</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; node --test test/settlement-commit.test.mjs</code>
+Expected: <code>declined-4xx</code> FAILS (1 row held, expected 0); the three held cases PASS already.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Classify the thrown answer</strong></li>
+</ul>
+<p>Replace the <code>catch</code> body in <code>observeSettlement</code>:</p>
+<pre><code class="language-js">      } catch (err) {
+        // A non-2xx whose body is a settlement answer reaches here as a
+        // SettleError carrying that answer, and is judged exactly as a returned
+        // one is. Every other throw -- a timeout, a dropped response, a proxy
+        // page -- may follow a mined transfer, and stays unknown.
+        const kind = err?.name === &quot;SettleError&quot; &amp;&amp; isDeclined(err) ? &quot;declined&quot; : &quot;unresolved&quot;;
+        if (payNonce) outcomes.set(payNonce, { ...where, kind, detail: err?.errorReason ?? err?.message ?? null });
+        throw err;
+      }
+</code></pre>
+<p>Move the comment block &quot;THE CASE THIS WHOLE FILE TURNS ON&quot; into this one; do
+not keep both.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the tests to verify they pass</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; node --test test/settlement-commit.test.mjs</code>
+Expected: PASS, all tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Break the fix to prove the test sees it</strong></li>
+</ul>
+<p>Temporarily change <code>&quot;declined&quot;</code> to <code>&quot;unresolved&quot;</code> in the new line, confirm
+<code>declined-4xx</code> fails, then restore it from a copy made before the edit (never
+<code>git checkout --</code>).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Correct <code>.claude/rules/warden.md</code></strong></li>
+</ul>
+<p>In the &quot;Failed and unknown&quot; bullet, after &quot;Declined means no transaction hash
+AND a pre-broadcast <code>errorReason</code>&quot;, add: &quot;-- whether it is returned as a 200
+or thrown as a <code>SettleError</code> for a non-2xx&quot;.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 8: Run all four suites, then commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/src/pay/x402.mjs warden/test/settlement-commit.test.mjs .claude/rules/warden.md
+git commit -m &quot;fix(warden): an explicit refusal is declined whatever status carries it&quot;
+</code></pre>
+<hr>
+<h3>Task 4: The Warden answers <code>payment-unresolved</code></h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/mcp/nextSteps.mjs</code> (NEXT table and one new export)</li>
+<li>Modify: <code>warden/src/pay/x402.mjs:644-666</code> (the unresolved branch of <code>paid()</code>)</li>
+<li>Test: <code>warden/test/settlement-commit.test.mjs</code></li>
+<li>Modify: <code>skills/machine-readable-only/references/refusals.md</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>export function unresolvedRefusal(tool)</code> in <code>x402.mjs</code>, returning an MCP tool result <code>{ content, structuredContent: { ok: false, reason: &quot;payment-unresolved&quot;, next }, isError: true }</code>. <code>tool === &quot;upgrade&quot;</code> gets the Mark wording, anything else the token wording.</p>
+</li>
+<li><p>Produces: <code>export const UNRESOLVED_MARK_NEXT</code> (string) in <code>nextSteps.mjs</code>.</p>
+</li>
+<li><p>Consumed by: Task 5 (the client matches <code>reason === &quot;payment-unresolved&quot;</code>) and its test double.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<p>Append to <code>settlement-commit.test.mjs</code>:</p>
+<pre><code class="language-js">test(&quot;an agent whose payment outcome is unknown is told so, and told not to pay again&quot;, async () =&gt; {
+  const { result } = await mintPaying({ settle: &quot;malformed&quot; });
+  assert.equal(result.isError, true);
+  assert.equal(result.structuredContent.reason, &quot;payment-unresolved&quot;);
+  const next = result.structuredContent.next;
+  assert.match(next, /outcome is not known yet/);
+  assert.match(next, /HOLDING your reservation/);
+  assert.match(next, /Do not pay again/);
+  assert.match(next, /your token is minted then/);
+  assert.doesNotMatch(JSON.stringify(result), /released its reservation/);
+});
+
+test(&quot;a Mark whose payment outcome is unknown says Mark, not token&quot;, async () =&gt; {
+  const { result } = await upgradePaying({ settle: &quot;malformed&quot; });
+  assert.equal(result.structuredContent.reason, &quot;payment-unresolved&quot;);
+  assert.match(result.structuredContent.next, /your Mark is applied then/);
+  assert.doesNotMatch(result.structuredContent.next, /token is minted/);
+});
+
+test(&quot;when even the hold fails, the answer is still unresolved, never released&quot;, async () =&gt; {
+  const fac = await fakeFacilitator({ settle: &quot;malformed&quot; });
+  try {
+    const db = openDb(&quot;:memory:&quot;);
+    const q = queries(db);
+    const gateway = makePaymentGateway({
+      facilitatorUrl: fac.url, network: NETWORK, payTo: PAY_TO,
+      onSettled: (n, tx) =&gt; q.settleByNonce(n, tx),
+      onUnsettled: (n) =&gt; q.releaseReservation(n),
+      onUnresolved: () =&gt; { throw new Error(&quot;disk full&quot;); },
+      alert: () =&gt; {},
+      build: async () =&gt; {
+        const server = registerExactEvmScheme(
+          new x402ResourceServer(new HTTPFacilitatorClient({ url: fac.url })), { networks: [NETWORK] });
+        await server.initialize();
+        return server;
+      },
+    });
+    const tool = makeMintTool({ q, chain: openChain(), paid: gateway, supplyCap: 100, today: () =&gt; 20_700, alert: () =&gt; {} });
+    const demand = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: undefined } } });
+    const meta = await payFor({ result: demand, expected: { payTo: PAY_TO, amount: readDemand(demand).accepts[0].amount },
+      walletPrivateKey: generatePrivateKey() });
+    const result = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: meta } } });
+    assert.equal(result.structuredContent.reason, &quot;payment-unresolved&quot;);
+  } finally {
+    await fac.close();
+  }
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run them to verify they fail</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; node --test test/settlement-commit.test.mjs</code>
+Expected: the three new tests FAIL (<code>structuredContent.reason</code> is undefined:
+the agent still gets @x402/mcp&#39;s settlement-failed demand).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Add the wording</strong></li>
+</ul>
+<p>In <code>nextSteps.mjs</code>, beside <code>&quot;paid-but-unavailable&quot;</code> in <code>NEXT</code>:</p>
+<pre><code class="language-js">  &quot;payment-unresolved&quot;:
+    &quot;The payment&#39;s outcome is not known yet. It may have gone through, so the site is HOLDING your reservation. Do not pay again. At the next 00:05 UTC the site checks the chain. If the payment landed, your token is minted then. If it did not, the reservation is released and no money moved. Check after 00:05 UTC with `status`.&quot;,
+</code></pre>
+<p>and after the <code>NEXT</code> table:</p>
+<pre><code class="language-js">/// The same answer for a Mark order, which `paid()` sets as `next` directly.
+export const UNRESOLVED_MARK_NEXT =
+  &quot;The payment&#39;s outcome is not known yet. It may have gone through, so the site is HOLDING your reservation. Do not pay again. At the next 00:05 UTC the site checks the chain. If the payment landed, your Mark is applied then. If it did not, the reservation is released and no money moved. Check after 00:05 UTC with `status`.&quot;;
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Return it from the unresolved branch</strong></li>
+</ul>
+<p>In <code>x402.mjs</code>, import <code>UNRESOLVED_MARK_NEXT</code> beside <code>withNext</code>, add after
+<code>payRefusal</code>:</p>
+<pre><code class="language-js">/// What an agent is told when nobody knows whether its payment moved.
+export function unresolvedRefusal(tool) {
+  return payRefusal({
+    ok: false,
+    reason: &quot;payment-unresolved&quot;,
+    ...(tool === &quot;upgrade&quot; ? { next: UNRESOLVED_MARK_NEXT } : {}),
+  });
+}
+</code></pre>
+<p>and in <code>paid()</code>, replace the final <code>return result;</code> of the unresolved branch
+so that BOTH the held path and the hold-failed <code>catch</code> fall through to
+<code>return unresolvedRefusal(tool);</code>. The declined branch keeps <code>return result;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Document the reason for agents</strong></li>
+</ul>
+<p>In <code>skills/machine-readable-only/references/refusals.md</code>, after the
+<code>paid-but-unavailable</code> row:</p>
+<pre><code>| `payment-unresolved` | The facilitator&#39;s answer about your payment was lost or unclear, so nobody knows yet whether it moved. **Your reservation is held. Do not pay again.** The chain is checked at the next 00:05 UTC: if the payment landed, what you paid for is written then; if not, the reservation is released and nothing moved. |
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Run the tests to verify they pass</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; node --test test/settlement-commit.test.mjs test/next-steps.test.mjs</code>
+Expected: PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Run all four suites, then commit</strong></li>
+</ul>
+<p><code>tools/</code> runs <code>skill-doc.test.mjs</code>, which fails if the refusals.md row is missing.</p>
+<pre><code class="language-bash">git add warden/src/pay/x402.mjs warden/src/mcp/nextSteps.mjs warden/test/settlement-commit.test.mjs skills/machine-readable-only/references/refusals.md
+git commit -m &quot;fix(warden): an unknown payment outcome is answered as held, not released&quot;
+</code></pre>
+<hr>
+<h3>Task 5: The client prints the approved message</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>client/src/messages.mjs</code>, <code>client/src/index.mjs:17</code>, <code>client/src/cli.mjs:14</code> and <code>:227-233</code></li>
+<li>Test: <code>client/test/cli.test.mjs</code></li>
+<li>Modify: <code>docs/2026-09-01-mro-raw-protocol.md</code> and its byte-identical copy <code>skills/machine-readable-only/references/raw-protocol.md</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>unresolvedRefusal(&quot;mint&quot;)</code> from <code>warden/src/pay/x402.mjs</code> (Task 4), in the test double only.</p>
+</li>
+<li><p>Produces: <code>export function unresolvedPaymentMessage(site = DEFAULT_SITE) -&gt; string</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Make the test double switchable</strong></p>
+</li>
+</ul>
+<p>In <code>cli.test.mjs</code>, import <code>unresolvedRefusal</code> beside <code>adaptContext</code>, add
+<code>let paidAnswer = &quot;failed&quot;;</code> beside <code>let dir, ...</code>, and in the <code>paid</code> double:</p>
+<pre><code class="language-js">    paid: () =&gt; async (_args, ctx) =&gt; {
+      const paying = adaptContext(ctx?.mcpCtx)._meta?.[&quot;x402/payment&quot;];
+      if (paying &amp;&amp; paidAnswer === &quot;unresolved&quot;) return unresolvedRefusal(&quot;mint&quot;);
+      const body = paying ? SETTLEMENT_FAILED : DEMAND;
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Write the failing test</strong></li>
+</ul>
+<p>After the &quot;fails to settle&quot; test:</p>
+<pre><code class="language-js">test(&quot;a payment whose outcome is unknown exits non-zero and says do not pay again&quot;, async () =&gt; {
+  paidAnswer = &quot;unresolved&quot;;
+  try {
+    const { code, out } = await withWallet(
+      &quot;join&quot;, &quot;--site&quot;, `https://${DOMAIN}`, &quot;--endpoint&quot;, endpoint,
+      &quot;--key&quot;, join(dir, &quot;payer4.json&quot;), &quot;--to&quot;, &quot;0x&quot; + &quot;a2&quot;.repeat(20),
+      &quot;--expect-payto&quot;, TREASURY, &quot;--expect-amount&quot;, &quot;1000000&quot;
+    );
+    assert.equal(code, 2, out);
+    assert.match(out, /The payment&#39;s outcome is not known yet/);
+    assert.match(out, /Do not pay again/);
+    assert.match(out, /Check after 00:05 UTC: mro-agent status --site https:\/\/example\.com/);
+    assert.doesNotMatch(out, /NOTHING WAS MINTED/);
+  } finally {
+    paidAnswer = &quot;failed&quot;;
+  }
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run it to verify it fails</strong></li>
+</ul>
+<p>Run: <code>cd client &amp;&amp; node --test test/cli.test.mjs</code>
+Expected: the new test FAILS (exit 2 from <code>report()</code>, but no message).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Write the message and print it</strong></li>
+</ul>
+<p><code>messages.mjs</code>, after <code>paymentFailedMessage</code>:</p>
+<pre><code class="language-js">/**
+ * A PAID call the site answered, but whose payment nobody can yet confirm.
+ *
+ * The opposite of paymentFailedMessage: the reservation is HELD, not released,
+ * so the one harmful response is paying again.
+ */
+export function unresolvedPaymentMessage(site = DEFAULT_SITE) {
+  return [
+    &quot;The payment&#39;s outcome is not known yet. It may have gone through, so the&quot;,
+    &quot;site is HOLDING your reservation. Do not pay again.&quot;,
+    &quot;At the next 00:05 UTC the site checks the chain. If the payment landed,&quot;,
+    &quot;your token is minted then. If it did not, the reservation is released and&quot;,
+    &quot;no money moved.&quot;,
+    `Check after 00:05 UTC: mro-agent status --site ${site}`,
+  ].join(&quot;\n&quot;);
+}
+</code></pre>
+<p>Add it to the imports in <code>cli.mjs:14</code> and the re-exports in <code>index.mjs:17</code>.
+In <code>cli.mjs</code>, directly after the <code>if (failed) { ... }</code> block:</p>
+<pre><code class="language-js">      if (structured(result)?.reason === &quot;payment-unresolved&quot;) {
+        out(&quot;mint&quot;, structured(result));
+        console.log(`\n${unresolvedPaymentMessage(site)}`);
+        process.exitCode = 2;
+        return;
+      }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>cd client &amp;&amp; node --test test/cli.test.mjs</code>
+Expected: PASS, including the unchanged &quot;fails to settle&quot; test.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Correct the protocol document</strong></li>
+</ul>
+<p>In <code>docs/2026-09-01-mro-raw-protocol.md</code>, after the paragraph ending &quot;A token
+id you were quoted but did not pay for is never minted.&quot;, add:</p>
+<pre><code>**When nobody knows whether the transfer happened, you get
+`payment-unresolved`.** A settlement can end with no clear answer: the
+facilitator timed out, its reply was lost, or it answered with a transaction
+hash but no success. The transfer may still land, so the reservation is HELD,
+not released, and the refusal says so. Do not pay again. The chain is checked
+at the next 00:05 UTC: if the payment landed, what you paid for is written
+then; if it did not, the reservation is released and no money moved.
+</code></pre>
+<p>Then copy the file byte for byte:
+<code>cp docs/2026-09-01-mro-raw-protocol.md skills/machine-readable-only/references/raw-protocol.md</code>,
+and re-render the HTML: <code>node ~/scripts/render-md-to-html.js docs/2026-09-01-mro-raw-protocol.md docs/2026-09-01-mro-raw-protocol.html</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Run all four suites, then commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add client/src/messages.mjs client/src/index.mjs client/src/cli.mjs client/test/cli.test.mjs docs/2026-09-01-mro-raw-protocol.md docs/2026-09-01-mro-raw-protocol.html skills/machine-readable-only/references/raw-protocol.md
+git commit -m &quot;fix(client): an unknown payment outcome says held and do not pay again&quot;
+</code></pre>
+<hr>
+<h3>Task 6: Put it live and prove it</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Rehearse the Warden start</strong> with <code>warden/tools/rehearse-start.sh</code> (it boots the real <code>main.mjs</code> against a copy of production state).</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Restart the live Warden</strong> as warden/DEPLOY.md describes it: <code>pm2 delete mro-warden</code>, <code>pm2 start</code> from <code>ecosystem.config.cjs</code>, <code>pm2 save</code>. Never <code>--update-env</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Probe it live</strong> -- <code>curl -s -o /dev/null -w &quot;%{http_code}&quot; https://machinereadableonly.com/</code> answers 200, and <code>pm2 ls</code> shows <code>mro-warden</code> online with 0 restarts after one minute.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Update memory</strong> -- ruling 6 and 7 DONE in <code>operator-decisions-2026-09-30</code>, with the probe&#39;s one-line finding.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Ask the operator before pushing.</strong></li>
+</ul>
+</body>
+</html>
