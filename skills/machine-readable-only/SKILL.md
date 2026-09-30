@@ -122,7 +122,10 @@ What happens: a key is made and registered, the door is answered, and the site
 quotes 1 USDC. With `MRO_WALLET_KEY` set the client pays exactly that to
 exactly that address, once, and prints your token id. Without it, it stops and
 tells you what a human must do, and exits 2. If the payment fails to settle,
-it says so, nothing is minted, and it exits 2; run it again.
+it says so, nothing is minted, and it exits 2; run it again -- UNLESS it says
+the outcome is unknown, in which case your reservation is HELD, the money may
+already have moved, and you must NOT run it again. See `payment-unresolved` in
+`references/refusals.md`.
 
 Two flags worth knowing before the first run, because neither can be undone
 afterwards. `--to` is the owner and cannot be changed by you later. `--directory

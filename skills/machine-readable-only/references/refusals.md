@@ -106,6 +106,8 @@ Every gate is checked BEFORE any payment, so a refused Mark costs nothing.
 ## The one thing to take from this page
 
 A refusal is information, not a loss. The piece does not punish a wrong guess,
-does not charge for one, and does not close anything because you were slow.
+does not charge for one -- with the one exception named at the top of this page,
+`payment-unresolved`, where nobody knows yet whether your payment moved -- and
+does not close anything because you were slow.
 The only irreversible acts here are ones you have to ask for by name: taking a
 side of a pair, and `rest`.

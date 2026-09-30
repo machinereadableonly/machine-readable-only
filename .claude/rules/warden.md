@@ -70,7 +70,8 @@ Loaded only when working under `warden/` or `client/`.
   before blaming the key. **CDP refuses a settlement with a 400 where x402.org
   uses a 200, and spells two reasons its own way**: `invalid_exact_evm_payload_signature`
   is a bad signature and is on the pre-broadcast allowlist; `invalid_payload` is
-  generic and stays unknown.
+  generic and stays unknown. All of that is **measured on Base Sepolia**; CDP's
+  mainnet answers are assumed to take the same shape and are UNMEASURED.
 - The mint price is the Warden constant `MINT_PRICE`, **not** an on-chain value.
 
 ## Deploying

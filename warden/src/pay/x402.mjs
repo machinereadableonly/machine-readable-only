@@ -109,7 +109,10 @@ export function payerOf(paymentPayload) {
 
 /**
  * The facilitator refusals that can ONLY have happened before a transfer was
- * broadcast, taken from @x402/evm's own `exact` scheme error constants.
+ * broadcast, taken from @x402/evm's own `exact` scheme error constants -- with
+ * one exception: `invalid_exact_evm_payload_signature` is not one of them. It is
+ * CDP's own spelling, measured off its live refusal on Base Sepolia rather than
+ * read out of a package.
  *
  * WHY AN ALLOWLIST AND NOT "anything that is not pending". `errorReason` is a
  * free string in @x402/core -- a facilitator may send one this build has never

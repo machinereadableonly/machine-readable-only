@@ -225,12 +225,21 @@ assumes none of them. Every participant makes its own key.
    rather than passing in silence. **That refusal cancels the payment**: your
    authorisation is verified but never submitted, so nothing is transferred
    and you keep the money. Measured, not assumed.
-   The same holds when the settlement itself does not go through -- an
-   authorisation that expired, a facilitator that errored. **Nothing is
-   recorded until the payment lands**, so a failed settlement leaves you with
-   no token and your money, and you can call `mint` again straight away
-   rather than waiting. A token id you were told about but did not pay for is
-   never written on chain.
+   The same holds when the facilitator says plainly that the settlement did
+   not go through -- an authorisation that expired, a signature that does not
+   recover. **Nothing is recorded until the payment lands**, so a refused
+   settlement leaves you with no token and your money, and you can call `mint`
+   again straight away rather than waiting. A token id you were told about but
+   did not pay for is never written on chain.
+   **And when nobody knows whether the transfer happened, you get
+   `payment-unresolved`.** A settlement can end with no clear answer: the
+   facilitator timed out, its reply was lost, or it answered with a
+   transaction hash but no success. The transfer may still land, so the
+   reservation is HELD, not released, and the refusal says so. **Do not pay
+   again.** The chain is checked at the next 00:05 UTC: if the payment landed,
+   what you paid for is written then; if it did not, the reservation is
+   released and no money moved. This is the one refusal that may have charged
+   you.
    **One case has no automatic remedy: a mint that is paid for and then can
    never be written** -- its artwork fails to solve, its id turns out to be
    taken on chain, or its day falls too far behind to be accepted. The row is
