@@ -188,7 +188,7 @@ export function payNonceFromMeta({ toolName, args, meta }) {
  * facilitator advertising some other EVM chain must not become a chain this
  * piece will quote a price on.
  */
-async function initResourceServer(facilitatorUrl, network, createAuthHeaders = undefined) {
+export async function initResourceServer(facilitatorUrl, network, createAuthHeaders = undefined) {
   // HTTPS ONLY. This host is told what every agent must pay and is trusted to
   // report that a payment settled; over plain HTTP anyone on the path could
   // rewrite the treasury address in a payment demand, or forge a settlement.
