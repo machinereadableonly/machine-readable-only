@@ -564,6 +564,9 @@ test("an agent whose payment outcome is unknown is told so, and told not to pay 
   assert.match(next, /outcome is not known yet/);
   assert.match(next, /HOLDING your reservation/);
   assert.match(next, /Do not pay again/);
+  // The checker runs once a night, so the honest answer is not always "tonight".
+  assert.match(next, /The site checks the chain at the next 00:05 UTC/);
+  assert.match(next, /waits one more night/);
   assert.match(next, /your token is minted then/);
   assert.doesNotMatch(JSON.stringify(result), /released its reservation/);
 });
@@ -572,6 +575,7 @@ test("a Mark whose payment outcome is unknown says Mark, not token", async () =>
   const { result } = await upgradePaying({ settle: "malformed" });
   assert.equal(result.structuredContent.reason, "payment-unresolved");
   assert.match(result.structuredContent.next, /your Mark is applied then/);
+  assert.match(result.structuredContent.next, /waits one more night/);
   assert.doesNotMatch(result.structuredContent.next, /token is minted/);
 });
 

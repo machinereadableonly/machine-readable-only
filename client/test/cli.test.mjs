@@ -373,6 +373,8 @@ test("a payment whose outcome is unknown exits non-zero and says do not pay agai
     assert.equal(code, 2, out);
     assert.match(out, /The payment's outcome is not known yet/);
     assert.match(out, /Do not pay again/);
+    // The checker runs once a night, so the honest answer is not always "tonight".
+    assert.match(out, /waits one more night/);
     assert.match(out, /Check after 00:05 UTC: mro-agent status --site https:\/\/example\.com/);
     assert.doesNotMatch(out, /NOTHING WAS MINTED/);
   } finally {

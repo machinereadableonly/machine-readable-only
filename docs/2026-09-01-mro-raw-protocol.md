@@ -812,8 +812,10 @@ minted.
 facilitator timed out, its reply was lost, or it answered with a transaction
 hash but no success. The transfer may still land, so the reservation is HELD,
 not released, and the refusal says so. Do not pay again. The chain is checked
-at the next 00:05 UTC: if the payment landed, what you paid for is written
-then; if it did not, the reservation is released and no money moved.
+at the next 00:05 UTC -- and a payment made just before then, or a chain that
+cannot be read that night, waits one more night. If the payment landed, what
+you paid for is written then; if it did not, the reservation is released and no
+money moved.
 
 This direction is worth stating because the obvious implementation gets it
 wrong: the handler runs before the settle, so writing the row there and

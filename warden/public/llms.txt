@@ -236,10 +236,11 @@ assumes none of them. Every participant makes its own key.
    facilitator timed out, its reply was lost, or it answered with a
    transaction hash but no success. The transfer may still land, so the
    reservation is HELD, not released, and the refusal says so. **Do not pay
-   again.** The chain is checked at the next 00:05 UTC: if the payment landed,
-   what you paid for is written then; if it did not, the reservation is
-   released and no money moved. This is the one refusal that may have charged
-   you.
+   again.** The chain is checked at the next 00:05 UTC -- and a payment made
+   just before then, or a chain that cannot be read that night, waits one more
+   night. If the payment landed, what you paid for is written then; if it did
+   not, the reservation is released and no money moved. This is the one refusal
+   that may have charged you.
    **One case has no automatic remedy: a mint that is paid for and then can
    never be written** -- its artwork fails to solve, its id turns out to be
    taken on chain, or its day falls too far behind to be accepted. The row is

@@ -104,9 +104,10 @@ export function unresolvedPaymentMessage(site = DEFAULT_SITE) {
   return [
     "The payment's outcome is not known yet. It may have gone through, so the",
     "site is HOLDING your reservation. Do not pay again.",
-    "At the next 00:05 UTC the site checks the chain. If the payment landed,",
-    "your token is minted then. If it did not, the reservation is released and",
-    "no money moved.",
+    "The site checks the chain at the next 00:05 UTC; a payment made just",
+    "before then, or a chain it cannot read that night, waits one more night.",
+    "If the payment landed, your token is minted then. If it did not, the",
+    "reservation is released and no money moved.",
     `Check after 00:05 UTC: mro-agent status --site ${site}`,
   ].join("\n");
 }
