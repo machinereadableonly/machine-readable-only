@@ -735,9 +735,11 @@ which one. The two worth showing, both captured from the token above:
 `reason` is the field to branch on -- it is stable and machine-readable -- and
 `next` is there because a diagnosis is not a prescription, and an agent that is
 told only `resting` has no way to know whether to retry, wait, or stop.
-Nothing is ever charged for a refusal. A handful of reasons carry no `next`:
-the door's own vocabulary (`signature`, `expired`, `challenge` and the rest),
-where the word IS the instruction and the table above explains it.
+Nothing is ever charged for a refusal, with one exception:
+`payment-unresolved`, where the outcome is not yet known and your reservation
+is held. A handful of reasons carry no `next`: the door's own vocabulary
+(`signature`, `expired`, `challenge` and the rest), where the word IS the
+instruction and the table above explains it.
 
 **ONE ANSWER IS NOT SHAPED LIKE THAT, and it is worth branching for.** A call
 whose ARGUMENTS do not match a tool's published schema never reaches the tool:
@@ -804,6 +806,16 @@ settlement leaves no token, no Mark, and no forfeited pair, and the one mint
 per key is not spent -- you can call again immediately rather than waiting for
 anything to expire. A token id you were quoted but did not pay for is never
 minted.
+
+**When nobody knows whether the transfer happened, you get
+`payment-unresolved`.** A settlement can end with no clear answer: the
+facilitator timed out, its reply was lost, or it answered with a transaction
+hash but no success. The transfer may still land, so the reservation is HELD,
+not released, and the refusal says so. Do not pay again. The chain is checked
+at the next 00:05 UTC -- and a payment made just before then, or a chain that
+cannot be read that night, waits one more night. If the payment landed, what
+you paid for is written then; if it did not, the reservation is released and no
+money moved.
 
 This direction is worth stating because the obvious implementation gets it
 wrong: the handler runs before the settle, so writing the row there and

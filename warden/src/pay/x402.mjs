@@ -14,7 +14,7 @@
 import { createPaymentWrapper, extractPaymentFromMeta } from "@x402/mcp";
 import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
-import { withNext } from "../mcp/nextSteps.mjs";
+import { withNext, UNRESOLVED_MARK_NEXT } from "../mcp/nextSteps.mjs";
 
 /// What a mint costs. One place, because the tool's own description quotes it.
 export const MINT_PRICE = "$1.00";
@@ -109,7 +109,10 @@ export function payerOf(paymentPayload) {
 
 /**
  * The facilitator refusals that can ONLY have happened before a transfer was
- * broadcast, taken from @x402/evm's own `exact` scheme error constants.
+ * broadcast, taken from @x402/evm's own `exact` scheme error constants -- with
+ * one exception: `invalid_exact_evm_payload_signature` is not one of them. It is
+ * CDP's own spelling, measured off its live refusal on Base Sepolia rather than
+ * read out of a package.
  *
  * WHY AN ALLOWLIST AND NOT "anything that is not pending". `errorReason` is a
  * free string in @x402/core -- a facilitator may send one this build has never
@@ -120,7 +123,8 @@ export function payerOf(paymentPayload) {
  *
  * Deliberately absent, though they look like they belong: `transaction_failed`
  * and `transfer_event_mismatch` are decided from a receipt, so a transfer was
- * broadcast, and `settlement_pending` carries a hash by definition.
+ * broadcast, and `settlement_pending` carries a hash by definition. So is CDP's
+ * `invalid_payload`: it is generic and says nothing about broadcast.
  */
 export const PRE_BROADCAST_REASONS = new Set([
   "asset_not_deployed_contract",
@@ -129,6 +133,9 @@ export const PRE_BROADCAST_REASONS = new Set([
   "invalid_exact_evm_missing_eip712_domain",
   "invalid_exact_evm_recipient_mismatch",
   "invalid_exact_evm_signature",
+  // CDP's spelling of the same refusal. A signature that does not recover can
+  // never have moved money, whichever facilitator names it.
+  "invalid_exact_evm_payload_signature",
   "invalid_exact_evm_payload_authorization_valid_before",
   "invalid_exact_evm_payload_authorization_valid_after",
   "invalid_exact_evm_authorization_value",
@@ -188,7 +195,7 @@ export function payNonceFromMeta({ toolName, args, meta }) {
  * facilitator advertising some other EVM chain must not become a chain this
  * piece will quote a price on.
  */
-async function initResourceServer(facilitatorUrl, network, createAuthHeaders = undefined) {
+export async function initResourceServer(facilitatorUrl, network, createAuthHeaders = undefined) {
   // HTTPS ONLY. This host is told what every agent must pay and is trusted to
   // report that a payment settled; over plain HTTP anyone on the path could
   // rewrite the treasury address in a payment demand, or forge a settlement.
@@ -286,6 +293,22 @@ function payRefusal(value) {
     structuredContent: answered,
     isError: true,
   };
+}
+
+/**
+ * What an agent is told when nobody knows whether its payment moved.
+ *
+ * The library's own settlement-failed answer says the call failed, which a
+ * client reasonably reads as "nothing happened, pay again" -- the one action
+ * that can debit an agent twice for a transfer that may already be mined. The
+ * reservation is HELD, so the answer has to say so.
+ */
+export function unresolvedRefusal(tool) {
+  return payRefusal({
+    ok: false,
+    reason: "payment-unresolved",
+    ...(tool === "upgrade" ? { next: UNRESOLVED_MARK_NEXT } : {}),
+  });
 }
 
 /**
@@ -458,9 +481,12 @@ export function makePaymentGateway({
         }
         return settlement;
       } catch (err) {
-        // THE CASE THIS WHOLE FILE TURNS ON. By here the transfer may already
-        // be mined; what failed may only be the news of it coming back.
-        if (payNonce) outcomes.set(payNonce, { ...where, kind: "unresolved", detail: err?.message ?? null });
+        // A non-2xx whose body is a settlement answer reaches here as a
+        // SettleError carrying that answer, and is judged exactly as a returned
+        // one is. Every other throw -- a timeout, a dropped response, a proxy
+        // page -- may follow a mined transfer, and stays unknown.
+        const kind = err?.name === "SettleError" && isDeclined(err) ? "declined" : "unresolved";
+        if (payNonce) outcomes.set(payNonce, { ...where, kind, detail: err?.errorReason ?? err?.message ?? null });
         throw err;
       }
     };
@@ -661,6 +687,10 @@ export function makePaymentGateway({
               `Check whether nonce ${reservedNonce} was spent before this row expires`
           );
         }
+        // Both paths answer the same way. The library's result says the call
+        // failed; the reservation is held, and a hold that could not be written
+        // is still not a release.
+        return unresolvedRefusal(tool);
       }
       return result;
     };

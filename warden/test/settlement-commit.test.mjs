@@ -63,8 +63,8 @@ async function fakeFacilitator({ settle = "ok" } = {}) {
   const calls = [];
   const server = createServer((req, res) => {
     calls.push(req.url);
-    const send = (body) => {
-      res.writeHead(200, { "content-type": "application/json" });
+    const send = (body, status = 200) => {
+      res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify(body));
     };
     if (req.url === "/supported") {
@@ -124,6 +124,44 @@ async function fakeFacilitator({ settle = "ok" } = {}) {
             network: NETWORK,
             payer: PAY_TO,
           });
+        }
+        // EXPLICIT REFUSALS SENT AS ERRORS. @x402/core throws a SettleError
+        // for a non-2xx whose body has `success`, carrying the body's reason
+        // and hash. The answer is the same answer; only the envelope differs.
+        if (settle === "declined-4xx") {
+          return send({ success: false, errorReason: "invalid_exact_evm_payload_authorization_valid_before",
+            transaction: "", network: NETWORK, payer: PAY_TO }, 400);
+        }
+        if (settle === "hash-4xx") {
+          return send({ success: false, errorReason: "invalid_exact_evm_transfer_event_mismatch",
+            transaction: SETTLE_TX, network: NETWORK, payer: PAY_TO }, 400);
+        }
+        // THE HASH ALONE HAS TO DECIDE IT. `hash-4xx` above carries a reason
+        // that is not on the pre-broadcast allowlist, so it is held on the
+        // reason and would stay held with the hash check deleted. This one
+        // pairs an ALLOWLISTED reason with a broadcast hash: the only thing
+        // standing between it and a released reservation is the hash.
+        if (settle === "allowlisted-reason-with-hash-4xx") {
+          return send({ success: false, errorReason: "invalid_exact_evm_signature",
+            transaction: SETTLE_TX, network: NETWORK, payer: PAY_TO }, 400);
+        }
+        if (settle === "unknown-4xx") {
+          return send({ success: false, errorReason: "some_reason_invented_after_this_build",
+            transaction: "", network: NETWORK, payer: PAY_TO }, 400);
+        }
+        if (settle === "gateway-502") {
+          res.writeHead(502, { "content-type": "text/html" });
+          return res.end("<html>bad gateway</html>");
+        }
+        // CDP's own spellings, measured. A bad signature can never have moved
+        // money; `invalid_payload` is generic and must stay unknown.
+        if (settle === "cdp-bad-signature-4xx") {
+          return send({ success: false, errorReason: "invalid_exact_evm_payload_signature",
+            transaction: "", network: NETWORK, payer: PAY_TO }, 400);
+        }
+        if (settle === "cdp-invalid-payload-4xx") {
+          return send({ success: false, errorReason: "invalid_payload",
+            transaction: "", network: NETWORK, payer: PAY_TO }, 400);
         }
         // A facilitator that answers with something unparseable: the client
         // throws rather than returning success:false.
@@ -280,6 +318,52 @@ for (const settle of ["pending", "event-mismatch"]) {
 test("a refusal this build does not recognise is held rather than released", async () => {
   const { db } = await mintPaying({ settle: "unknown-reason" });
   assert.equal(db.prepare("SELECT status FROM mints").get().status, "payment-unresolved");
+});
+
+// THE STATUS CODE IS AN ENVELOPE, NOT AN ANSWER. x402.org refuses with a 200
+// and CDP -- the mainnet facilitator -- refuses the same payment with a 400,
+// which @x402/core throws as a SettleError carrying that same body. Judging the
+// throw as unknown held every plain CDP refusal until the next 00:05 UTC.
+test("an explicit refusal sent as a non-2xx is released, like the same refusal sent as a 200", async () => {
+  const { db, settled } = await mintPaying({ settle: "declined-4xx" });
+  assert.equal(settled, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM mints").get().n, 0, "a plain no frees the key at once");
+});
+
+// CDP spells a bad signature its own way, and a signature that does not recover
+// can never have moved money.
+test("CDP's own bad-signature refusal is released too", async () => {
+  const { db } = await mintPaying({ settle: "cdp-bad-signature-4xx" });
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM mints").get().n, 0);
+});
+
+for (const settle of ["hash-4xx", "unknown-4xx", "gateway-502", "cdp-invalid-payload-4xx"]) {
+  test(`a non-2xx that is not a plain refusal (${settle}) is held`, async () => {
+    const { db } = await mintPaying({ settle });
+    assert.equal(db.prepare("SELECT status FROM mints").get().status, "payment-unresolved");
+  });
+}
+
+// AND THE HASH ON ITS OWN, which is what none of the cases above actually test.
+// Every held non-2xx up there carries a reason that is not on the pre-broadcast
+// allowlist, so each is held on the REASON -- delete the hash check in
+// `isDeclined` and they all stay green. A facilitator can send both: a
+// recognised pre-broadcast reason beside a transaction it did broadcast. The
+// hash wins, because a hash means the transfer exists and the money can still
+// move, whatever reason came with it.
+test("an allowlisted refusal that nonetheless carries a transaction hash is held", async () => {
+  const { result, db, q } = await mintPaying({ settle: "allowlisted-reason-with-hash-4xx" });
+
+  const row = db.prepare("SELECT tokenId, status FROM mints").get();
+  assert.ok(row, "the row must survive: a broadcast transfer can still land");
+  assert.equal(row.status, "payment-unresolved", "the hash decides it, not the reason");
+  assert.deepEqual(q.unresolvedPayments().map((r) => r.tokenId), [row.tokenId]);
+  assert.deepEqual(q.pendingMints(), [], "and nothing unpaid reaches the chain meanwhile");
+
+  // AND THE AGENT IS TOLD NOT TO PAY AGAIN, which is the whole point of the
+  // distinction: a released reservation invites the one retry that can debit a
+  // payer twice for a transfer that is already on chain.
+  assert.equal(result.structuredContent.reason, "payment-unresolved");
 });
 
 // THE OTHER FAILURE PATH, AND IT IS NOT THE SAME FAILURE. A facilitator that
@@ -462,6 +546,66 @@ test("a key's own retry sweeps its own orphaned reservation", async () => {
     // would be the loss the hold exists to prevent. The Clock frees it tonight.
     assert.equal(again.ok, false);
     assert.equal(again.reason, "already-minted");
+  } finally {
+    await fac.close();
+  }
+});
+
+// WHAT THE AGENT IS TOLD WHEN NOBODY KNOWS. The state above is right and the
+// answer was not: @x402/mcp's own settlement-failed demand reached the agent,
+// and a client reading it reported that nothing was minted and the reservation
+// released -- both false, and an invitation to pay a second time for a payment
+// that may already have moved.
+test("an agent whose payment outcome is unknown is told so, and told not to pay again", async () => {
+  const { result } = await mintPaying({ settle: "malformed" });
+  assert.equal(result.isError, true);
+  assert.equal(result.structuredContent.reason, "payment-unresolved");
+  const next = result.structuredContent.next;
+  assert.match(next, /outcome is not known yet/);
+  assert.match(next, /HOLDING your reservation/);
+  assert.match(next, /Do not pay again/);
+  // The checker runs once a night, so the honest answer is not always "tonight".
+  assert.match(next, /The site checks the chain at the next 00:05 UTC/);
+  assert.match(next, /waits one more night/);
+  assert.match(next, /your token is minted then/);
+  assert.doesNotMatch(JSON.stringify(result), /released its reservation/);
+});
+
+test("a Mark whose payment outcome is unknown says Mark, not token", async () => {
+  const { result } = await upgradePaying({ settle: "malformed" });
+  assert.equal(result.structuredContent.reason, "payment-unresolved");
+  assert.match(result.structuredContent.next, /your Mark is applied then/);
+  assert.match(result.structuredContent.next, /waits one more night/);
+  assert.doesNotMatch(result.structuredContent.next, /token is minted/);
+});
+
+// The hold itself can fail -- a full disk, a locked database -- and that is the
+// one moment the agent most needs the true answer. The alert already says a
+// human must check it; the agent must not be told anything different.
+test("when even the hold fails, the answer is still unresolved, never released", async () => {
+  const fac = await fakeFacilitator({ settle: "malformed" });
+  try {
+    const db = openDb(":memory:");
+    const q = queries(db);
+    const gateway = makePaymentGateway({
+      facilitatorUrl: fac.url, network: NETWORK, payTo: PAY_TO,
+      onSettled: (n, tx) => q.settleByNonce(n, tx),
+      onUnsettled: (n) => q.releaseReservation(n),
+      onUnresolved: () => { throw new Error("disk full"); },
+      alert: () => {},
+      build: async () => {
+        const server = registerExactEvmScheme(
+          new x402ResourceServer(new HTTPFacilitatorClient({ url: fac.url })), { networks: [NETWORK] });
+        await server.initialize();
+        return server;
+      },
+    });
+    const tool = makeMintTool({ q, chain: openChain(), paid: gateway, supplyCap: 100, today: () => 20_700, alert: () => {} });
+    const demand = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: undefined } } });
+    const meta = await payFor({ result: demand, expected: { payTo: PAY_TO, amount: readDemand(demand).accepts[0].amount },
+      walletPrivateKey: generatePrivateKey() });
+    const result = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: meta } } });
+    assert.equal(result.structuredContent.reason, "payment-unresolved");
   } finally {
     await fac.close();
   }

@@ -11,7 +11,7 @@ import { ensureIdentity, loadIdentity, defaultKeyPath } from "./keys.mjs";
 import { registerKey } from "./door.mjs";
 import { listTools, callTool, structured } from "./mcp.mjs";
 import { payFor, readDemand } from "./pay.mjs";
-import { DEFAULT_SITE, cronLine, unpayableMessage, paymentFailedMessage, lostResponseMessage } from "./messages.mjs";
+import { DEFAULT_SITE, cronLine, unpayableMessage, paymentFailedMessage, unresolvedPaymentMessage, lostResponseMessage } from "./messages.mjs";
 
 // The commands that exist. Checked BEFORE an identity key is created, because
 // creating a signing key as a side effect of a typo is not something a package
@@ -228,6 +228,17 @@ async function main() {
       if (failed) {
         out("mint", failed);
         console.log(`\n${paymentFailedMessage(failed)}`);
+        process.exitCode = 2;
+        return;
+      }
+
+      // THE OPPOSITE REFUSAL, AND THE ONE WHERE RETRYING COSTS MONEY. The site
+      // could not learn whether the transfer landed, so it HOLDS the
+      // reservation rather than releasing it. report() would exit 2 and say
+      // nothing, which reads like the failed settlement above.
+      if (structured(result)?.reason === "payment-unresolved") {
+        out("mint", structured(result));
+        console.log(`\n${unresolvedPaymentMessage(site)}`);
         process.exitCode = 2;
         return;
       }

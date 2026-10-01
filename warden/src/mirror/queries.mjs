@@ -819,9 +819,11 @@ export function queries(db) {
      * Move reservations whose settlement never reported back into
      * 'payment-unresolved', where the Clock decides them against the chain.
      *
-     * Called before each new reservation rather than on a timer: the only thing
-     * such a row can harm is the next agent to want its slot in the unique
-     * index, so that is when it is worth looking at.
+     * Called before each new reservation -- the next agent to want that slot in
+     * the unique index is the only one such a row can harm -- and by the Clock
+     * at the start of its nightly run, which is what reaches such a row on a
+     * piece nobody mints from again. The nightly call resolves what it moves
+     * against the chain in the same run.
      *
      * IT DOES NOT DELETE, and the difference is money. A row reaches this
      * function only by surviving its whole window as 'awaiting-payment', and

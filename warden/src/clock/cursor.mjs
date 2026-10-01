@@ -156,6 +156,10 @@ export function nextCursor(summary) {
  *
  * A DROPPED seed is deliberately NOT a failure. The drop is the remedy: the
  * year is already back and the agent can ask again.
+ *
+ * A FAILED EXPIRY SWEEP is one. It never stops the run -- the night's writes
+ * matter more than the housekeeping -- so this is the only place it is counted,
+ * and a reservation past its payment window stayed unlooked-at because of it.
  */
 export function exitCodeFor(summary) {
   if (!summary) return 1;
@@ -170,5 +174,6 @@ export function exitCodeFor(summary) {
   // settle it once the chain will not answer. It fails every night until it is
   // resolved, which is the point -- the defect this replaced was silent.
   if ((summary.unresolvedPayments?.length ?? 0) > 0) return 1;
+  if (summary.sweepFailed) return 1;
   return 0;
 }

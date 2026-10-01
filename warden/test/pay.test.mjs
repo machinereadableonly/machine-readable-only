@@ -285,13 +285,26 @@ function fakeServer(asked = []) {
  *
  * `lastCtx` records what the wrapper was GIVEN, so a test can still pin the v2
  * adaptation that makes the payment findable at all.
+ *
+ * It also SETTLES a handler that did not refuse, and fires the same hook the
+ * real wrapper fires. Without that, every successful call through this double
+ * looked to the gateway like a settlement it never saw -- an unresolved payment
+ * -- so a test asserting success was asserting the unknown-outcome path.
  */
 function fakeWrap(seen = [], given = []) {
-  return (server, { accepts }) => {
+  return (server, { accepts, hooks }) => {
     seen.push(accepts);
-    return (handler) => (args, ctx) => {
+    return (handler) => async (args, ctx) => {
       given.push(ctx);
-      return handler(args, { toolName: "fake", arguments: args, meta: ctx?._meta });
+      const paymentPayload = ctx?._meta?.["x402/payment"];
+      const result = await handler(args, { toolName: "fake", arguments: args, meta: ctx?._meta });
+      if (paymentPayload && result?.isError !== true) {
+        await hooks?.onAfterSettlement?.({
+          paymentPayload,
+          settlement: { success: true, transaction: "0xfaketx" },
+        });
+      }
+      return result;
     };
   };
 }
@@ -365,7 +378,8 @@ test("a failed build is retried on the next call rather than disabling payment f
 
   // A facilitator down for a minute must not need a process restart.
   const second = await paid(async () => ({ ok: true }), "$0.10")({}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
-  assert.equal(second.ok, true);
+  // A settled call answers in MCP's own shape, so the value is one level down.
+  assert.equal(second.structuredContent.ok, true);
   assert.equal(builds, 2);
 });
 
@@ -497,7 +511,7 @@ test("a handler is given the nonce that will settle it, and refuses without one"
     {},
     { mcpCtx: { mcpReq: { _meta: meta } } }
   );
-  assert.equal(ran.ok, true);
+  assert.equal(ran.structuredContent.ok, true);
   assert.equal(seen.payNonce, "0xfeed");
 
   // And with no payment in the context at all, the handler must never run.

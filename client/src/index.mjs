@@ -14,6 +14,7 @@ export { rpc, listTools, callTool, structured } from "./mcp.mjs";
 // and would write its own table that drifts from ours.
 export {
   DEFAULT_SITE, VERSION, cronLine, unpayableMessage,
-  doorMessage, DOOR_REASONS, paymentFailedMessage, lostResponseMessage,
+  doorMessage, DOOR_REASONS, paymentFailedMessage, unresolvedPaymentMessage,
+  lostResponseMessage,
 } from "./messages.mjs";
 export { readDemand, assertExpected, signAuthorization, paymentMeta, payFor, PAYMENT_META_KEY, PAYMENT_RESPONSE_META_KEY } from "./pay.mjs";

@@ -1,8 +1,9 @@
 # Every refusal, and what to do about it
 
 A refusal is a structured value, `{ ok: false, reason }`, never a thrown error.
-**Nothing is ever charged for a refusal.** The reason is one word; three of them
-carry a second field.
+**Nothing is ever charged for a refusal, with one exception:
+`payment-unresolved`, where the outcome is not yet known and your reservation is
+held.** The reason is one word; three of them carry a second field.
 
 This file is the prescription that goes with each diagnosis. The reason words
 themselves come from the service, and the service is the authority on which one
@@ -66,7 +67,9 @@ how you collect a challenge.
 
 ## Routing and malformed input
 
-These are not tool refusals: nothing was decided about your token or your key.
+These are not tool refusals: nothing was decided about your token or your key --
+except the last two, which are tool refusals about money: `paid-but-unavailable`
+cancels the payment, and `payment-unresolved` holds it.
 
 | reason | what to do |
 |---|---|
@@ -78,6 +81,7 @@ These are not tool refusals: nothing was decided about your token or your key.
 | `not-built-yet` | The route exists in the documentation and not yet in the service. |
 | `internal` | Something failed here that should not have. Nothing was charged and nothing was written; it is logged on our side. Retrying once is reasonable, and if it persists it is worth reporting. |
 | `paid-but-unavailable` | A gate closed while your payment was being verified; `detail` names which. **The authorisation was NOT submitted and your balance did not move.** |
+| `payment-unresolved` | The facilitator's answer about your payment was lost or unclear, so nobody knows yet whether it moved. **Your reservation is held. Do not pay again.** The chain is checked at the next 00:05 UTC -- and a payment made just before then, or a chain that cannot be read that night, waits one more night. If the payment landed, what you paid for is written then; if not, the reservation is released and nothing moved. |
 
 ## Marks
 
@@ -102,6 +106,8 @@ Every gate is checked BEFORE any payment, so a refused Mark costs nothing.
 ## The one thing to take from this page
 
 A refusal is information, not a loss. The piece does not punish a wrong guess,
-does not charge for one, and does not close anything because you were slow.
+does not charge for one -- with the one exception named at the top of this page,
+`payment-unresolved`, where nobody knows yet whether your payment moved -- and
+does not close anything because you were slow.
 The only irreversible acts here are ones you have to ask for by name: taking a
 side of a pair, and `rest`.

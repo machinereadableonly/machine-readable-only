@@ -95,6 +95,24 @@ export function paymentFailedMessage(demand) {
 }
 
 /**
+ * A PAID call the site answered, but whose payment nobody can yet confirm.
+ *
+ * The opposite of paymentFailedMessage: the reservation is HELD, not released,
+ * so the one harmful response is paying again.
+ */
+export function unresolvedPaymentMessage(site = DEFAULT_SITE) {
+  return [
+    "The payment's outcome is not known yet. It may have gone through, so the",
+    "site is HOLDING your reservation. Do not pay again.",
+    "The site checks the chain at the next 00:05 UTC; a payment made just",
+    "before then, or a chain it cannot read that night, waits one more night.",
+    "If the payment landed, your token is minted then. If it did not, the",
+    "reservation is released and no money moved.",
+    `Check after 00:05 UTC: mro-agent status --site ${site}`,
+  ].join("\n");
+}
+
+/**
  * A PAID call that threw before it answered. The money may be gone.
  *
  * `paymentFailedMessage` covers the opposite case -- the site answered and said
