@@ -333,7 +333,7 @@ test("a held MARK order is resolved the same way, and its Mark stays taken until
 });
 
 /// One real Clock run against a chain that answers the resolver's questions.
-function nightlyRun(q, chain) {
+function nightlyRun(q, chain, { alert = () => {} } = {}) {
   return runClock({
     q,
     writer: {
@@ -355,7 +355,7 @@ function nightlyRun(q, chain) {
     chainId: 84532,
     today: 20_701,
     log: () => {},
-    alert: () => {},
+    alert,
   });
 }
 
@@ -454,4 +454,41 @@ test("a reservation younger than its window is untouched by the nightly run", as
   assert.deepEqual(summary.resolvedUnpaid, []);
   assert.deepEqual(summary.deferredPayments, []);
   assert.deepEqual(summary.unresolvedPayments, []);
+});
+
+// A HOUSEKEEPING STEP MUST NOT COST THE NIGHT'S WRITES. The sweep writes to the
+// database the Warden is writing to as well, so it can throw -- SQLITE_BUSY is
+// the ordinary way. Unguarded, that throw rejected runClock before the gas
+// guard: no mints, no check-ins, no Marks and no reconcile, so one locked
+// moment during a step that resolves nothing by itself cost a whole night of
+// the artwork. The queued rows survive to the next run; the night does not.
+test("a sweep that throws is reported and the night's writes still go out", async () => {
+  const { db, q } = awaitingMint();
+  q.insertCredit(1, 20_700, "sig-yesterday");
+  const said = [];
+  const brokenSweep = {
+    ...q,
+    sweepExpiredReservations() {
+      throw new Error("SQLITE_BUSY: database is locked");
+    },
+  };
+
+  const summary = await nightlyRun(brokenSweep, chainWith({ logs: settlementLogs() }), {
+    alert: (m) => said.push(m),
+  });
+
+  assert.deepEqual(
+    summary.credited.map((e) => e.day),
+    [20_700],
+    "the night's check-in goes out even though the sweep failed"
+  );
+  assert.equal(
+    db.prepare("SELECT status FROM credits WHERE day = 20700").get().status,
+    "written",
+    "and the mirror records it, so the day is not offered again"
+  );
+  assert.ok(summary.reconciled, "and the mirror still learns what the chain did");
+  assert.match(said.join(" "), /sweep/i, "the operator is told which step failed");
+  assert.match(said.join(" "), /SQLITE_BUSY/, "and what it failed with");
+  assert.equal(exitCodeFor(summary), 1, "and systemd is told the night was not clean");
 });

@@ -21,6 +21,7 @@ import { MRO_ABI } from "./abi.mjs";
 import { keyIdToBytes32 } from "../mcp/keyId.mjs";
 import { sweep } from "../mcp/sweep.mjs";
 import { resolveUnresolvedPayments } from "./unresolved.mjs";
+import { safeErrorText } from "./redact.mjs";
 
 /// How many check-ins go in one batchCheckIn. MEASURED 2026-09-11 against a
 /// real node's receipts (warden/tools/chunk-rehearsal.sh, Osaka rules with
@@ -300,6 +301,9 @@ export async function runClock({
     /// And the ones still in doubt. They fail the run every night until a
     /// human settles them, because the defect these replaced was silent.
     unresolvedPayments: [],
+    /// Why the expiry sweep threw, or null. It fails the run at the END: a
+    /// reservation past its window went unlooked-at, and only a human notices.
+    sweepFailed: null,
   };
 
   // 0. MONEY WHOSE FATE IS UNKNOWN, BEFORE ANYTHING ELSE. It costs no gas, it
@@ -315,7 +319,19 @@ export async function runClock({
   //    'payment-unresolved' and the same run decides it against the chain. It
   //    touches only reservations past their window, so a settlement still in
   //    flight is left alone.
-  sweep(q, "clock", alert);
+  //
+  //    GUARDED, because the Warden writes this database too and a locked moment
+  //    here used to reject the whole run: no gas guard, no check-ins, no
+  //    reconcile, a night of the artwork lost to a housekeeping step.
+  try {
+    sweep(q, "clock", alert);
+  } catch (err) {
+    summary.sweepFailed = safeErrorText(err);
+    alert(
+      `clock: the expiry sweep failed (${summary.sweepFailed}) -- any reservation past its payment window ` +
+        "is unlooked-at tonight, and the rest of the run carries on"
+    );
+  }
   Object.assign(summary, await resolveUnresolvedPayments({ q, publicClient, alert, log }));
 
   // 1. THE GAS GUARD, BEFORE ANYTHING IS SENT. It stops every WRITE pass and
