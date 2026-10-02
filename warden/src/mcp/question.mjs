@@ -102,8 +102,13 @@ export function questionFor(day, secret, bank) {
 /// The index, not the text, because that is what the artwork stores.
 export function answerIndex(q, answer) {
   if (q.answers) {
-    if (typeof answer !== "string" || norm(answer) === "") return null;
-    const i = q.answers.findIndex((a) => norm(a) === norm(answer));
+    // A client cannot know an option is spelled in digits without the question
+    // in front of it, and the reference client sends a digits-only answer as an
+    // integer -- so a number is matched by its decimal spelling. Only a number:
+    // an array, a bigint or an object with a toString is still refused.
+    const given = typeof answer === "number" ? String(answer) : answer;
+    if (typeof given !== "string" || norm(given) === "") return null;
+    const i = q.answers.findIndex((a) => norm(a) === norm(given));
     return i === -1 ? null : i;
   }
   // Only a number or a string: stringifying would let [42] and 42n answer.

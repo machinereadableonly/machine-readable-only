@@ -71,6 +71,24 @@ test("answers match ignoring case and surrounding space", () => {
   assert.equal(answerIndex({ id: "x", text: "x", answers: [" ", "fog"] }, "  "), null);
 });
 
+// The reference client sends a digits-only --answer as an integer, so a list
+// option spelled in digits was unanswerable through it while only a string
+// matched. A hand-made entry rather than one in the fixture, which several
+// suites read for its own ids.
+test("a list option spelled in digits is answerable as a string or a number", () => {
+  const year = { id: "t-year", text: "1999 or 2008?", answers: ["1999", "2008"] };
+  const bank = [year];
+  assert.equal(assertBankSane(bank), bank, "a digit-spelled option is a legal bank entry");
+  assert.equal(answerIndex(year, "2008"), 1);
+  assert.equal(answerIndex(year, 2008), 1);
+  assert.equal(answerIndex(year, 1999), 0);
+  assert.equal(answerIndex(year, 2007), null);
+  // Only a number is given a decimal spelling.
+  for (const answer of [[2008], 2008n, { toString: () => "2008" }, true]) {
+    assert.equal(answerIndex(year, answer), null, String(answer));
+  }
+});
+
 test("a range takes a number or a numeric string, inside the range only", () => {
   const legs = byId("t-range");
   assert.equal(answerIndex(legs, 42), 42);

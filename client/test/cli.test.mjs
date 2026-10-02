@@ -519,6 +519,19 @@ test("--answer is a known flag, and question needs a token id", async () => {
   assert.match(help.out, /--answer/);
 });
 
+// `question` opens the token's one look for the day. An answer handed to it
+// would be parsed, discarded, and the window started -- so the day's answer is
+// lost with nothing said. Refused above the identity and every request.
+test("--answer on any command but beat is refused before anything is sent", async () => {
+  const stray = join(dir, "stray-answer.json");
+  for (const command of ["question", "status", "ladder", "whoami"]) {
+    const { code, out } = await cli(command, "--token", "1", "--answer", "fog", "--key", stray);
+    assert.equal(code, 1, out);
+    assert.match(out, /--answer belongs on beat: run question --token <id> first/);
+  }
+  assert.equal(loadIdentity(stray), null, "nothing was created, so nothing was sent either");
+});
+
 test("the three read-only commands still require a token id", async () => {
   for (const command of ["ladder", "rebind", "rest"]) {
     const { code, out } = await cli(command, "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath);
