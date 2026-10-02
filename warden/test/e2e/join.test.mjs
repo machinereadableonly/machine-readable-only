@@ -22,6 +22,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { signatureHeaders } from "web-bot-auth";
@@ -40,15 +41,16 @@ import { envelope } from "../mcp-envelope.mjs";
 
 const DOMAIN = "example.com";
 const SECRET = "e2e-secret";
+const BANK = JSON.parse(readFileSync(new URL("../fixtures/question-bank.json", import.meta.url), "utf8"));
 const TO = "0x00000000000000000000000000000000000000a1";
 // One contract and one chain id for the WHOLE journey, because production has
 // one of each and step 6 is the test that proves both audiences hear it.
 const CONTRACT = "0x00000000000000000000000000000000000C0DE0";
 const CHAIN_ID = 84532;
 
-// What a real client signs. The door checks exactly these four components, so
+// What a real client signs. The door checks exactly these seven components, so
 // signing fewer would be refused and signing more would not be read.
-const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
+const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest", "challenge", "challenge-response"];
 
 /**
  * Bring up the whole service the way a deployment does.
@@ -81,6 +83,7 @@ function startJourney({ catalogue = STUB_CATALOGUE } = {}) {
   const clock = { offset: 0 };
 
   const mcp = makeMcpHandler({
+    bank: BANK,
     q,
     // The facilitator, mocked at exactly the seam makePaid() occupies: paid()
     // takes a handler and returns a callable. Passing the handler straight
@@ -191,7 +194,10 @@ async function registerKey(base) {
 /// The signature headers a client mints for one request. The URL signed is the
 /// CONFIGURED domain, not the loopback address the socket goes to: the door
 /// pins @authority to its own domain, which is what a client behind nginx sees.
-async function signHeaders(privateJwk, path, body = "") {
+/// The challenge is answered BEFORE signing, because the pair is covered.
+/// `challenge` has no default: an empty pair signed by omission builds a
+/// request the door can only refuse.
+async function signHeaders(privateJwk, path, body, challenge) {
   const signer = await signerFromJWK(privateJwk);
   const message = {
     method: "POST",
@@ -200,6 +206,8 @@ async function signHeaders(privateJwk, path, body = "") {
       "signature-agent": `"https://${DOMAIN}"`,
       host: DOMAIN,
       "content-digest": contentDigest(body),
+      challenge,
+      "challenge-response": answerFor(challenge, signer.keyid),
     },
   };
   const created = new Date();
@@ -225,15 +233,10 @@ async function callMcp(base, privateJwk, payload) {
   // 2026-07-28 one -- the server rejects the legacy shape outright, so an
   // end-to-end test that sent it would be exercising a leg no agent can use.
   const { raw, headers: transport } = envelope(payload);
-  const { headers, keyId } = await signHeaders(privateJwk, "/mcp", raw);
+  const { headers } = await signHeaders(privateJwk, "/mcp", raw, challenge);
   const res = await fetch(`${base}/mcp`, {
     method: "POST",
-    headers: {
-      ...headers,
-      ...transport,
-      challenge,
-      "challenge-response": answerFor(challenge, keyId),
-    },
+    headers: { ...headers, ...transport },
     body: raw,
   });
   const text = await res.text();

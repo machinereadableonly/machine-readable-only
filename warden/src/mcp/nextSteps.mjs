@@ -34,6 +34,8 @@ export const NEXT = {
     "This token is bound to another key. If you are its new agent, the token OWNER's wallet must call rebind(tokenId, yourKeyId); call `rebind` to get that call. Nothing here can do it for you. If the owner has only just rebound it to you, this service reads the binding from a public chain endpoint that can lag the write by a few seconds, so wait a minute and try once more before concluding anything.",
   "already-credited-today":
     "You already came back today, and `nextWindowOpensAt` says when the next window opens. This is not a penalty: nothing was lost and your run is intact.",
+  "invalid-answer":
+    "Your answer is not one of today's options. Send one of them before answerBy; after that the day is credited without an answer.",
   "year-complete":
     "Your year is complete. The record is final and its place is written round the border once the chain has recorded it, normally the same night; `status` shows it. A whole token can seed a child once its key has a seed available.",
   "already-minted":

@@ -5,6 +5,7 @@ import { chainBlock, tokenBlock, yearCompleteBlock, requireChain } from "../gate
 import { onChainBy } from "../nextSteps.mjs";
 import { DAY_MS, utcDay } from "../../day.mjs";
 import { FINISH_LEVEL } from "../ladder.mjs";
+import { answerIndex, ANSWER_WINDOW_MS, MAX_ANSWER_LENGTH } from "../question.mjs";
 
 /// Day numbers are whole days since the epoch, the same unit the contract
 /// uses, so the mirror and the chain cannot drift on what "today" means. The
@@ -25,19 +26,26 @@ const RUNGS = [3, 7, 30, 100];
 /// closed to it), and no other refusal here echoes the id it was asked about.
 const yearComplete = () => ({ ok: false, accepted: false, reason: "year-complete", heart: `${FINISH_LEVEL}/${FINISH_LEVEL}` });
 
-export function makeCheckinTool({ q, chain, today = utcDay }) {
+export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now }) {
   requireChain(chain, "checkin");
+  // At construction, like the chain: a tool wired without the bank could grade
+  // nothing, and would refuse every answered call instead of failing here.
+  if (!Array.isArray(bank)) throw new Error("checkin needs the question bank");
   return {
     name: "checkin",
     config: {
       title: "Check in",
       description:
-        "Record today's visit for a token bound to your key. Free. The site pays the gas and writes it on chain at 00:05 UTC. Once per UTC day; a second call the same day is refused with `already-credited-today` and `nextWindowOpensAt`. A year is 365 credited days: after the 365th the record is final, and a further call is refused with `year-complete`.",
-      inputSchema: z.object({ tokenId: z.number().int().positive().describe("A token bound to your key.") }),
+        "Record today's visit for a token bound to your key. Free. The site pays the gas and writes it on chain at 00:05 UTC. Once per UTC day; a second call the same day is refused with `already-credited-today` and `nextWindowOpensAt`. A year is 365 credited days: after the 365th the record is final, and a further call is refused with `year-complete`. Ask `question` first and pass your answer here; a late or missing answer still credits the day.",
+      inputSchema: z.object({
+        tokenId: z.number().int().positive().describe("A token bound to your key."),
+        answer: z.union([z.string().max(MAX_ANSWER_LENGTH), z.number().int()]).optional()
+          .describe("Your answer to today's `question`, before its answerBy."),
+      }),
       annotations: { readOnlyHint: false, openWorldHint: false },
     },
 
-    async handler({ tokenId }, ctx) {
+    async handler({ tokenId, answer }, ctx) {
       const token = q.getToken(tokenId);
       // BOTH `ok` AND `accepted`, on every return. `ok` is the convention every
       // other tool answers with and the only one llms.txt states, so a client
@@ -130,6 +138,41 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
         };
       }
 
+      // THE ANSWER NEVER COSTS THE DAY. The credit is what the artwork
+      // records; an answer is something written beside it. So a missing one, a
+      // late one, and one to a question nobody asked are all graded SILENT and
+      // credited -- only an answer sent INSIDE the window that is not one of
+      // the day's options is refused, and that refusal exists so the agent can
+      // send a real one before the window closes.
+      //
+      // Decided here, above the chain reads, so an unreadable RPC cannot turn
+      // a wrong answer into a different refusal, and so a refusal costs no
+      // eth_call on a free tool.
+      //
+      // ONE reading of the clock, used for the deadline below AND for
+      // answeredAt: two would let the stamp fall outside the window the answer
+      // was accepted under.
+      const at = now();
+      const asked = q.getQuestion(tokenId, day);
+      const inTime = asked && answer !== undefined && at <= asked.issuedAt + ANSWER_WINDOW_MS;
+      let answerIdx = null;
+      if (inTime) {
+        // A bank the operator has edited can lose a question already issued.
+        // Grading that SILENT rather than invalid matters: `invalid-answer`
+        // would refuse every answer until the window passed, costing the agent
+        // a day over an edit of ours.
+        const entry = bank.find((b) => b.id === asked.questionId);
+        answerIdx = entry ? answerIndex(entry, answer) : null;
+        if (entry && answerIdx === null) {
+          return {
+            ok: false,
+            accepted: false,
+            reason: "invalid-answer",
+            answerBy: new Date(asked.issuedAt + ANSWER_WINDOW_MS).toISOString(),
+          };
+        }
+      }
+
       // ONLY NOW THE CHAIN. Three eth_calls used to run ABOVE the guard above,
       // on a tool that is FREE and has no per-caller budget -- so an agent
       // looping check-in on its own token paid nothing and cost this service
@@ -208,9 +251,17 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
       // fallback is unreachable through the door and is kept only so a
       // check-in can never be refused over bookkeeping; if it ever fires,
       // empty strings in credits.sigHash are the symptom to look for.
+      // `recorded` is read back from the UPDATE rather than assumed from
+      // `answerIdx`: recordAnswer writes only where `answeredAt IS NULL`, so a
+      // row already answered takes nothing, and `answered: true` would then
+      // claim a value the mirror does not hold.
+      let recorded = false;
       const credited = q.transact(() => {
         if (!q.insertCredit(tokenId, day, ctx.sigHash ?? "")) return false;
         q.creditDay(tokenId, day, level, streak);
+        // Inside the transaction and only once the credit was new, so the
+        // answer and the day it belongs to land or roll back together.
+        recorded = answerIdx !== null && q.recordAnswer(tokenId, day, answerIdx, at).changes === 1;
         return true;
       });
 
@@ -271,6 +322,7 @@ export function makeCheckinTool({ q, chain, today = utcDay }) {
         level,
         streak,
         heart: `${Math.min(level, FINISH_LEVEL)}/${FINISH_LEVEL}`,
+        answered: recorded,
         nextWindowOpensAt: finished ? null : new Date((day + 1) * DAY_MS).toISOString(),
         onChainBy: onChainBy(day),
         streakDeadline,

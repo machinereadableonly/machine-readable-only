@@ -1,0 +1,6 @@
+[
+  { "id": "t-two", "text": "Fog or thunder?", "answers": ["fog", "thunder"] },
+  { "id": "t-list", "text": "Keep one: a key, a feather, or a lantern?", "answers": ["key", "feather", "lantern"] },
+  { "id": "t-range", "text": "How many legs is the right number of legs?", "range": { "min": 0, "max": 100 } },
+  { "id": "t-shy", "text": "Is a tomato brave or shy?", "answers": ["brave", "shy"] }
+]

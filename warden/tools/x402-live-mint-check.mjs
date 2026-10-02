@@ -25,6 +25,7 @@ import { signerFromJWK } from "web-bot-auth/crypto";
 import { contentDigest } from "../src/door/verify.mjs";
 import { createServer } from "../src/server.mjs";
 import { makeMcpHandler } from "../src/mcp/server.mjs";
+import { loadBank, bankPath } from "../src/mcp/question.mjs";
 import { tokenView } from "../src/mcp/tokenView.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
@@ -41,7 +42,7 @@ const CHAIN_ID = Number(process.argv[3] ?? 84_532);
 const TREASURY = process.argv[4] ?? "0x000000000000000000000000000000000000dEaD";
 const NETWORK = `eip155:${CHAIN_ID}`;
 const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
-const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
+const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest", "challenge", "challenge-response"];
 const CONTRACT = "0x6a6f90E9586E2f58a65412b9b402494639bCc41C";
 const RPC = process.env.BASE_RPC_URL ?? "https://sepolia.base.org";
 
@@ -85,7 +86,11 @@ console.log("0. chain gates:", JSON.stringify({
   walletRoom: await chain.walletRoomFor("0x" + "a1".repeat(20)),
 }), "(writesOpen null means open)");
 
+// THE REAL BANK, like main.mjs: a capture built on the fixture would
+// document questions no agent is ever asked.
+const bank = loadBank(bankPath());
 const mcp = makeMcpHandler({
+  bank,
   q,
   chain,
   today: utcDay,
@@ -135,6 +140,9 @@ async function callMcp(privateJwk, payload) {
       host: DOMAIN,
       // Signed over the exact bytes sent below, serialised once.
       "content-digest": contentDigest(raw),
+      // The challenge pair is covered, so it is answered before signing.
+      challenge,
+      "challenge-response": createHash("sha256").update(challenge + signer.keyid).digest("hex"),
     },
   };
   const created = new Date();
@@ -148,8 +156,6 @@ async function callMcp(privateJwk, payload) {
     headers: {
       ...message.headers,
       ...signed,
-      challenge,
-      "challenge-response": createHash("sha256").update(challenge + signer.keyid).digest("hex"),
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
     },

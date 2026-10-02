@@ -2,11 +2,13 @@
 //
 //   node tools/mirror-reset-chain.mjs [path] --yes
 //
-// A redeploy gives the piece a new contract at a new address. Every token, mint
-// and Mark order in the mirror belongs to the OLD one: the ids restart at 1, and
-// a mint row even carries the QR bitmap solved for the old token's url. Left in
-// place they are phantoms -- rows describing tokens the configured contract has
-// never heard of.
+// A redeploy gives the piece a new contract at a new address. Every token, mint,
+// credit, Mark order and issued question in the mirror belongs to the OLD one:
+// the ids restart at 1, and a mint row even carries the QR bitmap solved for the
+// old token's url. Left in place they are phantoms -- rows describing tokens the
+// configured contract has never heard of. A `questions` row is keyed on
+// (tokenId, day), so a kept one would hand the NEW token 1 the old token's
+// question with an answer window that closed long ago.
 //
 // `keys` IS NOT TOUCHED, deliberately. A registered agent key is a DOOR fact,
 // not a chain fact: it survives a redeploy exactly as it survives a restart, and
@@ -23,7 +25,7 @@ if (!args.includes("--yes")) {
 
 // Every table whose rows are derived from the chain. Ordered children first so
 // a foreign key cannot block the parent's delete.
-const CHAIN_TABLES = ["mark_orders", "credits", "mints", "tokens"];
+const CHAIN_TABLES = ["mark_orders", "credits", "mints", "questions", "tokens"];
 
 const db = new DatabaseSync(path);
 const before = {}, after = {};

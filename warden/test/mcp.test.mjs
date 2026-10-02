@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeMcpHandler } from "../src/mcp/server.mjs";
@@ -8,12 +9,19 @@ import { openChain } from "./chain-stub.mjs";
 import { LADDER, ladderSentence } from "../src/mcp/ladder.mjs";
 import { envelope } from "./mcp-envelope.mjs";
 
+// The whole tool surface has to be buildable to list or call any of it, so
+// these are the deps `question` needs rather than anything this suite asserts.
+const BANK = JSON.parse(readFileSync(new URL("./fixtures/question-bank.json", import.meta.url), "utf8"));
+const SECRET = "mcp-test-secret";
+
 test("the caller's key id reaches a tool from authInfo, never from an argument", async () => {
   const q = queries(openDb(":memory:"));
   q.insertToken({ tokenId: 1, keyId: "real-caller", owner: "0xabc", lastDay: 100, mintDay: 100 });
 
   const seen = [];
   const { handler } = makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q,
     chain: openChain(),
     contract: "0xcontract",
@@ -48,6 +56,8 @@ test("an unexpected throw from a tool handler never leaks its message to the cal
   };
 
   const { handler } = makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q,
     chain: openChain(),
     contract: "0xcontract",
@@ -76,6 +86,8 @@ test("CONTROL: a tool that returns normally still delivers its real structured r
   q.insertToken({ tokenId: 1, keyId: "real-caller", owner: "0xabc", lastDay: 100, mintDay: 100 });
 
   const { handler } = makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q,
     chain: openChain(),
     contract: "0xcontract",
@@ -128,6 +140,8 @@ test("the sigHash the door computed reaches the tool through authInfo, and is st
   q.insertToken({ tokenId: 1, keyId: "real-caller", owner: "0xabc", lastDay: 100, mintDay: 100 });
 
   const { handler } = makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q,
     chain: openChain(),
     contract: "0xcontract",
@@ -153,6 +167,8 @@ test("the sigHash the door computed reaches the tool through authInfo, and is st
 test("mro://contract publishes the configured chain id, not a hardcoded mainnet one", async () => {
   const q = queries(openDb(":memory:"));
   const { handler } = makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q,
     chain: openChain(),
     contract: "0xsepolia-contract",
@@ -228,6 +244,8 @@ test("a payment demand survives the tool wrapper intact for the official x402 cl
   };
 
   const { handler } = makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q,
     chain: openChain(),
     contract: "0xcontract",
@@ -277,6 +295,8 @@ test("a facilitator outage reaches the agent as an ERROR result, not as a succes
     build: async () => { throw new Error("facilitator down"); },
   });
   const { handler } = makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract", chainId: 84532, paid,
   });
 
@@ -299,6 +319,8 @@ test("a facilitator outage reaches the agent as an ERROR result, not as a succes
 // This is the test that goes red when the central hook is gone.
 test("a refusal that came through the real handler carries its next step", async () => {
   const { handler } = makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract", chainId: 84532,
   });
   const body = await call(handler, {
@@ -319,6 +341,8 @@ test("a refusal that came through the real handler carries its next step", async
 // zod's .describe() reaching JSON Schema is the SDK's business, not ours.
 test("the served schemas name what their arguments are, and the ladder is generated", async () => {
   const { handler } = makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract", chainId: 84532,
     catalogue: LADDER,
   });
@@ -375,7 +399,7 @@ test("the served schemas name what their arguments are, and the ladder is genera
 // this project's own documents. These tests fail on the legacy leg.
 
 test("server/discover is implemented, and names the revision this server serves", async () => {
-  const { handler } = makeMcpHandler({ q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
+  const { handler } = makeMcpHandler({ bank: BANK, challengeSecret: SECRET, q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
   const body = await call(handler, { method: "server/discover", params: {} }, null);
 
   assert.equal(body.error, undefined, `server/discover must exist: ${JSON.stringify(body.error)}`);
@@ -389,7 +413,7 @@ test("server/discover is implemented, and names the revision this server serves"
 // describes as "optional natural-language guidance for LLMs on how to use this
 // server effectively". So this asserts the wire, not the option.
 test("server/discover carries one sentence of WHAT, not only nine HOWs", async () => {
-  const { handler } = makeMcpHandler({ q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
+  const { handler } = makeMcpHandler({ bank: BANK, challengeSecret: SECRET, q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
   const body = await call(handler, { method: "server/discover", params: {} }, null);
 
   assert.equal(typeof body.result.instructions, "string", "the SDK must actually emit instructions");
@@ -399,7 +423,7 @@ test("server/discover carries one sentence of WHAT, not only nine HOWs", async (
 });
 
 test("list and read results carry the cache fields the revision requires", async () => {
-  const { handler } = makeMcpHandler({ q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
+  const { handler } = makeMcpHandler({ bank: BANK, challengeSecret: SECRET, q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
 
   const tools = await call(handler, { method: "tools/list", params: {} }, null);
   // ttlMs 0 is what an unconfigured server sends: a valid value meaning "do
@@ -417,7 +441,7 @@ test("a request with no protocol claim is refused, not quietly served by an olde
   // The regression this guards. Left at the SDK default, a claim-less request
   // is answered by a compatibility leg that a future release removes in one
   // line -- on a piece meant to run for years.
-  const { handler } = makeMcpHandler({ q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
+  const { handler } = makeMcpHandler({ bank: BANK, challengeSecret: SECRET, q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract" });
   const req = new Request("https://example.com/mcp", {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
@@ -435,6 +459,8 @@ test("a request with no protocol claim is refused, not quietly served by an olde
 // rewritten, and this test is what keeps the documentation true.
 test("a schema-invalid call is refused by the protocol layer, in the protocol's shape", async () => {
   const { handler } = makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract", chainId: 84532,
   });
   const body = await call(handler, {
@@ -471,4 +497,15 @@ test("a status answer names the chain and contract even when the caller owns not
   assert.deepEqual(empty.tokens, [], "this is the no-tokens case");
   assert.equal(empty.chainId, 84_532, "the chain must be stated anyway");
   assert.equal(empty.contract, "0x" + "c0de".repeat(10));
+});
+
+// THE BANK IS CHECKED ONCE, HERE. The tool factories run inside the
+// per-request builder, so a full assertBankSane in one of them re-walked the
+// whole bank on every MCP call. Moving it to construction keeps the guard --
+// a malformed bank still cannot reach a tool -- and pays for it once.
+test("a malformed bank cannot reach a tool: the handler refuses at construction", () => {
+  const deps = { challengeSecret: SECRET, q: queries(openDb(":memory:")), chain: openChain(), contract: "0xc", chainId: 84_532 };
+  assert.throws(() => makeMcpHandler({ ...deps }), /question bank must be an array/);
+  assert.throws(() => makeMcpHandler({ ...deps, bank: [] }), /question bank is empty/);
+  assert.throws(() => makeMcpHandler({ ...deps, bank: [{ id: "x" }] }), /printable ASCII/);
 });

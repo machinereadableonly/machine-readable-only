@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createPrivateKey, sign as edSign } from "node:crypto";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { parseDictionary } from "structured-headers";
 import { verify } from "web-bot-auth";
 import { verifierFromJWK } from "web-bot-auth/crypto";
-import { verifyRequest, assertWebBotAuthParams, MAX_SKEW_MS, MAX_WINDOW_MS, coveredComponents, contentDigest, signatureAgentUrl, signatureLabel } from "../src/door/verify.mjs";
+import { verifyRequest, assertWebBotAuthParams, MAX_SKEW_MS, MAX_WINDOW_MS, coveredComponents, contentDigest, signatureAgentUrl, signatureLabel, keyedMessage } from "../src/door/verify.mjs";
 
 const VECTORS = JSON.parse(
   readFileSync(new URL("./vectors/web_bot_auth_architecture_v1.json", import.meta.url), "utf8")
@@ -462,6 +463,161 @@ test("the signature label is read off Signature-Input", () => {
 
   const bare = new Request("https://example.com/mcp", { method: "POST" });
   assert.equal(signatureLabel(bare), null);
+});
+
+// ---------------------------------------------------------------------------
+// A `"signature-agent";key=` component, which RFC 9421 2.1.2 says signs ONE
+// serialised dictionary member. http-message-sig 0.2.0 builds that base line
+// from the WHOLE header, so a signer that follows the RFC was refused
+// `signature` -- a refusal whose published prescription sends a correct
+// implementer to check its key and its origin, the two things that were right.
+//
+// Every base below is written out line by line and signed with Node's own
+// Ed25519, never a signing library, so these tests cannot share a bug with the
+// code under test.
+// ---------------------------------------------------------------------------
+
+/// One hand-built, genuinely valid signature over a base this test wrote
+/// itself. `lines` are the component lines; `components` is the parameters
+/// inner list, serialised exactly as RFC 9421 2.1.2 writes a keyed component.
+async function handSigned({ lines, components, agent, label = "sig1" }) {
+  const created = Math.floor(Date.now() / 1000);
+  const expires = created + 60;
+  const keyid = (await signerFromJWK(ED.key)).keyid;
+  const params =
+    `(${components});created=${created};expires=${expires}` +
+    `;keyid="${keyid}";tag="web-bot-auth"`;
+  const base = [...lines, `"@signature-params": ${params}`].join("\n");
+  const sig = edSign(null, Buffer.from(base, "utf8"), createPrivateKey({ key: ED.key, format: "jwk" }));
+  return {
+    method: "POST",
+    url: "https://example.com/mcp",
+    headers: {
+      host: "example.com",
+      "signature-agent": agent,
+      "content-digest": EMPTY_DIGEST,
+      "signature-input": `${label}=${params}`,
+      signature: `${label}=:${sig.toString("base64")}:`,
+    },
+  };
+}
+
+test('a signature over "signature-agent";key= verifies, from a hand-built base', async () => {
+  const req = await handSigned({
+    agent: 'sig1="https://example.com"',
+    components: '"@authority" "@method" "@path" "signature-agent";key="sig1" "content-digest"',
+    lines: [
+      `"@authority": example.com`,
+      `"@method": POST`,
+      `"@path": /mcp`,
+      // The serialised MEMBER, which is what RFC 9421 2.1.2 prescribes:
+      // "the serialization algorithm ... on the member_value and its
+      // parameters, not including the Dictionary key itself".
+      `"signature-agent";key="sig1": "https://example.com"`,
+      `"content-digest": ${EMPTY_DIGEST}`,
+    ],
+  });
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, true, r.reason);
+  assert.ok(r.covered.includes("signature-agent"), "the keyed component still reports its name");
+});
+
+// keyedMessage rebuilds the header bag, and a `Headers` instance has to be
+// walked with forEach rather than spread -- a plain spread of one yields {}, so
+// the rewritten `signature-agent` would be the only header left and every
+// component line would be missing. The door's own adapter hands over Node's
+// plain object, so this branch is reached only by a caller holding a real
+// Request; it is cheaper to pin than to delete and rediscover.
+test("a Headers instance survives the keyed rewrite", async () => {
+  const req = await handSigned({
+    agent: 'sig1="https://example.com"',
+    components: '"@authority" "@method" "@path" "signature-agent";key="sig1" "content-digest"',
+    lines: [
+      `"@authority": example.com`,
+      `"@method": POST`,
+      `"@path": /mcp`,
+      `"signature-agent";key="sig1": "https://example.com"`,
+      `"content-digest": ${EMPTY_DIGEST}`,
+    ],
+  });
+  const asHeaders = { ...req, headers: new Headers(req.headers) };
+
+  const { message, key } = keyedMessage(asHeaders);
+  assert.equal(key, "sig1");
+  assert.equal(message.headers["signature-agent"], '"https://example.com"', "the selected member replaced the dictionary");
+  assert.equal(message.headers.host, "example.com", "and the other headers came with it");
+
+  const r = await verifyRequest(asHeaders, lookup);
+  assert.equal(r.ok, true, r.reason);
+});
+
+test("signature-agent covered both keyed and whole is refused, not resolved", async () => {
+  // Both lines are correct RFC 9421, so this is a valid signature over a base
+  // that names one header twice with two different values. Which one the door
+  // then trusted would be a guess, so it refuses instead.
+  const req = await handSigned({
+    agent: 'sig1="https://example.com"',
+    components:
+      '"@authority" "@method" "@path" "signature-agent" "signature-agent";key="sig1" "content-digest"',
+    lines: [
+      `"@authority": example.com`,
+      `"@method": POST`,
+      `"@path": /mcp`,
+      `"signature-agent": sig1="https://example.com"`,
+      `"signature-agent";key="sig1": "https://example.com"`,
+      `"content-digest": ${EMPTY_DIGEST}`,
+    ],
+  });
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "components");
+});
+
+test("a key= naming a member the header does not have is refused", async () => {
+  // No conforming signer can build this base at all: with no `sig9` member
+  // there is no component value to serialise. So the value here is invented,
+  // and the door must refuse on the missing member rather than resolve the
+  // request against whichever member it does have.
+  const req = await handSigned({
+    agent: 'sig1="https://example.com"',
+    components: '"@authority" "@method" "@path" "signature-agent";key="sig9" "content-digest"',
+    lines: [
+      `"@authority": example.com`,
+      `"@method": POST`,
+      `"@path": /mcp`,
+      `"signature-agent";key="sig9": "https://example.com"`,
+      `"content-digest": ${EMPTY_DIGEST}`,
+    ],
+  });
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "components");
+});
+
+test("the key is looked up at the URL the signature COVERED, not the label's", async () => {
+  // The signature label is unsigned and renameable; the covered `key=` is not.
+  // Here they disagree on purpose: the signature commits to member k1
+  // (a.example) while the label says k9 (b.example). Reading the label would
+  // verify against one origin and fetch the key from another.
+  const req = await handSigned({
+    label: "k9",
+    agent: 'k1="https://a.example", k9="https://b.example"',
+    components: '"@authority" "@method" "@path" "signature-agent";key="k1" "content-digest"',
+    lines: [
+      `"@authority": example.com`,
+      `"@method": POST`,
+      `"@path": /mcp`,
+      `"signature-agent";key="k1": "https://a.example"`,
+      `"content-digest": ${EMPTY_DIGEST}`,
+    ],
+  });
+  const asked = [];
+  const r = await verifyRequest(req, async (_keyId, agent) => {
+    asked.push(agent);
+    return ED.key;
+  });
+  assert.equal(r.ok, true, r.reason);
+  assert.deepEqual(asked, ["https://a.example"], "the lookup must read the covered member");
 });
 
 // ---------------------------------------------------------------------------

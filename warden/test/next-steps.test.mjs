@@ -19,6 +19,7 @@ import { queries } from "../src/mirror/queries.mjs";
 import { openChain } from "./chain-stub.mjs";
 
 const src = fileURLToPath(new URL("../src/", import.meta.url));
+const BANK = JSON.parse(readFileSync(new URL("./fixtures/question-bank.json", import.meta.url), "utf8"));
 
 function sources(dir, found = []) {
   for (const entry of readdirSync(dir)) {
@@ -82,7 +83,7 @@ function withToken({ level, streak, lastDay }) {
 test("the daily reply says when the day lands, what the deadline is, and what is next", async () => {
   const day = 500;
   const q = withToken({ level: 6, streak: 6, lastDay: day - 1 });
-  const tool = makeCheckinTool({ q, chain: openChain(), today: () => day });
+  const tool = makeCheckinTool({ bank: BANK, q, chain: openChain(), today: () => day });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1", sigHash: "s" });
 
   assert.equal(r.ok, true);
@@ -103,7 +104,7 @@ test("the daily reply says when the day lands, what the deadline is, and what is
 test("a broken run is named, with what it was, rather than silently reported as 1", async () => {
   const day = 500;
   const q = withToken({ level: 98, streak: 99, lastDay: day - 5 });
-  const tool = makeCheckinTool({ q, chain: openChain(), today: () => day });
+  const tool = makeCheckinTool({ bank: BANK, q, chain: openChain(), today: () => day });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1", sigHash: "s" });
 
   assert.equal(r.streak, 1);
@@ -116,7 +117,7 @@ test("a broken run is named, with what it was, rather than silently reported as 
 test("a run past the last rung is told there is nothing further to reach", async () => {
   const day = 500;
   const q = withToken({ level: 200, streak: 200, lastDay: day - 1 });
-  const tool = makeCheckinTool({ q, chain: openChain(), today: () => day });
+  const tool = makeCheckinTool({ bank: BANK, q, chain: openChain(), today: () => day });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1", sigHash: "s" });
   assert.equal(r.nextRung, null);
 });
@@ -124,7 +125,7 @@ test("a run past the last rung is told there is nothing further to reach", async
 test("a second call the same day learns when the first one lands", async () => {
   const day = 500;
   const q = withToken({ level: 6, streak: 6, lastDay: day });
-  const tool = makeCheckinTool({ q, chain: openChain(), today: () => day });
+  const tool = makeCheckinTool({ bank: BANK, q, chain: openChain(), today: () => day });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1", sigHash: "s" });
 
   assert.equal(r.reason, "already-credited-today");

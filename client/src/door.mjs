@@ -5,7 +5,6 @@
 // past the door is JSON-RPC, which mcp.mjs layers on top.
 import { sign as edSign, createPrivateKey } from "node:crypto";
 import { signRequest } from "./signing.mjs";
-import { answerChallenge } from "./challenge.mjs";
 import { publicFromPrivate } from "./keys.mjs";
 
 /**
@@ -127,24 +126,26 @@ export async function admittedFetch({ origin, site = origin, privateJwk, signatu
   // machine's clock and the site's -- so the retry is stamped in the site's
   // present rather than its future. It shifts the timestamp only; nothing else
   // about the signature changes.
-  const { headers, keyId } = await signRequest({
-    privateJwk, origin: site, signatureAgent, path, body,
+  const { headers } = await signRequest({
+    privateJwk, origin: site, signatureAgent, challenge, path, body,
     now: new Date(Date.now() + clockOffsetMs),
   });
 
   const res = await fetchImpl(new URL(path, origin), {
     method: "POST",
     headers: {
-      ...headers,
       // The transport's own metadata headers, supplied by the caller because
       // only it knows the JSON-RPC method and name. They are NOT among the
       // signed components, and do not need to be: they mirror values in the
       // body, and the body is bound to the signature by content-digest, so a
       // header that disagreed with it would be caught by the server's own
       // header-body validation rather than smuggled past the signature.
+      //
+      // FIRST, so the signed headers win every collision. Spread last, a
+      // caller passing `challenge` would replace the pair the signature covers
+      // and earn a refusal it could not read from here.
       ...extraHeaders,
-      challenge,
-      "challenge-response": answerChallenge(challenge, keyId),
+      ...headers,
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
     },

@@ -12,6 +12,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, chmodSync, rmSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -34,6 +35,9 @@ import { readDemand, assertExpected, signAuthorization, payFor } from "../src/pa
 
 const DOMAIN = "example.com";
 const SECRET = "client-journey-secret";
+// The Warden's own fixture bank, read across the package boundary like the
+// rest of this harness, which builds its server from warden/src.
+const BANK = JSON.parse(readFileSync(new URL("../../warden/test/fixtures/question-bank.json", import.meta.url), "utf8"));
 const TREASURY = "0x000000000000000000000000000000000000dEaD";
 const USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
@@ -70,6 +74,7 @@ before(async () => {
   const chain = openChain();
 
   const mcp = makeMcpHandler({
+    bank: BANK,
     q, chain, today: utcDay,
     contract: "0xcontract", chainId: 84532,
     challengeSecret: SECRET, domain: DOMAIN, llmsTxt: "",
@@ -151,9 +156,11 @@ test("an EXISTING key directory is tightened, not only a new one", async () => {
   assert.equal(statSync(home).mode & 0o777, 0o700, "the directory must be tightened on save");
 });
 
-test("the signature covers exactly the four components the door requires", async () => {
+test("the signature covers exactly the seven components the door requires", async () => {
   const { privateJwk } = await generateIdentity();
-  const { headers } = await signRequest({ privateJwk, origin: `https://${DOMAIN}`, signatureAgent: `https://${DOMAIN}` });
+  const { headers } = await signRequest({
+    privateJwk, origin: `https://${DOMAIN}`, signatureAgent: `https://${DOMAIN}`, challenge: "n.1.m",
+  });
 
   const input = headers["Signature-Input"] ?? headers["signature-input"];
   for (const component of REQUIRED_COMPONENTS) {
@@ -182,7 +189,7 @@ test("a registered key is admitted, and can list the tools", async () => {
 
   const tools = await listTools({ origin, site: `https://${DOMAIN}`, privateJwk });
   const names = tools.map((t) => t.name).sort();
-  assert.deepEqual(names, ["challenge", "checkin", "ladder", "mint", "rebind", "rest", "seed", "status", "upgrade"]);
+  assert.deepEqual(names, ["challenge", "checkin", "ladder", "mint", "question", "rebind", "rest", "seed", "status", "upgrade"]);
 });
 
 test("a free tool answers, and reads the caller's identity from the signature", async () => {
@@ -194,6 +201,36 @@ test("a free tool answers, and reads the caller's identity from the signature", 
   assert.equal(body.ok, true);
   // A fresh key owns nothing, and cannot see anybody else's tokens.
   assert.deepEqual(body.tokens, []);
+});
+
+// The `answer` argument is a zod union of a string and an integer, and the
+// wrong arm is what an agent sends first. Over real MCP, because the union is
+// enforced by the server's own schema: a direct call on the handler would
+// accept anything.
+test("a wrong answer inside the window is refused, and the right one credits the day", async () => {
+  const { privateJwk, keyId } = await generateIdentity();
+  await registerKey({ origin, privateJwk });
+  const tokenId = 701;
+  const day = utcDay();
+  q.insertToken({ tokenId, keyId, owner: "0x" + "a1".repeat(20), lastDay: day - 1, mintDay: day - 1 });
+
+  const call = { origin, site: `https://${DOMAIN}`, privateJwk };
+  const asked = structured(await callTool({ ...call, name: "question", arguments: { tokenId } }));
+  assert.equal(asked.ok, true);
+
+  // The wrong answer is sent in the OTHER arm of the union, so whichever
+  // question the day picked, both arms cross the wire on every run.
+  const wrong = asked.answers ? 999_999 : "not-a-number";
+  const right = asked.answers ? asked.answers[0] : asked.range.min;
+
+  const refused = structured(await callTool({ ...call, name: "checkin", arguments: { tokenId, answer: wrong } }));
+  assert.equal(refused.reason, "invalid-answer");
+  assert.ok(refused.answerBy, "the refusal must say how long is left to send a real one");
+  assert.equal(q.getToken(tokenId).level, 1, "a refused answer must not spend the day");
+
+  const accepted = structured(await callTool({ ...call, name: "checkin", arguments: { tokenId, answer: right } }));
+  assert.equal(accepted.ok, true, JSON.stringify(accepted));
+  assert.equal(accepted.answered, true);
 });
 
 test("an unsigned request is refused at the door", async () => {

@@ -718,6 +718,19 @@ refuses an address that is not EIP-55 checksummed.</p>
 <code>MRO_CONTRACT_ADDRESS</code> in the configuration file, back up <code>state.db</code>, and
 restart.</p>
 </li>
+<li><p><strong>Snapshot the mirror, then clear its chain rows.</strong></p>
+<pre><code>cd warden
+node tools/mirror-snapshot.mjs ~/backups/state.db.pre-reset.$(date -u +%Y%m%dT%H%M%SZ)
+node tools/mirror-reset-chain.mjs state.db --yes
+</code></pre>
+<p>It empties <code>mark_orders</code>, <code>credits</code>, <code>mints</code>, <code>questions</code> and <code>tokens</code>, and
+KEEPS <code>keys</code>, which are door state rather than chain state. Every one of
+those rows is keyed on an id the new pair restarts at 1: left in place, a
+returning agent is told <code>already-minted</code> for a token this contract has never
+held (found by a refused mint on 2026-09-22), and a kept <code>questions</code> row
+hands the new token 1 the old one&#39;s question with an answer window that
+closed long ago.</p>
+</li>
 <li><p><strong>Verify through Cloudflare, not against localhost</strong>, exactly as section 9
 says. Then check all four suites and commit.</p>
 </li>

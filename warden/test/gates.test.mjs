@@ -8,6 +8,7 @@
 // to revert.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { chainBlock, tokenBlock, walletCapBlock, supplyBlock, receiverBlock, yearCompleteBlock, paidWriteBlock, requireChain } from "../src/mcp/gates.mjs";
 import { makeChainReader, SUNSET_CACHE_MS } from "../src/chain/read.mjs";
 import { openDb } from "../src/mirror/db.mjs";
@@ -23,6 +24,7 @@ import {
 } from "./chain-stub.mjs";
 
 const TO = "0x" + "11".repeat(20);
+const BANK = JSON.parse(readFileSync(new URL("./fixtures/question-bank.json", import.meta.url), "utf8"));
 
 /// A mirror with nothing in it, for the gates that now subtract what this
 /// service has promised and the chain has not been told.
@@ -417,7 +419,7 @@ for (const [label, chain, reason] of [
     const db = openDb(":memory:");
     const q = queries(db);
     q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
-    const tool = makeCheckinTool({ q, chain: chain(), today: () => 101 });
+    const tool = makeCheckinTool({ bank: BANK, q, chain: chain(), today: () => 101 });
     const r = await tool.handler({ tokenId: 1 }, { keyId: "k1", sigHash: "h" });
     assert.equal(r.accepted, false);
     assert.equal(r.reason, reason);
@@ -442,9 +444,9 @@ function checkinMirror(level = 1) {
 // field that is there only sometimes, and an agent reading `heart` to learn the
 // year is whole would see it from one path and not the other.
 test("the year-complete refusal is the SAME value whether the mirror or the chain decided it", async () => {
-  const fromChain = await makeCheckinTool({ q: checkinMirror(), chain: finishedChain(), today: () => 101 })
+  const fromChain = await makeCheckinTool({ bank: BANK, q: checkinMirror(), chain: finishedChain(), today: () => 101 })
     .handler({ tokenId: 1 }, { keyId: "k1", sigHash: "h" });
-  const fromMirror = await makeCheckinTool({ q: checkinMirror(365), chain: openChain(), today: () => 101 })
+  const fromMirror = await makeCheckinTool({ bank: BANK, q: checkinMirror(365), chain: openChain(), today: () => 101 })
     .handler({ tokenId: 1 }, { keyId: "k1", sigHash: "h" });
 
   assert.deepEqual(fromChain, fromMirror);
@@ -462,7 +464,7 @@ test("checkin reads the token's lifecycle once, however many gates ask about it"
       return { exists: true, resting: false, sunset: false, level: 1, lastDay: 0 };
     },
   });
-  const r = await makeCheckinTool({ q: checkinMirror(), chain: counting, today: () => 101 })
+  const r = await makeCheckinTool({ bank: BANK, q: checkinMirror(), chain: counting, today: () => 101 })
     .handler({ tokenId: 1 }, { keyId: "k1", sigHash: "h" });
   assert.equal(r.ok, true, "the credit must actually be taken, or the gates were never reached");
   assert.equal(reads, 1, "two gates, one read");

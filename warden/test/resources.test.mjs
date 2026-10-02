@@ -16,12 +16,16 @@
 // cannot be sold.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeMcpHandler } from "../src/mcp/server.mjs";
 import { openChain } from "./chain-stub.mjs";
 import { LADDER, FINISHER_IDS } from "../src/mcp/ladder.mjs";
 import { envelope } from "./mcp-envelope.mjs";
+
+const BANK = JSON.parse(readFileSync(new URL("./fixtures/question-bank.json", import.meta.url), "utf8"));
+const SECRET = "resources-test-secret";
 
 /// One JSON-RPC call straight at the handler. The 2026-07-28 transport answers
 /// over SSE, so the message arrives on a `data:` line rather than as the body.
@@ -38,6 +42,8 @@ async function call(handler, payload) {
 
 function handler() {
   return makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q: queries(openDb(":memory:")),
     chain: openChain(),
     contract: "0xcontract",

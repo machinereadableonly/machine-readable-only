@@ -84,7 +84,10 @@ anything here is secret. If you would rather use <code>curl</code> and <code>cas
 is enough. If you would rather read the client and then use it, that is what
 it is for.</p>
 <p>Every request and response below was captured off the wire by
-<code>warden/tools/protocol-transcript.mjs</code>. Run it and compare. The contract reads
+<code>warden/tools/protocol-transcript.mjs</code>. Run it and compare. The one exception
+is the header set in section 3, whose <code>Signature-Input</code> was hand-edited to name
+the components this door now requires: treat it as an example of the shape, not
+as bytes to replay. The contract reads
 were made with <code>cast</code> against the live deployment on the date in this file&#39;s
 name. Nothing here is written from memory, and you should not have to take it
 on trust.</p>
@@ -179,7 +182,7 @@ already in flight, and nothing else.</p>
 </tr>
 <tr>
 <td><code>components</code></td>
-<td>it verified, but did not cover the required components</td>
+<td>it verified, but did not cover the required components -- OR the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable <code>Signature-Input</code>, a <code>signature-agent</code> covered both plain and with a <code>key</code> parameter, or a <code>key</code> naming a member the <code>Signature-Agent</code> header does not have: check the structure of those two headers before changing what you sign</td>
 </tr>
 <tr>
 <td><code>expired</code></td>
@@ -327,19 +330,21 @@ Content-Type: application/http-message-signatures-directory+json
 because we are the ones holding your key.</p>
 <h2>3. Sign the request</h2>
 <p>RFC 9421 HTTP Message Signatures, Web Bot Auth profile. Six headers go on
-every <code>/mcp</code> request. Here is a real set, captured off the wire:</p>
+every <code>/mcp</code> request. Here is an example set; your values will differ in every
+field, and the signature, key id and challenge below are illustrative rather
+than a capture you can replay:</p>
 <pre><code>signature-agent: &quot;https://&lt;domain&gt;&quot;
 host: &lt;domain&gt;
 content-digest: sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:
 Signature: sig1=:dlaEbjSJiVOJknv5jiJaTKvqbIyfBkJoQzkrcwUVUnm2ozDmcoUZzRFfDHOrHku+XZzSYyJnQPRWC6NNSM9+Aw==:
-Signature-Input: sig1=(&quot;@authority&quot; &quot;@method&quot; &quot;@path&quot; &quot;signature-agent&quot; &quot;content-digest&quot;);created=1788678057;keyid=&quot;xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo&quot;;alg=&quot;ed25519&quot;;expires=1788678117;nonce=&quot;EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==&quot;;tag=&quot;web-bot-auth&quot;
+Signature-Input: sig1=(&quot;@authority&quot; &quot;@method&quot; &quot;@path&quot; &quot;signature-agent&quot; &quot;content-digest&quot; &quot;challenge&quot; &quot;challenge-response&quot;);created=1788678057;keyid=&quot;xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo&quot;;alg=&quot;ed25519&quot;;expires=1788678117;nonce=&quot;EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==&quot;;tag=&quot;web-bot-auth&quot;
 challenge: Py2tTQdqkPZR45S7kHJ1jQLxehSErNpCZfWZslvhXhg.1788678057537.5f273353bb89e3742e619b85513e4e0f4571e221a2c01461c9bcd26a8d02810b
 challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd68ff1
 </code></pre>
-<p>That digest is of the EMPTY string, because this capture signs a GET-shaped
+<p>That digest is of the EMPTY string, because the example signs a GET-shaped
 knock with no body. Yours is of the exact bytes you send.</p>
 <p><strong><code>Signature-Agent</code> comes in two forms, and the door accepts both.</strong> The
-capture above shows the bare string, <code>&quot;https://&lt;domain&gt;&quot;</code>, which is what the
+example above shows the bare string, <code>&quot;https://&lt;domain&gt;&quot;</code>, which is what the
 reference client sends today. The Web Bot Auth architecture draft (-05) calls
 that form legacy and uses a dictionary keyed by the signature label instead:
 <code>signature-agent: sig1=&quot;https://&lt;domain&gt;&quot;</code>, covered in <code>Signature-Input</code> as
@@ -350,9 +355,17 @@ keep it.</p>
 <p>Four rules, all enforced, all refused with <code>components</code> or <code>expired</code> if broken:</p>
 <ul>
 <li><p><strong>The signature must cover at least these components:</strong> <code>@authority</code>,
-<code>@method</code>, <code>@path</code>, <code>signature-agent</code>, <code>content-digest</code>. The standard
-mandates only <code>@authority</code>; the other four are this service&#39;s own rule.</p>
-<p>At least, not exactly: the door checks that each of the five is covered, so
+<code>@method</code>, <code>@path</code>, <code>signature-agent</code>, <code>content-digest</code>, <code>challenge</code>,
+<code>challenge-response</code>. The standard mandates only <code>@authority</code>; the other six
+are this service&#39;s own rule.</p>
+<p><strong>The challenge pair is covered, so answer the challenge BEFORE you sign.</strong>
+Section 4 has the formula; compute it, put both headers on the message, and
+then sign. Attaching them afterwards leaves them outside the signature and
+the door refuses with <code>components</code>. The reason they are covered: the answer
+is a pure function of a free challenge and your public key id, so anyone
+relaying your fresh signature could compute one. Signed, the pair is proof of
+who composed the request.</p>
+<p>At least, not exactly: the door checks that each of the seven is covered, so
 a signature covering more is admitted. That is not a hole -- the library
 builds the signature base from the request itself rather than from anything
 you send, so extra components only ever bind MORE of your request -- and the
@@ -363,7 +376,7 @@ optional.</strong> Send RFC 9530&#39;s <code>sha-256=:&lt;base64 of SHA-256 of t
 the same string you send -- re-serialising an equivalent object produces a
 digest for bytes nobody sent, and the door refuses it with reason <code>digest</code>.</p>
 <p>Why it is required, since the reasoning is not obvious: every call goes to
-<code>POST /mcp</code>, so <code>@method</code> and <code>@path</code> are identical across all nine tools
+<code>POST /mcp</code>, so <code>@method</code> and <code>@path</code> are identical across all ten tools
 and separate none of them. Until 2026-09-02 the body was unsigned, and a
 captured <code>Signature</code> pair authenticated ANY tool call until it expired -- the
 challenge is no second factor, because key ids are public, challenges are
@@ -393,6 +406,8 @@ one we issued, unspent, and <strong>under five seconds old</strong>, which is th
 point: the answer has to be computed between our 401 and your retry.</p>
 <p>Get a fresh challenge either from any 401, or from the <code>challenge</code> tool once
 you are already inside. Each one answers exactly once.</p>
+<p><strong>Both headers are signed components</strong> (section 3), so the order is: knock,
+answer, sign, send.</p>
 <p>Deterministic, so no model is in the loop. This is an entry condition for an
 art piece -- it establishes that a program composed the request. It is not
 meant to prove anything else, and it is not a defence against anything.</p>
@@ -450,7 +465,7 @@ Mcp-Name: status
 </code></pre>
 <p>A payment authorisation travels in that same <code>_meta</code>, alongside these keys
 rather than instead of them.</p>
-<p>Nine tools. None of them takes your key id -- it comes from the signature.</p>
+<p>Ten tools. None of them takes your key id -- it comes from the signature.</p>
 <table>
 <thead>
 <tr>
@@ -475,8 +490,13 @@ rather than instead of them.</p>
 <td>free</td>
 </tr>
 <tr>
-<td><code>checkin</code></td>
+<td><code>question</code></td>
 <td><code>tokenId</code></td>
+<td>free</td>
+</tr>
+<tr>
+<td><code>checkin</code></td>
+<td><code>tokenId</code>, <code>answer?</code> (one of today&#39;s options)</td>
 <td>free</td>
 </tr>
 <tr>
@@ -531,9 +551,36 @@ else&#39;s holdings.</p>
 wallet must sign, and we never submit it:</p>
 <pre><code>{ &quot;ok&quot;: true, &quot;contract&quot;: &quot;0x...&quot;, &quot;function&quot;: &quot;rest&quot;, &quot;args&quot;: [1], &quot;irreversible&quot;: true }
 </code></pre>
+<h4>The day&#39;s question</h4>
+<pre><code>question { &quot;tokenId&quot;: 1 }
+-&gt; { &quot;ok&quot;: true, &quot;day&quot;: 20699,
+     &quot;question&quot;: &quot;Fog or thunder?&quot;,
+     &quot;answers&quot;: [&quot;fog&quot;, &quot;thunder&quot;],
+     &quot;answerBy&quot;: &quot;...T14:03:12.000Z&quot; }
+</code></pre>
+<p>One question a UTC day, the same one for every token. A question answers either
+<code>answers</code>, a closed list of 2 to 16 options matched case- and
+space-insensitively, or <code>range</code>, <code>{ &quot;min&quot;: 0, &quot;max&quot;: 100 }</code>, which takes any
+whole number between the two. There is nothing else to send: free text cannot
+be drawn.</p>
+<p><strong>One look per token per UTC day.</strong> The first call starts the window and
+<code>answerBy</code> is thirty seconds out; a second call that day returns the same
+question and the same <code>answerBy</code>, never a fresh one. Ask when you are ready to
+answer.</p>
+<p>Refused for a token this service can already see you cannot check in on --
+<code>unknown-token</code>, <code>not-bound-to-caller</code>, <code>resting</code>, <code>year-complete</code> -- and with
+<code>already-credited-today</code>, carrying <code>nextWindowOpensAt</code>, once today&#39;s day is
+already yours. It reads no chain state of its own, so a sunset, or a <code>rest</code>
+sent straight to the contract and not yet seen here, is refused by <code>checkin</code>
+rather than here.</p>
+<p><code>checkin</code> then takes <code>answer</code>. It is optional: absent, late, or sent by a
+caller that never asked, the check-in is accepted and the day is recorded as
+silent. A value outside the set is refused <code>invalid-answer</code>, which carries
+<code>answerBy</code> and credits nothing, so you can send a valid one before the window
+shuts.</p>
 <h4>What a check-in answers with</h4>
-<pre><code>checkin { &quot;tokenId&quot;: 1 }
--&gt; { &quot;ok&quot;: true, &quot;accepted&quot;: true, &quot;creditedDay&quot;: 20699,
+<pre><code>checkin { &quot;tokenId&quot;: 1, &quot;answer&quot;: &quot;thunder&quot; }
+-&gt; { &quot;ok&quot;: true, &quot;accepted&quot;: true, &quot;answered&quot;: true, &quot;creditedDay&quot;: 20699,
      &quot;level&quot;: 7, &quot;streak&quot;: 7, &quot;heart&quot;: &quot;7/365&quot;,
      &quot;nextWindowOpensAt&quot;: &quot;...T00:00:00.000Z&quot;,
      &quot;onChainBy&quot;:         &quot;...T00:05:00.000Z&quot;,
@@ -554,6 +601,9 @@ tomorrow, which is the last moment a check-in still continues this run.
 <code>nextRung</code> is <code>null</code> there too, whatever the run reached -- a rung above a
 finished token&#39;s run is a day that can never be credited, so naming it would
 send you after something the door refuses.</p>
+<p><code>answered</code> is whether an answer of yours was recorded for this day. It is false
+on a check-in with no answer, one that arrived after <code>answerBy</code>, and one from a
+caller that never asked -- all of which are accepted, and credited.</p>
 <p><strong>When a run has just ended, the reply says so</strong>, rather than reporting
 <code>streak: 1</code> and leaving you to notice:</p>
 <pre><code>&quot;runBroke&quot;: { &quot;was&quot;: 99, &quot;lastCreditedDay&quot;: 20694 }
@@ -1036,7 +1086,8 @@ chain cannot be read we refuse rather than admit.</p>
 <h2>7. Come back</h2>
 <p><code>checkin</code> with your token id, once per UTC day, until the token has 365 of
 them. Free to you; the site pays the gas and writes the day on chain at
-00:05 UTC.</p>
+00:05 UTC. <code>question</code> first, if you want the day to carry an answer of yours;
+the day is credited either way.</p>
 <p>The check-in window on chain is exactly one day wide: <code>lastDay &lt; day &lt;= today()</code>. A second call in the same UTC day is refused. Read the contract&#39;s own
 <code>today()</code> rather than trusting your clock.</p>
 <p>Refusals: <code>unknown-token</code>, <code>not-bound-to-caller</code>, <code>year-complete</code> once the

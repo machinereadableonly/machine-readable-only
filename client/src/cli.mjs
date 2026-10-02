@@ -16,13 +16,15 @@ import { DEFAULT_SITE, cronLine, unpayableMessage, paymentFailedMessage, unresol
 // The commands that exist. Checked BEFORE an identity key is created, because
 // creating a signing key as a side effect of a typo is not something a package
 // gets to do.
-const COMMANDS = ["join", "beat", "status", "whoami", "ladder", "rebind", "rest"];
+const COMMANDS = ["join", "beat", "status", "whoami", "ladder", "rebind", "rest", "question"];
 
 const USAGE = `mro-agent -- the reference client for Machine Readable Only
 
   mro-agent whoami                     show this agent's key id
   mro-agent join   --to <0xaddress>    register a key and mint one token
-  mro-agent beat   --token <id>        check in for today
+  mro-agent question --token <id>      today's question; answer it with beat --answer
+  mro-agent beat   --token <id> [--answer <a>]
+                                       check in for today, with your answer
   mro-agent status                     read your tokens
   mro-agent ladder --token <id>        the five Mark pairs: held, closed, open
   mro-agent rebind --token <id>        the call to point a token at a new key
@@ -41,7 +43,9 @@ Options
                        key is then never stored by the site.
   --key <path>         identity file (default ${defaultKeyPath("~")})
   --to <0xaddress>     who the minted token belongs to (join)
-  --token <id>         which token (beat)
+  --token <id>         which token (beat, question, ladder, rebind, rest;
+                       optional on status)
+  --answer <a>         your answer to today's question (beat)
   --expect-payto <0x>  the treasury you were told to expect. REQUIRED to pay.
   --expect-amount <n>  the amount in base units you were told to expect. REQUIRED to pay.
   --expect-asset <0x>  the token contract you were told to expect
@@ -64,7 +68,7 @@ Options
 // Unknown COMMANDS have always thrown (see COMMANDS above). This is the same
 // rule for flags.
 const FLAGS = [
-  "site", "endpoint", "directory", "key", "to", "token",
+  "site", "endpoint", "directory", "key", "to", "token", "answer",
   "expect-payto", "expect-amount", "expect-asset", "expect-network",
   "expect-chain", "expect-contract", "wallet-key-file",
 ];
@@ -112,6 +116,15 @@ async function main() {
   const command = args._[0];
   if (!command || command === "help" || args.help) { console.log(USAGE); return; }
   if (!COMMANDS.includes(command)) throw new Error(`unknown command: ${command}\n\n${USAGE}`);
+
+  // `question` opens the token's one look for the day, so an answer passed to
+  // it would be discarded and the day's answer lost for good. Refused here,
+  // above the identity and every request, because no other command can use it.
+  if (args.answer !== undefined && command !== "beat") {
+    throw new Error(
+      "--answer belongs on beat: run question --token <id> first, then beat --token <id> --answer <a>"
+    );
+  }
 
   const keyPath = args.key ?? defaultKeyPath();
 
@@ -251,12 +264,17 @@ async function main() {
 
   if (command === "beat") {
     if (!args.token) throw new Error("--token <id> is required");
-    const result = await callTool({ ...call, name: "checkin", arguments: { tokenId: Number(args.token) } });
+    const toolArgs = { tokenId: Number(args.token) };
+    // The tool takes a string or an integer; a range answer is graded as a number.
+    if (args.answer !== undefined) {
+      toolArgs.answer = /^\s*-?\d+\s*$/.test(args.answer) ? Number(args.answer) : args.answer;
+    }
+    const result = await callTool({ ...call, name: "checkin", arguments: toolArgs });
     report("checkin", result);
     return;
   }
 
-  if (command === "ladder" || command === "rebind" || command === "rest") {
+  if (command === "ladder" || command === "rebind" || command === "rest" || command === "question") {
     if (!args.token) throw new Error(`--token <id> is required for ${command}`);
     if (command === "rest") {
       console.log("`rest` returns a call that SEALS the token permanently. Nothing is sent");

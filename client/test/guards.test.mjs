@@ -11,7 +11,7 @@ import { parseDictionary } from "structured-headers";
 import { signAuthorization, chooseAccepted, assertExpected, MAX_AUTHORISATION_SECONDS } from "../src/pay.mjs";
 import { signRequest } from "../src/signing.mjs";
 import { generateIdentity, saveIdentity, loadIdentity } from "../src/keys.mjs";
-import { knock } from "../src/door.mjs";
+import { admittedFetch, knock } from "../src/door.mjs";
 
 const PAY_TO = "0x000000000000000000000000000000000000dEaD";
 const ASSET = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
@@ -163,6 +163,53 @@ test("a non-JSON answer is a sentence, not a raw SyntaxError", async () => {
 });
 
 // -----------------------------------------------------------------------
+// A CALLER'S OWN HEADERS CANNOT REACH THE SIGNED ONES
+// -----------------------------------------------------------------------
+
+test("an empty challenge is refused rather than signed", async () => {
+  // "" is what a site answering a 401 without a challenge leaves in hand. It
+  // signs a pair the door cannot check, so the request exists only to be
+  // turned away -- and refused here the reason names the missing challenge.
+  const { privateJwk } = await generateIdentity();
+  for (const challenge of ["", undefined, null, 7]) {
+    await assert.rejects(
+      () => signRequest({ privateJwk, origin: "https://example.com", signatureAgent: "https://example.com", challenge }),
+      /needs the door's challenge/,
+      `challenge ${JSON.stringify(challenge)} must be refused`
+    );
+  }
+});
+
+test("extra headers cannot overwrite the signed challenge pair", async () => {
+  // `headers` carries the transport's metadata, and it used to be spread AFTER
+  // the signed set -- so a caller passing `challenge` replaced a component the
+  // signature covers, and every request it made was refused `signature` with
+  // nothing here to say why.
+  const { privateJwk } = await generateIdentity();
+  const CHALLENGE = "nonce.1.mac";
+  let sent = null;
+
+  const fetchImpl = async (_url, init = {}) => {
+    // The knock is the one call with no headers; the admitted request follows.
+    if (!init.headers) return new Response(JSON.stringify({ challenge: CHALLENGE }), { status: 401 });
+    sent = init.headers;
+    return new Response("{}", { status: 200 });
+  };
+
+  await admittedFetch({
+    origin: "https://example.com",
+    privateJwk,
+    body: '{"n":1}',
+    headers: { challenge: "forged", "challenge-response": "forged", "mcp-name": "status" },
+    fetchImpl,
+  });
+
+  assert.equal(sent.challenge, CHALLENGE, "the door's challenge must be the one sent");
+  assert.notEqual(sent["challenge-response"], "forged");
+  assert.equal(sent["mcp-name"], "status", "a header that collides with nothing still goes");
+});
+
+// -----------------------------------------------------------------------
 // THE SIGNATURE-AGENT FORM THE DRAFT ASKS FOR
 // -----------------------------------------------------------------------
 
@@ -178,6 +225,7 @@ test("Signature-Agent is sent as a dictionary keyed by the signature label", asy
     privateJwk,
     origin: "https://example.com",
     signatureAgent: "https://example.com",
+    challenge: "n.1.m",
   });
 
   const agent = headers["signature-agent"] ?? headers["Signature-Agent"];

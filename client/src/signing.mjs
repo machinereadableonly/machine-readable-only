@@ -7,23 +7,29 @@
 import { createHash } from "node:crypto";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
+import { answerChallenge } from "./challenge.mjs";
 
 /**
  * The components the door requires a signature to cover.
  *
- * The standard mandates only @authority. The other four are the door's own
+ * The standard mandates only @authority. The other six are the door's own
  * rule: method and path, signature-agent so the directory a key came from is
- * part of what was signed, and content-digest so the signature is bound to the
- * BODY. Sign fewer than these five and the door answers 401 with reason
- * "components".
+ * part of what was signed, content-digest so the signature is bound to the
+ * BODY, and the challenge pair so only the key holder can answer it. Sign
+ * fewer than these seven and the door answers 401 with reason "components".
  *
- * CONTENT-DIGEST IS THE ONE THAT MATTERS. Every call goes to POST /mcp, so
- * method and path are the same for every tool and separate none of them.
- * Without the digest, anyone who captures your Signature headers can send any
- * tool call they like as you until the signature expires -- and one key may
- * mint only once, ever. Added 2026-09-02.
+ * CONTENT-DIGEST AND THE CHALLENGE PAIR ARE THE TWO THAT MATTER. Every call
+ * goes to POST /mcp, so method and path are the same for every tool and
+ * separate none of them. Without the digest, anyone who captures your
+ * Signature headers can send any tool call they like as you until the
+ * signature expires -- and one key may mint only once, ever. Without the
+ * challenge pair, a relayer holding your signature can answer the challenge
+ * itself: the answer is a pure function of a free challenge and your public
+ * key id. The answer must therefore be computed BEFORE signing.
  */
-export const REQUIRED_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
+export const REQUIRED_COMPONENTS = [
+  "@authority", "@method", "@path", "signature-agent", "content-digest", "challenge", "challenge-response",
+];
 
 /**
  * The RFC 9530 `Content-Digest` for a body: `sha-256=:<base64>:`.
@@ -60,7 +66,12 @@ export const WINDOW_MS = 60_000;
 /// a covered component.
 export const SIGNATURE_LABEL = "sig1";
 
-export async function signRequest({ privateJwk, origin, signatureAgent, method = "POST", path = "/mcp", body = "", now = new Date() }) {
+export async function signRequest({ privateJwk, origin, signatureAgent, challenge, method = "POST", path = "/mcp", body = "", now = new Date() }) {
+  // An empty string is refused with the absent case: it signs a pair the door
+  // cannot check, so the request is built only to be turned away.
+  if (typeof challenge !== "string" || challenge === "") {
+    throw new Error("signRequest needs the door's challenge: it is a signed component");
+  }
   const signer = await signerFromJWK(privateJwk);
   const message = {
     method,
@@ -79,6 +90,8 @@ export async function signRequest({ privateJwk, origin, signatureAgent, method =
       // The EXACT bytes that will be sent. Sign a re-serialised copy of the
       // same object and the digest will not match what arrives.
       "content-digest": contentDigest(body),
+      challenge,
+      "challenge-response": answerChallenge(challenge, signer.keyid),
     },
   };
   const signed = await signatureHeaders(message, signer, {

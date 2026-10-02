@@ -19,7 +19,7 @@ const VECTORS = JSON.parse(
   readFileSync(new URL("./vectors/web_bot_auth_architecture_v1.json", import.meta.url), "utf8")
 );
 const ED = VECTORS.find((v) => v.key.kty === "OKP");
-const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
+const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest", "challenge", "challenge-response"];
 
 // -- toRequestLike ----------------------------------------------------------
 
@@ -119,10 +119,12 @@ const SECRET = "test-secret";
 const DOMAIN = "example.com";
 const lookupED = async () => ED.key;
 
-/// Build a signed request the way a real client will, with the challenge
-/// headers a real client would also carry. `req.url` is a PATH, matching what
-/// Node's IncomingMessage actually gives admit() -- the whole point of
-/// toRequestLike is turning that back into what the signature covers.
+/// Build a signed request the way a real client will. `extraHeaders` goes into
+/// the message BEFORE signing, because the challenge pair is a covered
+/// component: a client has to answer the challenge before it signs. `req.url`
+/// is a PATH, matching what Node's IncomingMessage actually gives admit() --
+/// the whole point of toRequestLike is turning that back into what the
+/// signature covers.
 async function signedRequest({ extraHeaders = {}, windowMs = 60_000, body = "", components = CLIENT_COMPONENTS, createdAt = null } = {}) {
   const signer = await signerFromJWK(ED.key);
   const message = {
@@ -150,6 +152,23 @@ async function signedRequest({ extraHeaders = {}, windowMs = 60_000, body = "", 
 
 function answerFor(challenge, keyId) {
   return createHash("sha256").update(challenge + keyId).digest("hex");
+}
+
+/// A signed request that can actually be admitted: the challenge is minted and
+/// answered first, because both headers are covered by the signature. Nothing
+/// can attach a challenge to a signature afterwards any more, which is the
+/// whole point of binding it.
+async function admittableRequest(options = {}) {
+  const signer = await signerFromJWK(ED.key);
+  const { challenge } = issueChallenge(SECRET);
+  return signedRequest({
+    ...options,
+    extraHeaders: {
+      challenge,
+      "challenge-response": answerFor(challenge, signer.keyid),
+      ...(options.extraHeaders ?? {}),
+    },
+  });
 }
 
 test("a request with no signature header gets a 401 challenge, undefined reason", async () => {
@@ -208,28 +227,21 @@ test("the same challenge answer cannot be replayed", async () => {
 // signature itself was recorded, one captured request was replayable for the
 // whole five-minute window. Demonstrated at four admissions with one signature.
 
-/// Swap in a fresh challenge pair, leaving the signature exactly as captured.
-/// The challenge headers are not covered by the signature, which is what makes
-/// this a replay rather than a forgery.
-function withFreshChallenge(req, keyId) {
-  const { challenge } = issueChallenge(SECRET);
-  return {
-    ...req,
-    headers: { ...req.headers, challenge, "challenge-response": answerFor(challenge, keyId) },
-  };
-}
-
-test("one captured signature cannot be presented twice, even with a fresh challenge", async () => {
+/// A whole captured request, presented again byte for byte. Swapping in a
+/// fresh challenge is no longer available to a replayer -- the pair is covered
+/// by the signature -- so the replay is the captured request itself, and the
+/// `spent` set is what has to refuse it. `spent` is checked before the
+/// challenge, so the reason is `replay` rather than the burnt challenge.
+test("one captured signature cannot be presented twice", async () => {
   const seen = new Set();
   const spent = new Map();
-  const signer = await signerFromJWK(ED.key);
   const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
 
-  const captured = await signedRequest();
-  const first = await admit(withFreshChallenge(captured, signer.keyid), deps);
+  const captured = await admittableRequest();
+  const first = await admit(captured, deps);
   assert.equal(first.ok, true, `expected the first presentation to be admitted, got ${JSON.stringify(first)}`);
 
-  const second = await admit(withFreshChallenge(captured, signer.keyid), deps);
+  const second = await admit(captured, deps);
   assert.equal(second.ok, false);
   assert.equal(second.body.reason, "replay");
 });
@@ -237,17 +249,65 @@ test("one captured signature cannot be presented twice, even with a fresh challe
 test("a captured signature stays refused however many times it is presented", async () => {
   const seen = new Set();
   const spent = new Map();
-  const signer = await signerFromJWK(ED.key);
   const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
 
-  const captured = await signedRequest();
+  const captured = await admittableRequest();
   const admitted = [];
   for (let i = 0; i < 5; i++) {
-    const decision = await admit(withFreshChallenge(captured, signer.keyid), deps);
+    const decision = await admit(captured, deps);
     if (decision.ok) admitted.push(decision.sigHash);
   }
   // Before the fix this was five admissions carrying one identical sigHash.
   assert.equal(admitted.length, 1);
+});
+
+// -- the challenge must be SIGNED, not merely attached -----------------------
+//
+// A relayer holding somebody's fresh signature can compute the answer itself:
+// the key id travels in plaintext and the answer is a pure function of it and
+// a free challenge. So an unsigned challenge pair proved nothing about who
+// composed the request. The door now requires both headers to be covered.
+
+test("a challenge answered outside the signature is refused components", async () => {
+  const { challenge } = issueChallenge(SECRET);
+  const signer = await signerFromJWK(ED.key);
+  const req = await signedRequest({
+    components: ["@authority", "@method", "@path", "signature-agent", "content-digest"],
+    extraHeaders: {},
+  });
+  req.headers = { ...req.headers, challenge, "challenge-response": answerFor(challenge, signer.keyid) };
+  const decision = await admit(req, { secret: SECRET, lookupKey: lookupED, seen: new Set(), spent: new Map(), domain: DOMAIN });
+  assert.equal(decision.ok, false);
+  assert.equal(decision.body.reason, "components");
+});
+
+// THE CANONICAL RULING-4 ATTACK, and the one the binding exists for: a whole
+// captured request that DID cover the pair, with a fresh challenge and a
+// correctly computed answer swapped in. That is what a relayer can do unaided --
+// the key id travels in plaintext and the answer is a pure function of it and a
+// free challenge -- and before the pair was covered it bought a fresh admission
+// for the signature's whole five-minute life. Now the swap changes signed bytes,
+// so the signature itself fails: `signature`, not `components`, because the
+// captured request covers everything the door asks for.
+test("a captured request re-answered with a fresh challenge is refused signature", async () => {
+  const deps = { secret: SECRET, lookupKey: lookupED, seen: new Set(), spent: new Map(), domain: DOMAIN };
+  const signer = await signerFromJWK(ED.key);
+  const captured = await admittableRequest();
+
+  const { challenge } = issueChallenge(SECRET);
+  assert.notEqual(challenge, captured.headers.challenge, "the swap must really be a different challenge");
+  const swapped = {
+    ...captured,
+    headers: {
+      ...captured.headers,
+      challenge,
+      "challenge-response": answerFor(challenge, signer.keyid),
+    },
+  };
+
+  const decision = await admit(swapped, deps);
+  assert.equal(decision.ok, false, "a relayer's own challenge must never buy admission");
+  assert.equal(decision.body.reason, "signature");
 });
 
 /// Rename the signature label in BOTH headers, changing nothing else.
@@ -278,15 +338,14 @@ function relabel(req, from, to) {
 test("a captured signature cannot be readmitted by renaming its label", async () => {
   const seen = new Set();
   const spent = new Map();
-  const signer = await signerFromJWK(ED.key);
   const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
 
-  const captured = await signedRequest();
-  const first = await admit(withFreshChallenge(captured, signer.keyid), deps);
+  const captured = await admittableRequest();
+  const first = await admit(captured, deps);
   assert.equal(first.ok, true, `expected the first presentation to be admitted, got ${JSON.stringify(first)}`);
 
   const relabelled = relabel(captured, "sig1", "sig2");
-  const second = await admit(withFreshChallenge(relabelled, signer.keyid), deps);
+  const second = await admit(relabelled, deps);
   assert.equal(second.ok, false, "a rename is not a new signature");
   assert.equal(second.body.reason, "replay");
 });
@@ -294,14 +353,13 @@ test("a captured signature cannot be readmitted by renaming its label", async ()
 test("no number of fresh labels buys a second admission", async () => {
   const seen = new Set();
   const spent = new Map();
-  const signer = await signerFromJWK(ED.key);
   const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
 
-  const captured = await signedRequest();
+  const captured = await admittableRequest();
   const admitted = [];
   for (const label of ["sig1", "sig2", "sigA", "a-b_c", "x"]) {
     const attempt = label === "sig1" ? captured : relabel(captured, "sig1", label);
-    const decision = await admit(withFreshChallenge(attempt, signer.keyid), deps);
+    const decision = await admit(attempt, deps);
     if (decision.ok) admitted.push(decision.sigHash);
   }
   // Before the fix: five admissions, five DIFFERENT sigHashes from one
@@ -320,9 +378,8 @@ test("renaming only one of the two headers is refused by the library, not by us"
   // header names, so the "mutation" changed nothing and the control passed a
   // pristine request. It reported the door admitting a forgery it had never
   // been shown. A control that does not actually mutate is worse than none.
-  const signer = await signerFromJWK(ED.key);
   const deps = () => ({ secret: SECRET, lookupKey: lookupED, seen: new Set(), spent: new Map(), domain: DOMAIN });
-  const captured = await signedRequest();
+  const captured = await admittableRequest();
 
   for (const target of ["signature", "signature-input"]) {
     const headers = {};
@@ -333,7 +390,7 @@ test("renaming only one of the two headers is refused by the library, not by us"
     const mutated = { ...captured, headers };
     assert.notDeepEqual(mutated.headers, captured.headers, `${target} was not actually changed`);
 
-    const decision = await admit(withFreshChallenge(mutated, signer.keyid), deps());
+    const decision = await admit(mutated, deps());
     assert.equal(decision.ok, false, `renaming ${target} alone must not be admitted`);
     assert.equal(decision.body.reason, "signature");
   }
@@ -345,11 +402,10 @@ test("a relabelled signature that was never presented is still admitted once", a
   // is a perfectly good request.
   const seen = new Set();
   const spent = new Map();
-  const signer = await signerFromJWK(ED.key);
   const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
 
-  const fresh = relabel(await signedRequest(), "sig1", "whatever");
-  const decision = await admit(withFreshChallenge(fresh, signer.keyid), deps);
+  const fresh = relabel(await admittableRequest(), "sig1", "whatever");
+  const decision = await admit(fresh, deps);
   assert.equal(decision.ok, true, `an unusual label is not an attack, got ${JSON.stringify(decision)}`);
 });
 
@@ -358,12 +414,11 @@ test("two genuinely distinct signatures are both admitted", async () => {
   // tests above and close the door.
   const seen = new Set();
   const spent = new Map();
-  const signer = await signerFromJWK(ED.key);
   const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
 
-  const one = await admit(withFreshChallenge(await signedRequest(), signer.keyid), deps);
+  const one = await admit(await admittableRequest(), deps);
   const two = await admit(
-    withFreshChallenge(await signedRequest({ body: '{"n":2}' }), signer.keyid),
+    await admittableRequest({ body: '{"n":2}' }),
     { ...deps, body: '{"n":2}' }
   );
   assert.equal(one.ok, true);
@@ -378,17 +433,16 @@ test("a refused request records nothing, so its signature cannot be poisoned in 
   // registration nonce as 13.7.
   const seen = new Set();
   const spent = new Map();
-  const signer = await signerFromJWK(ED.key);
 
-  const captured = await signedRequest();
-  const refused = await admit(withFreshChallenge(captured, signer.keyid), {
+  const captured = await admittableRequest();
+  const refused = await admit(captured, {
     secret: SECRET, lookupKey: async () => null, seen, spent, domain: DOMAIN,
   });
   assert.equal(refused.ok, false);
   assert.equal(spent.size, 0, "an unverified signature was recorded");
 
   // The same signature, once the key is known, is still good exactly once.
-  const admitted = await admit(withFreshChallenge(captured, signer.keyid), {
+  const admitted = await admit(captured, {
     secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN,
   });
   assert.equal(admitted.ok, true, `expected admission, got ${JSON.stringify(admitted)}`);
@@ -397,10 +451,9 @@ test("a refused request records nothing, so its signature cannot be poisoned in 
 test("a spent signature is forgotten once its own window has passed", async () => {
   const seen = new Set();
   const spent = new Map();
-  const signer = await signerFromJWK(ED.key);
   const deps = { secret: SECRET, lookupKey: lookupED, seen, spent, domain: DOMAIN };
 
-  await admit(withFreshChallenge(await signedRequest(), signer.keyid), deps);
+  await admit(await admittableRequest(), deps);
   assert.equal(spent.size, 1);
 
   // Sweeping while the signature is still live must keep it: dropping it early
@@ -600,8 +653,13 @@ async function registerFreshKey(base) {
 }
 
 /// Sign a message the way a real client would, for an arbitrary target URL
-/// (which may name a different authority than this server).
-async function signFor(privateJwk, targetUrl, body = "", agentHeader = null) {
+/// (which may name a different authority than this server). `challenge` has to
+/// be in hand before signing, because the pair is covered by the signature;
+/// the returned headers already carry it answered. It is stated by every
+/// caller, `""` included: an empty pair signed by omission is a request the
+/// door can only refuse, which is a weak test unless it is the point.
+async function signFor(privateJwk, targetUrl, { body = "", agentHeader = null, challenge } = {}) {
+  if (typeof challenge !== "string") throw new Error('signFor needs a challenge, or "" to sign an unanswerable pair');
   const target = new URL(targetUrl);
   const signer = await signerFromJWK(privateJwk);
   const message = {
@@ -614,6 +672,8 @@ async function signFor(privateJwk, targetUrl, body = "", agentHeader = null) {
       "signature-agent": agentHeader ?? `"https://${DOMAIN}"`,
       host: target.host,
       "content-digest": contentDigest(body),
+      challenge,
+      "challenge-response": challenge === "" ? "" : answerFor(challenge, signer.keyid),
     },
   };
   const created = new Date();
@@ -737,6 +797,7 @@ test("a signed and answered request to an unmatched path gets 404", async () => 
     const challengeRes = await fetch(`${base}/nowhere`, { method: "POST" });
     const { challenge } = await challengeRes.json();
 
+    const signer = await signerFromJWK(privateJwk);
     const message = {
       method: "POST",
       url: `https://${DOMAIN}/nowhere`,
@@ -746,20 +807,20 @@ test("a signed and answered request to an unmatched path gets 404", async () => 
         // No body is sent, so the digest is of the empty string -- which is
         // exactly what the door will compute from the request it receives.
         "content-digest": contentDigest(""),
+        challenge,
+        "challenge-response": answerFor(challenge, signer.keyid),
       },
     };
-    const signer = await signerFromJWK(privateJwk);
     const created = new Date();
     const sigHeaders = await signatureHeaders(message, signer, {
       created,
       expires: new Date(created.getTime() + 60_000),
       components: CLIENT_COMPONENTS,
     });
-    const answer = createHash("sha256").update(challenge + signer.keyid).digest("hex");
 
     const res = await fetch(`${base}/nowhere`, {
       method: "POST",
-      headers: { ...message.headers, ...sigHeaders, challenge, "challenge-response": answer },
+      headers: { ...message.headers, ...sigHeaders },
     });
     assert.equal(res.status, 404);
   } finally {
@@ -824,6 +885,7 @@ test("a fully signed and answered POST /mcp reaches the mcp handler", async () =
     const challengeRes = await fetch(`${base}/mcp`, { method: "POST" });
     const { challenge } = await challengeRes.json();
 
+    const signer = await signerFromJWK(privateJwk);
     const message = {
       method: "POST",
       url: `https://${DOMAIN}/mcp`,
@@ -833,20 +895,20 @@ test("a fully signed and answered POST /mcp reaches the mcp handler", async () =
         // No body is sent, so the digest is of the empty string -- which is
         // exactly what the door will compute from the request it receives.
         "content-digest": contentDigest(""),
+        challenge,
+        "challenge-response": answerFor(challenge, signer.keyid),
       },
     };
-    const signer = await signerFromJWK(privateJwk);
     const created = new Date();
     const sigHeaders = await signatureHeaders(message, signer, {
       created,
       expires: new Date(created.getTime() + 60_000),
       components: CLIENT_COMPONENTS,
     });
-    const answer = createHash("sha256").update(challenge + signer.keyid).digest("hex");
 
     const res = await fetch(`${base}/mcp`, {
       method: "POST",
-      headers: { ...message.headers, ...sigHeaders, challenge, "challenge-response": answer },
+      headers: { ...message.headers, ...sigHeaders },
     });
     assert.equal(res.status, 200, `expected the mcp handler to run, got ${JSON.stringify(await res.clone().text())}`);
     assert.equal(await res.text(), "mcp-reached");
@@ -863,7 +925,9 @@ test("a signature minted for https://evil.example/mcp, sent with a target that n
   const { server, base } = await startServer();
   try {
     const { privateJwk } = await registerFreshKey(base);
-    const { headers } = await signFor(privateJwk, "https://evil.example/mcp");
+    // "" on purpose: the router refuses the target before any challenge is
+    // read, so the pair never has to be answerable for this to be the test.
+    const { headers } = await signFor(privateJwk, "https://evil.example/mcp", { challenge: "" });
     for (const path of ["//evil.example/mcp", "http://evil.example/mcp"]) {
       const res = await rawRequest(base, { method: "POST", path, headers });
       assert.equal(res.status, 400, `expected the forged authority to be refused, got ${res.status}: ${res.text}`);
@@ -891,15 +955,10 @@ for (const path of [
     });
     try {
       const { privateJwk } = await registerFreshKey(base);
-      const { headers, keyId } = await signFor(privateJwk, "https://evil.example/mcp");
       const knock = await rawRequest(base, { method: "POST", path: "/mcp", headers: {} });
       const { challenge } = JSON.parse(knock.text);
-      const answer = createHash("sha256").update(challenge + keyId).digest("hex");
-      const res = await rawRequest(base, {
-        method: "POST",
-        path,
-        headers: { ...headers, challenge, "challenge-response": answer },
-      });
+      const { headers } = await signFor(privateJwk, "https://evil.example/mcp", { challenge });
+      const res = await rawRequest(base, { method: "POST", path, headers });
       assert.notEqual(res.status, 200, `BYPASS: an evil.example signature was admitted via ${path}`);
       assert.equal(mcpReached, false, "a forged authority must never reach the MCP handler");
     } finally {
@@ -915,15 +974,10 @@ test("CONTROL: the same evil.example signature at a plain /mcp target is refused
   const { server, base } = await startServer();
   try {
     const { privateJwk } = await registerFreshKey(base);
-    const { headers, keyId } = await signFor(privateJwk, "https://evil.example/mcp");
     const knock = await rawRequest(base, { method: "POST", path: "/mcp", headers: {} });
     const { challenge } = JSON.parse(knock.text);
-    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
-    const res = await rawRequest(base, {
-      method: "POST",
-      path: "/mcp",
-      headers: { ...headers, challenge, "challenge-response": answer },
-    });
+    const { headers } = await signFor(privateJwk, "https://evil.example/mcp", { challenge });
+    const res = await rawRequest(base, { method: "POST", path: "/mcp", headers });
     assert.equal(res.status, 401, `expected the forged authority to be refused, got ${res.status}: ${res.text}`);
   } finally {
     server.close();
@@ -937,16 +991,11 @@ test("CONTROL: a correctly signed request for the configured domain still reache
   const { server, base } = await startServer();
   try {
     const { privateJwk } = await registerFreshKey(base);
-    const { headers, keyId } = await signFor(privateJwk, `https://${DOMAIN}/mcp`);
     const challengeRes = await rawRequest(base, { method: "POST", path: "/mcp", headers: {} });
     assert.equal(challengeRes.status, 401);
     const { challenge } = JSON.parse(challengeRes.text);
-    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
-    const res = await rawRequest(base, {
-      method: "POST",
-      path: "/mcp",
-      headers: { ...headers, challenge, "challenge-response": answer },
-    });
+    const { headers } = await signFor(privateJwk, `https://${DOMAIN}/mcp`, { challenge });
+    const res = await rawRequest(base, { method: "POST", path: "/mcp", headers });
     assert.equal(res.status, 200, `expected the mcp handler to run, got ${res.status}: ${res.text}`);
     assert.equal(res.text, "mcp-reached");
   } finally {
@@ -1135,13 +1184,9 @@ test("an admitted request over its budget is refused 429, and never reaches a to
     const { privateJwk } = await registerFreshKey(base);
     const challengeRes = await fetch(`${base}/mcp`, { method: "POST" });
     const { challenge } = await challengeRes.json();
-    const { headers, keyId } = await signFor(privateJwk, `https://${DOMAIN}/mcp`);
-    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
+    const { headers, keyId } = await signFor(privateJwk, `https://${DOMAIN}/mcp`, { challenge });
 
-    const res = await fetch(`${base}/mcp`, {
-      method: "POST",
-      headers: { ...headers, challenge, "challenge-response": answer },
-    });
+    const res = await fetch(`${base}/mcp`, { method: "POST", headers });
 
     assert.equal(res.status, 429);
     const body = await res.json();
@@ -1168,12 +1213,10 @@ test("a registration nonce and a door challenge do not spend each other", async 
     // Take a nonce from the REGISTRATION endpoint and answer the DOOR with it.
     const { nonce } = await (await fetch(`${base}/keys/nonce`)).json();
     const { privateJwk } = await registerFreshKey(base);
-    const { headers, keyId } = await signFor(privateJwk, `https://${DOMAIN}/mcp`);
-    const answer = createHash("sha256").update(nonce + keyId).digest("hex");
-    const doorRes = await fetch(`${base}/mcp`, {
-      method: "POST",
-      headers: { ...headers, challenge: nonce, "challenge-response": answer },
-    });
+    // The registration nonce IS the challenge here -- that is the point -- so it
+    // is signed as one.
+    const { headers } = await signFor(privateJwk, `https://${DOMAIN}/mcp`, { challenge: nonce });
+    const doorRes = await fetch(`${base}/mcp`, { method: "POST", headers });
     // It is admitted -- the two really are one format, and that is not the
     // finding. What matters is what it did NOT consume.
     assert.equal(doorRes.status, 200, `expected the door to accept a well-formed challenge, got ${doorRes.status}`);
@@ -1205,15 +1248,11 @@ test("a request whose Signature-Agent is a dictionary is admitted", async () => 
     const { privateJwk } = await registerFreshKey(base);
     const challengeRes = await fetch(`${base}/mcp`, { method: "POST" });
     const { challenge } = await challengeRes.json();
-    const { headers, keyId } = await signFor(
-      privateJwk, `https://${DOMAIN}/mcp`, "", `sig1="https://${DOMAIN}"`
+    const { headers } = await signFor(
+      privateJwk, `https://${DOMAIN}/mcp`, { challenge, agentHeader: `sig1="https://${DOMAIN}"` }
     );
-    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
 
-    const res = await fetch(`${base}/mcp`, {
-      method: "POST",
-      headers: { ...headers, challenge, "challenge-response": answer },
-    });
+    const res = await fetch(`${base}/mcp`, { method: "POST", headers });
     assert.equal(res.status, 200, `the dictionary form must be admitted, got ${res.status}: ${await res.text()}`);
   } finally {
     server.close();
@@ -1227,12 +1266,8 @@ test("CONTROL: the legacy bare-string Signature-Agent is still admitted", async 
   try {
     const { privateJwk } = await registerFreshKey(base);
     const { challenge } = await (await fetch(`${base}/mcp`, { method: "POST" })).json();
-    const { headers, keyId } = await signFor(privateJwk, `https://${DOMAIN}/mcp`);
-    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
-    const res = await fetch(`${base}/mcp`, {
-      method: "POST",
-      headers: { ...headers, challenge, "challenge-response": answer },
-    });
+    const { headers } = await signFor(privateJwk, `https://${DOMAIN}/mcp`, { challenge });
+    const res = await fetch(`${base}/mcp`, { method: "POST", headers });
     assert.equal(res.status, 200);
   } finally {
     server.close();
@@ -1257,14 +1292,9 @@ test("a body with invalid utf-8 is digested as it arrived, not as it re-encodes"
       contentDigest(body), contentDigest(body.toString("utf8")),
       "the two digests must differ, or this test proves nothing"
     );
-    const { headers, keyId } = await signFor(privateJwk, `https://${DOMAIN}/mcp`, body);
-    const answer = createHash("sha256").update(challenge + keyId).digest("hex");
+    const { headers } = await signFor(privateJwk, `https://${DOMAIN}/mcp`, { challenge, body });
 
-    const res = await fetch(`${base}/mcp`, {
-      method: "POST",
-      headers: { ...headers, challenge, "challenge-response": answer },
-      body,
-    });
+    const res = await fetch(`${base}/mcp`, { method: "POST", headers, body });
     assert.equal(res.status, 200, `expected admission, got ${res.status}: ${await res.text()}`);
   } finally {
     server.close();

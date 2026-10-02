@@ -24,7 +24,7 @@
 // the exact version web-bot-auth itself resolves.
 import { verify as httpsigVerify } from "http-message-sig";
 import { verifierFromJWK } from "web-bot-auth/crypto";
-import { parseDictionary } from "structured-headers";
+import { parseDictionary, serializeItem } from "structured-headers";
 import { createHash } from "node:crypto";
 
 /**
@@ -117,7 +117,7 @@ const WEB_BOT_AUTH_TAG = "web-bot-auth";
 ///
 /// `content-digest` is what binds a signature to a BODY, and it is the whole
 /// reason the other three are not enough here. Every MCP call is POST /mcp, so
-/// @method and @path are identical across all nine tools and separate none of
+/// @method and @path are identical across all ten tools and separate none of
 /// them. Without the digest, a captured Signature pair authenticates ANY tool
 /// call until it expires -- and the challenge is no second factor, because key
 /// ids are public, challenges are free and unauthenticated, and the answer is a
@@ -303,6 +303,50 @@ export function coveredComponents(base) {
 }
 
 /**
+ * The request as the verifier must see it when a component carries `;key=`.
+ *
+ * RFC 9421 2.1.2: such a component signs ONE dictionary member, serialised
+ * "on the member_value and its parameters, not including the Dictionary key
+ * itself". http-message-sig 0.2.0 builds that base line from the WHOLE header
+ * instead, so a conforming signer is refused `signature` -- which sends a
+ * correct implementer to check its key and its origin, the two things that
+ * were right. Replacing the header with the selected member makes the
+ * library's line the RFC's line.
+ *
+ * Parsed with the same RFC 8941 parser as the component list, never sliced:
+ * every bypass this door has had came from treating a structured field as
+ * text. Throws when the selection is ambiguous or unresolvable, because
+ * guessing which member was meant is the bypass.
+ *
+ * Returns `{ message, key }`. `key` is the member the signature COVERED, or
+ * null for a plain `signature-agent`; the caller needs it because the key
+ * lookup must read that same member. See verifyRequest.
+ */
+export function keyedMessage(request) {
+  const [first] = parseDictionary(headerOf(request, "signature-input") ?? "").values();
+  const members = Array.isArray(first?.[0]) ? first[0] : [];
+  const agents = members.filter(([name]) => name === "signature-agent");
+  const keyed = agents.filter(([, params]) => params.has("key"));
+  if (keyed.length === 0) return { message: request, key: null };
+  // Two lines for one header name, with two different values: which one the
+  // door trusted afterwards would be a guess.
+  if (agents.length > 1) throw new Error("signature-agent covered more than once");
+  const key = keyed[0][1].get("key");
+  if (typeof key !== "string") throw new Error("signature-agent key is not a string");
+  const member = parseDictionary(headerOf(request, "signature-agent") ?? "").get(key);
+  if (!member) throw new Error("signature-agent has no member for that key");
+  const headers = {};
+  if (typeof request.headers?.forEach === "function") request.headers.forEach((v, k) => { headers[k] = v; });
+  else Object.assign(headers, request.headers);
+  // Dropped by whatever case it arrived in, so the replacement is the only one.
+  for (const k of Object.keys(headers)) if (k.toLowerCase() === "signature-agent") delete headers[k];
+  headers["signature-agent"] = serializeItem(member);
+  // method and url are copied by name: on a real Request they are prototype
+  // accessors, which a spread does not carry, and the base needs both.
+  return { message: { ...request, method: request.method, url: request.url, headers }, key };
+}
+
+/**
  * Verify one request.
  *
  * `lookupKey(keyId, signatureAgent)` returns the public JWK or null. The key id
@@ -310,17 +354,35 @@ export function coveredComponents(base) {
  * inside the verifier callback rather than before the call.
  */
 export async function verifyRequest(request, lookupKey) {
+  // The URL lookup needs the dictionary as it ARRIVED; the verifier needs the
+  // one member the signature selected. See keyedMessage.
+  let message;
+  let coveredAgentKey;
+  try {
+    ({ message, key: coveredAgentKey } = keyedMessage(request));
+  } catch {
+    return { ok: false, reason: "components" };
+  }
+
   // The header as it arrived, and the URL it names -- which are not the same
   // thing since the field became a dictionary. See signatureAgentUrl.
-  const signatureAgentHeader = headerOf(request, "signature-agent");
-  const signatureAgent = signatureAgentUrl(signatureAgentHeader, signatureLabel(request));
+  //
+  // Keyed by the member the signature COVERED whenever there is one: the
+  // signature LABEL is unsigned and renameable, so a request could otherwise
+  // verify against the member it signed while the key was looked up at a URL
+  // nobody signed.
+  const signatureAgent = signatureAgentUrl(
+    headerOf(request, "signature-agent"),
+    coveredAgentKey ?? signatureLabel(request),
+  );
   let reason = "signature";
   let verifiedKeyId = null;
   let verifiedExpiresAt = null;
   let verifiedSigHash = null;
+  let verifiedCovered = null;
 
   try {
-    await verifyWebBotAuth(request, async (data, signature, params) => {
+    await verifyWebBotAuth(message, async (data, signature, params) => {
       const covered = coveredComponents(data);
       if (!covered) {
         reason = "components";
@@ -384,6 +446,9 @@ export async function verifyRequest(request, lookupKey) {
       // replayer can change without breaking the signature is by definition
       // not in it, and it commits to created, expires, nonce and keyid.
       verifiedSigHash = createHash("sha256").update(data, "utf8").digest("hex");
+      // The list the cryptography actually checked, so a caller adding a rule
+      // of its own cannot be told a component was covered when it was not.
+      verifiedCovered = covered;
       reason = null;
     });
   } catch {
@@ -404,7 +469,13 @@ export async function verifyRequest(request, lookupKey) {
   }
 
   if (!verifiedKeyId) return { ok: false, reason: "signature" };
-  return { ok: true, keyId: verifiedKeyId, expiresAt: verifiedExpiresAt, sigHash: verifiedSigHash };
+  return {
+    ok: true,
+    keyId: verifiedKeyId,
+    expiresAt: verifiedExpiresAt,
+    sigHash: verifiedSigHash,
+    covered: verifiedCovered,
+  };
 }
 
 /**

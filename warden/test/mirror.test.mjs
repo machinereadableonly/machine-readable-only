@@ -459,3 +459,46 @@ test("pendingCredits comes back in (day, tokenId) order however the rows went in
     "day ascending, and lowest token id first within the day",
   );
 });
+
+test("a question is issued once per token and day; the first issue wins", () => {
+  const { q } = fresh();
+  assert.deepEqual(q.issueQuestion(1, 20700, "t-two", 1000), { questionId: "t-two", issuedAt: 1000 });
+  assert.deepEqual(q.issueQuestion(1, 20700, "t-list", 5000), { questionId: "t-two", issuedAt: 1000 });
+  assert.deepEqual(q.issueQuestion(2, 20700, "t-list", 5000), { questionId: "t-list", issuedAt: 5000 });
+});
+
+test("an answer is recorded against the issued question", () => {
+  const { q } = fresh();
+  q.issueQuestion(1, 20700, "t-two", 1000);
+  q.recordAnswer(1, 20700, 1, 3000);
+  const row = q.getQuestion(1, 20700);
+  assert.equal(row.answer, 1);
+  assert.equal(row.answeredAt, 3000);
+  assert.equal(q.getQuestion(1, 20701), undefined);
+});
+
+// recordAnswer is called from inside the checkin credit transaction, so it must
+// not open one of its own: node:sqlite refuses a nested BEGIN.
+test("recordAnswer runs inside a transaction its caller owns", () => {
+  const { q } = fresh();
+  q.issueQuestion(1, 20700, "t-two", 1000);
+  q.transact(() => {
+    q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 20699, mintDay: 20699 });
+    q.insertCredit(1, 20700, "sig1");
+    q.recordAnswer(1, 20700, 2, 3000);
+  });
+  assert.equal(q.getQuestion(1, 20700).answer, 2);
+});
+
+// The window closes once; a second answer to the same day is a second bite at
+// what the artwork records, so the first recorded answer wins in SQL rather
+// than by the caller remembering to check.
+test("a second answer does not overwrite the first", () => {
+  const { q } = fresh();
+  q.issueQuestion(1, 20700, "t-two", 1000);
+  q.recordAnswer(1, 20700, 1, 3000);
+  q.recordAnswer(1, 20700, 0, 4000);
+  const row = q.getQuestion(1, 20700);
+  assert.equal(row.answer, 1);
+  assert.equal(row.answeredAt, 3000);
+});

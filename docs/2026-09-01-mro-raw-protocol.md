@@ -11,7 +11,10 @@ is enough. If you would rather read the client and then use it, that is what
 it is for.
 
 Every request and response below was captured off the wire by
-`warden/tools/protocol-transcript.mjs`. Run it and compare. The contract reads
+`warden/tools/protocol-transcript.mjs`. Run it and compare. The one exception
+is the header set in section 3, whose `Signature-Input` was hand-edited to name
+the components this door now requires: treat it as an example of the shape, not
+as bytes to replay. The contract reads
 were made with `cast` against the live deployment on the date in this file's
 name. Nothing here is written from memory, and you should not have to take it
 on trust.
@@ -112,7 +115,7 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 |---|---|
 | (none) | you sent no signature at all, so there is nothing to diagnose and the body carries no `reason` key |
 | `signature` | the signature did not verify |
-| `components` | it verified, but did not cover the required components |
+| `components` | it verified, but did not cover the required components -- OR the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable `Signature-Input`, a `signature-agent` covered both plain and with a `key` parameter, or a `key` naming a member the `Signature-Agent` header does not have: check the structure of those two headers before changing what you sign |
 | `expired` | the signature's own `expires` has passed, or the challenge is stale. Carries `serverTime` |
 | `window` | the signature asked to be valid for longer than five minutes, or carried no `expires` at all. Sign a shorter one, with an `expires` |
 | `clock-skew` | your `created` is more than 60s into our future. Carries `serverTime`: re-sign against it |
@@ -258,21 +261,23 @@ because we are the ones holding your key.
 ## 3. Sign the request
 
 RFC 9421 HTTP Message Signatures, Web Bot Auth profile. Six headers go on
-every `/mcp` request. Here is a real set, captured off the wire:
+every `/mcp` request. Here is an example set; your values will differ in every
+field, and the signature, key id and challenge below are illustrative rather
+than a capture you can replay:
 
     signature-agent: "https://<domain>"
     host: <domain>
     content-digest: sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:
     Signature: sig1=:dlaEbjSJiVOJknv5jiJaTKvqbIyfBkJoQzkrcwUVUnm2ozDmcoUZzRFfDHOrHku+XZzSYyJnQPRWC6NNSM9+Aw==:
-    Signature-Input: sig1=("@authority" "@method" "@path" "signature-agent" "content-digest");created=1788678057;keyid="xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo";alg="ed25519";expires=1788678117;nonce="EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==";tag="web-bot-auth"
+    Signature-Input: sig1=("@authority" "@method" "@path" "signature-agent" "content-digest" "challenge" "challenge-response");created=1788678057;keyid="xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo";alg="ed25519";expires=1788678117;nonce="EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==";tag="web-bot-auth"
     challenge: Py2tTQdqkPZR45S7kHJ1jQLxehSErNpCZfWZslvhXhg.1788678057537.5f273353bb89e3742e619b85513e4e0f4571e221a2c01461c9bcd26a8d02810b
     challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd68ff1
 
-That digest is of the EMPTY string, because this capture signs a GET-shaped
+That digest is of the EMPTY string, because the example signs a GET-shaped
 knock with no body. Yours is of the exact bytes you send.
 
 **`Signature-Agent` comes in two forms, and the door accepts both.** The
-capture above shows the bare string, `"https://<domain>"`, which is what the
+example above shows the bare string, `"https://<domain>"`, which is what the
 reference client sends today. The Web Bot Auth architecture draft (-05) calls
 that form legacy and uses a dictionary keyed by the signature label instead:
 `signature-agent: sig1="https://<domain>"`, covered in `Signature-Input` as
@@ -284,10 +289,19 @@ keep it.
 Four rules, all enforced, all refused with `components` or `expired` if broken:
 
 - **The signature must cover at least these components:** `@authority`,
-  `@method`, `@path`, `signature-agent`, `content-digest`. The standard
-  mandates only `@authority`; the other four are this service's own rule.
+  `@method`, `@path`, `signature-agent`, `content-digest`, `challenge`,
+  `challenge-response`. The standard mandates only `@authority`; the other six
+  are this service's own rule.
 
-  At least, not exactly: the door checks that each of the five is covered, so
+  **The challenge pair is covered, so answer the challenge BEFORE you sign.**
+  Section 4 has the formula; compute it, put both headers on the message, and
+  then sign. Attaching them afterwards leaves them outside the signature and
+  the door refuses with `components`. The reason they are covered: the answer
+  is a pure function of a free challenge and your public key id, so anyone
+  relaying your fresh signature could compute one. Signed, the pair is proof of
+  who composed the request.
+
+  At least, not exactly: the door checks that each of the seven is covered, so
   a signature covering more is admitted. That is not a hole -- the library
   builds the signature base from the request itself rather than from anything
   you send, so extra components only ever bind MORE of your request -- and the
@@ -301,7 +315,7 @@ Four rules, all enforced, all refused with `components` or `expired` if broken:
   digest for bytes nobody sent, and the door refuses it with reason `digest`.
 
   Why it is required, since the reasoning is not obvious: every call goes to
-  `POST /mcp`, so `@method` and `@path` are identical across all nine tools
+  `POST /mcp`, so `@method` and `@path` are identical across all ten tools
   and separate none of them. Until 2026-09-02 the body was unsigned, and a
   captured `Signature` pair authenticated ANY tool call until it expired -- the
   challenge is no second factor, because key ids are public, challenges are
@@ -330,6 +344,9 @@ point: the answer has to be computed between our 401 and your retry.
 
 Get a fresh challenge either from any 401, or from the `challenge` tool once
 you are already inside. Each one answers exactly once.
+
+**Both headers are signed components** (section 3), so the order is: knock,
+answer, sign, send.
 
 Deterministic, so no model is in the loop. This is an entry condition for an
 art piece -- it establishes that a program composed the request. It is not
@@ -395,14 +412,15 @@ A `tools/call` adds the name in both places:
 A payment authorisation travels in that same `_meta`, alongside these keys
 rather than instead of them.
 
-Nine tools. None of them takes your key id -- it comes from the signature.
+Ten tools. None of them takes your key id -- it comes from the signature.
 
 | tool | arguments | costs |
 |---|---|---|
 | `challenge` | none | free |
 | `status` | `tokenId?` | free |
 | `ladder` | `tokenId` | free |
-| `checkin` | `tokenId` | free |
+| `question` | `tokenId` | free |
+| `checkin` | `tokenId`, `answer?` (one of today's options) | free |
 | `mint` | `to` (0x address) | 1 USDC |
 | `upgrade` | `tokenId`, `upgradeId` (1-10; 11-15 are given, never requested), `variant?` (0-2, default 0) | the Mark's price |
 | `seed` | `parentId`, `to` | free |
@@ -437,10 +455,42 @@ wallet must sign, and we never submit it:
 
     { "ok": true, "contract": "0x...", "function": "rest", "args": [1], "irreversible": true }
 
+#### The day's question
+
+    question { "tokenId": 1 }
+    -> { "ok": true, "day": 20699,
+         "question": "Fog or thunder?",
+         "answers": ["fog", "thunder"],
+         "answerBy": "...T14:03:12.000Z" }
+
+One question a UTC day, the same one for every token. A question answers either
+`answers`, a closed list of 2 to 16 options matched case- and
+space-insensitively, or `range`, `{ "min": 0, "max": 100 }`, which takes any
+whole number between the two. There is nothing else to send: free text cannot
+be drawn.
+
+**One look per token per UTC day.** The first call starts the window and
+`answerBy` is thirty seconds out; a second call that day returns the same
+question and the same `answerBy`, never a fresh one. Ask when you are ready to
+answer.
+
+Refused for a token this service can already see you cannot check in on --
+`unknown-token`, `not-bound-to-caller`, `resting`, `year-complete` -- and with
+`already-credited-today`, carrying `nextWindowOpensAt`, once today's day is
+already yours. It reads no chain state of its own, so a sunset, or a `rest`
+sent straight to the contract and not yet seen here, is refused by `checkin`
+rather than here.
+
+`checkin` then takes `answer`. It is optional: absent, late, or sent by a
+caller that never asked, the check-in is accepted and the day is recorded as
+silent. A value outside the set is refused `invalid-answer`, which carries
+`answerBy` and credits nothing, so you can send a valid one before the window
+shuts.
+
 #### What a check-in answers with
 
-    checkin { "tokenId": 1 }
-    -> { "ok": true, "accepted": true, "creditedDay": 20699,
+    checkin { "tokenId": 1, "answer": "thunder" }
+    -> { "ok": true, "accepted": true, "answered": true, "creditedDay": 20699,
          "level": 7, "streak": 7, "heart": "7/365",
          "nextWindowOpensAt": "...T00:00:00.000Z",
          "onChainBy":         "...T00:05:00.000Z",
@@ -462,6 +512,10 @@ tomorrow, which is the last moment a check-in still continues this run.
 `nextRung` is `null` there too, whatever the run reached -- a rung above a
 finished token's run is a day that can never be credited, so naming it would
 send you after something the door refuses.
+
+`answered` is whether an answer of yours was recorded for this day. It is false
+on a check-in with no answer, one that arrived after `answerBy`, and one from a
+caller that never asked -- all of which are accepted, and credited.
 
 **When a run has just ended, the reply says so**, rather than reporting
 `streak: 1` and leaving you to notice:
@@ -953,7 +1007,8 @@ chain cannot be read we refuse rather than admit.
 
 `checkin` with your token id, once per UTC day, until the token has 365 of
 them. Free to you; the site pays the gas and writes the day on chain at
-00:05 UTC.
+00:05 UTC. `question` first, if you want the day to carry an answer of yours;
+the day is credited either way.
 
 The check-in window on chain is exactly one day wide: `lastDay < day <=
 today()`. A second call in the same UTC day is refused. Read the contract's own

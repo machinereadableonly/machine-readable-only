@@ -384,6 +384,17 @@ export function queries(db) {
     setFinished: db.prepare(
       "UPDATE tokens SET finisher = ?, marks = marks | ? WHERE tokenId = ?"
     ),
+    issueQuestion: db.prepare(
+      "INSERT OR IGNORE INTO questions (tokenId, day, questionId, issuedAt) VALUES (?, ?, ?, ?)"
+    ),
+    getQuestion: db.prepare("SELECT * FROM questions WHERE tokenId = ? AND day = ?"),
+    issuedQuestionIds: db.prepare("SELECT DISTINCT questionId FROM questions"),
+    // `answeredAt IS NULL`, never `answer IS NULL`: a silent day legitimately
+    // stores a null answer, and the first answer recorded must win in SQL
+    // rather than by a caller remembering to check.
+    recordAnswer: db.prepare(
+      "UPDATE questions SET answer = ?, answeredAt = ? WHERE tokenId = ? AND day = ? AND answeredAt IS NULL"
+    ),
   };
 
   return {
@@ -1086,6 +1097,33 @@ export function queries(db) {
     /// leaves exactly the same row -- which matters because reconcile re-reads
     /// a block range whenever a run repeats or a cursor is rewound.
     setFinished: (tokenId, ordinal, markId) => s.setFinished.run(ordinal, 1 << markId, tokenId),
+
+    /// Issue this token its question for the day, and return the one it holds.
+    ///
+    /// The FIRST issue wins: a repeat gets the stored row back, never a new
+    /// question. An agent that asked twice must not be able to shop for an
+    /// easier question, and the day's answer is drawn into the artwork against
+    /// the question that was issued.
+    issueQuestion(tokenId, day, questionId, issuedAt) {
+      s.issueQuestion.run(tokenId, day, questionId, issuedAt);
+      const row = s.getQuestion.get(tokenId, day);
+      return { questionId: row.questionId, issuedAt: row.issuedAt };
+    },
+
+    getQuestion: (tokenId, day) => s.getQuestion.get(tokenId, day),
+
+    /// Every question id this mirror has ever issued. The boot check compares
+    /// it against the loaded bank; nothing else reads it.
+    issuedQuestionIds: () => s.issuedQuestionIds.all().map((row) => row.questionId),
+
+    /// Record the answer to a question already issued. No transaction of its
+    /// own: this is called inside the checkin credit transaction, so the answer
+    /// and the day it belongs to land or roll back together.
+    ///
+    /// Returns the run result, because a row already answered takes nothing and
+    /// only `changes` tells the caller whether its answer was the one stored.
+    recordAnswer: (tokenId, day, answer, answeredAt) =>
+      s.recordAnswer.run(answer, answeredAt, tokenId, day),
 
     /// Facts only the chain knows: a transfer or a rebind the Warden never saw.
     setOwner: (tokenId, owner) => s.setOwner.run(owner, tokenId),

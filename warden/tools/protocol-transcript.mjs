@@ -27,6 +27,7 @@ import { envelope } from "../test/mcp-envelope.mjs";
 import { makePaymentGateway } from "../src/pay/x402.mjs";
 import { makeChainReader } from "../src/chain/read.mjs";
 import { LADDER, assertLadderSane } from "../src/mcp/ladder.mjs";
+import { loadBank, bankPath } from "../src/mcp/question.mjs";
 
 const DOMAIN = "example.com";
 const SECRET = "transcript-secret";
@@ -42,14 +43,18 @@ const TREASURY = "0x000000000000000000000000000000000000dEaD";
 // clean checkout, the same reason DOMAIN and SECRET are constants here.
 const CONTRACT = "0x6a6f90E9586E2f58a65412b9b402494639bCc41C";
 const RPC = process.env.BASE_RPC_URL ?? "https://sepolia.base.org";
-const COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
+const COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest", "challenge", "challenge-response"];
 
 const dir = mkdtempSync(join(tmpdir(), "mro-transcript-"));
 const db = openDb(join(dir, "mirror.db"));
 const q = queries(db);
 const paid = makePaymentGateway({ facilitatorUrl: FACILITATOR, network: NETWORK, payTo: TREASURY });
 const chain = makeChainReader({ rpcUrl: RPC, contract: CONTRACT });
+// THE REAL BANK, like main.mjs: a capture built on the fixture would
+// document questions no agent is ever asked.
+const bank = loadBank(bankPath());
 const mcp = makeMcpHandler({
+  bank,
   q, chain, today: utcDay, contract: CONTRACT, chainId: CHAIN_ID,
   challengeSecret: SECRET, domain: DOMAIN, llmsTxt: "", paid,
   // THE REAL CATALOGUE, exactly as main.mjs boots it. This read `{}` until
@@ -100,16 +105,17 @@ show("4. GET /.well-known/http-message-signatures-directory -> " + dirRes.status
 // --- 4. a signed, challenge-answering request ------------------------------
 const { challenge } = await (await fetch(`${base}/mcp`, { method: "POST" })).json();
 const signer = await signerFromJWK(privateKey.export({ format: "jwk" }));
-const messageFor = (body) => ({ method: "POST", url: `https://${DOMAIN}/mcp`,
+// The challenge pair is COVERED, so it is answered before the message is built.
+const answerFor = (c) => createHash("sha256").update(c + signer.keyid).digest("hex");
+const messageFor = (body, c) => ({ method: "POST", url: `https://${DOMAIN}/mcp`,
   headers: { "signature-agent": `"https://${DOMAIN}"`, host: DOMAIN,
-    "content-digest": contentDigest(body) } });
-const message = messageFor("");
+    "content-digest": contentDigest(body), challenge: c,
+    "challenge-response": answerFor(c) } });
+const message = messageFor("", challenge);
 const created = new Date();
 const signed = await signatureHeaders(message, signer, {
   created, expires: new Date(created.getTime() + 60_000), components: COMPONENTS });
-const answer = createHash("sha256").update(challenge + signer.keyid).digest("hex");
-show("5. the headers a signed request carries", {
-  ...message.headers, ...signed, challenge, "challenge-response": answer });
+show("5. the headers a signed request carries", { ...message.headers, ...signed });
 console.log("\n(key id / RFC 7638 thumbprint: " + signer.keyid + ")");
 
 async function call(payload) {
@@ -118,13 +124,11 @@ async function call(payload) {
   // Serialised ONCE. The bytes signed must be the bytes sent, or the door
   // refuses with reason "digest".
   const { raw, headers: transport } = envelope(payload);
-  const msg = messageFor(raw);
+  const msg = messageFor(raw, c);
   const s = await signatureHeaders(msg, signer, {
     created: cr, expires: new Date(cr.getTime() + 60_000), components: COMPONENTS });
   const res = await fetch(`${base}/mcp`, { method: "POST",
-    headers: { ...msg.headers, ...s, ...transport, challenge: c,
-      "challenge-response": createHash("sha256").update(c + signer.keyid).digest("hex") },
-    body: raw });
+    headers: { ...msg.headers, ...s, ...transport }, body: raw });
   const text = await res.text();
   const line = text.split("\n").find((l) => l.startsWith("data:"));
   return { status: res.status, body: JSON.parse((line ?? text).replace(/^data:\s*/, "")) };

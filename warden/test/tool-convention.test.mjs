@@ -9,6 +9,7 @@
 // `upgrade` returned BOTH, which is what hid it when reading the source.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
@@ -17,12 +18,15 @@ import { openChain } from "./chain-stub.mjs";
 import { makeChallengeTool } from "../src/mcp/tools/challenge.mjs";
 import { makeStatusTool } from "../src/mcp/tools/status.mjs";
 import { makeLadderTool } from "../src/mcp/tools/ladder.mjs";
+import { makeQuestionTool } from "../src/mcp/tools/question.mjs";
 import { makeCheckinTool } from "../src/mcp/tools/checkin.mjs";
 import { makeRebindTool } from "../src/mcp/tools/rebind.mjs";
 import { makeRestTool } from "../src/mcp/tools/rest.mjs";
 import { makeSeedTool } from "../src/mcp/tools/seed.mjs";
 
 const CONTRACT = "0x" + "a".repeat(40);
+const BANK = JSON.parse(readFileSync(new URL("./fixtures/question-bank.json", import.meta.url), "utf8"));
+const SECRET = "s".repeat(32);
 const ctx = { keyId: "k1", sigHash: "sig" };
 
 /// The tools that cost nothing. The paid two (mint, upgrade) already return
@@ -39,7 +43,8 @@ function freeTools(q) {
     ["challenge", makeChallengeTool({ challengeSecret: "s".repeat(32), domain: "example.com" }), {}],
     ["status", makeStatusTool({ q, chain: openChain() }), {}],
     ["ladder", makeLadderTool({ q, chain: openChain() }), { tokenId: 1 }],
-    ["checkin", makeCheckinTool({ q, chain: openChain(), today: () => 100 }), { tokenId: 1 }],
+    ["question", makeQuestionTool({ q, bank: BANK, challengeSecret: SECRET, today: () => 100 }), { tokenId: 1 }],
+    ["checkin", makeCheckinTool({ bank: BANK, q, chain: openChain(), today: () => 100 }), { tokenId: 1 }],
     ["rebind", makeRebindTool({ q, contract: CONTRACT }), { tokenId: 1 }],
     ["rest", makeRestTool({ q, contract: CONTRACT }), { tokenId: 1 }],
     ["seed", makeSeedTool({ q, chain: openChain(), today: () => 100 }), { tokenId: 1, parentId: 1, to: "0x" + "a1".repeat(20) }],
@@ -58,7 +63,7 @@ test("a check-in answers with `ok` on the refusal AND on the success", async () 
   const db = openDb(":memory:");
   const q = queries(db);
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0x" + "1".repeat(40), lastDay: 99, mintDay: 99 });
-  const tool = makeCheckinTool({ q, chain: openChain(), today: () => 100 });
+  const tool = makeCheckinTool({ bank: BANK, q, chain: openChain(), today: () => 100 });
 
   const good = await tool.handler({ tokenId: 1 }, ctx);
   assert.equal(good.ok, true, "a credited day is ok:true, not merely accepted:true");
@@ -85,6 +90,8 @@ test("no tool accepts free-form text, which is what makes the warning unnecessar
   const { envelope } = await import("./mcp-envelope.mjs");
 
   const { handler } = makeMcpHandler({
+    bank: BANK,
+    challengeSecret: SECRET,
     q: queries(openDb(":memory:")), chain: openChain(), contract: "0xc", chainId: 84532,
   });
   const built = envelope({ method: "tools/list", params: {} });
@@ -121,15 +128,15 @@ test("no tool accepts free-form text, which is what makes the warning unnecessar
 // This iterates TOOL_FACTORIES -- the same array server.mjs registers from --
 // so a tenth tool is covered on the day it exists rather than the day somebody
 // remembers to add it here.
-test("the registry is the nine tools this piece publishes, and the hand-list covers the free ones", async () => {
+test("the registry is the ten tools this piece publishes, and the hand-list covers the free ones", async () => {
   const { TOOL_FACTORIES, PAID_TOOLS } = await import("../src/mcp/server.mjs");
   const q = queries(openDb(":memory:"));
 
-  const names = TOOL_FACTORIES.map((make) => make({ q, chain: openChain(), contract: CONTRACT, challengeSecret: "s".repeat(32), domain: "example.com" }).name);
-  assert.equal(names.length, 9, "nine tools; if this changed, the protocol document changed too");
+  const names = TOOL_FACTORIES.map((make) => make({ q, chain: openChain(), contract: CONTRACT, bank: BANK, challengeSecret: SECRET, domain: "example.com" }).name);
+  assert.equal(names.length, 10, "ten tools; if this changed, the protocol document changed too");
   assert.deepEqual(
     [...names].sort(),
-    ["challenge", "checkin", "ladder", "mint", "rebind", "rest", "seed", "status", "upgrade"],
+    ["challenge", "checkin", "ladder", "mint", "question", "rebind", "rest", "seed", "status", "upgrade"],
     "a tool was added, removed or renamed: llms.txt and the protocol document name these",
   );
 
