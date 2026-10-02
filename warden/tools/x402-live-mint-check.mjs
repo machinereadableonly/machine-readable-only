@@ -18,13 +18,14 @@
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { contentDigest } from "../src/door/verify.mjs";
 import { createServer } from "../src/server.mjs";
 import { makeMcpHandler } from "../src/mcp/server.mjs";
+import { loadBank } from "../src/mcp/question.mjs";
 import { tokenView } from "../src/mcp/tokenView.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
@@ -85,7 +86,11 @@ console.log("0. chain gates:", JSON.stringify({
   walletRoom: await chain.walletRoomFor("0x" + "a1".repeat(20)),
 }), "(writesOpen null means open)");
 
+// THE REAL BANK, like main.mjs: a capture built on the fixture would
+// document questions no agent is ever asked.
+const bank = loadBank(process.env.MRO_QUESTION_BANK ?? join(homedir(), ".mro-questions", "bank.json"));
 const mcp = makeMcpHandler({
+  bank,
   q,
   chain,
   today: utcDay,

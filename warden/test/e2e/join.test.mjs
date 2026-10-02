@@ -22,6 +22,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { signatureHeaders } from "web-bot-auth";
@@ -40,6 +41,7 @@ import { envelope } from "../mcp-envelope.mjs";
 
 const DOMAIN = "example.com";
 const SECRET = "e2e-secret";
+const BANK = JSON.parse(readFileSync(new URL("../fixtures/question-bank.json", import.meta.url), "utf8"));
 const TO = "0x00000000000000000000000000000000000000a1";
 // One contract and one chain id for the WHOLE journey, because production has
 // one of each and step 6 is the test that proves both audiences hear it.
@@ -81,6 +83,7 @@ function startJourney({ catalogue = STUB_CATALOGUE } = {}) {
   const clock = { offset: 0 };
 
   const mcp = makeMcpHandler({
+    bank: BANK,
     q,
     // The facilitator, mocked at exactly the seam makePaid() occupies: paid()
     // takes a handler and returns a callable. Passing the handler straight

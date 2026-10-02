@@ -12,6 +12,7 @@ import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { Readable } from "node:stream";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { makeCheckinTool } from "./tools/checkin.mjs";
+import { makeQuestionTool } from "./tools/question.mjs";
 import { makeStatusTool } from "./tools/status.mjs";
 import { makeLadderTool } from "./tools/ladder.mjs";
 import { makeRebindTool } from "./tools/rebind.mjs";
@@ -59,7 +60,7 @@ function isToolResult(value) {
  * same way it is for every other free tool.
  */
 export const TOOL_FACTORIES = [
-  makeChallengeTool, makeStatusTool, makeLadderTool, makeCheckinTool,
+  makeChallengeTool, makeStatusTool, makeLadderTool, makeQuestionTool, makeCheckinTool,
   makeRebindTool, makeRestTool, makeSeedTool, makeMintTool, makeUpgradeTool,
 ];
 
@@ -82,7 +83,7 @@ export function makeMcpHandler(deps) {
         {
           // C1.6. An agent that has passed the door and listed tools has, by
           // construction, run a client without necessarily reading a word of
-          // copy, and each of the nine tool descriptions is a correct HOW.
+          // copy, and each of the ten tool descriptions is a correct HOW.
           // This is the one WHAT, on the surface where it chooses.
           //
           // It belongs in the OPTIONS argument, not in serverInfo beside the
@@ -95,6 +96,7 @@ export function makeMcpHandler(deps) {
             "Machine Readable Only is an artwork that only admits programs. " +
             "Read mro://llms.txt before calling anything. mint costs 1 USDC and is once per key; " +
             "checkin is free and is the whole daily obligation; " +
+            "ask `question` first and pass your answer to checkin; " +
             "rebind and rest never act, they return a call for the token owner's wallet.",
 
           // SEP-2549 makes ttlMs and cacheScope REQUIRED on list and read

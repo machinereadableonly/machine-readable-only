@@ -16,6 +16,8 @@
 // of environment variables set, since requireEnv() below runs at module
 // load and throws on the first missing one.)
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAddress } from "viem";
 import { createServer } from "./server.mjs";
@@ -23,6 +25,7 @@ import { makeAllowRegistration, makeAllowToolCall, makeSpawnSolve } from "./boot
 import { makePaymentGateway, warmUp, bootDecisionFor } from "./pay/x402.mjs";
 import { makeCdpAuthHeaders, isCdpFacilitator } from "./pay/cdp.mjs";
 import { makeMcpHandler } from "./mcp/server.mjs";
+import { loadBank } from "./mcp/question.mjs";
 import { LADDER, assertLadderSane } from "./mcp/ladder.mjs";
 import { tokenView } from "./mcp/tokenView.mjs";
 import { openDb } from "./mirror/db.mjs";
@@ -348,8 +351,14 @@ async function main() {
   const serverCard = readFileSync(fileURLToPath(new URL("../../server.json", import.meta.url)), "utf8");
   JSON.parse(serverCard);
 
+  // The question bank lives OUTSIDE the worktree, because this repository is
+  // public and a published bank is a year of answers given away. A missing or
+  // malformed one stops the Warden here, before it admits anyone.
+  const bank = loadBank(process.env.MRO_QUESTION_BANK ?? join(homedir(), ".mro-questions", "bank.json"));
+
   const mcp = makeMcpHandler({
     q,
+    bank,
     chain,
     today: utcDay,
     contract,

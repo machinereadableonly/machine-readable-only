@@ -30,6 +30,7 @@ const run = promisify(execFile);
 const CLI = fileURLToPath(new URL("../src/cli.mjs", import.meta.url));
 const DOMAIN = "example.com";
 const SECRET = "cli-test-secret";
+const BANK = JSON.parse(readFileSync(new URL("../../warden/test/fixtures/question-bank.json", import.meta.url), "utf8"));
 const TREASURY = "0x000000000000000000000000000000000000dEaD";
 
 const DEMAND = {
@@ -92,6 +93,7 @@ before(async () => {
   q = queries(openDb(join(dir, "mirror.db")));
 
   const mcp = makeMcpHandler({
+    bank: BANK,
     q, chain: openChain(), today: utcDay,
     contract: "0xcontract", chainId: 84532,
     challengeSecret: SECRET, domain: DOMAIN, llmsTxt: "",

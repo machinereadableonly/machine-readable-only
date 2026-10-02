@@ -12,6 +12,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, chmodSync, rmSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -34,6 +35,9 @@ import { readDemand, assertExpected, signAuthorization, payFor } from "../src/pa
 
 const DOMAIN = "example.com";
 const SECRET = "client-journey-secret";
+// The Warden's own fixture bank, read across the package boundary like the
+// rest of this harness, which builds its server from warden/src.
+const BANK = JSON.parse(readFileSync(new URL("../../warden/test/fixtures/question-bank.json", import.meta.url), "utf8"));
 const TREASURY = "0x000000000000000000000000000000000000dEaD";
 const USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
@@ -70,6 +74,7 @@ before(async () => {
   const chain = openChain();
 
   const mcp = makeMcpHandler({
+    bank: BANK,
     q, chain, today: utcDay,
     contract: "0xcontract", chainId: 84532,
     challengeSecret: SECRET, domain: DOMAIN, llmsTxt: "",
@@ -184,7 +189,7 @@ test("a registered key is admitted, and can list the tools", async () => {
 
   const tools = await listTools({ origin, site: `https://${DOMAIN}`, privateJwk });
   const names = tools.map((t) => t.name).sort();
-  assert.deepEqual(names, ["challenge", "checkin", "ladder", "mint", "rebind", "rest", "seed", "status", "upgrade"]);
+  assert.deepEqual(names, ["challenge", "checkin", "ladder", "mint", "question", "rebind", "rest", "seed", "status", "upgrade"]);
 });
 
 test("a free tool answers, and reads the caller's identity from the signature", async () => {
