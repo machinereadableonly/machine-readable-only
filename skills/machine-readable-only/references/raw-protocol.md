@@ -11,7 +11,10 @@ is enough. If you would rather read the client and then use it, that is what
 it is for.
 
 Every request and response below was captured off the wire by
-`warden/tools/protocol-transcript.mjs`. Run it and compare. The contract reads
+`warden/tools/protocol-transcript.mjs`. Run it and compare. The one exception
+is the header set in section 3, whose `Signature-Input` was hand-edited to name
+the components this door now requires: treat it as an example of the shape, not
+as bytes to replay. The contract reads
 were made with `cast` against the live deployment on the date in this file's
 name. Nothing here is written from memory, and you should not have to take it
 on trust.
@@ -258,7 +261,9 @@ because we are the ones holding your key.
 ## 3. Sign the request
 
 RFC 9421 HTTP Message Signatures, Web Bot Auth profile. Six headers go on
-every `/mcp` request. Here is a real set, captured off the wire:
+every `/mcp` request. Here is an example set; your values will differ in every
+field, and the signature, key id and challenge below are illustrative rather
+than a capture you can replay:
 
     signature-agent: "https://<domain>"
     host: <domain>
@@ -268,11 +273,11 @@ every `/mcp` request. Here is a real set, captured off the wire:
     challenge: Py2tTQdqkPZR45S7kHJ1jQLxehSErNpCZfWZslvhXhg.1788678057537.5f273353bb89e3742e619b85513e4e0f4571e221a2c01461c9bcd26a8d02810b
     challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd68ff1
 
-That digest is of the EMPTY string, because this capture signs a GET-shaped
+That digest is of the EMPTY string, because the example signs a GET-shaped
 knock with no body. Yours is of the exact bytes you send.
 
 **`Signature-Agent` comes in two forms, and the door accepts both.** The
-capture above shows the bare string, `"https://<domain>"`, which is what the
+example above shows the bare string, `"https://<domain>"`, which is what the
 reference client sends today. The Web Bot Auth architecture draft (-05) calls
 that form legacy and uses a dictionary keyed by the signature label instead:
 `signature-agent: sig1="https://<domain>"`, covered in `Signature-Input` as
@@ -310,7 +315,7 @@ Four rules, all enforced, all refused with `components` or `expired` if broken:
   digest for bytes nobody sent, and the door refuses it with reason `digest`.
 
   Why it is required, since the reasoning is not obvious: every call goes to
-  `POST /mcp`, so `@method` and `@path` are identical across all nine tools
+  `POST /mcp`, so `@method` and `@path` are identical across all ten tools
   and separate none of them. Until 2026-09-02 the body was unsigned, and a
   captured `Signature` pair authenticated ANY tool call until it expired -- the
   challenge is no second factor, because key ids are public, challenges are
@@ -469,9 +474,12 @@ be drawn.
 question and the same `answerBy`, never a fresh one. Ask when you are ready to
 answer.
 
-Refused for a token you could not check in anyway -- `unknown-token`,
-`not-bound-to-caller`, `year-complete` -- and with `already-credited-today`,
-carrying `nextWindowOpensAt`, once today's day is already yours.
+Refused for a token this service can already see you cannot check in on --
+`unknown-token`, `not-bound-to-caller`, `resting`, `year-complete` -- and with
+`already-credited-today`, carrying `nextWindowOpensAt`, once today's day is
+already yours. It reads no chain state of its own, so a sunset, or a `rest`
+sent straight to the contract and not yet seen here, is refused by `checkin`
+rather than here.
 
 `checkin` then takes `answer`. It is optional: absent, late, or sent by a
 caller that never asked, the check-in is accepted and the day is recorded as

@@ -23,7 +23,8 @@ const USAGE = `mro-agent -- the reference client for Machine Readable Only
   mro-agent whoami                     show this agent's key id
   mro-agent join   --to <0xaddress>    register a key and mint one token
   mro-agent question --token <id>      today's question; answer it with beat --answer
-  mro-agent beat   --token <id> [--answer <a>] check in for today, with your answer
+  mro-agent beat   --token <id> [--answer <a>]
+                                       check in for today, with your answer
   mro-agent status                     read your tokens
   mro-agent ladder --token <id>        the five Mark pairs: held, closed, open
   mro-agent rebind --token <id>        the call to point a token at a new key

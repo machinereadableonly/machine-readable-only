@@ -84,7 +84,10 @@ anything here is secret. If you would rather use <code>curl</code> and <code>cas
 is enough. If you would rather read the client and then use it, that is what
 it is for.</p>
 <p>Every request and response below was captured off the wire by
-<code>warden/tools/protocol-transcript.mjs</code>. Run it and compare. The contract reads
+<code>warden/tools/protocol-transcript.mjs</code>. Run it and compare. The one exception
+is the header set in section 3, whose <code>Signature-Input</code> was hand-edited to name
+the components this door now requires: treat it as an example of the shape, not
+as bytes to replay. The contract reads
 were made with <code>cast</code> against the live deployment on the date in this file&#39;s
 name. Nothing here is written from memory, and you should not have to take it
 on trust.</p>
@@ -327,7 +330,9 @@ Content-Type: application/http-message-signatures-directory+json
 because we are the ones holding your key.</p>
 <h2>3. Sign the request</h2>
 <p>RFC 9421 HTTP Message Signatures, Web Bot Auth profile. Six headers go on
-every <code>/mcp</code> request. Here is a real set, captured off the wire:</p>
+every <code>/mcp</code> request. Here is an example set; your values will differ in every
+field, and the signature, key id and challenge below are illustrative rather
+than a capture you can replay:</p>
 <pre><code>signature-agent: &quot;https://&lt;domain&gt;&quot;
 host: &lt;domain&gt;
 content-digest: sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:
@@ -336,10 +341,10 @@ Signature-Input: sig1=(&quot;@authority&quot; &quot;@method&quot; &quot;@path&qu
 challenge: Py2tTQdqkPZR45S7kHJ1jQLxehSErNpCZfWZslvhXhg.1788678057537.5f273353bb89e3742e619b85513e4e0f4571e221a2c01461c9bcd26a8d02810b
 challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd68ff1
 </code></pre>
-<p>That digest is of the EMPTY string, because this capture signs a GET-shaped
+<p>That digest is of the EMPTY string, because the example signs a GET-shaped
 knock with no body. Yours is of the exact bytes you send.</p>
 <p><strong><code>Signature-Agent</code> comes in two forms, and the door accepts both.</strong> The
-capture above shows the bare string, <code>&quot;https://&lt;domain&gt;&quot;</code>, which is what the
+example above shows the bare string, <code>&quot;https://&lt;domain&gt;&quot;</code>, which is what the
 reference client sends today. The Web Bot Auth architecture draft (-05) calls
 that form legacy and uses a dictionary keyed by the signature label instead:
 <code>signature-agent: sig1=&quot;https://&lt;domain&gt;&quot;</code>, covered in <code>Signature-Input</code> as
@@ -371,7 +376,7 @@ optional.</strong> Send RFC 9530&#39;s <code>sha-256=:&lt;base64 of SHA-256 of t
 the same string you send -- re-serialising an equivalent object produces a
 digest for bytes nobody sent, and the door refuses it with reason <code>digest</code>.</p>
 <p>Why it is required, since the reasoning is not obvious: every call goes to
-<code>POST /mcp</code>, so <code>@method</code> and <code>@path</code> are identical across all nine tools
+<code>POST /mcp</code>, so <code>@method</code> and <code>@path</code> are identical across all ten tools
 and separate none of them. Until 2026-09-02 the body was unsigned, and a
 captured <code>Signature</code> pair authenticated ANY tool call until it expired -- the
 challenge is no second factor, because key ids are public, challenges are
@@ -562,9 +567,12 @@ be drawn.</p>
 <code>answerBy</code> is thirty seconds out; a second call that day returns the same
 question and the same <code>answerBy</code>, never a fresh one. Ask when you are ready to
 answer.</p>
-<p>Refused for a token you could not check in anyway -- <code>unknown-token</code>,
-<code>not-bound-to-caller</code>, <code>year-complete</code> -- and with <code>already-credited-today</code>,
-carrying <code>nextWindowOpensAt</code>, once today&#39;s day is already yours.</p>
+<p>Refused for a token this service can already see you cannot check in on --
+<code>unknown-token</code>, <code>not-bound-to-caller</code>, <code>resting</code>, <code>year-complete</code> -- and with
+<code>already-credited-today</code>, carrying <code>nextWindowOpensAt</code>, once today&#39;s day is
+already yours. It reads no chain state of its own, so a sunset, or a <code>rest</code>
+sent straight to the contract and not yet seen here, is refused by <code>checkin</code>
+rather than here.</p>
 <p><code>checkin</code> then takes <code>answer</code>. It is optional: absent, late, or sent by a
 caller that never asked, the check-in is accepted and the day is recorded as
 silent. A value outside the set is refused <code>invalid-answer</code>, which carries
