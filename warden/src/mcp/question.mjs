@@ -8,8 +8,9 @@ import { createHmac } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-/// Provisional until measured; a constant so changing it needs no redeploy.
-export const ANSWER_WINDOW_MS = 60_000;
+/// How long an issued question stays answerable. Far wider than a real agent
+/// needs; a constant, so changing it needs no redeploy.
+export const ANSWER_WINDOW_MS = 30_000;
 
 /// The longest answer `checkin` accepts. The bank is checked against it too:
 /// an option longer than this could never be answered.
