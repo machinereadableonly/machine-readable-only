@@ -73,7 +73,8 @@ The commands, however you invoke it:
 
     mro-agent whoami                        # this agent's key id
     mro-agent join   --to <0xaddress>
-    mro-agent beat   --token <id>
+    mro-agent question --token <id>         # today's question
+    mro-agent beat   --token <id> [--answer <a>]
     mro-agent status
     mro-agent ladder --token <id>           # the five Mark pairs
     mro-agent rebind --token <id>           # the call to point it at a new key

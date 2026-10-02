@@ -203,6 +203,36 @@ test("a free tool answers, and reads the caller's identity from the signature", 
   assert.deepEqual(body.tokens, []);
 });
 
+// The `answer` argument is a zod union of a string and an integer, and the
+// wrong arm is what an agent sends first. Over real MCP, because the union is
+// enforced by the server's own schema: a direct call on the handler would
+// accept anything.
+test("a wrong answer inside the window is refused, and the right one credits the day", async () => {
+  const { privateJwk, keyId } = await generateIdentity();
+  await registerKey({ origin, privateJwk });
+  const tokenId = 701;
+  const day = utcDay();
+  q.insertToken({ tokenId, keyId, owner: "0x" + "a1".repeat(20), lastDay: day - 1, mintDay: day - 1 });
+
+  const call = { origin, site: `https://${DOMAIN}`, privateJwk };
+  const asked = structured(await callTool({ ...call, name: "question", arguments: { tokenId } }));
+  assert.equal(asked.ok, true);
+
+  // The wrong answer is sent in the OTHER arm of the union, so whichever
+  // question the day picked, both arms cross the wire on every run.
+  const wrong = asked.answers ? 999_999 : "not-a-number";
+  const right = asked.answers ? asked.answers[0] : asked.range.min;
+
+  const refused = structured(await callTool({ ...call, name: "checkin", arguments: { tokenId, answer: wrong } }));
+  assert.equal(refused.reason, "invalid-answer");
+  assert.ok(refused.answerBy, "the refusal must say how long is left to send a real one");
+  assert.equal(q.getToken(tokenId).level, 1, "a refused answer must not spend the day");
+
+  const accepted = structured(await callTool({ ...call, name: "checkin", arguments: { tokenId, answer: right } }));
+  assert.equal(accepted.ok, true, JSON.stringify(accepted));
+  assert.equal(accepted.answered, true);
+});
+
 test("an unsigned request is refused at the door", async () => {
   const res = await fetch(new URL("/mcp", origin), {
     method: "POST",

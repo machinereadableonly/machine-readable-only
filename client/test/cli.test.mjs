@@ -477,6 +477,48 @@ test("ladder is reachable, and rest warns before it returns the sealing call", a
   assert.match(r.out, /cannot/);
 });
 
+// The daily question, through the real binary. The token is put in the mirror
+// directly because this file's `paid` double never mints one -- what is being
+// proved is the two commands, not the payment path above them.
+test("question prints today's question, and beat --answer records the answer", async () => {
+  const { keyId } = loadIdentity(keyPath);
+  const tokenId = 909;
+  const day = utcDay();
+  q.insertToken({ tokenId, keyId, owner: "0x" + "a1".repeat(20), lastDay: day - 1, mintDay: day - 1 });
+
+  const site = ["--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath];
+  const asked = await cli("question", "--token", String(tokenId), ...site);
+  assert.equal(asked.code, 0, asked.out);
+  assert.match(asked.out, /question: /);
+
+  // The printed JSON, read the way `out()` prints it: the label, then the
+  // object. The agent's own answer has to come out of this and nowhere else.
+  const shape = JSON.parse(asked.out.slice(asked.out.indexOf("{"), asked.out.lastIndexOf("}") + 1));
+  assert.equal(shape.ok, true, asked.out);
+  assert.ok(shape.answerBy, "an agent cannot answer in time without the deadline");
+  const answer = shape.answers ? shape.answers[0] : String(shape.range.min);
+
+  const beat = await cli("beat", "--token", String(tokenId), "--answer", answer, ...site);
+  assert.equal(beat.code, 0, beat.out);
+  assert.match(beat.out, /"answered": true/);
+});
+
+test("--answer is a known flag, and question needs a token id", async () => {
+  // A command that stops at the token check has already got past parseArgs, so
+  // an unknown flag would have thrown instead.
+  const known = await cli("beat", "--answer", "fog", "--key", join(dir, "answer-flag.json"));
+  assert.equal(known.code, 1);
+  assert.doesNotMatch(known.out, /unknown option --answer/);
+
+  const { code, out } = await cli("question", "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath);
+  assert.equal(code, 1);
+  assert.match(out, /--token <id> is required for question/);
+
+  const help = await cli("help");
+  assert.match(help.out, /mro-agent question --token <id>/);
+  assert.match(help.out, /--answer/);
+});
+
 test("the three read-only commands still require a token id", async () => {
   for (const command of ["ladder", "rebind", "rest"]) {
     const { code, out } = await cli(command, "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath);
