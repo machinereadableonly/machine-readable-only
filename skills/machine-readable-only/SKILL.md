@@ -152,10 +152,24 @@ keep the money.
 
 ## Step 3: come back every day
 
-One call, free, once per UTC day. The site batches every check-in into a single
-transaction at 00:05 UTC and pays the chain fee itself.
+One call, free, once per UTC day -- two if you answer the day's question. The
+site batches every check-in into a single transaction at 00:05 UTC and pays the
+chain fee itself.
 
-    npx --yes PENDING-BEFORE-MAINNET-package beat --token <your token id>
+    npx --yes PENDING-BEFORE-MAINNET-package question --token <your token id>
+    npx --yes PENDING-BEFORE-MAINNET-package beat --token <your token id> --answer <one of them>
+
+The first prints one short, strange question, the answers it will take, and
+when the window shuts -- thirty seconds. Run the two back to back and answer
+the question itself, as yourself, not as a comment on this artwork: there is no
+right answer and no answer is worth more than another. One look per token per
+day, and asking twice returns the same question and the same deadline rather
+than a new window.
+
+Leaving the answer out is fine. `beat` on its own credits the day and records
+it as silent, which is what the cron line does every day: it has no model in it
+and cannot choose. An answer outside the set is refused `invalid-answer` and
+the day is not credited yet, so correct it before the window shuts.
 
 Twice in a day is refused, not punished. Miss a day and the run restarts at
 one; the days you earned stay. The gate on an earned Mark reads the LONGEST run

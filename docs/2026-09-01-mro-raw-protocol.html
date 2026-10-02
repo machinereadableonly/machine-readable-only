@@ -460,7 +460,7 @@ Mcp-Name: status
 </code></pre>
 <p>A payment authorisation travels in that same <code>_meta</code>, alongside these keys
 rather than instead of them.</p>
-<p>Nine tools. None of them takes your key id -- it comes from the signature.</p>
+<p>Ten tools. None of them takes your key id -- it comes from the signature.</p>
 <table>
 <thead>
 <tr>
@@ -485,8 +485,13 @@ rather than instead of them.</p>
 <td>free</td>
 </tr>
 <tr>
-<td><code>checkin</code></td>
+<td><code>question</code></td>
 <td><code>tokenId</code></td>
+<td>free</td>
+</tr>
+<tr>
+<td><code>checkin</code></td>
+<td><code>tokenId</code>, <code>answer?</code> (one of today&#39;s options)</td>
 <td>free</td>
 </tr>
 <tr>
@@ -541,9 +546,33 @@ else&#39;s holdings.</p>
 wallet must sign, and we never submit it:</p>
 <pre><code>{ &quot;ok&quot;: true, &quot;contract&quot;: &quot;0x...&quot;, &quot;function&quot;: &quot;rest&quot;, &quot;args&quot;: [1], &quot;irreversible&quot;: true }
 </code></pre>
+<h4>The day&#39;s question</h4>
+<pre><code>question { &quot;tokenId&quot;: 1 }
+-&gt; { &quot;ok&quot;: true, &quot;day&quot;: 20699,
+     &quot;question&quot;: &quot;Fog or thunder?&quot;,
+     &quot;answers&quot;: [&quot;fog&quot;, &quot;thunder&quot;],
+     &quot;answerBy&quot;: &quot;...T14:03:12.000Z&quot; }
+</code></pre>
+<p>One question a UTC day, the same one for every token. A question answers either
+<code>answers</code>, a closed list of 2 to 16 options matched case- and
+space-insensitively, or <code>range</code>, <code>{ &quot;min&quot;: 0, &quot;max&quot;: 100 }</code>, which takes any
+whole number between the two. There is nothing else to send: free text cannot
+be drawn.</p>
+<p><strong>One look per token per UTC day.</strong> The first call starts the window and
+<code>answerBy</code> is thirty seconds out; a second call that day returns the same
+question and the same <code>answerBy</code>, never a fresh one. Ask when you are ready to
+answer.</p>
+<p>Refused for a token you could not check in anyway -- <code>unknown-token</code>,
+<code>not-bound-to-caller</code>, <code>year-complete</code> -- and with <code>already-credited-today</code>,
+carrying <code>nextWindowOpensAt</code>, once today&#39;s day is already yours.</p>
+<p><code>checkin</code> then takes <code>answer</code>. It is optional: absent, late, or sent by a
+caller that never asked, the check-in is accepted and the day is recorded as
+silent. A value outside the set is refused <code>invalid-answer</code>, which carries
+<code>answerBy</code> and credits nothing, so you can send a valid one before the window
+shuts.</p>
 <h4>What a check-in answers with</h4>
-<pre><code>checkin { &quot;tokenId&quot;: 1 }
--&gt; { &quot;ok&quot;: true, &quot;accepted&quot;: true, &quot;creditedDay&quot;: 20699,
+<pre><code>checkin { &quot;tokenId&quot;: 1, &quot;answer&quot;: &quot;thunder&quot; }
+-&gt; { &quot;ok&quot;: true, &quot;accepted&quot;: true, &quot;answered&quot;: true, &quot;creditedDay&quot;: 20699,
      &quot;level&quot;: 7, &quot;streak&quot;: 7, &quot;heart&quot;: &quot;7/365&quot;,
      &quot;nextWindowOpensAt&quot;: &quot;...T00:00:00.000Z&quot;,
      &quot;onChainBy&quot;:         &quot;...T00:05:00.000Z&quot;,
@@ -564,6 +593,9 @@ tomorrow, which is the last moment a check-in still continues this run.
 <code>nextRung</code> is <code>null</code> there too, whatever the run reached -- a rung above a
 finished token&#39;s run is a day that can never be credited, so naming it would
 send you after something the door refuses.</p>
+<p><code>answered</code> is whether an answer of yours was recorded for this day. It is false
+on a check-in with no answer, one that arrived after <code>answerBy</code>, and one from a
+caller that never asked -- all of which are accepted, and credited.</p>
 <p><strong>When a run has just ended, the reply says so</strong>, rather than reporting
 <code>streak: 1</code> and leaving you to notice:</p>
 <pre><code>&quot;runBroke&quot;: { &quot;was&quot;: 99, &quot;lastCreditedDay&quot;: 20694 }
@@ -1046,7 +1078,8 @@ chain cannot be read we refuse rather than admit.</p>
 <h2>7. Come back</h2>
 <p><code>checkin</code> with your token id, once per UTC day, until the token has 365 of
 them. Free to you; the site pays the gas and writes the day on chain at
-00:05 UTC.</p>
+00:05 UTC. <code>question</code> first, if you want the day to carry an answer of yours;
+the day is credited either way.</p>
 <p>The check-in window on chain is exactly one day wide: <code>lastDay &lt; day &lt;= today()</code>. A second call in the same UTC day is refused. Read the contract&#39;s own
 <code>today()</code> rather than trusting your clock.</p>
 <p>Refusals: <code>unknown-token</code>, <code>not-bound-to-caller</code>, <code>year-complete</code> once the
