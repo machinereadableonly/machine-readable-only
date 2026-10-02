@@ -121,22 +121,18 @@ else
     ok "wrote $ENV_FILE with the rehearsal token $REHEARSAL_TOKEN"
 fi
 
-CURRENT_TOKEN="$(grep -E '^MRO_SEED_TOKEN=' "$ENV_FILE" | head -1 | cut -d= -f2-)"
-if ! grep -qE '^MRO_SEED_NOT_BEFORE=' "$ENV_FILE"; then
-    if [ "$CURRENT_TOKEN" = "$REHEARSAL_TOKEN" ]; then
-        printf '\nMRO_SEED_NOT_BEFORE=%s\n' "$REHEARSAL_NOT_BEFORE" >> "$ENV_FILE"
-        ok "added MRO_SEED_NOT_BEFORE=$REHEARSAL_NOT_BEFORE to $ENV_FILE (rehearsal)"
-    else
-        bad "MRO_SEED_NOT_BEFORE is missing from $ENV_FILE: set it to opening day + 2 (DEPLOY.md 9c)"
-    fi
+CURRENT_TOKEN="$(grep -E '^MRO_SEED_TOKEN=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
+if [ "$CURRENT_TOKEN" = "$REHEARSAL_TOKEN" ] && ! grep -qE '^MRO_SEED_NOT_BEFORE=' "$ENV_FILE"; then
+    printf '\nMRO_SEED_NOT_BEFORE=%s\n' "$REHEARSAL_NOT_BEFORE" >> "$ENV_FILE"
+    ok "added MRO_SEED_NOT_BEFORE=$REHEARSAL_NOT_BEFORE to $ENV_FILE (rehearsal)"
 fi
 NOT_BEFORE="$(grep -E '^MRO_SEED_NOT_BEFORE=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
-if [ "$CURRENT_TOKEN" != "$REHEARSAL_TOKEN" ]; then
-    if [ "$NOT_BEFORE" = "$REHEARSAL_NOT_BEFORE" ] || [ "$(date -u -d "$NOT_BEFORE" +%F 2>/dev/null)" != "$NOT_BEFORE" ]; then
-        bad "MRO_SEED_NOT_BEFORE is '$NOT_BEFORE' for a real token: set it to opening day + 2 (DEPLOY.md 9c)"
-    else
-        ok "token $CURRENT_TOKEN checks in from $NOT_BEFORE (UTC)"
-    fi
+# A real token with a bad day must never reach step 7's start: that run would
+# be a real check-in before the day, and it cannot be undone.
+START_SAFE=1
+if ! bash "$REPO_WARDEN/deploy/seed-config-check.sh" "$ENV_FILE"; then
+    fail=1
+    START_SAFE=0
 fi
 
 step "4. the rotation config"
@@ -193,15 +189,17 @@ step "7. THE REHEARSAL -- does a refusal actually reach systemd?"
 # breaks the run is caught here rather than at 12:00 UTC in a log nobody reads.
 # The env file currently names a token that does not exist, which is exactly the
 # refusal being rehearsed.
-systemctl --user reset-failed mro-seed.service 2>/dev/null || true
-systemctl --user start mro-seed.service 2>/dev/null || true
+if [ "$START_SAFE" = 1 ]; then
+    systemctl --user reset-failed mro-seed.service 2>/dev/null || true
+    systemctl --user start mro-seed.service 2>/dev/null || true
+    RESULT="$(systemctl --user show mro-seed.service -p Result --value)"
+    STATUS="$(systemctl --user show mro-seed.service -p ExecMainStatus --value)"
+    echo "   Result=$RESULT  ExecMainStatus=$STATUS  (token $CURRENT_TOKEN)"
+fi
 
-RESULT="$(systemctl --user show mro-seed.service -p Result --value)"
-STATUS="$(systemctl --user show mro-seed.service -p ExecMainStatus --value)"
-
-echo "   Result=$RESULT  ExecMainStatus=$STATUS  (token $CURRENT_TOKEN)"
-
-if [ "$CURRENT_TOKEN" = "$REHEARSAL_TOKEN" ]; then
+if [ "$START_SAFE" != 1 ]; then
+    bad "NOT started: step 3's config check failed, and a real token with a bad day would check in for real. Fix $ENV_FILE first"
+elif [ "$CURRENT_TOKEN" = "$REHEARSAL_TOKEN" ]; then
     if [ "$RESULT" = "exit-code" ] && [ "$STATUS" = "2" ]; then
         ok "a refusal by the site reaches systemd as a FAILED unit (status 2)"
     elif [ "$STATUS" = "1" ]; then

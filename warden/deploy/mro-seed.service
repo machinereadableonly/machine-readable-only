@@ -50,8 +50,10 @@ EnvironmentFile=%h/.mro/seed.env
 # The identity lives OUTSIDE the worktree, and in its own file rather than the
 # client's default: a scratch identity created by a test or a manual run must
 # never be able to become, or destroy, the key token #1 is bound to.
-# --not-before stays LAST: an empty value is refused as not a day, and a
-# dropped one as a flag with no value. Either way the unit fails.
+#
+# ${} always yields exactly one argument, empty when the key is missing, and the
+# client refuses an empty day. Kept LAST so a $VAR form, which drops an empty
+# value, would still fail as a flag with no value.
 ExecStart=%h/.nvm/versions/node/v24.14.1/bin/node src/cli.mjs beat --site ${MRO_SEED_SITE} --token ${MRO_SEED_TOKEN} --key %h/.mro/seed-identity.jwk.json --not-before ${MRO_SEED_NOT_BEFORE}
 
 # One check-in is a challenge, a signed request and a tool call. Two minutes is
