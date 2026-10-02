@@ -1,7 +1,8 @@
 # Machine Readable Only -- The Daily Question
 
-Design record, 2026-10-02. **DRAFT, awaiting the operator's review.** Nothing
-is built.
+Design record, 2026-10-02. **APPROVED by the operator 2026-10-02.** Nothing is
+built yet: it is folded into Plans B and A of
+`docs/plans/2026-09-30-mro-rulings-roadmap.md`.
 
 Brainstormed with the operator on 2026-10-02. Extends
 `2026-09-20-mro-finisher-marks-design.md`: it changes what the finisher's digit

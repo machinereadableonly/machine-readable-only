@@ -98,6 +98,12 @@ behind that agent only when k is at least (O - M) + 1, which means its first
 check-in after the mint must be on <strong>day O + 2, two days after the door opens</strong>
 -- whatever the head start. Resuming the day after opening, as first worded,
 leaves an exact tie that token 1 wins on its id. The plan builds O + 2.</p>
+<h2>The daily question (Q), added 2026-10-02</h2>
+<p>Approved by the operator the same day:
+<code>docs/specs/2026-10-02-mro-daily-question-design.md</code>. It needs no plan of its
+own; its work splits along the seams below and is marked <strong>Q</strong> in the table.
+B comes first because the window must be measured before A fixes anything on
+chain.</p>
 <h2>Five plans, in this order</h2>
 <p>The rulings touch five separate parts of the system, so each gets its own plan,
 its own tests and its own review. Small, independent work goes first; the one
@@ -120,8 +126,8 @@ own user comes last because it relocates the thing the redeploy exercises.</p>
 </tr>
 <tr>
 <td><strong>B. Door and client</strong></td>
-<td>4, 5</td>
-<td><code>challenge-response</code> becomes a required signed component, so only the key holder can answer. The door builds a <code>&quot;signature-agent&quot;;key=</code> base line from the named dictionary member (RFC 9421 section 2.1.2), with a test signed from a hand-built base. <code>mro-agent</code>, the raw-protocol doc, <code>refusals.md</code> and SKILL.md change in the same plan.</td>
+<td>4, 5, Q</td>
+<td><code>challenge-response</code> becomes a required signed component, so only the key holder can answer. The door builds a <code>&quot;signature-agent&quot;;key=</code> base line from the named dictionary member (RFC 9421 section 2.1.2), with a test signed from a hand-built base. <code>mro-agent</code>, the raw-protocol doc, <code>refusals.md</code> and SKILL.md change in the same plan. <strong>Daily question (Q):</strong> the <code>question</code> tool (one look per token per day), <code>checkin</code>&#39;s optional <code>answer</code>, the mirror&#39;s <code>questions</code> table, the private question bank and its loader, <code>mro-agent question</code> / <code>beat --answer</code>, the agent-facing copy, and a MEASURED answer window.</td>
 <td>No</td>
 </tr>
 <tr>
@@ -132,14 +138,14 @@ own user comes last because it relocates the thing the redeploy exercises.</p>
 </tr>
 <tr>
 <td><strong>A. The contract redeploy</strong></td>
-<td>3, 2</td>
-<td><code>seed</code> takes <code>expectedKeyId</code>; contractURI (ERC-7572) and a per-token <code>external_url</code>; <code>freezeRenderer</code> (built, not called); <code>bestRunOf</code>; the stored rest day; a <code>DEPLOY_DAY</code> floor; a 30-day lateness floor on check-ins. The Warden and Clock follow: the Clock passes the key to <code>seed</code>, and drops and flags a credit older than 30 days instead of letting it revert a whole batch. Then the size gate, a strict-limit anvil deploy, and a Base Sepolia redeploy with <code>adopt-deployment.sh</code>. <code>applyMark</code> is untouched (ruling 2).</td>
+<td>3, 2, Q</td>
+<td><code>seed</code> takes <code>expectedKeyId</code>; contractURI (ERC-7572) and a per-token <code>external_url</code>; <code>freezeRenderer</code> (built, not called); <code>bestRunOf</code>; the stored rest day; a <code>DEPLOY_DAY</code> floor; a 30-day lateness floor on check-ins. The Warden and Clock follow: the Clock passes the key to <code>seed</code>, and drops and flags a credit older than 30 days instead of letting it revert a whole batch. Then the size gate, a strict-limit anvil deploy, and a Base Sepolia redeploy with <code>adopt-deployment.sh</code>. <code>applyMark</code> is untouched (ruling 2). <strong>Daily question (Q):</strong> 365 answer bits per token, <code>batchCheckIn</code>&#39;s answer bits and key reveals, <code>setSplitAnchor</code>, the renderer&#39;s three answer edges, the Clock&#39;s split and reveal, <code>mro-agent verify-border</code>, and re-pinned size, gas and decode gates.</td>
 <td><strong>Yes, Sepolia</strong></td>
 </tr>
 <tr>
 <td><strong>E. Key custody</strong></td>
 <td>1</td>
-<td>The Clock under its own Unix user: its own settings file split from <code>warden/.env</code>, a code copy the Warden cannot write, a shared group for the mirror database and its SQLite side files, new unit and log paths. The owner handover right after deploy (Ownable2Step), and <code>SwapRenderer</code> / <code>SetClockWarden</code> reworked to sign through the chosen device. DEPLOY.md 9b rewritten for a Safe-or-Ledger owner.</td>
+<td>The Clock under its own Unix user: its own settings file split from <code>warden/.env</code>, a code copy the Warden cannot write, a shared group for the mirror database and its SQLite side files, new unit and log paths. The owner handover right after deploy (Ownable2Step), and <code>SwapRenderer</code> / <code>SetClockWarden</code> reworked to sign through the chosen device. DEPLOY.md 9b rewritten for a Safe-or-Ledger owner. <strong>Daily question (Q):</strong> the split seed lives with the Clock key.</td>
 <td>No</td>
 </tr>
 </tbody></table>
