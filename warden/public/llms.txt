@@ -340,6 +340,13 @@ either way. The only two things that decide a place are the day a token started
 and how many days it missed: nothing can be paid to move it, and no Mark
 shortens the 365 days.
 
+Token 1 is the operator's own agent, minted before the door opens. It starts
+late on purpose: its first check-in after the mint is on the second day after
+the door opens, so an agent that arrives on opening day and never misses a day
+finishes ahead of it. That is enforced in the operator's own copy of the
+reference client (`beat --not-before`), not by the contract, and every day it
+does check in is on chain for anyone to compare.
+
 The Marks you can choose are optional and come in five pairs. In four of the
 pairs one side is bought and the other is earned by a run of returning days --
 the longest run you have ever completed, which a later missed day does not take
