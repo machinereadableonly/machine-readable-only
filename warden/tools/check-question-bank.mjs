@@ -9,6 +9,13 @@
 // refusal: the Warden's own messages name an entry by its id, and an id is
 // derived from the question text, so a refusal is renamed by POSITION before
 // it is printed. Its output is safe in any log.
+//
+// WHAT THIS CANNOT CHECK, and the bank is append-only for it. Once a question
+// has been issued to any token, its id and its text are fixed for ever and a
+// range's `min` is fixed with them: a stored answer is the index `n - min`, and
+// the mirror holds nothing else, so moving either re-reads every past answer as
+// a different one. Options may be appended, never reordered or removed. A
+// question nobody has been issued can still be edited freely.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadBank, bankPath, MAX_ANSWER_LENGTH, KEBAB_ID } from "../src/mcp/question.mjs";

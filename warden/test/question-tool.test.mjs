@@ -14,11 +14,12 @@ import { DAY_MS } from "../src/day.mjs";
 
 const BANK = JSON.parse(readFileSync(new URL("./fixtures/question-bank.json", import.meta.url), "utf8"));
 
-function setup({ lastDay = 100, level = 1, keyId = "k1" } = {}) {
+function setup({ lastDay = 100, level = 1, keyId = "k1", resting = false } = {}) {
   const db = openDb(":memory:");
   const q = queries(db);
   q.insertToken({ tokenId: 1, keyId, owner: "0xabc", lastDay, mintDay: 100 });
   if (level !== 1) db.prepare("UPDATE tokens SET level = ? WHERE tokenId = 1").run(level);
+  if (resting) q.setResting(1);
   let clock = 1_000_000;
   const tool = makeQuestionTool({ q, bank: BANK, challengeSecret: "s", today: () => 101, now: () => clock });
   return { q, tool, tick: (ms) => { clock += ms; } };
@@ -42,10 +43,18 @@ test("a second look the same day is the same question and the same window", asyn
   assert.deepEqual(second, first);
 });
 
-test("refusals: unbound, unknown, already credited today, year complete", async () => {
+test("refusals: unbound, unknown, resting, already credited today, year complete", async () => {
   assert.equal((await setup({ keyId: "other" }).tool.handler({ tokenId: 1 }, { keyId: "k1" })).reason, "not-bound-to-caller");
   assert.equal((await setup().tool.handler({ tokenId: 9 }, { keyId: "k1" })).reason, "unknown-token");
   assert.equal((await setup({ level: 365 }).tool.handler({ tokenId: 1 }, { keyId: "k1" })).reason, "year-complete");
+
+  // A sealed token cannot be credited again, so a look would be spent on a day
+  // it can never answer for. The row is also left untouched.
+  const rested = setup({ resting: true });
+  const r = await rested.tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "resting");
+  assert.equal(rested.q.getQuestion(1, 101), undefined, "no question is issued to a resting token");
 
   // The same shape checkin answers with, so a client has one rule for it.
   const credited = await setup({ lastDay: 101 }).tool.handler({ tokenId: 1 }, { keyId: "k1" });

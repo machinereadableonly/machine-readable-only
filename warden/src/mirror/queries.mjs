@@ -1119,6 +1119,9 @@ export function queries(db) {
     /// Record the answer to a question already issued. No transaction of its
     /// own: this is called inside the checkin credit transaction, so the answer
     /// and the day it belongs to land or roll back together.
+    ///
+    /// Returns the run result, because a row already answered takes nothing and
+    /// only `changes` tells the caller whether its answer was the one stored.
     recordAnswer: (tokenId, day, answer, answeredAt) =>
       s.recordAnswer.run(answer, answeredAt, tokenId, day),
 

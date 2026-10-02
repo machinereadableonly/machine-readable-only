@@ -719,7 +719,23 @@ two it was.
    `MRO_CONTRACT_ADDRESS` in the configuration file, back up `state.db`, and
    restart.
 
-6. **Verify through Cloudflare, not against localhost**, exactly as section 9
+6. **Snapshot the mirror, then clear its chain rows.**
+
+   ```
+   cd warden
+   node tools/mirror-snapshot.mjs ~/backups/state.db.pre-reset.$(date -u +%Y%m%dT%H%M%SZ)
+   node tools/mirror-reset-chain.mjs state.db --yes
+   ```
+
+   It empties `mark_orders`, `credits`, `mints`, `questions` and `tokens`, and
+   KEEPS `keys`, which are door state rather than chain state. Every one of
+   those rows is keyed on an id the new pair restarts at 1: left in place, a
+   returning agent is told `already-minted` for a token this contract has never
+   held (found by a refused mint on 2026-09-22), and a kept `questions` row
+   hands the new token 1 the old one's question with an answer window that
+   closed long ago.
+
+7. **Verify through Cloudflare, not against localhost**, exactly as section 9
    says. Then check all four suites and commit.
 
 ### What a redeploy does NOT carry over

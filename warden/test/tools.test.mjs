@@ -462,6 +462,23 @@ test("an answer to a question the bank no longer holds credits the day as silent
   assert.equal(q.getQuestion(1, 101).answer, null);
 });
 
+// `answered` is read back from the UPDATE, not inferred from having graded an
+// answer: recordAnswer writes only where answeredAt IS NULL, so a row already
+// answered takes nothing and the reply must not claim the new value.
+test("an answer a row already holds is reported unanswered and never overwritten", async () => {
+  const { q } = withQuestion();
+  assert.equal(q.recordAnswer(1, 101, 0, 2_000).changes, 1, "the row must start answered");
+
+  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => 5_000 });
+  const r = await tool.handler({ tokenId: 1, answer: "Thunder" }, { keyId: "k1" });
+  assert.equal(r.accepted, true, "the day is still credited: an answer never costs it");
+  assert.equal(r.answered, false);
+
+  const row = q.getQuestion(1, 101);
+  assert.equal(row.answer, 0, "the stored answer is the first one");
+  assert.equal(row.answeredAt, 2_000);
+});
+
 test("no answer at all is accepted and says so", async () => {
   const { q } = withQuestion();
   const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => 5_000 });

@@ -28,6 +28,12 @@ export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now
       // Mirror only: a stale binding costs a look, never a credit; checkin
       // re-checks the chain.
       if (token.keyId !== ctx.keyId) return { ok: false, reason: "not-bound-to-caller" };
+      // A sealed token can never be credited again, so issuing it a question
+      // would spend its one look on a day it cannot answer for. The mirror's
+      // flag is one-way (set by reconcile and by the gates, never cleared), so
+      // reading it here costs no eth_call on a free tool; a rest the mirror has
+      // not learned yet is caught by checkin, which reads the chain.
+      if (token.resting) return { ok: false, reason: "resting" };
       if (token.level >= FINISH_LEVEL) return { ok: false, reason: "year-complete" };
       const day = today();
       if (day <= token.lastDay) {

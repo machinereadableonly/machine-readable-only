@@ -251,12 +251,17 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
       // fallback is unreachable through the door and is kept only so a
       // check-in can never be refused over bookkeeping; if it ever fires,
       // empty strings in credits.sigHash are the symptom to look for.
+      // `recorded` is read back from the UPDATE rather than assumed from
+      // `answerIdx`: recordAnswer writes only where `answeredAt IS NULL`, so a
+      // row already answered takes nothing, and `answered: true` would then
+      // claim a value the mirror does not hold.
+      let recorded = false;
       const credited = q.transact(() => {
         if (!q.insertCredit(tokenId, day, ctx.sigHash ?? "")) return false;
         q.creditDay(tokenId, day, level, streak);
         // Inside the transaction and only once the credit was new, so the
         // answer and the day it belongs to land or roll back together.
-        if (answerIdx !== null) q.recordAnswer(tokenId, day, answerIdx, at);
+        recorded = answerIdx !== null && q.recordAnswer(tokenId, day, answerIdx, at).changes === 1;
         return true;
       });
 
@@ -317,7 +322,7 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
         level,
         streak,
         heart: `${Math.min(level, FINISH_LEVEL)}/${FINISH_LEVEL}`,
-        answered: answerIdx !== null,
+        answered: recorded,
         nextWindowOpensAt: finished ? null : new Date((day + 1) * DAY_MS).toISOString(),
         onChainBy: onChainBy(day),
         streakDeadline,
