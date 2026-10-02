@@ -24,7 +24,7 @@
 // the exact version web-bot-auth itself resolves.
 import { verify as httpsigVerify } from "http-message-sig";
 import { verifierFromJWK } from "web-bot-auth/crypto";
-import { parseDictionary } from "structured-headers";
+import { parseDictionary, serializeItem } from "structured-headers";
 import { createHash } from "node:crypto";
 
 /**
@@ -303,6 +303,44 @@ export function coveredComponents(base) {
 }
 
 /**
+ * The request as the verifier must see it when a component carries `;key=`.
+ *
+ * RFC 9421 2.1.2: such a component signs ONE dictionary member, serialised
+ * "on the member_value and its parameters, not including the Dictionary key
+ * itself". http-message-sig 0.2.0 builds that base line from the WHOLE header
+ * instead, so a conforming signer is refused `signature` -- which sends a
+ * correct implementer to check its key and its origin, the two things that
+ * were right. Replacing the header with the selected member makes the
+ * library's line the RFC's line.
+ *
+ * Parsed with the same RFC 8941 parser as the component list, never sliced:
+ * every bypass this door has had came from treating a structured field as
+ * text. Throws when the selection is ambiguous or unresolvable, because
+ * guessing which member was meant is the bypass.
+ */
+export function keyedMessage(request) {
+  const [first] = parseDictionary(headerOf(request, "signature-input") ?? "").values();
+  const members = Array.isArray(first?.[0]) ? first[0] : [];
+  const agents = members.filter(([name]) => name === "signature-agent");
+  const keyed = agents.filter(([, params]) => params.has("key"));
+  if (keyed.length === 0) return request;
+  // Two lines for one header name, with two different values: which one the
+  // door trusted afterwards would be a guess.
+  if (agents.length > 1) throw new Error("signature-agent covered more than once");
+  const key = keyed[0][1].get("key");
+  if (typeof key !== "string") throw new Error("signature-agent key is not a string");
+  const member = parseDictionary(headerOf(request, "signature-agent") ?? "").get(key);
+  if (!member) throw new Error("signature-agent has no member for that key");
+  const headers = {};
+  if (typeof request.headers?.forEach === "function") request.headers.forEach((v, k) => { headers[k] = v; });
+  else Object.assign(headers, request.headers);
+  // Dropped by whatever case it arrived in, so the replacement is the only one.
+  for (const k of Object.keys(headers)) if (k.toLowerCase() === "signature-agent") delete headers[k];
+  headers["signature-agent"] = serializeItem(member);
+  return { ...request, headers };
+}
+
+/**
  * Verify one request.
  *
  * `lookupKey(keyId, signatureAgent)` returns the public JWK or null. The key id
@@ -320,8 +358,17 @@ export async function verifyRequest(request, lookupKey) {
   let verifiedSigHash = null;
   let verifiedCovered = null;
 
+  // The URL lookup above needs the dictionary as it arrived; the VERIFIER needs
+  // the member the signature selected. See keyedMessage.
+  let message;
   try {
-    await verifyWebBotAuth(request, async (data, signature, params) => {
+    message = keyedMessage(request);
+  } catch {
+    return { ok: false, reason: "components" };
+  }
+
+  try {
+    await verifyWebBotAuth(message, async (data, signature, params) => {
       const covered = coveredComponents(data);
       if (!covered) {
         reason = "components";
