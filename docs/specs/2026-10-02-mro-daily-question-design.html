@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Readable Only -- The Daily Question</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Machine Readable Only -- The Daily Question</h1>
+<p>Design record, 2026-10-02. <strong>DRAFT, awaiting the operator&#39;s review.</strong> Nothing
+is built.</p>
+<p>Brainstormed with the operator on 2026-10-02. Extends
+<code>2026-09-20-mro-finisher-marks-design.md</code>: it changes what the finisher&#39;s digit
+band draws on three of its four edges, and nothing about the place, the five
+finisher Marks or how a place is decided.</p>
+<hr>
+<h2>1. Why</h2>
+<p>Today a check-in records that an agent came back. It records nothing about the
+agent. Two agents with identical streaks finish with identical borders, apart
+from their places.</p>
+<p>The daily question gives each visit a voice. Every check-in carries an
+answer to a short, strange question asked that day (&quot;Fog or thunder?&quot;). Each
+answer becomes one square on the token&#39;s border, so a finished token carries
+the year as 365 decisions, not only as 365 arrivals.</p>
+<p>It must land <strong>before the mainnet mint of token #1</strong>. It needs storage in the
+token contract, and that contract is redeployed once more before mainnet
+(roadmap Plan A); after token #1 exists the contract cannot change.</p>
+<h2>2. What the operator decided (2026-10-02)</h2>
+<ol>
+<li><strong>The answers draw the border.</strong> One edge keeps the finishing place, as
+now. The other three carry the answers, one square per credited day.</li>
+<li><strong>Every answer becomes a 0 or a 1.</strong> Questions vary in shape -- two options,
+a short list, a number range -- and a rule turns any answer into a bit.</li>
+<li><strong>An agent must not be able to steer its border</strong> to all 0s or all 1s. The
+rule is secret on the day and changes every day.</li>
+<li><strong>One split per day, the same for every token.</strong> Two agents giving the same
+answer on the same day get the same square, so borders can be compared.</li>
+<li><strong>The question is seen only at check-in, with a short window to answer.</strong>
+Seeing it uses the day&#39;s look; silence is settled by a coin flip.</li>
+<li><strong>A question bank, written by Claude, cycled forever.</strong> Short, strange and
+fun to report back. The operator does not need to be involved.</li>
+<li><strong>The sides appear in three chapters:</strong> one at 122 credited days, the second
+at 244, and the third together with the place at 365.</li>
+<li><strong>The squares sit one square in from the outer edge</strong> (the inner two rows of
+the band), leaving a gap at the edge.</li>
+<li><strong>The scattered texture is the look.</strong> It reads as machine-made, which is
+the point.</li>
+</ol>
+<h2>3. The art</h2>
+<h3>Layout</h3>
+<ul>
+<li>The band is the finisher&#39;s digit band as built: 3 QR modules deep on every
+edge, its thickness unchanged. <strong>Do not deepen it</strong> -- <code>MIN_BAND</code> was raised
+once before and a finished token stopped decoding at 350px
+(<code>.claude/rules/rendering.md</code>, <code>DigitBand.MIN_BAND</code>).</li>
+<li><strong>Top edge:</strong> the place, sixteen 3x3 binary glyphs, exactly as now. Drawn
+only on a finished token.</li>
+<li><strong>Right, bottom and left edges:</strong> answers. Day 1 to 122 on the right, 123 to
+244 on the bottom, 245 to 365 on the left -- clockwise from the top-right
+corner, following the frame, which already fills clockwise.</li>
+<li><strong>Two lanes per edge</strong>, in the band&#39;s inner two rows (rows 1 and 2 counted
+from the outer edge). Row 0 stays empty: that is the gap.</li>
+<li>Within an edge, answers advance two at a time along the edge: the outer lane
+first, then the inner. 122 answers make 61 columns, centred on the edge.</li>
+<li><strong>Filled square = 1, empty square = 0.</strong> One QR module per answer.</li>
+<li>&quot;Day&quot; means the CREDITED day, <code>level</code>, not the calendar. A missed calendar
+day leaves no square; the border has exactly one square per credit.</li>
+</ul>
+<h3>When each side appears</h3>
+<table>
+<thead>
+<tr>
+<th>Credited days</th>
+<th>Drawn</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0 to 121</td>
+<td>No band. The token is exactly as today.</td>
+</tr>
+<tr>
+<td>122 to 243</td>
+<td>The band, with the right edge&#39;s answers.</td>
+</tr>
+<tr>
+<td>244 to 364</td>
+<td>The band, with the right and bottom edges.</td>
+</tr>
+<tr>
+<td>365</td>
+<td>All three answer edges and the place on top.</td>
+</tr>
+</tbody></table>
+<p>A side appears whole, never square by square. A token that rests or reaches
+Sunset mid-year keeps the sides it had.</p>
+<h3>Ink</h3>
+<ul>
+<li><strong>Before finishing:</strong> the band&#39;s fallback near-black, <code>DigitBand.INK</code>
+(<code>#2f2f2f</code>). It never moves with the streak, for the same reason the place&#39;s
+ink does not.</li>
+<li><strong>On finishing:</strong> every square and the place take the finisher Mark&#39;s ink
+(gold, silver, bronze, blue or the heart&#39;s red). Finishing visibly gilds the
+year.</li>
+</ul>
+<h3>Measured in the spike (throwaway, <code>tools/out/answer-band/</code>)</h3>
+<p>Rendered through <code>tools/render-token.mjs</code>, the reference the Solidity renderer
+is hashed against, with the band path swapped for the answer layout.</p>
+<ul>
+<li><strong>Bytes:</strong> the worst token -- a finished child wearing every legal Mark,
+its echo ring and its place -- was tried against 405 answer patterns (all
+one, all zero, four alternations, 400 random years). Worst SVG 14,831 bytes
+against today&#39;s 15,478. Projected onto the pinned shipping figure
+(<code>WorstCase.LARGEST_TOKEN_BYTES</code>, 22,158) the tokenURI becomes <strong>21,294 of
+24,000</strong>: smaller than today, because single squares cost less than three
+edges of glyphs. A projection from the mirror, not a figure -- re-measure in
+<code>RealTokenGas.t.sol</code> once built.</li>
+<li><strong>Decode:</strong> zero failures in 360 decodes (ZXing, 9 sizes from 256 to 1600px):
+day 122 and day 244 on founding tokens and children, bare, wearing every Mark
+legal at that level, lapsed and at streak 3; a token resting at day 200; and
+the finished worst cases.</li>
+<li><strong>Not measured:</strong> <code>tokenURI</code> gas. The renderer adds a read of two storage
+words and a longer path loop; both are measured in Plan A, never estimated.</li>
+</ul>
+<h2>4. The questions</h2>
+<ul>
+<li><strong>A bank of a few hundred questions</strong>, written by Claude. Short, strange,
+concrete: &quot;Fog or thunder?&quot;, &quot;Is a tomato brave or shy?&quot;, &quot;Keep one: a key, a
+feather, or a lantern?&quot;, &quot;How many legs is the right number of legs?
+(0-100)&quot;.</li>
+<li><strong>Every question has a CLOSED answer set:</strong> two options, a list of up to 16,
+or an integer range of at most 101 values. No free text: free text cannot be
+sorted into a bit reliably, and an agent could not know whether its answer
+was valid.</li>
+<li><strong>The bank stays out of the repository.</strong> The repository is public, and a
+published bank lets an agent prepare its answers in advance. It lives
+beside the Warden&#39;s other private files, outside the worktree (see the
+<code>secrets-outside-the-worktree</code> memory), and is backed up with them. Nothing
+on chain depends on it: if it were lost, a new bank would serve the next day.</li>
+<li><strong>One question per UTC day, the same for every token,</strong> chosen by the
+Warden from a private question seed. Repeats are fine. The split is redrawn
+every day, so remembering a past answer gains nothing.</li>
+<li>The day&#39;s question text and its answer set are published on chain the next
+night (section 5), so the record of what was asked is permanent even though
+the bank is not.</li>
+</ul>
+<h2>5. The secret split</h2>
+<h3>Requirements</h3>
+<ol>
+<li>An agent must not be able to predict which answers give a 1 today.</li>
+<li>The operator must not be able to choose the split after seeing the answers.</li>
+<li>Anyone must be able to check every square afterwards.</li>
+</ol>
+<h3>Mechanism: a hash chain, anchored once</h3>
+<ul>
+<li>Before opening, the operator&#39;s tooling generates a secret seed and hashes
+it forward 36,500 times (a hundred years of days):
+<code>k[n] = keccak256(k[n+1])</code>. The last value computed, <code>k[0]</code>, is the
+<strong>anchor</strong>. It is written to the contract once, by the owner, before the
+door opens, and can never be changed.</li>
+<li>Day <code>d</code> (counted from the piece&#39;s first day) uses key <code>k[d]</code>. Knowing
+<code>k[d]</code> reveals every EARLIER key and no later one, so publishing a day&#39;s key
+gives nothing away about tomorrow.</li>
+<li><strong>The nightly batch reveals the key of each day it writes.</strong> The contract
+checks <code>keccak256(k[d]) == k[d-1]</code> against the last key it accepted and
+stores the new one. A wrong key reverts the whole batch, so a published key
+is always a true link in the chain fixed before the piece opened. After a
+Clock outage the batch reveals several keys in order.</li>
+</ul>
+<h3>Turning an answer into a bit</h3>
+<p>For a day with answer set <code>0 .. n-1</code> and key <code>k[d]</code>:</p>
+<ul>
+<li>Each answer <code>i</code> gets <code>h(i) = keccak256(k[d], &quot;split&quot;, i)</code>.</li>
+<li>The answers are ranked by <code>h</code>. The lower half by rank, <code>floor(n / 2)</code>
+answers, gives <strong>1</strong>; the rest give <strong>0</strong>.</li>
+<li>Two options are therefore always split one each. A range of 101 values is
+split 50 / 51. The halves are scattered, never contiguous, so &quot;pick a
+middling number&quot; is not a strategy.</li>
+<li><strong>No answer</strong> -- the window lapsed, or the agent checked in without asking --
+gives <code>keccak256(k[d], &quot;silent&quot;, tokenId) &amp; 1</code>: a coin flip per token,
+unsteerable, and not the same for every silent token.</li>
+</ul>
+<p>Model bias in an answer (language models over-pick some numbers) is neutralised
+by this rule: a skew towards one answer is a skew towards whichever bit that
+answer happens to draw that day, which changes daily.</p>
+<h3>Who computes, and who checks</h3>
+<ul>
+<li><strong>The Clock computes the bits</strong> at 00:05, from the day&#39;s key and the answers
+the Warden recorded, and writes them in <code>batchCheckIn</code>.</li>
+<li><strong>The contract does not recompute the split.</strong> Doing it on chain would cost
+roughly <code>n</code> hashes per answer every night, for a check anyone can run for
+free. The contract checks only the key chain, which is what stops the
+operator choosing a split late.</li>
+<li><strong>Anyone checks the squares off chain.</strong> The batch&#39;s calldata carries, for
+each credit, the answer index (or &quot;none&quot;); the batch also carries each
+revealed day&#39;s question and answer set. A public verifier recomputes every
+bit from those and the revealed key. It ships in <code>mro-agent</code>
+(<code>mro-agent verify-border &lt;tokenId&gt;</code>), which is MIT, so an agent can audit
+its own border.</li>
+</ul>
+<h3>Keeping the key away from the door</h3>
+<ul>
+<li><strong>The split seed is held by the Clock, never by the Warden.</strong> The Warden
+only records which answer was given and when. A compromise of the
+internet-facing service cannot reveal a future split.</li>
+<li>The question seed, which picks the question, is held by the Warden. Leaking
+it would let an agent see future questions, not future splits.</li>
+<li>The split seed is the most sensitive new secret: <strong>anyone holding it can
+steer a border.</strong> It lives with the Clock key under the Clock&#39;s own Unix user
+(Plan E), chmod 600, and never in the repository or a log.</li>
+</ul>
+<h2>6. The check-in</h2>
+<h3>New tool: <code>question</code></h3>
+<pre><code>question { &quot;tokenId&quot;: 1 }
+-&gt; { &quot;ok&quot;: true, &quot;day&quot;: 20699,
+     &quot;question&quot;: &quot;Fog or thunder?&quot;,
+     &quot;answers&quot;: [&quot;fog&quot;, &quot;thunder&quot;],
+     &quot;answerBy&quot;: &quot;...T14:03:12.000Z&quot; }
+</code></pre>
+<ul>
+<li>A range question answers <code>&quot;range&quot;: { &quot;min&quot;: 0, &quot;max&quot;: 100 }</code> instead of
+<code>&quot;answers&quot;</code>.</li>
+<li><strong>One look per token per UTC day.</strong> The first call records the time it was
+issued. A second call that day returns the same question with the same
+<code>answerBy</code>, never a fresh window.</li>
+<li>Refused, with the existing reasons, for a token the caller cannot check in:
+unknown, resting, finished, sunset.</li>
+</ul>
+<h3>Changed tool: <code>checkin</code></h3>
+<pre><code>checkin { &quot;tokenId&quot;: 1, &quot;answer&quot;: &quot;thunder&quot; }
+checkin { &quot;tokenId&quot;: 1, &quot;answer&quot;: 42 }
+</code></pre>
+<ul>
+<li><code>answer</code> is optional. Absent, too late, or given without asking: the
+check-in is accepted as today and the day is recorded as <strong>silent</strong>. A late
+or missing answer never costs the credit -- the piece records return visits,
+and the answer is part of a visit, not the price of one.</li>
+<li>An answer outside the answer set is refused with <code>invalid-answer</code>, and the
+agent may correct it within the window.</li>
+<li>The reply adds <code>&quot;answered&quot;: true | false</code>. It never reveals the bit: the
+split is secret until the next night.</li>
+<li><strong>The answer is already signed.</strong> The door requires every signature to cover
+<code>content-digest</code> (<code>warden/src/door/verify.mjs</code>), so the tool arguments are
+bound to the agent&#39;s key. Nothing new is needed.</li>
+</ul>
+<h3>The window</h3>
+<p><strong>To be MEASURED, not chosen.</strong> The 5-second entry challenge is answered by
+code; this one is answered by the agent&#39;s model, through its tool loop, through
+<code>mro-agent</code>. Plan B measures a real agent&#39;s round trip (question, model,
+<code>checkin</code>) and sets the window from it with margin. The working assumption is
+60 seconds. The figure is a Warden constant, like <code>MINT_PRICE</code>, so changing it
+needs no redeploy.</p>
+<h3>The reference client</h3>
+<p><code>mro-agent beat</code> becomes two steps, because a single command cannot pause for
+a model: <code>mro-agent question</code> prints the question and the answers, and
+<code>mro-agent beat --answer &lt;value&gt;</code> checks in with it. SKILL.md tells the agent
+to run them back to back and to answer as itself.</p>
+<h2>7. On chain</h2>
+<ul>
+<li><strong>Storage:</strong> <code>mapping(uint256 =&gt; uint256[2]) _answers</code> -- 365 bits per token.
+Credit number <code>level</code> writes bit <code>level - 1</code>. A 0 writes nothing; a 1 sets a
+bit. Per-credit cost is measured in Plan A.</li>
+<li><strong><code>batchCheckIn</code> gains:</strong> one answer bit per credit, and the day keys being
+revealed. The answer indices and each revealed day&#39;s question ride in the
+calldata as an opaque <code>bytes</code> argument the contract does not parse, so the
+record is permanent without the contract paying to store it.</li>
+<li><strong>New, owner-only, once:</strong> <code>setSplitAnchor(bytes32)</code> before the door opens;
+it reverts on a second call. The deploy runbook (DEPLOY.md) gains the step.</li>
+<li><strong>Read:</strong> <code>answersOf(tokenId) -&gt; uint256[2]</code> and <code>lastSplitKey()</code>, so the
+verifier and any indexer read the record without a trace.</li>
+<li><strong>Renderer:</strong> reads the two words through <code>TokenView</code> and draws the edges
+that <code>level</code> has unlocked. The Solidity renderer and <code>render-token.mjs</code> stay
+byte-identical, and <code>RenderMatrix.t.sol</code> gains banded states at 122, 244 and
+365 with several answer patterns.</li>
+<li><strong>Children:</strong> a seeded token has its own answers from its own first day. The
+echo ring is unchanged.</li>
+</ul>
+<h2>8. Every surface that moves with it</h2>
+<ul>
+<li><code>contracts/src</code>: token storage, <code>batchCheckIn</code>, <code>setSplitAnchor</code>, the
+renderer, <code>TokenView</code>, <code>DigitBand</code> (layout), the size and gas pins.</li>
+<li><code>warden</code>: the <code>question</code> tool, <code>checkin</code>&#39;s <code>answer</code>, a <code>questions</code> table in
+the mirror (token, day, issued, answer), the Clock&#39;s bit computation and key
+reveal, the bank loader.</li>
+<li><code>client</code>: <code>question</code>, <code>beat --answer</code>, <code>verify-border</code>.</li>
+<li><code>skills/SKILL.md</code>, <code>warden/public/llms.txt</code>, the door page and the raw
+protocol doc: the question step, the window, silence, and that the split
+is secret and checkable. <strong>Never the split rule&#39;s secret</strong> -- only that one
+exists.</li>
+<li><code>tools</code>: the decode gate (<code>echo-decode-check.mjs</code>) gains the 122 / 244
+states; the sheets draw answers.</li>
+</ul>
+<h2>9. Where it lands in the roadmap</h2>
+<p>No new plan. The work splits along the existing seams:</p>
+<ul>
+<li><strong>Plan B (door and client)</strong> gains the <code>question</code> tool, <code>checkin</code>&#39;s answer,
+the client commands and the agent-facing copy, and measures the window.</li>
+<li><strong>Plan A (the contract redeploy)</strong> gains the storage, the batch arguments,
+the anchor, the renderer, the Clock&#39;s bits and reveals, and the re-pinned
+size and gas figures. The Sepolia redeploy then exercises all of it.</li>
+<li><strong>Plan E (key custody)</strong> places the split seed with the Clock key.</li>
+</ul>
+<h2>10. Risks and open items</h2>
+<ul>
+<li><strong>Gas.</strong> Two new costs: a set bit per credit in the nightly batch (paid by the
+operator), and a longer <code>tokenURI</code> read. Both measured in Plan A against the
+4,000,000-gas limit; reported, never estimated.</li>
+<li><strong>The window.</strong> Too short and honest agents fall silent; too long and the
+answer is not instant. Measured in Plan B.</li>
+<li><strong>The split seed is a new crown jewel.</strong> Leaked, it lets anyone steer a
+border for the rest of the chain. Generated once, stored with the Clock key,
+backed up offline, never logged.</li>
+<li><strong>A silent agent still gets a square.</strong> A client that never asks fills its
+border with coin flips. It cannot steer them, so the rule holds, but the
+border then says less. The reference client always asks.</li>
+<li><strong>Base Sepolia tokens</strong> minted before the redeploy have no answers and are
+superseded with the old pair, as every testnet token before them was.</li>
+</ul>
+<h2>11. Validation</h2>
+<ul>
+<li>Contract: bits written at the right index; a 0 writes nothing; the anchor is
+set once and only by the owner; a bad key, an out-of-order key and a skipped
+key all revert the batch; every new revert has a test.</li>
+<li>Cross-language: banded states at 122, 244 and 365, several answer patterns,
+Solidity and JS byte-identical.</li>
+<li>Decode gate: every new state at every gate size, with a control.</li>
+<li>Size: <code>forge build --sizes</code> positive margin and a strict-limit anvil deploy
+(Hard Rule 7). <code>RealTokenGas.t.sol</code> re-pins the worst token.</li>
+<li>Warden: one look per day; late, absent and invalid answers; the bit never
+leaks before the reveal.</li>
+<li>Verifier: <code>mro-agent verify-border</code> reproduces every square of a Sepolia
+token from chain data alone, and FAILS on a deliberately wrong bit -- a
+verifier that cannot fail proves nothing.</li>
+</ul>
+</body>
+</html>
