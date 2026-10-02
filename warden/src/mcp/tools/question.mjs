@@ -1,13 +1,15 @@
 // The daily question. Seeing it spends the token's look for the day.
 import * as z from "zod";
-import { utcDay } from "../../day.mjs";
+import { DAY_MS, utcDay } from "../../day.mjs";
 import { FINISH_LEVEL } from "../ladder.mjs";
-import { questionFor, publicShape, ANSWER_WINDOW_MS } from "../question.mjs";
+import { questionFor, publicShape, assertBankSane, ANSWER_WINDOW_MS } from "../question.mjs";
 
 export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now = Date.now }) {
   // Both at construction, like requireChain: a tool built without them would
-  // refuse every caller, or key the day's choice on nothing.
-  if (!Array.isArray(bank)) throw new Error("question tool needs the question bank");
+  // refuse every caller, or key the day's choice on nothing. assertBankSane
+  // rather than Array.isArray, because an empty or malformed bank passes that
+  // and then fails on every call instead of at the wiring.
+  assertBankSane(bank);
   if (!challengeSecret) throw new Error("question tool needs the challenge secret");
   return {
     name: "question",
@@ -27,13 +29,22 @@ export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now
       if (token.keyId !== ctx.keyId) return { ok: false, reason: "not-bound-to-caller" };
       if (token.level >= FINISH_LEVEL) return { ok: false, reason: "year-complete" };
       const day = today();
-      if (day <= token.lastDay) return { ok: false, reason: "already-credited-today" };
+      if (day <= token.lastDay) {
+        return {
+          ok: false,
+          reason: "already-credited-today",
+          nextWindowOpensAt: new Date((token.lastDay + 1) * DAY_MS).toISOString(),
+        };
+      }
 
       const chosen = questionFor(day, challengeSecret, bank);
       // The FIRST issue wins, so a second look cannot shop for a question the
       // artwork would rather record.
       const issued = q.issueQuestion(tokenId, day, chosen.id, now());
-      const asked = bank.find((b) => b.id === issued.questionId) ?? chosen;
+      const asked = bank.find((b) => b.id === issued.questionId);
+      // Showing any other question would let checkin grade an answer against
+      // one the agent never saw, so refuse rather than substitute.
+      if (!asked) throw new Error("issued question is missing from the bank");
       return {
         ok: true,
         day,
