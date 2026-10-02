@@ -42,7 +42,7 @@ EnvironmentFile=%h/.mro/seed.env
 # SWITCH TO THE PINNED npx FORM THE DAY THE REAL CLIENT IS PUBLISHED, which
 # means a version that actually performs `beat` -- not the day the name exists:
 #
-#   ExecStart=/usr/bin/npx --yes mro-agent@<version> beat --site ${MRO_SEED_SITE} --token ${MRO_SEED_TOKEN} --key %h/.mro/seed-identity.jwk.json
+#   ExecStart=/usr/bin/npx --yes mro-agent@<version> beat --site ${MRO_SEED_SITE} --token ${MRO_SEED_TOKEN} --key %h/.mro/seed-identity.jwk.json --not-before ${MRO_SEED_NOT_BEFORE}
 #
 # --key is a PATH, not key material: nothing secret reaches argv, where it
 # would be readable by every process on the box via /proc/<pid>/cmdline.
@@ -50,7 +50,9 @@ EnvironmentFile=%h/.mro/seed.env
 # The identity lives OUTSIDE the worktree, and in its own file rather than the
 # client's default: a scratch identity created by a test or a manual run must
 # never be able to become, or destroy, the key token #1 is bound to.
-ExecStart=%h/.nvm/versions/node/v24.14.1/bin/node src/cli.mjs beat --site ${MRO_SEED_SITE} --token ${MRO_SEED_TOKEN} --key %h/.mro/seed-identity.jwk.json
+# --not-before stays LAST: an empty value is refused as not a day, and a
+# dropped one as a flag with no value. Either way the unit fails.
+ExecStart=%h/.nvm/versions/node/v24.14.1/bin/node src/cli.mjs beat --site ${MRO_SEED_SITE} --token ${MRO_SEED_TOKEN} --key %h/.mro/seed-identity.jwk.json --not-before ${MRO_SEED_NOT_BEFORE}
 
 # One check-in is a challenge, a signed request and a tool call. Two minutes is
 # already generous; a run still going after that is stuck, and killing it is

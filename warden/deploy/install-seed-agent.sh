@@ -46,6 +46,7 @@ CONF="$LOG_DIR/mro-seed-logrotate.conf"
 # Deploy day replaces it with the real one; until then the unit has nothing
 # legitimate to beat, which is why the timer stays disabled.
 REHEARSAL_TOKEN=999999
+REHEARSAL_NOT_BEFORE=2000-01-01
 
 fail=0
 step() { printf '\n== %s\n' "$1"; }
@@ -111,11 +112,31 @@ step "3. the runtime config"
 if [ -f "$ENV_FILE" ]; then
     ok "$ENV_FILE already exists; left untouched"
 else
-    # Written from the tracked template so the schema has one home, with the
-    # token replaced by one that does not exist. Deploy day sets the real id.
-    sed "s/^MRO_SEED_TOKEN=.*/MRO_SEED_TOKEN=$REHEARSAL_TOKEN/" "$ENV_TEMPLATE" > "$ENV_FILE"
+    # Written from the tracked template so the schema has one home. Deploy day
+    # sets the real token and the real day.
+    sed -e "s/^MRO_SEED_TOKEN=.*/MRO_SEED_TOKEN=$REHEARSAL_TOKEN/" \
+        -e "s/^MRO_SEED_NOT_BEFORE=.*/MRO_SEED_NOT_BEFORE=$REHEARSAL_NOT_BEFORE/" \
+        "$ENV_TEMPLATE" > "$ENV_FILE"
     chmod 600 "$ENV_FILE"
     ok "wrote $ENV_FILE with the rehearsal token $REHEARSAL_TOKEN"
+fi
+
+CURRENT_TOKEN="$(grep -E '^MRO_SEED_TOKEN=' "$ENV_FILE" | head -1 | cut -d= -f2-)"
+if ! grep -qE '^MRO_SEED_NOT_BEFORE=' "$ENV_FILE"; then
+    if [ "$CURRENT_TOKEN" = "$REHEARSAL_TOKEN" ]; then
+        printf '\nMRO_SEED_NOT_BEFORE=%s\n' "$REHEARSAL_NOT_BEFORE" >> "$ENV_FILE"
+        ok "added MRO_SEED_NOT_BEFORE=$REHEARSAL_NOT_BEFORE to $ENV_FILE (rehearsal)"
+    else
+        bad "MRO_SEED_NOT_BEFORE is missing from $ENV_FILE: set it to opening day + 2 (DEPLOY.md 9c)"
+    fi
+fi
+NOT_BEFORE="$(grep -E '^MRO_SEED_NOT_BEFORE=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
+if [ "$CURRENT_TOKEN" != "$REHEARSAL_TOKEN" ]; then
+    if [ "$NOT_BEFORE" = "$REHEARSAL_NOT_BEFORE" ] || [ "$(date -u -d "$NOT_BEFORE" +%F 2>/dev/null)" != "$NOT_BEFORE" ]; then
+        bad "MRO_SEED_NOT_BEFORE is '$NOT_BEFORE' for a real token: set it to opening day + 2 (DEPLOY.md 9c)"
+    else
+        ok "token $CURRENT_TOKEN checks in from $NOT_BEFORE (UTC)"
+    fi
 fi
 
 step "4. the rotation config"
@@ -177,7 +198,6 @@ systemctl --user start mro-seed.service 2>/dev/null || true
 
 RESULT="$(systemctl --user show mro-seed.service -p Result --value)"
 STATUS="$(systemctl --user show mro-seed.service -p ExecMainStatus --value)"
-CURRENT_TOKEN="$(grep -E '^MRO_SEED_TOKEN=' "$ENV_FILE" | head -1 | cut -d= -f2-)"
 
 echo "   Result=$RESULT  ExecMainStatus=$STATUS  (token $CURRENT_TOKEN)"
 
@@ -191,7 +211,9 @@ if [ "$CURRENT_TOKEN" = "$REHEARSAL_TOKEN" ]; then
     fi
 else
     ok "token is $CURRENT_TOKEN, not the rehearsal id -- deploy day has happened"
-    if [ "$RESULT" = "success" ]; then
+    if [ "$RESULT" = "success" ] && tail -1 "$LOG" | grep -q '^not before '; then
+        ok "the guard held: token $CURRENT_TOKEN waits until $NOT_BEFORE"
+    elif [ "$RESULT" = "success" ]; then
         ok "the real check-in SUCCEEDED"
     else
         bad "the real check-in failed: Result=$RESULT status=$STATUS. Read: tail -20 $LOG"
@@ -213,7 +235,7 @@ if [ "$fail" = 0 ]; then
     echo ""
     echo "What is left, and it is the operator's call, not this script's:"
     echo "  1. mint token #1 from a wallet you control (real funds on mainnet)"
-    echo "  2. put its id in $ENV_FILE"
+    echo "  2. put its id and the opening day + 2 in $ENV_FILE"
     echo "  3. systemctl --user enable --now mro-seed.timer"
     echo "  4. re-run this script; step 7 then checks the REAL check-in instead"
     echo "See the deploy-day section of warden/DEPLOY.md for the ordered version."
