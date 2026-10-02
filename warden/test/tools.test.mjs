@@ -405,6 +405,20 @@ test("an answer inside the window is recorded with the credit", async () => {
   assert.equal(q.getQuestion(1, 101).answer, 1);
 });
 
+// ONE READING OF THE CLOCK. The window comparison and the recorded answeredAt
+// used to call `now` separately, so a clock that moved between them stamped the
+// answer after the deadline it was accepted under -- a row that contradicts
+// itself, and the only evidence of when the answer arrived.
+test("the time the answer is stamped with is the time it was judged against", async () => {
+  const { q } = withQuestion();
+  const deadline = 1_000 + ANSWER_WINDOW_MS;
+  let reading = deadline;
+  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => reading++ });
+  const r = await tool.handler({ tokenId: 1, answer: "Thunder" }, { keyId: "k1" });
+  assert.equal(r.answered, true, "the last millisecond of the window is in time");
+  assert.equal(q.getQuestion(1, 101).answeredAt, deadline);
+});
+
 test("an answer outside the set, in time, is refused and NOT credited", async () => {
   const { db, q } = withQuestion();
   const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => 5_000 });

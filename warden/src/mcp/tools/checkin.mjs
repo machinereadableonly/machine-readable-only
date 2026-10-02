@@ -148,8 +148,13 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
       // Decided here, above the chain reads, so an unreadable RPC cannot turn
       // a wrong answer into a different refusal, and so a refusal costs no
       // eth_call on a free tool.
+      //
+      // ONE reading of the clock, used for the deadline below AND for
+      // answeredAt: two would let the stamp fall outside the window the answer
+      // was accepted under.
+      const at = now();
       const asked = q.getQuestion(tokenId, day);
-      const inTime = asked && answer !== undefined && now() <= asked.issuedAt + ANSWER_WINDOW_MS;
+      const inTime = asked && answer !== undefined && at <= asked.issuedAt + ANSWER_WINDOW_MS;
       let answerIdx = null;
       if (inTime) {
         // A bank the operator has edited can lose a question already issued.
@@ -251,7 +256,7 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
         q.creditDay(tokenId, day, level, streak);
         // Inside the transaction and only once the credit was new, so the
         // answer and the day it belongs to land or roll back together.
-        if (answerIdx !== null) q.recordAnswer(tokenId, day, answerIdx, now());
+        if (answerIdx !== null) q.recordAnswer(tokenId, day, answerIdx, at);
         return true;
       });
 
