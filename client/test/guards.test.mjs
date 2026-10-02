@@ -178,6 +178,7 @@ test("Signature-Agent is sent as a dictionary keyed by the signature label", asy
     privateJwk,
     origin: "https://example.com",
     signatureAgent: "https://example.com",
+    challenge: "n.1.m",
   });
 
   const agent = headers["signature-agent"] ?? headers["Signature-Agent"];

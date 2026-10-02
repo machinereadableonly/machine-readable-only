@@ -82,6 +82,10 @@ export function challengeBody(challenge, expires, domain, reason, extra = null, 
   return body;
 }
 
+/// The door's own rule on top of verify.mjs's REQUIRED list: these two are
+/// checked here because they are the door's mechanism, not RFC 9421's.
+export const BOUND_COMPONENTS = ["challenge", "challenge-response"];
+
 /**
  * Decide whether one request gets in.
  *
@@ -119,6 +123,12 @@ export async function admit(req, deps) {
     return fail(verified.reason, verified.serverTime ? { serverTime: verified.serverTime } : null);
   }
 
+  // THE CHALLENGE MUST BE SIGNED, so only the key holder can answer it. The
+  // answer is a pure function of a free challenge and a public key id, so a
+  // relayer holding somebody's fresh signature could compute one itself; bound
+  // into the signature, the pair is proof of who composed the request.
+  if (!BOUND_COMPONENTS.every((c) => verified.covered?.includes(c))) return fail("components");
+
   // ONE SIGNATURE, ONE ADMISSION.
   //
   // The challenge is not a second factor and never was: key ids travel in
@@ -128,6 +138,9 @@ export async function admit(req, deps) {
   // and be admitted again, for as long as the signature lived -- up to five
   // minutes, unlimited times. The existing challenge-burn test missed it by
   // re-signing on each attempt, which is not what a replayer does.
+  //
+  // BOUND_COMPONENTS closes the swap; this set is still what refuses the whole
+  // captured request, challenge and all, so neither replaces the other.
   //
   // Recorded ONLY AFTER the cryptography has passed. Writing the set before the
   // proof would hand an attacker a way to pre-spend a signature it had seen but

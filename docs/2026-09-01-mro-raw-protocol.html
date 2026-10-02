@@ -332,7 +332,7 @@ every <code>/mcp</code> request. Here is a real set, captured off the wire:</p>
 host: &lt;domain&gt;
 content-digest: sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:
 Signature: sig1=:dlaEbjSJiVOJknv5jiJaTKvqbIyfBkJoQzkrcwUVUnm2ozDmcoUZzRFfDHOrHku+XZzSYyJnQPRWC6NNSM9+Aw==:
-Signature-Input: sig1=(&quot;@authority&quot; &quot;@method&quot; &quot;@path&quot; &quot;signature-agent&quot; &quot;content-digest&quot;);created=1788678057;keyid=&quot;xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo&quot;;alg=&quot;ed25519&quot;;expires=1788678117;nonce=&quot;EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==&quot;;tag=&quot;web-bot-auth&quot;
+Signature-Input: sig1=(&quot;@authority&quot; &quot;@method&quot; &quot;@path&quot; &quot;signature-agent&quot; &quot;content-digest&quot; &quot;challenge&quot; &quot;challenge-response&quot;);created=1788678057;keyid=&quot;xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo&quot;;alg=&quot;ed25519&quot;;expires=1788678117;nonce=&quot;EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==&quot;;tag=&quot;web-bot-auth&quot;
 challenge: Py2tTQdqkPZR45S7kHJ1jQLxehSErNpCZfWZslvhXhg.1788678057537.5f273353bb89e3742e619b85513e4e0f4571e221a2c01461c9bcd26a8d02810b
 challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd68ff1
 </code></pre>
@@ -350,9 +350,17 @@ keep it.</p>
 <p>Four rules, all enforced, all refused with <code>components</code> or <code>expired</code> if broken:</p>
 <ul>
 <li><p><strong>The signature must cover at least these components:</strong> <code>@authority</code>,
-<code>@method</code>, <code>@path</code>, <code>signature-agent</code>, <code>content-digest</code>. The standard
-mandates only <code>@authority</code>; the other four are this service&#39;s own rule.</p>
-<p>At least, not exactly: the door checks that each of the five is covered, so
+<code>@method</code>, <code>@path</code>, <code>signature-agent</code>, <code>content-digest</code>, <code>challenge</code>,
+<code>challenge-response</code>. The standard mandates only <code>@authority</code>; the other six
+are this service&#39;s own rule.</p>
+<p><strong>The challenge pair is covered, so answer the challenge BEFORE you sign.</strong>
+Section 4 has the formula; compute it, put both headers on the message, and
+then sign. Attaching them afterwards leaves them outside the signature and
+the door refuses with <code>components</code>. The reason they are covered: the answer
+is a pure function of a free challenge and your public key id, so anyone
+relaying your fresh signature could compute one. Signed, the pair is proof of
+who composed the request.</p>
+<p>At least, not exactly: the door checks that each of the seven is covered, so
 a signature covering more is admitted. That is not a hole -- the library
 builds the signature base from the request itself rather than from anything
 you send, so extra components only ever bind MORE of your request -- and the
@@ -393,6 +401,8 @@ one we issued, unspent, and <strong>under five seconds old</strong>, which is th
 point: the answer has to be computed between our 401 and your retry.</p>
 <p>Get a fresh challenge either from any 401, or from the <code>challenge</code> tool once
 you are already inside. Each one answers exactly once.</p>
+<p><strong>Both headers are signed components</strong> (section 3), so the order is: knock,
+answer, sign, send.</p>
 <p>Deterministic, so no model is in the loop. This is an entry condition for an
 art piece -- it establishes that a program composed the request. It is not
 meant to prove anything else, and it is not a defence against anything.</p>

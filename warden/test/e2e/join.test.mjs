@@ -46,9 +46,9 @@ const TO = "0x00000000000000000000000000000000000000a1";
 const CONTRACT = "0x00000000000000000000000000000000000C0DE0";
 const CHAIN_ID = 84532;
 
-// What a real client signs. The door checks exactly these four components, so
+// What a real client signs. The door checks exactly these seven components, so
 // signing fewer would be refused and signing more would not be read.
-const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
+const CLIENT_COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest", "challenge", "challenge-response"];
 
 /**
  * Bring up the whole service the way a deployment does.
@@ -191,7 +191,8 @@ async function registerKey(base) {
 /// The signature headers a client mints for one request. The URL signed is the
 /// CONFIGURED domain, not the loopback address the socket goes to: the door
 /// pins @authority to its own domain, which is what a client behind nginx sees.
-async function signHeaders(privateJwk, path, body = "") {
+/// The challenge is answered BEFORE signing, because the pair is covered.
+async function signHeaders(privateJwk, path, body = "", challenge = "") {
   const signer = await signerFromJWK(privateJwk);
   const message = {
     method: "POST",
@@ -200,6 +201,8 @@ async function signHeaders(privateJwk, path, body = "") {
       "signature-agent": `"https://${DOMAIN}"`,
       host: DOMAIN,
       "content-digest": contentDigest(body),
+      challenge,
+      "challenge-response": answerFor(challenge, signer.keyid),
     },
   };
   const created = new Date();
@@ -225,15 +228,10 @@ async function callMcp(base, privateJwk, payload) {
   // 2026-07-28 one -- the server rejects the legacy shape outright, so an
   // end-to-end test that sent it would be exercising a leg no agent can use.
   const { raw, headers: transport } = envelope(payload);
-  const { headers, keyId } = await signHeaders(privateJwk, "/mcp", raw);
+  const { headers } = await signHeaders(privateJwk, "/mcp", raw, challenge);
   const res = await fetch(`${base}/mcp`, {
     method: "POST",
-    headers: {
-      ...headers,
-      ...transport,
-      challenge,
-      "challenge-response": answerFor(challenge, keyId),
-    },
+    headers: { ...headers, ...transport },
     body: raw,
   });
   const text = await res.text();

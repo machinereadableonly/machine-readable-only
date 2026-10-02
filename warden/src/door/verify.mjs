@@ -318,6 +318,7 @@ export async function verifyRequest(request, lookupKey) {
   let verifiedKeyId = null;
   let verifiedExpiresAt = null;
   let verifiedSigHash = null;
+  let verifiedCovered = null;
 
   try {
     await verifyWebBotAuth(request, async (data, signature, params) => {
@@ -384,6 +385,9 @@ export async function verifyRequest(request, lookupKey) {
       // replayer can change without breaking the signature is by definition
       // not in it, and it commits to created, expires, nonce and keyid.
       verifiedSigHash = createHash("sha256").update(data, "utf8").digest("hex");
+      // The list the cryptography actually checked, so a caller adding a rule
+      // of its own cannot be told a component was covered when it was not.
+      verifiedCovered = covered;
       reason = null;
     });
   } catch {
@@ -404,7 +408,13 @@ export async function verifyRequest(request, lookupKey) {
   }
 
   if (!verifiedKeyId) return { ok: false, reason: "signature" };
-  return { ok: true, keyId: verifiedKeyId, expiresAt: verifiedExpiresAt, sigHash: verifiedSigHash };
+  return {
+    ok: true,
+    keyId: verifiedKeyId,
+    expiresAt: verifiedExpiresAt,
+    sigHash: verifiedSigHash,
+    covered: verifiedCovered,
+  };
 }
 
 /**

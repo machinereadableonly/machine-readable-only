@@ -151,9 +151,11 @@ test("an EXISTING key directory is tightened, not only a new one", async () => {
   assert.equal(statSync(home).mode & 0o777, 0o700, "the directory must be tightened on save");
 });
 
-test("the signature covers exactly the four components the door requires", async () => {
+test("the signature covers exactly the seven components the door requires", async () => {
   const { privateJwk } = await generateIdentity();
-  const { headers } = await signRequest({ privateJwk, origin: `https://${DOMAIN}`, signatureAgent: `https://${DOMAIN}` });
+  const { headers } = await signRequest({
+    privateJwk, origin: `https://${DOMAIN}`, signatureAgent: `https://${DOMAIN}`, challenge: "n.1.m",
+  });
 
   const input = headers["Signature-Input"] ?? headers["signature-input"];
   for (const component of REQUIRED_COMPONENTS) {

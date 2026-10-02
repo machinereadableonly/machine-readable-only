@@ -264,7 +264,7 @@ every `/mcp` request. Here is a real set, captured off the wire:
     host: <domain>
     content-digest: sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:
     Signature: sig1=:dlaEbjSJiVOJknv5jiJaTKvqbIyfBkJoQzkrcwUVUnm2ozDmcoUZzRFfDHOrHku+XZzSYyJnQPRWC6NNSM9+Aw==:
-    Signature-Input: sig1=("@authority" "@method" "@path" "signature-agent" "content-digest");created=1788678057;keyid="xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo";alg="ed25519";expires=1788678117;nonce="EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==";tag="web-bot-auth"
+    Signature-Input: sig1=("@authority" "@method" "@path" "signature-agent" "content-digest" "challenge" "challenge-response");created=1788678057;keyid="xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo";alg="ed25519";expires=1788678117;nonce="EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==";tag="web-bot-auth"
     challenge: Py2tTQdqkPZR45S7kHJ1jQLxehSErNpCZfWZslvhXhg.1788678057537.5f273353bb89e3742e619b85513e4e0f4571e221a2c01461c9bcd26a8d02810b
     challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd68ff1
 
@@ -284,10 +284,19 @@ keep it.
 Four rules, all enforced, all refused with `components` or `expired` if broken:
 
 - **The signature must cover at least these components:** `@authority`,
-  `@method`, `@path`, `signature-agent`, `content-digest`. The standard
-  mandates only `@authority`; the other four are this service's own rule.
+  `@method`, `@path`, `signature-agent`, `content-digest`, `challenge`,
+  `challenge-response`. The standard mandates only `@authority`; the other six
+  are this service's own rule.
 
-  At least, not exactly: the door checks that each of the five is covered, so
+  **The challenge pair is covered, so answer the challenge BEFORE you sign.**
+  Section 4 has the formula; compute it, put both headers on the message, and
+  then sign. Attaching them afterwards leaves them outside the signature and
+  the door refuses with `components`. The reason they are covered: the answer
+  is a pure function of a free challenge and your public key id, so anyone
+  relaying your fresh signature could compute one. Signed, the pair is proof of
+  who composed the request.
+
+  At least, not exactly: the door checks that each of the seven is covered, so
   a signature covering more is admitted. That is not a hole -- the library
   builds the signature base from the request itself rather than from anything
   you send, so extra components only ever bind MORE of your request -- and the
@@ -330,6 +339,9 @@ point: the answer has to be computed between our 401 and your retry.
 
 Get a fresh challenge either from any 401, or from the `challenge` tool once
 you are already inside. Each one answers exactly once.
+
+**Both headers are signed components** (section 3), so the order is: knock,
+answer, sign, send.
 
 Deterministic, so no model is in the loop. This is an entry condition for an
 art piece -- it establishes that a program composed the request. It is not

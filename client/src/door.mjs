@@ -5,7 +5,6 @@
 // past the door is JSON-RPC, which mcp.mjs layers on top.
 import { sign as edSign, createPrivateKey } from "node:crypto";
 import { signRequest } from "./signing.mjs";
-import { answerChallenge } from "./challenge.mjs";
 import { publicFromPrivate } from "./keys.mjs";
 
 /**
@@ -127,8 +126,8 @@ export async function admittedFetch({ origin, site = origin, privateJwk, signatu
   // machine's clock and the site's -- so the retry is stamped in the site's
   // present rather than its future. It shifts the timestamp only; nothing else
   // about the signature changes.
-  const { headers, keyId } = await signRequest({
-    privateJwk, origin: site, signatureAgent, path, body,
+  const { headers } = await signRequest({
+    privateJwk, origin: site, signatureAgent, challenge, path, body,
     now: new Date(Date.now() + clockOffsetMs),
   });
 
@@ -143,8 +142,6 @@ export async function admittedFetch({ origin, site = origin, privateJwk, signatu
       // header that disagreed with it would be caught by the server's own
       // header-body validation rather than smuggled past the signature.
       ...extraHeaders,
-      challenge,
-      "challenge-response": answerChallenge(challenge, keyId),
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
     },

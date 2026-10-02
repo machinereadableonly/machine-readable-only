@@ -105,14 +105,29 @@ test("the protocol copy inside the skill is the protocol document", () => {
 
 // A remedy that names the WRONG components is worse than none: the agent does
 // exactly what it is told and is refused again, with no way to tell that the
-// instruction was the problem. The list lives in one place in the door, so the
-// row is pinned to it rather than to a number somebody has to remember.
+// instruction was the problem. The lists live in one place each in the door, so
+// the row is pinned to them rather than to a number somebody has to remember.
+//
+// TWO lists, because the door enforces two: RFC 9421's set in verify.mjs, and
+// the challenge pair in middleware.mjs, which is the door's own mechanism
+// rather than the standard's. A test reading only the first passed while the
+// remedy omitted the pair.
+function doorComponents() {
+  const named = (file, decl) => {
+    const src = readFileSync(join(root, file), "utf8");
+    const declared = src.match(new RegExp(`^(?:export )?const ${decl} = \\[(.*)\\];$`, "m"));
+    assert.ok(declared, `${file} no longer declares ${decl} where this test reads it`);
+    return [...declared[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  };
+  return [
+    ...named("warden/src/door/verify.mjs", "REQUIRED"),
+    ...named("warden/src/door/middleware.mjs", "BOUND_COMPONENTS"),
+  ];
+}
+
 test("the `components` remedy names exactly the components the door requires", () => {
-  const verify = readFileSync(join(root, "warden/src/door/verify.mjs"), "utf8");
-  const declared = verify.match(/^const REQUIRED = \[(.*)\];$/m);
-  assert.ok(declared, "verify.mjs no longer declares REQUIRED where this test reads it");
-  const required = [...declared[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(required.length >= 4, `parsed only ${required.length} required components`);
+  const required = doorComponents();
+  assert.ok(required.length >= 7, `parsed only ${required.length} required components`);
 
   const doc = readFileSync(join(skill, "references/refusals.md"), "utf8");
   const row = doc.split("\n").find((line) => line.startsWith("| `components` |"));
