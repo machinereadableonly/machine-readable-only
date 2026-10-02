@@ -236,3 +236,15 @@ CREATE TABLE IF NOT EXISTS pay_nonces (
   tool       TEXT NOT NULL,     -- which tool claimed it, for the audit trail
   claimedAt  INTEGER NOT NULL   -- unix ms
 );
+
+-- The day's question as issued to one token, and the answer it gave.
+-- answer is the index into the question's answer set; NULL is silent.
+CREATE TABLE IF NOT EXISTS questions (
+  tokenId    INTEGER NOT NULL,
+  day        INTEGER NOT NULL,
+  questionId TEXT    NOT NULL,
+  issuedAt   INTEGER NOT NULL,
+  answer     INTEGER,
+  answeredAt INTEGER,
+  PRIMARY KEY (tokenId, day)
+);
