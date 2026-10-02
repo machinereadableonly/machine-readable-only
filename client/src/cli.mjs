@@ -11,6 +11,7 @@ import { ensureIdentity, loadIdentity, defaultKeyPath } from "./keys.mjs";
 import { registerKey } from "./door.mjs";
 import { listTools, callTool, structured } from "./mcp.mjs";
 import { payFor, readDemand } from "./pay.mjs";
+import { parseNotBefore, notYet, utcToday } from "./notBefore.mjs";
 import { DEFAULT_SITE, cronLine, unpayableMessage, paymentFailedMessage, unresolvedPaymentMessage, lostResponseMessage } from "./messages.mjs";
 
 // The commands that exist. Checked BEFORE an identity key is created, because
@@ -46,6 +47,7 @@ Options
   --token <id>         which token (beat, question, ladder, rebind, rest;
                        optional on status)
   --answer <a>         your answer to today's question (beat)
+  --not-before <day>   beat only: do nothing before this UTC day (YYYY-MM-DD)
   --expect-payto <0x>  the treasury you were told to expect. REQUIRED to pay.
   --expect-amount <n>  the amount in base units you were told to expect. REQUIRED to pay.
   --expect-asset <0x>  the token contract you were told to expect
@@ -68,7 +70,7 @@ Options
 // Unknown COMMANDS have always thrown (see COMMANDS above). This is the same
 // rule for flags.
 const FLAGS = [
-  "site", "endpoint", "directory", "key", "to", "token", "answer",
+  "site", "endpoint", "directory", "key", "to", "token", "answer", "not-before",
   "expect-payto", "expect-amount", "expect-asset", "expect-network",
   "expect-chain", "expect-contract", "wallet-key-file",
 ];
@@ -124,6 +126,18 @@ async function main() {
     throw new Error(
       "--answer belongs on beat: run question --token <id> first, then beat --token <id> --answer <a>"
     );
+  }
+
+  // Checked before the identity is touched or anything is sent: a skip must
+  // leave no trace, and a malformed day must fail rather than mean "no guard".
+  if (args["not-before"] !== undefined) {
+    if (command !== "beat") throw new Error("--not-before belongs on beat");
+    if (!args.token) throw new Error("--token <id> is required");
+    const day = parseNotBefore(args["not-before"]);
+    if (notYet(day)) {
+      console.log(`not before ${day}: today is ${utcToday()} (UTC). Nothing was sent.`);
+      return;
+    }
   }
 
   const keyPath = args.key ?? defaultKeyPath();
