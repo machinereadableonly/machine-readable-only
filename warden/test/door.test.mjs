@@ -281,6 +281,35 @@ test("a challenge answered outside the signature is refused components", async (
   assert.equal(decision.body.reason, "components");
 });
 
+// THE CANONICAL RULING-4 ATTACK, and the one the binding exists for: a whole
+// captured request that DID cover the pair, with a fresh challenge and a
+// correctly computed answer swapped in. That is what a relayer can do unaided --
+// the key id travels in plaintext and the answer is a pure function of it and a
+// free challenge -- and before the pair was covered it bought a fresh admission
+// for the signature's whole five-minute life. Now the swap changes signed bytes,
+// so the signature itself fails: `signature`, not `components`, because the
+// captured request covers everything the door asks for.
+test("a captured request re-answered with a fresh challenge is refused signature", async () => {
+  const deps = { secret: SECRET, lookupKey: lookupED, seen: new Set(), spent: new Map(), domain: DOMAIN };
+  const signer = await signerFromJWK(ED.key);
+  const captured = await admittableRequest();
+
+  const { challenge } = issueChallenge(SECRET);
+  assert.notEqual(challenge, captured.headers.challenge, "the swap must really be a different challenge");
+  const swapped = {
+    ...captured,
+    headers: {
+      ...captured.headers,
+      challenge,
+      "challenge-response": answerFor(challenge, signer.keyid),
+    },
+  };
+
+  const decision = await admit(swapped, deps);
+  assert.equal(decision.ok, false, "a relayer's own challenge must never buy admission");
+  assert.equal(decision.body.reason, "signature");
+});
+
 /// Rename the signature label in BOTH headers, changing nothing else.
 ///
 /// RFC 9421 lets the caller name its own signature -- `sig1=` by convention,
@@ -626,8 +655,11 @@ async function registerFreshKey(base) {
 /// Sign a message the way a real client would, for an arbitrary target URL
 /// (which may name a different authority than this server). `challenge` has to
 /// be in hand before signing, because the pair is covered by the signature;
-/// the returned headers already carry it answered.
-async function signFor(privateJwk, targetUrl, { body = "", agentHeader = null, challenge = null } = {}) {
+/// the returned headers already carry it answered. It is stated by every
+/// caller, `""` included: an empty pair signed by omission is a request the
+/// door can only refuse, which is a weak test unless it is the point.
+async function signFor(privateJwk, targetUrl, { body = "", agentHeader = null, challenge } = {}) {
+  if (typeof challenge !== "string") throw new Error('signFor needs a challenge, or "" to sign an unanswerable pair');
   const target = new URL(targetUrl);
   const signer = await signerFromJWK(privateJwk);
   const message = {
@@ -640,8 +672,8 @@ async function signFor(privateJwk, targetUrl, { body = "", agentHeader = null, c
       "signature-agent": agentHeader ?? `"https://${DOMAIN}"`,
       host: target.host,
       "content-digest": contentDigest(body),
-      challenge: challenge ?? "",
-      "challenge-response": challenge === null ? "" : answerFor(challenge, signer.keyid),
+      challenge,
+      "challenge-response": challenge === "" ? "" : answerFor(challenge, signer.keyid),
     },
   };
   const created = new Date();
@@ -893,7 +925,9 @@ test("a signature minted for https://evil.example/mcp, sent with a target that n
   const { server, base } = await startServer();
   try {
     const { privateJwk } = await registerFreshKey(base);
-    const { headers } = await signFor(privateJwk, "https://evil.example/mcp");
+    // "" on purpose: the router refuses the target before any challenge is
+    // read, so the pair never has to be answerable for this to be the test.
+    const { headers } = await signFor(privateJwk, "https://evil.example/mcp", { challenge: "" });
     for (const path of ["//evil.example/mcp", "http://evil.example/mcp"]) {
       const res = await rawRequest(base, { method: "POST", path, headers });
       assert.equal(res.status, 400, `expected the forged authority to be refused, got ${res.status}: ${res.text}`);

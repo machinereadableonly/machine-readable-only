@@ -67,7 +67,11 @@ export const WINDOW_MS = 60_000;
 export const SIGNATURE_LABEL = "sig1";
 
 export async function signRequest({ privateJwk, origin, signatureAgent, challenge, method = "POST", path = "/mcp", body = "", now = new Date() }) {
-  if (typeof challenge !== "string") throw new Error("signRequest needs the door's challenge: it is a signed component");
+  // An empty string is refused with the absent case: it signs a pair the door
+  // cannot check, so the request is built only to be turned away.
+  if (typeof challenge !== "string" || challenge === "") {
+    throw new Error("signRequest needs the door's challenge: it is a signed component");
+  }
   const signer = await signerFromJWK(privateJwk);
   const message = {
     method,

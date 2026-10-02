@@ -134,14 +134,18 @@ export async function admittedFetch({ origin, site = origin, privateJwk, signatu
   const res = await fetchImpl(new URL(path, origin), {
     method: "POST",
     headers: {
-      ...headers,
       // The transport's own metadata headers, supplied by the caller because
       // only it knows the JSON-RPC method and name. They are NOT among the
       // signed components, and do not need to be: they mirror values in the
       // body, and the body is bound to the signature by content-digest, so a
       // header that disagreed with it would be caught by the server's own
       // header-body validation rather than smuggled past the signature.
+      //
+      // FIRST, so the signed headers win every collision. Spread last, a
+      // caller passing `challenge` would replace the pair the signature covers
+      // and earn a refusal it could not read from here.
       ...extraHeaders,
+      ...headers,
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
     },

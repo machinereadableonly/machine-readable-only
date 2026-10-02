@@ -195,7 +195,9 @@ async function registerKey(base) {
 /// CONFIGURED domain, not the loopback address the socket goes to: the door
 /// pins @authority to its own domain, which is what a client behind nginx sees.
 /// The challenge is answered BEFORE signing, because the pair is covered.
-async function signHeaders(privateJwk, path, body = "", challenge = "") {
+/// `challenge` has no default: an empty pair signed by omission builds a
+/// request the door can only refuse.
+async function signHeaders(privateJwk, path, body, challenge) {
   const signer = await signerFromJWK(privateJwk);
   const message = {
     method: "POST",

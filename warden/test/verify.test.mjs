@@ -7,7 +7,7 @@ import { signerFromJWK } from "web-bot-auth/crypto";
 import { parseDictionary } from "structured-headers";
 import { verify } from "web-bot-auth";
 import { verifierFromJWK } from "web-bot-auth/crypto";
-import { verifyRequest, assertWebBotAuthParams, MAX_SKEW_MS, MAX_WINDOW_MS, coveredComponents, contentDigest, signatureAgentUrl, signatureLabel } from "../src/door/verify.mjs";
+import { verifyRequest, assertWebBotAuthParams, MAX_SKEW_MS, MAX_WINDOW_MS, coveredComponents, contentDigest, signatureAgentUrl, signatureLabel, keyedMessage } from "../src/door/verify.mjs";
 
 const VECTORS = JSON.parse(
   readFileSync(new URL("./vectors/web_bot_auth_architecture_v1.json", import.meta.url), "utf8")
@@ -520,6 +520,35 @@ test('a signature over "signature-agent";key= verifies, from a hand-built base',
   const r = await verifyRequest(req, lookup);
   assert.equal(r.ok, true, r.reason);
   assert.ok(r.covered.includes("signature-agent"), "the keyed component still reports its name");
+});
+
+// keyedMessage rebuilds the header bag, and a `Headers` instance has to be
+// walked with forEach rather than spread -- a plain spread of one yields {}, so
+// the rewritten `signature-agent` would be the only header left and every
+// component line would be missing. The door's own adapter hands over Node's
+// plain object, so this branch is reached only by a caller holding a real
+// Request; it is cheaper to pin than to delete and rediscover.
+test("a Headers instance survives the keyed rewrite", async () => {
+  const req = await handSigned({
+    agent: 'sig1="https://example.com"',
+    components: '"@authority" "@method" "@path" "signature-agent";key="sig1" "content-digest"',
+    lines: [
+      `"@authority": example.com`,
+      `"@method": POST`,
+      `"@path": /mcp`,
+      `"signature-agent";key="sig1": "https://example.com"`,
+      `"content-digest": ${EMPTY_DIGEST}`,
+    ],
+  });
+  const asHeaders = { ...req, headers: new Headers(req.headers) };
+
+  const { message, key } = keyedMessage(asHeaders);
+  assert.equal(key, "sig1");
+  assert.equal(message.headers["signature-agent"], '"https://example.com"', "the selected member replaced the dictionary");
+  assert.equal(message.headers.host, "example.com", "and the other headers came with it");
+
+  const r = await verifyRequest(asHeaders, lookup);
+  assert.equal(r.ok, true, r.reason);
 });
 
 test("signature-agent covered both keyed and whole is refused, not resolved", async () => {
