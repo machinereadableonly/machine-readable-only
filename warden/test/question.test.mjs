@@ -15,6 +15,7 @@ test("a malformed bank is refused, entry by entry, with a reason", () => {
     [[{ id: "a", text: "x", answers: ["same", "SAME"] }], /answers repeat/],
     [[{ id: "a", text: "x", answers: [" ", "fog"] }], /an answer is blank/],
     [[{ id: "a", text: "x", answers: ["fog", 7] }], /answers must be printable ASCII/],
+    [[{ id: "a", text: "x", answers: ["fog", "t".repeat(65)] }], /an answer is longer than 64/],
     [[{ id: "a", text: "x", answers: "fog" }], /exactly one of answers or range/],
     [[{ id: "a", text: "x", range: { min: 0, max: 101 } }], /range must be 2 to 101 integers/],
     [[{ id: "a", text: "x", range: { min: 5, max: 5 } }], /range must be 2 to 101 integers/],

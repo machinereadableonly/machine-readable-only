@@ -44,7 +44,7 @@ function freeTools(q) {
     ["status", makeStatusTool({ q, chain: openChain() }), {}],
     ["ladder", makeLadderTool({ q, chain: openChain() }), { tokenId: 1 }],
     ["question", makeQuestionTool({ q, bank: BANK, challengeSecret: SECRET, today: () => 100 }), { tokenId: 1 }],
-    ["checkin", makeCheckinTool({ q, chain: openChain(), today: () => 100 }), { tokenId: 1 }],
+    ["checkin", makeCheckinTool({ bank: BANK, q, chain: openChain(), today: () => 100 }), { tokenId: 1 }],
     ["rebind", makeRebindTool({ q, contract: CONTRACT }), { tokenId: 1 }],
     ["rest", makeRestTool({ q, contract: CONTRACT }), { tokenId: 1 }],
     ["seed", makeSeedTool({ q, chain: openChain(), today: () => 100 }), { tokenId: 1, parentId: 1, to: "0x" + "a1".repeat(20) }],
@@ -63,7 +63,7 @@ test("a check-in answers with `ok` on the refusal AND on the success", async () 
   const db = openDb(":memory:");
   const q = queries(db);
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0x" + "1".repeat(40), lastDay: 99, mintDay: 99 });
-  const tool = makeCheckinTool({ q, chain: openChain(), today: () => 100 });
+  const tool = makeCheckinTool({ bank: BANK, q, chain: openChain(), today: () => 100 });
 
   const good = await tool.handler({ tokenId: 1 }, ctx);
   assert.equal(good.ok, true, "a credited day is ok:true, not merely accepted:true");

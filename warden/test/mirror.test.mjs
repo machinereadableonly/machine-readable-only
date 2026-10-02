@@ -489,3 +489,16 @@ test("recordAnswer runs inside a transaction its caller owns", () => {
   });
   assert.equal(q.getQuestion(1, 20700).answer, 2);
 });
+
+// The window closes once; a second answer to the same day is a second bite at
+// what the artwork records, so the first recorded answer wins in SQL rather
+// than by the caller remembering to check.
+test("a second answer does not overwrite the first", () => {
+  const { q } = fresh();
+  q.issueQuestion(1, 20700, "t-two", 1000);
+  q.recordAnswer(1, 20700, 1, 3000);
+  q.recordAnswer(1, 20700, 0, 4000);
+  const row = q.getQuestion(1, 20700);
+  assert.equal(row.answer, 1);
+  assert.equal(row.answeredAt, 3000);
+});

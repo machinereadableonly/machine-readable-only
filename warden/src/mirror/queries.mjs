@@ -388,8 +388,11 @@ export function queries(db) {
       "INSERT OR IGNORE INTO questions (tokenId, day, questionId, issuedAt) VALUES (?, ?, ?, ?)"
     ),
     getQuestion: db.prepare("SELECT * FROM questions WHERE tokenId = ? AND day = ?"),
+    // `answeredAt IS NULL`, never `answer IS NULL`: a silent day legitimately
+    // stores a null answer, and the first answer recorded must win in SQL
+    // rather than by a caller remembering to check.
     recordAnswer: db.prepare(
-      "UPDATE questions SET answer = ?, answeredAt = ? WHERE tokenId = ? AND day = ?"
+      "UPDATE questions SET answer = ?, answeredAt = ? WHERE tokenId = ? AND day = ? AND answeredAt IS NULL"
     ),
   };
 

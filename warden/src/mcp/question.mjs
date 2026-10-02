@@ -9,6 +9,10 @@ import { createHmac } from "node:crypto";
 /// Provisional until measured; a constant so changing it needs no redeploy.
 export const ANSWER_WINDOW_MS = 60_000;
 
+/// The longest answer `checkin` accepts. The bank is checked against it too:
+/// an option longer than this could never be answered.
+export const MAX_ANSWER_LENGTH = 64;
+
 const MAX_OPTIONS = 16;
 const MAX_RANGE = 101;
 const ASCII = /^[\x20-\x7e]+$/;
@@ -32,6 +36,7 @@ export function assertBankSane(bank) {
       if (!q.answers.every((a) => typeof a === "string" && ASCII.test(a))) throw new Error(`question ${q.id}: answers must be printable ASCII`);
       // A blank option would match an empty answer, which is not an answer.
       if (q.answers.some((a) => norm(a) === "")) throw new Error(`question ${q.id}: an answer is blank`);
+      if (q.answers.some((a) => a.length > MAX_ANSWER_LENGTH)) throw new Error(`question ${q.id}: an answer is longer than ${MAX_ANSWER_LENGTH}`);
       if (new Set(q.answers.map(norm)).size !== q.answers.length) throw new Error(`question ${q.id}: answers repeat`);
     } else {
       if (!isPlainObject(q.range)) throw new Error(`question ${q.id}: range must be an object`);
