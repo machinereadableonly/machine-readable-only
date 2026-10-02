@@ -5,6 +5,7 @@
 // if the rewrite were a pass-through.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertBankSane, loadBank } from "../src/mcp/question.mjs";
@@ -40,18 +41,51 @@ test("a repeated id names the entry that repeats it", () => {
   const bank = [ok("alpha"), ok("alpha")];
   const message = refusalFor(bank);
   assert.ok(message.includes("alpha"));
-  assert.equal(namedByPosition(message, bank), "entry 1: its id is missing or repeated");
+  assert.equal(namedByPosition(message, bank), "entry 1: its id is missing, repeated or not kebab-case");
 });
 
 test("a missing id names its entry too", () => {
   const bank = [ok("alpha"), { text: "a question", answers: ["x", "y"] }];
-  assert.equal(namedByPosition(refusalFor(bank), bank), "entry 1: its id is missing or repeated");
+  assert.equal(namedByPosition(refusalFor(bank), bank), "entry 1: its id is missing, repeated or not kebab-case");
 });
 
 test("a bank-wide refusal names no entry and is passed through", () => {
   for (const bank of [[], "not an array"]) {
     const message = refusalFor(bank);
     assert.equal(namedByPosition(message, []), message);
+  }
+});
+
+// The re-review's case. The rewrite used to assume an id held no space, which
+// nothing enforced, so an id beginning "bank " walked straight through the
+// bank-wide branch with its text intact. The shape is a rule now, and this
+// entry is refused before any message can carry it.
+test("an id that could impersonate a bank-wide refusal is refused, and not printed", () => {
+  const bank = [{ id: "bank nasty", text: "a question", answers: ["x", "x"] }];
+  const message = refusalFor(bank);
+  const named = namedByPosition(message, bank);
+  assert.equal(named, "entry 0: its id is missing, repeated or not kebab-case");
+  assert.equal(named.includes("bank nasty"), false, named);
+  assert.equal(named.includes("nasty"), false, named);
+});
+
+// A parser's own message quotes the bytes around the bad token, so the fix is
+// in loadBank; the rewrite must leave its fixed sentence alone.
+test("a bank that is not valid JSON says so and nothing more", () => {
+  const file = join(tmpdir(), `mro-checker-bad-json-${process.pid}.json`);
+  writeFileSync(file, '[{ "id": "a-question", "text": "a question", "answers": ["a", "b"], }]');
+  try {
+    let message;
+    try {
+      loadBank(file);
+    } catch (err) {
+      message = err.message;
+    }
+    assert.equal(message, "question bank is not valid JSON");
+    assert.equal(namedByPosition(message, []), message);
+    assert.equal(namedByPosition(message, []).includes("a question"), false);
+  } finally {
+    rmSync(file, { force: true });
   }
 });
 
@@ -89,13 +123,15 @@ test("every refusal the bank can raise is renamed or carries no id", () => {
     [{ id: "alpha", text: "a question", answers: ["x", "y".repeat(65)] }],
     [{ id: "alpha", text: "a question", range: "wide" }],
     [{ id: "alpha", text: "a question", range: { min: 1.5, max: 9 } }],
+    [{ id: "bank nasty", text: "a question", answers: ["x", "x"] }],
+    [{ id: "question alpha: elsewhere", text: "a question", answers: ["x", "y"] }],
   ];
   for (const bank of banks) {
     const entries = Array.isArray(bank) ? bank : [];
     const named = namedByPosition(refusalFor(bank), entries);
-    // "question bank ..." names the whole bank; "question <id>: ..." names one
-    // entry and must have been rewritten.
-    assert.ok(!/^question (?!bank )/.test(named), `a raw refusal escaped: ${named}`);
+    // Only an enforced id shape counts as an id, so the one thing that must
+    // never survive is `question <kebab-id>: `.
+    assert.ok(!/^question [a-z0-9]+(-[a-z0-9]+)*: /.test(named), `a raw refusal escaped: ${named}`);
     for (const q of entries) {
       if (q?.id) assert.ok(!named.includes(q.id), `an id reached the output: ${named}`);
     }

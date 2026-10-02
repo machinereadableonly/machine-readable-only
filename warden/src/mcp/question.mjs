@@ -19,6 +19,11 @@ export const MAX_ANSWER_LENGTH = 64;
 const MAX_OPTIONS = 16;
 const MAX_RANGE = 101;
 const ASCII = /^[\x20-\x7e]+$/;
+/// An id is derived from the question text, so it must not be able to carry
+/// punctuation or spaces: `check-question-bank.mjs` tells a refusal naming one
+/// entry from one naming the whole bank by this shape, and exporting it keeps
+/// one definition rather than two that can drift.
+export const KEBAB_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const norm = (s) => String(s).trim().toLowerCase();
 const isPlainObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -31,6 +36,9 @@ export function assertBankSane(bank) {
   for (const q of bank) {
     if (!isPlainObject(q)) throw new Error("question bank entry must be an object");
     if (typeof q.id !== "string" || !q.id || ids.has(q.id)) throw new Error(`question id missing or repeated: ${q.id}`);
+    // The one refusal that names no id: an id free to hold any character is an
+    // id free to hold the question, and this message is read in public.
+    if (!KEBAB_ID.test(q.id)) throw new Error("question id must be kebab-case");
     ids.add(q.id);
     if (typeof q.text !== "string" || !ASCII.test(q.text)) throw new Error(`question ${q.id}: text must be printable ASCII`);
     if (Array.isArray(q.answers) === (q.range !== undefined)) throw new Error(`question ${q.id}: exactly one of answers or range`);
@@ -69,7 +77,15 @@ export function loadBank(path) {
         : `question bank could not be read (${err.code ?? "unknown error"})`
     );
   }
-  return assertBankSane(JSON.parse(text));
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    // Also a FIXED SENTENCE: a parser quotes the bytes around the bad token,
+    // and in this file those bytes are a question.
+    throw new Error("question bank is not valid JSON");
+  }
+  return assertBankSane(parsed);
 }
 
 /// Refuse a bank that has lost a question already issued to a token.

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,6 +46,48 @@ test("a malformed bank is refused, entry by entry, with a reason", () => {
   ];
   for (const [bank, reason] of bad) {
     assert.throws(() => assertBankSane(bank), reason, JSON.stringify(bank) ?? String(bank));
+  }
+});
+
+// An id is a slug of the question text, so an id free to hold any character is
+// an id free to hold the question itself -- and `check-question-bank.mjs` tells
+// an entry's refusal from the whole bank's by this shape. The refusal is the
+// one message that names no id, because a bad id is the thing being hidden.
+test("an id that is not kebab-case is refused, and the refusal names no id", () => {
+  for (const id of ["bank nasty", "Fog", "fog_thunder", "fog--thunder", "-fog", "fog-", "fog?", "fog thunder: x"]) {
+    assert.throws(
+      () => assertBankSane([{ id, text: "a question", answers: ["a", "b"] }]),
+      (err) => {
+        assert.equal(err.message, "question id must be kebab-case", err.message);
+        assert.equal(err.message.includes(id), false, err.message);
+        return true;
+      },
+      id
+    );
+  }
+  for (const id of ["fog-thunder", "a", "t-two", "how-many-clouds-make-7"]) {
+    assert.doesNotThrow(() => assertBankSane([{ id, text: "a question", answers: ["a", "b"] }]), id);
+  }
+});
+
+// V8's SyntaxError quotes the bytes around the bad token -- about sixteen
+// characters of the file, which in this file is part of a question.
+test("a bank that is not valid JSON refuses with a fixed sentence, quoting nothing", () => {
+  const file = join(tmpdir(), `mro-bad-json-bank-${process.pid}.json`);
+  const text = '[{ "id": "a-question", "text": "a question", "answers": ["a", "b"], }]';
+  writeFileSync(file, text);
+  try {
+    assert.throws(
+      () => loadBank(file),
+      (err) => {
+        assert.equal(err.message, "question bank is not valid JSON", err.message);
+        assert.equal(err.message.includes("a question"), false, err.message);
+        assert.equal(err.message.includes("JSON.parse"), false, err.message);
+        return true;
+      }
+    );
+  } finally {
+    rmSync(file, { force: true });
   }
 });
 
