@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan B: the door, the client and the daily question</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan B: the door, the client and the daily question</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<blockquote>
+<p>After completing any operator-only step, tell Claude so it can update memory
+immediately. Operator-only steps in this plan: approving the agent-facing
+copy (Task 9, a STOP gate, because that copy is locked), approving the push
+and the live Sepolia Warden re-create (Task 10), and approving any npm
+re-stage (Task 11).</p>
+</blockquote>
+<p><strong>Goal:</strong> Bind the entry challenge into the signature, admit a conforming
+<code>&quot;signature-agent&quot;;key=</code> signer, and give every check-in a daily question whose
+answer the Warden records -- with the answer window measured on a real agent.</p>
+<p><strong>Why:</strong> Rulings 4 and 5 of the 2026-09-28 review, and the door/client half of
+the daily question approved by the operator on 2026-10-02. The reference client
+is staged on npm and not yet released; every change here alters what a client
+must send, so all of it must land before that release and before the mainnet
+mint. The contract half of the question (storing bits, the split, the
+renderer) is Plan A and depends on this plan&#39;s recorded answers and measured
+window.</p>
+<p><strong>Architecture:</strong> The door already verifies RFC 9421 and then checks the
+challenge separately. The challenge headers become COVERED components, checked
+in <code>admit</code> (the door&#39;s own rule), so only the key holder can answer. The
+<code>;key=</code> fix rewrites the one header value the library reads, from the selected
+dictionary member, before verification. The question is a new MCP tool backed
+by a private bank file and a new <code>questions</code> table in the mirror; <code>checkin</code>
+gains an optional <code>answer</code> recorded in the same transaction as the credit.
+The window is a Warden constant measured by a throwaway probe against a local
+Warden.</p>
+<p><strong>Tech Stack:</strong> Node 24.14.1, <code>node:test</code>, <code>web-bot-auth</code> 0.1.3,
+<code>http-message-sig</code> 0.2.0, <code>structured-headers</code> 2.0.2, <code>zod</code>, SQLite via the
+mirror&#39;s existing <code>openDb</code>.</p>
+<p><strong>Spec:</strong> <code>docs/specs/2026-10-02-mro-daily-question-design.md</code> (sections 4, 6,
+8, 9) and <code>docs/reviews/2026-09-28/00-verification.md</code> (Rulings 4 and 5);
+roadmap <code>docs/plans/2026-09-30-mro-rulings-roadmap.md</code>.</p>
+<h2>Global Constraints</h2>
+<ul>
+<li>Plain ASCII only in code, comments and docs.</li>
+<li>All four suites green before every commit: <code>cd contracts &amp;&amp; forge test</code>, and
+<code>npm test</code> in <code>tools/</code>, <code>warden/</code>, <code>client/</code>. Heavy runs go through
+<code>~/scripts/safe-build.sh</code>. Never pipe a gate into anything.</li>
+<li>Use <code>/bin/grep</code>, never bare <code>grep</code>. Node needs <code>source ~/.nvm/nvm.sh</code>.</li>
+<li>The repository is PUBLIC: no absolute paths, no key ids, no secrets, no AI
+attribution in files or commit messages. The REAL question bank is never
+committed; only the test fixture is.</li>
+<li>Comments follow <code>~/.claude/rules/code-comments.md</code>: the why, one short line,
+no history. Do not add narration to files this plan touches.</li>
+<li>Licences: <code>warden/src/door</code> and <code>client</code> are MIT; <code>warden/src/mcp</code>,
+<code>warden/src/mirror</code>, <code>warden/tools</code> and <code>warden/test</code> are PolyForm
+Noncommercial. New files take their directory&#39;s licence (LICENSING.md).</li>
+<li>Answer window: <code>ANSWER_WINDOW_MS</code>, a Warden constant, starts at <code>60_000</code> and
+is replaced by the MEASURED value in Task 10.</li>
+<li>Answer sets: two options, a list of 2 to 16 options, or an integer range of
+at most 101 values. No free text.</li>
+<li>Silence never costs the credit: a check-in with no answer, a late answer, or
+no question asked is ACCEPTED and recorded as silent.</li>
+<li>The split is never computed, stored or hinted at in this plan. The Warden
+records WHICH answer and WHEN, nothing more.</li>
+</ul>
+<h2>Review Focus</h2>
+<ol>
+<li><strong>A captured request replayed by a relayer with its own fresh challenge</strong>
+must be refused <code>components</code>, not admitted -- the whole point of ruling 4.
+Pinned in Task 1.</li>
+<li><strong>A signer covering BOTH <code>signature-agent</code> and <code>&quot;signature-agent&quot;;key=</code></strong>
+must be refused, not have one silently chosen. Pinned in Task 2.</li>
+<li><strong>An answer with different case or surrounding spaces</strong> (&quot;Fog &quot;, &quot;FOG&quot;) must
+match the option &quot;fog&quot;; an answer of <code>42</code> and <code>&quot;42&quot;</code> must both match a range.
+Pinned in Task 3.</li>
+<li><strong>A second <code>question</code> call the same day</strong> must return the SAME question and
+the SAME <code>answerBy</code>, never a fresh window. Pinned in Task 5.</li>
+<li><strong>An invalid answer inside the window</strong> must refuse WITHOUT crediting, so the
+agent can correct it; the same invalid answer after the window must be
+accepted as silent. Pinned in Task 6.</li>
+</ol>
+<hr>
+<h3>Task 1: Bind the challenge into the signature (ruling 4)</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/door/verify.mjs</code> (return the covered list)</li>
+<li>Modify: <code>warden/src/door/middleware.mjs</code> (<code>admit</code> requires the two components)</li>
+<li>Modify: <code>client/src/signing.mjs</code>, <code>client/src/door.mjs</code></li>
+<li>Modify: <code>warden/test/door.test.mjs</code>, <code>warden/test/e2e/join.test.mjs</code></li>
+<li>Modify: <code>warden/tools/protocol-transcript.mjs</code>, <code>warden/tools/x402-live-mint-check.mjs</code></li>
+<li>Modify: <code>docs/2026-09-01-mro-raw-protocol.md</code> (the components rule, the worked example)</li>
+<li>Modify: <code>skills/machine-readable-only/references/refusals.md</code> (it lists four components; the door requires seven)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>verifyRequest(...)</code> returns <code>{ ok: true, keyId, expiresAt, sigHash, covered: string[] }</code>.</p>
+</li>
+<li><p>Produces: <code>BOUND_COMPONENTS = [&quot;challenge&quot;, &quot;challenge-response&quot;]</code> exported from <code>middleware.mjs</code>.</p>
+</li>
+<li><p>Produces: <code>signRequest({ ..., challenge })</code> in the client; the returned headers include <code>challenge</code> and <code>challenge-response</code>, both covered. <code>REQUIRED_COMPONENTS</code> has seven entries.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing door test (the relayer)</strong></p>
+</li>
+</ul>
+<p>Add to <code>warden/test/door.test.mjs</code>, beside the existing replay tests. It signs
+WITHOUT the challenge components, then attaches a correct answer -- exactly what
+a relayer holding someone&#39;s fresh signature can do today.</p>
+<pre><code class="language-js">test(&quot;a challenge answered outside the signature is refused components&quot;, async () =&gt; {
+  const { challenge } = issueChallenge(SECRET, NOW);
+  const signer = await signerFromJWK(ED.key);
+  const req = await signedRequest({
+    components: [&quot;@authority&quot;, &quot;@method&quot;, &quot;@path&quot;, &quot;signature-agent&quot;, &quot;content-digest&quot;],
+    extraHeaders: {},
+  });
+  req.headers = { ...req.headers, challenge, &quot;challenge-response&quot;: answerFor(challenge, signer.keyid) };
+  const decision = await admit(req, deps());
+  assert.equal(decision.ok, false);
+  assert.equal(decision.body.reason, &quot;components&quot;);
+});
+</code></pre>
+<p>(<code>deps()</code>, <code>SECRET</code>, <code>NOW</code>, <code>answerFor</code> and <code>signedRequest</code> are the file&#39;s
+existing helpers; if <code>deps</code> is named differently there, use the existing
+factory that builds <code>admit</code>&#39;s dependencies.)</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and watch it fail</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; npm test -- --test-name-pattern &quot;outside the signature&quot;</code>
+Expected: FAIL -- <code>decision.ok</code> is <code>true</code>, because today the challenge is
+checked but not required to be signed.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Return the covered list from the verifier</strong></li>
+</ul>
+<p>In <code>warden/src/door/verify.mjs</code>, capture <code>covered</code> beside <code>verifiedKeyId</code> and
+return it:</p>
+<pre><code class="language-js">  let verifiedCovered = null;
+</code></pre>
+<p>inside the callback, after the REQUIRED loop passes:</p>
+<pre><code class="language-js">      verifiedCovered = covered;
+</code></pre>
+<p>and the final return:</p>
+<pre><code class="language-js">  return { ok: true, keyId: verifiedKeyId, expiresAt: verifiedExpiresAt, sigHash: verifiedSigHash, covered: verifiedCovered };
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Require the challenge components in <code>admit</code></strong></li>
+</ul>
+<p>In <code>warden/src/door/middleware.mjs</code>, export the list and check it straight
+after <code>verified.ok</code> is known:</p>
+<pre><code class="language-js">/// The door&#39;s own rule on top of verify.mjs: the challenge must be SIGNED, so
+/// only the key holder can answer it.
+export const BOUND_COMPONENTS = [&quot;challenge&quot;, &quot;challenge-response&quot;];
+</code></pre>
+<pre><code class="language-js">  if (!BOUND_COMPONENTS.every((c) =&gt; verified.covered?.includes(c))) return fail(&quot;components&quot;);
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Sign the challenge in the door test helper</strong></li>
+</ul>
+<p><code>signedRequest</code> in <code>door.test.mjs</code> currently signs and then spreads
+<code>extraHeaders</code> on top. Move <code>extraHeaders</code> INTO <code>message.headers</code> before
+signing, and add the two components to <code>CLIENT_COMPONENTS</code>:</p>
+<pre><code class="language-js">const CLIENT_COMPONENTS = [&quot;@authority&quot;, &quot;@method&quot;, &quot;@path&quot;, &quot;signature-agent&quot;, &quot;content-digest&quot;, &quot;challenge&quot;, &quot;challenge-response&quot;];
+</code></pre>
+<pre><code class="language-js">  const message = {
+    method: &quot;POST&quot;,
+    url: &quot;https://example.com/mcp&quot;,
+    headers: { &quot;signature-agent&quot;: &#39;&quot;https://example.com&quot;&#39;, host: &quot;example.com&quot;, &quot;content-digest&quot;: contentDigest(body), ...extraHeaders },
+  };
+</code></pre>
+<p>Every existing call already passes the challenge pair through <code>extraHeaders</code>,
+so they now sign it. A call that passes NO challenge now signs two empty
+header values; it still verifies, passes the components check, and is refused
+<code>challenge</code> by <code>checkChallenge</code> exactly as before. Confirm by running the
+suite; do not assume. The two other
+<code>signatureHeaders</code> calls in this file (near lines 620 and 753) get the same
+treatment: put <code>challenge</code> and <code>challenge-response</code> in the message headers
+before signing.</p>
+<p>Apply the same change to <code>warden/test/e2e/join.test.mjs</code> and to both tools in
+<code>warden/tools/</code> that sign by hand: add the pair to the message headers before
+<code>signatureHeaders</code>, and add both names to their component lists.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Make the reference client sign the challenge</strong></li>
+</ul>
+<p><code>client/src/signing.mjs</code>:</p>
+<pre><code class="language-js">export const REQUIRED_COMPONENTS = [
+  &quot;@authority&quot;, &quot;@method&quot;, &quot;@path&quot;, &quot;signature-agent&quot;, &quot;content-digest&quot;, &quot;challenge&quot;, &quot;challenge-response&quot;,
+];
+</code></pre>
+<pre><code class="language-js">import { answerChallenge } from &quot;./challenge.mjs&quot;;
+
+export async function signRequest({ privateJwk, origin, signatureAgent, challenge, method = &quot;POST&quot;, path = &quot;/mcp&quot;, body = &quot;&quot;, now = new Date() }) {
+  if (typeof challenge !== &quot;string&quot;) throw new Error(&quot;signRequest needs the door&#39;s challenge: it is a signed component&quot;);
+  const signer = await signerFromJWK(privateJwk);
+  const message = {
+    method,
+    url: new URL(path, origin).toString(),
+    headers: {
+      &quot;signature-agent&quot;: `${SIGNATURE_LABEL}=&quot;${signatureAgent}&quot;`,
+      host: new URL(origin).host,
+      &quot;content-digest&quot;: contentDigest(body),
+      challenge,
+      &quot;challenge-response&quot;: answerChallenge(challenge, signer.keyid),
+    },
+  };
+</code></pre>
+<p>(the rest of the function is unchanged). Update the doc comment above
+<code>REQUIRED_COMPONENTS</code>: seven components, and the challenge pair is signed so
+that only the key holder can answer.</p>
+<p><code>client/src/door.mjs</code> <code>admittedFetch</code>: pass <code>challenge</code> into <code>signRequest</code> and
+delete the two lines that add <code>challenge</code> and <code>challenge-response</code> after
+signing (they are now in <code>headers</code>).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Run all four suites</strong></li>
+</ul>
+<p>Run each, separately, through the wrapper:
+<code>cd contracts &amp;&amp; ~/scripts/safe-build.sh forge test</code>, then
+<code>~/scripts/safe-build.sh npm test</code> in <code>tools/</code>, <code>warden/</code>, <code>client/</code>.
+Expected: all PASS, including the new test. If a client test fails with
+<code>components</code>, a signing path was missed: find it with
+<code>/bin/grep -rn &quot;signatureHeaders(\|signRequest(&quot; warden client --include=*.mjs</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 8: Correct the agent-facing protocol text</strong></li>
+</ul>
+<p><code>docs/2026-09-01-mro-raw-protocol.md</code>, the &quot;Four rules&quot; section (near line
+284): the components rule now lists seven, and says the challenge pair is
+signed, so the answer is computed BEFORE signing. Re-run
+<code>node tools/protocol-transcript.mjs</code> only if that document&#39;s worked example is
+generated by it (read its header); otherwise update the example&#39;s
+<code>Signature-Input</code> line by hand to list seven components.
+<code>skills/machine-readable-only/references/refusals.md</code>: the <code>components</code> entry
+lists the seven names.</p>
+<p>These two files are agent-facing PROTOCOL facts, not the locked narrative copy;
+a wrong component list is a defect, not a wording choice.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 9: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/src/door client/src warden/test warden/tools docs/2026-09-01-mro-raw-protocol.md skills/machine-readable-only/references/refusals.md
+git commit -m &quot;feat(door): the challenge is a signed component&quot;
+</code></pre>
+<hr>
+<h3>Task 2: Admit a conforming <code>&quot;signature-agent&quot;;key=</code> signer (ruling 5)</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/door/verify.mjs</code></li>
+<li>Test: <code>warden/test/verify.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>keyedMessage(request) -&gt; request</code> exported from <code>verify.mjs</code>: the
+request unchanged, or a copy whose <code>signature-agent</code> header is the serialised
+member the signature selected. Throws on an ambiguous or unresolvable key.</li>
+</ul>
+<p><code>http-message-sig</code> 0.2.0 <code>buildSignedData</code> reads the WHOLE header for a header
+component and ignores its <code>key</code> parameter, so a base line RFC 9421 2.1.2 builds
+as <code>&quot;signature-agent&quot;;key=&quot;sig1&quot;: &quot;https://a.example&quot;</code> is built by the library
+from the entire dictionary, and a conforming signature fails.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test, signed from a HAND-BUILT base</strong></li>
+</ul>
+<p>The base is written out line by line, per RFC 9421 2.1.2 and 2.5, and signed
+with Node&#39;s own Ed25519 -- no signing library -- so the test cannot share a bug
+with the code under test.</p>
+<pre><code class="language-js">import { createPrivateKey, sign as edSign } from &quot;node:crypto&quot;;
+
+test(&quot;a signature over \&quot;signature-agent\&quot;;key= verifies, from a hand-built base&quot;, async () =&gt; {
+  const created = Math.floor(Date.now() / 1000);
+  const expires = created + 60;
+  const agent = &#39;sig1=&quot;https://example.com&quot;&#39;;
+  const params =
+    `(&quot;@authority&quot; &quot;@method&quot; &quot;@path&quot; &quot;signature-agent&quot;;key=&quot;sig1&quot; &quot;content-digest&quot;)` +
+    `;created=${created};expires=${expires};keyid=&quot;${ED.key.kid}&quot;;tag=&quot;web-bot-auth&quot;`;
+  const base = [
+    `&quot;@authority&quot;: example.com`,
+    `&quot;@method&quot;: POST`,
+    `&quot;@path&quot;: /mcp`,
+    `&quot;signature-agent&quot;;key=&quot;sig1&quot;: &quot;https://example.com&quot;`,
+    `&quot;content-digest&quot;: ${EMPTY_DIGEST}`,
+    `&quot;@signature-params&quot;: ${params}`,
+  ].join(&quot;\n&quot;);
+  const sig = edSign(null, Buffer.from(base, &quot;utf8&quot;), createPrivateKey({ key: ED.key, format: &quot;jwk&quot; })).toString(&quot;base64&quot;);
+  const req = {
+    method: &quot;POST&quot;,
+    url: &quot;https://example.com/mcp&quot;,
+    headers: {
+      host: &quot;example.com&quot;,
+      &quot;signature-agent&quot;: agent,
+      &quot;content-digest&quot;: EMPTY_DIGEST,
+      &quot;signature-input&quot;: `sig1=${params}`,
+      signature: `sig1=:${sig}:`,
+    },
+  };
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, true, r.reason);
+});
+</code></pre>
+<p>If <code>ED.key</code> has no <code>kid</code>, compute the key id the way the file&#39;s other tests
+obtain it (<code>(await signerFromJWK(ED.key)).keyid</code>) and use that.</p>
+<p>Add the two refusals beside it, built the same way:</p>
+<ul>
+<li><p>covering BOTH <code>&quot;signature-agent&quot;</code> and <code>&quot;signature-agent&quot;;key=&quot;sig1&quot;</code> -&gt; <code>ok: false</code>;</p>
+</li>
+<li><p><code>;key=&quot;sig9&quot;</code>, a member the header does not have -&gt; <code>ok: false</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run them and watch the first fail</strong></p>
+</li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; npm test -- --test-name-pattern &quot;signature-agent&quot;</code>
+Expected: the hand-built test FAILS with <code>reason: &quot;signature&quot;</code>; the two refusal
+tests already pass (they must still pass after the fix).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement <code>keyedMessage</code></strong></li>
+</ul>
+<p>In <code>verify.mjs</code>, import <code>serializeItem</code> beside <code>parseDictionary</code>, and add:</p>
+<pre><code class="language-js">/**
+ * RFC 9421 2.1.2: a component carrying `;key=` signs ONE dictionary member,
+ * serialised. http-message-sig 0.2.0 signs the whole header instead, so the
+ * header handed to it is replaced by the selected member. Parsed, never sliced.
+ */
+export function keyedMessage(request) {
+  const [first] = parseDictionary(headerOf(request, &quot;signature-input&quot;) ?? &quot;&quot;).values();
+  const members = Array.isArray(first?.[0]) ? first[0] : [];
+  const agents = members.filter(([name]) =&gt; name === &quot;signature-agent&quot;);
+  const keyed = agents.filter(([, params]) =&gt; params.has(&quot;key&quot;));
+  if (keyed.length === 0) return request;
+  if (agents.length &gt; 1) throw new Error(&quot;signature-agent covered more than once&quot;);
+  const key = keyed[0][1].get(&quot;key&quot;);
+  if (typeof key !== &quot;string&quot;) throw new Error(&quot;signature-agent key is not a string&quot;);
+  const member = parseDictionary(headerOf(request, &quot;signature-agent&quot;) ?? &quot;&quot;).get(key);
+  if (!member) throw new Error(&quot;signature-agent has no member for that key&quot;);
+  const headers = {};
+  if (typeof request.headers?.forEach === &quot;function&quot;) request.headers.forEach((v, k) =&gt; { headers[k] = v; });
+  else Object.assign(headers, request.headers);
+  for (const k of Object.keys(headers)) if (k.toLowerCase() === &quot;signature-agent&quot;) delete headers[k];
+  headers[&quot;signature-agent&quot;] = serializeItem(member);
+  return { ...request, headers };
+}
+</code></pre>
+<p>In <code>verifyRequest</code>, keep reading <code>signatureAgentHeader</code> from the ORIGINAL
+request (the URL lookup needs the dictionary), and verify the keyed copy:</p>
+<pre><code class="language-js">  let message;
+  try {
+    message = keyedMessage(request);
+  } catch {
+    return { ok: false, reason: &quot;components&quot; };
+  }
+</code></pre>
+<p>then pass <code>message</code> instead of <code>request</code> to <code>verifyWebBotAuth</code>. <code>timeReason</code>
+keeps reading <code>request</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the suites</strong></li>
+</ul>
+<p>All four, as in Task 1 Step 7. Expected: PASS, and the existing tests that sign
+a plain <code>signature-agent</code> are untouched (<code>keyedMessage</code> returns them as they
+came).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/src/door/verify.mjs warden/test/verify.test.mjs
+git commit -m &quot;fix(door): a signature-agent component with key= signs the selected member&quot;
+</code></pre>
+<hr>
+<h3>Task 3: The question bank</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/src/mcp/question.mjs</code></li>
+<li>Create: <code>warden/test/fixtures/question-bank.json</code></li>
+<li>Test: <code>warden/test/question.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces, from <code>question.mjs</code>:</p>
+<ul>
+<li><code>ANSWER_WINDOW_MS</code> (number, <code>60_000</code> until Task 10)</li>
+<li><code>assertBankSane(bank) -&gt; bank</code> (throws on any malformed entry)</li>
+<li><code>loadBank(path) -&gt; bank</code> (reads JSON, then <code>assertBankSane</code>)</li>
+<li><code>questionFor(day, secret, bank) -&gt; entry</code> (deterministic per day)</li>
+<li><code>answerIndex(entry, answer) -&gt; number | null</code> (<code>null</code> when not in the set)</li>
+<li><code>publicShape(entry) -&gt; { question, answers } | { question, range }</code></li>
+</ul>
+</li>
+<li><p>A bank entry is <code>{ &quot;id&quot;: &quot;fog-thunder&quot;, &quot;text&quot;: &quot;Fog or thunder?&quot;, &quot;answers&quot;: [&quot;fog&quot;, &quot;thunder&quot;] }</code>
+or <code>{ &quot;id&quot;: &quot;legs&quot;, &quot;text&quot;: &quot;How many legs is the right number of legs?&quot;, &quot;range&quot;: { &quot;min&quot;: 0, &quot;max&quot;: 100 } }</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the fixture</strong></p>
+</li>
+</ul>
+<p><code>warden/test/fixtures/question-bank.json</code> -- four entries, deliberately
+covering every shape and NOT drawn from the real bank:</p>
+<pre><code class="language-json">[
+  { &quot;id&quot;: &quot;t-two&quot;, &quot;text&quot;: &quot;Fog or thunder?&quot;, &quot;answers&quot;: [&quot;fog&quot;, &quot;thunder&quot;] },
+  { &quot;id&quot;: &quot;t-list&quot;, &quot;text&quot;: &quot;Keep one: a key, a feather, or a lantern?&quot;, &quot;answers&quot;: [&quot;key&quot;, &quot;feather&quot;, &quot;lantern&quot;] },
+  { &quot;id&quot;: &quot;t-range&quot;, &quot;text&quot;: &quot;How many legs is the right number of legs?&quot;, &quot;range&quot;: { &quot;min&quot;: 0, &quot;max&quot;: 100 } },
+  { &quot;id&quot;: &quot;t-shy&quot;, &quot;text&quot;: &quot;Is a tomato brave or shy?&quot;, &quot;answers&quot;: [&quot;brave&quot;, &quot;shy&quot;] }
+]
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Write the failing tests</strong></li>
+</ul>
+<p><code>warden/test/question.test.mjs</code>:</p>
+<pre><code class="language-js">import { test } from &quot;node:test&quot;;
+import assert from &quot;node:assert/strict&quot;;
+import { readFileSync } from &quot;node:fs&quot;;
+import { assertBankSane, questionFor, answerIndex, publicShape } from &quot;../src/mcp/question.mjs&quot;;
+
+const BANK = JSON.parse(readFileSync(new URL(&quot;./fixtures/question-bank.json&quot;, import.meta.url), &quot;utf8&quot;));
+const byId = (id) =&gt; BANK.find((q) =&gt; q.id === id);
+
+test(&quot;the fixture bank is sane&quot;, () =&gt; { assert.equal(assertBankSane(BANK), BANK); });
+
+test(&quot;a malformed bank is refused, entry by entry&quot;, () =&gt; {
+  const bad = [
+    [{ id: &quot;a&quot;, text: &quot;x&quot;, answers: [&quot;one&quot;] }],
+    [{ id: &quot;a&quot;, text: &quot;x&quot;, answers: Array.from({ length: 17 }, (_, i) =&gt; `o${i}`) }],
+    [{ id: &quot;a&quot;, text: &quot;x&quot;, answers: [&quot;same&quot;, &quot;SAME&quot;] }],
+    [{ id: &quot;a&quot;, text: &quot;x&quot;, range: { min: 0, max: 101 } }],
+    [{ id: &quot;a&quot;, text: &quot;x&quot;, range: { min: 5, max: 5 } }],
+    [{ id: &quot;a&quot;, text: &quot;x&quot; }],
+    [{ id: &quot;a&quot;, text: &quot;x&quot;, answers: [&quot;a&quot;, &quot;b&quot;] }, { id: &quot;a&quot;, text: &quot;y&quot;, answers: [&quot;a&quot;, &quot;b&quot;] }],
+    [{ id: &quot;a&quot;, text: &quot;caf\u00e9?&quot;, answers: [&quot;a&quot;, &quot;b&quot;] }],
+    [],
+  ];
+  for (const bank of bad) assert.throws(() =&gt; assertBankSane(bank), undefined, JSON.stringify(bank));
+});
+
+test(&quot;the day&#39;s question is the same for every caller and changes by day&quot;, () =&gt; {
+  const a = questionFor(20700, &quot;s&quot;, BANK);
+  assert.deepEqual(questionFor(20700, &quot;s&quot;, BANK), a);
+  const seen = new Set(Array.from({ length: 40 }, (_, i) =&gt; questionFor(20700 + i, &quot;s&quot;, BANK).id));
+  assert.ok(seen.size &gt; 1);
+});
+
+test(&quot;answers match ignoring case and surrounding space&quot;, () =&gt; {
+  assert.equal(answerIndex(byId(&quot;t-two&quot;), &quot;Fog &quot;), 0);
+  assert.equal(answerIndex(byId(&quot;t-two&quot;), &quot;THUNDER&quot;), 1);
+  assert.equal(answerIndex(byId(&quot;t-two&quot;), &quot;rain&quot;), null);
+});
+
+test(&quot;a range takes a number or a numeric string, inside the range only&quot;, () =&gt; {
+  const legs = byId(&quot;t-range&quot;);
+  assert.equal(answerIndex(legs, 42), 42);
+  assert.equal(answerIndex(legs, &quot;42&quot;), 42);
+  assert.equal(answerIndex(legs, 101), null);
+  assert.equal(answerIndex(legs, 4.5), null);
+  assert.equal(answerIndex(legs, &quot;4x&quot;), null);
+});
+
+test(&quot;the public shape never carries the id&quot;, () =&gt; {
+  assert.deepEqual(publicShape(byId(&quot;t-range&quot;)), { question: &quot;How many legs is the right number of legs?&quot;, range: { min: 0, max: 100 } });
+  assert.equal(&quot;id&quot; in publicShape(byId(&quot;t-two&quot;)), false);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run them and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; npm test -- --test-name-pattern &quot;bank|question|answers|range|public shape&quot;</code>
+Expected: FAIL -- module not found.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Implement <code>question.mjs</code></strong></li>
+</ul>
+<pre><code class="language-js">// The daily question: which one is asked, and whether an answer is in its set.
+import { readFileSync } from &quot;node:fs&quot;;
+import { createHmac } from &quot;node:crypto&quot;;
+
+/// Measured in Task 10 of Plan B; a constant so changing it needs no redeploy.
+export const ANSWER_WINDOW_MS = 60_000;
+
+const MAX_OPTIONS = 16;
+const MAX_RANGE = 101;
+const ASCII = /^[\x20-\x7e]+$/;
+const norm = (s) =&gt; String(s).trim().toLowerCase();
+
+export function assertBankSane(bank) {
+  if (!Array.isArray(bank) || bank.length === 0) throw new Error(&quot;question bank is empty&quot;);
+  const ids = new Set();
+  for (const q of bank) {
+    if (typeof q.id !== &quot;string&quot; || !q.id || ids.has(q.id)) throw new Error(`question id missing or repeated: ${q.id}`);
+    ids.add(q.id);
+    if (typeof q.text !== &quot;string&quot; || !ASCII.test(q.text)) throw new Error(`question ${q.id}: text must be printable ASCII`);
+    if (Array.isArray(q.answers) === (q.range !== undefined)) throw new Error(`question ${q.id}: exactly one of answers or range`);
+    if (q.answers) {
+      if (q.answers.length &lt; 2 || q.answers.length &gt; MAX_OPTIONS) throw new Error(`question ${q.id}: 2 to ${MAX_OPTIONS} answers`);
+      if (!q.answers.every((a) =&gt; typeof a === &quot;string&quot; &amp;&amp; ASCII.test(a))) throw new Error(`question ${q.id}: answers must be printable ASCII`);
+      if (new Set(q.answers.map(norm)).size !== q.answers.length) throw new Error(`question ${q.id}: answers repeat`);
+    } else {
+      const { min, max } = q.range;
+      if (!Number.isInteger(min) || !Number.isInteger(max) || max &lt;= min || max - min + 1 &gt; MAX_RANGE) {
+        throw new Error(`question ${q.id}: range must be 2 to ${MAX_RANGE} integers`);
+      }
+    }
+  }
+  return bank;
+}
+
+export function loadBank(path) {
+  return assertBankSane(JSON.parse(readFileSync(path, &quot;utf8&quot;)));
+}
+
+/// Keyed by the Warden&#39;s secret so the day&#39;s question cannot be read in advance.
+export function questionFor(day, secret, bank) {
+  const h = createHmac(&quot;sha256&quot;, secret).update(`question:${day}`).digest();
+  return bank[h.readUInt32BE(0) % bank.length];
+}
+
+export function answerIndex(q, answer) {
+  if (q.answers) {
+    if (typeof answer !== &quot;string&quot;) return null;
+    const i = q.answers.findIndex((a) =&gt; norm(a) === norm(answer));
+    return i === -1 ? null : i;
+  }
+  const n = typeof answer === &quot;number&quot; ? answer : /^\s*-?\d+\s*$/.test(String(answer)) ? Number(answer) : NaN;
+  if (!Number.isInteger(n) || n &lt; q.range.min || n &gt; q.range.max) return null;
+  return n - q.range.min;
+}
+
+export function publicShape(q) {
+  return q.answers ? { question: q.text, answers: [...q.answers] } : { question: q.text, range: { ...q.range } };
+}
+</code></pre>
+<p>Note the range index is <code>n - min</code>, so <code>answerIndex(legs, 42)</code> is 42 only
+because that range starts at 0 -- the test above uses that range on purpose.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the tests and watch them pass</strong></li>
+</ul>
+<p>Same command as Step 3. Expected: PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/src/mcp/question.mjs warden/test/question.test.mjs warden/test/fixtures/question-bank.json
+git commit -m &quot;feat(warden): the question bank, its checks and the day&#39;s choice&quot;
+</code></pre>
+<hr>
+<h3>Task 4: The mirror&#39;s <code>questions</code> table</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/mirror/schema.sql</code></li>
+<li>Modify: <code>warden/src/mirror/queries.mjs</code></li>
+<li>Test: <code>warden/test/mirror.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces, on <code>q</code>:<ul>
+<li><code>issueQuestion(tokenId, day, questionId, issuedAt) -&gt; { questionId, issuedAt }</code> -- the FIRST issue wins; a repeat returns the stored row.</li>
+<li><code>getQuestion(tokenId, day) -&gt; row | undefined</code> (<code>{ tokenId, day, questionId, issuedAt, answer, answeredAt }</code>)</li>
+<li><code>recordAnswer(tokenId, day, answer, answeredAt) -&gt; void</code> (call inside the credit transaction)</li>
+</ul>
+</li>
+</ul>
+<p>A NEW table needs no <code>migrate()</code> step: <code>CREATE TABLE IF NOT EXISTS</code> is safe on
+every open, and nothing in it references a column <code>migrate()</code> adds
+(<code>.claude/rules/warden.md</code>).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<p>Append to <code>warden/test/mirror.test.mjs</code> (use its existing <code>openDb(&quot;:memory:&quot;)</code></p>
+<ul>
+<li><code>queries(db)</code> setup):</li>
+</ul>
+<pre><code class="language-js">test(&quot;a question is issued once per token and day; the first issue wins&quot;, () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  assert.deepEqual(q.issueQuestion(1, 20700, &quot;t-two&quot;, 1000), { questionId: &quot;t-two&quot;, issuedAt: 1000 });
+  assert.deepEqual(q.issueQuestion(1, 20700, &quot;t-list&quot;, 5000), { questionId: &quot;t-two&quot;, issuedAt: 1000 });
+  assert.deepEqual(q.issueQuestion(2, 20700, &quot;t-list&quot;, 5000), { questionId: &quot;t-list&quot;, issuedAt: 5000 });
+});
+
+test(&quot;an answer is recorded against the issued question&quot;, () =&gt; {
+  const q = queries(openDb(&quot;:memory:&quot;));
+  q.issueQuestion(1, 20700, &quot;t-two&quot;, 1000);
+  q.recordAnswer(1, 20700, 1, 3000);
+  const row = q.getQuestion(1, 20700);
+  assert.equal(row.answer, 1);
+  assert.equal(row.answeredAt, 3000);
+  assert.equal(q.getQuestion(1, 20701), undefined);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; npm test -- --test-name-pattern &quot;question is issued|answer is recorded&quot;</code>
+Expected: FAIL -- <code>q.issueQuestion is not a function</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Add the table</strong></li>
+</ul>
+<p>Append to <code>schema.sql</code>:</p>
+<pre><code class="language-sql">-- The day&#39;s question as issued to one token, and the answer it gave.
+-- answer is the index into the question&#39;s answer set; NULL is silent.
+CREATE TABLE IF NOT EXISTS questions (
+  tokenId    INTEGER NOT NULL,
+  day        INTEGER NOT NULL,
+  questionId TEXT    NOT NULL,
+  issuedAt   INTEGER NOT NULL,
+  answer     INTEGER,
+  answeredAt INTEGER,
+  PRIMARY KEY (tokenId, day)
+);
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Add the queries</strong></li>
+</ul>
+<p>In <code>queries.mjs</code>, in the prepared-statement object <code>s</code>:</p>
+<pre><code class="language-js">    issueQuestion: db.prepare(
+      &quot;INSERT OR IGNORE INTO questions (tokenId, day, questionId, issuedAt) VALUES (?, ?, ?, ?)&quot;
+    ),
+    getQuestion: db.prepare(&quot;SELECT * FROM questions WHERE tokenId = ? AND day = ?&quot;),
+    recordAnswer: db.prepare(&quot;UPDATE questions SET answer = ?, answeredAt = ? WHERE tokenId = ? AND day = ?&quot;),
+</code></pre>
+<p>and in the returned object:</p>
+<pre><code class="language-js">    issueQuestion(tokenId, day, questionId, issuedAt) {
+      s.issueQuestion.run(tokenId, day, questionId, issuedAt);
+      const row = s.getQuestion.get(tokenId, day);
+      return { questionId: row.questionId, issuedAt: row.issuedAt };
+    },
+    getQuestion(tokenId, day) {
+      return s.getQuestion.get(tokenId, day);
+    },
+    recordAnswer(tokenId, day, answer, answeredAt) {
+      s.recordAnswer.run(answer, answeredAt, tokenId, day);
+    },
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run and watch them pass, then the whole Warden suite</strong></li>
+</ul>
+<p>Run the Step 2 command, then <code>cd warden &amp;&amp; ~/scripts/safe-build.sh npm test</code>.
+Expected: PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/src/mirror/schema.sql warden/src/mirror/queries.mjs warden/test/mirror.test.mjs
+git commit -m &quot;feat(mirror): the questions table&quot;
+</code></pre>
+<hr>
+<h3>Task 5: The <code>question</code> tool</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/src/mcp/tools/question.mjs</code></li>
+<li>Modify: <code>warden/src/mcp/server.mjs</code> (<code>TOOL_FACTORIES</code>, <code>instructions</code>)</li>
+<li>Modify: every place that builds <code>makeMcpHandler</code> deps: <code>warden/test/e2e/join.test.mjs</code>,
+<code>warden/test/mcp.test.mjs</code>, <code>warden/test/tool-convention.test.mjs</code>,
+<code>warden/test/resources.test.mjs</code>, <code>client/test/journey.test.mjs</code>,
+<code>client/test/cli.test.mjs</code>, <code>warden/tools/protocol-transcript.mjs</code>,
+<code>warden/tools/x402-live-mint-check.mjs</code></li>
+<li>Test: <code>warden/test/question-tool.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>questionFor</code>, <code>publicShape</code>, <code>ANSWER_WINDOW_MS</code> (Task 3); <code>q.issueQuestion</code>, <code>q.getToken</code> (Task 4).</p>
+</li>
+<li><p>Produces: <code>makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now = Date.now })</code>, tool name <code>&quot;question&quot;</code>, input <code>{ tokenId }</code>.
+Reply <code>{ ok: true, day, question, answers | range, answerBy }</code>.</p>
+</li>
+<li><p>Produces: <code>makeMcpHandler</code> deps gain <code>bank</code> (required).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<p><code>warden/test/question-tool.test.mjs</code>:</p>
+<pre><code class="language-js">import { test } from &quot;node:test&quot;;
+import assert from &quot;node:assert/strict&quot;;
+import { readFileSync } from &quot;node:fs&quot;;
+import { openDb } from &quot;../src/mirror/db.mjs&quot;;
+import { queries } from &quot;../src/mirror/queries.mjs&quot;;
+import { makeQuestionTool } from &quot;../src/mcp/tools/question.mjs&quot;;
+import { ANSWER_WINDOW_MS } from &quot;../src/mcp/question.mjs&quot;;
+
+const BANK = JSON.parse(readFileSync(new URL(&quot;./fixtures/question-bank.json&quot;, import.meta.url), &quot;utf8&quot;));
+
+function setup({ lastDay = 100, level = 1, keyId = &quot;k1&quot; } = {}) {
+  const db = openDb(&quot;:memory:&quot;);
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId, owner: &quot;0xabc&quot;, lastDay, mintDay: 100 });
+  if (level !== 1) db.prepare(&quot;UPDATE tokens SET level = ? WHERE tokenId = 1&quot;).run(level);
+  let clock = 1_000_000;
+  const tool = makeQuestionTool({ q, bank: BANK, challengeSecret: &quot;s&quot;, today: () =&gt; 101, now: () =&gt; clock });
+  return { q, tool, tick: (ms) =&gt; { clock += ms; } };
+}
+
+test(&quot;the question is the day&#39;s, with a window&quot;, async () =&gt; {
+  const { tool } = setup();
+  const r = await tool.handler({ tokenId: 1 }, { keyId: &quot;k1&quot; });
+  assert.equal(r.ok, true);
+  assert.equal(r.day, 101);
+  assert.equal(typeof r.question, &quot;string&quot;);
+  assert.equal(r.answerBy, new Date(1_000_000 + ANSWER_WINDOW_MS).toISOString());
+  assert.equal(&quot;id&quot; in r, false);
+});
+
+test(&quot;a second look the same day is the same question and the same window&quot;, async () =&gt; {
+  const { tool, tick } = setup();
+  const first = await tool.handler({ tokenId: 1 }, { keyId: &quot;k1&quot; });
+  tick(30_000);
+  const second = await tool.handler({ tokenId: 1 }, { keyId: &quot;k1&quot; });
+  assert.deepEqual(second, first);
+});
+
+test(&quot;refusals: unbound, unknown, already credited today, year complete&quot;, async () =&gt; {
+  assert.equal((await setup({ keyId: &quot;other&quot; }).tool.handler({ tokenId: 1 }, { keyId: &quot;k1&quot; })).reason, &quot;not-bound-to-caller&quot;);
+  assert.equal((await setup().tool.handler({ tokenId: 9 }, { keyId: &quot;k1&quot; })).reason, &quot;unknown-token&quot;);
+  assert.equal((await setup({ lastDay: 101 }).tool.handler({ tokenId: 1 }, { keyId: &quot;k1&quot; })).reason, &quot;already-credited-today&quot;);
+  assert.equal((await setup({ level: 365 }).tool.handler({ tokenId: 1 }, { keyId: &quot;k1&quot; })).reason, &quot;year-complete&quot;);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; npm test -- --test-name-pattern &quot;the question is the day|second look|refusals: unbound&quot;</code>
+Expected: FAIL -- module not found.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement the tool</strong></li>
+</ul>
+<p><code>warden/src/mcp/tools/question.mjs</code>:</p>
+<pre><code class="language-js">// The daily question. Seeing it spends the token&#39;s look for the day.
+import * as z from &quot;zod&quot;;
+import { utcDay } from &quot;../../day.mjs&quot;;
+import { FINISH_LEVEL } from &quot;../ladder.mjs&quot;;
+import { questionFor, publicShape, ANSWER_WINDOW_MS } from &quot;../question.mjs&quot;;
+
+export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now = Date.now }) {
+  if (!Array.isArray(bank)) throw new Error(&quot;question tool needs the question bank&quot;);
+  if (!challengeSecret) throw new Error(&quot;question tool needs the challenge secret&quot;);
+  return {
+    name: &quot;question&quot;,
+    config: {
+      title: &quot;Today&#39;s question&quot;,
+      description:
+        &quot;Today&#39;s question for a token bound to your key. Free. Answer it with `checkin { tokenId, answer }` before `answerBy`. One look per token per UTC day: asking again returns the same question and the same deadline. A late or missing answer still credits the day.&quot;,
+      inputSchema: z.object({ tokenId: z.number().int().positive().describe(&quot;A token bound to your key.&quot;) }),
+      annotations: { readOnlyHint: false, openWorldHint: false },
+    },
+
+    async handler({ tokenId }, ctx) {
+      const token = q.getToken(tokenId);
+      if (!token) return { ok: false, reason: &quot;unknown-token&quot; };
+      // Mirror only: a stale binding costs a look, never a credit; checkin re-checks the chain.
+      if (token.keyId !== ctx.keyId) return { ok: false, reason: &quot;not-bound-to-caller&quot; };
+      if (token.level &gt;= FINISH_LEVEL) return { ok: false, reason: &quot;year-complete&quot; };
+      const day = today();
+      if (day &lt;= token.lastDay) return { ok: false, reason: &quot;already-credited-today&quot; };
+
+      const chosen = questionFor(day, challengeSecret, bank);
+      const issued = q.issueQuestion(tokenId, day, chosen.id, now());
+      const asked = bank.find((b) =&gt; b.id === issued.questionId) ?? chosen;
+      return {
+        ok: true,
+        day,
+        ...publicShape(asked),
+        answerBy: new Date(issued.issuedAt + ANSWER_WINDOW_MS).toISOString(),
+      };
+    },
+  };
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Register it and require the bank everywhere</strong></li>
+</ul>
+<p><code>server.mjs</code>: import <code>makeQuestionTool</code> and add it to <code>TOOL_FACTORIES</code> directly
+before <code>makeCheckinTool</code>. In <code>instructions</code>, after &quot;checkin is free and is the
+whole daily obligation;&quot; insert &quot;ask <code>question</code> first and pass your answer to
+checkin;&quot;. Then add <code>bank</code> to every <code>makeMcpHandler({...})</code> call listed under
+Files, loaded from the fixture:</p>
+<pre><code class="language-js">const BANK = JSON.parse(readFileSync(new URL(&quot;&lt;relative path to&gt;/warden/test/fixtures/question-bank.json&quot;, import.meta.url), &quot;utf8&quot;));
+</code></pre>
+<p>(use the correct relative path from each file; the two <code>warden/tools</code> scripts
+take <code>loadBank(process.env.MRO_QUESTION_BANK ?? join(homedir(), &quot;.mro-questions&quot;, &quot;bank.json&quot;))</code>
+instead, because they talk to a real bank). Make sure each of those call sites
+also passes <code>challengeSecret</code> -- most already do.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run all four suites</strong></li>
+</ul>
+<p>Expected: PASS. <code>tool-convention.test.mjs</code> iterates <code>TOOL_FACTORIES</code>, so it
+checks the new tool&#39;s <code>ok</code> convention with no edit beyond its deps.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/src/mcp warden/test client/test warden/tools
+git commit -m &quot;feat(warden): the question tool&quot;
+</code></pre>
+<hr>
+<h3>Task 6: <code>checkin</code> takes an answer</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/mcp/tools/checkin.mjs</code></li>
+<li>Test: <code>warden/test/tools.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>answerIndex</code>, <code>ANSWER_WINDOW_MS</code> (Task 3); <code>q.getQuestion</code>, <code>q.recordAnswer</code> (Task 4).</p>
+</li>
+<li><p>Produces: <code>makeCheckinTool({ q, chain, bank, today, now = Date.now })</code>; input
+<code>{ tokenId, answer? }</code> with <code>answer</code> a string or an integer. Every accepted
+reply gains <code>answered: boolean</code>. New refusal reason <code>invalid-answer</code>, carrying
+<code>answerBy</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<p>In <code>tools.test.mjs</code>, the existing <code>makeCheckinTool</code> calls gain <code>bank: BANK</code>
+(load the fixture as in Task 5). Then add:</p>
+<pre><code class="language-js">function withQuestion({ issuedAt = 1_000 } = {}) {
+  const { db, q } = withToken();
+  q.issueQuestion(1, 101, &quot;t-two&quot;, issuedAt);
+  return { db, q };
+}
+
+test(&quot;an answer inside the window is recorded with the credit&quot;, async () =&gt; {
+  const { q } = withQuestion();
+  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () =&gt; 101, now: () =&gt; 5_000 });
+  const r = await tool.handler({ tokenId: 1, answer: &quot;Thunder&quot; }, { keyId: &quot;k1&quot; });
+  assert.equal(r.accepted, true);
+  assert.equal(r.answered, true);
+  assert.equal(q.getQuestion(1, 101).answer, 1);
+});
+
+test(&quot;an answer outside the set, in time, is refused and NOT credited&quot;, async () =&gt; {
+  const { db, q } = withQuestion();
+  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () =&gt; 101, now: () =&gt; 5_000 });
+  const r = await tool.handler({ tokenId: 1, answer: &quot;rain&quot; }, { keyId: &quot;k1&quot; });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, &quot;invalid-answer&quot;);
+  assert.equal(creditsFor(db, 1).length, 0);
+  const again = await tool.handler({ tokenId: 1, answer: &quot;fog&quot; }, { keyId: &quot;k1&quot; });
+  assert.equal(again.answered, true);
+});
+
+test(&quot;a late answer, valid or not, credits the day as silent&quot;, async () =&gt; {
+  const { q } = withQuestion();
+  const late = 1_000 + ANSWER_WINDOW_MS + 1;
+  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () =&gt; 101, now: () =&gt; late });
+  const r = await tool.handler({ tokenId: 1, answer: &quot;rain&quot; }, { keyId: &quot;k1&quot; });
+  assert.equal(r.accepted, true);
+  assert.equal(r.answered, false);
+  assert.equal(q.getQuestion(1, 101).answer, null);
+});
+
+test(&quot;an answer with no question asked credits the day as silent&quot;, async () =&gt; {
+  const { q } = withToken();
+  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () =&gt; 101, now: () =&gt; 5_000 });
+  const r = await tool.handler({ tokenId: 1, answer: &quot;fog&quot; }, { keyId: &quot;k1&quot; });
+  assert.equal(r.accepted, true);
+  assert.equal(r.answered, false);
+});
+
+test(&quot;no answer at all is accepted and says so&quot;, async () =&gt; {
+  const { q } = withQuestion();
+  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () =&gt; 101, now: () =&gt; 5_000 });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: &quot;k1&quot; });
+  assert.equal(r.answered, false);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; npm test -- --test-name-pattern &quot;answer&quot;</code>
+Expected: FAIL -- <code>answered</code> is undefined and <code>invalid-answer</code> is never returned.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></li>
+</ul>
+<p>In <code>checkin.mjs</code>: accept <code>bank</code> and <code>now</code> in the factory, and require the bank
+the same way <code>requireChain</code> requires the chain:</p>
+<pre><code class="language-js">export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now }) {
+  requireChain(chain, &quot;checkin&quot;);
+  if (!Array.isArray(bank)) throw new Error(&quot;checkin needs the question bank&quot;);
+</code></pre>
+<p>The input schema:</p>
+<pre><code class="language-js">      inputSchema: z.object({
+        tokenId: z.number().int().positive().describe(&quot;A token bound to your key.&quot;),
+        answer: z.union([z.string().max(64), z.number().int()]).optional()
+          .describe(&quot;Your answer to today&#39;s `question`, before its answerBy.&quot;),
+      }),
+</code></pre>
+<p>and the description gains, at its end: &quot; Ask <code>question</code> first and pass your
+answer here; a late or missing answer still credits the day.&quot;</p>
+<p>In the handler signature, take <code>{ tokenId, answer }</code>. Directly AFTER the
+<code>day &lt;= token.lastDay</code> guard and BEFORE the chain reads, decide the answer:</p>
+<pre><code class="language-js">      const asked = q.getQuestion(tokenId, day);
+      const inTime = asked &amp;&amp; answer !== undefined &amp;&amp; now() &lt;= asked.issuedAt + ANSWER_WINDOW_MS;
+      let answerIdx = null;
+      if (inTime) {
+        const entry = bank.find((b) =&gt; b.id === asked.questionId);
+        answerIdx = entry ? answerIndex(entry, answer) : null;
+        if (answerIdx === null) {
+          return {
+            ok: false, accepted: false, reason: &quot;invalid-answer&quot;,
+            answerBy: new Date(asked.issuedAt + ANSWER_WINDOW_MS).toISOString(),
+          };
+        }
+      }
+</code></pre>
+<p>Inside the existing credit transaction, after <code>q.creditDay(...)</code>:</p>
+<pre><code class="language-js">        if (answerIdx !== null) q.recordAnswer(tokenId, day, answerIdx, now());
+</code></pre>
+<p>and add <code>answered: answerIdx !== null,</code> to the accepted reply, after <code>heart</code>.</p>
+<p>Import <code>answerIndex</code> and <code>ANSWER_WINDOW_MS</code> from <code>../question.mjs</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Add <code>invalid-answer</code> to the next-step table</strong></li>
+</ul>
+<p><code>warden/src/mcp/nextSteps.mjs</code> maps every refusal reason to a next step (C3.7).
+Add: <code>&quot;invalid-answer&quot;: &quot;Your answer is not one of today&#39;s options. Send one of them before answerBy; after that the day is credited without an answer.&quot;</code>
+Read <code>warden/test/next-steps.test.mjs</code> first: if it already fails for a
+reason with no entry, running <code>cd warden &amp;&amp; npm test</code> checks this step; if it
+does not, add a test there asserting <code>withNext({ ok: false, reason: &quot;invalid-answer&quot; })</code> carries a <code>next</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run all four suites</strong></li>
+</ul>
+<p>Expected: PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/src/mcp warden/test
+git commit -m &quot;feat(warden): checkin records the day&#39;s answer&quot;
+</code></pre>
+<hr>
+<h3>Task 7: The Warden loads the bank at boot</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/main.mjs</code></li>
+<li>Modify: <code>warden/.env.example</code></li>
+<li>Test: <code>warden/test/question.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>bankPath(env = process.env) -&gt; string</code> exported from <code>question.mjs</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<pre><code class="language-js">import { bankPath } from &quot;../src/mcp/question.mjs&quot;;
+import { homedir } from &quot;node:os&quot;;
+import { join } from &quot;node:path&quot;;
+
+test(&quot;the bank path is the setting, else the private default outside the worktree&quot;, () =&gt; {
+  assert.equal(bankPath({ MRO_QUESTION_BANK: &quot;/x/bank.json&quot; }), &quot;/x/bank.json&quot;);
+  assert.equal(bankPath({}), join(homedir(), &quot;.mro-questions&quot;, &quot;bank.json&quot;));
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run, watch it fail, implement, watch it pass</strong></li>
+</ul>
+<p>In <code>question.mjs</code>:</p>
+<pre><code class="language-js">import { homedir } from &quot;node:os&quot;;
+import { join } from &quot;node:path&quot;;
+
+/// Outside every worktree: the repository is public and the bank must not be.
+export function bankPath(env = process.env) {
+  return env.MRO_QUESTION_BANK || join(homedir(), &quot;.mro-questions&quot;, &quot;bank.json&quot;);
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Load it in <code>main.mjs</code>, failing loudly</strong></li>
+</ul>
+<p>Beside the other boot-time reads, before <code>makeMcpHandler</code>:</p>
+<pre><code class="language-js">  // A missing or malformed bank stops the Warden here, before it admits anyone.
+  const bank = loadBank(bankPath());
+</code></pre>
+<p>and pass <code>bank</code> in the <code>makeMcpHandler({...})</code> deps.</p>
+<p><code>.env.example</code> gains, commented, after <code>STATE_DB_PATH</code>:</p>
+<pre><code># Optional. The private question bank; default is .mro-questions/bank.json in the home directory.
+# MRO_QUESTION_BANK=
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run all four suites, then commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/src/main.mjs warden/src/mcp/question.mjs warden/test/question.test.mjs warden/.env.example
+git commit -m &quot;feat(warden): the question bank is loaded at boot&quot;
+</code></pre>
+<hr>
+<h3>Task 8: The reference client asks and answers</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>client/src/cli.mjs</code></li>
+<li>Test: <code>client/test/cli.test.mjs</code>, <code>client/test/journey.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: command <code>mro-agent question --token &lt;id&gt;</code>; flag <code>--answer &lt;value&gt;</code>
+on <code>beat</code>. A value of only digits (optionally signed) is sent as an integer,
+anything else as a string.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing journey test</strong></p>
+</li>
+</ul>
+<p>In <code>journey.test.mjs</code>, after the existing check-in step of the journey (or as a
+new test using the same harness), drive the two commands against the real
+in-process Warden:</p>
+<pre><code class="language-js">test(&quot;question, then beat --answer, records the answer&quot;, async () =&gt; {
+  const asked = await runCli([&quot;question&quot;, &quot;--token&quot;, String(tokenId), ...siteArgs]);
+  assert.match(asked.stdout, /question: /);
+  const shape = JSON.parse(asked.stdout.slice(asked.stdout.indexOf(&quot;{&quot;)));
+  const answer = shape.answers ? shape.answers[0] : String(shape.range.min);
+  const beat = await runCli([&quot;beat&quot;, &quot;--token&quot;, String(tokenId), &quot;--answer&quot;, answer, ...siteArgs]);
+  assert.match(beat.stdout, /&quot;answered&quot;: true/);
+});
+</code></pre>
+<p>(<code>runCli</code>, <code>tokenId</code> and <code>siteArgs</code> stand for the harness&#39;s existing helpers
+for running the CLI against the test Warden and for the minted token; use the
+names that file already defines.)</p>
+<p>Also add to <code>cli.test.mjs</code>: <code>--answer</code> is a known flag, and <code>question</code> without
+<code>--token</code> throws <code>--token &lt;id&gt; is required for question</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run, watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd client &amp;&amp; npm test</code>
+Expected: FAIL -- unknown command <code>question</code>, unknown option <code>--answer</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></li>
+</ul>
+<p><code>cli.mjs</code>:</p>
+<ul>
+<li><code>COMMANDS</code> gains <code>&quot;question&quot;</code>; <code>FLAGS</code> gains <code>&quot;answer&quot;</code>.</li>
+<li>Usage lines:
+<code>mro-agent question --token &lt;id&gt;    today&#39;s question; answer it with beat --answer</code>
+<code>mro-agent beat   --token &lt;id&gt; [--answer &lt;a&gt;]  check in for today, with your answer</code></li>
+<li><code>question</code> joins the <code>ladder</code>/<code>rebind</code>/<code>rest</code> branch, which already calls the
+tool named by the command with <code>{ tokenId }</code>.</li>
+<li><code>beat</code>:</li>
+</ul>
+<pre><code class="language-js">  if (command === &quot;beat&quot;) {
+    if (!args.token) throw new Error(&quot;--token &lt;id&gt; is required&quot;);
+    const toolArgs = { tokenId: Number(args.token) };
+    if (args.answer !== undefined) toolArgs.answer = /^\s*-?\d+\s*$/.test(args.answer) ? Number(args.answer) : args.answer;
+    const result = await callTool({ ...call, name: &quot;checkin&quot;, arguments: toolArgs });
+    report(&quot;checkin&quot;, result);
+    return;
+  }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run all four suites, then commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add client/src/cli.mjs client/test
+git commit -m &quot;feat(client): question, and beat --answer&quot;
+</code></pre>
+<hr>
+<h3>Task 9: The bank itself, and the agent-facing copy -- STOP for approval</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Create (OUTSIDE the repository): <code>.mro-questions/bank.json</code> in the home directory, directory mode 700, file mode 600</p>
+</li>
+<li><p>Create: <code>warden/tools/check-question-bank.mjs</code></p>
+</li>
+<li><p>Modify (after approval only): <code>warden/public/llms.txt</code>, <code>skills/machine-readable-only/SKILL.md</code>,
+<code>docs/2026-09-01-mro-raw-protocol.md</code>, the door page under <code>warden/public/</code></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: The bank checker</strong></p>
+</li>
+</ul>
+<p><code>warden/tools/check-question-bank.mjs</code> -- prints counts only, never a question,
+so its output is safe in any log:</p>
+<pre><code class="language-js">// Validate the private question bank and print its shape, never its content.
+//   node warden/tools/check-question-bank.mjs
+import { loadBank, bankPath } from &quot;../src/mcp/question.mjs&quot;;
+
+const bank = loadBank(bankPath());
+const two = bank.filter((q) =&gt; q.answers?.length === 2).length;
+const list = bank.filter((q) =&gt; q.answers?.length &gt; 2).length;
+const range = bank.filter((q) =&gt; q.range).length;
+console.log(`question bank: ${bank.length} questions (${two} two-way, ${list} lists, ${range} ranges)`);
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Write the bank</strong></li>
+</ul>
+<p>At least 300 questions, written to the path above with <code>mkdir -m 700</code> and
+<code>chmod 600</code>. Rules, from the spec and the operator: short; a little strange;
+concrete; fun to repeat when an agent is asked &quot;what were you asked today?&quot;;
+roughly 60% two-way, 25% lists of 3 to 6, 15% ranges; no question about the
+agent&#39;s operator, money, politics, religion, health or real people; printable
+ASCII; ids in kebab-case. Run the checker; it must pass.</p>
+<p>Copy the file to the existing private backups directory (<code>.mro-state-backups</code>
+in the home directory) with mode 600.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Draft the agent-facing copy, and STOP</strong></li>
+</ul>
+<p>The narrative copy is LOCKED (<code>docs/2026-09-01-mro-agent-facing-copy.md</code>; the
+<code>agent-facing-copy-locked</code> memory). Draft, in one file at
+<code>tools/out/plan-b-copy-draft.md</code> (gitignored), every sentence this feature adds
+to <code>llms.txt</code>, SKILL.md, the raw protocol doc and the door page:</p>
+<ul>
+<li>the daily step: ask <code>question</code>, then <code>checkin</code> with <code>answer</code>;</li>
+<li>the window, as &quot;about a minute&quot; until Task 10 measures it;</li>
+<li>one look per day; silence still credits the day;</li>
+<li><strong>a scheduled (cron) check-in has no model in it, so it is silent every day</strong>
+-- the agent answers only when it runs the two steps itself;</li>
+<li>the answers become the border; the rule that turns them into squares is
+secret on the day and checkable afterwards;</li>
+<li>never the rule itself.</li>
+</ul>
+<p>Render it (<code>~/scripts/render-md-to-html.js</code>, one argument), send it to the
+operator, and wait. Apply only the approved wording, then run all four suites
+(copy is pinned by tests in <code>warden/test/door-page.test.mjs</code> and others; update
+the pins to the approved text, never the reverse).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Commit (after approval)</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/tools/check-question-bank.mjs warden/public skills docs/2026-09-01-mro-raw-protocol.md
+git commit -m &quot;docs: the daily question reaches every agent-facing surface&quot;
+</code></pre>
+<hr>
+<h3>Task 10: Measure the window, then go live on Base Sepolia</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Create: <code>tools/out/answer-window/probe.mjs</code> (gitignored; throwaway)</p>
+</li>
+<li><p>Modify: <code>warden/src/mcp/question.mjs</code> (<code>ANSWER_WINDOW_MS</code>, the measured value)</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: The probe</strong></p>
+</li>
+</ul>
+<p>A script that starts a Warden IN PROCESS on <code>127.0.0.1</code> with a SCRATCH mirror
+(never the live one: <code>.claude/rules/warden.md</code>), the REAL bank,
+<code>chain-stub.mjs</code>&#39;s open chain, and five tokens seeded directly into the scratch
+mirror, each bound to a fresh probe key. Build it from the same parts
+<code>client/test/journey.test.mjs</code> uses; print the endpoint and the five token ids.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Five real-agent trials</strong></li>
+</ul>
+<p>For each token, dispatch a FRESH subagent with only SKILL.md and this
+instruction: &quot;You are checking in for token N at <endpoint>. Run <code>mro-agent question --token N --endpoint &lt;endpoint&gt; --site &lt;site&gt;</code>, answer the question as
+yourself, then run <code>mro-agent beat --token N --answer &lt;your answer&gt; ...</code>.&quot;
+Read <code>issuedAt</code> and <code>answeredAt</code> from the scratch mirror for each.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Set the window</strong></li>
+</ul>
+<p><code>ANSWER_WINDOW_MS</code> = twice the slowest of the five, rounded UP to the next
+15 seconds, and never below 30 seconds. Write the five measurements and the
+chosen value into the commit message, not the code. Run all four suites.</p>
+<pre><code class="language-bash">git add warden/src/mcp/question.mjs
+git commit -m &quot;feat(warden): the answer window, as measured&quot;
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Rehearse, then STOP for the push and the re-create</strong></li>
+</ul>
+<p>Run <code>warden/tools/rehearse-start.sh</code> (the real <code>main.mjs</code> against a copy of
+production state); it must boot with the real bank. Then STOP: the push and the
+live Warden re-create are outward-facing. Ask the operator. On approval:
+<code>git push</code> (the pre-push hook runs both leak guards), then re-create the Warden
+as the <code>warden-deployed</code> memory describes (<code>pm2 delete</code> + <code>pm2 start</code>, then
+<code>pm2 save</code> -- never <code>--update-env</code>).</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 5: Probe what changed, live</strong></p>
+</li>
+<li><p>An unsigned POST to <code>/mcp</code> answers 401 with a challenge (unchanged).</p>
+</li>
+<li><p>A request signed WITHOUT the challenge components, with a correct answer,
+answers 401 <code>components</code> -- the relayer case, live.</p>
+</li>
+<li><p>The test agent&#39;s daily check-in (its cron) still succeeds on the next run;
+confirm from the Warden log the next UTC day.</p>
+</li>
+<li><p><code>mro-agent question</code> then <code>beat --answer</code> on the test agent&#39;s token succeeds
+on a day it has not yet checked in.</p>
+</li>
+</ul>
+<hr>
+<h3>Task 11: The staged npm package -- STOP</h3>
+<p><code>mro-agent@0.1.0</code> is STAGED with signed provenance and signs only five
+components, so after Task 10 it cannot get through the door. It must NOT be
+approved. Record this in the <code>publishing-facts</code> memory. A new version is staged
+through the release workflow only on the operator&#39;s word, because staging
+publishes.</p>
+<hr>
+<h2>Self-review</h2>
+<ul>
+<li>Spec coverage: section 4 (bank: Tasks 3, 7, 9), section 6 (<code>question</code>: Task
+5; <code>checkin</code> answer: Task 6; window: Task 10; client: Task 8; signed answer:
+already covered by content-digest, pinned by Task 1&#39;s component rule),
+section 8 (warden, client, agent copy: Tasks 3-9), section 9 (Plan B&#39;s share).
+Sections 5 and 7 (the split, the chain) are Plan A by design.</li>
+<li>Rulings 4 and 5: Tasks 1 and 2, each with the relayer / hand-built-base test.</li>
+<li>The live seed agent (token 1&#39;s daily script) and every cron user are silent
+by construction; the copy says so (Task 9), and the spec accepts it.</li>
+</ul>
+</body>
+</html>
