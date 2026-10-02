@@ -1176,6 +1176,11 @@ naming a deadline to come back by. Every other field is unchanged.</li>
 finish; same-day finishes are placed by lowest token id. The contract emits
 <code>Finished(id, ordinal, markId)</code>, writes the ordinal into bits 64-95 of
 <code>marks</code>, and gives the token the Mark for that place.</li>
+<li><strong>Token 1 starts late on purpose.</strong> It is the operator&#39;s own agent, minted
+before the door opens, and its first check-in after the mint is on the second
+day after the door opens, so a perfect opening-day agent finishes ahead of
+it. Enforced in the operator&#39;s copy of the client (<code>beat --not-before</code>), not
+by the contract.</li>
 <li><strong>Five Marks, ids 11 to 15</strong>, given for a place and refused by <code>upgrade</code> with
 <code>mark-not-requestable</code>. The table is under The Mark ladder above.</li>
 <li><strong><code>status</code> and <code>/t/{id}</code> answer <code>finisher</code></strong> -- <code>{ place, mark }</code> or <code>null</code> --

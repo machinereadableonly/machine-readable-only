@@ -449,10 +449,14 @@ breaking streak looked healthy to every supervisor watching it.
 
 ### On deploy day, after the mint
 
-1. put token #1's id in `~/.mro/seed.env` as `MRO_SEED_TOKEN`
+1. in `~/.mro/seed.env`, put token #1's id as `MRO_SEED_TOKEN` and the door's
+   opening day plus 2 as `MRO_SEED_NOT_BEFORE` (`YYYY-MM-DD`, UTC). Not plus 1:
+   a mint credits its own day and same-day finishers are placed by lowest token
+   id, so starting the day after opening leaves a tie that token #1 wins
 2. `systemctl --user enable --now mro-seed.timer`
-3. re-run the installer -- step 7 now checks the REAL check-in instead of the
-   rehearsal, and says so
+3. re-run the installer -- step 7 now reports either "the guard held" (before
+   that day: the run sent nothing and exited 0) or the REAL check-in. It refuses
+   the rehearsal day `2000-01-01` for a real token
 
 The timer fires at **12:00 UTC**, deliberately far from the Clock's 00:05. The
 check-in window is one UTC day wide on chain, so midday leaves twelve hours of
@@ -504,6 +508,7 @@ handling of the real owner key.
 | the testnet-preview section | `public/llms.txt` | it tells agents this is a rehearsal |
 | "It will be ready soon" | `public/door.html` | delete it the day the piece opens |
 | `MRO_SEED_TOKEN` | `~/.mro/seed.env` | it holds a rehearsal id that does not exist; the seed agent beats nothing until it is the real one |
+| `MRO_SEED_NOT_BEFORE` | `~/.mro/seed.env` | it holds the rehearsal day `2000-01-01`; left there, token #1 checks in from its mint and races ahead of every opening-day agent. The installer refuses it once the token is real |
 
 ### Before the cutover, in this order
 

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan D: token 1 on equal terms</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan D: token 1 on equal terms</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<blockquote>
+<p>After completing any operator-only step, tell Claude so it can update memory
+immediately. Operator-only steps in this plan: approving the disclosure
+wording (approving this plan approves it, because the agent-facing copy is
+locked), approving the push, re-creating the live Warden so the served
+llms.txt carries the disclosure, and (optional, any time before mainnet)
+re-running <code>bash warden/deploy/install-seed-agent.sh</code>.</p>
+</blockquote>
+<p><strong>Goal:</strong> The seed agent cannot check token 1 in before the second day after
+the door opens, whatever its timer does, and <code>llms.txt</code> says so.</p>
+<p><strong>Why:</strong> Ruling 9 of the 2026-09-28 review. Token 1 is minted by the operator
+before the door opens, and the first finisher wins Apex. A mint credits its own
+day and same-day finishers are placed by lowest token id, so token 1 is
+strictly behind a perfect opening-day agent only if its first check-in after
+the mint is on opening day + 2 (the roadmap&#39;s correction to ruling 9). Today
+the only thing that would hold it back is a person remembering not to enable a
+timer; a convention is not a guard. This plan makes it a refusal in code, wires
+it into the seed unit so an unset value fails loudly, and discloses it. It must
+land before the client is released and before the mainnet mint. It changes no
+contract and needs no redeploy; Plan A comes next.</p>
+<p><strong>Architecture:</strong> A pure module in the client (<code>notBefore.mjs</code>) validates a
+<code>YYYY-MM-DD</code> UTC day and compares it with today. <code>mro-agent beat --not-before &lt;day&gt;</code> checks it BEFORE the identity is loaded or any request is sent: before
+that day it prints one line and exits 0 (an expected skip, so the unit does not
+alarm every day of the head start); a missing, empty or impossible day exits 1
+(the unit fails). The seed unit passes <code>--not-before ${MRO_SEED_NOT_BEFORE}</code> as
+its LAST argument, so an empty variable is refused as &quot;not a day&quot; and a dropped
+one as &quot;needs a value&quot; -- both fail closed. The installer refuses a real token
+still carrying the rehearsal day.</p>
+<p><strong>Tech Stack:</strong> Node 24.14.1, <code>node:test</code>, bash, systemd user units.</p>
+<p><strong>Spec:</strong> <code>docs/reviews/2026-09-28/00-verification.md</code> (Rulings, item 9) and
+<code>docs/plans/2026-09-30-mro-rulings-roadmap.md</code> (&quot;One correction to ruling 9&quot;
+and row D).</p>
+<h2>Global Constraints</h2>
+<ul>
+<li>Plain ASCII only in code, comments and docs.</li>
+<li>All four suites green before every commit: <code>cd contracts &amp;&amp; forge test</code>, and
+<code>npm test</code> in <code>tools/</code>, <code>warden/</code>, <code>client/</code>. Run them through
+<code>~/scripts/safe-build.sh</code>. Never pipe a gate into anything.</li>
+<li>Use <code>/bin/grep</code>, never bare <code>grep</code>, in Bash tool calls. Node needs
+<code>source ~/.nvm/nvm.sh</code>.</li>
+<li>The repository is PUBLIC: no absolute paths, no key ids, no real env values,
+no AI attribution in files or commit messages.</li>
+<li>Comments follow <code>~/.claude/rules/code-comments.md</code>: the why, one short line,
+no history.</li>
+<li>Licences: <code>client/</code> is MIT; <code>warden/deploy</code>, <code>warden/test</code> and <code>docs/</code> are
+PolyForm Noncommercial; <code>warden/public</code> is MIT. New files take their
+directory&#39;s licence (<code>LICENSING.md</code>).</li>
+<li>The day is a UTC day, compared as a <code>YYYY-MM-DD</code> string. The guard&#39;s day is
+the FIRST day a check-in is allowed: on that day <code>beat</code> proceeds.</li>
+<li>Claude never reads <code>~/.mro/seed.env</code>; a hook blocks it. The installer, run by
+the operator, is what reads and amends it.</li>
+</ul>
+<h2>Review Focus</h2>
+<ol>
+<li><strong>An empty value</strong> (<code>MRO_SEED_NOT_BEFORE=</code> left as shipped) must exit 1 and
+touch nothing, never read as &quot;no guard&quot;. Pinned in Task 1.</li>
+<li><strong>An impossible or loosely written day</strong> (<code>2027-02-30</code>, <code>2027-3-2</code>,
+<code>tomorrow</code>, a full timestamp) must exit 1, not be coerced by <code>Date</code>.
+Pinned in Task 1.</li>
+<li><strong>The boundary day itself</strong> proceeds, and one second before UTC midnight
+still skips; a caller in another timezone gets the UTC answer. Pinned in
+Task 1.</li>
+<li><strong>A skip sends nothing and creates nothing</strong>: no identity file appears, and
+an unreachable endpoint does not matter. Pinned in Task 1.</li>
+<li><strong>A skip with no <code>--token</code></strong> (an empty <code>MRO_SEED_TOKEN</code>) must still fail,
+rather than skip quietly through the head start and fail on opening day + 2.
+Pinned in Task 1.</li>
+</ol>
+<hr>
+<h3>Task 1: <code>mro-agent beat --not-before &lt;day&gt;</code></h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>client/src/notBefore.mjs</code></li>
+<li>Create: <code>client/test/not-before.test.mjs</code></li>
+<li>Modify: <code>client/src/cli.mjs</code> (FLAGS, USAGE, <code>main</code> right after the
+<code>--answer</code> check)</li>
+<li>Modify: <code>client/test/cli.test.mjs</code> (five new tests at the end)</li>
+<li>Modify: <code>client/README.md</code> (the command list)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>parseNotBefore(value: string | undefined): string</code> (returns the
+day unchanged, throws <code>Error</code> whose message starts <code>--not-before needs a UTC day as YYYY-MM-DD</code>); <code>utcToday(now?: Date): string</code>; <code>notYet(day: string, now?: Date): boolean</code>. The skip line printed by the CLI starts with
+<code>not before &lt;day&gt;:</code> -- Task 2&#39;s installer matches that prefix.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing unit tests</strong></p>
+</li>
+</ul>
+<p><code>client/test/not-before.test.mjs</code>:</p>
+<pre><code class="language-js">import { test } from &quot;node:test&quot;;
+import assert from &quot;node:assert/strict&quot;;
+import { parseNotBefore, utcToday, notYet } from &quot;../src/notBefore.mjs&quot;;
+
+test(&quot;a real UTC day is accepted as written&quot;, () =&gt; {
+  assert.equal(parseNotBefore(&quot;2027-03-02&quot;), &quot;2027-03-02&quot;);
+  assert.equal(parseNotBefore(&quot;2028-02-29&quot;), &quot;2028-02-29&quot;);
+});
+
+test(&quot;anything that is not exactly a real YYYY-MM-DD day is refused&quot;, () =&gt; {
+  for (const bad of [undefined, &quot;&quot;, &quot; 2027-03-02&quot;, &quot;2027-3-2&quot;, &quot;2027-02-30&quot;, &quot;2027-13-01&quot;,
+    &quot;2027-02-29&quot;, &quot;0050-01-01&quot;, &quot;tomorrow&quot;, &quot;2027-03-02T00:00:00Z&quot;]) {
+    assert.throws(() =&gt; parseNotBefore(bad), /--not-before needs a UTC day as YYYY-MM-DD/, String(bad));
+  }
+});
+
+test(&quot;today is the UTC day, wherever the caller is&quot;, () =&gt; {
+  assert.equal(utcToday(new Date(&quot;2027-03-01T23:30:00-05:00&quot;)), &quot;2027-03-02&quot;);
+});
+
+test(&quot;the day itself is allowed; the second before it is not&quot;, () =&gt; {
+  assert.equal(notYet(&quot;2027-03-02&quot;, new Date(&quot;2027-03-01T23:59:59Z&quot;)), true);
+  assert.equal(notYet(&quot;2027-03-02&quot;, new Date(&quot;2027-03-02T00:00:00Z&quot;)), false);
+  assert.equal(notYet(&quot;2027-03-02&quot;, new Date(&quot;2027-03-03T12:00:00Z&quot;)), false);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and see it fail</strong></li>
+</ul>
+<p>Run: <code>cd client &amp;&amp; node --test test/not-before.test.mjs</code>
+Expected: FAIL, <code>Cannot find module .../src/notBefore.mjs</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Write the module</strong></li>
+</ul>
+<p><code>client/src/notBefore.mjs</code>:</p>
+<pre><code class="language-js">// A UTC day before which `beat` does nothing. Strict on input: an unset guard
+// must fail, never read as &quot;no guard&quot;.
+const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+export function parseNotBefore(value) {
+  const m = DAY.exec(value ?? &quot;&quot;);
+  if (m) {
+    const [y, mo, d] = m.slice(1).map(Number);
+    const t = new Date(Date.UTC(y, mo - 1, d));
+    if (t.getUTCFullYear() === y &amp;&amp; t.getUTCMonth() === mo - 1 &amp;&amp; t.getUTCDate() === d) return value;
+  }
+  throw new Error(`--not-before needs a UTC day as YYYY-MM-DD, got &quot;${value ?? &quot;&quot;}&quot;`);
+}
+
+export const utcToday = (now = new Date()) =&gt; now.toISOString().slice(0, 10);
+
+export const notYet = (day, now = new Date()) =&gt; utcToday(now) &lt; day;
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the unit tests and see them pass</strong></li>
+</ul>
+<p>Run: <code>cd client &amp;&amp; node --test test/not-before.test.mjs</code>
+Expected: 4 pass, 0 fail.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Write the failing CLI tests</strong></li>
+</ul>
+<p>Append to <code>client/test/cli.test.mjs</code> (it already imports <code>mkdtempSync</code>,
+<code>tmpdir</code>, <code>join</code>, <code>utcDay</code>, <code>loadIdentity</code>; add <code>existsSync</code> to the
+<code>node:fs</code> import):</p>
+<pre><code class="language-js">// --not-before: the seed agent&#39;s guard. A skip must touch nothing, and every
+// malformed value must fail, because the seed unit passes it from a variable.
+const UNREACHABLE = [&quot;--site&quot;, `https://${DOMAIN}`, &quot;--endpoint&quot;, &quot;http://127.0.0.1:9&quot;];
+
+test(&quot;beat before its --not-before day sends nothing, creates nothing, and exits 0&quot;, async () =&gt; {
+  const fresh = join(mkdtempSync(join(tmpdir(), &quot;mro-nb-&quot;)), &quot;id.json&quot;);
+  const { code, out } = await cli(&quot;beat&quot;, &quot;--token&quot;, &quot;1&quot;, &quot;--not-before&quot;, &quot;9999-12-31&quot;, &quot;--key&quot;, fresh, ...UNREACHABLE);
+  assert.equal(code, 0, out);
+  assert.match(out, /^not before 9999-12-31: today is \d{4}-\d{2}-\d{2} \(UTC\)\. Nothing was sent\.$/m);
+  assert.equal(existsSync(fresh), false, &quot;a skip must not create an identity&quot;);
+});
+
+test(&quot;beat on or after its --not-before day checks in as normal&quot;, async () =&gt; {
+  const { keyId } = loadIdentity(keyPath);
+  const tokenId = 910;
+  const day = utcDay();
+  q.insertToken({ tokenId, keyId, owner: &quot;0x&quot; + &quot;a1&quot;.repeat(20), lastDay: day - 1, mintDay: day - 1 });
+  const site = [&quot;--site&quot;, `https://${DOMAIN}`, &quot;--endpoint&quot;, endpoint, &quot;--key&quot;, keyPath];
+  const { code, out } = await cli(&quot;beat&quot;, &quot;--token&quot;, String(tokenId), &quot;--not-before&quot;, &quot;2000-01-01&quot;, ...site);
+  assert.equal(code, 0, out);
+  assert.match(out, /^checkin: /m);
+  assert.doesNotMatch(out, /not before/);
+});
+
+test(&quot;an empty, impossible or dangling --not-before fails before anything happens&quot;, async () =&gt; {
+  const fresh = join(mkdtempSync(join(tmpdir(), &quot;mro-nb-&quot;)), &quot;id.json&quot;);
+  for (const value of [&quot;&quot;, &quot;2027-02-30&quot;, &quot;tomorrow&quot;]) {
+    const { code, out } = await cli(&quot;beat&quot;, &quot;--token&quot;, &quot;1&quot;, &quot;--not-before&quot;, value, &quot;--key&quot;, fresh, ...UNREACHABLE);
+    assert.equal(code, 1, `${JSON.stringify(value)}: ${out}`);
+    assert.match(out, /--not-before needs a UTC day as YYYY-MM-DD/);
+  }
+  const dangling = await cli(&quot;beat&quot;, &quot;--token&quot;, &quot;1&quot;, &quot;--key&quot;, fresh, ...UNREACHABLE, &quot;--not-before&quot;);
+  assert.equal(dangling.code, 1, dangling.out);
+  assert.match(dangling.out, /--not-before needs a value/);
+  assert.equal(existsSync(fresh), false);
+});
+
+test(&quot;a skip without --token still fails, so an unset token is caught in the head start&quot;, async () =&gt; {
+  const fresh = join(mkdtempSync(join(tmpdir(), &quot;mro-nb-&quot;)), &quot;id.json&quot;);
+  const { code, out } = await cli(&quot;beat&quot;, &quot;--not-before&quot;, &quot;9999-12-31&quot;, &quot;--key&quot;, fresh, ...UNREACHABLE);
+  assert.equal(code, 1, out);
+  assert.match(out, /--token &lt;id&gt; is required/);
+});
+
+test(&quot;--not-before on any command but beat is refused&quot;, async () =&gt; {
+  const fresh = join(mkdtempSync(join(tmpdir(), &quot;mro-nb-&quot;)), &quot;id.json&quot;);
+  for (const command of [&quot;status&quot;, &quot;question&quot;, &quot;join&quot;]) {
+    const { code, out } = await cli(command, &quot;--not-before&quot;, &quot;2000-01-01&quot;, &quot;--key&quot;, fresh, ...UNREACHABLE);
+    assert.equal(code, 1, `${command}: ${out}`);
+    assert.match(out, /--not-before belongs on beat/);
+  }
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Run them and see them fail</strong></li>
+</ul>
+<p>Run: <code>cd client &amp;&amp; node --test --test-name-pattern=&quot;not-before|a skip without&quot; test/cli.test.mjs</code>
+Expected: FAIL -- <code>unknown option --not-before</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Wire the flag into the CLI</strong></li>
+</ul>
+<p>In <code>client/src/cli.mjs</code>:</p>
+<p>Import, beside the other imports:</p>
+<pre><code class="language-js">import { parseNotBefore, notYet, utcToday } from &quot;./notBefore.mjs&quot;;
+</code></pre>
+<p>Add <code>&quot;not-before&quot;</code> to <code>FLAGS</code> (after <code>&quot;answer&quot;</code>).</p>
+<p>In <code>USAGE</code>, after the <code>--answer &lt;a&gt;</code> option line:</p>
+<pre><code>  --not-before &lt;day&gt;   beat only: do nothing before this UTC day (YYYY-MM-DD)
+</code></pre>
+<p>In <code>main</code>, directly after the <code>--answer</code> refusal block and before <code>const keyPath</code>:</p>
+<pre><code class="language-js">  // Checked before the identity is touched or anything is sent: a skip must
+  // leave no trace, and a malformed day must fail rather than mean &quot;no guard&quot;.
+  if (args[&quot;not-before&quot;] !== undefined) {
+    if (command !== &quot;beat&quot;) throw new Error(&quot;--not-before belongs on beat&quot;);
+    if (!args.token) throw new Error(&quot;--token &lt;id&gt; is required&quot;);
+    const day = parseNotBefore(args[&quot;not-before&quot;]);
+    if (notYet(day)) {
+      console.log(`not before ${day}: today is ${utcToday()} (UTC). Nothing was sent.`);
+      return;
+    }
+  }
+</code></pre>
+<p>In <code>client/README.md</code>, after the <code>mro-agent beat</code> line of the command list:</p>
+<pre><code>    mro-agent beat   --token &lt;id&gt; --not-before &lt;YYYY-MM-DD&gt;   # do nothing before that UTC day
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 8: Run the client suite</strong></li>
+</ul>
+<p>Run: <code>cd client &amp;&amp; ~/scripts/safe-build.sh npm test</code>
+Expected: all pass, 0 fail (the existing &quot;every option the usage text offers
+is accepted&quot; test now also covers <code>--not-before</code>).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 9: All four suites, then commit</strong></li>
+</ul>
+<p>Run the four suites per Global Constraints; all green.</p>
+<pre><code class="language-bash">git add client/src/notBefore.mjs client/src/cli.mjs client/test/not-before.test.mjs client/test/cli.test.mjs client/README.md
+git commit -m &quot;feat(client): beat --not-before, a UTC day before which nothing is sent&quot;
+</code></pre>
+<hr>
+<h3>Task 2: The seed unit carries the guard, and the installer checks it</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/deploy/mro-seed.service</code> (both <code>ExecStart</code> lines, the live
+one and the commented npx one)</li>
+<li>Modify: <code>warden/deploy/mro-seed.env.example</code></li>
+<li>Modify: <code>warden/deploy/install-seed-agent.sh</code> (constants, step 3, step 7)</li>
+<li>Create: <code>warden/test/seed-unit.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: Task 1&#39;s CLI flag and its skip line prefix <code>not before &lt;day&gt;:</code>.</p>
+</li>
+<li><p>Produces: the env key <code>MRO_SEED_NOT_BEFORE</code>; the installer constant
+<code>REHEARSAL_NOT_BEFORE=2000-01-01</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing pin test</strong></p>
+</li>
+</ul>
+<p><code>warden/test/seed-unit.test.mjs</code>:</p>
+<pre><code class="language-js">// The seed unit&#39;s guard is configuration, so nothing else would notice it
+// being dropped from the command line.
+import test from &quot;node:test&quot;;
+import assert from &quot;node:assert/strict&quot;;
+import { readFileSync } from &quot;node:fs&quot;;
+
+const read = (p) =&gt; readFileSync(new URL(p, import.meta.url), &quot;utf8&quot;);
+const unit = read(&quot;../deploy/mro-seed.service&quot;);
+const env = read(&quot;../deploy/mro-seed.env.example&quot;);
+const installer = read(&quot;../deploy/install-seed-agent.sh&quot;);
+
+test(&quot;every seed ExecStart ends with the not-before guard&quot;, () =&gt; {
+  const lines = unit.split(&quot;\n&quot;).filter((l) =&gt; /^#?\s*ExecStart=/.test(l));
+  assert.equal(lines.length, 2, &quot;the live line and the commented npx line&quot;);
+  for (const l of lines) assert.match(l.trimEnd(), / --not-before \$\{MRO_SEED_NOT_BEFORE\}$/);
+});
+
+test(&quot;the schema ships the guard empty, so an unset day fails the unit&quot;, () =&gt; {
+  assert.match(env, /^MRO_SEED_NOT_BEFORE=$/m);
+});
+
+test(&quot;the installer writes a rehearsal day and refuses it for a real token&quot;, () =&gt; {
+  assert.match(installer, /^REHEARSAL_NOT_BEFORE=2000-01-01$/m);
+  assert.match(installer, /opening day \+ 2/);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and see it fail</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; node --test test/seed-unit.test.mjs</code>
+Expected: 3 fail.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: The unit</strong></li>
+</ul>
+<p>In <code>warden/deploy/mro-seed.service</code>, append <code> --not-before ${MRO_SEED_NOT_BEFORE}</code>
+to the END of both ExecStart lines, so they read:</p>
+<pre><code>#   ExecStart=/usr/bin/npx --yes mro-agent@&lt;version&gt; beat --site ${MRO_SEED_SITE} --token ${MRO_SEED_TOKEN} --key %h/.mro/seed-identity.jwk.json --not-before ${MRO_SEED_NOT_BEFORE}
+</code></pre>
+<pre><code>ExecStart=%h/.nvm/versions/node/v24.14.1/bin/node src/cli.mjs beat --site ${MRO_SEED_SITE} --token ${MRO_SEED_TOKEN} --key %h/.mro/seed-identity.jwk.json --not-before ${MRO_SEED_NOT_BEFORE}
+</code></pre>
+<p>Directly above the live ExecStart line, add:</p>
+<pre><code># --not-before stays LAST: an empty value is refused as not a day, and a
+# dropped one as a flag with no value. Either way the unit fails.
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: The schema</strong></li>
+</ul>
+<p>Append to <code>warden/deploy/mro-seed.env.example</code>:</p>
+<pre><code>
+# The first UTC day token #1 may check in, as YYYY-MM-DD: the day the door
+# opens plus 2. A mint credits its own day and same-day finishers are placed by
+# lowest token id, so any earlier day lets token #1 tie or beat an agent that
+# arrived on opening day and never missed. Empty fails the unit on purpose.
+# Deploy day sets it.
+MRO_SEED_NOT_BEFORE=
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: The installer</strong></li>
+</ul>
+<p>In <code>warden/deploy/install-seed-agent.sh</code>, beside <code>REHEARSAL_TOKEN=999999</code>:</p>
+<pre><code class="language-bash">REHEARSAL_NOT_BEFORE=2000-01-01
+</code></pre>
+<p>Replace step 3 (from <code>step &quot;3. the runtime config&quot;</code> up to, not including,
+<code>step &quot;4. the rotation config&quot;</code>) with:</p>
+<pre><code class="language-bash">step &quot;3. the runtime config&quot;
+if [ -f &quot;$ENV_FILE&quot; ]; then
+    ok &quot;$ENV_FILE already exists; left untouched&quot;
+else
+    # Written from the tracked template so the schema has one home. Deploy day
+    # sets the real token and the real day.
+    sed -e &quot;s/^MRO_SEED_TOKEN=.*/MRO_SEED_TOKEN=$REHEARSAL_TOKEN/&quot; \
+        -e &quot;s/^MRO_SEED_NOT_BEFORE=.*/MRO_SEED_NOT_BEFORE=$REHEARSAL_NOT_BEFORE/&quot; \
+        &quot;$ENV_TEMPLATE&quot; &gt; &quot;$ENV_FILE&quot;
+    chmod 600 &quot;$ENV_FILE&quot;
+    ok &quot;wrote $ENV_FILE with the rehearsal token $REHEARSAL_TOKEN&quot;
+fi
+
+CURRENT_TOKEN=&quot;$(grep -E &#39;^MRO_SEED_TOKEN=&#39; &quot;$ENV_FILE&quot; | head -1 | cut -d= -f2-)&quot;
+if ! grep -qE &#39;^MRO_SEED_NOT_BEFORE=&#39; &quot;$ENV_FILE&quot;; then
+    if [ &quot;$CURRENT_TOKEN&quot; = &quot;$REHEARSAL_TOKEN&quot; ]; then
+        printf &#39;\nMRO_SEED_NOT_BEFORE=%s\n&#39; &quot;$REHEARSAL_NOT_BEFORE&quot; &gt;&gt; &quot;$ENV_FILE&quot;
+        ok &quot;added MRO_SEED_NOT_BEFORE=$REHEARSAL_NOT_BEFORE to $ENV_FILE (rehearsal)&quot;
+    else
+        bad &quot;MRO_SEED_NOT_BEFORE is missing from $ENV_FILE: set it to opening day + 2 (DEPLOY.md 9c)&quot;
+    fi
+fi
+NOT_BEFORE=&quot;$(grep -E &#39;^MRO_SEED_NOT_BEFORE=&#39; &quot;$ENV_FILE&quot; | head -1 | cut -d= -f2-)&quot;
+if [ &quot;$CURRENT_TOKEN&quot; != &quot;$REHEARSAL_TOKEN&quot; ]; then
+    if [ &quot;$NOT_BEFORE&quot; = &quot;$REHEARSAL_NOT_BEFORE&quot; ] || [ &quot;$(date -u -d &quot;$NOT_BEFORE&quot; +%F 2&gt;/dev/null)&quot; != &quot;$NOT_BEFORE&quot; ]; then
+        bad &quot;MRO_SEED_NOT_BEFORE is &#39;$NOT_BEFORE&#39; for a real token: set it to opening day + 2 (DEPLOY.md 9c)&quot;
+    else
+        ok &quot;token $CURRENT_TOKEN checks in from $NOT_BEFORE (UTC)&quot;
+    fi
+fi
+</code></pre>
+<p>In step 7, delete the now-duplicated line
+<code>CURRENT_TOKEN=&quot;$(grep -E &#39;^MRO_SEED_TOKEN=&#39; &quot;$ENV_FILE&quot; | head -1 | cut -d= -f2-)&quot;</code>,
+and replace the real-token success branch:</p>
+<pre><code class="language-bash">    if [ &quot;$RESULT&quot; = &quot;success&quot; ]; then
+        ok &quot;the real check-in SUCCEEDED&quot;
+</code></pre>
+<p>with:</p>
+<pre><code class="language-bash">    if [ &quot;$RESULT&quot; = &quot;success&quot; ] &amp;&amp; tail -1 &quot;$LOG&quot; | grep -q &#39;^not before &#39;; then
+        ok &quot;the guard held: token $CURRENT_TOKEN waits until $NOT_BEFORE&quot;
+    elif [ &quot;$RESULT&quot; = &quot;success&quot; ]; then
+        ok &quot;the real check-in SUCCEEDED&quot;
+</code></pre>
+<p>In the closing &quot;What is left&quot; lines, change item 2 to:</p>
+<pre><code class="language-bash">    echo &quot;  2. put its id and the opening day + 2 in $ENV_FILE&quot;
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Check the shell and the unit without running them</strong></li>
+</ul>
+<p>Run: <code>bash -n warden/deploy/install-seed-agent.sh &amp;&amp; systemd-analyze --user verify warden/deploy/mro-seed.service</code>
+Expected: no output from <code>bash -n</code>; <code>verify</code> may only complain that the
+EnvironmentFile or WorkingDirectory paths differ from the installed copy&#39;s
+<code>%h</code> -- anything about ExecStart syntax is a failure. (Read-only: neither
+command installs or starts anything.)</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Run the pin test, then all four suites, then commit</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; node --test test/seed-unit.test.mjs</code> -- 3 pass. Then the four
+suites per Global Constraints.</p>
+<pre><code class="language-bash">git add warden/deploy/mro-seed.service warden/deploy/mro-seed.env.example warden/deploy/install-seed-agent.sh warden/test/seed-unit.test.mjs
+git commit -m &quot;feat(seed): the seed unit cannot check token 1 in before its day&quot;
+</code></pre>
+<hr>
+<h3>Task 3: The disclosure and the runbook</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/public/llms.txt</code> (after the paragraph ending &quot;no Mark shortens
+the 365 days.&quot;)</li>
+<li>Modify: <code>docs/2026-09-01-mro-raw-protocol.md</code> (after the bullet &quot;The credit
+that reaches 365 gives the token a place&quot;)</li>
+<li>Modify: <code>warden/test/static.test.mjs</code> (one test)</li>
+<li>Modify: <code>warden/DEPLOY.md</code> (section 9c &quot;On deploy day, after the mint&quot;, and
+the section 10 table)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: the flag name <code>--not-before</code> (Task 1) and the env key
+<code>MRO_SEED_NOT_BEFORE</code> (Task 2).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<p>Append to <code>warden/test/static.test.mjs</code>:</p>
+<pre><code class="language-js">test(&quot;the served llms.txt discloses that token 1 starts late, and how&quot;, () =&gt; {
+  const llms = readFileSync(new URL(&quot;../public/llms.txt&quot;, import.meta.url), &quot;utf8&quot;);
+  assert.match(llms, /Token 1 is the operator&#39;s own agent/);
+  assert.match(llms, /second day after\s+the door opens/);
+  assert.match(llms, /`beat --not-before`/);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run it and see it fail</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; node --test --test-name-pattern=&quot;starts late&quot; test/static.test.mjs</code>
+Expected: FAIL on the first <code>assert.match</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: The disclosure (wording approved with this plan)</strong></li>
+</ul>
+<p>In <code>warden/public/llms.txt</code>, a new paragraph directly after the one ending
+&quot;nothing can be paid to move it, and no Mark shortens the 365 days.&quot;:</p>
+<pre><code>Token 1 is the operator&#39;s own agent, minted before the door opens. It starts
+late on purpose: its first check-in after the mint is on the second day after
+the door opens, so an agent that arrives on opening day and never misses a day
+finishes ahead of it. That is enforced in the operator&#39;s own copy of the
+reference client (`beat --not-before`), not by the contract, and every day it
+does check in is on chain for anyone to compare.
+</code></pre>
+<p>In <code>docs/2026-09-01-mro-raw-protocol.md</code>, a new bullet directly after the
+&quot;gives the token a place&quot; bullet:</p>
+<pre><code>- **Token 1 starts late on purpose.** It is the operator&#39;s own agent, minted
+  before the door opens, and its first check-in after the mint is on the second
+  day after the door opens, so a perfect opening-day agent finishes ahead of
+  it. Enforced in the operator&#39;s copy of the client (`beat --not-before`), not
+  by the contract.
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: The runbook</strong></li>
+</ul>
+<p>In <code>warden/DEPLOY.md</code> section 9c, replace the three numbered steps under
+&quot;### On deploy day, after the mint&quot; with:</p>
+<pre><code>1. in `~/.mro/seed.env`, put token #1&#39;s id as `MRO_SEED_TOKEN` and the door&#39;s
+   opening day plus 2 as `MRO_SEED_NOT_BEFORE` (`YYYY-MM-DD`, UTC). Not plus 1:
+   a mint credits its own day and same-day finishers are placed by lowest token
+   id, so starting the day after opening leaves a tie that token #1 wins
+2. `systemctl --user enable --now mro-seed.timer`
+3. re-run the installer -- step 7 now reports either &quot;the guard held&quot; (before
+   that day: the run sent nothing and exited 0) or the REAL check-in. It refuses
+   the rehearsal day `2000-01-01` for a real token
+</code></pre>
+<p>In the section 10 table, after the <code>MRO_SEED_TOKEN</code> row:</p>
+<pre><code>| `MRO_SEED_NOT_BEFORE` | `~/.mro/seed.env` | it holds the rehearsal day `2000-01-01`; left there, token #1 checks in from its mint and races ahead of every opening-day agent. The installer refuses it once the token is real |
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the test, all four suites, then commit</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; node --test --test-name-pattern=&quot;starts late&quot; test/static.test.mjs</code> -- pass.
+Then the four suites per Global Constraints, and
+<code>node tools/prepublish-check.mjs</code> from the repo root (the guard the pre-push
+hook runs) -- exit 0.</p>
+<pre><code class="language-bash">git add warden/public/llms.txt docs/2026-09-01-mro-raw-protocol.md warden/test/static.test.mjs warden/DEPLOY.md
+git commit -m &quot;docs: token 1 starts on the second day after the door opens, and says so&quot;
+</code></pre>
+<hr>
+<h3>Task 4: Review, merge, and the operator&#39;s steps -- STOP</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1:</strong> Whole-branch review (one fresh reviewer, most capable model)
+against this plan and ruling 9. Fix anything confirmed, re-run all four
+suites.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2:</strong> Merge to <code>main</code> with <code>merge: plan D, token 1 on equal terms</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3: STOP.</strong> Ask the operator to approve the push. The pre-push hook
+runs both guards.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Operator:</strong> re-create the live Warden so the served <code>llms.txt</code>
+carries the disclosure (the Warden reads it at boot; see the
+<code>warden-deployed</code> memory for the re-create, never <code>--update-env</code>). Claude
+then checks <code>curl -s https://machinereadableonly.com/llms.txt</code> contains
+&quot;Token 1 is the operator&#39;s own agent&quot;.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Operator, optional before mainnet:</strong>
+<code>bash warden/deploy/install-seed-agent.sh</code>. It installs the new unit, adds
+the rehearsal day to the existing <code>~/.mro/seed.env</code>, and step 7 should still
+report the rehearsal refusal as status 2. That run is the live proof that
+the unit&#39;s new argument parses under systemd.</li>
+</ul>
+<h2>Self-review</h2>
+<ul>
+<li><strong>Coverage:</strong> ruling 9&#39;s guard (Task 1), &quot;whatever the timer does&quot; (Task 2:
+the unit always passes it, empty fails), <code>MRO_SEED_NOT_BEFORE</code> (Task 2), the
+<code>llms.txt</code> disclosure (Task 3), DEPLOY.md 9c (Task 3), and the roadmap&#39;s O + 2
+correction (Tasks 2 and 3 say &quot;plus 2&quot;, with the reason).</li>
+<li><strong>Not in this plan, on purpose:</strong> the contract does not enforce it (ruling 9
+asks for the client), and the npm package is not re-staged here; the staged
+<code>0.1.0</code> predates Plans B and D and is re-staged once, before release.</li>
+<li><strong>Open, not blocking:</strong> systemd&#39;s exact handling of an empty <code>${VAR}</code> was not
+measured (the measurement was declined); the design fails closed on both
+possible behaviours, and Task 4 step 5 is the live proof.</li>
+<li><strong>Names:</strong> <code>parseNotBefore</code>, <code>utcToday</code>, <code>notYet</code>, <code>MRO_SEED_NOT_BEFORE</code>,
+<code>REHEARSAL_NOT_BEFORE</code> and the <code>not before &lt;day&gt;:</code> prefix are used
+consistently across Tasks 1 to 3.</li>
+</ul>
+</body>
+</html>

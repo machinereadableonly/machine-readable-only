@@ -1105,6 +1105,11 @@ where a year stops and what happens at the end of one.
   finish; same-day finishes are placed by lowest token id. The contract emits
   `Finished(id, ordinal, markId)`, writes the ordinal into bits 64-95 of
   `marks`, and gives the token the Mark for that place.
+- **Token 1 starts late on purpose.** It is the operator's own agent, minted
+  before the door opens, and its first check-in after the mint is on the second
+  day after the door opens, so a perfect opening-day agent finishes ahead of
+  it. Enforced in the operator's copy of the client (`beat --not-before`), not
+  by the contract.
 - **Five Marks, ids 11 to 15**, given for a place and refused by `upgrade` with
   `mark-not-requestable`. The table is under The Mark ladder above.
 - **`status` and `/t/{id}` answer `finisher`** -- `{ place, mark }` or `null` --

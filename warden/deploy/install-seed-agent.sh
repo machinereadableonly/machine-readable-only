@@ -46,6 +46,7 @@ CONF="$LOG_DIR/mro-seed-logrotate.conf"
 # Deploy day replaces it with the real one; until then the unit has nothing
 # legitimate to beat, which is why the timer stays disabled.
 REHEARSAL_TOKEN=999999
+REHEARSAL_NOT_BEFORE=2000-01-01
 
 fail=0
 step() { printf '\n== %s\n' "$1"; }
@@ -111,11 +112,27 @@ step "3. the runtime config"
 if [ -f "$ENV_FILE" ]; then
     ok "$ENV_FILE already exists; left untouched"
 else
-    # Written from the tracked template so the schema has one home, with the
-    # token replaced by one that does not exist. Deploy day sets the real id.
-    sed "s/^MRO_SEED_TOKEN=.*/MRO_SEED_TOKEN=$REHEARSAL_TOKEN/" "$ENV_TEMPLATE" > "$ENV_FILE"
+    # Written from the tracked template so the schema has one home. Deploy day
+    # sets the real token and the real day.
+    sed -e "s/^MRO_SEED_TOKEN=.*/MRO_SEED_TOKEN=$REHEARSAL_TOKEN/" \
+        -e "s/^MRO_SEED_NOT_BEFORE=.*/MRO_SEED_NOT_BEFORE=$REHEARSAL_NOT_BEFORE/" \
+        "$ENV_TEMPLATE" > "$ENV_FILE"
     chmod 600 "$ENV_FILE"
     ok "wrote $ENV_FILE with the rehearsal token $REHEARSAL_TOKEN"
+fi
+
+CURRENT_TOKEN="$(grep -E '^MRO_SEED_TOKEN=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
+if [ "$CURRENT_TOKEN" = "$REHEARSAL_TOKEN" ] && ! grep -qE '^MRO_SEED_NOT_BEFORE=' "$ENV_FILE"; then
+    printf '\nMRO_SEED_NOT_BEFORE=%s\n' "$REHEARSAL_NOT_BEFORE" >> "$ENV_FILE"
+    ok "added MRO_SEED_NOT_BEFORE=$REHEARSAL_NOT_BEFORE to $ENV_FILE (rehearsal)"
+fi
+NOT_BEFORE="$(grep -E '^MRO_SEED_NOT_BEFORE=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
+# A real token with a bad day must never reach step 7's start: that run would
+# be a real check-in before the day, and it cannot be undone.
+START_SAFE=1
+if ! bash "$REPO_WARDEN/deploy/seed-config-check.sh" "$ENV_FILE"; then
+    fail=1
+    START_SAFE=0
 fi
 
 step "4. the rotation config"
@@ -172,16 +189,17 @@ step "7. THE REHEARSAL -- does a refusal actually reach systemd?"
 # breaks the run is caught here rather than at 12:00 UTC in a log nobody reads.
 # The env file currently names a token that does not exist, which is exactly the
 # refusal being rehearsed.
-systemctl --user reset-failed mro-seed.service 2>/dev/null || true
-systemctl --user start mro-seed.service 2>/dev/null || true
+if [ "$START_SAFE" = 1 ]; then
+    systemctl --user reset-failed mro-seed.service 2>/dev/null || true
+    systemctl --user start mro-seed.service 2>/dev/null || true
+    RESULT="$(systemctl --user show mro-seed.service -p Result --value)"
+    STATUS="$(systemctl --user show mro-seed.service -p ExecMainStatus --value)"
+    echo "   Result=$RESULT  ExecMainStatus=$STATUS  (token $CURRENT_TOKEN)"
+fi
 
-RESULT="$(systemctl --user show mro-seed.service -p Result --value)"
-STATUS="$(systemctl --user show mro-seed.service -p ExecMainStatus --value)"
-CURRENT_TOKEN="$(grep -E '^MRO_SEED_TOKEN=' "$ENV_FILE" | head -1 | cut -d= -f2-)"
-
-echo "   Result=$RESULT  ExecMainStatus=$STATUS  (token $CURRENT_TOKEN)"
-
-if [ "$CURRENT_TOKEN" = "$REHEARSAL_TOKEN" ]; then
+if [ "$START_SAFE" != 1 ]; then
+    bad "NOT started: step 3's config check failed, and a real token with a bad day would check in for real. Fix $ENV_FILE first"
+elif [ "$CURRENT_TOKEN" = "$REHEARSAL_TOKEN" ]; then
     if [ "$RESULT" = "exit-code" ] && [ "$STATUS" = "2" ]; then
         ok "a refusal by the site reaches systemd as a FAILED unit (status 2)"
     elif [ "$STATUS" = "1" ]; then
@@ -191,7 +209,9 @@ if [ "$CURRENT_TOKEN" = "$REHEARSAL_TOKEN" ]; then
     fi
 else
     ok "token is $CURRENT_TOKEN, not the rehearsal id -- deploy day has happened"
-    if [ "$RESULT" = "success" ]; then
+    if [ "$RESULT" = "success" ] && tail -1 "$LOG" | grep -q '^not before '; then
+        ok "the guard held: token $CURRENT_TOKEN waits until $NOT_BEFORE"
+    elif [ "$RESULT" = "success" ]; then
         ok "the real check-in SUCCEEDED"
     else
         bad "the real check-in failed: Result=$RESULT status=$STATUS. Read: tail -20 $LOG"
@@ -213,7 +233,7 @@ if [ "$fail" = 0 ]; then
     echo ""
     echo "What is left, and it is the operator's call, not this script's:"
     echo "  1. mint token #1 from a wallet you control (real funds on mainnet)"
-    echo "  2. put its id in $ENV_FILE"
+    echo "  2. put its id and the opening day + 2 in $ENV_FILE"
     echo "  3. systemctl --user enable --now mro-seed.timer"
     echo "  4. re-run this script; step 7 then checks the REAL check-in instead"
     echo "See the deploy-day section of warden/DEPLOY.md for the ordered version."

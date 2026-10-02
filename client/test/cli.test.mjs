@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, chmodSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -771,4 +771,57 @@ test("the README never tells a reader to npx a package that is a placeholder", a
   const npxLines = instructions.filter((l) => l.includes("npx mro-agent"));
   assert.deepEqual(npxLines, [], "an unpublished client must not be invoked with npx in its own README");
   assert.match(readme, /node src\/cli\.mjs/, "and it must say how to run what actually exists");
+});
+
+// --not-before: the seed agent's guard. A skip must touch nothing, and every
+// malformed value must fail, because the seed unit passes it from a variable.
+const UNREACHABLE = ["--site", `https://${DOMAIN}`, "--endpoint", "http://127.0.0.1:9"];
+
+test("beat before its --not-before day sends nothing, creates nothing, and exits 0", async () => {
+  const fresh = join(mkdtempSync(join(tmpdir(), "mro-nb-")), "id.json");
+  const { code, out } = await cli("beat", "--token", "1", "--not-before", "9999-12-31", "--key", fresh, ...UNREACHABLE);
+  assert.equal(code, 0, out);
+  assert.match(out, /^not before 9999-12-31: today is \d{4}-\d{2}-\d{2} \(UTC\)\. Nothing was sent\.$/m);
+  assert.equal(existsSync(fresh), false, "a skip must not create an identity");
+});
+
+test("beat on or after its --not-before day checks in as normal", async () => {
+  const { keyId } = loadIdentity(keyPath);
+  const tokenId = 910;
+  const day = utcDay();
+  q.insertToken({ tokenId, keyId, owner: "0x" + "a1".repeat(20), lastDay: day - 1, mintDay: day - 1 });
+  const site = ["--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", keyPath];
+  const { code, out } = await cli("beat", "--token", String(tokenId), "--not-before", "2000-01-01", ...site);
+  assert.equal(code, 0, out);
+  assert.match(out, /^checkin: /m);
+  assert.doesNotMatch(out, /not before/);
+});
+
+test("an empty, impossible or dangling --not-before fails before anything happens", async () => {
+  const fresh = join(mkdtempSync(join(tmpdir(), "mro-nb-")), "id.json");
+  for (const value of ["", "2027-02-30", "tomorrow"]) {
+    const { code, out } = await cli("beat", "--token", "1", "--not-before", value, "--key", fresh, ...UNREACHABLE);
+    assert.equal(code, 1, `${JSON.stringify(value)}: ${out}`);
+    assert.match(out, /--not-before needs a UTC day as YYYY-MM-DD/);
+  }
+  const dangling = await cli("beat", "--token", "1", "--key", fresh, ...UNREACHABLE, "--not-before");
+  assert.equal(dangling.code, 1, dangling.out);
+  assert.match(dangling.out, /--not-before needs a value/);
+  assert.equal(existsSync(fresh), false);
+});
+
+test("a skip without --token still fails, so an unset token is caught in the head start", async () => {
+  const fresh = join(mkdtempSync(join(tmpdir(), "mro-nb-")), "id.json");
+  const { code, out } = await cli("beat", "--not-before", "9999-12-31", "--key", fresh, ...UNREACHABLE);
+  assert.equal(code, 1, out);
+  assert.match(out, /--token <id> is required/);
+});
+
+test("--not-before on any command but beat is refused", async () => {
+  const fresh = join(mkdtempSync(join(tmpdir(), "mro-nb-")), "id.json");
+  for (const command of ["status", "question", "join"]) {
+    const { code, out } = await cli(command, "--not-before", "2000-01-01", "--key", fresh, ...UNREACHABLE);
+    assert.equal(code, 1, `${command}: ${out}`);
+    assert.match(out, /--not-before belongs on beat/);
+  }
 });
