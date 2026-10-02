@@ -179,7 +179,7 @@ already in flight, and nothing else.</p>
 </tr>
 <tr>
 <td><code>components</code></td>
-<td>it verified, but did not cover the required components</td>
+<td>it verified, but did not cover the required components -- OR the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable <code>Signature-Input</code>, a <code>signature-agent</code> covered both plain and with a <code>key</code> parameter, or a <code>key</code> naming a member the <code>Signature-Agent</code> header does not have: check the structure of those two headers before changing what you sign</td>
 </tr>
 <tr>
 <td><code>expired</code></td>

@@ -317,13 +317,17 @@ export function coveredComponents(base) {
  * every bypass this door has had came from treating a structured field as
  * text. Throws when the selection is ambiguous or unresolvable, because
  * guessing which member was meant is the bypass.
+ *
+ * Returns `{ message, key }`. `key` is the member the signature COVERED, or
+ * null for a plain `signature-agent`; the caller needs it because the key
+ * lookup must read that same member. See verifyRequest.
  */
 export function keyedMessage(request) {
   const [first] = parseDictionary(headerOf(request, "signature-input") ?? "").values();
   const members = Array.isArray(first?.[0]) ? first[0] : [];
   const agents = members.filter(([name]) => name === "signature-agent");
   const keyed = agents.filter(([, params]) => params.has("key"));
-  if (keyed.length === 0) return request;
+  if (keyed.length === 0) return { message: request, key: null };
   // Two lines for one header name, with two different values: which one the
   // door trusted afterwards would be a guess.
   if (agents.length > 1) throw new Error("signature-agent covered more than once");
@@ -337,7 +341,9 @@ export function keyedMessage(request) {
   // Dropped by whatever case it arrived in, so the replacement is the only one.
   for (const k of Object.keys(headers)) if (k.toLowerCase() === "signature-agent") delete headers[k];
   headers["signature-agent"] = serializeItem(member);
-  return { ...request, headers };
+  // method and url are copied by name: on a real Request they are prototype
+  // accessors, which a spread does not carry, and the base needs both.
+  return { message: { ...request, method: request.method, url: request.url, headers }, key };
 }
 
 /**
@@ -348,24 +354,32 @@ export function keyedMessage(request) {
  * inside the verifier callback rather than before the call.
  */
 export async function verifyRequest(request, lookupKey) {
+  // The URL lookup needs the dictionary as it ARRIVED; the verifier needs the
+  // one member the signature selected. See keyedMessage.
+  let message;
+  let coveredAgentKey;
+  try {
+    ({ message, key: coveredAgentKey } = keyedMessage(request));
+  } catch {
+    return { ok: false, reason: "components" };
+  }
+
   // The header as it arrived, and the URL it names -- which are not the same
   // thing since the field became a dictionary. See signatureAgentUrl.
-  const signatureAgentHeader = headerOf(request, "signature-agent");
-  const signatureAgent = signatureAgentUrl(signatureAgentHeader, signatureLabel(request));
+  //
+  // Keyed by the member the signature COVERED whenever there is one: the
+  // signature LABEL is unsigned and renameable, so a request could otherwise
+  // verify against the member it signed while the key was looked up at a URL
+  // nobody signed.
+  const signatureAgent = signatureAgentUrl(
+    headerOf(request, "signature-agent"),
+    coveredAgentKey ?? signatureLabel(request),
+  );
   let reason = "signature";
   let verifiedKeyId = null;
   let verifiedExpiresAt = null;
   let verifiedSigHash = null;
   let verifiedCovered = null;
-
-  // The URL lookup above needs the dictionary as it arrived; the VERIFIER needs
-  // the member the signature selected. See keyedMessage.
-  let message;
-  try {
-    message = keyedMessage(request);
-  } catch {
-    return { ok: false, reason: "components" };
-  }
 
   try {
     await verifyWebBotAuth(message, async (data, signature, params) => {

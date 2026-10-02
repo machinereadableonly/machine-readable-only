@@ -480,7 +480,7 @@ test("the signature label is read off Signature-Input", () => {
 /// One hand-built, genuinely valid signature over a base this test wrote
 /// itself. `lines` are the component lines; `components` is the parameters
 /// inner list, serialised exactly as RFC 9421 2.1.2 writes a keyed component.
-async function handSigned({ lines, components, agent }) {
+async function handSigned({ lines, components, agent, label = "sig1" }) {
   const created = Math.floor(Date.now() / 1000);
   const expires = created + 60;
   const keyid = (await signerFromJWK(ED.key)).keyid;
@@ -496,8 +496,8 @@ async function handSigned({ lines, components, agent }) {
       host: "example.com",
       "signature-agent": agent,
       "content-digest": EMPTY_DIGEST,
-      "signature-input": `sig1=${params}`,
-      signature: `sig1=:${sig.toString("base64")}:`,
+      "signature-input": `${label}=${params}`,
+      signature: `${label}=:${sig.toString("base64")}:`,
     },
   };
 }
@@ -563,6 +563,32 @@ test("a key= naming a member the header does not have is refused", async () => {
   const r = await verifyRequest(req, lookup);
   assert.equal(r.ok, false);
   assert.equal(r.reason, "components");
+});
+
+test("the key is looked up at the URL the signature COVERED, not the label's", async () => {
+  // The signature label is unsigned and renameable; the covered `key=` is not.
+  // Here they disagree on purpose: the signature commits to member k1
+  // (a.example) while the label says k9 (b.example). Reading the label would
+  // verify against one origin and fetch the key from another.
+  const req = await handSigned({
+    label: "k9",
+    agent: 'k1="https://a.example", k9="https://b.example"',
+    components: '"@authority" "@method" "@path" "signature-agent";key="k1" "content-digest"',
+    lines: [
+      `"@authority": example.com`,
+      `"@method": POST`,
+      `"@path": /mcp`,
+      `"signature-agent";key="k1": "https://a.example"`,
+      `"content-digest": ${EMPTY_DIGEST}`,
+    ],
+  });
+  const asked = [];
+  const r = await verifyRequest(req, async (_keyId, agent) => {
+    asked.push(agent);
+    return ED.key;
+  });
+  assert.equal(r.ok, true, r.reason);
+  assert.deepEqual(asked, ["https://a.example"], "the lookup must read the covered member");
 });
 
 // ---------------------------------------------------------------------------

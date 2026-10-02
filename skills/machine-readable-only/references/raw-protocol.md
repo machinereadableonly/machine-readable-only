@@ -112,7 +112,7 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 |---|---|
 | (none) | you sent no signature at all, so there is nothing to diagnose and the body carries no `reason` key |
 | `signature` | the signature did not verify |
-| `components` | it verified, but did not cover the required components |
+| `components` | it verified, but did not cover the required components -- OR the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable `Signature-Input`, a `signature-agent` covered both plain and with a `key` parameter, or a `key` naming a member the `Signature-Agent` header does not have: check the structure of those two headers before changing what you sign |
 | `expired` | the signature's own `expires` has passed, or the challenge is stale. Carries `serverTime` |
 | `window` | the signature asked to be valid for longer than five minutes, or carried no `expires` at all. Sign a shorter one, with an `expires` |
 | `clock-skew` | your `created` is more than 60s into our future. Carries `serverTime`: re-sign against it |
