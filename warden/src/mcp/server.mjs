@@ -23,6 +23,7 @@ import { makeMintTool } from "./tools/mint.mjs";
 import { makeUpgradeTool } from "./tools/upgrade.mjs";
 import { registerResources } from "./resources.mjs";
 import { withNext } from "./nextSteps.mjs";
+import { assertBankSane } from "./question.mjs";
 
 /**
  * Is this already an MCP tool result, rather than a plain value to wrap?
@@ -76,6 +77,11 @@ export const PAID_TOOLS = ["mint", "upgrade"];
 export const SERVER_INFO = { name: "machine-readable-only", version: "1.0.0" };
 
 export function makeMcpHandler(deps) {
+  // ONCE, HERE. The builder below runs per request and every tool factory with
+  // it, so a full walk of the bank inside one of them was paid on every call.
+  // A malformed bank still cannot reach a tool -- it cannot get past this.
+  assertBankSane(deps.bank);
+
   const handler = createMcpHandler(
     (ctx) => {
       const server = new McpServer(

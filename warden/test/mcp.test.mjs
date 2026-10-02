@@ -498,3 +498,14 @@ test("a status answer names the chain and contract even when the caller owns not
   assert.equal(empty.chainId, 84_532, "the chain must be stated anyway");
   assert.equal(empty.contract, "0x" + "c0de".repeat(10));
 });
+
+// THE BANK IS CHECKED ONCE, HERE. The tool factories run inside the
+// per-request builder, so a full assertBankSane in one of them re-walked the
+// whole bank on every MCP call. Moving it to construction keeps the guard --
+// a malformed bank still cannot reach a tool -- and pays for it once.
+test("a malformed bank cannot reach a tool: the handler refuses at construction", () => {
+  const deps = { challengeSecret: SECRET, q: queries(openDb(":memory:")), chain: openChain(), contract: "0xc", chainId: 84_532 };
+  assert.throws(() => makeMcpHandler({ ...deps }), /question bank must be an array/);
+  assert.throws(() => makeMcpHandler({ ...deps, bank: [] }), /question bank is empty/);
+  assert.throws(() => makeMcpHandler({ ...deps, bank: [{ id: "x" }] }), /printable ASCII/);
+});

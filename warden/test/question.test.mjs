@@ -1,9 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { assertBankSane, questionFor, answerIndex, publicShape } from "../src/mcp/question.mjs";
+import { fileURLToPath } from "node:url";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  assertBankSane, assertIssuedQuestionsPresent, bankPath, loadBank,
+  questionFor, answerIndex, publicShape,
+} from "../src/mcp/question.mjs";
+import { openDb } from "../src/mirror/db.mjs";
+import { queries } from "../src/mirror/queries.mjs";
 
-const BANK = JSON.parse(readFileSync(new URL("./fixtures/question-bank.json", import.meta.url), "utf8"));
+const BANK_FILE = fileURLToPath(new URL("./fixtures/question-bank.json", import.meta.url));
+const BANK = JSON.parse(readFileSync(BANK_FILE, "utf8"));
 const byId = (id) => BANK.find((q) => q.id === id);
 
 test("the fixture bank is sane", () => { assert.equal(assertBankSane(BANK), BANK); });
@@ -81,4 +90,67 @@ test("a range refuses anything that is not a number or a string", () => {
 test("the public shape never carries the id", () => {
   assert.deepEqual(publicShape(byId("t-range")), { question: "How many legs is the right number of legs?", range: { min: 0, max: 100 } });
   assert.equal("id" in publicShape(byId("t-two")), false);
+});
+
+test("the bank path is the setting, else the private default outside the worktree", () => {
+  assert.equal(bankPath({ MRO_QUESTION_BANK: "/x/bank.json" }), "/x/bank.json");
+  assert.equal(bankPath({}), join(homedir(), ".mro-questions", "bank.json"));
+  // An empty setting is a setting nobody filled in, so it falls back too.
+  assert.equal(bankPath({ MRO_QUESTION_BANK: "" }), join(homedir(), ".mro-questions", "bank.json"));
+});
+
+test("a bank file on disk is read and checked", () => {
+  assert.deepEqual(loadBank(BANK_FILE), BANK);
+});
+
+// The boot log is read in public and the default path carries the home
+// directory, so a missing bank must not surface readFileSync's ENOENT.
+test("a bank that cannot be read refuses with a fixed sentence, naming no path", () => {
+  const absent = join(tmpdir(), `mro-absent-bank-${process.pid}`, "bank.json");
+  assert.throws(
+    () => loadBank(absent),
+    (err) => {
+      assert.match(err.message, /question bank not found: set MRO_QUESTION_BANK/);
+      assert.equal(err.message.includes(absent), false, err.message);
+      assert.equal(err.message.includes(tmpdir()), false, err.message);
+      return true;
+    }
+  );
+});
+
+test("a bank that is unreadable for another reason says so, still without a path", () => {
+  assert.throws(
+    () => loadBank(tmpdir()),
+    (err) => {
+      assert.match(err.message, /question bank could not be read \(EISDIR\)/);
+      assert.equal(err.message.includes(tmpdir()), false, err.message);
+      return true;
+    }
+  );
+});
+
+// R10b. A bank edited under a question already issued would make the Warden
+// show one question and grade the answer against another, so boot refuses.
+test("boot refuses when a question already issued is gone from the bank", () => {
+  const q = queries(openDb(":memory:"));
+  assert.equal(assertIssuedQuestionsPresent(q, BANK), BANK, "no rows, nothing to miss");
+
+  q.issueQuestion(1, 101, BANK[0].id, 1_000);
+  q.issueQuestion(1, 102, BANK[1].id, 2_000);
+  // The same id twice: the refusal counts questions, not rows.
+  q.issueQuestion(2, 102, BANK[1].id, 2_000);
+  assert.equal(assertIssuedQuestionsPresent(q, BANK), BANK);
+
+  const without = BANK.filter((b) => b.id !== BANK[1].id);
+  assert.throws(
+    () => assertIssuedQuestionsPresent(q, without),
+    (err) => {
+      assert.match(err.message, /missing 1 question/);
+      // The count only: the id names a question, and this reaches a log.
+      assert.equal(err.message.includes(BANK[1].id), false, err.message);
+      assert.equal(err.message.includes(BANK[1].text), false, err.message);
+      return true;
+    }
+  );
+  assert.throws(() => assertIssuedQuestionsPresent(q, []), /missing 2 questions/);
 });

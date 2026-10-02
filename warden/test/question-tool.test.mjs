@@ -53,15 +53,17 @@ test("refusals: unbound, unknown, already credited today, year complete", async 
   assert.equal(credited.nextWindowOpensAt, new Date(102 * DAY_MS).toISOString());
 });
 
-// The guards the construction site cannot get wrong quietly: a malformed bank,
+// The guards the construction site cannot get wrong quietly: no bank at all,
 // or a missing secret the day's choice is keyed by, would otherwise refuse
-// every caller or choose predictably once it was live.
-test("the tool refuses to be built without a sane bank or without the secret", () => {
+// every caller or choose predictably once it was live. The CONTENT of the bank
+// is checked once at boot and in makeMcpHandler -- see mcp.test.mjs -- because
+// this factory runs on every MCP call.
+test("the tool refuses to be built without a bank or without the secret", () => {
   const q = queries(openDb(":memory:"));
-  assert.throws(() => makeQuestionTool({ q, challengeSecret: "s" }), /question bank must be an array/);
-  // An empty array is the one a bare Array.isArray check let through.
-  assert.throws(() => makeQuestionTool({ q, bank: [], challengeSecret: "s" }), /question bank is empty/);
-  assert.throws(() => makeQuestionTool({ q, bank: [{ id: "x" }], challengeSecret: "s" }), /printable ASCII/);
+  assert.throws(() => makeQuestionTool({ q, challengeSecret: "s" }), /non-empty question bank/);
+  // An empty array is the one a bare Array.isArray check let through, and
+  // questionFor would divide by its length.
+  assert.throws(() => makeQuestionTool({ q, bank: [], challengeSecret: "s" }), /non-empty question bank/);
   assert.throws(() => makeQuestionTool({ q, bank: BANK, challengeSecret: "" }), /challenge secret/);
 });
 

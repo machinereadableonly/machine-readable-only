@@ -388,6 +388,7 @@ export function queries(db) {
       "INSERT OR IGNORE INTO questions (tokenId, day, questionId, issuedAt) VALUES (?, ?, ?, ?)"
     ),
     getQuestion: db.prepare("SELECT * FROM questions WHERE tokenId = ? AND day = ?"),
+    issuedQuestionIds: db.prepare("SELECT DISTINCT questionId FROM questions"),
     // `answeredAt IS NULL`, never `answer IS NULL`: a silent day legitimately
     // stores a null answer, and the first answer recorded must win in SQL
     // rather than by a caller remembering to check.
@@ -1110,6 +1111,10 @@ export function queries(db) {
     },
 
     getQuestion: (tokenId, day) => s.getQuestion.get(tokenId, day),
+
+    /// Every question id this mirror has ever issued. The boot check compares
+    /// it against the loaded bank; nothing else reads it.
+    issuedQuestionIds: () => s.issuedQuestionIds.all().map((row) => row.questionId),
 
     /// Record the answer to a question already issued. No transaction of its
     /// own: this is called inside the checkin credit transaction, so the answer

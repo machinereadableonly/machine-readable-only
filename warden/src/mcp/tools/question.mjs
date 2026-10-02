@@ -2,14 +2,15 @@
 import * as z from "zod";
 import { DAY_MS, utcDay } from "../../day.mjs";
 import { FINISH_LEVEL } from "../ladder.mjs";
-import { questionFor, publicShape, assertBankSane, ANSWER_WINDOW_MS } from "../question.mjs";
+import { questionFor, publicShape, ANSWER_WINDOW_MS } from "../question.mjs";
 
 export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now = Date.now }) {
   // Both at construction, like requireChain: a tool built without them would
-  // refuse every caller, or key the day's choice on nothing. assertBankSane
-  // rather than Array.isArray, because an empty or malformed bank passes that
-  // and then fails on every call instead of at the wiring.
-  assertBankSane(bank);
+  // refuse every caller, or key the day's choice on nothing. The SHAPE only --
+  // makeMcpHandler and boot run the full assertBankSane, and this factory runs
+  // on every MCP call. An empty bank is checked because questionFor would
+  // divide by its length.
+  if (!Array.isArray(bank) || bank.length === 0) throw new Error("question tool needs a non-empty question bank");
   if (!challengeSecret) throw new Error("question tool needs the challenge secret");
   return {
     name: "question",

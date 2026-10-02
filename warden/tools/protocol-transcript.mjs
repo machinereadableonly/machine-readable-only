@@ -12,7 +12,7 @@
 // UNPAID, and what it captures is the refusal.
 import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
 import { mkdtempSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { signatureHeaders } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
@@ -27,7 +27,7 @@ import { envelope } from "../test/mcp-envelope.mjs";
 import { makePaymentGateway } from "../src/pay/x402.mjs";
 import { makeChainReader } from "../src/chain/read.mjs";
 import { LADDER, assertLadderSane } from "../src/mcp/ladder.mjs";
-import { loadBank } from "../src/mcp/question.mjs";
+import { loadBank, bankPath } from "../src/mcp/question.mjs";
 
 const DOMAIN = "example.com";
 const SECRET = "transcript-secret";
@@ -52,7 +52,7 @@ const paid = makePaymentGateway({ facilitatorUrl: FACILITATOR, network: NETWORK,
 const chain = makeChainReader({ rpcUrl: RPC, contract: CONTRACT });
 // THE REAL BANK, like main.mjs: a capture built on the fixture would
 // document questions no agent is ever asked.
-const bank = loadBank(process.env.MRO_QUESTION_BANK ?? join(homedir(), ".mro-questions", "bank.json"));
+const bank = loadBank(bankPath());
 const mcp = makeMcpHandler({
   bank,
   q, chain, today: utcDay, contract: CONTRACT, chainId: CHAIN_ID,

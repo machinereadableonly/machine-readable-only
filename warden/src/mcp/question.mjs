@@ -5,6 +5,8 @@
 // This module is pure: it reads the bank and decides, and writes nothing.
 import { readFileSync } from "node:fs";
 import { createHmac } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 /// Provisional until measured; a constant so changing it needs no redeploy.
 export const ANSWER_WINDOW_MS = 60_000;
@@ -48,8 +50,44 @@ export function assertBankSane(bank) {
   return bank;
 }
 
+/// Outside every worktree: the repository is public and the bank must not be.
+export function bankPath(env = process.env) {
+  return env.MRO_QUESTION_BANK || join(homedir(), ".mro-questions", "bank.json");
+}
+
 export function loadBank(path) {
-  return assertBankSane(JSON.parse(readFileSync(path, "utf8")));
+  let text;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch (err) {
+    // A FIXED SENTENCE, because the default path carries the home directory and
+    // a boot failure is read in public. readFileSync's own message names it.
+    throw new Error(
+      err.code === "ENOENT"
+        ? "question bank not found: set MRO_QUESTION_BANK or create .mro-questions/bank.json in the home directory"
+        : `question bank could not be read (${err.code ?? "unknown error"})`
+    );
+  }
+  return assertBankSane(JSON.parse(text));
+}
+
+/// Refuse a bank that has lost a question already issued to a token.
+///
+/// The artwork records the answer as an index against the question that was
+/// issued, so an id the bank no longer holds can never be graded or drawn.
+/// Called at boot: one refusal there beats a token whose day is silent for
+/// ever because of an edit of ours.
+export function assertIssuedQuestionsPresent(q, bank) {
+  const held = new Set(bank.map((b) => b.id));
+  const missing = q.issuedQuestionIds().filter((id) => !held.has(id));
+  // The COUNT only. An id names a question, and this reaches a public log.
+  if (missing.length > 0) {
+    throw new Error(
+      `question bank is missing ${missing.length} question${missing.length === 1 ? "" : "s"} already ` +
+        "issued to a token: restore them, or no answer to them can ever be recorded"
+    );
+  }
+  return bank;
 }
 
 /// Keyed by the Warden's secret so the day's question cannot be read in advance.
