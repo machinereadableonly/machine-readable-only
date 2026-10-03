@@ -14,7 +14,7 @@ contract FinishLineTest is MroTestBase {
         t = new MachineReadableOnly(address(r), WARDEN);
         vm.warp(86_400 * 1000 + 1);
         vm.prank(WARDEN);
-        t.mint(1, ALICE, KEY, _code(), _today());
+        t.mint(1, ALICE, KEY, _code(), _today(), false);
     }
 
     function test_aCreditPast365Reverts() public {
@@ -23,7 +23,7 @@ contract FinishLineTest is MroTestBase {
         _warpToDay(next);
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.AlreadyFinished.selector, uint256(1)));
-        t.batchCheckIn(_one(1), _days(next));
+        t.batchCheckIn(_one(1), _days(next), _noBits(_days(next)), _silent(_days(next)));
     }
 
     function test_level364StillCredits() public {
@@ -37,7 +37,7 @@ contract FinishLineTest is MroTestBase {
     function _mintMore(uint32 n) internal {
         for (uint32 i = 2; i <= n + 1; i++) {
             vm.prank(WARDEN);
-            t.mint(i, ALICE, keccak256(abi.encode("key", i)), _code(), _today());
+            t.mint(i, ALICE, keccak256(abi.encode("key", i)), _code(), _today(), false);
         }
     }
 
@@ -71,7 +71,7 @@ contract FinishLineTest is MroTestBase {
         uint32[] memory ds = new uint32[](2);
         ds[0] = d; ds[1] = d;
         vm.prank(WARDEN);
-        t.batchCheckIn(_packed(ids), ds);
+        t.batchCheckIn(_packed(ids), ds, _noBits(ds), _silent(ds));
         assertEq(uint32(t.marksOf(1) >> ORDINAL_SHIFT), 1);
         assertEq(uint32(t.marksOf(2) >> ORDINAL_SHIFT), 2);
         assertTrue(t.marksOf(2) & (1 << 14) != 0, "second place is atrium");
@@ -84,7 +84,7 @@ contract FinishLineTest is MroTestBase {
         vm.expectEmit(true, true, false, true);
         emit MachineReadableOnly.Finished(1, 1, 15);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d));
+        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
     }
 
     function test_applyMarkRefusesEveryFinisherId() public {
@@ -165,7 +165,7 @@ contract FinishLineTest is MroTestBase {
         uint32 d = t.today() + 1;
         _warpToDay(d);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d));
+        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
         // The token really did finish, asserted FIRST. Without this the test
         // passes on a contract that never writes a place at all -- measured
         // while breaking the wiring, where it stayed green with _finish

@@ -36,7 +36,7 @@ contract SunsetByAbsenceTest is MroTestBase {
         uint32 d = t.today();
         _warpToDay(d + 200);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d + 200));
+        t.batchCheckIn(_one(1), _days(d + 200), _noBits(_days(d + 200)), _silent(_days(d + 200)));
         assertEq(t.lastWardenDay(), d + 200, "a check-in is a heartbeat");
 
         // 200 days of silence is not a year, so the piece stays open.
@@ -87,7 +87,7 @@ contract SunsetByAbsenceTest is MroTestBase {
         uint32 d = t.today();
         _warpToDay(d + 10);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d + 10));
+        t.batchCheckIn(_one(1), _days(d + 10), _noBits(_days(d + 10)), _silent(_days(d + 10)));
         uint32 lastWrite = t.today();
 
         _warpToDay(lastWrite + 400);

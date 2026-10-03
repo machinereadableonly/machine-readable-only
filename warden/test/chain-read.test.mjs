@@ -36,9 +36,13 @@ const DEPLOYED = fixture("viewof-token1-deployed.hex");
 /// The EIGHTEEN-field shape of the 2026-09-26 deployment, encoded once and frozen.
 const POST_ECHO = fixture("viewof-post-echo.hex");
 
-/// The NINETEEN-field shape this branch defines (`restDay` after `resting`),
-/// re-encoded once from POST_ECHO with restDay 20810, and frozen.
+/// The NINETEEN-field shape (`restDay` after `resting`), re-encoded once from
+/// POST_ECHO with restDay 20810, and frozen.
 const POST_REST = fixture("viewof-post-restday.hex");
+
+/// The TWENTY-field shape this branch defines (`answers` after `marks`),
+/// re-encoded once from POST_REST with answers [2, 0], and frozen.
+const POST_ANSWERS = fixture("viewof-post-answers.hex");
 
 /// Read off the chain, not off our own decoder. This is the assertion that
 /// would have caught the live defect.
@@ -52,7 +56,7 @@ const ZERO_KEY = "0x" + "00".repeat(32);
 const DEPLOYED_ABI = MRO_ABI.map((entry) => {
   if (entry.type !== "function" || entry.name !== "viewOf") return entry;
   const out = structuredClone(entry);
-  out.outputs[0].components = out.outputs[0].components.filter((c) => c.name !== "echo" && c.name !== "restDay");
+  out.outputs[0].components = out.outputs[0].components.filter((c) => c.name !== "echo" && c.name !== "restDay" && c.name !== "answers");
   return out;
 });
 
@@ -106,13 +110,13 @@ test("lifecycleOf reads the deployed token 1 by name", async () => {
 
 // --- the shape this branch defines -----------------------------------------
 
-test("boundKeyOf reads the nineteen-field struct this branch defines", async () => {
-  const chain = readerFor(POST_REST);
+test("boundKeyOf reads the twenty-field struct this branch defines", async () => {
+  const chain = readerFor(POST_ANSWERS);
   assert.equal(await chain.boundKeyOf(7), POST_ECHO_KEY);
 });
 
-test("lifecycleOf reads the nineteen-field struct this branch defines", async () => {
-  const chain = readerFor(POST_REST);
+test("lifecycleOf reads the twenty-field struct this branch defines", async () => {
+  const chain = readerFor(POST_ANSWERS);
   assert.deepEqual(await chain.lifecycleOf(7), {
     exists: true,
     resting: true,
@@ -129,12 +133,15 @@ test("lifecycleOf reads the nineteen-field struct this branch defines", async ()
 // the ABI is precisely the case the old code got wrong: it returned a
 // confident, wrong answer instead of nothing.
 test("a return whose shape disagrees with the ABI is null, never a wrong key", async () => {
-  const chain = readerFor(DEPLOYED); // 17 fields of data, 19 in the ABI
+  const chain = readerFor(DEPLOYED); // 17 fields of data, 20 in the ABI
   assert.equal(await chain.boundKeyOf(1), null);
   assert.equal(await chain.lifecycleOf(1), null);
-  const live = readerFor(POST_ECHO); // 18 fields of data, 19 in the ABI
+  const live = readerFor(POST_ECHO); // 18 fields of data, 20 in the ABI
   assert.equal(await live.boundKeyOf(7), null);
   assert.equal(await live.lifecycleOf(7), null);
+  const rest = readerFor(POST_REST); // 19 fields of data, 20 in the ABI
+  assert.equal(await rest.boundKeyOf(7), null);
+  assert.equal(await rest.lifecycleOf(7), null);
 });
 
 test("a return too short to be a TokenView is null", async () => {

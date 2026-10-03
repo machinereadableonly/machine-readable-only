@@ -151,8 +151,10 @@ const fixture = (name) =>
 const DEPLOYED_17 = fixture("viewof-token1-deployed.hex");
 /// The EIGHTEEN-field shape of the 2026-09-26 deployment, token 7, frozen.
 const POST_ECHO_18 = fixture("viewof-post-echo.hex");
-/// The NINETEEN-field shape this branch defines, token 7, frozen.
+/// The NINETEEN-field shape (`restDay`), token 7, frozen.
 const POST_REST_19 = fixture("viewof-post-restday.hex");
+/// The TWENTY-field shape this branch defines (`answers`), token 7, frozen.
+const POST_ANSWERS_20 = fixture("viewof-post-answers.hex");
 
 const CONTRACT = "0x" + "22".repeat(20);
 /// An endpoint with a provider API key in the path, as a managed provider
@@ -166,10 +168,11 @@ const answering = (result) => async () => ({
 
 test("verifyDecoder returns the decoded view when the shapes agree", async () => {
   const view = await verifyDecoder({
-    rpcUrl: RPC, contract: CONTRACT, tokenId: 7, fetchImpl: answering(POST_REST_19),
+    rpcUrl: RPC, contract: CONTRACT, tokenId: 7, fetchImpl: answering(POST_ANSWERS_20),
   });
   assert.equal(Number(view.tokenId), 7);
   assert.equal(typeof view.restDay, "number", "the field the deployed contract does not have");
+  assert.deepEqual(view.answers, [2n, 0n], "the field this branch adds");
 });
 
 test("verifyDecoder REFUSES on a contract whose TokenView has moved", async () => {
@@ -191,6 +194,13 @@ test("verifyDecoder REFUSES the eighteen-field contract live before this branch"
   );
 });
 
+test("verifyDecoder REFUSES the nineteen-field shape that predates the answer bits", async () => {
+  await assert.rejects(
+    verifyDecoder({ rpcUrl: RPC, contract: CONTRACT, tokenId: 7, fetchImpl: answering(POST_REST_19) }),
+    /cannot decode viewOf/
+  );
+});
+
 test("verifyDecoder refuses an address with no contract code at all", async () => {
   await assert.rejects(
     verifyDecoder({ rpcUrl: RPC, contract: CONTRACT, fetchImpl: answering("0x") }),
@@ -204,7 +214,7 @@ test("verifyDecoder refuses an address with no contract code at all", async () =
 // one equality catches a return whose fields have slid.
 test("verifyDecoder refuses a return that decodes but reports another token", async () => {
   await assert.rejects(
-    verifyDecoder({ rpcUrl: RPC, contract: CONTRACT, tokenId: 1, fetchImpl: answering(POST_REST_19) }),
+    verifyDecoder({ rpcUrl: RPC, contract: CONTRACT, tokenId: 1, fetchImpl: answering(POST_ANSWERS_20) }),
     /decoded, but reported tokenId 7/
   );
 });
@@ -236,7 +246,7 @@ test("a transient outage that clears is not a refusal", async () => {
   const fetchImpl = async (...args) => {
     calls += 1;
     if (calls < 3) throw new Error("ECONNREFUSED");
-    return answering(POST_REST_19)(...args);
+    return answering(POST_ANSWERS_20)(...args);
   };
   const view = await verifyDecoder({
     rpcUrl: RPC, contract: CONTRACT, tokenId: 7, fetchImpl, sleep: noSleep, log: () => {},
@@ -285,9 +295,9 @@ test("verifyDecoder works against a contract with no tokens minted", async () =>
   const zeroView = "0x" + [
     (32).toString(16).padStart(64, "0"),            // tuple offset
     (5).toString(16).padStart(64, "0"),             // tokenId = 5
-    ...Array.from({ length: 15 }, () => "0".repeat(64)), // 15 more static words
+    ...Array.from({ length: 17 }, () => "0".repeat(64)), // 17 more static words
     (0).toString(16).padStart(64, "0"),             // today
-    (18 * 32).toString(16).padStart(64, "0"),       // offset of `code`
+    (20 * 32).toString(16).padStart(64, "0"),       // offset of `code`
     "0".repeat(64),                                 // code length 0
   ].join("");
   const view = await verifyDecoder({

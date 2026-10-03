@@ -230,7 +230,7 @@ contract LineageTest is MroTestBase {
         bytes memory code = _code();
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.KeyChanged.selector, uint256(1)));
-        t.seed(901, 1, ALICE, code, day, KEY);
+        t.seed(901, 1, ALICE, code, day, KEY, false);
     }
 
     function test_seedWithTheParentsCurrentKeyLands() public {
@@ -239,7 +239,7 @@ contract LineageTest is MroTestBase {
         uint32 day = _today();
         bytes memory code = _code();
         vm.prank(WARDEN);
-        t.seed(901, 1, ALICE, code, day, KEY);
+        t.seed(901, 1, ALICE, code, day, KEY, false);
         assertEq(t.viewOf(901).agentKeyId, KEY);
     }
 }

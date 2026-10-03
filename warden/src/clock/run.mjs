@@ -322,7 +322,7 @@ export async function runClock({
       // today() at the write, and since the Clock writes at 00:05 the next day
       // every token began a day later on chain than here, and lost its first
       // check-in (found by the fast-days copy, 2026-09-11).
-      [BigInt(mint.tokenId), mint.toAddress, keyIdToBytes32(mint.agentKeyId), `0x${mint.qr}`, mint.day],
+      [BigInt(mint.tokenId), mint.toAddress, keyIdToBytes32(mint.agentKeyId), `0x${mint.qr}`, mint.day, false],
       { label: `mint ${mint.tokenId}` }
     );
     if (result.ok) {
@@ -430,7 +430,7 @@ export async function runClock({
       "seed",
       // The fifth argument is the day the seed was asked for -- the same
       // first-day rule as the mint above, and for the same reason.
-      [BigInt(s.tokenId), BigInt(s.parentId), s.toAddress, `0x${s.qr}`, s.day, keyIdToBytes32(s.agentKeyId)],
+      [BigInt(s.tokenId), BigInt(s.parentId), s.toAddress, `0x${s.qr}`, s.day, keyIdToBytes32(s.agentKeyId), false],
       { label: `seed ${s.tokenId} from ${s.parentId}` }
     );
     if (result.ok) {

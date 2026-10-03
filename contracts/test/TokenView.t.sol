@@ -28,6 +28,7 @@ contract TokenViewTest is Test {
             fellRun: 0,
             fellDay: 0,
             marks: 0,
+            answers: [uint256(0), uint256(0)],
             agentKeyId: bytes32(uint256(0xa9e)),
             code: new bytes(HeartMask.BYTES),
             today: 20_000

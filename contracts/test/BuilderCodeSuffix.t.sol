@@ -46,12 +46,12 @@ contract BuilderCodeSuffixTest is MroTestBase {
     }
 
     function test_mintIgnoresTheSuffix() public {
-        _sameWithAndWithout(abi.encodeCall(MachineReadableOnly.mint, (2, ALICE, KEY_TWO, _code(), _today())), 2);
+        _sameWithAndWithout(abi.encodeCall(MachineReadableOnly.mint, (2, ALICE, KEY_TWO, _code(), _today(), false)), 2);
     }
 
     function test_batchCheckInIgnoresTheSuffix() public {
         _warpToDay(t.today() + 1);
-        _sameWithAndWithout(abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(1), _days(_today()))), 1);
+        _sameWithAndWithout(abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(1), _days(_today()), _noBits(_days(_today())), _silent(_days(_today())))), 1);
     }
 
     function test_applyMarkIgnoresTheSuffix() public {
@@ -80,7 +80,7 @@ contract BuilderCodeSuffixTest is MroTestBase {
         while (t.seedsAvailable(1) == 0) _warpToDay(t.today() + 365);
         uint256 child = 901;
         _sameWithAndWithout(
-            abi.encodeCall(MachineReadableOnly.seed, (child, 1, address(uint160(0x5EED0000 + child)), _code(), _today(), KEY)),
+            abi.encodeCall(MachineReadableOnly.seed, (child, 1, address(uint160(0x5EED0000 + child)), _code(), _today(), KEY, false)),
             child
         );
     }

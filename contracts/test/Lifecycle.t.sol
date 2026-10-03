@@ -18,7 +18,7 @@ contract LifecycleTest is MroTestBase {
         uint32 day = t.today() + 1;
         _warpToDay(day);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(day));
+        t.batchCheckIn(_one(1), _days(day), _noBits(_days(day)), _silent(_days(day)));
 
         vm.prank(ALICE);
         t.rebind(1, bytes32(uint256(0xBEEF)));
@@ -38,7 +38,7 @@ contract LifecycleTest is MroTestBase {
     /// that already minted can be bound to a second token it was given.
     function test_aKeyCanBeBoundToSeveralTokens() public {
         vm.prank(WARDEN);
-        t.mint(2, ALICE, bytes32(uint256(2)), _code(), _today());
+        t.mint(2, ALICE, bytes32(uint256(2)), _code(), _today(), false);
         vm.startPrank(ALICE);
         t.rebind(1, bytes32(uint256(0xAAA)));
         t.rebind(2, bytes32(uint256(0xAAA)));
@@ -55,7 +55,7 @@ contract LifecycleTest is MroTestBase {
         // The original key already minted, so it still cannot mint again.
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.AlreadyMinted.selector);
-        t.mint(3, MALLORY, KEY, _code(), _today());
+        t.mint(3, MALLORY, KEY, _code(), _today(), false);
     }
 
     /// @dev The payload is asserted in full, not just the indexed id. It was
@@ -104,7 +104,7 @@ contract LifecycleTest is MroTestBase {
         uint32 day = t.today() + 1;
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
-        t.batchCheckIn(_one(1), _days(day));
+        t.batchCheckIn(_one(1), _days(day), _noBits(_days(day)), _silent(_days(day)));
 
         // Transfer still works.
         vm.prank(ALICE);
@@ -150,7 +150,7 @@ contract LifecycleTest is MroTestBase {
         _warpToDay(tomorrow);
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
-        t.batchCheckIn(_one(1), _days(tomorrow));
+        t.batchCheckIn(_one(1), _days(tomorrow), _noBits(_days(tomorrow)), _silent(_days(tomorrow)));
 
         // Resting again is refused: a second Rested event would name a second day.
         vm.prank(MALLORY);
@@ -169,13 +169,13 @@ contract LifecycleTest is MroTestBase {
     function test_aRebindBeforeTheSeedLandsCannotSpendAnotherKeysBudget() public {
         bytes32 victimKey = bytes32(uint256(0x171c7));
         vm.prank(WARDEN);
-        t.mint(2, ALICE, victimKey, _code(), _today());   // the victim, minted today
+        t.mint(2, ALICE, victimKey, _code(), _today(), false);   // the victim, minted today
 
         _warpOneYear();                          // the victim's key earns a seed
 
         bytes32 freshKey = bytes32(uint256(0xf5e5));
         vm.prank(WARDEN);
-        t.mint(3, MALLORY, freshKey, _code(), _today());  // Mallory mints with no tenure
+        t.mint(3, MALLORY, freshKey, _code(), _today(), false);  // Mallory mints with no tenure
         _makeWhole(3);
 
         assertEq(t.seedsAvailable(2), 1, "the victim's key earned a seed");
@@ -191,7 +191,7 @@ contract LifecycleTest is MroTestBase {
         bytes memory code = _code();
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.KeyChanged.selector, uint256(3)));
-        t.seed(77, 3, MALLORY, code, day, freshKey);
+        t.seed(77, 3, MALLORY, code, day, freshKey, false);
 
         assertEq(t.seedsAvailable(2), 1, "the victim's earned seed is untouched");
     }
@@ -199,7 +199,7 @@ contract LifecycleTest is MroTestBase {
     function test_seedRequiresAWholeParent() public {
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.ParentNotWhole.selector);
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
     }
 
     function test_seedCreatesAChildWithTheParentsKeyAndNextGeneration() public {
@@ -209,7 +209,7 @@ contract LifecycleTest is MroTestBase {
         assertEq(t.seedsAvailable(1), 1);
 
         vm.prank(WARDEN);
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
 
         assertEq(t.ownerOf(2), ALICE);
         assertEq(t.viewOf(2).generation, 1);
@@ -228,12 +228,12 @@ contract LifecycleTest is MroTestBase {
         _makeWhole(1);
         _warpOneYear();
         vm.prank(WARDEN);
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
 
         uint32 day = t.today() + 1;
         _warpToDay(day);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(2), _days(day));
+        t.batchCheckIn(_one(2), _days(day), _noBits(_days(day)), _silent(_days(day)));
 
         assertEq(t.viewOf(2).level, 2);
         assertEq(t.viewOf(2).streak, 2);
@@ -243,19 +243,19 @@ contract LifecycleTest is MroTestBase {
         _makeWhole(1);
         _warpOneYear();
         vm.prank(WARDEN);
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
 
         // The second seed in the same year has no budget.
         assertEq(t.seedsAvailable(1), 0);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.NoSeedAvailable.selector);
-        t.seed(3, 1, ALICE, _code(), _today(), KEY);
+        t.seed(3, 1, ALICE, _code(), _today(), KEY, false);
 
         // A second year of tenure grants exactly one more.
         _warpOneYear();
         assertEq(t.seedsAvailable(1), 1);
         vm.prank(WARDEN);
-        t.seed(3, 1, ALICE, _code(), _today(), KEY);
+        t.seed(3, 1, ALICE, _code(), _today(), KEY, false);
         assertEq(t.viewOf(1).seedsGiven, 2);
     }
 
@@ -265,7 +265,7 @@ contract LifecycleTest is MroTestBase {
         _makeWhole(1);
         _warpOneYear();
         vm.prank(WARDEN);
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
 
         // The child is on the same key, so it sees the same exhausted budget
         // even once it is itself whole.
@@ -276,7 +276,7 @@ contract LifecycleTest is MroTestBase {
         _makeWhole(1);
         _warpOneYear();
         vm.expectRevert(MachineReadableOnly.NotWarden.selector);
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
     }
 
     function test_seedRefusesARestingParent() public {
@@ -286,7 +286,7 @@ contract LifecycleTest is MroTestBase {
         t.rest(1);
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
     }
 
     function test_seedIsBlockedBySunsetAndBySupplyCap() public {
@@ -295,13 +295,13 @@ contract LifecycleTest is MroTestBase {
         t.setSupplyCap(1);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.SupplyCap.selector);
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
 
         t.setSupplyCap(100);
         t.sunset();
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.Sunset.selector);
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
     }
 
     // -------------------------------------------------------------------
@@ -327,7 +327,7 @@ contract LifecycleTest is MroTestBase {
         assertEq(t.seedsAvailable(1), 0, "a key that never minted has earned nothing");
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.NoSeedAvailable.selector);
-        t.seed(2, 1, ALICE, _code(), _today(), strangerKey);
+        t.seed(2, 1, ALICE, _code(), _today(), strangerKey, false);
     }
 
     /// @dev The other half, and the reason the condition is `&&` and not `||`:
@@ -346,7 +346,7 @@ contract LifecycleTest is MroTestBase {
         MachineReadableOnly t2 = new MachineReadableOnly(address(r2), WARDEN);
         assertEq(t2.today(), 0, "the fixture must mint on day zero for this to test anything");
         vm.prank(WARDEN);
-        t2.mint(1, ALICE, KEY, _code(), _today());
+        t2.mint(1, ALICE, KEY, _code(), _today(), false);
         assertEq(t2.viewOf(1).mintDay, 0);
 
         // Two years of tenure from day zero.

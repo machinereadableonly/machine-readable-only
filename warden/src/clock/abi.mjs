@@ -57,6 +57,25 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "answersOf",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256[2]",
+        "internalType": "uint256[2]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "applyMark",
     "inputs": [
       {
@@ -128,6 +147,16 @@ export const MRO_ABI = [
         "name": "days_",
         "type": "uint32[]",
         "internalType": "uint32[]"
+      },
+      {
+        "name": "answerBits",
+        "type": "bytes",
+        "internalType": "bytes"
+      },
+      {
+        "name": "record",
+        "type": "bytes",
+        "internalType": "bytes"
       }
     ],
     "outputs": [],
@@ -412,6 +441,11 @@ export const MRO_ABI = [
         "name": "day",
         "type": "uint32",
         "internalType": "uint32"
+      },
+      {
+        "name": "firstAnswer",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [],
@@ -662,6 +696,11 @@ export const MRO_ABI = [
         "name": "expectedKeyId",
         "type": "bytes32",
         "internalType": "bytes32"
+      },
+      {
+        "name": "firstAnswer",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [],
@@ -1155,6 +1194,11 @@ export const MRO_ABI = [
             "name": "marks",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "answers",
+            "type": "uint256[2]",
+            "internalType": "uint256[2]"
           },
           {
             "name": "agentKeyId",

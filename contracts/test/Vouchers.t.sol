@@ -43,7 +43,7 @@ contract VouchersTest is MroTestBase {
         t = new MachineReadableOnly(address(r), wardenAddr);
         vm.warp(86_400 * 1000 + 1);
         vm.prank(wardenAddr);
-        t.mint(1, ALICE, KEY, _code(), _today());
+        t.mint(1, ALICE, KEY, _code(), _today(), false);
     }
 
     function _sign(uint256 id, uint32 day) internal view returns (bytes memory) {
@@ -246,7 +246,7 @@ contract VouchersTest is MroTestBase {
     function test_aVoucherCannotBeReplayedOntoAnotherToken() public {
         t.setVouchersEnabled(true);
         vm.prank(wardenAddr);
-        t.mint(2, MALLORY, bytes32(uint256(2)), _code(), _today());
+        t.mint(2, MALLORY, bytes32(uint256(2)), _code(), _today(), false);
 
         uint32 d = t.today() + 1;
         _warpToDay(d);

@@ -36,6 +36,7 @@ struct TokenView {
     // ordinal lives at bits 64-95, never at 32-63, which the earned Iris's run
     // already owns.
     uint256 marks;
+    uint256[2] answers;  // one bit per credit: credit `level` is bit `level - 1`
     bytes32 agentKeyId;  // which agent key minted it
     bytes code;          // 407 bytes, the packed 57x57 code, written once at mint
     uint32 today;        // UTC day index now, supplied by the token contract

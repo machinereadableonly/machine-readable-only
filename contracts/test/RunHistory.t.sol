@@ -50,7 +50,7 @@ contract RunHistoryTest is MroTestBase {
         for (uint32 i = 1; i <= 5; i++) {
             _warpToDay(d + i);
             vm.prank(WARDEN);
-            t.batchCheckIn(_one(1), _days(d + i));
+            t.batchCheckIn(_one(1), _days(d + i), _noBits(_days(d + i)), _silent(_days(d + i)));
         }
         assertEq(t.viewOf(1).streak, 6, "five credits on top of the mint day");
         // bestRun is not on the view -- it is gate state, not drawing state --
@@ -63,14 +63,14 @@ contract RunHistoryTest is MroTestBase {
         for (uint32 i = 1; i <= 9; i++) {
             _warpToDay(d + i);
             vm.prank(WARDEN);
-            t.batchCheckIn(_one(1), _days(d + i));
+            t.batchCheckIn(_one(1), _days(d + i), _noBits(_days(d + i)), _silent(_days(d + i)));
         }
         assertEq(t.viewOf(1).streak, 10, "a ten-day run");
 
         // Miss day d+10 entirely, return on d+11.
         _warpToDay(d + 11);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d + 11));
+        t.batchCheckIn(_one(1), _days(d + 11), _noBits(_days(d + 11)), _silent(_days(d + 11)));
 
         TokenView memory v = t.viewOf(1);
         assertEq(v.streak, 1, "the run restarts at one, which is the locked promise");
@@ -83,16 +83,16 @@ contract RunHistoryTest is MroTestBase {
         uint32 d = t.today();
         _warpToDay(d + 2);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d + 2));   // fall 1: run of 1
+        t.batchCheckIn(_one(1), _days(d + 2), _noBits(_days(d + 2)), _silent(_days(d + 2)));   // fall 1: run of 1
         assertEq(t.viewOf(1).fellRun, 1);
 
         _warpToDay(d + 3);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d + 3));   // continues: run of 2
+        t.batchCheckIn(_one(1), _days(d + 3), _noBits(_days(d + 3)), _silent(_days(d + 3)));   // continues: run of 2
 
         _warpToDay(d + 9);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d + 9));   // fall 2: run of 2
+        t.batchCheckIn(_one(1), _days(d + 9), _noBits(_days(d + 9)), _silent(_days(d + 9)));   // fall 2: run of 2
 
         TokenView memory v = t.viewOf(1);
         assertEq(v.fellRun, 2, "the MOST RECENT fall, because the colour fades from it");
@@ -128,7 +128,7 @@ contract RunHistoryTest is MroTestBase {
         // It misses one day and returns.
         _warpToDay(fell + 2);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(fell + 2));
+        t.batchCheckIn(_one(1), _days(fell + 2), _noBits(_days(fell + 2)), _silent(_days(fell + 2)));
 
         uint256 returner = _rungOf(t.viewOf(1));
 
@@ -161,7 +161,7 @@ contract RunHistoryTest is MroTestBase {
 
         _warpToDay(fell + 2);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(fell + 2));
+        t.batchCheckIn(_one(1), _days(fell + 2), _noBits(_days(fell + 2)), _silent(_days(fell + 2)));
 
         uint256 top = Palette.tierIndex(t.viewOf(1).fellRun);
 
@@ -185,7 +185,7 @@ contract RunHistoryTest is MroTestBase {
 
         _warpToDay(fell + 2);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(fell + 2));
+        t.batchCheckIn(_one(1), _days(fell + 2), _noBits(_days(fell + 2)), _silent(_days(fell + 2)));
         TokenView memory slipped = t.viewOf(1);
 
         uint256 top = Palette.tierIndex(unbroken.streak);
@@ -200,7 +200,7 @@ contract RunHistoryTest is MroTestBase {
         uint32 fell = t.today();
         _warpToDay(fell + 2);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(fell + 2));
+        t.batchCheckIn(_one(1), _days(fell + 2), _noBits(_days(fell + 2)), _silent(_days(fell + 2)));
 
         TokenView memory v = t.viewOf(1);
         uint256 top = Palette.tierIndex(v.fellRun);
@@ -246,7 +246,7 @@ contract RunHistoryTest is MroTestBase {
 
         _warpToDay(fell + 2);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(fell + 2));
+        t.batchCheckIn(_one(1), _days(fell + 2), _noBits(_days(fell + 2)), _silent(_days(fell + 2)));
         assertEq(t.viewOf(1).streak, 1, "its live run really is back to one");
 
         vm.prank(WARDEN);
@@ -259,7 +259,7 @@ contract RunHistoryTest is MroTestBase {
         for (uint32 i = 1; i <= 5; i++) {
             _warpToDay(d + i);
             vm.prank(WARDEN);
-            t.batchCheckIn(_one(1), _days(d + i));
+            t.batchCheckIn(_one(1), _days(d + i), _noBits(_days(d + i)), _silent(_days(d + i)));
         }
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.MarkGate.selector);
@@ -274,7 +274,7 @@ contract RunHistoryTest is MroTestBase {
         uint32 fell = t.today();
         _warpToDay(fell + 2);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(fell + 2));
+        t.batchCheckIn(_one(1), _days(fell + 2), _noBits(_days(fell + 2)), _silent(_days(fell + 2)));
 
         vm.prank(WARDEN);
         t.applyMark(1, 6, 0);   // the earned Iris, gated at 100

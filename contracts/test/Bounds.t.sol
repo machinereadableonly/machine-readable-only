@@ -47,7 +47,7 @@ contract BoundsTest is MroTestBase {
         uint32 wrongUnit = uint32(block.timestamp); // seconds, not a day index
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.FutureDay.selector, wrongUnit));
-        t.batchCheckIn(_one(1), _days(wrongUnit));
+        t.batchCheckIn(_one(1), _days(wrongUnit), _noBits(_days(wrongUnit)), _silent(_days(wrongUnit)));
 
         // The token is untouched, so the next real check-in still works.
         assertEq(t.viewOf(1).lastDay, t.today(), "lastDay was never corrupted");
@@ -55,7 +55,7 @@ contract BoundsTest is MroTestBase {
         uint32 tomorrow = t.today() + 1;
         _warpToDay(tomorrow);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(tomorrow));
+        t.batchCheckIn(_one(1), _days(tomorrow), _noBits(_days(tomorrow)), _silent(_days(tomorrow)));
         assertEq(t.viewOf(1).level, 2, "and the token still checks in normally");
     }
 
@@ -66,11 +66,11 @@ contract BoundsTest is MroTestBase {
         uint32 tomorrow = t.today() + 1;
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.FutureDay.selector, tomorrow));
-        t.batchCheckIn(_one(1), _days(tomorrow));
+        t.batchCheckIn(_one(1), _days(tomorrow), _noBits(_days(tomorrow)), _silent(_days(tomorrow)));
 
         _warpToDay(tomorrow);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(tomorrow));
+        t.batchCheckIn(_one(1), _days(tomorrow), _noBits(_days(tomorrow)), _silent(_days(tomorrow)));
         assertEq(t.viewOf(1).lastDay, tomorrow, "the same day is legal once reached");
     }
 
@@ -90,19 +90,19 @@ contract BoundsTest is MroTestBase {
         uint256 big = uint256(type(uint32).max) + 5;
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.IdTooLarge.selector, big));
-        t.mint(big, ALICE, bytes32(uint256(0xcafe)), _code(), _today());
+        t.mint(big, ALICE, bytes32(uint256(0xcafe)), _code(), _today(), false);
     }
 
     function test_theLargestLegalIdStillMints() public {
         uint256 max = uint256(type(uint32).max);
         vm.prank(WARDEN);
-        t.mint(max, ALICE, bytes32(uint256(0xcafe)), _code(), _today());
+        t.mint(max, ALICE, bytes32(uint256(0xcafe)), _code(), _today(), false);
         assertEq(t.ownerOf(max), ALICE, "2**32 - 1 is legal");
 
         uint32 tomorrow = t.today() + 1;
         _warpToDay(tomorrow);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(type(uint32).max), _days(tomorrow));
+        t.batchCheckIn(_one(type(uint32).max), _days(tomorrow), _noBits(_days(tomorrow)), _silent(_days(tomorrow)));
         assertEq(t.viewOf(max).level, 2, "and it can be checked in");
     }
 
@@ -113,7 +113,7 @@ contract BoundsTest is MroTestBase {
         uint256 big = uint256(type(uint32).max) + 1;
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.IdTooLarge.selector, big));
-        t.seed(big, 1, ALICE, _code(), _today(), KEY);
+        t.seed(big, 1, ALICE, _code(), _today(), KEY, false);
     }
 
     // -------------------------------------------------------------------
@@ -179,7 +179,7 @@ contract BoundsTest is MroTestBase {
 
         // Still sold out, rather than silently re-opened.
         vm.prank(WARDEN);
-        t.mint(2, MALLORY, bytes32(uint256(2)), _code(), _today());
+        t.mint(2, MALLORY, bytes32(uint256(2)), _code(), _today(), false);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.MarkSoldOut.selector);
         t.applyMark(2, 3, 0);
@@ -195,7 +195,7 @@ contract BoundsTest is MroTestBase {
     function test_mintRejectsTheZeroKey() public {
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.ZeroKeyId.selector);
-        t.mint(2, ALICE, bytes32(0), _code(), _today());
+        t.mint(2, ALICE, bytes32(0), _code(), _today(), false);
     }
 
     // -------------------------------------------------------------------

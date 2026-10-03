@@ -280,7 +280,12 @@ export async function writeCheckInChunk(
 
     const result = await writer.send(
       "batchCheckIn",
-      [packIds(remaining.map((e) => e.tokenId)), remaining.map((e) => e.day)],
+      [
+        packIds(remaining.map((e) => e.tokenId)),
+        remaining.map((e) => e.day),
+        "0x" + "00".repeat(Math.ceil(remaining.length / 8)),
+        "0x" + "ff".repeat(remaining.length),
+      ],
       { label: `batchCheckIn x${remaining.length}` }
     );
 

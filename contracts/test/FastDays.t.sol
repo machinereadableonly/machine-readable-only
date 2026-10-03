@@ -47,7 +47,7 @@ contract FastDaysTest is Test {
         // and mint reverts BadCodeLength on anything else.
         bytes memory code = new bytes(407);
         vm.prank(WARDEN);
-        fast.mint(1, address(0xA11), bytes32(uint256(1)), code, uint32(block.timestamp / 300));
+        fast.mint(1, address(0xA11), bytes32(uint256(1)), code, uint32(block.timestamp / 300), false);
         uint32 d = fast.today();
         assertEq(fast.viewOf(1).lastDay, d);
 
@@ -55,7 +55,7 @@ contract FastDaysTest is Test {
         uint32[] memory days_ = new uint32[](1);
         days_[0] = d + 1;
         vm.prank(WARDEN);
-        fast.batchCheckIn(abi.encodePacked(uint32(1)), days_);
+        fast.batchCheckIn(abi.encodePacked(uint32(1)), days_, hex"00", hex"ff");
         assertEq(fast.viewOf(1).level, 2);
         assertEq(fast.viewOf(1).streak, 2);
     }

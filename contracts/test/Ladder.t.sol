@@ -17,7 +17,7 @@ contract LadderTest is MroTestBase {
         t = new MachineReadableOnly(address(r), WARDEN);
         vm.warp(86_400 * 1000 + 1);
         vm.prank(WARDEN);
-        t.mint(1, ALICE, KEY, _code(), _today());
+        t.mint(1, ALICE, KEY, _code(), _today(), false);
     }
 
     /// @dev Bits 1-10: the five pairs, and nothing else. The assertions below
@@ -229,7 +229,7 @@ contract LadderTest is MroTestBase {
         uint256 id = _readied;
         if (id > 1) {
             vm.prank(WARDEN);
-            t.mint(id, ALICE, bytes32(id), _code(), _today());
+            t.mint(id, ALICE, bytes32(id), _code(), _today(), false);
         }
         _makeWhole(id);
         assertEq(t.viewOf(id).streak, 365, "Break's gate needs a 365-day run");
@@ -421,7 +421,7 @@ contract LadderTest is MroTestBase {
     function _readyEveryPair(uint256 id) internal returns (uint256) {
         if (id != 1) {
             vm.prank(WARDEN);
-            t.mint(id, ALICE, bytes32(id), _code(), _today());
+            t.mint(id, ALICE, bytes32(id), _code(), _today(), false);
         }
         _makeWhole(id);
 

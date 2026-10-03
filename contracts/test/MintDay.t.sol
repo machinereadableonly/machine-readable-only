@@ -26,7 +26,7 @@ contract MintDayTest is MroTestBase {
     function test_theRecordedDayIsTheTokensFirstDay() public {
         uint32 paid = _today() - 1;
         vm.prank(WARDEN);
-        t.mint(1, ALICE, KEY, _code(), paid);
+        t.mint(1, ALICE, KEY, _code(), paid, false);
         assertEq(t.viewOf(1).mintDay, paid);
         assertEq(t.viewOf(1).lastDay, paid);
         assertEq(t.viewOf(1).level, 1);
@@ -37,9 +37,9 @@ contract MintDayTest is MroTestBase {
     function test_aNextDayCheckInCountsWhenTheMintLandsLate() public {
         uint32 paid = _today() - 1;
         vm.prank(WARDEN);
-        t.mint(1, ALICE, KEY, _code(), paid);
+        t.mint(1, ALICE, KEY, _code(), paid, false);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(paid + 1));
+        t.batchCheckIn(_one(1), _days(paid + 1), _noBits(_days(paid + 1)), _silent(_days(paid + 1)));
         assertEq(t.viewOf(1).level, 2);
         assertEq(t.viewOf(1).streak, 2);
     }
@@ -48,21 +48,21 @@ contract MintDayTest is MroTestBase {
         uint32 tomorrow = _today() + 1;
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.FutureDay.selector, tomorrow));
         vm.prank(WARDEN);
-        t.mint(1, ALICE, KEY, _code(), tomorrow);
+        t.mint(1, ALICE, KEY, _code(), tomorrow, false);
     }
 
     function test_aStaleDayIsRefusedByName() public {
         uint32 old = _today() - GRACE - 1;
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.StaleDay.selector, old));
         vm.prank(WARDEN);
-        t.mint(1, ALICE, KEY, _code(), old);
+        t.mint(1, ALICE, KEY, _code(), old, false);
     }
 
     /// Both sides of the floor: exactly GRACE days back is still accepted.
     function test_theGraceBoundaryIsInclusive() public {
         uint32 edge = _today() - GRACE;
         vm.prank(WARDEN);
-        t.mint(1, ALICE, KEY, _code(), edge);
+        t.mint(1, ALICE, KEY, _code(), edge, false);
         assertEq(t.viewOf(1).mintDay, edge);
     }
 
@@ -70,7 +70,7 @@ contract MintDayTest is MroTestBase {
     function test_todayIsAValidDay() public {
         uint32 d = _today();
         vm.prank(WARDEN);
-        t.mint(1, ALICE, KEY, _code(), d);
+        t.mint(1, ALICE, KEY, _code(), d, false);
         assertEq(t.viewOf(1).mintDay, d);
     }
 }

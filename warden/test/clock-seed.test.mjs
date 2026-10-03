@@ -162,7 +162,7 @@ test("a queued seed is sent as seed(), not mint()", async () => {
   // The fifth argument is the day the seed was ASKED for (reserveChild records
   // TODAY), not the day the Clock writes it; the sixth is the key the agent
   // signed the request with.
-  assert.deepEqual(writer.sent[0].args, [2n, 1n, CHILD_OWNER, `0x${QR}`, TODAY, keyIdToBytes32("k")]);
+  assert.deepEqual(writer.sent[0].args, [2n, 1n, CHILD_OWNER, `0x${QR}`, TODAY, keyIdToBytes32("k"), false]);
   assert.deepEqual(summary.seeded, [2]);
   assert.deepEqual(summary.droppedSeeds, []);
   assert.equal(q.getToken(2).status, "written");

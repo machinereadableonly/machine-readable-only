@@ -55,6 +55,17 @@ abstract contract MroTestBase is Test {
         out[0] = day;
     }
 
+    /// @dev Zero answer bits for a batch of `ds.length`.
+    function _noBits(uint32[] memory ds) internal pure returns (bytes memory) {
+        return new bytes((ds.length + 7) / 8);
+    }
+
+    /// @dev An all-silent record for a batch of `ds.length`.
+    function _silent(uint32[] memory ds) internal pure returns (bytes memory r) {
+        r = new bytes(ds.length);
+        for (uint256 i; i < r.length; ++i) r[i] = 0xff;
+    }
+
     /// @dev Today's day number, computed HERE rather than read from `t`, so it
     /// can sit inside the arguments of a call under `vm.expectRevert`: an
     /// external `t.today()` there would be the call the cheatcode matched
@@ -77,7 +88,7 @@ abstract contract MroTestBase is Test {
         t = new MachineReadableOnly(address(r), WARDEN);
         vm.warp(86_400 * 1000 + 1);
         vm.prank(WARDEN);
-        t.mint(1, ALICE, KEY, _code(), _today());
+        t.mint(1, ALICE, KEY, _code(), _today(), false);
     }
 
     /// @dev Advance the clock by one year. NEVER write `vm.warp(block.timestamp
@@ -123,7 +134,7 @@ abstract contract MroTestBase is Test {
             }
             _warpToDay(firstDay + done + m - 1);
             vm.prank(w);
-            t.batchCheckIn(_packed(ids), ds);
+            t.batchCheckIn(_packed(ids), ds, _noBits(ds), _silent(ds));
             done += m;
         }
     }
@@ -170,6 +181,6 @@ abstract contract MroTestBase is Test {
         childId = ++_nextSeedId;
         bytes32 key = t.viewOf(parentId).agentKeyId;
         vm.prank(WARDEN);
-        t.seed(childId, parentId, address(uint160(0x5EED0000 + childId)), _code(), _today(), key);
+        t.seed(childId, parentId, address(uint160(0x5EED0000 + childId)), _code(), _today(), key, false);
     }
 }

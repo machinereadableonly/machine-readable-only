@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan A2: the daily question on chain</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan A2: the daily question on chain</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<blockquote>
+<p>After completing any operator-only step, tell Claude so it can update memory
+immediately. Operator-only steps in this plan: approving it (which approves
+the design choices and the agent-facing wording below). Nothing in A2 is
+pushed, deployed or re-created: the work continues on branch <code>plan-a</code> until
+Plan A3 deploys it.</p>
+</blockquote>
+<p><strong>Goal:</strong> Each credited day carries one answer bit on chain, drawn as a square
+on three edges of the border; the bit comes from a secret split fixed before
+the piece opened and revealed the next night, and anyone can check every
+square with <code>mro-agent verify-border</code>.</p>
+<p><strong>Why:</strong> Plan B (live since 2026-10-02) asks every agent a daily question and
+records its answer in the Warden&#39;s mirror, but nothing reaches the artwork yet.
+The answers need storage in the token contract, and that contract is
+redeployed once more before mainnet (Plan A3); after token 1 exists it can
+never change. This is the last chance to put the year&#39;s 365 decisions into the
+token. It unblocks Plan A3 (gates and the Sepolia redeploy), which carries A1
+and A2 together.</p>
+<table>
+<thead>
+<tr>
+<th>Plan</th>
+<th>What</th>
+<th>Deploys?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A1 (built, <code>plan-a</code>)</td>
+<td>Rulings 2 and 3, four small fixes, the Warden and Clock follow</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>A2 (this)</strong></td>
+<td>The daily question on chain: answer bits, the split key chain, the three answer edges, the Clock&#39;s split, <code>verify-border</code></td>
+<td>No</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>Size and gas gates over both, the Base Sepolia redeploy, <code>adopt-deployment.sh</code>, <code>setSplitAnchor</code>, re-pointing the test agent</td>
+<td>Yes, Sepolia</td>
+</tr>
+</tbody></table>
+<p><strong>What approving this plan also approves.</strong> Each is a choice the approved
+spec does not make, or makes differently, named so it is made out loud:</p>
+<ol>
+<li><strong>Keys are revealed by their own call, not inside <code>batchCheckIn</code>.</strong>
+<code>revealSplitKeys(bytes32[] keys, bytes questions)</code>, sent once at the start
+of any Clock run that has something to write, reveals every key through
+yesterday. The spec put the keys in the batch. A separate call means a
+chunk that is halved or bisected never carries keys twice, and mints and
+seeds (sent before the batch) are covered by the same reveal. The contract
+still checks every key against the chain, and also refuses to reveal a key
+for a day that is not over yet (<code>SplitKeyTooEarly</code>), so today&#39;s split can
+never leak.</li>
+<li><strong>The mint day&#39;s square is always a coin flip.</strong> The <code>question</code> tool
+refuses on the mint day (the day is already credited), so no agent can ever
+answer it. <code>mint</code> and <code>seed</code> take a final <code>bool firstAnswer</code>, which the Clock
+sets to the day&#39;s silent coin flip for that token. The agent-facing copy
+says so.</li>
+<li><strong>The questions ride in the reveal&#39;s event, and the chain keeps a pointer
+to the last reveal.</strong> <code>SplitKeysRevealed(firstIndex, keys, prevRevealBlock, questions)</code> and <code>lastRevealBlock()</code> let <code>verify-border</code> walk back night by
+night with one small log query each. A public RPC serves only 1,000 blocks
+per log query, so scanning a year of Base blocks (about 15.8 million) any
+other way would take tens of thousands of calls.</li>
+<li><strong>A credit written through the voucher path draws an empty square.</strong> The
+voucher path exists for after the Warden is gone, when no split exists. The
+verifier reports those days as voucher days.</li>
+<li><strong>The anchor is guarded in code, not only in the runbook.</strong> The Warden
+refuses to start against a contract with no split anchor, so no paid mint
+can happen before the anchor exists; and the Clock refuses to write anything
+if its split seed does not hash to the anchor on chain.</li>
+<li><strong>The agent-facing wording in Task 9</strong>, which tells agents that answers
+become the border, that the rule is secret on the day and published the
+next night, that the mint day is a coin flip, and how to run the verifier.
+It never states the rule&#39;s secret.</li>
+</ol>
+<p><strong>Architecture:</strong> The token contract gains <code>mapping(uint256 =&gt; uint256[2]) _answers</code> (credit <code>level</code> writes bit <code>level - 1</code>), a split anchor set once by
+the owner, and <code>revealSplitKeys</code>, which walks the key chain forward. The
+renderer reads the two answer words through <code>TokenView</code> and draws them with
+<code>DigitBand</code>, now a band that appears at 122 credited days with the place on top
+only. The split rule lives in two small modules, one in the Clock and one in
+the MIT client, pinned to the same literal test vectors.</p>
+<p><strong>Tech Stack:</strong> Solidity 0.8.30 / Foundry 1.7.1 (via_ir), Node 24.14.1,
+<code>node:test</code>, viem.</p>
+<p><strong>Spec:</strong> <code>docs/specs/2026-10-02-mro-daily-question-design.md</code> (APPROVED
+2026-10-02), sections 3, 5, 7, 8, 10 and 11; <code>docs/plans/2026-09-30-mro-rulings-roadmap.md</code>
+row A (<strong>Q</strong>); <code>.claude/rules/rendering.md</code> for the band&#39;s limits.</p>
+<h2>Global Constraints</h2>
+<ul>
+<li>Plain ASCII only in code, comments and docs.</li>
+<li>All four suites green before every commit: <code>cd contracts &amp;&amp; forge test</code>, and
+<code>npm test</code> in <code>tools/</code>, <code>warden/</code>, <code>client/</code>, all through
+<code>~/scripts/safe-build.sh</code>. Never pipe a gate into anything.</li>
+<li>Foundry needs <code>export PATH=$HOME/.foundry/bin:$PATH</code>; Node needs
+<code>source ~/.nvm/nvm.sh</code>. Use <code>/bin/grep</code>, never bare <code>grep</code>.</li>
+<li>The repository is PUBLIC: no absolute paths, key ids, real env values or AI
+attribution in files or commit messages. <strong>The split seed, the question bank
+and any question text never enter the repository, a log or an error.</strong></li>
+<li>Comments follow <code>~/.claude/rules/code-comments.md</code>; in <code>contracts/src</code>, one
+short NatSpec line per item, no history.</li>
+<li>Files with a <code>// GENERATED by tools/&lt;script&gt;</code> header are changed in their
+generator and re-generated. <code>warden/src/clock/abi.mjs</code> is regenerated with
+<code>cd warden &amp;&amp; node tools/gen-abi.mjs</code> after <code>forge build</code>, in every task that
+changes the ABI.</li>
+<li><code>vm.expectRevert</code> matches the NEXT call: compute every argument first.</li>
+<li>Every new owner function and every new revert gets a test.</li>
+<li><strong>The band is never deepened.</strong> <code>DigitBand.MIN_BAND</code> stays three modules.</li>
+<li>Stay on branch <code>plan-a</code>. Do NOT merge to <code>main</code>.</li>
+<li>The split chain is <code>CHAIN_LENGTH = 36_500</code> keys: <code>k[36500]</code> is the seed,
+<code>k[i] = keccak256(k[i+1])</code> over the 32 raw bytes, <code>k[0]</code> is the anchor. Key
+<code>n</code> (n &gt;= 1) belongs to UTC day <code>splitAnchorDay + n - 1</code>.</li>
+<li>The split rule (identical in both modules):
+<code>h(i) = keccak256(abi.encodePacked(bytes32 key, &quot;split&quot;, uint256 i))</code>; rank
+the indices <code>0..n-1</code> by <code>(h, i)</code> ascending; the first <code>floor(n / 2)</code> give 1.
+Silent: <code>uint256(keccak256(abi.encodePacked(bytes32 key, &quot;silent&quot;, uint256 tokenId))) &amp; 1</code>.</li>
+<li>The batch&#39;s <code>record</code> holds one byte per entry, in entry order: the answer
+index (0..100), or <code>0xff</code> for silent.</li>
+</ul>
+<h2>Review Focus</h2>
+<ol>
+<li><strong>A reveal that skips, repeats or reorders a key, or reveals today&#39;s key:</strong>
+refused (<code>BadSplitKey(index)</code>, <code>SplitKeyTooEarly(index)</code>), nothing stored.
+Pinned in Task 2.</li>
+<li><strong>A token at exactly 121, 122, 243, 244, 364 and 365 credited days:</strong> no
+band, one side, one side, two sides, two sides, three sides and the place.
+Pinned in Tasks 3 and 4, in both languages.</li>
+<li><strong>A chunk that is halved or bisected:</strong> every entry keeps its own bit and
+its own answer byte, whatever order the retry sends them in. Pinned in
+Task 6.</li>
+<li><strong>A credit whose recorded question is missing from the bank:</strong> the Clock
+writes nothing that night rather than guessing a bit. Pinned in Task 6.</li>
+<li><strong><code>verify-border</code> against a deliberately wrong bit, and against a credit it
+cannot find:</strong> it fails, naming the square, rather than passing. Pinned in
+Task 8.</li>
+</ol>
+<hr>
+<h3>Task 1: Answer bits in the contract</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code> (<code>_answers</code>, <code>answersOf</code>, <code>mint</code>, <code>seed</code>, <code>batchCheckIn</code>, <code>viewOf</code>)</li>
+<li>Modify: <code>contracts/src/render/TokenView.sol</code> (<code>answers</code>)</li>
+<li>Modify: <code>contracts/test/MroTestBase.sol</code> (<code>_noBits</code>, <code>_silent</code>, and the helpers that call <code>mint</code>, <code>seed</code>, <code>batchCheckIn</code>)</li>
+<li>Create: <code>contracts/test/AnswerBits.t.sol</code></li>
+<li>Modify: every <code>mint(</code>, <code>seed(</code> and <code>batchCheckIn(</code> call in <code>contracts/test</code> and <code>contracts/script</code>, and <code>contracts/test/TokenView.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>batchCheckIn(bytes packedIds, uint32[] days, bytes answerBits, bytes record)</code>;
+<code>mint(uint256 tokenId, address to, bytes32 keyId, bytes code, uint32 day, bool firstAnswer)</code>;
+<code>seed(uint256 childId, uint256 parentId, address to, bytes code, uint32 day, bytes32 expectedKeyId, bool firstAnswer)</code>;
+<code>answersOf(uint256) returns (uint256[2])</code>; <code>TokenView.answers</code> (<code>uint256[2]</code>, directly after <code>marks</code>);
+test helpers <code>_noBits(uint32[] memory days)</code> and <code>_silent(uint32[] memory days)</code>, both <code>returns (bytes memory)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<p><code>contracts/test/AnswerBits.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {MroTestBase} from &quot;./MroTestBase.sol&quot;;
+
+/// @notice One answer bit per credit: credit `level` is bit `level - 1`.
+contract AnswerBitsTest is MroTestBase {
+    function setUp() public {
+        _deployAndMintOne();
+    }
+
+    function _bitOf(uint256 id, uint256 i) internal view returns (uint256) {
+        uint256[2] memory a = t.answersOf(id);
+        return (a[i &gt;&gt; 8] &gt;&gt; (i &amp; 255)) &amp; 1;
+    }
+
+    function test_aOneBitIsWrittenAtItsCredit() public {
+        uint32 d = _today() + 1;
+        _warpToDay(d);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d), hex&quot;80&quot;, hex&quot;01&quot;);
+        assertEq(_bitOf(1, 1), 1, &quot;credit 2 is bit 1&quot;);
+        assertEq(_bitOf(1, 0), 0, &quot;the mint&#39;s bit was 0&quot;);
+    }
+
+    function test_aZeroBitWritesNothing() public {
+        uint32 d = _today() + 1;
+        _warpToDay(d);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d), hex&quot;00&quot;, hex&quot;ff&quot;);
+        uint256[2] memory a = t.answersOf(1);
+        assertEq(a[0], 0);
+        assertEq(a[1], 0);
+    }
+
+    function test_bitsFollowEntryOrderAcrossTokens() public {
+        vm.prank(WARDEN);
+        t.mint(2, address(0x2222), bytes32(uint256(2)), _code(), _today(), true);
+        uint32 d = _today() + 1;
+        _warpToDay(d);
+        uint32[] memory ids = new uint32[](2);
+        uint32[] memory ds = new uint32[](2);
+        ids[0] = 1; ids[1] = 2; ds[0] = d; ds[1] = d;
+        vm.prank(WARDEN);
+        t.batchCheckIn(_packed(ids), ds, hex&quot;40&quot;, hex&quot;0001&quot;);
+        assertEq(_bitOf(1, 1), 0, &quot;entry 0 carried a 0&quot;);
+        assertEq(_bitOf(2, 1), 1, &quot;entry 1 carried a 1&quot;);
+        assertEq(_bitOf(2, 0), 1, &quot;token 2&#39;s mint carried a 1&quot;);
+    }
+
+    function test_theLastCreditWritesBit364() public {
+        _growTo(1, 364);
+        uint32 d = t.viewOf(1).lastDay + 1;
+        _warpToDay(d);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d), hex&quot;80&quot;, hex&quot;00&quot;);
+        assertEq(_bitOf(1, 364), 1);
+    }
+
+    function test_answerBitsOfTheWrongLengthAreRefused() public {
+        uint32 d = _today() + 1;
+        _warpToDay(d);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.LengthMismatch.selector);
+        t.batchCheckIn(_one(1), _days(d), hex&quot;&quot;, hex&quot;00&quot;);
+    }
+
+    function test_aRecordOfTheWrongLengthIsRefused() public {
+        uint32 d = _today() + 1;
+        _warpToDay(d);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.LengthMismatch.selector);
+        t.batchCheckIn(_one(1), _days(d), hex&quot;00&quot;, hex&quot;&quot;);
+    }
+
+    function test_viewOfCarriesTheAnswers() public {
+        uint32 d = _today() + 1;
+        _warpToDay(d);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d), hex&quot;80&quot;, hex&quot;01&quot;);
+        assertEq(t.viewOf(1).answers[0], 2);
+    }
+
+    function test_aSeededChildCarriesItsFirstAnswer() public {
+        _makeWhole(1);
+        while (t.seedsAvailable(1) == 0) _warpToDay(t.today() + 365);
+        uint32 day = _today();
+        bytes memory code = _code();
+        vm.prank(WARDEN);
+        t.seed(901, 1, ALICE, code, day, KEY, true);
+        assertEq(_bitOf(901, 0), 1);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path test/AnswerBits.t.sol -vv</code>
+Expected: compile FAIL (<code>answersOf</code>, the four-argument <code>batchCheckIn</code>, <code>mint</code>&#39;s sixth argument).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></li>
+</ul>
+<p><code>TokenView.sol</code>, directly after <code>uint256 marks;</code>:</p>
+<pre><code class="language-solidity">    uint256[2] answers;  // one bit per credit: credit `level` is bit `level - 1`
+</code></pre>
+<p><code>MachineReadableOnly.sol</code>, beside <code>_restDay</code>:</p>
+<pre><code class="language-solidity">    /// @dev One answer bit per credit, 365 in two words: credit `level` is bit `level - 1`.
+    mapping(uint256 =&gt; uint256[2]) internal _answers;
+</code></pre>
+<pre><code class="language-solidity">    /// @notice The token&#39;s answer bits: credit `level` is bit `level - 1`.
+    function answersOf(uint256 id) external view returns (uint256[2] memory) {
+        return _answers[id];
+    }
+
+    /// @dev Set the bit for credit `level`. A 0 writes nothing.
+    function _setAnswer(uint256 id, uint32 level) private {
+        uint256 i = uint256(level) - 1;
+        _answers[id][i &gt;&gt; 8] |= uint256(1) &lt;&lt; (i &amp; 255);
+    }
+</code></pre>
+<p><code>viewOf</code>: <code>v.answers = _answers[id];</code> after <code>v.marks = _marks[id];</code>.</p>
+<p><code>mint</code> and <code>seed</code> gain <code>bool firstAnswer</code> as their LAST parameter, with
+<code>@param firstAnswer The first day&#39;s answer bit: the Clock&#39;s coin flip, since the mint day cannot be answered.</code>,
+and after the token&#39;s record is written: <code>if (firstAnswer) _setAnswer(id, 1);</code>
+(<code>childId</code> in <code>seed</code>).</p>
+<p><code>batchCheckIn(bytes calldata packedIds, uint32[] calldata days_, bytes calldata answerBits, bytes calldata record)</code>,
+with a <code>@param</code> for each new argument (&quot;one bit per entry, high bit first&quot;;
+&quot;one byte per entry, the answer index or 0xff, never read here: it is the
+public record the verifier reads&quot;). After the existing length checks:</p>
+<pre><code class="language-solidity">        if (answerBits.length != (n + 7) / 8 || record.length != n) revert LengthMismatch();
+</code></pre>
+<p>and in the loop, right after <code>_credit(id, s, day);</code>:</p>
+<pre><code class="language-solidity">            if ((uint8(answerBits[i &gt;&gt; 3]) &gt;&gt; (7 - (i &amp; 7))) &amp; 1 == 1) _setAnswer(id, s.level);
+</code></pre>
+<p><code>checkInWithVoucher</code> writes no bit (the voucher path has no split).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Repair every caller</strong></li>
+</ul>
+<p><code>MroTestBase.sol</code> gains:</p>
+<pre><code class="language-solidity">    /// @dev Zero answer bits for a batch of `days.length`.
+    function _noBits(uint32[] memory days) internal pure returns (bytes memory) {
+        return new bytes((days.length + 7) / 8);
+    }
+
+    /// @dev An all-silent record for a batch of `days.length`.
+    function _silent(uint32[] memory days) internal pure returns (bytes memory r) {
+        r = new bytes(days.length);
+        for (uint256 i; i &lt; r.length; ++i) r[i] = 0xff;
+    }
+</code></pre>
+<p>Then, mechanically, in <code>contracts/test</code> and <code>contracts/script</code>:</p>
+<ul>
+<li><p>every <code>batchCheckIn(A, B)</code> call (on <code>t</code>, <code>fresh</code>, <code>t2</code> and the rest, and in
+<code>abi.encodeCall(MachineReadableOnly.batchCheckIn, (A, B))</code>) becomes
+<code>(A, B, _noBits(B), _silent(B))</code>, computing <code>B</code> into a local first where it
+sits under <code>vm.expectRevert</code> or <code>vm.prank</code>;</p>
+</li>
+<li><p>every <code>mint(...)</code> gains a final <code>false</code>, every <code>seed(...)</code> a final <code>false</code>;</p>
+</li>
+<li><p><code>TokenView.t.sol</code>&#39;s named builder gains <code>answers: [uint256(0), uint256(0)]</code>;</p>
+</li>
+<li><p>scripts that call <code>mint</code> or <code>batchCheckIn</code>
+(<code>/bin/grep -rln &quot;batchCheckIn\|\.mint(&quot; contracts/script</code>) follow the same rule.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 5: Run the contract suite, then regenerate the ABI and fix the Warden</strong></p>
+</li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; ~/scripts/safe-build.sh forge test</code>
+Expected: all PASS, the eight new tests included.</p>
+<p>Then <code>cd warden &amp;&amp; node tools/gen-abi.mjs</code> and <code>npm test</code>. Expected
+failures, each repaired in this task so the commit is green:</p>
+<ul>
+<li><p><code>run.mjs</code> mint and seed sends append <code>false</code> for now (Task 6 computes the
+real bit); <code>batch.mjs</code>&#39;s <code>batchCheckIn</code> args append
+<code>&quot;0x&quot; + &quot;00&quot;.repeat(Math.ceil(n / 8))</code> and <code>&quot;0x&quot; + &quot;ff&quot;.repeat(n)</code> for now.</p>
+</li>
+<li><p>The frozen <code>viewOf</code> fixtures: re-encode once, as A1 did, a twenty-field
+<code>warden/test/fixtures/viewof-post-answers.hex</code> from <code>viewof-post-restday.hex</code>
+with <code>answers: [2n, 0n]</code>; the &quot;this branch&quot; tests read it, and the
+nineteen-field fixture joins the shapes that are refused.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 6: All four suites, then commit</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">git add contracts/ warden/
+git commit -m &quot;feat(contract): one answer bit per credit, written by the batch and at the mint&quot;
+</code></pre>
+<hr>
+<h3>Task 2: The split anchor and the key chain</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code></li>
+<li>Modify: <code>contracts/test/MroTestBase.sol</code> (<code>_splitChain</code>)</li>
+<li>Create: <code>contracts/test/SplitKeys.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>setSplitAnchor(bytes32)</code> (owner, once); <code>revealSplitKeys(bytes32[] keys, bytes questions)</code> (Warden);
+public <code>splitAnchor</code>, <code>lastSplitKey</code>, <code>splitAnchorDay</code>, <code>splitKeysRevealed</code>, <code>lastRevealBlock</code>;
+<code>event SplitAnchorSet(bytes32 anchor, uint32 day)</code>;
+<code>event SplitKeysRevealed(uint32 firstIndex, bytes32[] keys, uint64 prevRevealBlock, bytes questions)</code>;
+errors <code>SplitAnchorAlreadySet()</code>, <code>ZeroSplitAnchor()</code>, <code>NoSplitAnchor()</code>, <code>BadSplitKey(uint32 index)</code>, <code>SplitKeyTooEarly(uint32 index)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<p><code>MroTestBase.sol</code>:</p>
+<pre><code class="language-solidity">    /// @dev A short split chain: k[m] is the seed, k[i] = keccak256(k[i+1]), k[0] the anchor.
+    function _splitChain(bytes32 seed, uint256 m) internal pure returns (bytes32[] memory k) {
+        k = new bytes32[](m + 1);
+        k[m] = seed;
+        for (uint256 i = m; i &gt; 0; --i) k[i - 1] = keccak256(abi.encodePacked(k[i]));
+    }
+</code></pre>
+<p><code>contracts/test/SplitKeys.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Ownable} from &quot;@openzeppelin/contracts/access/Ownable.sol&quot;;
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {MroTestBase} from &quot;./MroTestBase.sol&quot;;
+
+/// @notice The split&#39;s key chain: fixed by an anchor before opening, walked
+/// forward one key per day, never past a day that is not over.
+contract SplitKeysTest is MroTestBase {
+    bytes32[] internal k;
+
+    function setUp() public {
+        _deployAndMintOne();
+        k = _splitChain(keccak256(&quot;test split seed&quot;), 40);
+    }
+
+    function _keys(uint256 from, uint256 count) internal view returns (bytes32[] memory out) {
+        out = new bytes32[](count);
+        for (uint256 i; i &lt; count; ++i) out[i] = k[from + i];
+    }
+
+    function test_theAnchorIsSetOnceByTheOwner() public {
+        t.setSplitAnchor(k[0]);
+        assertEq(t.splitAnchor(), k[0]);
+        assertEq(t.lastSplitKey(), k[0]);
+        assertEq(t.splitAnchorDay(), _today());
+        vm.expectRevert(MachineReadableOnly.SplitAnchorAlreadySet.selector);
+        t.setSplitAnchor(k[1]);
+    }
+
+    function test_aStrangerCannotSetTheAnchor() public {
+        vm.prank(MALLORY);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
+        t.setSplitAnchor(k[0]);
+    }
+
+    function test_aZeroAnchorIsRefused() public {
+        vm.expectRevert(MachineReadableOnly.ZeroSplitAnchor.selector);
+        t.setSplitAnchor(bytes32(0));
+    }
+
+    function test_settingTheAnchorEmits() public {
+        uint32 d = _today();
+        vm.expectEmit(address(t));
+        emit MachineReadableOnly.SplitAnchorSet(k[0], d);
+        t.setSplitAnchor(k[0]);
+    }
+
+    function test_nothingIsRevealedBeforeTheAnchor() public {
+        bytes32[] memory one = _keys(1, 1);
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.NoSplitAnchor.selector);
+        t.revealSplitKeys(one, &quot;&quot;);
+    }
+
+    function test_keysAreRevealedInOrderOnceTheirDayIsOver() public {
+        t.setSplitAnchor(k[0]);
+        _warpToDay(_today() + 3);
+        bytes32[] memory three = _keys(1, 3);
+        vm.prank(WARDEN);
+        t.revealSplitKeys(three, &quot;[]&quot;);
+        assertEq(t.splitKeysRevealed(), 3);
+        assertEq(t.lastSplitKey(), k[3]);
+    }
+
+    function test_todaysKeyIsNeverRevealed() public {
+        t.setSplitAnchor(k[0]);
+        _warpToDay(_today() + 2);
+        bytes32[] memory three = _keys(1, 3);
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.SplitKeyTooEarly.selector, uint32(3)));
+        t.revealSplitKeys(three, &quot;&quot;);
+    }
+
+    function test_aSkippedKeyIsRefused() public {
+        t.setSplitAnchor(k[0]);
+        _warpToDay(_today() + 5);
+        bytes32[] memory skip = new bytes32[](2);
+        skip[0] = k[1]; skip[1] = k[3];
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadSplitKey.selector, uint32(2)));
+        t.revealSplitKeys(skip, &quot;&quot;);
+    }
+
+    function test_aRepeatedKeyIsRefused() public {
+        t.setSplitAnchor(k[0]);
+        _warpToDay(_today() + 5);
+        bytes32[] memory one = _keys(1, 1);
+        vm.prank(WARDEN);
+        t.revealSplitKeys(one, &quot;&quot;);
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadSplitKey.selector, uint32(2)));
+        t.revealSplitKeys(one, &quot;&quot;);
+    }
+
+    function test_aKeyNotOnTheChainIsRefused() public {
+        t.setSplitAnchor(k[0]);
+        _warpToDay(_today() + 5);
+        bytes32[] memory wrong = new bytes32[](1);
+        wrong[0] = keccak256(&quot;not on the chain&quot;);
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadSplitKey.selector, uint32(1)));
+        t.revealSplitKeys(wrong, &quot;&quot;);
+    }
+
+    function test_onlyTheWardenReveals() public {
+        t.setSplitAnchor(k[0]);
+        _warpToDay(_today() + 5);
+        bytes32[] memory one = _keys(1, 1);
+        vm.prank(MALLORY);
+        vm.expectRevert(MachineReadableOnly.NotWarden.selector);
+        t.revealSplitKeys(one, &quot;&quot;);
+    }
+
+    function test_eachRevealPointsBackAtThePreviousOne() public {
+        t.setSplitAnchor(k[0]);
+        _warpToDay(_today() + 5);
+        vm.roll(100);
+        bytes32[] memory a = _keys(1, 2);
+        vm.prank(WARDEN);
+        t.revealSplitKeys(a, &quot;&quot;);
+        assertEq(t.lastRevealBlock(), 100);
+        vm.roll(250);
+        bytes32[] memory b = _keys(3, 1);
+        vm.expectEmit(address(t));
+        emit MachineReadableOnly.SplitKeysRevealed(3, b, 100, &quot;q&quot;);
+        vm.prank(WARDEN);
+        t.revealSplitKeys(b, &quot;q&quot;);
+        assertEq(t.lastRevealBlock(), 250);
+    }
+
+    function test_anEmptyRevealStillMarksTheNight() public {
+        t.setSplitAnchor(k[0]);
+        vm.roll(300);
+        bytes32[] memory none = new bytes32[](0);
+        vm.prank(WARDEN);
+        t.revealSplitKeys(none, &quot;&quot;);
+        assertEq(t.lastRevealBlock(), 300);
+        assertEq(t.splitKeysRevealed(), 0);
+    }
+
+    function test_aRevealAfterSunsetIsAllowed() public {
+        t.setSplitAnchor(k[0]);
+        _warpToDay(_today() + 5);
+        t.sunset();
+        bytes32[] memory one = _keys(1, 1);
+        vm.prank(WARDEN);
+        t.revealSplitKeys(one, &quot;&quot;);
+        assertEq(t.splitKeysRevealed(), 1);
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path test/SplitKeys.t.sol -vv</code>
+Expected: compile FAIL (<code>setSplitAnchor</code> and the rest do not exist).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></li>
+</ul>
+<p>State, in the state block at the top beside <code>lastWardenDay</code>, so the three
+small fields share a slot:</p>
+<pre><code class="language-solidity">    /// @notice k[0] of the split&#39;s key chain, fixed once before the door opens.
+    bytes32 public splitAnchor;
+    /// @notice The last key revealed; the next must hash to it.
+    bytes32 public lastSplitKey;
+    /// @notice The day the anchor was set: key n belongs to day splitAnchorDay + n - 1.
+    uint32 public splitAnchorDay;
+    /// @notice How many keys have been revealed.
+    uint32 public splitKeysRevealed;
+    /// @notice The block of the last reveal, so a verifier can walk back night by night.
+    uint64 public lastRevealBlock;
+</code></pre>
+<p>Errors and events beside the other lifecycle declarations (one NatSpec line
+each), then:</p>
+<pre><code class="language-solidity">    /// @notice Fix the split&#39;s key chain. Once, by the owner, before the door opens.
+    function setSplitAnchor(bytes32 anchor) external onlyOwner {
+        if (splitAnchor != bytes32(0)) revert SplitAnchorAlreadySet();
+        if (anchor == bytes32(0)) revert ZeroSplitAnchor();
+        uint32 d = today();
+        splitAnchor = anchor;
+        lastSplitKey = anchor;
+        splitAnchorDay = d;
+        emit SplitAnchorSet(anchor, d);
+    }
+
+    /// @notice Reveal the next keys of the split chain, each for a day that is over.
+    /// @param questions Each revealed day&#39;s question and answer set, as JSON; not read here.
+    /// @dev Not `notSunset`: a mint written on the last night still needs its key.
+    function revealSplitKeys(bytes32[] calldata keys, bytes calldata questions) external onlyWarden {
+        bytes32 last = lastSplitKey;
+        if (last == bytes32(0)) revert NoSplitAnchor();
+        uint32 n = splitKeysRevealed;
+        uint32 first = n + 1;
+        uint32 tday = today();
+        for (uint256 i; i &lt; keys.length; ++i) {
+            ++n;
+            if (splitAnchorDay + n - 1 &gt;= tday) revert SplitKeyTooEarly(n);
+            if (keccak256(abi.encodePacked(keys[i])) != last) revert BadSplitKey(n);
+            last = keys[i];
+        }
+        lastSplitKey = last;
+        splitKeysRevealed = n;
+        emit SplitKeysRevealed(first, keys, lastRevealBlock, questions);
+        lastRevealBlock = uint64(block.number);
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the new file, then the suite</strong></li>
+</ul>
+<p>Expected: 13 PASS, then all PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: ABI, all four suites, commit</strong></li>
+</ul>
+<pre><code class="language-bash">cd warden &amp;&amp; node tools/gen-abi.mjs
+git add contracts/ warden/
+git commit -m &quot;feat(contract): the split anchor, set once, and a key chain revealed a day at a time&quot;
+</code></pre>
+<hr>
+<h3>Task 3: The answer band in the JavaScript reference</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>tools/render-token.mjs</code> (<code>answerBandCells</code>, the band&#39;s presence, <code>renderSvg</code> / <code>tokenUri</code> state <code>answers</code>)</li>
+<li>Modify: <code>tools/test/render-token.test.mjs</code>, and every importer of <code>digitBandCells</code> (<code>/bin/grep -rln digitBandCells tools</code>)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>FIRST_SIDE = 122</code>; <code>answerBandCells({ ordinal, answers, level }, canvasCells, size)</code>
+returning <code>{ cells, modules }</code> like <code>digitBandCells</code> did; state field <code>answers = [0n, 0n]</code>.
+The band is present when <code>level &gt;= FIRST_SIDE</code>. Sides drawn: <code>level &gt;= 365 ? 3 : floor(level / 122)</code>.
+The place&#39;s glyphs are drawn on the TOP edge only, and only when <code>ordinal &gt; 0</code>.
+When no cell is lit, no band path is emitted at all (the Solidity side does the same).</li>
+</ul>
+<p>Layout (the spike&#39;s, <code>tools/out/answer-band/spike2.mjs</code>, made exact):
+<code>cols = 61</code>, <code>start = floor((modules - 61) / 2)</code>; answer <code>p</code> on a side sits at
+<code>along = start + floor(p / 2)</code>, <code>depth = 1 + (p % 2)</code> (outer lane first);
+right edge (bits 0..121) at <code>x = modules - 1 - depth, y = along</code>; bottom edge
+(bits 122..243) at <code>x = modules - 1 - along, y = modules - 1 - depth</code>; left
+edge (bits 244..364) at <code>x = depth, y = modules - 1 - along</code>. A filled square
+is a 1. Bit <code>i</code> is <code>(answers[i &gt;&gt; 8] &gt;&gt; (i &amp; 255)) &amp; 1</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<pre><code class="language-js">import { answerBandCells, FIRST_SIDE, canvasFor } from &quot;../render-token.mjs&quot;;
+
+const wordsFrom = (bits) =&gt; {
+  const w = [0n, 0n];
+  bits.forEach((b, i) =&gt; { if (b) w[i &gt;&gt; 8] |= 1n &lt;&lt; BigInt(i &amp; 255); });
+  return w;
+};
+const ALL = wordsFrom(Array(365).fill(1));
+const FOUNDING = canvasFor(0, 0);
+const FINISHED = canvasFor(1, 0);
+
+test(&quot;no band below 122 credited days&quot;, () =&gt; {
+  assert.equal(FIRST_SIDE, 122);
+  const state = { level: 121, streak: 121, lastDay: 1000, today: 1000 };
+  assert.equal(render({ ...state, answers: ALL }), render(state), &quot;answers below 122 change nothing&quot;);
+});
+
+test(&quot;sides appear whole at 122, 244 and 365&quot;, () =&gt; {
+  const count = (level) =&gt;
+    answerBandCells({ ordinal: 0, answers: ALL, level }, level &gt;= 365 ? FINISHED : FOUNDING, CODE.size).cells.size;
+  assert.equal(count(122), 122);
+  assert.equal(count(243), 122);
+  assert.equal(count(244), 244);
+  assert.equal(count(364), 244);
+  assert.equal(count(365), 365);
+});
+
+test(&quot;the outer lane fills first, clockwise from the top right&quot;, () =&gt; {
+  const { cells, modules } = answerBandCells({ ordinal: 0, answers: wordsFrom([1]), level: 122 }, FOUNDING, CODE.size);
+  const start = Math.floor((modules - 61) / 2);
+  assert.deepEqual([...cells], [start * modules + (modules - 2)]);
+});
+
+test(&quot;the place is drawn on the top edge only&quot;, () =&gt; {
+  const { cells, modules } = answerBandCells({ ordinal: 1, answers: [0n, 0n], level: 365 }, FINISHED, CODE.size);
+  assert.ok(cells.size &gt; 0);
+  for (const c of cells) assert.ok(Math.floor(c / modules) &lt; 3, `cell ${c} is off the top edge`);
+});
+</code></pre>
+<p>(<code>render</code> is the file&#39;s existing <code>renderSvg</code> helper. If <code>canvasFor</code> takes
+different arguments, call it the way the file&#39;s other tests do for a
+founding token and a one-ring finished token.)</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run, watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd tools &amp;&amp; node --test test/render-token.test.mjs</code>
+Expected: FAIL (<code>answerBandCells</code> is not exported).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></li>
+</ul>
+<p>Replace <code>digitBandCells</code> with <code>answerBandCells</code> (same return shape), built
+from the layout above plus the existing glyph loop restricted to the top
+edge; the band&#39;s presence in <code>renderSvg</code> becomes <code>level &gt;= FIRST_SIDE</code> (was
+<code>ordinal</code>); the ink is unchanged (<code>finisherInk(marks)</code>, which falls back to
+<code>DIGIT_INK</code>); thread <code>answers = [0n, 0n]</code> through <code>renderSvg</code>&#39;s and
+<code>tokenUri</code>&#39;s state the way A1 threaded <code>restDay</code>. Delete <code>digitBandCells</code> and
+move its other importers, the sheet scripts included, to the new function.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run tools&#39; suite; commit</strong></li>
+</ul>
+<p>Expected: the new tests PASS. Existing tests that pinned a finished token&#39;s
+band (the place round four edges) are updated to the top-edge rule, each
+named in the ledger.</p>
+<pre><code class="language-bash">git add tools/
+git commit -m &quot;feat(render): the JS reference draws answers on three edges and the place on top&quot;
+</code></pre>
+<p>(The contract suite is still green here: its fixtures are not regenerated
+until Task 4.)</p>
+<hr>
+<h3>Task 4: The answer band in Solidity, and the cross-language pins</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/render/DigitBand.sol</code>, <code>contracts/src/render/Renderer.sol</code> (<code>_band</code>, <code>_digitGroup</code>)</li>
+<li>Modify: <code>tools/state-matrix.mjs</code>, <code>tools/render-fixture.mjs</code> (cases and <code>Case</code> gain <code>answers0</code>, <code>answers1</code>), then re-run every fixture generator and <code>tools/token-uri-fixture.mjs</code></li>
+<li>Modify: <code>contracts/test/RenderMatrix.t.sol</code> (fill <code>v.answers</code>; size pin), <code>contracts/test/Renderer.t.sol</code> (pasted references), any DigitBand unit test (<code>/bin/grep -rln DigitBand contracts/test</code>)</li>
+<li>Modify: <code>tools/echo-decode-check.mjs</code> (the 122 and 244 states)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>TokenView.answers</code> (Task 1); the JS layout (Task 3).</p>
+</li>
+<li><p>Produces: <code>DigitBand.FIRST_SIDE = 122</code>, <code>DigitBand.COLS = 61</code>,
+<code>DigitBand.path(uint32 ordinal, uint256[2] memory answers, uint32 level, uint256 canvasCells, string memory fill)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Add the banded matrix cases (the failing differential)</strong></p>
+</li>
+</ul>
+<p>In <code>tools/state-matrix.mjs</code> <code>renderCases()</code>:</p>
+<pre><code class="language-js">  const words = (f) =&gt; {
+    const w = [0n, 0n];
+    for (let i = 0; i &lt; 365; i++) if (f(i)) w[i &gt;&gt; 8] |= 1n &lt;&lt; BigInt(i &amp; 255);
+    return w;
+  };
+  const PATTERNS = [
+    [&quot;all ones&quot;, words(() =&gt; true)],
+    [&quot;alternate&quot;, words((i) =&gt; i % 2 === 0)],
+    [&quot;thirds&quot;, words((i) =&gt; i % 3 === 1)],
+  ];
+  for (const level of [121, 122, 243, 244, 364]) {
+    for (const [name, answers] of PATTERNS) {
+      out.push({ label: `answers ${name}, day ${level}`, ...base, level, streak: level, answers });
+    }
+  }
+  for (const [name, answers] of PATTERNS) {
+    out.push({ label: `answers ${name}, finished 3rd`, ...base, answers, ordinal: 3, marks: [finisherMark(3)] });
+  }
+</code></pre>
+<p><code>render-fixture.mjs</code> emits <code>answers0, answers1</code> per case (after <code>marks</code>), and
+<code>RenderMatrix.t.sol</code> sets <code>v.answers = [c.answers0, c.answers1];</code>. Rows with
+<code>answers</code> are left out of <code>soakCases()</code> the way echo rows are (SoakStates has
+no answers field). Regenerate the fixtures (<code>render-fixture</code>,
+<code>colour-fixture</code>, <code>combination-fixture</code>, <code>identity-fixture</code>) and the
+<code>token-uri-fixture</code> references, paste the references into <code>Renderer.t.sol</code>,
+and update the matrix size pin to the new count.</p>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path &#39;test/Render*.t.sol&#39;</code>
+Expected: FAIL -- the Solidity band still draws the place on four edges and
+no answers, so every banded case differs from the JS reference.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Implement <code>DigitBand</code></strong></li>
+</ul>
+<pre><code class="language-solidity">    /// @notice The credited day the band appears, with its first side of answers.
+    uint32 internal constant FIRST_SIDE = 122;
+    /// @dev Answers per side are two lanes of COLS columns.
+    uint256 internal constant COLS = 61;
+
+    struct Layout {
+        uint256 modules;
+        uint256 pad;
+        uint256 start;
+        uint256 sides;
+    }
+
+    /// @notice The band as one path, drawn in QR MODULES: answers on the right,
+    /// bottom and left edges as `level` unlocks them, the place on top once finished.
+    function path(uint32 ordinal, uint256[2] memory answers, uint32 level, uint256 canvasCells, string memory fill)
+        internal
+        pure
+        returns (string memory)
+    {
+        if (level &lt; FIRST_SIDE) return &quot;&quot;;
+        uint256 modules = canvasUnits(canvasCells) / FrameGeometry.MODULE_UNITS;
+        Layout memory l = Layout(modules, (modules - SPAN) / 2, (modules - COLS) / 2, level &gt;= 365 ? 3 : level / FIRST_SIDE);
+        // Bounds: 3 glyph rows x 16 glyphs x 2 runs, 4 side squares per row
+        // over COLS rows, and 2 bottom rows of up to COLS runs.
+        PathWriter.Buffer memory buf = PathWriter.create(GH * BITS * 2 + 6 * COLS);
+        bool lit;
+        for (uint256 y; y &lt; modules; ++y) {
+            uint256 row = _rowBits(ordinal, answers, y, l);
+            if (row != 0) {
+                lit = true;
+                PathWriter.writeRow(buf, row, modules, 0, y);
+            }
+        }
+        if (!lit) return &quot;&quot;;
+        return string(abi.encodePacked(&#39;&lt;path fill=&quot;&#39;, fill, &#39;&quot; d=&quot;&#39;, PathWriter.seal(buf), &#39;&quot;/&gt;&#39;));
+    }
+
+    /// @dev Bit `modules - 1 - x` set means x is lit, as PathWriter.writeRow expects.
+    function _rowBits(uint32 ordinal, uint256[2] memory answers, uint256 y, Layout memory l)
+        private
+        pure
+        returns (uint256 row)
+    {
+        uint256 m = l.modules;
+        if (ordinal != 0 &amp;&amp; y &lt; GH) {
+            for (uint256 i; i &lt; BITS; ++i) {
+                row |= _glyphRow(_digit(ordinal, i), y) &lt;&lt; (m - (l.pad + i * STEP) - GW);
+            }
+        }
+        // Right edge, bits 0..121: x = m - 1 - depth, y = along.
+        if (y &gt;= l.start &amp;&amp; y &lt; l.start + COLS) {
+            uint256 a = y - l.start;
+            for (uint256 d = 1; d &lt;= 2; ++d) {
+                if (_bit(answers, a * 2 + d - 1)) row |= uint256(1) &lt;&lt; d;
+            }
+        }
+        // Bottom edge, bits 122..243: x = m - 1 - along, y = m - 1 - depth.
+        if (l.sides &gt;= 2 &amp;&amp; (y == m - 2 || y == m - 3)) {
+            uint256 d = m - 1 - y;
+            for (uint256 a; a &lt; COLS; ++a) {
+                if (_bit(answers, FIRST_SIDE + a * 2 + d - 1)) row |= uint256(1) &lt;&lt; (l.start + a);
+            }
+        }
+        // Left edge, bits 244..364: x = depth, y = m - 1 - along.
+        if (l.sides &gt;= 3 &amp;&amp; y &lt;= m - 1 - l.start &amp;&amp; y + COLS &gt; m - 1 - l.start) {
+            uint256 a = (m - 1 - l.start) - y;
+            for (uint256 d = 1; d &lt;= 2; ++d) {
+                uint256 p = a * 2 + d - 1;
+                if (p &lt; 365 - 2 * FIRST_SIDE &amp;&amp; _bit(answers, 2 * FIRST_SIDE + p)) row |= uint256(1) &lt;&lt; (m - 1 - d);
+            }
+        }
+    }
+
+    function _bit(uint256[2] memory w, uint256 i) private pure returns (bool) {
+        return (w[i &gt;&gt; 8] &gt;&gt; (i &amp; 255)) &amp; 1 == 1;
+    }
+</code></pre>
+<p>The old four-edge <code>_rowBits</code> and its doc comment go. <code>Renderer._band</code>:
+<code>if (v.level &lt; DigitBand.FIRST_SIDE) return 0;</code> (was the ordinal test).
+<code>_digitGroup</code> passes <code>v.answers</code> and <code>v.level</code>. Both doc comments say what
+they now do, one line each.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run the differential until byte-identical</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; ~/scripts/safe-build.sh forge test</code>
+Expected: all PASS. A mismatch is fixed in whichever renderer disagrees with
+the layout above, never by editing a fixture.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: The decode gate</strong></li>
+</ul>
+<p>Add to <code>tools/echo-decode-check.mjs</code> the spike&#39;s states: day 122 and day 244,
+founding and child, bare, every legal Mark at that level, lapsed 30 days and
+streak 3, each with the <code>all ones</code> and <code>alternate</code> patterns, plus a finished
+child with every legal Mark and its place. Run it through
+<code>~/scripts/safe-build.sh node tools/echo-decode-check.mjs</code>.
+Expected: zero decode failures at every gate size, and the script&#39;s existing
+control still fails. Record the counts in the ledger.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: All four suites, commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add contracts/ tools/
+git commit -m &quot;feat(render): the answer band in Solidity, byte-identical to the reference&quot;
+</code></pre>
+<hr>
+<h3>Task 5: The split rule, twice, pinned to one set of vectors</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/src/clock/split.mjs</code>, <code>warden/test/split.test.mjs</code></li>
+<li>Create: <code>client/src/split.mjs</code>, <code>client/test/split.test.mjs</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces (both modules, same names): <code>CHAIN_LENGTH = 36_500</code>;
+<code>chainKeys(seedHex)</code> -&gt; array of <code>CHAIN_LENGTH + 1</code> hex keys, <code>[0]</code> the anchor;
+<code>keyIndexFor(day, anchorDay)</code> -&gt; <code>day - anchorDay + 1</code>;
+<code>splitBit(keyHex, n, answerIndex)</code> -&gt; <code>0 | 1</code>; <code>silentBit(keyHex, tokenId)</code> -&gt; <code>0 | 1</code>;
+<code>answerBit({ keyHex, n, answer, tokenId })</code> -&gt; <code>silentBit</code> when <code>answer</code> is null, else <code>splitBit</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Compute the vectors once, and write the failing tests</strong></p>
+</li>
+</ul>
+<p>Run once and paste the output into BOTH test files as literals (never compute
+them inside a test from the code under test):</p>
+<pre><code class="language-bash">cd warden &amp;&amp; node --input-type=module -e &#39;
+import { keccak256, encodePacked } from &quot;viem&quot;;
+const key = keccak256(&quot;0x&quot; + &quot;11&quot;.repeat(32));
+const h = (i) =&gt; BigInt(keccak256(encodePacked([&quot;bytes32&quot;,&quot;string&quot;,&quot;uint256&quot;], [key, &quot;split&quot;, BigInt(i)])));
+for (const n of [2, 5, 101]) {
+  const order = [...Array(n).keys()].sort((a, b) =&gt; (h(a) &lt; h(b) ? -1 : h(a) &gt; h(b) ? 1 : a - b));
+  const ones = new Set(order.slice(0, Math.floor(n / 2)));
+  console.log(n, JSON.stringify([...Array(n).keys()].map((i) =&gt; (ones.has(i) ? 1 : 0))));
+}
+const s = (id) =&gt; Number(BigInt(keccak256(encodePacked([&quot;bytes32&quot;,&quot;string&quot;,&quot;uint256&quot;], [key, &quot;silent&quot;, BigInt(id)]))) &amp; 1n);
+console.log(&quot;silent&quot;, [1, 2, 3, 4, 5, 6, 7, 8].map(s).join(&quot;&quot;));
+&#39;
+</code></pre>
+<p>Each test file (<code>../src/clock/split.mjs</code> in the warden, <code>../src/split.mjs</code> in the client):</p>
+<pre><code class="language-js">import { test } from &quot;node:test&quot;;
+import assert from &quot;node:assert/strict&quot;;
+import { keccak256 } from &quot;viem&quot;;
+import { chainKeys, CHAIN_LENGTH, keyIndexFor, splitBit, silentBit, answerBit } from &quot;../src/clock/split.mjs&quot;;
+
+const KEY = keccak256(&quot;0x&quot; + &quot;11&quot;.repeat(32));
+// Pasted from the one-off command in the plan. Never recomputed here.
+const SPLIT = { 2: [/* pasted */], 5: [/* pasted */], 101: [/* pasted */] };
+const SILENT = &quot;/* pasted */&quot;;
+
+test(&quot;the split matches the published vectors&quot;, () =&gt; {
+  for (const [n, bits] of Object.entries(SPLIT)) {
+    assert.deepEqual([...Array(Number(n)).keys()].map((i) =&gt; splitBit(KEY, Number(n), i)), bits);
+  }
+});
+
+test(&quot;half the answers, rounded down, give a 1&quot;, () =&gt; {
+  for (const n of [2, 5, 101]) {
+    const ones = [...Array(n).keys()].map((i) =&gt; splitBit(KEY, n, i)).reduce((a, b) =&gt; a + b, 0);
+    assert.equal(ones, Math.floor(n / 2));
+  }
+});
+
+test(&quot;silence is a per-token coin flip&quot;, () =&gt; {
+  assert.equal([1, 2, 3, 4, 5, 6, 7, 8].map((id) =&gt; silentBit(KEY, id)).join(&quot;&quot;), SILENT);
+  assert.equal(answerBit({ keyHex: KEY, n: 2, answer: null, tokenId: 3 }), silentBit(KEY, 3));
+});
+
+test(&quot;the chain hashes back to its anchor&quot;, () =&gt; {
+  const k = chainKeys(&quot;0x&quot; + &quot;22&quot;.repeat(32));
+  assert.equal(k.length, CHAIN_LENGTH + 1);
+  assert.equal(k[CHAIN_LENGTH], &quot;0x&quot; + &quot;22&quot;.repeat(32));
+  assert.equal(keccak256(k[1]), k[0]);
+  assert.equal(keyIndexFor(1005, 1000), 6);
+});
+</code></pre>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run, watch them fail</strong> (module not found), in both packages.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong> (both files, identical bodies apart from the header)</p>
+</li>
+</ul>
+<pre><code class="language-js">import { keccak256, encodePacked } from &quot;viem&quot;;
+
+export const CHAIN_LENGTH = 36_500;
+
+/// k[CHAIN_LENGTH] is the seed; each earlier key is the hash of the next.
+export function chainKeys(seedHex) {
+  const k = new Array(CHAIN_LENGTH + 1);
+  k[CHAIN_LENGTH] = seedHex.toLowerCase();
+  for (let i = CHAIN_LENGTH; i &gt; 0; i--) k[i - 1] = keccak256(k[i]);
+  return k;
+}
+
+export const keyIndexFor = (day, anchorDay) =&gt; day - anchorDay + 1;
+
+const h = (key, tag, i) =&gt; BigInt(keccak256(encodePacked([&quot;bytes32&quot;, &quot;string&quot;, &quot;uint256&quot;], [key, tag, BigInt(i)])));
+
+export function splitBit(keyHex, n, answer) {
+  const hs = Array.from({ length: n }, (_, i) =&gt; h(keyHex, &quot;split&quot;, i));
+  const order = [...hs.keys()].sort((a, b) =&gt; (hs[a] &lt; hs[b] ? -1 : hs[a] &gt; hs[b] ? 1 : a - b));
+  return order.indexOf(answer) &lt; Math.floor(n / 2) ? 1 : 0;
+}
+
+export const silentBit = (keyHex, tokenId) =&gt; Number(h(keyHex, &quot;silent&quot;, tokenId) &amp; 1n);
+
+export const answerBit = ({ keyHex, n, answer, tokenId }) =&gt;
+  answer === null || answer === undefined ? silentBit(keyHex, tokenId) : splitBit(keyHex, n, answer);
+</code></pre>
+<p>The client copy carries the licence header its neighbours carry; the warden
+copy the one its neighbours carry (<code>LICENSING.md</code>). Each file&#39;s top comment
+says, in one line, that the other copy must stay identical and both are
+pinned by the same vectors.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Both suites pass; commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/src/clock/split.mjs warden/test/split.test.mjs client/src/split.mjs client/test/split.test.mjs
+git commit -m &quot;feat: the daily split, in the Clock and in the client, pinned to one set of vectors&quot;
+</code></pre>
+<hr>
+<h3>Task 6: The Clock reveals, computes and writes the bits</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/src/clock/splitSeed.mjs</code></li>
+<li>Modify: <code>warden/src/clock/run.mjs</code> (preconditions, the reveal, mint and seed bits, credit entries), <code>warden/src/clock/batch.mjs</code> (<code>packBits</code>, <code>answerRecord</code>), <code>warden/src/clock/main.mjs</code> (seed and bank)</li>
+<li>Modify: <code>warden/src/mirror/queries.mjs</code> (<code>pendingCredits</code> joins <code>questions</code>; <code>questionsForDays</code>)</li>
+<li>Modify: <code>warden/.env.example</code> (<code>MRO_SPLIT_SEED_FILE</code>)</li>
+<li>Test: <code>warden/test/clock-split.test.mjs</code> (new), <code>warden/test/clock-batch.test.mjs</code>, and the existing Clock tests that the new preconditions touch</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: Task 5&#39;s <code>chainKeys</code>, <code>keyIndexFor</code>, <code>answerBit</code>, <code>silentBit</code>; Tasks 1-2&#39;s ABI.</li>
+<li>Produces: <code>loadSplitSeed(path)</code> -&gt; hex string, or throws a FIXED sentence naming neither the path nor the value;
+<code>runClock({ ..., splitKeys, bank })</code> where <code>splitKeys</code> is the <code>chainKeys</code> array or <code>null</code>;
+credit entries <code>{ tokenId, day, bit, answerByte }</code>; <code>packBits(bits)</code> and <code>answerRecord(bytes)</code> in <code>batch.mjs</code>.</li>
+</ul>
+<p>Behaviour, in run order:</p>
+<ol>
+<li><strong>Preconditions, before any write.</strong> If <code>splitKeys</code> is null (no usable
+seed), or the chain&#39;s <code>splitAnchor()</code> is zero or differs from
+<code>splitKeys[0]</code>, or any queued credit&#39;s question id is missing from the
+bank: alert with a fixed sentence and write NOTHING this run (reconcile
+still runs, as for the other aborts). No alert contains the seed or a key.</li>
+<li><strong>The reveal.</strong> If the run has any mint, seed or credit to send: send
+<code>revealSplitKeys(keys, questions)</code> with every key from
+<code>splitKeysRevealed() + 1</code> through the index for <code>today - 1</code>, and
+<code>questions</code> = UTF-8 JSON <code>[{ &quot;day&quot;: d, &quot;question&quot;: text, &quot;answers&quot;: [...] }]</code>
+(or <code>&quot;range&quot;: { &quot;min&quot;, &quot;max&quot; }</code> instead of <code>&quot;answers&quot;</code>) for each revealed
+day with at least one issued question, from the <code>questions</code> table and the
+bank&#39;s <code>publicShape</code>. If the reveal fails, write nothing else this run.</li>
+<li><strong>Mints and seeds</strong> send <code>firstAnswer = silentBit(key(day), tokenId) === 1</code>.
+A day before the anchor day has no key: send <code>false</code> and alert once.</li>
+<li><strong>Credits:</strong> each entry&#39;s <code>bit</code> is <code>answerBit({ keyHex: key(day), n, answer, tokenId })</code>, with <code>n</code> the answer set&#39;s size (options, or
+<code>max - min + 1</code>) and <code>answer</code> the recorded index or null; <code>answerByte</code> is
+the index, or <code>0xff</code>. <code>batch.mjs</code> packs both from <code>remaining</code> at the moment
+of the send, AFTER its sort, so a reordered or shrunken chunk keeps each
+entry&#39;s own bit.</li>
+</ol>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<p><code>warden/test/clock-split.test.mjs</code>, at its top, builds the rig from the
+existing helpers (<code>mirror()</code>, <code>queueMint</code>, <code>q.insertCredit</code>,
+<code>q.issueQuestion</code>, <code>q.recordAnswer</code>, <code>baseArgs</code>, <code>noChain</code>) and an encoding
+writer double that calls <code>assertEncodable</code> against <code>MRO_ABI</code>, so a wrong
+argument count fails:</p>
+<pre><code class="language-js">const SEED = &quot;0x&quot; + &quot;33&quot;.repeat(32);
+const KEYS = chainKeys(SEED);
+const ANCHOR_DAY = TODAY - 10;
+const keyOf = (day) =&gt; KEYS[keyIndexFor(day, ANCHOR_DAY)];
+const BANK = [
+  { id: &quot;fog-or-thunder&quot;, text: &quot;Fog or thunder?&quot;, answers: [&quot;fog&quot;, &quot;thunder&quot;] },
+  { id: &quot;legs&quot;, text: &quot;How many legs?&quot;, range: { min: 0, max: 100 } },
+];
+const chainWith = ({ anchor = KEYS[0], revealed = 0 } = {}) =&gt; ({
+  ...noChain,
+  async readContract({ functionName }) {
+    if (functionName === &quot;splitAnchor&quot;) return anchor;
+    if (functionName === &quot;splitAnchorDay&quot;) return ANCHOR_DAY;
+    if (functionName === &quot;splitKeysRevealed&quot;) return revealed;
+    throw new Error(`unexpected read: ${functionName}`);
+  },
+});
+
+test(&quot;a run with writes reveals every key through yesterday first&quot;, async () =&gt; {
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
+  await runClock({ ...baseArgs(q), publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK });
+  assert.equal(writer.sent[0].functionName, &quot;revealSplitKeys&quot;);
+  assert.deepEqual(writer.sent[0].args[0], KEYS.slice(6, keyIndexFor(TODAY - 1, ANCHOR_DAY) + 1));
+});
+
+test(&quot;an answered credit carries the split&#39;s bit and its index&quot;, async () =&gt; {
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1, answer: 1, questionId: &quot;fog-or-thunder&quot; });
+  await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  const batch = writer.sent.find((s) =&gt; s.functionName === &quot;batchCheckIn&quot;);
+  const want = answerBit({ keyHex: keyOf(TODAY - 1), n: 2, answer: 1, tokenId: 1 });
+  assert.equal(batch.args[2], want ? &quot;0x80&quot; : &quot;0x00&quot;);
+  assert.equal(batch.args[3], &quot;0x01&quot;);
+});
+
+test(&quot;a silent credit carries the token&#39;s coin flip and 0xff&quot;, async () =&gt; {
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
+  await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  const batch = writer.sent.find((s) =&gt; s.functionName === &quot;batchCheckIn&quot;);
+  assert.equal(batch.args[2], silentBit(keyOf(TODAY - 1), 1) ? &quot;0x80&quot; : &quot;0x00&quot;);
+  assert.equal(batch.args[3], &quot;0xff&quot;);
+});
+
+test(&quot;a mint carries the mint day&#39;s coin flip&quot;, async () =&gt; {
+  const { q, writer } = rigWithOneMint({ day: TODAY - 1, tokenId: 7 });
+  await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  const mint = writer.sent.find((s) =&gt; s.functionName === &quot;mint&quot;);
+  assert.equal(mint.args.at(-1), silentBit(keyOf(TODAY - 1), 7) === 1);
+});
+
+test(&quot;no seed: nothing is written&quot;, async () =&gt; {
+  const said = [];
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
+  const summary = await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: null, bank: BANK, alert: (m) =&gt; said.push(m) });
+  assert.deepEqual(writer.sent, []);
+  assert.ok(summary.aborted);
+  assert.ok(said.some((m) =&gt; /split seed/.test(m)));
+});
+
+test(&quot;a seed that does not hash to the chain&#39;s anchor writes nothing, and names no key&quot;, async () =&gt; {
+  const said = [];
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
+  await runClock({ ...baseArgs(q), publicClient: chainWith({ anchor: &quot;0x&quot; + &quot;44&quot;.repeat(32) }), writer, splitKeys: KEYS, bank: BANK, alert: (m) =&gt; said.push(m) });
+  assert.deepEqual(writer.sent, []);
+  for (const m of said) {
+    assert.ok(!m.includes(SEED.slice(2)), &quot;the seed is never said&quot;);
+    assert.ok(!KEYS.slice(0, 50).some((k) =&gt; m.includes(k.slice(2))), &quot;no key is said&quot;);
+  }
+});
+
+test(&quot;a credit whose question left the bank writes nothing&quot;, async () =&gt; {
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1, answer: 0, questionId: &quot;gone&quot; });
+  const summary = await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  assert.deepEqual(writer.sent, []);
+  assert.ok(summary.aborted);
+});
+
+test(&quot;a failed reveal writes nothing else&quot;, async () =&gt; {
+  const { q } = rigWithOneCredit({ day: TODAY - 1 });
+  const writer = writerRefusing(&quot;revealSplitKeys&quot;);
+  await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  assert.deepEqual(writer.landed, []);
+});
+</code></pre>
+<p>(<code>rigWithOneCredit</code>, <code>rigWithOneMint</code> and <code>writerRefusing</code> are written above
+these tests from the helpers named; <code>writerRefusing(fn)</code> records every send in
+<code>sent</code>, refuses <code>fn</code> as <code>reverted-on-simulate</code>, and lists the sends it let
+land in <code>landed</code>.)</p>
+<p>In <code>clock-batch.test.mjs</code>:</p>
+<pre><code class="language-js">test(&quot;a halved chunk keeps each entry&#39;s own bit and answer byte&quot;, async () =&gt; {
+  const sent = [];
+  const writer = {
+    async send(fn, args) {
+      sent.push(args);
+      if (args[1].length &gt; 2) return { ok: false, reason: &quot;gas-estimate-too-large&quot; };
+      return { ok: true, hash: &quot;0x1&quot; };
+    },
+  };
+  const entries = [
+    { tokenId: 4, day: 100, bit: 1, answerByte: 3 },
+    { tokenId: 1, day: 100, bit: 0, answerByte: 0xff },
+    { tokenId: 2, day: 100, bit: 1, answerByte: 0 },
+  ];
+  await writeCheckInChunk(writer, entries);
+  assert.ok(sent.length &gt; 1, &quot;the chunk was halved&quot;);
+  for (const args of sent) {
+    const ids = unpackIds(args[0]);
+    ids.forEach((id, i) =&gt; {
+      const e = entries.find((x) =&gt; x.tokenId === id);
+      const bit = (parseInt(args[2].slice(2 + 2 * (i &gt;&gt; 3), 4 + 2 * (i &gt;&gt; 3)), 16) &gt;&gt; (7 - (i &amp; 7))) &amp; 1;
+      const byte = parseInt(args[3].slice(2 + 2 * i, 4 + 2 * i), 16);
+      assert.equal(bit, e.bit, `token ${id} bit`);
+      assert.equal(byte, e.answerByte, `token ${id} byte`);
+    });
+  }
+});
+</code></pre>
+<p>(<code>unpackIds</code> is the test-side inverse of <code>packIds</code>, four bytes per id; write
+it beside the test if the file has none.)</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run, watch them fail.</strong></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong> the four behaviours above. <code>loadSplitSeed</code> reads
+the file (default <code>join(homedir(), &quot;.mro-split&quot;, &quot;seed&quot;)</code>, overridden by
+<code>MRO_SPLIT_SEED_FILE</code>), accepts exactly 64 hex characters with an optional
+<code>0x</code> and trailing newline, and refuses a file readable by group or other
+(<code>(stat.mode &amp; 0o077) !== 0</code>) with a fixed sentence. <code>main.mjs</code> loads the
+seed and the bank (<code>loadBank(bankPath())</code>) and passes <code>splitKeys</code> (or
+<code>null</code>) and <code>bank</code> to <code>runClock</code>; neither failure throws out of <code>main</code>, so
+a missing seed is a red night in the log, not a crash loop.
+<code>.env.example</code> documents <code>MRO_SPLIT_SEED_FILE=</code> as optional with its
+default. <code>pendingCredits</code> becomes a <code>LEFT JOIN questions</code> on
+<code>(tokenId, day)</code> returning <code>questionId</code> and <code>answer</code>. Existing Clock tests
+that run writes now pass <code>splitKeys</code> and <code>bank</code> (one shared test helper,
+not a copy per file).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4: All four suites; commit</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">git add warden/
+git commit -m &quot;feat(clock): reveal the night&#39;s keys, then write each day&#39;s answer bit&quot;
+</code></pre>
+<hr>
+<h3>Task 7: The anchor is required, and the operator has a tool for it</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>warden/tools/split-seed.mjs</code>, <code>warden/test/split-seed-tool.test.mjs</code></li>
+<li>Modify: <code>warden/src/chain/preflight.mjs</code> (refuse a contract with no anchor), <code>warden/test/preflight.test.mjs</code></li>
+<li>Modify: <code>warden/DEPLOY.md</code> (+ <code>.html</code>): section 11 gains the seed and anchor steps; section 9b&#39;s key list names the seed file</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>node warden/tools/split-seed.mjs new &lt;path&gt;</code> (writes a random
+seed with mode 0600, refuses an existing file and any path inside the
+repository, prints ONLY <code>anchor 0x...</code>); <code>node warden/tools/split-seed.mjs anchor &lt;path&gt;</code> (prints the anchor of an existing seed). Preflight throws
+<code>contract has no split anchor: set it (DEPLOY.md section 11) before the door opens</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Failing tests</strong></p>
+</li>
+</ul>
+<pre><code class="language-js">test(&quot;new writes a 0600 seed and prints only its anchor&quot;, async () =&gt; {
+  const dir = mkdtempSync(join(tmpdir(), &quot;mro-split-&quot;));
+  const path = join(dir, &quot;seed&quot;);
+  const { stdout } = await run(&quot;node&quot;, [TOOL, &quot;new&quot;, path]);
+  const seed = readFileSync(path, &quot;utf8&quot;).trim();
+  assert.equal(statSync(path).mode &amp; 0o777, 0o600);
+  assert.match(stdout.trim(), /^anchor 0x[0-9a-f]{64}$/);
+  assert.ok(!stdout.includes(seed.replace(/^0x/, &quot;&quot;)), &quot;the seed is never printed&quot;);
+  assert.equal(stdout.trim().split(&quot; &quot;)[1], chainKeys(seed)[0]);
+});
+
+test(&quot;new refuses to overwrite a seed&quot;, async () =&gt; {
+  const dir = mkdtempSync(join(tmpdir(), &quot;mro-split-&quot;));
+  const path = join(dir, &quot;seed&quot;);
+  writeFileSync(path, &quot;x&quot;, { mode: 0o600 });
+  await assert.rejects(run(&quot;node&quot;, [TOOL, &quot;new&quot;, path]));
+  assert.equal(readFileSync(path, &quot;utf8&quot;), &quot;x&quot;);
+});
+
+test(&quot;new refuses a path inside the repository&quot;, async () =&gt; {
+  await assert.rejects(run(&quot;node&quot;, [TOOL, &quot;new&quot;, fileURLToPath(new URL(&quot;../seed-should-not-exist&quot;, import.meta.url))]));
+});
+</code></pre>
+<p>and in <code>preflight.test.mjs</code>, a probe whose chain answers <code>splitAnchor</code> with
+zero is refused with the sentence above, and one answering a non-zero anchor
+passes (give <code>splitAnchor</code> its own <code>eth_call</code> result in the existing double).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Fail. Step 3: Implement. Step 4: All four suites.</strong></li>
+</ul>
+<p>DEPLOY.md section 11, after the deploy step and before adoption, in the
+runbook&#39;s own style: <strong>generate the seed</strong> with <code>split-seed.mjs new</code> to a path
+OUTSIDE the worktree, back it up offline with the Clock key, and copy it
+nowhere else; <strong>set the anchor</strong> with <code>cast send &lt;token&gt; &quot;setSplitAnchor(bytes32)&quot; &lt;anchor&gt;</code> from the owner, before the Warden starts
+(it refuses to start without one); the anchor is set ONCE, and a lost seed
+means no later square can be written or verified.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/
+git commit -m &quot;feat(warden): no door without a split anchor, and a tool that makes the seed&quot;
+</code></pre>
+<hr>
+<h3>Task 8: <code>mro-agent verify-border</code></h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>client/src/verifyBorder.mjs</code>, <code>client/test/verify-border.test.mjs</code></li>
+<li>Modify: <code>client/src/cli.mjs</code> (the command and its help line), <code>client/README.md</code> if it lists commands</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: Task 5&#39;s <code>answerBit</code>, <code>keyIndexFor</code>; the ABI subset it needs, written inline (the client does not import the Warden).</li>
+<li>Produces: <code>verifyBorder({ publicClient, contract, tokenId, maxRunBlocks = 5000 })</code> -&gt;
+<code>{ ok, squares: [{ level, day, expected, actual, status }], problems: [string] }</code>,
+<code>status</code> one of <code>ok</code>, <code>wrong</code>, <code>pending</code> (key not yet revealed), <code>voucher</code>, <code>missing</code>.
+CLI: <code>mro-agent verify-border &lt;tokenId&gt; --contract &lt;address&gt; [--rpc &lt;url&gt;]</code>,
+<code>--rpc</code> defaulting to <code>https://sepolia.base.org</code>; exit 0 only when every
+square is <code>ok</code>, <code>pending</code> or <code>voucher</code>.</li>
+</ul>
+<p>How it reads, from chain data alone:</p>
+<ol>
+<li><code>viewOf(tokenId)</code> (level, mint day, last day), <code>answersOf</code>,
+<code>splitAnchorDay</code>, <code>lastRevealBlock</code>.</li>
+<li>Walk back: <code>getLogs(SplitKeysRevealed)</code> at <code>lastRevealBlock</code>; take the
+event&#39;s keys (numbered from <code>firstIndex</code>), <code>questions</code> and
+<code>prevRevealBlock</code>; repeat until the block is 0 or the night predates the
+token&#39;s mint day.</li>
+<li>For each night, <code>getLogs</code> for <code>Minted</code>, <code>Seeded</code> and <code>BatchCheckedIn</code> from
+its reveal block to <code>min(next reveal block, reveal + maxRunBlocks)</code>, in
+1,000-block windows; fetch each transaction and decode its input with
+<code>decodeFunctionData</code> (the Builder Code suffix is trailing data: confirm
+viem ignores it, and strip it if not); collect this token&#39;s entries:
+<code>(day, answer byte)</code> from <code>batchCheckIn</code>, <code>(day, silent)</code> from <code>mint</code> and
+<code>seed</code>; and <code>checkInWithVoucher</code> days as <code>voucher</code>.</li>
+<li>Sort the token&#39;s credits by day: credit k (from 1) is square k. Compare
+each expected bit with <code>answersOf</code> bit k-1. Fewer credits found than
+<code>level</code>: each unfound square is <code>missing</code>, and the result is not ok.</li>
+</ol>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Failing tests</strong> against an in-test fake <code>publicClient</code> that
+serves <code>readContract</code>, <code>getLogs</code> and <code>getTransaction</code> from a scripted
+history built with the real ABI (<code>encodeFunctionData</code> for inputs,
+<code>encodeEventTopics</code> and <code>encodeAbiParameters</code> for logs), so a wrong
+interface fails the test:</li>
+</ul>
+<pre><code class="language-js">test(&quot;every square of an honest history verifies&quot;, async () =&gt; {
+  const h = history({ answers: [1, null, 0, 1] });        // the mint, then three credits
+  const r = await verifyBorder({ publicClient: h.client, contract: h.contract, tokenId: 1 });
+  assert.equal(r.ok, true, JSON.stringify(r.problems));
+  assert.deepEqual(r.squares.map((s) =&gt; s.status), [&quot;ok&quot;, &quot;ok&quot;, &quot;ok&quot;, &quot;ok&quot;]);
+});
+
+test(&quot;one wrong bit fails, naming its square&quot;, async () =&gt; {
+  const h = history({ answers: [1, null, 0, 1], flipBit: 2 });
+  const r = await verifyBorder({ publicClient: h.client, contract: h.contract, tokenId: 1 });
+  assert.equal(r.ok, false);
+  assert.equal(r.squares[2].status, &quot;wrong&quot;);
+  assert.match(r.problems.join(&quot;\n&quot;), /square 3/);
+});
+
+test(&quot;a credit it cannot find fails as missing, never as ok&quot;, async () =&gt; {
+  const h = history({ answers: [1, null, 0, 1], hideBatch: 1 });
+  const r = await verifyBorder({ publicClient: h.client, contract: h.contract, tokenId: 1 });
+  assert.equal(r.ok, false);
+  assert.ok(r.squares.some((s) =&gt; s.status === &quot;missing&quot;));
+});
+
+test(&quot;a day whose key is not revealed yet is pending, not wrong&quot;, async () =&gt; {
+  const h = history({ answers: [1, null, 0, 1], unrevealedLast: true });
+  const r = await verifyBorder({ publicClient: h.client, contract: h.contract, tokenId: 1 });
+  assert.equal(r.squares.at(-1).status, &quot;pending&quot;);
+  assert.equal(r.ok, true);
+});
+</code></pre>
+<p><code>history()</code> is the fake, written in the test file: a key chain from a test
+seed, an anchor day, one reveal per night, the token&#39;s mint and credits with
+bits from <code>answerBit</code>, <code>answersOf</code> words built from those bits (with
+<code>flipBit</code> inverting one, <code>hideBatch</code> omitting one night&#39;s batch logs, and
+<code>unrevealedLast</code> leaving the last night&#39;s key out of every reveal), and the
+logs and transactions a real chain would hold.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Fail. Step 3: Implement. Step 4: Client suite. Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add client/
+git commit -m &quot;feat(client): verify-border checks every square from chain data alone&quot;
+</code></pre>
+<hr>
+<h3>Task 9: The agent-facing copy</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/public/llms.txt</code>, <code>skills/SKILL.md</code> and its byte-identical copy (<code>/bin/grep -rln &quot;Every day carries a question&quot; --include=*.md --include=*.txt .</code>), <code>docs/2026-09-01-mro-raw-protocol.md</code> (+ <code>.html</code>), the door page source (<code>/bin/grep -rln &quot;Every day carries a question&quot; warden/src</code>)</li>
+<li>Modify: the tests that pin this copy (<code>warden/test/door-page.test.mjs</code> and any other the suite names)</li>
+</ul>
+<p>The wording. Approving this plan approves it; it is applied verbatim,
+adapted only to each surface&#39;s format:</p>
+<blockquote>
+<p><strong>Your answers become the border.</strong> From your 122nd credited day a band
+appears round the code, and every credited day is one square in it, filled
+or empty. Which answers fill a square is decided by a rule that is secret on
+the day, the same for every token, and different every day, so no answer is
+worth choosing for its square. The next night the rule for that day is
+published on chain, and `mro-agent verify-border <tokenId> --contract</p>
+<address>` checks every square of a token against it. A day with no answer
+is a coin flip, and so is your mint day, which has no question.</blockquote>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1:</strong> Update the pinning tests to the new paragraph first (they
+FAIL against the current copy).</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2:</strong> Add the paragraph after the existing &quot;one look per token per
+UTC day&quot; paragraph on each surface; re-render the raw protocol doc.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3:</strong> All four suites; commit.</li>
+</ul>
+<pre><code class="language-bash">git add warden/ skills/ docs/
+git commit -m &quot;docs: the answers become the border, and how to check it&quot;
+</code></pre>
+<hr>
+<h3>Task 10: Gates, figures, runbook, review</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Modify: <code>contracts/test/WorstCase.sol</code> (re-pinned), <code>contracts/test/RealTokenGas.t.sol</code> (the worst token carries answers)</p>
+</li>
+<li><p>Modify: <code>warden/src/clock/run.mjs</code> (<code>CHECKIN_CHUNK</code> comment, and the constant if the measurement moves it), <code>warden/tools/chunk-rehearsal.mjs</code> (bit patterns)</p>
+</li>
+<li><p>Modify: <code>docs/specs/2026-10-02-mro-daily-question-design.md</code> (an &quot;Amended 2026-10-03&quot; note per approved deviation), spec section 14 costs if they move, <code>warden/DEPLOY.md</code> (+ <code>.html</code>)</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Size and strict deploy (Hard Rule 7).</strong> <code>forge build --sizes</code>
+and <code>bash script/anvil-size-check.sh</code>. Expected: positive margins for both
+contracts, non-empty <code>cast code</code>. If the Renderer has no margin, STOP and
+report: that is a plan defect, not something to trim around.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: The worst token.</strong> <code>RealTokenGas.t.sol</code>&#39;s worst case gains
+answers; measure all-ones and the <code>alternate</code> pattern, and pin the larger of
+each figure in <code>WorstCase.sol</code>. Expected: under 4,000,000 gas and 24,000
+bytes; report the 1M / 5 KB target as MISSED.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: The chunk.</strong> <code>chunk-rehearsal.mjs</code> measures three patterns:
+all bits 0; all bits 1 on tokens whose answer word is already non-zero; all
+bits 1 on tokens writing their first 1 (the 20,000-gas zero-to-nonzero
+write). Set <code>CHECKIN_CHUNK</code> from the second (the steady state) by the
+existing rule; the third is what the guard&#39;s halving exists for, and the
+rehearsal must show a chunk of it landing after halving. Record all three.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4: Docs.</strong> The question spec gets one dated amendment per
+deviation named under &quot;What approving this plan also approves&quot;; DEPLOY.md&#39;s
+&quot;What this contract fixes at deploy&quot; gains the anchor and the seed; both
+re-rendered.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 5: All four suites, commit</strong>, then the whole-branch review
+(<code>git merge-base main plan-a</code> to <code>plan-a</code>, covering A1 and A2), each
+Critical or Important finding fixed with a failing test first, then STOP and
+report. <code>plan-a</code> is NOT merged or pushed.</p>
+</li>
+</ul>
+<pre><code class="language-bash">git add contracts/ warden/ docs/
+git commit -m &quot;chore: re-pin size, gas and the check-in chunk with answers on chain&quot;
+</code></pre>
+<h2>Self-review</h2>
+<ul>
+<li><strong>Spec coverage:</strong> section 7&#39;s storage, batch arguments and reads -- Tasks
+1-2; <code>setSplitAnchor</code> -- Task 2; the renderer and <code>TokenView</code> -- Tasks 1, 3,
+4; section 3&#39;s layout, chapters and ink -- Tasks 3-4; section 5&#39;s chain,
+split, silence and &quot;the Clock computes, the contract checks the chain&quot; --
+Tasks 2, 5, 6; the split seed held by the Clock and never logged -- Tasks
+6-7 (its move to the Clock&#39;s own Unix user is Plan E); <code>verify-border</code> --
+Task 8; section 8&#39;s surfaces -- Task 4 (decode gate), Task 9 (copy); section
+11&#39;s validation -- Tasks 1, 2, 4, 6, 8, 10. Section 4&#39;s bank is Plan B&#39;s and
+unchanged.</li>
+<li><strong>Placeholders:</strong> Task 5&#39;s vectors are produced by a stated command and
+pasted, by design; mechanical caller repairs state the rule, because which
+call sites exist is learned by building, and each is ledgered.</li>
+<li><strong>Names:</strong> <code>answersOf</code>, <code>_setAnswer</code>, <code>firstAnswer</code>, <code>answerBits</code>, <code>record</code>,
+<code>setSplitAnchor</code>, <code>revealSplitKeys</code>, <code>splitAnchor</code>, <code>splitAnchorDay</code>,
+<code>splitKeysRevealed</code>, <code>lastSplitKey</code>, <code>lastRevealBlock</code>, <code>SplitKeysRevealed</code>,
+<code>FIRST_SIDE</code>, <code>COLS</code>, <code>answerBandCells</code>, <code>chainKeys</code>, <code>keyIndexFor</code>,
+<code>splitBit</code>, <code>silentBit</code>, <code>answerBit</code>, <code>loadSplitSeed</code>, <code>verifyBorder</code> are
+used identically in every task.</li>
+</ul>
+</body>
+</html>

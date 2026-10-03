@@ -44,7 +44,7 @@ contract RedeployFixesTest is MroTestBase {
         ds[0] = d0 + 1; ds[1] = d0 + 2; ds[2] = d0 + 5;
         _warpToDay(d0 + 5);
         vm.prank(WARDEN);
-        t.batchCheckIn(_packed(ids), ds);
+        t.batchCheckIn(_packed(ids), ds, _noBits(ds), _silent(ds));
         assertEq(t.viewOf(1).streak, 1, "the run fell");
         assertEq(t.bestRunOf(1), 3, "the run of three is kept");
     }
@@ -85,7 +85,7 @@ contract RedeployFixesTest is MroTestBase {
         uint32 day = _today();
         bytes memory code = _code();
         vm.prank(WARDEN);
-        t.mint(2, noHook, bytes32(uint256(2)), code, day);
+        t.mint(2, noHook, bytes32(uint256(2)), code, day, false);
         assertEq(t.ownerOf(2), noHook);
     }
 

@@ -32,7 +32,7 @@ contract CheckInTest is MroTestBase {
         uint32 d = t.today();
         _warpToDay(d + 1);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d + 1));
+        t.batchCheckIn(_one(1), _days(d + 1), _noBits(_days(d + 1)), _silent(_days(d + 1)));
         assertEq(t.viewOf(1).level, 2);
         assertEq(t.viewOf(1).streak, 2);
         assertEq(t.viewOf(1).lastDay, d + 1);
@@ -42,7 +42,7 @@ contract CheckInTest is MroTestBase {
         uint32 d = t.today();
         _warpToDay(d + 5);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d + 5));
+        t.batchCheckIn(_one(1), _days(d + 5), _noBits(_days(d + 5)), _silent(_days(d + 5)));
         assertEq(t.viewOf(1).level, 2);
         assertEq(t.viewOf(1).streak, 1);
     }
@@ -51,7 +51,7 @@ contract CheckInTest is MroTestBase {
         uint32 d = t.today();
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.DayNotAdvanced.selector, uint256(1)));
-        t.batchCheckIn(_one(1), _days(d));
+        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
     }
 
     /// @dev Late writes after an outage: several days for one token in one
@@ -64,7 +64,7 @@ contract CheckInTest is MroTestBase {
         ds[0] = d + 1; ds[1] = d + 2; ds[2] = d + 3;
         _warpToDay(d + 3);
         vm.prank(WARDEN);
-        t.batchCheckIn(_packed(ids), ds);
+        t.batchCheckIn(_packed(ids), ds, _noBits(ds), _silent(ds));
         assertEq(t.viewOf(1).level, 4);
         assertEq(t.viewOf(1).streak, 4);
     }
@@ -77,13 +77,13 @@ contract CheckInTest is MroTestBase {
         vm.expectEmit(false, false, false, true);
         emit IERC4906.MetadataUpdate(1);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d + 1));
+        t.batchCheckIn(_one(1), _days(d + 1), _noBits(_days(d + 1)), _silent(_days(d + 1)));
     }
 
     function test_checkInRevertsForANonWarden() public {
         uint32 d = t.today() + 1;
         vm.expectRevert(MachineReadableOnly.NotWarden.selector);
-        t.batchCheckIn(_one(1), _days(d));
+        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
     }
 
     function test_mismatchedLengthsRevert() public {
@@ -92,7 +92,7 @@ contract CheckInTest is MroTestBase {
         uint32 d = t.today() + 1;
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.LengthMismatch.selector);
-        t.batchCheckIn(_packed(ids), _days(d));
+        t.batchCheckIn(_packed(ids), _days(d), _noBits(_days(d)), _silent(_days(d)));
     }
 
     function test_checkInIsBlockedByPauseAndBySunset() public {
@@ -100,33 +100,33 @@ contract CheckInTest is MroTestBase {
         t.pause();
         vm.prank(WARDEN);
         vm.expectRevert();
-        t.batchCheckIn(_one(1), _days(d));
+        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
         t.unpause();
         t.sunset();
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.Sunset.selector);
-        t.batchCheckIn(_one(1), _days(d));
+        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
     }
 
     function test_checkInRevertsForAnUnmintedToken() public {
         uint32 d = t.today() + 1;
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.NoSuchToken.selector, uint256(999)));
-        t.batchCheckIn(_one(999), _days(d));
+        t.batchCheckIn(_one(999), _days(d), _noBits(_days(d)), _silent(_days(d)));
     }
 
     function test_anEmptyBatchReverts() public {
         uint32[] memory none = new uint32[](0);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.EmptyBatch.selector);
-        t.batchCheckIn("", none);
+        t.batchCheckIn("", none, _noBits(none), _silent(none));
     }
 
     /// @dev The review noted nothing asserted this event's payload.
     function test_batchCheckedInReportsTheDayRangeAndCount() public {
         uint32 d = t.today();
         vm.prank(WARDEN);
-        t.mint(2, MALLORY, bytes32(uint256(2)), _code(), _today());
+        t.mint(2, MALLORY, bytes32(uint256(2)), _code(), _today(), false);
         uint32[] memory ids = new uint32[](2);
         ids[0] = 1; ids[1] = 2;
         uint32[] memory ds = new uint32[](2);
@@ -136,7 +136,7 @@ contract CheckInTest is MroTestBase {
         vm.expectEmit(false, false, false, true);
         emit MachineReadableOnly.BatchCheckedIn(d + 1, d + 3, 2);
         vm.prank(WARDEN);
-        t.batchCheckIn(packed, ds);
+        t.batchCheckIn(packed, ds, _noBits(ds), _silent(ds));
     }
 
     /// @notice A full chunk, per-token emits included, must pass the SAME check
@@ -156,7 +156,7 @@ contract CheckInTest is MroTestBase {
     ///   2,900 on chain. That read 6,836,778, half the truth. Isolation also
     ///   charges the 21,000 base and the calldata, as the Clock's estimate does.
     ///
-    ///   PRE-ENCODED CALLDATA. `t.batchCheckIn(packed, ds)` ABI-encodes both
+    ///   PRE-ENCODED CALLDATA. `t.batchCheckIn(packed, ds, _noBits(ds), _silent(ds))` ABI-encodes both
     ///   arrays in THIS contract, after gasleft() is read, and that loop is
     ///   harness work. With it inside the window the isolated figure read
     ///   14,353,906 -- 1,178,624 over the node -- and made 1,500 look like a
@@ -166,7 +166,7 @@ contract CheckInTest is MroTestBase {
         uint32 n = CHECKIN_CHUNK;
         vm.startPrank(WARDEN);
         for (uint32 i = 2; i < 2 + n; i++) {
-            t.mint(i, address(uint160(0x10000 + i)), bytes32(uint256(i)), _code(), _today());
+            t.mint(i, address(uint160(0x10000 + i)), bytes32(uint256(i)), _code(), _today(), false);
         }
         vm.stopPrank();
 
@@ -186,7 +186,7 @@ contract CheckInTest is MroTestBase {
         bytes memory packed = _packed(ids);
         // And the call's own ABI encoding, for the same reason: a high-level
         // call encodes its arguments after gasleft() has been read.
-        bytes memory callData = abi.encodeCall(MachineReadableOnly.batchCheckIn, (packed, ds));
+        bytes memory callData = abi.encodeCall(MachineReadableOnly.batchCheckIn, (packed, ds, _noBits(ds), _silent(ds)));
 
         // Outside the gasleft() window: this is harness setup, not contract work.
         _warpToDay(d);
@@ -251,10 +251,10 @@ contract CheckInTest is MroTestBase {
     /// forge-config: default.isolate = true
     function test_theFinishingCreditCostsMoreThanAnOrdinaryOne() public {
         vm.startPrank(WARDEN);
-        t.mint(2, address(0x2222), bytes32(uint256(2)), _code(), _today());
-        t.mint(3, address(0x3333), bytes32(uint256(3)), _code(), _today());
-        t.mint(4, address(0x4444), bytes32(uint256(4)), _code(), _today());
-        t.mint(5, address(0x5555), bytes32(uint256(5)), _code(), _today());
+        t.mint(2, address(0x2222), bytes32(uint256(2)), _code(), _today(), false);
+        t.mint(3, address(0x3333), bytes32(uint256(3)), _code(), _today(), false);
+        t.mint(4, address(0x4444), bytes32(uint256(4)), _code(), _today(), false);
+        t.mint(5, address(0x5555), bytes32(uint256(5)), _code(), _today(), false);
         vm.stopPrank();
 
         // One day apart in level, so the only difference between the measured
@@ -282,13 +282,13 @@ contract CheckInTest is MroTestBase {
         _warpToDay(_today() + 1);
 
         bytes memory stampCall =
-            abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(5), _days(next5)));
+            abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(5), _days(next5), _noBits(_days(next5)), _silent(_days(next5))));
         bytes memory ordinaryCall =
-            abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(2), _days(next2)));
+            abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(2), _days(next2), _noBits(_days(next2)), _silent(_days(next2))));
         bytes memory firstCall =
-            abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(3), _days(next3)));
+            abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(3), _days(next3), _noBits(_days(next3)), _silent(_days(next3))));
         bytes memory laterCall =
-            abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(4), _days(next4)));
+            abi.encodeCall(MachineReadableOnly.batchCheckIn, (_one(4), _days(next4), _noBits(_days(next4)), _silent(_days(next4))));
 
         // 1. The first Warden call of the night. Identical work to call 2 in
         //    every other respect, so the gap between them IS the stamp.
@@ -391,7 +391,7 @@ contract CheckInTest is MroTestBase {
         vm.startPrank(WARDEN);
         for (uint32 i = 0; i < n; i++) {
             // One wallet each, so walletCap can never be what fails this.
-            t.mint(first + i, address(uint160(0x20000 + i)), bytes32(uint256(first + i)), _code(), _today());
+            t.mint(first + i, address(uint160(0x20000 + i)), bytes32(uint256(first + i)), _code(), _today(), false);
         }
         vm.stopPrank();
 
@@ -413,7 +413,7 @@ contract CheckInTest is MroTestBase {
             }
             _warpToDay(d + c + m);
             vm.prank(WARDEN);
-            t.batchCheckIn(growIds, growDays);
+            t.batchCheckIn(growIds, growDays, _noBits(growDays), _silent(growDays));
         }
         assertEq(t.viewOf(first).level, 364, "setup must leave every token one day short");
 
@@ -425,7 +425,7 @@ contract CheckInTest is MroTestBase {
             _putId(ids, i, first + i);
             ds[i] = finishDay;
         }
-        bytes memory callData = abi.encodeCall(MachineReadableOnly.batchCheckIn, (ids, ds));
+        bytes memory callData = abi.encodeCall(MachineReadableOnly.batchCheckIn, (ids, ds, _noBits(ds), _silent(ds)));
         _warpToDay(finishDay);
 
         vm.prank(WARDEN);
@@ -483,7 +483,7 @@ contract CheckInTest is MroTestBase {
     /// @dev The revert an owner can cause, and the proof it costs nobody a day.
     function test_oneRestingTokenRevertsTheWholeBatchAndTheRestAreRetryable() public {
         vm.prank(WARDEN);
-        t.mint(2, MALLORY, bytes32(uint256(0xb0b)), _code(), _today());
+        t.mint(2, MALLORY, bytes32(uint256(0xb0b)), _code(), _today(), false);
 
         // Mallory seals their own token between the batch being built and sent.
         vm.prank(MALLORY);
@@ -504,7 +504,7 @@ contract CheckInTest is MroTestBase {
         // bisect.
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, 2));
-        t.batchCheckIn(_packed(ids), ds);
+        t.batchCheckIn(_packed(ids), ds, _noBits(ds), _silent(ds));
 
         assertEq(t.viewOf(1).lastDay, d - 1, "token 1 was not credited by the reverted batch");
 
@@ -512,7 +512,7 @@ contract CheckInTest is MroTestBase {
         uint32[] memory good = new uint32[](1);
         good[0] = 1;
         vm.prank(WARDEN);
-        t.batchCheckIn(_packed(good), _days(d));
+        t.batchCheckIn(_packed(good), _days(d), _noBits(_days(d)), _silent(_days(d)));
         assertEq(t.viewOf(1).lastDay, d, "the day is credited on the re-chunk");
         assertEq(t.viewOf(1).streak, 2, "and the run is unbroken, so nothing was lost");
     }
@@ -525,7 +525,7 @@ contract CheckInTest is MroTestBase {
         _warpToDay(missed + 5);          // five nights go by with nothing sent
 
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(missed));
+        t.batchCheckIn(_one(1), _days(missed), _noBits(_days(missed)), _silent(_days(missed)));
         assertEq(t.viewOf(1).lastDay, missed, "the missed day is still creditable");
     }
 }

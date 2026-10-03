@@ -264,7 +264,7 @@ contract RealTokenGasTest is MroTestBase {
         // documented on MroTestBase._today() and this is it happening.
         uint32 back = _today();
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(back));
+        t.batchCheckIn(_one(1), _days(back), _noBits(_days(back)), _silent(_days(back)));
 
         TokenView memory v = t.viewOf(1);
         assertGt(v.fellRun, 0, "the fallen run must be recorded, or this measures nothing new");

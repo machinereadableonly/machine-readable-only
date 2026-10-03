@@ -72,6 +72,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     mapping(uint256 => uint32) internal _echo;
     /// @dev The day each token was rested. Its own mapping because `Token` is full.
     mapping(uint256 => uint32) internal _restDay;
+    /// @dev One answer bit per credit, 365 in two words: credit `level` is bit `level - 1`.
+    mapping(uint256 => uint256[2]) internal _answers;
 
     /// @dev One mint per key ever. Binding is unlimited, so `rebind` can move a
     /// token to a new key but can never resurrect a mint.
@@ -216,9 +218,21 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         v.fellRun = s.fellRun;
         v.fellDay = s.fellDay;
         v.marks = _marks[id];
+        v.answers = _answers[id];
         v.agentKeyId = _agentKeyOf[id];
         v.code = _codeOf[id];
         v.today = today();
+    }
+
+    /// @notice The token's answer bits: credit `level` is bit `level - 1`.
+    function answersOf(uint256 id) external view returns (uint256[2] memory) {
+        return _answers[id];
+    }
+
+    /// @dev Set the bit for credit `level`. A 0 writes nothing.
+    function _setAnswer(uint256 id, uint32 level) private {
+        uint256 i = uint256(level) - 1;
+        _answers[id][i >> 8] |= uint256(1) << (i & 255);
     }
 
     /// @notice The sealed inherited tenure: days the line had run when this
@@ -375,7 +389,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// `today()`: the Clock writes a mint the day after payment, and a token
     /// dated the write day would lose the check-in that landed on its first
     /// day. Bounded both ways by `_checkCreationDay`.
-    function mint(uint256 id, address to, bytes32 keyId, bytes calldata code, uint32 day)
+    /// @param firstAnswer The first day's answer bit: the Clock's coin flip, since the mint day cannot be answered.
+    function mint(uint256 id, address to, bytes32 keyId, bytes calldata code, uint32 day, bool firstAnswer)
         external
         onlyWarden
         whenNotPaused
@@ -406,6 +421,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         _codeOf[id] = code;
         _hasMinted[keyId] = true;
         _firstMintDay[keyId] = d;
+        if (firstAnswer) _setAnswer(id, 1);
         unchecked {
             totalMinted += 1;
             mintedTo[to] += 1;
@@ -533,7 +549,10 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// Emits one `MetadataUpdate` per token written, AFTER the writes, and
     /// never a range: a day's check-ins are a scattered subset of ids, so
     /// `minId..maxId` would claim untouched tokens had changed.
-    function batchCheckIn(bytes calldata packedIds, uint32[] calldata days_)
+    /// @param answerBits One bit per entry, high bit first.
+    /// @param record One byte per entry, the answer index or 0xff, never read here: it is the
+    /// public record the verifier reads.
+    function batchCheckIn(bytes calldata packedIds, uint32[] calldata days_, bytes calldata answerBits, bytes calldata record)
         external
         onlyWarden
         whenNotPaused
@@ -542,6 +561,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         uint256 n = days_.length;
         if (packedIds.length != n * 4) revert LengthMismatch();
         if (n == 0) revert EmptyBatch();
+        if (answerBits.length != (n + 7) / 8 || record.length != n) revert LengthMismatch();
 
         // Read once, not once per token: this is the gas-critical loop.
         uint32 tday = today();
@@ -567,6 +587,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
             if (day <= s.lastDay) revert DayNotAdvanced(id);
 
             _credit(id, s, day);
+            if ((uint8(answerBits[i >> 3]) >> (7 - (i & 7))) & 1 == 1) _setAnswer(id, s.level);
 
             if (day < lo) lo = day;
             if (day > hi) hi = day;
@@ -889,7 +910,16 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// day it was made, not the day it was written.
     /// @param expectedKeyId The key the Warden verified when the seed was asked
     /// for; a rebind since then refuses it.
-    function seed(uint256 childId, uint256 parentId, address to, bytes calldata code, uint32 day, bytes32 expectedKeyId)
+    /// @param firstAnswer The first day's answer bit: the Clock's coin flip, since the mint day cannot be answered.
+    function seed(
+        uint256 childId,
+        uint256 parentId,
+        address to,
+        bytes calldata code,
+        uint32 day,
+        bytes32 expectedKeyId,
+        bool firstAnswer
+    )
         external
         onlyWarden
         whenNotPaused
@@ -924,6 +954,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         _echo[childId] = p.level + _echo[parentId];
         _agentKeyOf[childId] = key;
         _codeOf[childId] = code;
+        if (firstAnswer) _setAnswer(childId, 1);
 
         unchecked {
             _seedsSpent[key] += 1;

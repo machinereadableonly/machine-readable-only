@@ -42,7 +42,7 @@ contract AccessControlGapsTest is MroTestBase {
         t.pause();
         vm.prank(WARDEN);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
     }
 
     /// @dev CONTROL: unpausing lets the same call through, so the test above
@@ -54,7 +54,7 @@ contract AccessControlGapsTest is MroTestBase {
         t.unpause();
 
         vm.prank(WARDEN);
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
         assertEq(t.ownerOf(2), ALICE);
     }
 
@@ -88,7 +88,7 @@ contract AccessControlGapsTest is MroTestBase {
 
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.WalletCap.selector);
-        t.seed(2, 1, ALICE, _code(), _today(), KEY);
+        t.seed(2, 1, ALICE, _code(), _today(), KEY, false);
     }
 
     /// @dev Reusing a live id through the seed path, tested only for mint.
@@ -98,7 +98,7 @@ contract AccessControlGapsTest is MroTestBase {
 
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.TokenExists.selector, uint256(1)));
-        t.seed(1, 1, ALICE, _code(), _today(), KEY);
+        t.seed(1, 1, ALICE, _code(), _today(), KEY, false);
     }
 
     /// @dev A short bitmap through the seed path, tested only for mint. The
@@ -110,7 +110,7 @@ contract AccessControlGapsTest is MroTestBase {
 
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadCodeLength.selector, uint256(2)));
-        t.seed(2, 1, ALICE, hex"dead", _today(), KEY);
+        t.seed(2, 1, ALICE, hex"dead", _today(), KEY, false);
     }
 
     // -------------------------------------------------------------------
@@ -128,11 +128,11 @@ contract AccessControlGapsTest is MroTestBase {
 
         vm.prank(WARDEN);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        t.mint(2, ALICE, bytes32(uint256(2)), _code(), _today());
+        t.mint(2, ALICE, bytes32(uint256(2)), _code(), _today(), false);
 
         vm.prank(WARDEN);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        t.batchCheckIn(ids, days_);
+        t.batchCheckIn(ids, days_, _noBits(days_), _silent(days_));
 
         vm.prank(WARDEN);
         vm.expectRevert(Pausable.EnforcedPause.selector);
