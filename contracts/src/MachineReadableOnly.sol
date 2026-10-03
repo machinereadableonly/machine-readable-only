@@ -232,6 +232,11 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         return _effectiveRun(_tokens[id]);
     }
 
+    /// @notice ERC-7572 collection metadata, drawn by the renderer.
+    function contractURI() external view returns (string memory) {
+        return IRenderer(renderer).contractURI();
+    }
+
     /// @inheritdoc ERC721
     function tokenURI(uint256 id) public view override returns (string memory) {
         _requireOwned(id);
@@ -252,6 +257,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
     error RendererIsFrozen();
     event RendererFrozen(address renderer);
+    /// @notice ERC-7572: the collection metadata changed with the renderer.
+    event ContractURIUpdated();
 
     function setRenderer(address r) external onlyOwner {
         if (rendererFrozen) revert RendererIsFrozen();
@@ -336,6 +343,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (r.code.length == 0) revert RendererNotContract();
         renderer = r;
         emit RendererSet(r);
+        emit ContractURIUpdated();
     }
 
     function _setWarden(address w) internal {

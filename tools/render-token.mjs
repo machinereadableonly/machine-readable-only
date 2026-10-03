@@ -1030,6 +1030,7 @@ export function tokenUri(modules, want, size, state) {
   const json = "{"
     + `"name":"${TOKEN_NAME} %23${tokenId}${suffix}",`
     + `"description":"${DESCRIPTION}",`
+    + `"external_url":"https://machinereadableonly.com/t/${tokenId}",`
     + `"image":"data:image/svg+xml;base64,${image}",`
     + `"attributes":[`
     + [

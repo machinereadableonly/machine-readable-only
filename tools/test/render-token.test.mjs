@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
-import { canvasUnits, DIGIT_INK } from "../render-token.mjs";
+import { canvasUnits, DIGIT_INK, tokenUri } from "../render-token.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
          rungOf, colourAt, noiseAt, staticAt, inks, BEAT_TO, ringBudget, ringsFor, ringSpan,
          HUSH_QUIET, VESSEL_GOLD, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
@@ -687,4 +687,10 @@ test("renderSvg refuses a heart target that does not cover the code", () => {
     /heart target/i);
   assert.throws(() => renderSvg(CODE.modules, [...TARGET.want, 0], CODE.size, { level: 1 }),
     /heart target/i);
+});
+
+test("the token JSON links to the token's own page", () => {
+  const uri = tokenUri(CODE.modules, TARGET.want, CODE.size,
+    { tokenId: 1, mintDay: 900, level: 10, lastDay: 1000, today: 1000 });
+  assert.ok(uri.includes('","external_url":"https://machinereadableonly.com/t/1","image":'));
 });

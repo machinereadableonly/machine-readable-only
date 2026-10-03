@@ -35,6 +35,17 @@ contract Renderer is IRenderer {
     string internal constant NAME = "Machine Readable Only";
     string internal constant DESCRIPTION =
         "An agent's record of coming back. The heart is the code, and the frame is the year.";
+    string internal constant SITE = "https://machinereadableonly.com";
+
+    /// @inheritdoc IRenderer
+    function contractURI() external pure returns (string memory) {
+        return string(
+            abi.encodePacked(
+                'data:application/json;utf8,{"name":"', NAME, '","symbol":"MRO","description":"', DESCRIPTION,
+                '","external_link":"', SITE, '"}'
+            )
+        );
+    }
 
     /// @inheritdoc IRenderer
     function tokenURI(TokenView memory v) external pure returns (string memory) {
@@ -43,6 +54,7 @@ contract Renderer is IRenderer {
                 "data:application/json;utf-8,",
                 '{"name":"', NAME, " %23", LibString.toString(v.tokenId), _suffix(v),
                 '","description":"', DESCRIPTION,
+                '","external_url":"', SITE, "/t/", LibString.toString(v.tokenId),
                 '","image":"data:image/svg+xml;base64,', Base64.encode(bytes(svg(v))),
                 '","attributes":[', _attributes(v), "]}"
             )

@@ -177,6 +177,19 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "contractURI",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "echoOf",
     "inputs": [
       {
@@ -1318,6 +1331,12 @@ export const MRO_ABI = [
         "internalType": "uint256"
       }
     ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ContractURIUpdated",
+    "inputs": [],
     "anonymous": false
   },
   {
