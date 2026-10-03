@@ -605,6 +605,11 @@ export const MRO_ABI = [
         "name": "day",
         "type": "uint32",
         "internalType": "uint32"
+      },
+      {
+        "name": "expectedKeyId",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [],
@@ -1828,6 +1833,17 @@ export const MRO_ABI = [
     "type": "error",
     "name": "InvalidShortString",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "KeyChanged",
+    "inputs": [
+      {
+        "name": "parentId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",

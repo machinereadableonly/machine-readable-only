@@ -168,7 +168,8 @@ abstract contract MroTestBase is Test {
     function _seedFrom(uint256 parentId) internal returns (uint256 childId) {
         while (t.seedsAvailable(parentId) == 0) _warpToDay(t.today() + 365);
         childId = ++_nextSeedId;
+        bytes32 key = t.viewOf(parentId).agentKeyId;
         vm.prank(WARDEN);
-        t.seed(childId, parentId, address(uint160(0x5EED0000 + childId)), _code(), _today());
+        t.seed(childId, parentId, address(uint160(0x5EED0000 + childId)), _code(), _today(), key);
     }
 }

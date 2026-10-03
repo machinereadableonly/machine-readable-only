@@ -161,27 +161,11 @@ contract LifecycleTest is MroTestBase {
     // seed and the per-year budget
     // -------------------------------------------------------------------
 
-    /// @notice ACCEPTED BEHAVIOUR, pinned so it is not re-audited as a defect.
-    ///
-    /// @dev `rebind` takes any bytes32 with no proof the caller holds that key,
-    /// and `seedsAvailable` is keyed on the agent key, so a token owner CAN
-    /// point a token at another key's earned seed budget and spend it.
-    ///
-    /// This is a decided trust boundary, not an oversight. `seed` is
-    /// `onlyWarden`, and the Warden re-checks the RFC 9421 signature against
-    /// the CURRENT ON-CHAIN binding before calling -- the same trust boundary
-    /// as mint, check-in and marks. The rejected alternatives both fail worse:
-    /// EIP-712 proof-of-possession strands a token whose agent lost its key,
-    /// and Warden-only rebind means a token could never be rebound if the
-    /// Warden died.
-    ///
-    /// What this test pins for Plan 3: the Warden's re-check is FRONT-RUNNABLE.
-    /// Rebinding one block before the Warden's `seed` lands means the Warden
-    /// validated a binding that no longer holds. The Warden must therefore
-    /// submit `seed` with the key it expects and have the contract check it, or
-    /// the operator accepts the front-run knowingly. The Warden's re-check must
-    /// read the CHAIN, never its own database.
-    function test_rebindCanSpendAnotherKeysSeedBudget_acceptedTrustBoundary() public {
+    /// @notice `rebind` takes any key with no proof (a decided trust boundary),
+    /// so a token CAN be pointed at another key's seed budget. A rebind landing
+    /// between the Warden's signature check and its `seed` is refused: `seed`
+    /// carries the key the Warden verified, and the contract compares it.
+    function test_aRebindBeforeTheSeedLandsCannotSpendAnotherKeysBudget() public {
         bytes32 victimKey = bytes32(uint256(0x171c7));
         vm.prank(WARDEN);
         t.mint(2, ALICE, victimKey, _code(), _today());   // the victim, minted today
@@ -201,17 +185,20 @@ contract LifecycleTest is MroTestBase {
         t.rebind(3, victimKey);
         assertEq(t.seedsAvailable(3), 1, "token 3 now draws on the victim's budget");
 
-        // An honest Warden whose check ran before the rebind landed now seeds.
+        // The Warden verified Mallory's own key before the rebind landed.
+        uint32 day = _today();
+        bytes memory code = _code();
         vm.prank(WARDEN);
-        t.seed(77, 3, MALLORY, _code(), _today());
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.KeyChanged.selector, uint256(3)));
+        t.seed(77, 3, MALLORY, code, day, freshKey);
 
-        assertEq(t.seedsAvailable(2), 0, "and the victim's earned seed is spent");
+        assertEq(t.seedsAvailable(2), 1, "the victim's earned seed is untouched");
     }
 
     function test_seedRequiresAWholeParent() public {
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.ParentNotWhole.selector);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
     }
 
     function test_seedCreatesAChildWithTheParentsKeyAndNextGeneration() public {
@@ -221,7 +208,7 @@ contract LifecycleTest is MroTestBase {
         assertEq(t.seedsAvailable(1), 1);
 
         vm.prank(WARDEN);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
 
         assertEq(t.ownerOf(2), ALICE);
         assertEq(t.viewOf(2).generation, 1);
@@ -240,7 +227,7 @@ contract LifecycleTest is MroTestBase {
         _makeWhole(1);
         _warpOneYear();
         vm.prank(WARDEN);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
 
         uint32 day = t.today() + 1;
         _warpToDay(day);
@@ -255,19 +242,19 @@ contract LifecycleTest is MroTestBase {
         _makeWhole(1);
         _warpOneYear();
         vm.prank(WARDEN);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
 
         // The second seed in the same year has no budget.
         assertEq(t.seedsAvailable(1), 0);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.NoSeedAvailable.selector);
-        t.seed(3, 1, ALICE, _code(), _today());
+        t.seed(3, 1, ALICE, _code(), _today(), KEY);
 
         // A second year of tenure grants exactly one more.
         _warpOneYear();
         assertEq(t.seedsAvailable(1), 1);
         vm.prank(WARDEN);
-        t.seed(3, 1, ALICE, _code(), _today());
+        t.seed(3, 1, ALICE, _code(), _today(), KEY);
         assertEq(t.viewOf(1).seedsGiven, 2);
     }
 
@@ -277,7 +264,7 @@ contract LifecycleTest is MroTestBase {
         _makeWhole(1);
         _warpOneYear();
         vm.prank(WARDEN);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
 
         // The child is on the same key, so it sees the same exhausted budget
         // even once it is itself whole.
@@ -288,7 +275,7 @@ contract LifecycleTest is MroTestBase {
         _makeWhole(1);
         _warpOneYear();
         vm.expectRevert(MachineReadableOnly.NotWarden.selector);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
     }
 
     function test_seedRefusesARestingParent() public {
@@ -298,7 +285,7 @@ contract LifecycleTest is MroTestBase {
         t.rest(1);
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
     }
 
     function test_seedIsBlockedBySunsetAndBySupplyCap() public {
@@ -307,13 +294,13 @@ contract LifecycleTest is MroTestBase {
         t.setSupplyCap(1);
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.SupplyCap.selector);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
 
         t.setSupplyCap(100);
         t.sunset();
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.Sunset.selector);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
     }
 
     // -------------------------------------------------------------------
@@ -339,7 +326,7 @@ contract LifecycleTest is MroTestBase {
         assertEq(t.seedsAvailable(1), 0, "a key that never minted has earned nothing");
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.NoSeedAvailable.selector);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), strangerKey);
     }
 
     /// @dev The other half, and the reason the condition is `&&` and not `||`:

@@ -216,4 +216,30 @@ contract LineageTest is MroTestBase {
         assertTrue(vm.contains(uri, '{"trait_type":"Children","value":1}'), "and gave one seed");
         assertEq(t.echoOf(1), 0, "and inherited nothing itself");
     }
+
+    // -----------------------------------------------------------------
+    // The parent's key at the request
+    // -----------------------------------------------------------------
+
+    function test_seedRefusesAParentReboundSinceTheRequest() public {
+        _makeWhole(1);
+        while (t.seedsAvailable(1) == 0) _warpToDay(t.today() + 365);
+        vm.prank(ALICE);
+        t.rebind(1, bytes32(uint256(0xbeef)));
+        uint32 day = _today();
+        bytes memory code = _code();
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.KeyChanged.selector, uint256(1)));
+        t.seed(901, 1, ALICE, code, day, KEY);
+    }
+
+    function test_seedWithTheParentsCurrentKeyLands() public {
+        _makeWhole(1);
+        while (t.seedsAvailable(1) == 0) _warpToDay(t.today() + 365);
+        uint32 day = _today();
+        bytes memory code = _code();
+        vm.prank(WARDEN);
+        t.seed(901, 1, ALICE, code, day, KEY);
+        assertEq(t.viewOf(901).agentKeyId, KEY);
+    }
 }

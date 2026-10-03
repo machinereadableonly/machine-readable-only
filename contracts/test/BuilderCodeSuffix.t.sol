@@ -80,7 +80,7 @@ contract BuilderCodeSuffixTest is MroTestBase {
         while (t.seedsAvailable(1) == 0) _warpToDay(t.today() + 365);
         uint256 child = 901;
         _sameWithAndWithout(
-            abi.encodeCall(MachineReadableOnly.seed, (child, 1, address(uint160(0x5EED0000 + child)), _code(), _today())),
+            abi.encodeCall(MachineReadableOnly.seed, (child, 1, address(uint160(0x5EED0000 + child)), _code(), _today(), KEY)),
             child
         );
     }

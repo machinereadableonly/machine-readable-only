@@ -113,7 +113,7 @@ contract BoundsTest is MroTestBase {
         uint256 big = uint256(type(uint32).max) + 1;
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.IdTooLarge.selector, big));
-        t.seed(big, 1, ALICE, _code(), _today());
+        t.seed(big, 1, ALICE, _code(), _today(), KEY);
     }
 
     // -------------------------------------------------------------------

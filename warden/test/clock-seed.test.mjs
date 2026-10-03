@@ -29,6 +29,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
 import { CODE_BYTES } from "../tools/code-bytes.mjs";
+import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
 
 const FLOOR = DEPLOY_BLOCK[84532];
 const TODAY = 20_700;
@@ -51,8 +52,8 @@ function parentToken(q, { tokenId = 1, keyId = "k", owner = PARENT_OWNER } = {})
 
 /// Encoding is not decoration. On 2026-09-03 the Clock handed a base64url key
 /// id to a bytes32 parameter and every test still passed, because no double had
-/// ever tried to encode the call. `seed` takes no bytes32 at all, but it does
-/// take an address and a `bytes`, and this is what proves those are right.
+/// ever tried to encode the call. `seed` takes a bytes32 key, an address and a
+/// `bytes`, and this is what proves all three are right.
 function assertEncodable(functionName, args) {
   try {
     encodeFunctionData({ abi: MRO_ABI, functionName, args });
@@ -159,8 +160,9 @@ test("a queued seed is sent as seed(), not mint()", async () => {
   assert.equal(writer.sent.length, 1, "exactly one write");
   assert.equal(writer.sent[0].functionName, "seed", "a child is created by seed, never by mint");
   // The fifth argument is the day the seed was ASKED for (reserveChild records
-  // TODAY), not the day the Clock writes it -- the first-day fix, 2026-09-11.
-  assert.deepEqual(writer.sent[0].args, [2n, 1n, CHILD_OWNER, `0x${QR}`, TODAY]);
+  // TODAY), not the day the Clock writes it; the sixth is the key the agent
+  // signed the request with.
+  assert.deepEqual(writer.sent[0].args, [2n, 1n, CHILD_OWNER, `0x${QR}`, TODAY, keyIdToBytes32("k")]);
   assert.deepEqual(summary.seeded, [2]);
   assert.deepEqual(summary.droppedSeeds, []);
   assert.equal(q.getToken(2).status, "written");
@@ -198,6 +200,8 @@ for (const errorName of [
   "IdTooLarge",              // the child id is stored; the ceiling is constant
   "BadCodeLength",           // the stored bitmap's length; CODE_BYTES is constant
   "ERC721InvalidReceiver",   // `to` is stored, and the child can go nowhere else
+  "KeyChanged",              // the parent was rebound after the request
+  "BeforeDeploy",            // the stored day predates the contract
 ]) {
   test(`${errorName} drops the row and returns the budget`, async () => {
     const { q, writer } = seedRig({ fail: errorName });

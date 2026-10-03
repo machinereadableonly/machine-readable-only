@@ -75,7 +75,7 @@ contract TokenUriGoldenTest is MroTestBase {
         assertEq(t.seedsAvailable(5), 1);
 
         vm.prank(WARDEN);
-        t.seed(6, 5, ALICE, _code(), _today());
+        t.seed(6, 5, ALICE, _code(), _today(), otherKey);
         assertEq(t.viewOf(6).generation, 1);
         assertEq(t.viewOf(6).parent, 5);
 

@@ -822,6 +822,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
     error ParentNotWhole();
     error NoSeedAvailable();
+    /// The parent's key changed after the seed was asked for.
+    error KeyChanged(uint256 parentId);
 
     event Seeded(uint256 indexed parentId, uint256 indexed childId, uint32 generation);
 
@@ -843,7 +845,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// @param day The day the seed was asked for, as the Warden recorded it --
     /// the same rule and the same bounds as `mint`: a child must begin on the
     /// day it was made, not the day it was written.
-    function seed(uint256 childId, uint256 parentId, address to, bytes calldata code, uint32 day)
+    /// @param expectedKeyId The key the Warden verified when the seed was asked
+    /// for; a rebind since then refuses it.
+    function seed(uint256 childId, uint256 parentId, address to, bytes calldata code, uint32 day, bytes32 expectedKeyId)
         external
         onlyWarden
         whenNotPaused
@@ -851,6 +855,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     {
         Token storage p = _tokens[parentId];
         if (p.resting) revert Resting(parentId);
+        if (_agentKeyOf[parentId] != expectedKeyId) revert KeyChanged(parentId);
         if (p.level < 365) revert ParentNotWhole();
         // Same 32-bit ceiling as mint: seed is the other creation path.
         if (childId > type(uint32).max) revert IdTooLarge(childId);
@@ -861,7 +866,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         if (seedsAvailable(parentId) == 0) revert NoSeedAvailable();
         _checkCreationDay(day);
 
-        bytes32 key = _agentKeyOf[parentId];
+        bytes32 key = expectedKeyId;
         uint32 d = day;
 
         _tokens[childId] = Token({

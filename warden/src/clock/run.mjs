@@ -505,16 +505,13 @@ export async function runClock({
   // Nothing is sent once a write phase has aborted: NotWarden, Sunset and
   // EnforcedPause refuse `seed` for exactly the reasons they refuse `mint`.
   for (const s of noWrites() ? [] : q.pendingSeeds()) {
-    // FOUR arguments, and NO key id among them. The child inherits the parent's
-    // agent key on chain (`_agentKeyOf[childId] = key`), so unlike `mint` there
-    // is no bytes32 here for keyIdToBytes32 to get wrong -- but the address and
-    // the `bytes` still have to encode, which is what the suite's writer double
-    // checks against the real ABI.
+    // The last argument is the key the agent signed with when it asked; a
+    // rebind since refuses it as KeyChanged.
     const result = await writer.send(
       "seed",
       // The fifth argument is the day the seed was asked for -- the same
       // first-day rule as the mint above, and for the same reason.
-      [BigInt(s.tokenId), BigInt(s.parentId), s.toAddress, `0x${s.qr}`, s.day],
+      [BigInt(s.tokenId), BigInt(s.parentId), s.toAddress, `0x${s.qr}`, s.day, keyIdToBytes32(s.agentKeyId)],
       { label: `seed ${s.tokenId} from ${s.parentId}` }
     );
     if (result.ok) {
@@ -1017,6 +1014,11 @@ function isFinalMark(result) {
  *                         nowhere else. Dropping returns the year so the agent
  *                         can seed to an address that accepts ERC-721; keeping
  *                         delivers it nowhere, forever.
+ *   KeyChanged            the parent's key moved after the agent proved the old
+ *                         one. Only a new request, signed with the new key, can
+ *                         seed, so the year goes back for it.
+ *   BeforeDeploy          the stored day predates the contract's deploy day,
+ *                         which never moves.
  *
  * NOT permanent, and each for a reason:
  *   ParentNotWhole   THE BRIEF CALLED THIS PERMANENT AND THE CONTRACT SAYS
@@ -1054,6 +1056,11 @@ function isFinalSeed(result) {
     // the row is frozen and the chain's clock only moves forward, so no later
     // run can write it. Dropping hands the agent-year back to ask again.
     "StaleDay",
+    // The parent was rebound after the request: the key the agent proved is no
+    // longer the parent's, and only a new request under the new key can seed.
+    "KeyChanged",
+    // The recorded day predates the contract, and the deploy day never moves.
+    "BeforeDeploy",
   ].includes(result.errorName);
 }
 

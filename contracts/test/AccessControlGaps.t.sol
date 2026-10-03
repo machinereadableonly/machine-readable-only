@@ -42,7 +42,7 @@ contract AccessControlGapsTest is MroTestBase {
         t.pause();
         vm.prank(WARDEN);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
     }
 
     /// @dev CONTROL: unpausing lets the same call through, so the test above
@@ -54,7 +54,7 @@ contract AccessControlGapsTest is MroTestBase {
         t.unpause();
 
         vm.prank(WARDEN);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
         assertEq(t.ownerOf(2), ALICE);
     }
 
@@ -88,7 +88,7 @@ contract AccessControlGapsTest is MroTestBase {
 
         vm.prank(WARDEN);
         vm.expectRevert(MachineReadableOnly.WalletCap.selector);
-        t.seed(2, 1, ALICE, _code(), _today());
+        t.seed(2, 1, ALICE, _code(), _today(), KEY);
     }
 
     /// @dev Reusing a live id through the seed path, tested only for mint.
@@ -98,7 +98,7 @@ contract AccessControlGapsTest is MroTestBase {
 
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.TokenExists.selector, uint256(1)));
-        t.seed(1, 1, ALICE, _code(), _today());
+        t.seed(1, 1, ALICE, _code(), _today(), KEY);
     }
 
     /// @dev A short bitmap through the seed path, tested only for mint. The
@@ -110,7 +110,7 @@ contract AccessControlGapsTest is MroTestBase {
 
         vm.prank(WARDEN);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BadCodeLength.selector, uint256(2)));
-        t.seed(2, 1, ALICE, hex"dead", _today());
+        t.seed(2, 1, ALICE, hex"dead", _today(), KEY);
     }
 
     // -------------------------------------------------------------------
