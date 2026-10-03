@@ -259,11 +259,18 @@ contract CheckInTest is MroTestBase {
 
         // One day apart in level, so the only difference between the measured
         // calls is whether the credit lands on the finish line. Tokens 5 and 2
-        // take ordinary credits to 364; 3 and 4 both seal.
-        _growTo(5, 363);
-        _growTo(2, 363);
-        _growTo(3, 364);
-        _growTo(4, 364);
+        // take ordinary credits to 364; 3 and 4 both seal. Grown side by side,
+        // a window at a time, so none falls more than MAX_LAG days behind.
+        uint32 start = _today() + 1;
+        for (uint32 c = 0; c < 362; c += 30) {
+            uint32 m = 362 - c > 30 ? 30 : 362 - c;
+            _creditRun(5, start + c, m);
+            _creditRun(2, start + c, m);
+            _creditRun(3, start + c, m);
+            _creditRun(4, start + c, m);
+        }
+        _creditRun(3, start + 362, 1);
+        _creditRun(4, start + 362, 1);
 
         // Each token's next consecutive day. Read BEFORE the clock moves, and
         // credited as a late write where it has fallen behind -- legal, and it
@@ -388,23 +395,26 @@ contract CheckInTest is MroTestBase {
         }
         vm.stopPrank();
 
-        // Every token from level 1 to 364 in ONE batch: days d+1 .. d+363 for
-        // each, token-major, so each token's days ascend as the contract needs.
+        // Every token from level 1 to 364: days d+1 .. d+363 for each, one
+        // batch per 30-day window (no credit may be more than MAX_LAG days
+        // late), token-major, so each token's days ascend as the contract needs.
         uint32 d = t.today();
         uint32 grow = 363;
-        uint32 total = n * grow;
-        bytes memory growIds = new bytes(uint256(total) * 4);
-        uint32[] memory growDays = new uint32[](total);
-        for (uint32 i = 0; i < n; i++) {
-            for (uint32 k = 0; k < grow; k++) {
-                uint256 at = uint256(i) * grow + k;
-                _putId(growIds, at, first + i);
-                growDays[at] = d + 1 + k;
+        for (uint32 c = 0; c < grow; c += 30) {
+            uint32 m = grow - c > 30 ? 30 : grow - c;
+            bytes memory growIds = new bytes(uint256(n) * m * 4);
+            uint32[] memory growDays = new uint32[](uint256(n) * m);
+            for (uint32 i = 0; i < n; i++) {
+                for (uint32 k = 0; k < m; k++) {
+                    uint256 at = uint256(i) * m + k;
+                    _putId(growIds, at, first + i);
+                    growDays[at] = d + 1 + c + k;
+                }
             }
+            _warpToDay(d + c + m);
+            vm.prank(WARDEN);
+            t.batchCheckIn(growIds, growDays);
         }
-        _warpToDay(d + grow);
-        vm.prank(WARDEN);
-        t.batchCheckIn(growIds, growDays);
         assertEq(t.viewOf(first).level, 364, "setup must leave every token one day short");
 
         // The measured night: every token's 365th day, lowest id first.

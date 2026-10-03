@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan A1: the contract additions</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan A1: the contract additions</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<blockquote>
+<p>After completing any operator-only step, tell Claude so it can update memory
+immediately. Operator-only steps in this plan: approving it (which approves
+the two art changes and the four extra fixes named under &quot;Why&quot;). Nothing in
+A1 is pushed, deployed or re-created: the work stays on branch <code>plan-a</code>
+until Plan A3 deploys it.</p>
+</blockquote>
+<p><strong>Goal:</strong> The token contract carries every redeploy-only change ruled on
+2026-09-30 (rulings 2 and 3), the Renderer and its JavaScript mirror draw them,
+and the Warden and Clock speak the new interface -- all proven by tests, on a
+branch, with nothing deployed.</p>
+<p><strong>Why:</strong> The token contract can never change after the mainnet mint of token</p>
+<ol>
+<li>Ruling 3 put six additions into the one redeploy left, and ruling 2 kept
+<code>seed</code>&#39;s key check. Roadmap Plan A is too large for one plan, so it is split
+along its seams, one plan each, all on one branch and deployed once:</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Plan</th>
+<th>What</th>
+<th>Deploys?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>A1 (this)</strong></td>
+<td>Rulings 2 and 3, four small contract fixes, the Warden and Clock follow</td>
+<td>No</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>The daily question on chain: answer bits, key chain, <code>setSplitAnchor</code>, the three answer edges, the Clock&#39;s split, <code>verify-border</code></td>
+<td>No</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>Size and gas gates over both, the Base Sepolia redeploy, <code>adopt-deployment.sh</code>, re-pointing the test agent</td>
+<td>Yes, Sepolia</td>
+</tr>
+</tbody></table>
+<p><strong>What approving this plan also approves</strong> -- each is a choice, named here so
+it is made out loud:</p>
+<ol>
+<li><strong>Art: a rested token is drawn exactly as it was on its rest day, forever.</strong>
+Today resting restores the token&#39;s full colour however long it had been
+away (a token silent two years goes back to its top colour the moment it
+rests). Storing the rest day exists to fix that, so the image is frozen at
+that day under the same rules a live token follows.</li>
+<li><strong>Art: a sunset keeps the fallen-run colour.</strong> The same one rule
+(<code>_stopDay</code>) serves rest, sunset and a finished year, so a sunset token that
+slipped and came back keeps its fallen-run colour instead of dropping to the
+lower one. Renderer-only; flagged by the same review finding.</li>
+<li><strong>Four one-line contract fixes the review proved REAL</strong> and that only a
+redeploy can make: <code>rest</code> refuses a token already resting (it re-emitted a
+second rest day); <code>heartbeat</code> refuses after sunset; a finisher Mark record
+(ids 11-15) can be written once and never edited; <code>mint</code> and <code>seed</code> use
+<code>_mint</code>, not <code>_safeMint</code> (the Warden already refuses a recipient that cannot
+hold a token before payment, and the callback only let a recipient contract
+cost the Clock a failed transaction a night).</li>
+<li><strong>contractURI carries name, symbol, description and link, and no image.</strong>
+The token description is reused word for word. An image can be added by a
+renderer swap at any time until the renderer is frozen.</li>
+</ol>
+<p><strong>Architecture:</strong> All contract changes are in <code>MachineReadableOnly.sol</code>, plus
+<code>IRenderer</code> gaining <code>contractURI()</code> and <code>TokenView</code> gaining <code>restDay</code>. The
+Renderer gets one helper, <code>_stopDay</code>, used by both <code>_rung</code> and <code>_absence</code>, and
+the <code>external_url</code> field; <code>tools/render-token.mjs</code> mirrors both byte for byte.
+The Warden regenerates its ABI; the Clock sends the parent&#39;s key with <code>seed</code>
+and lets the chain&#39;s <code>StaleDay</code> condemn only the stale day&#39;s entries.</p>
+<p><strong>Tech Stack:</strong> Solidity 0.8.30 / Foundry 1.7.1 (via_ir), Node 24.14.1,
+<code>node:test</code>, viem.</p>
+<p><strong>Spec:</strong> <code>docs/reviews/2026-09-28/00-verification.md</code> (Contract section and
+Rulings 2-3), with the findings it cites in <code>14-mro-q1.md</code>, <code>15-mro-q2.md</code>,
+<code>19-mro-qver.md</code> and <code>38-mro-sver.md</code>; <code>docs/plans/2026-09-30-mro-rulings-roadmap.md</code>
+row A; ERC-7572 (Draft): <a href="https://eips.ethereum.org/EIPS/eip-7572">https://eips.ethereum.org/EIPS/eip-7572</a>, checked
+live 2026-10-03 -- <code>contractURI() returns (string)</code>, <code>event ContractURIUpdated()</code>
+SHOULD be emitted on update, and <code>data:application/json;utf8,{...}</code> is its
+on-chain form.</p>
+<h2>Global Constraints</h2>
+<ul>
+<li>Plain ASCII only in code, comments and docs.</li>
+<li>All four suites green before every commit: <code>cd contracts &amp;&amp; forge test</code>, and
+<code>npm test</code> in <code>tools/</code>, <code>warden/</code>, <code>client/</code>. Run them through
+<code>~/scripts/safe-build.sh</code>. Never pipe a gate into anything.</li>
+<li>Foundry needs <code>export PATH=$HOME/.foundry/bin:$PATH</code>; Node needs
+<code>source ~/.nvm/nvm.sh</code>. Use <code>/bin/grep</code>, never bare <code>grep</code>.</li>
+<li>The repository is PUBLIC: no absolute paths, no key ids, no real env values,
+no AI attribution in files or commit messages.</li>
+<li>Comments follow <code>~/.claude/rules/code-comments.md</code> and, in <code>contracts/src</code>,
+the lean-source rule: one short NatSpec line per item, no history.</li>
+<li>Files with a <code>// GENERATED by tools/&lt;script&gt;</code> header are never hand-edited:
+change the generator and re-run it. <code>warden/src/clock/abi.mjs</code> is regenerated
+with <code>cd warden &amp;&amp; node tools/gen-abi.mjs</code> after <code>forge build</code>.</li>
+<li><code>vm.expectRevert</code> matches the NEXT call: compute every argument (including
+any <code>t.</code> read) BEFORE it. Never measure gas around harness setup.</li>
+<li>Every new owner function and every new revert gets a test (project rule).</li>
+<li>Work on branch <code>plan-a</code>, created from <code>main</code>. Do NOT merge to <code>main</code> in A1:
+the live Warden runs the old contract, and its boot preflight would refuse a
+<code>viewOf</code> with a field it does not know.</li>
+<li><code>MAX_LAG</code> is 30 days, and one constant serves creation and check-ins.</li>
+</ul>
+<h2>Review Focus</h2>
+<ol>
+<li><strong>The lateness boundary:</strong> a check-in exactly 30 days behind <code>today()</code> is
+accepted; 31 is refused <code>StaleDay(day)</code> -- on BOTH the batch and the voucher
+path. Pinned in Task 1.</li>
+<li><strong>A batch carrying one stale day among fresh ones:</strong> the contract reverts
+the whole batch, and the Clock condemns only that day&#39;s entries and writes
+the rest. Pinned in Task 6.</li>
+<li><strong>A parent rebound between the seed request and the Clock&#39;s write:</strong> the
+chain refuses <code>KeyChanged(parentId)</code> before it spends any budget, and the
+Clock drops the row so the agent&#39;s year comes back. Pinned in Tasks 2 and 6.</li>
+<li><strong>Rest and sunset in either order, and a finished token that rests later:</strong>
+the earliest stop wins, and a finished token never pales by resting.
+Pinned in Task 5, in both languages.</li>
+<li><strong>The freeze is one-way and owner-only:</strong> a second freeze, a swap after it
+and a stranger&#39;s freeze are all refused; the constructor still sets the
+first renderer. Pinned in Task 3.</li>
+</ol>
+<hr>
+<h3>Task 1: The lateness floor and the deploy-day floor</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code> (constructor, <code>MAX_CREATION_LAG</code>, <code>_checkCreationDay</code>, <code>batchCheckIn</code>, <code>checkInWithVoucher</code>)</li>
+<li>Modify: <code>contracts/test/MroTestBase.sol</code> (<code>_makeWhole</code>, <code>_growTo</code>, new <code>_creditRun</code>)</li>
+<li>Create: <code>contracts/test/Floors.t.sol</code></li>
+<li>Modify: <code>contracts/test/Vouchers.t.sol</code> (one test)</li>
+<li>Modify: any existing test the floor turns red (see Step 6)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>uint32 public immutable DEPLOY_DAY</code>; <code>error BeforeDeploy(uint32 day)</code>;
+<code>StaleDay(uint32 day)</code> now also raised by both check-in paths;
+constant <code>MAX_LAG = 30</code> (renamed from <code>MAX_CREATION_LAG</code>);
+test helper <code>_creditRun(uint256 id, uint32 firstDay, uint32 n)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Branch</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">git switch -c plan-a main
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Write the failing tests</strong></li>
+</ul>
+<p><code>contracts/test/Floors.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {MroTestBase} from &quot;./MroTestBase.sol&quot;;
+
+/// @notice The two floors on a day: none before deployment, and no credit more
+/// than MAX_LAG days late.
+contract FloorsTest is MroTestBase {
+    function setUp() public {
+        _deployAndMintOne();
+    }
+
+    function test_aCheckInThirtyDaysLateIsAccepted() public {
+        uint32 d0 = _today();
+        _warpToDay(d0 + 31);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d0 + 1));
+        assertEq(t.viewOf(1).level, 2);
+    }
+
+    function test_aCheckInThirtyOneDaysLateIsRefused() public {
+        uint32 d0 = _today();
+        uint32 late = d0 + 1;
+        _warpToDay(d0 + 32);
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.StaleDay.selector, late));
+        t.batchCheckIn(_one(1), _days(late));
+    }
+
+    function test_deployDayIsTheDayOfDeployment() public {
+        vm.warp(86_400 * 5000 + 7);
+        MachineReadableOnly fresh = new MachineReadableOnly(address(r), WARDEN);
+        assertEq(fresh.DEPLOY_DAY(), 5000);
+    }
+
+    function test_aMintDatedBeforeDeploymentIsRefused() public {
+        vm.warp(86_400 * 5000 + 7);
+        MachineReadableOnly fresh = new MachineReadableOnly(address(r), WARDEN);
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.BeforeDeploy.selector, uint32(4999)));
+        fresh.mint(7, ALICE, bytes32(uint256(7)), _code(), 4999);
+    }
+
+    function test_aMintOnDeploymentDayIsAccepted() public {
+        vm.warp(86_400 * 5000 + 7);
+        MachineReadableOnly fresh = new MachineReadableOnly(address(r), WARDEN);
+        vm.prank(WARDEN);
+        fresh.mint(7, ALICE, bytes32(uint256(7)), _code(), 5000);
+        assertEq(fresh.viewOf(7).mintDay, 5000);
+    }
+}
+</code></pre>
+<p>In <code>contracts/test/Vouchers.t.sol</code>, beside the existing voucher tests (its
+<code>setUp</code> and <code>_sign(id, day)</code> already exist):</p>
+<pre><code class="language-solidity">    function test_aVoucherThirtyOneDaysLateIsRefused() public {
+        t.setVouchersEnabled(true);
+        uint32 d0 = _today();
+        uint32 late = d0 + 1;
+        _warpToDay(d0 + 32);
+        bytes memory sig = _sign(1, late);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.StaleDay.selector, late));
+        t.checkInWithVoucher(1, late, sig);
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run them and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path &#39;test/Floors.t.sol&#39; -vv</code> and
+<code>forge test --match-test test_aVoucherThirtyOneDaysLateIsRefused -vv</code>
+Expected: compile FAIL (<code>DEPLOY_DAY</code> and <code>BeforeDeploy</code> do not exist).
+Comment out the three deploy-day tests, re-run: the two thirty-one-day tests
+FAIL (no revert), the thirty-day test passes. Restore them.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Implement</strong></li>
+</ul>
+<p>In <code>MachineReadableOnly.sol</code>:</p>
+<pre><code class="language-solidity">    /// @notice The day this contract was deployed. Nothing may be dated before it.
+    uint32 public immutable DEPLOY_DAY;
+</code></pre>
+<p>In the constructor, before <code>lastWardenDay = today();</code>:</p>
+<pre><code class="language-solidity">        DEPLOY_DAY = today();
+</code></pre>
+<p>Replace the <code>StaleDay</code> / <code>MAX_CREATION_LAG</code> block and <code>_checkCreationDay</code>:</p>
+<pre><code class="language-solidity">    /// A day more than MAX_LAG days behind today().
+    error StaleDay(uint32 day);
+    /// A creation day before this contract existed.
+    error BeforeDeploy(uint32 day);
+
+    /// How late a mint, seed or check-in may be dated. Without it the Warden
+    /// could backdate days and write a year of history in one night.
+    uint32 internal constant MAX_LAG = 30;
+
+    /// @dev The bound on a creation day, shared by `mint` and `seed`.
+    function _checkCreationDay(uint32 day) internal view {
+        uint32 tday = today();
+        if (day &gt; tday) revert FutureDay(day);
+        if (day + MAX_LAG &lt; tday) revert StaleDay(day);
+        if (day &lt; DEPLOY_DAY) revert BeforeDeploy(day);
+    }
+</code></pre>
+<p>In <code>batchCheckIn</code>, after the <code>FutureDay</code> line:</p>
+<pre><code class="language-solidity">            if (day + MAX_LAG &lt; tday) revert StaleDay(day);
+</code></pre>
+<p>In <code>checkInWithVoucher</code>, replace <code>if (day &gt; today()) revert FutureDay(day);</code> with:</p>
+<pre><code class="language-solidity">        uint32 tday = today();
+        if (day &gt; tday) revert FutureDay(day);
+        if (day + MAX_LAG &lt; tday) revert StaleDay(day);
+</code></pre>
+<p><code>/bin/grep -rn MAX_CREATION_LAG contracts/ warden/ docs/</code> and rename every
+remaining mention to <code>MAX_LAG</code> (comments in <code>warden/src/clock/run.mjs</code> refer to it).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Rebuild the test helpers to credit 30 days per batch</strong></li>
+</ul>
+<p>In <code>MroTestBase.sol</code>, add above <code>_makeWhole</code>:</p>
+<pre><code class="language-solidity">    /// @dev Credit `n` consecutive days from `firstDay`, at most 30 per batch,
+    /// because the contract refuses a credit more than MAX_LAG days late.
+    /// Ends with the clock on the last credited day.
+    function _creditRun(uint256 id, uint32 firstDay, uint32 n) internal {
+        uint32 done = 0;
+        while (done &lt; n) {
+            uint32 m = n - done &gt; 30 ? 30 : n - done;
+            uint32[] memory ids = new uint32[](m);
+            uint32[] memory ds = new uint32[](m);
+            for (uint32 i = 0; i &lt; m; i++) {
+                ids[i] = uint32(id);
+                ds[i] = firstDay + done + i;
+            }
+            _warpToDay(firstDay + done + m - 1);
+            vm.prank(WARDEN);
+            t.batchCheckIn(_packed(ids), ds);
+            done += m;
+        }
+    }
+</code></pre>
+<p>Replace the bodies of <code>_makeWhole</code> and <code>_growTo</code> (keep their doc comments; the
+clock still ends 364 days on for <code>_makeWhole</code>, so the seed-budget arithmetic
+holds):</p>
+<pre><code class="language-solidity">    function _makeWhole(uint256 id) internal {
+        _creditRun(id, t.today() + 1, 364);
+        assertEq(t.viewOf(id).level, 365);
+    }
+</code></pre>
+<pre><code class="language-solidity">    function _growTo(uint256 id, uint32 target) internal {
+        uint32 have = t.viewOf(id).level;
+        if (have &gt;= target) return;
+        _creditRun(id, t.today() + 1, target - have);
+        assertEq(t.viewOf(id).level, target, &quot;_growTo did not reach its target&quot;);
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Run the whole contract suite and repair what the floor broke</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; ~/scripts/safe-build.sh forge test</code>
+Expected: the new tests PASS. Some existing tests FAIL with <code>StaleDay</code>: every
+one builds a long run of days for one token in a single <code>batchCheckIn</code>. Repair
+each by routing it through <code>_creditRun</code> / <code>_growTo</code> / <code>_makeWhole</code>, never by
+weakening an assertion. A test whose point IS a large single batch (a gas or
+size measurement) keeps its shape by spreading the batch across DIFFERENT
+tokens on the same day. Record every repaired file in the ledger. Re-run until
+green.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add contracts/
+git commit -m &quot;feat(contract): a 30-day lateness floor on check-ins and a deploy-day floor on creation&quot;
+</code></pre>
+<hr>
+<h3>Task 2: <code>seed</code> checks the parent&#39;s key</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code> (<code>seed</code>)</li>
+<li>Modify: <code>contracts/test/MroTestBase.sol</code> (<code>_seedFrom</code>)</li>
+<li>Modify: <code>contracts/test/Lineage.t.sol</code> (two tests), every other <code>t.seed(</code> call site
+(<code>/bin/grep -rn &quot;\.seed(&quot; contracts/test contracts/script</code>: 21 today)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>_checkCreationDay</code> from Task 1.</p>
+</li>
+<li><p>Produces: <code>seed(uint256 childId, uint256 parentId, address to, bytes code, uint32 day, bytes32 expectedKeyId)</code>;
+<code>error KeyChanged(uint256 parentId)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong> (in <code>Lineage.t.sol</code>)</p>
+</li>
+</ul>
+<pre><code class="language-solidity">    function test_seedRefusesAParentReboundSinceTheRequest() public {
+        _makeWhole(1);
+        while (t.seedsAvailable(1) == 0) _warpToDay(t.today() + 365);
+        vm.prank(ALICE);
+        t.rebind(1, bytes32(uint256(0xbeef)));
+        uint32 day = _today();
+        bytes memory code = _code();
+        vm.prank(WARDEN);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.KeyChanged.selector, uint256(1)));
+        t.seed(901, 1, ALICE, code, day, KEY);
+    }
+
+    function test_seedWithTheParentsCurrentKeyLands() public {
+        _makeWhole(1);
+        while (t.seedsAvailable(1) == 0) _warpToDay(t.today() + 365);
+        uint32 day = _today();
+        bytes memory code = _code();
+        vm.prank(WARDEN);
+        t.seed(901, 1, ALICE, code, day, KEY);
+        assertEq(t.viewOf(901).agentKeyId, KEY);
+    }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run them and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path test/Lineage.t.sol -vv</code>
+Expected: compile FAIL (<code>seed</code> takes five arguments; <code>KeyChanged</code> missing).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></li>
+</ul>
+<pre><code class="language-solidity">    /// The parent&#39;s key changed after the seed was asked for.
+    error KeyChanged(uint256 parentId);
+</code></pre>
+<p><code>seed</code> gains <code>bytes32 expectedKeyId</code> as its last parameter, a <code>@param</code> line
+(&quot;the key the Warden verified when the seed was asked for; a rebind since then
+refuses it&quot;), and directly after <code>if (p.resting) revert Resting(parentId);</code>:</p>
+<pre><code class="language-solidity">        if (_agentKeyOf[parentId] != expectedKeyId) revert KeyChanged(parentId);
+</code></pre>
+<p>Later in <code>seed</code>, <code>bytes32 key = _agentKeyOf[parentId];</code> becomes
+<code>bytes32 key = expectedKeyId;</code> (they are equal by now).</p>
+<p><code>_seedFrom</code> in <code>MroTestBase.sol</code> reads the key BEFORE the prank, since a call
+between <code>vm.prank</code> and <code>t.seed</code> would take the prank:</p>
+<pre><code class="language-solidity">        bytes32 key = t.viewOf(parentId).agentKeyId;
+        vm.prank(WARDEN);
+        t.seed(childId, parentId, address(uint160(0x5EED0000 + childId)), _code(), _today(), key);
+</code></pre>
+<p>Every other <code>t.seed(</code> call adds the parent&#39;s key as the last argument, read
+before any <code>vm.prank</code> / <code>vm.expectRevert</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the suite</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; ~/scripts/safe-build.sh forge test</code>
+Expected: all PASS, including both new tests.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add contracts/
+git commit -m &quot;fix(contract): seed refuses a parent whose key changed since the request&quot;
+</code></pre>
+<hr>
+<h3>Task 3: Rest once with its day, bestRunOf, freezeRenderer and three small fixes</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code>, <code>contracts/src/render/TokenView.sol</code></li>
+<li>Create: <code>contracts/test/RedeployFixes.t.sol</code></li>
+<li>Modify: <code>contracts/test/Lifecycle.t.sol</code> (<code>test_restIsIrreversible</code> repeat-rest lines), and
+every test that built a <code>TokenView</code> positionally or expected <code>_safeMint</code>&#39;s receiver revert (Step 5)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>TokenView.restDay</code> (uint32, directly after <code>resting</code>; 0 while not resting);
+<code>viewOf</code> fills it; <code>bestRunOf(uint256) returns (uint32)</code>;
+<code>freezeRenderer()</code>, <code>bool public rendererFrozen</code>, <code>error RendererIsFrozen()</code>,
+<code>event RendererFrozen(address renderer)</code>; <code>error FinisherRecordSet(uint8 upgradeId)</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<p><code>contracts/test/RedeployFixes.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Ownable} from &quot;@openzeppelin/contracts/access/Ownable.sol&quot;;
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {Ladder} from &quot;../src/Ladder.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+import {MroTestBase} from &quot;./MroTestBase.sol&quot;;
+
+contract RedeployFixesTest is MroTestBase {
+    function setUp() public {
+        _deployAndMintOne();
+    }
+
+    // rest
+
+    function test_restStoresItsDay() public {
+        _warpToDay(_today() + 9);
+        uint32 d = _today();
+        vm.prank(ALICE);
+        t.rest(1);
+        assertEq(t.viewOf(1).restDay, d);
+    }
+
+    function test_aSecondRestIsRefused() public {
+        vm.prank(ALICE);
+        t.rest(1);
+        vm.prank(ALICE);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
+        t.rest(1);
+    }
+
+    function test_restDayIsZeroWhileNotResting() public view {
+        assertEq(t.viewOf(1).restDay, 0);
+    }
+
+    // bestRunOf
+
+    function test_bestRunOfReadsTheLongestRunEver() public {
+        uint32 d0 = _today();
+        uint32[] memory ids = new uint32[](3);
+        uint32[] memory ds = new uint32[](3);
+        ids[0] = 1; ids[1] = 1; ids[2] = 1;
+        ds[0] = d0 + 1; ds[1] = d0 + 2; ds[2] = d0 + 5;
+        _warpToDay(d0 + 5);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_packed(ids), ds);
+        assertEq(t.viewOf(1).streak, 1, &quot;the run fell&quot;);
+        assertEq(t.bestRunOf(1), 3, &quot;the run of three is kept&quot;);
+    }
+
+    function test_bestRunOfAnUnmintedTokenIsZero() public view {
+        assertEq(t.bestRunOf(999), 0);
+    }
+
+    // heartbeat
+
+    function test_heartbeatIsRefusedAfterSunset() public {
+        t.sunset();
+        vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.Sunset.selector);
+        t.heartbeat();
+    }
+
+    // finisher records
+
+    function test_aFinisherRecordIsWrittenOnce() public {
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
+        t.setUpgrade(15, u[15]);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.FinisherRecordSet.selector, uint8(15)));
+        t.setUpgrade(15, u[15]);
+    }
+
+    function test_aLadderRecordCanStillBeEdited() public {
+        MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
+        t.setUpgrade(1, u[1]);
+        t.setUpgrade(1, u[1]);
+        assertTrue(t.upgradeOf(1).active);
+    }
+
+    // _mint
+
+    function test_mintToAContractWithoutAReceiverHookLands() public {
+        address noHook = address(r);
+        uint32 day = _today();
+        bytes memory code = _code();
+        vm.prank(WARDEN);
+        t.mint(2, noHook, bytes32(uint256(2)), code, day);
+        assertEq(t.ownerOf(2), noHook);
+    }
+
+    // freezeRenderer
+
+    function test_freezeRendererStopsEverySwap() public {
+        t.freezeRenderer();
+        assertTrue(t.rendererFrozen());
+        Renderer r2 = new Renderer();
+        vm.expectRevert(MachineReadableOnly.RendererIsFrozen.selector);
+        t.setRenderer(address(r2));
+        assertEq(t.renderer(), address(r));
+    }
+
+    function test_freezeRendererEmits() public {
+        vm.expectEmit(address(t));
+        emit MachineReadableOnly.RendererFrozen(address(r));
+        t.freezeRenderer();
+    }
+
+    function test_aSecondFreezeIsRefused() public {
+        t.freezeRenderer();
+        vm.expectRevert(MachineReadableOnly.RendererIsFrozen.selector);
+        t.freezeRenderer();
+    }
+
+    function test_onlyTheOwnerCanFreezeTheRenderer() public {
+        vm.prank(MALLORY);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
+        t.freezeRenderer();
+    }
+
+    function test_theRendererCanBeSwappedUntilFrozen() public {
+        Renderer r2 = new Renderer();
+        t.setRenderer(address(r2));
+        assertEq(t.renderer(), address(r2));
+    }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run them and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path test/RedeployFixes.t.sol -vv</code>
+Expected: compile FAIL (<code>restDay</code>, <code>bestRunOf</code>, <code>freezeRenderer</code>,
+<code>FinisherRecordSet</code>, <code>RendererIsFrozen</code> missing). After Step 3&#39;s TokenView
+field alone, <code>test_aSecondRestIsRefused</code>, <code>test_heartbeatIsRefusedAfterSunset</code>,
+<code>test_aFinisherRecordIsWrittenOnce</code> and <code>test_mintToAContractWithoutAReceiverHookLands</code>
+FAIL on behaviour -- note it in the ledger.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></li>
+</ul>
+<p><code>TokenView.sol</code>, directly after <code>bool resting;</code>:</p>
+<pre><code class="language-solidity">    uint32 restDay;      // the day the owner sealed it; 0 while not resting
+</code></pre>
+<p><code>MachineReadableOnly.sol</code>:</p>
+<pre><code class="language-solidity">    /// @dev The day each token was rested. Its own mapping because `Token` is full.
+    mapping(uint256 =&gt; uint32) internal _restDay;
+</code></pre>
+<p><code>viewOf</code>: <code>v.restDay = _restDay[id];</code> after <code>v.resting = s.resting;</code>.</p>
+<p><code>rest</code>:</p>
+<pre><code class="language-solidity">    function rest(uint256 id) external onlyTokenOwner(id) {
+        Token storage s = _tokens[id];
+        if (s.resting) revert Resting(id);
+        uint32 d = today();
+        s.resting = true;
+        _restDay[id] = d;
+        emit Rested(id, d, s.level, s.streak);
+        emit MetadataUpdate(id);
+    }
+</code></pre>
+<p><code>bestRunOf</code>, beside <code>echoOf</code>:</p>
+<pre><code class="language-solidity">    /// @notice The longest run this token has ever completed: what the earned Marks gate on.
+    function bestRunOf(uint256 id) external view returns (uint32) {
+        return _effectiveRun(_tokens[id]);
+    }
+</code></pre>
+<p><code>heartbeat</code> gains <code>notSunset</code>: <code>function heartbeat() external onlyWarden notSunset {}</code>
+(its NatSpec keeps &quot;deliberately NOT whenNotPaused&quot;, and adds &quot;refused once the
+piece has closed&quot;).</p>
+<p><code>setUpgrade</code>, after the <code>MarkIdOutOfRange</code> check:</p>
+<pre><code class="language-solidity">        // The place table is constant, so its readable record is written once.
+        if (upgradeId &gt;= FIRST_FINISHER_MARK &amp;&amp; _upgrades[upgradeId].active) {
+            revert FinisherRecordSet(upgradeId);
+        }
+</code></pre>
+<p>with <code>error FinisherRecordSet(uint8 upgradeId);</code> beside the other Mark errors.
+<code>Ladder._finisher</code> sets <code>active: true</code>, which is what the guard keys on.</p>
+<p><code>mint</code> and <code>seed</code>: <code>_safeMint(to, id)</code> becomes <code>_mint(to, id)</code> (and
+<code>_safeMint(to, childId)</code> becomes <code>_mint(to, childId)</code>).</p>
+<p>Freeze:</p>
+<pre><code class="language-solidity">    /// @notice True once the renderer can never be swapped again.
+    bool public rendererFrozen;
+
+    error RendererIsFrozen();
+    event RendererFrozen(address renderer);
+
+    /// @notice Make the current renderer permanent. Irreversible.
+    function freezeRenderer() external onlyOwner {
+        if (rendererFrozen) revert RendererIsFrozen();
+        rendererFrozen = true;
+        emit RendererFrozen(renderer);
+    }
+</code></pre>
+<p><code>setRenderer</code> becomes:</p>
+<pre><code class="language-solidity">    function setRenderer(address r) external onlyOwner {
+        if (rendererFrozen) revert RendererIsFrozen();
+        _setRenderer(r);
+    }
+</code></pre>
+<p>The constructor still calls <code>_setRenderer</code> directly.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the new file</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path test/RedeployFixes.t.sol -vv</code>
+Expected: 14 PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the suite and repair</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; ~/scripts/safe-build.sh forge test</code>
+Expected failures to repair, each recorded in the ledger:</p>
+<ul>
+<li><p><code>Lifecycle.t.sol</code> <code>test_restIsIrreversible</code>: the repeat rest it calls &quot;a
+harmless no-op&quot; now reverts; assert <code>Resting(1)</code> instead.</p>
+</li>
+<li><p>Any <code>TokenView(...)</code> built positionally (spike, fixtures, <code>GasBudget.t.sol</code>):
+add <code>restDay</code>. A GENERATED fixture is fixed in its generator in Task 5.</p>
+</li>
+<li><p>Any test expecting <code>ERC721InvalidReceiver</code> for a contract recipient: it now
+lands; assert the owner instead.</p>
+</li>
+<li><p>Any test writing a finisher record (11-15) twice: write it once.
+Re-run until green.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">git add contracts/
+git commit -m &quot;feat(contract): rest stores its day once, bestRunOf, freezeRenderer, and three small fixes&quot;
+</code></pre>
+<hr>
+<h3>Task 4: contractURI (ERC-7572) and a per-token <code>external_url</code></h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/render/IRenderer.sol</code>, <code>contracts/src/render/Renderer.sol</code>, <code>contracts/src/MachineReadableOnly.sol</code></li>
+<li>Modify: <code>tools/render-token.mjs</code> (the <code>tokenUri</code> JSON)</li>
+<li>Create: <code>contracts/test/ContractUri.t.sol</code></li>
+<li>Modify: <code>tools/test/render-token.test.mjs</code> (one test); regenerate goldens (Step 5)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>IRenderer.contractURI() external view returns (string memory)</code>;
+<code>MachineReadableOnly.contractURI() external view returns (string memory)</code>;
+<code>event ContractURIUpdated()</code> emitted by <code>_setRenderer</code>;
+token JSON key order <code>name, description, external_url, image, attributes</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<p><code>contracts/test/ContractUri.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+import {MroTestBase} from &quot;./MroTestBase.sol&quot;;
+
+contract ContractUriTest is MroTestBase {
+    string internal constant EXPECTED =
+        &#39;data:application/json;utf8,{&quot;name&quot;:&quot;Machine Readable Only&quot;,&quot;symbol&quot;:&quot;MRO&quot;,&#39;
+        &#39;&quot;description&quot;:&quot;An agent\&#39;s record of coming back. The heart is the code, and the frame is the year.&quot;,&#39;
+        &#39;&quot;external_link&quot;:&quot;https://machinereadableonly.com&quot;}&#39;;
+
+    function setUp() public {
+        _deployAndMintOne();
+    }
+
+    function test_contractURIIsTheCollectionJson() public view {
+        assertEq(t.contractURI(), EXPECTED);
+    }
+
+    function test_swappingTheRendererAnnouncesNewCollectionMetadata() public {
+        Renderer r2 = new Renderer();
+        vm.expectEmit(address(t));
+        emit MachineReadableOnly.ContractURIUpdated();
+        t.setRenderer(address(r2));
+    }
+
+    function test_aTokenLinksToItsOwnPage() public view {
+        string memory uri = t.tokenURI(1);
+        assertTrue(
+            vm.indexOf(uri, &#39;&quot;,&quot;external_url&quot;:&quot;https://machinereadableonly.com/t/1&quot;,&quot;image&quot;:&#39;) != type(uint256).max,
+            &quot;external_url missing or out of place&quot;
+        );
+    }
+}
+</code></pre>
+<p>In <code>tools/test/render-token.test.mjs</code> (use the file&#39;s existing <code>tokenUri</code>
+import and its existing default-state helper for a token):</p>
+<pre><code class="language-js">test(&quot;the token JSON links to the token&#39;s own page&quot;, () =&gt; {
+  const uri = tokenUri({ ...SOME_STATE, tokenId: 1 });
+  assert.ok(uri.includes(&#39;&quot;,&quot;external_url&quot;:&quot;https://machinereadableonly.com/t/1&quot;,&quot;image&quot;:&#39;));
+});
+</code></pre>
+<p>where <code>SOME_STATE</code> is the minimal state object that file&#39;s other <code>tokenUri</code>
+tests already pass.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run them and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd contracts &amp;&amp; forge test --match-path test/ContractUri.t.sol -vv</code>; <code>cd tools &amp;&amp; npm test</code>
+Expected: compile FAIL (<code>contractURI</code>, <code>ContractURIUpdated</code> missing); the JS test FAILS (no <code>external_url</code>).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement</strong></li>
+</ul>
+<p><code>IRenderer.sol</code>: add <code>function contractURI() external view returns (string memory);</code>
+and change the interface doc to &quot;Two calls: one token&#39;s image and metadata,
+and the collection&#39;s.&quot;</p>
+<p><code>Renderer.sol</code>:</p>
+<pre><code class="language-solidity">    string internal constant SITE = &quot;https://machinereadableonly.com&quot;;
+
+    /// @inheritdoc IRenderer
+    function contractURI() external pure returns (string memory) {
+        return string(
+            abi.encodePacked(
+                &#39;data:application/json;utf8,{&quot;name&quot;:&quot;&#39;, NAME, &#39;&quot;,&quot;symbol&quot;:&quot;MRO&quot;,&quot;description&quot;:&quot;&#39;, DESCRIPTION,
+                &#39;&quot;,&quot;external_link&quot;:&quot;&#39;, SITE, &#39;&quot;}&#39;
+            )
+        );
+    }
+</code></pre>
+<p>and in <code>tokenURI</code>, between the description and the image:</p>
+<pre><code class="language-solidity">                &#39;&quot;,&quot;external_url&quot;:&quot;&#39;, SITE, &quot;/t/&quot;, LibString.toString(v.tokenId),
+</code></pre>
+<p><code>MachineReadableOnly.sol</code>:</p>
+<pre><code class="language-solidity">    /// @notice ERC-7572 collection metadata, drawn by the renderer.
+    event ContractURIUpdated();
+
+    /// @notice ERC-7572 collection metadata.
+    function contractURI() external view returns (string memory) {
+        return IRenderer(renderer).contractURI();
+    }
+</code></pre>
+<p>and <code>_setRenderer</code> emits <code>ContractURIUpdated();</code> after <code>RendererSet(r)</code>.</p>
+<p><code>tools/render-token.mjs</code> <code>tokenUri</code>, after the description line:</p>
+<pre><code class="language-js">    + `&quot;external_url&quot;:&quot;https://machinereadableonly.com/t/${tokenId}&quot;,`
+</code></pre>
+<p>(The <code>tokenURI</code> prefix stays <code>;utf-8,</code>: Alchemy, the one consumer proven
+working, ingests it. <code>contractURI</code> uses the ERC&#39;s own <code>;utf8,</code>.)</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the new tests</strong></li>
+</ul>
+<p>Expected: 3 Solidity PASS; the JS test PASSES.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Regenerate every golden and run all suites</strong></li>
+</ul>
+<p>The tokenURI bytes moved, so pinned hashes and lengths move. Re-run each
+generator that pins a tokenURI or JSON (<code>/bin/grep -ln &quot;GENERATED by&quot; contracts/test/*.sol</code>
+names them; <code>TokenUriGolden.t.sol</code> and <code>RealTokenGas.t.sol</code> / <code>WorstCase.sol</code>
+pin by hand): re-run generators, and update the hand pins to the measured
+values, recording old and new in the ledger. Run all four suites.
+Expected: all PASS; tokenURI bytes for the worst case still under 24,000 and
+gas under 4,000,000 (report both).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add contracts/ tools/
+git commit -m &quot;feat(contract): contractURI (ERC-7572) and each token&#39;s external_url&quot;
+</code></pre>
+<hr>
+<h3>Task 5: The renderer reads the rest day</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/render/Renderer.sol</code> (<code>_absence</code>, <code>_rung</code>, new <code>_stopDay</code>)</li>
+<li>Modify: <code>tools/render-token.mjs</code> (<code>absenceOf</code>, <code>rungFor</code>, new <code>stopDay</code>, every caller passing <code>restDay</code>)</li>
+<li>Modify: the fixture generators that build a resting or sunset case (<code>tools/render-fixture.mjs</code>, and any other the suite names), then re-run them</li>
+<li>Create: <code>contracts/test/RestDay.t.sol</code></li>
+<li>Modify: <code>tools/test/render-token.test.mjs</code> (two tests); <code>contracts/test/RunHistory.t.sol</code> (sunset assertions that pinned the old rule)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>TokenView.restDay</code> (Task 3).</p>
+</li>
+<li><p>Produces: JS <code>stopDay({ lastDay, today, resting, restDay, sunset, sunsetDay, whole })</code>;
+<code>rungFor</code> and <code>absenceOf</code> accept <code>restDay</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong></p>
+</li>
+</ul>
+<p><code>contracts/test/RestDay.t.sol</code>:</p>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {MroTestBase} from &quot;./MroTestBase.sol&quot;;
+
+/// @notice A seal stops the picture where it stood, under the live rules.
+contract RestDayTest is MroTestBase {
+    function setUp() public {
+        _deployAndMintOne();
+        _growTo(1, 10);
+    }
+
+    function test_restFreezesThePictureAsItWasOnTheRestDay() public {
+        _warpToDay(t.today() + 40);
+        string memory before = r.svg(t.viewOf(1));
+        vm.prank(ALICE);
+        t.rest(1);
+        assertEq(r.svg(t.viewOf(1)), before, &quot;resting changed the picture&quot;);
+        _warpToDay(t.today() + 400);
+        assertEq(r.svg(t.viewOf(1)), before, &quot;a rested token kept paling&quot;);
+    }
+
+    function test_restAfterSunsetChangesNothing() public {
+        _warpToDay(t.today() + 5);
+        t.sunset();
+        _warpToDay(t.today() + 40);
+        string memory before = r.svg(t.viewOf(1));
+        vm.prank(ALICE);
+        t.rest(1);
+        assertEq(r.svg(t.viewOf(1)), before, &quot;the earlier stop, the sunset, must win&quot;);
+    }
+
+    function test_aFinishedTokenDoesNotPaleByRestingLater() public {
+        _growTo(1, 365);
+        string memory before = r.svg(t.viewOf(1));
+        _warpToDay(t.today() + 200);
+        vm.prank(ALICE);
+        t.rest(1);
+        assertEq(r.svg(t.viewOf(1)), before);
+    }
+}
+</code></pre>
+<p>In <code>tools/test/render-token.test.mjs</code> (import <code>rungFor</code>, <code>absenceOf</code>, <code>stopDay</code>):</p>
+<pre><code class="language-js">test(&quot;a rested token is drawn as it was on its rest day, forever&quot;, () =&gt; {
+  const rested = { streak: 10, lastDay: 1000, resting: true, restDay: 1040 };
+  const liveThen = { streak: 10, lastDay: 1000, today: 1040 };
+  assert.equal(rungFor({ ...rested, today: 1040 }), rungFor(liveThen));
+  assert.equal(rungFor({ ...rested, today: 9999 }), rungFor(liveThen));
+  assert.equal(absenceOf({ ...rested, today: 9999 }), 40);
+});
+
+test(&quot;the earliest stop wins, and a finished token stops at its last day&quot;, () =&gt; {
+  const base = { lastDay: 1000, today: 5000 };
+  assert.equal(stopDay({ ...base, sunset: true, sunsetDay: 1100, resting: true, restDay: 1200 }), 1100);
+  assert.equal(stopDay({ ...base, sunset: true, sunsetDay: 1300, resting: true, restDay: 1200 }), 1200);
+  assert.equal(stopDay({ ...base, whole: true, resting: true, restDay: 1200 }), 1000);
+  assert.equal(stopDay(base), 5000);
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run them and watch them fail</strong></li>
+</ul>
+<p>Expected: <code>test_restFreezesThePictureAsItWasOnTheRestDay</code> and
+<code>test_restAfterSunsetChangesNothing</code> FAIL (rest restores the colour); the
+finished-token test passes already (a CONTROL: it must stay green). The JS tests
+FAIL (<code>stopDay</code> is not exported).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Implement in Solidity</strong></li>
+</ul>
+<pre><code class="language-solidity">    /// @dev The day the picture stops moving: the last credited day once whole,
+    /// else the earliest of the rest day, the piece&#39;s sunset day and today.
+    function _stopDay(TokenView memory v) private pure returns (uint32 at) {
+        if (v.level &gt;= FrameGeometry.DAY_CELLS) return v.lastDay;
+        at = v.today;
+        if (v.sunset &amp;&amp; v.sunsetDay &lt; at) at = v.sunsetDay;
+        if (v.resting &amp;&amp; v.restDay &lt; at) at = v.restDay;
+    }
+</code></pre>
+<p><code>_absence</code> becomes:</p>
+<pre><code class="language-solidity">    function _absence(TokenView memory v) private pure returns (uint256) {
+        uint32 end = _stopDay(v);
+        return end &gt; v.lastDay ? end - v.lastDay : 0;
+    }
+</code></pre>
+<p><code>_rung</code> loses the resting early return, the sunset branch and the <code>whole</code> /
+<code>at</code> lines; it opens with <code>uint32 at = _stopDay(v);</code> and keeps the
+live / fell logic below unchanged. Trim both doc comments to one line each
+saying they follow <code>_stopDay</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Implement in JavaScript</strong></li>
+</ul>
+<pre><code class="language-js">/** The day the picture stops moving. MUST mirror Renderer._stopDay. */
+export function stopDay({ lastDay, today, resting = false, restDay = 0, sunset = false, sunsetDay = 0, whole = false }) {
+  if (whole) return lastDay;
+  let at = today;
+  if (sunset &amp;&amp; sunsetDay &lt; at) at = sunsetDay;
+  if (resting &amp;&amp; restDay &lt; at) at = restDay;
+  return at;
+}
+
+export function absenceOf(s) {
+  const end = stopDay(s);
+  return end &gt; s.lastDay ? end - s.lastDay : 0;
+}
+
+export function rungFor(s) {
+  const at = stopDay(s);
+  const live = lapsedRung(s.streak, s.lastDay, at);
+  if (!s.fellRun) return live;
+  const cap = Math.max(0, rungOf(s.fellRun) - 1);
+  const fell = Math.min(lapsedRung(s.fellRun, s.fellDay, at), cap);
+  return Math.max(fell, live);
+}
+</code></pre>
+<p>Thread <code>restDay = 0</code> through every state destructuring in <code>render-token.mjs</code>
+that carries <code>resting</code> (the renderer state near line 674, <code>tokenUri</code> near 983)
+and pass it to <code>rungFor</code> and <code>absenceOf</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Regenerate fixtures and run all four suites</strong></li>
+</ul>
+<p>Add <code>restDay</code> to the fixture generators&#39; cases (a resting case rests on a
+stated day; pick the day the case&#39;s <code>today</code> already holds, so cases that were
+unlapsed stay so), re-run every generator, and run all four suites. Tests that
+pinned the OLD rule (a rested lapsed token drawn at full colour, a sunset
+dropping the fallen run) are updated to the new rule and each is named in the
+ledger. Expected: all PASS, Solidity and JS byte-identical.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add contracts/ tools/
+git commit -m &quot;feat(render): a rested or sunset token is drawn as it stood on the day it stopped&quot;
+</code></pre>
+<hr>
+<h3>Task 6: The Warden and the Clock follow</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Regenerate: <code>warden/src/clock/abi.mjs</code></li>
+<li>Modify: <code>warden/src/clock/run.mjs</code> (seed send, <code>isFinalSeed</code>, the mint pass&#39;s <code>StaleDay</code> branch, the F6 receiver branch)</li>
+<li>Modify: <code>warden/src/clock/batch.mjs</code> (<code>ENTRY_ERRORS</code>)</li>
+<li>Modify: <code>warden/test/clock-seed.test.mjs</code>, a check-in batch test file (<code>/bin/grep -ln writeCheckInChunk warden/test</code>), and any test double that encodes <code>viewOf</code> without <code>restDay</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: the Task 1-5 ABI.</p>
+</li>
+<li><p>Produces: the Clock sends <code>seed(..., day, keyIdToBytes32(agentKeyId))</code>;
+<code>KeyChanged</code> and <code>BeforeDeploy</code> drop a seed row; <code>StaleDay</code> condemns one day&#39;s check-in entries.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Regenerate the ABI</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">cd contracts &amp;&amp; forge build &amp;&amp; cd ../warden &amp;&amp; node tools/gen-abi.mjs
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Write the failing tests</strong></li>
+</ul>
+<p><code>clock-seed.test.mjs</code>: the happy-path assertion becomes</p>
+<pre><code class="language-js">  assert.deepEqual(writer.sent[0].args, [2n, 1n, CHILD_OWNER, `0x${QR}`, TODAY, keyIdToBytes32(&quot;k&quot;)]);
+</code></pre>
+<p>(import <code>keyIdToBytes32</code> from <code>../src/mcp/keyId.mjs</code>), and the permanent list
+gains two entries:</p>
+<pre><code class="language-js">  &quot;KeyChanged&quot;,              // the parent was rebound after the request
+  &quot;BeforeDeploy&quot;,            // the stored day predates the contract
+</code></pre>
+<p>In the check-in batch test file, using its existing writer double and entry
+shape:</p>
+<pre><code class="language-js">test(&quot;a StaleDay refusal condemns that day&#39;s entries and writes the rest&quot;, async () =&gt; {
+  // Two tokens on a stale day, one on a fresh day. The chain refuses the
+  // stale day by number, as the contract does.
+  const entries = [
+    { tokenId: 1, day: 100 }, { tokenId: 2, day: 100 }, { tokenId: 3, day: 140 },
+  ];
+  const writer = refusingWriter((sent) =&gt;
+    sent.some((e) =&gt; e.day === 100) ? { errorName: &quot;StaleDay&quot;, errorArgs: [100n] } : null);
+  const result = await writeCheckInChunk(writer, entries, OPTS);
+  assert.deepEqual(result.written.map((e) =&gt; e.tokenId), [3]);
+  assert.deepEqual(result.dropped.map((d) =&gt; [d.entry.tokenId, d.reason]), [[1, &quot;StaleDay&quot;], [2, &quot;StaleDay&quot;]]);
+});
+</code></pre>
+<p><code>refusingWriter</code> and <code>OPTS</code> stand for that file&#39;s existing double and options;
+use their real names.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run them and watch them fail</strong></li>
+</ul>
+<p>Run: <code>cd warden &amp;&amp; npm test</code>
+Expected: the seed args test FAILS (five args), the two new permanent-list
+tests FAIL (row kept), the StaleDay test FAILS (unknown error, run aborts or
+bisects to nothing).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Implement</strong></li>
+</ul>
+<p><code>run.mjs</code> seed send:</p>
+<pre><code class="language-js">      [BigInt(s.tokenId), BigInt(s.parentId), s.toAddress, `0x${s.qr}`, s.day, keyIdToBytes32(s.agentKeyId)],
+</code></pre>
+<p>and replace the &quot;FOUR arguments, and NO key id&quot; comment with one line: &quot;The
+last argument is the key the agent signed with when it asked; a rebind since
+refuses it as KeyChanged.&quot; <code>isFinalSeed</code> gains <code>&quot;KeyChanged&quot;</code> and
+<code>&quot;BeforeDeploy&quot;</code>, each with a one-line reason. The mint pass&#39;s <code>StaleDay</code>
+branch also takes <code>BeforeDeploy</code>:
+<code>if (result.errorName === &quot;StaleDay&quot; || result.errorName === &quot;BeforeDeploy&quot;)</code>.</p>
+<p>The F6 branch (&quot;AN UNNAMED REVERT IS USUALLY THE RECIPIENT&#39;S OWN CODE&quot;) reads a
+<code>_safeMint</code> callback that no longer exists: delete that branch and its test,
+keep the plain failure line. Keep the Warden&#39;s pre-payment receiver check (F5).</p>
+<p><code>batch.mjs</code> <code>ENTRY_ERRORS</code> gains:</p>
+<pre><code class="language-js">  // More than MAX_LAG days late: that day can never land, the others can.
+  StaleDay: { by: &quot;day&quot; },
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run all four suites</strong></li>
+</ul>
+<p>Expected: all PASS. Any warden test double that encodes a <code>viewOf</code> return
+fails on the missing <code>restDay</code> until given <code>restDay: 0</code>; fix each.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/
+git commit -m &quot;feat(clock): seed carries the parent&#39;s key, and a stale check-in day is dropped alone&quot;
+</code></pre>
+<hr>
+<h3>Task 7: Gates, figures and the runbook</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Modify: <code>contracts/test/WorstCase.sol</code> (re-pinned figures), <code>warden/src/clock/run.mjs:28</code> (per-entry gas)</p>
+</li>
+<li><p>Modify: <code>warden/DEPLOY.md</code> (and re-render <code>.html</code>): <code>freezeRenderer</code> exists and is NOT called; finisher records are written once by the deploy script</p>
+</li>
+<li><p>Modify: the <code>gas-budget</code> memory (figures stay out of memory; record only what changed and where it lives)</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Size and strict deploy (Hard Rule 7)</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">cd contracts &amp;&amp; forge build --sizes
+bash script/anvil-size-check.sh
+</code></pre>
+<p>Expected: <code>MachineReadableOnly</code> and <code>Renderer</code> both show POSITIVE margin under
+24,576 bytes; the strict-limit anvil deploy prints non-empty <code>cast code</code>.
+Record both margins.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Gas and bytes</strong></li>
+</ul>
+<pre><code class="language-bash">cd contracts &amp;&amp; forge test --match-path test/RealTokenGas.t.sol -vv
+</code></pre>
+<p>Expected: the worst token under 4,000,000 gas and 24,000 bytes; the pins in
+<code>WorstCase.sol</code> match what it prints (they were re-pinned in Tasks 4-5).
+Report the 1M / 5 KB target as MISSED.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: The Clock&#39;s per-entry figure</strong></li>
+</ul>
+<p><code>/bin/grep -rn &quot;30,896\|30896&quot; contracts/test warden</code> finds the test that
+measures <code>batchCheckIn</code> per entry. Run it; if the figure moved (the lateness
+check adds a comparison per entry), update <code>run.mjs:28</code> and whatever chunk
+size it derives, with the measured numbers.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: DEPLOY.md</strong></li>
+</ul>
+<p>Add to the deploy section, in the runbook&#39;s own style: <code>freezeRenderer</code> is
+built and must NOT be called (ruling 3); the finisher Mark records 11-15 are
+written once by the deploy script and cannot be edited after; <code>seed</code> now takes
+the parent&#39;s key. Re-render with <code>~/scripts/render-md-to-html.js warden/DEPLOY.md</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: All four suites, then commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add contracts/ warden/
+git commit -m &quot;chore: re-pin size and gas figures after the contract additions; runbook notes&quot;
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Final review, then STOP</strong></li>
+</ul>
+<p>Run the whole-branch review (<code>git merge-base main plan-a</code> to <code>plan-a</code>). Fix
+Critical and Important findings with a failing test first. Then STOP: report to
+the operator. <code>plan-a</code> is NOT merged to <code>main</code> and nothing is pushed or
+deployed; Plan A2 continues on the same branch.</p>
+<h2>Self-review</h2>
+<ul>
+<li><strong>Spec coverage:</strong> ruling 2 <code>seed</code> key -- Task 2; ruling 3 contractURI and
+external_url -- Task 4; freezeRenderer, bestRunOf, the rest day -- Task 3 (and
+its drawing, Task 5); DEPLOY_DAY floor and lateness floor -- Task 1; &quot;the
+Clock passes the key to seed, and drops and flags a credit older than 30
+days&quot; -- Task 6; size gate -- Task 7. The strict-limit deploy on Base Sepolia
+and <code>adopt-deployment.sh</code> are A3 by the split above. <code>applyMark</code> is
+untouched (ruling 2).</li>
+<li><strong>Placeholders:</strong> Steps that repair existing tests describe the rule rather
+than every file, because which tests break is learned by running the suite;
+each repair is ledgered.</li>
+<li><strong>Names:</strong> <code>MAX_LAG</code>, <code>DEPLOY_DAY</code>, <code>BeforeDeploy</code>, <code>StaleDay</code>, <code>KeyChanged</code>,
+<code>restDay</code>, <code>_stopDay</code> / <code>stopDay</code>, <code>RendererIsFrozen</code>, <code>RendererFrozen</code>,
+<code>FinisherRecordSet</code>, <code>ContractURIUpdated</code> are used identically in every task.</li>
+</ul>
+</body>
+</html>

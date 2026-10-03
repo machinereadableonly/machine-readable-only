@@ -124,6 +124,16 @@ contract VouchersTest is MroTestBase {
         assertEq(t.viewOf(1).lastDay, t.today(), "lastDay was never corrupted");
     }
 
+    function test_aVoucherThirtyOneDaysLateIsRefused() public {
+        t.setVouchersEnabled(true);
+        uint32 d0 = _today();
+        uint32 late = d0 + 1;
+        _warpToDay(d0 + 32);
+        bytes memory sig = _sign(1, late);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.StaleDay.selector, late));
+        t.checkInWithVoucher(1, late, sig);
+    }
+
     function test_setVouchersEnabledRevertsForANonOwner() public {
         vm.prank(MALLORY);
         vm.expectRevert();
@@ -152,7 +162,7 @@ contract VouchersTest is MroTestBase {
     /// year, on the one path the operator is not watching.
     function test_aVoucherCannotCreditAFinishedToken() public {
         t.setVouchersEnabled(true);
-        _fillTheYear();
+        _makeWhole(1);
         assertEq(t.viewOf(1).level, 365, "the year is complete");
 
         uint32 d = t.viewOf(1).lastDay + 1;
@@ -161,22 +171,6 @@ contract VouchersTest is MroTestBase {
         vm.prank(MALLORY);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.AlreadyFinished.selector, uint256(1)));
         t.checkInWithVoucher(1, d, sig);
-    }
-
-    /// @dev `MroTestBase._makeWhole` cannot be used here: it pranks the base's
-    /// WARDEN constant, and this suite's Warden is an address it holds the key
-    /// for. Same 364 consecutive days, same one call.
-    function _fillTheYear() internal {
-        uint32 d = t.today();
-        uint32[] memory ids = new uint32[](364);
-        uint32[] memory ds = new uint32[](364);
-        for (uint32 i = 0; i < 364; i++) {
-            ids[i] = 1;
-            ds[i] = d + 1 + i;
-        }
-        _warpToDay(d + 364);
-        vm.prank(wardenAddr);
-        t.batchCheckIn(_packed(ids), ds);
     }
 
     function test_vouchersAreBlockedBySunset() public {

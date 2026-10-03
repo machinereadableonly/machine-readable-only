@@ -107,57 +107,44 @@ abstract contract MroTestBase is Test {
         if (target > block.timestamp) vm.warp(target);
     }
 
-    /// @dev Put a token at an arbitrary level by checking it in repeatedly is
-    /// far too slow, so the budget tests warp the clock and check in once per
-    /// needed day instead. 365 check-ins is affordable in a test; a decade is
-    /// not, which is why seedsAvailable is asserted directly.
-    /// @dev Moved here from Lifecycle.t.sol so a second test file (the golden
-    /// tokenURI test) can share it rather than keep a second copy.
-    /// @dev It ADVANCES THE CLOCK by 364 days, which it must, because a day can
-    /// no longer be credited before the chain reaches it. The seed-budget tests
-    /// depend on that figure: they warp a further year and expect a budget of
-    /// exactly 1, which holds at 364 (729 days of tenure) and would flip to 2
-    /// at 366 (731). Changing this count changes those tests' arithmetic -- they
-    /// will fail loudly rather than drift, but they will fail.
-    /// @dev IT ALSO FINISHES THE TOKEN, since 2026-09-23: the credit that
-    /// reaches 365 gives it a place and one of the five finisher Marks, so the
-    /// first token a test makes whole comes back wearing bit 15 and ordinal 1,
-    /// and it can never be credited again.
-    function _makeWhole(uint256 id) internal {
-        uint32 d = t.today();
-        uint32[] memory ids = new uint32[](364);
-        uint32[] memory ds = new uint32[](364);
-        for (uint32 i = 0; i < 364; i++) {
-            ids[i] = uint32(id);
-            ds[i] = d + 1 + i;
+    /// @dev Credit `n` consecutive days from `firstDay`, at most 30 per batch,
+    /// because the contract refuses a credit more than MAX_LAG days late.
+    /// Ends with the clock on the last credited day.
+    function _creditRun(uint256 id, uint32 firstDay, uint32 n) internal {
+        address w = t.warden();
+        uint32 done = 0;
+        while (done < n) {
+            uint32 m = n - done > 30 ? 30 : n - done;
+            uint32[] memory ids = new uint32[](m);
+            uint32[] memory ds = new uint32[](m);
+            for (uint32 i = 0; i < m; i++) {
+                ids[i] = uint32(id);
+                ds[i] = firstDay + done + i;
+            }
+            _warpToDay(firstDay + done + m - 1);
+            vm.prank(w);
+            t.batchCheckIn(_packed(ids), ds);
+            done += m;
         }
-        bytes memory packed;
-        for (uint32 i = 0; i < 364; i++) packed = abi.encodePacked(packed, ids[i]);
-        _warpToDay(d + 364);
-        vm.prank(WARDEN);
-        t.batchCheckIn(packed, ds);
+    }
+
+    /// @dev Make a token whole: 364 more days, ending with the clock 364 days
+    /// on. The seed-budget tests depend on that figure: they warp a further
+    /// year and expect a budget of exactly 1, which holds at 364 (729 days of
+    /// tenure) and would flip to 2 at 366. It also FINISHES the token, so it
+    /// comes back wearing a finisher Mark and can never be credited again.
+    function _makeWhole(uint256 id) internal {
+        _creditRun(id, t.today() + 1, 364);
         assertEq(t.viewOf(id).level, 365);
     }
 
-    /// @dev Credit days until `id` sits at exactly `target` level, in ONE
-    /// batchCheckIn. Same shape as `_makeWhole` and same reason: a day cannot
-    /// be credited before the chain reaches it, so the clock is warped to the
-    /// last day of the run BEFORE the call. A no-op if the token is already at
+    /// @dev Credit days until `id` sits at exactly `target` level, ending with
+    /// the clock on the last credited day. A no-op if the token is already at
     /// or past `target`.
     function _growTo(uint256 id, uint32 target) internal {
         uint32 have = t.viewOf(id).level;
         if (have >= target) return;
-        uint32 n = target - have;
-        uint32 d = t.today();
-        uint32[] memory ids = new uint32[](n);
-        uint32[] memory ds = new uint32[](n);
-        for (uint32 i = 0; i < n; i++) {
-            ids[i] = uint32(id);
-            ds[i] = d + 1 + i;
-        }
-        _warpToDay(d + n);
-        vm.prank(WARDEN);
-        t.batchCheckIn(_packed(ids), ds);
+        _creditRun(id, t.today() + 1, target - have);
         assertEq(t.viewOf(id).level, target, "_growTo did not reach its target");
     }
 

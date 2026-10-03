@@ -98,18 +98,7 @@ contract TokenUriGoldenTest is MroTestBase {
     /// @dev The worst case from Phase 0 is the day BEFORE the heart seals.
     /// This is the contract-level version of the gas budget the spike measured.
     function test_worstCaseTokenUriStaysInsideTheHardLimit() public {
-        // Drive the token to level 364 the cheap way: one call, many days.
-        uint32 d = t.today();
-        uint32[] memory ds = new uint32[](363);
-        bytes memory packed;
-        for (uint32 i = 0; i < 363; i++) {
-            ds[i] = d + 1 + i;
-            packed = abi.encodePacked(packed, uint32(1));
-        }
-        _warpToDay(d + 363);
-        vm.prank(WARDEN);
-        t.batchCheckIn(packed, ds);
-        assertEq(t.viewOf(1).level, 364);
+        _growTo(1, 364);
 
         uint256 before = gasleft();
         string memory uri = t.tokenURI(1);

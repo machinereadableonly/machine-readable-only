@@ -92,6 +92,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// @notice The last day the Warden wrote anything at all. This is what
     /// `sunsetByAbsence` measures.
     uint32 public lastWardenDay;
+    /// @notice The day this contract was deployed. Nothing may be dated before it.
+    uint32 public immutable DEPLOY_DAY;
     /// @notice How many tokens have finished their year. The next finisher's
     /// place is this plus one.
     uint32 public finishers;
@@ -177,6 +179,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         _setWarden(warden_);
         supplyCap = 10_000;
         walletCap = 20;
+        DEPLOY_DAY = today();
         // Deployment counts as a write. Left at zero, the gap from day zero
         // already exceeds ABSENCE_DAYS and anyone could close the piece at once.
         lastWardenDay = today();
@@ -388,20 +391,21 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// @dev The day a token's year is complete. Equal to FrameGeometry.DAY_CELLS
     /// in the renderer; a test pins the two together.
     uint32 internal constant FINISH_LEVEL = 365;
-    /// A creation day more than MAX_CREATION_LAG days behind today().
+    /// A day more than MAX_LAG days behind today().
     error StaleDay(uint32 day);
+    /// A creation day before this contract existed.
+    error BeforeDeploy(uint32 day);
 
-    /// How far behind `today()` a mint or seed may be dated. Without a floor, a
-    /// Warden could backdate a mint and credit every day since, fabricating a
-    /// year of history in one night.
-    uint32 internal constant MAX_CREATION_LAG = 30;
+    /// How late a mint, seed or check-in may be dated. Without it the Warden
+    /// could backdate days and write a year of history in one night.
+    uint32 internal constant MAX_LAG = 30;
 
-    /// @dev The one bound on a creation day, shared by `mint` and `seed`: not
-    /// after today, and not more than MAX_CREATION_LAG days before it.
+    /// @dev The bound on a creation day, shared by `mint` and `seed`.
     function _checkCreationDay(uint32 day) internal view {
         uint32 tday = today();
         if (day > tday) revert FutureDay(day);
-        if (day + MAX_CREATION_LAG < tday) revert StaleDay(day);
+        if (day + MAX_LAG < tday) revert StaleDay(day);
+        if (day < DEPLOY_DAY) revert BeforeDeploy(day);
     }
     error LengthMismatch();
     error Resting(uint256 id);
@@ -526,6 +530,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
             // where a day index belongs would set lastDay far past any real day
             // and revert every later check-in forever, with no admin reset.
             if (day > tday) revert FutureDay(day);
+            if (day + MAX_LAG < tday) revert StaleDay(day);
             if (day <= s.lastDay) revert DayNotAdvanced(id);
 
             _credit(id, s, day);
@@ -601,7 +606,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
         // Bounded above for the same reason as batchCheckIn: a signed voucher
         // for a nonsense future day would brick the token permanently.
-        if (day > today()) revert FutureDay(day);
+        uint32 tday = today();
+        if (day > tday) revert FutureDay(day);
+        if (day + MAX_LAG < tday) revert StaleDay(day);
         if (day <= s.lastDay) revert DayNotAdvanced(id);
 
         _credit(id, s, day);

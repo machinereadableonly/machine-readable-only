@@ -114,30 +114,11 @@ contract RealTokenGasTest is MroTestBase {
     // Building a real token
     // -----------------------------------------------------------------------
 
-    /// @dev Credit `n` CONSECUTIVE days to `id`, which is the only way a real
-    /// token's level and run go up. In chunks, because `batchCheckIn` takes one
-    /// day per entry and the chain must have reached each day before it can be
-    /// credited -- so a decade is ten warps and ten calls, not one.
-    ///
-    /// Consecutive is load-bearing: `_credit` raises the run only when the day
-    /// is exactly `lastDay + 1`. A gap is a LAPSE, which is a different token
-    /// and is measured separately below.
+    /// @dev Credit `n` CONSECUTIVE days to `id` from its last day. Consecutive
+    /// is load-bearing: `_credit` raises the run only when the day is exactly
+    /// `lastDay + 1`. A gap is a LAPSE, which is measured separately below.
     function _creditRun(uint32 id, uint32 n) internal {
-        uint32 done;
-        while (done < n) {
-            uint32 batch = n - done > 364 ? 364 : n - done;
-            uint32 from = t.viewOf(id).lastDay + 1;
-            uint32[] memory ds = new uint32[](batch);
-            uint32[] memory ids = new uint32[](batch);
-            for (uint32 i = 0; i < batch; i++) {
-                ds[i] = from + i;
-                ids[i] = id;
-            }
-            _warpToDay(from + batch - 1);
-            vm.prank(WARDEN);
-            t.batchCheckIn(_packed(ids), ds);
-            done += batch;
-        }
+        _creditRun(id, t.viewOf(id).lastDay + 1, n);
     }
 
     /// @dev Apply the maximal legal set through the REAL `applyMark`, which

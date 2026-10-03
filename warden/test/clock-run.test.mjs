@@ -359,7 +359,7 @@ test("a mint whose id cannot be identified on chain is left queued", async () =>
   assert.ok(alerts.some((a) => /could not be identified/.test(a)));
 });
 
-// StaleDay: the day the agent paid is more than MAX_CREATION_LAG behind the
+// StaleDay: the day the agent paid is more than MAX_LAG behind the
 // chain, so this mint can never land -- the contract will refuse the same day
 // every night. It used to fall through to "stays queued" with one ordinary
 // alert a night and a clean exit. The agent has PAID, so it is a stuck mint:

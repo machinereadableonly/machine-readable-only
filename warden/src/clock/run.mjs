@@ -418,7 +418,7 @@ export async function runClock({
       continue;
     }
     // STALEDAY NEVER CLEARS FOR THIS ROW. The day the agent paid is more than
-    // MAX_CREATION_LAG behind the chain, and it only falls further behind, so
+    // MAX_LAG behind the chain, and it only falls further behind, so
     // the contract refuses the same argument every night. The agent has PAID:
     // same treatment as a mint blocked by somebody else's token -- left queued
     // for a human, never closed, and counted so the run fails.
@@ -990,7 +990,7 @@ function isFinalMark(result) {
  * `_checkCreationDay`, and each is here or below the line for a stated reason.
  * `StaleDay` joined 2026-09-11 with the first-day fix: a seed's day is frozen in
  * its row and the chain's today() only moves forward, so a day more than
- * MAX_CREATION_LAG behind can never become writable. `FutureDay` cannot fire
+ * MAX_LAG behind can never become writable. `FutureDay` cannot fire
  * here -- the day is recorded when the seed is asked for, so it is never ahead.
  *
  * PERMANENT, because no later run can clear it:
@@ -1050,7 +1050,7 @@ function isFinalSeed(result) {
     "IdTooLarge",
     "BadCodeLength",
     "ERC721InvalidReceiver",
-    // The seed's recorded day is more than MAX_CREATION_LAG behind today() --
+    // The seed's recorded day is more than MAX_LAG behind today() --
     // the row is frozen and the chain's clock only moves forward, so no later
     // run can write it. Dropping hands the agent-year back to ask again.
     "StaleDay",

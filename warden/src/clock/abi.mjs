@@ -37,6 +37,19 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "DEPLOY_DAY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "acceptOwnership",
     "inputs": [],
     "outputs": [],
@@ -1648,6 +1661,17 @@ export const MRO_ABI = [
     "type": "error",
     "name": "BadVoucher",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BeforeDeploy",
+    "inputs": [
+      {
+        "name": "day",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
   },
   {
     "type": "error",

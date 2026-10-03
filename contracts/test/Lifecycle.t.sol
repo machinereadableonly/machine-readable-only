@@ -350,12 +350,12 @@ contract LifecycleTest is MroTestBase {
     /// Needs its own deployment: the shared fixture warps to day 1000 before
     /// minting, so day zero is unreachable from it.
     function test_aKeyWhoseFirstMintWasDayZeroStillEarnsItsBudget() public {
+        // Day 0 is the first 86,400 seconds of the epoch, and setUp has
+        // already warped to day 1000, so wind the clock back BEFORE deploying:
+        // nothing may be dated before the deploy day.
+        vm.warp(1);
         Renderer r2 = new Renderer();
         MachineReadableOnly t2 = new MachineReadableOnly(address(r2), WARDEN);
-
-        // Day 0 is the first 86,400 seconds of the epoch, and setUp has
-        // already warped to day 1000, so wind the clock back to reach it.
-        vm.warp(1);
         assertEq(t2.today(), 0, "the fixture must mint on day zero for this to test anything");
         vm.prank(WARDEN);
         t2.mint(1, ALICE, KEY, _code(), _today());
