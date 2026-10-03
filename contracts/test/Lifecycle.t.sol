@@ -152,9 +152,10 @@ contract LifecycleTest is MroTestBase {
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
         t.batchCheckIn(_one(1), _days(tomorrow));
 
+        // Resting again is refused: a second Rested event would name a second day.
         vm.prank(MALLORY);
+        vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.Resting.selector, uint256(1)));
         t.rest(1);
-        assertTrue(t.viewOf(1).resting, "and resting again is a harmless no-op");
     }
 
     // -------------------------------------------------------------------

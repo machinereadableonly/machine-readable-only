@@ -70,6 +70,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// @dev Days the line had run when this token was seeded. Its own mapping
     /// because `Token` is EXACTLY full at 256 bits. Written once, in `seed`.
     mapping(uint256 => uint32) internal _echo;
+    /// @dev The day each token was rested. Its own mapping because `Token` is full.
+    mapping(uint256 => uint32) internal _restDay;
 
     /// @dev One mint per key ever. Binding is unlimited, so `rebind` can move a
     /// token to a new key but can never resurrect a mint.
@@ -167,8 +169,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     ///
     /// Deliberately NOT `whenNotPaused`: a pause outlasting `ABSENCE_DAYS`
     /// would otherwise force the ending with no way to speak against it. It
-    /// does not reopen a closed piece -- `isSunset` is one-way.
-    function heartbeat() external onlyWarden {}
+    /// does not reopen a closed piece -- `isSunset` is one-way -- and is
+    /// refused once the piece has closed.
+    function heartbeat() external onlyWarden notSunset {}
 
     constructor(address renderer_, address warden_)
         ERC721("Machine Readable Only", "MRO")
@@ -207,6 +210,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         v.parent = _parentOf[id];
         v.echo = _echo[id];
         v.resting = s.resting;
+        v.restDay = _restDay[id];
         v.sunset = isSunset;
         v.sunsetDay = sunsetDay;
         v.fellRun = s.fellRun;
@@ -221,6 +225,11 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// token was seeded. 0 for a founding token.
     function echoOf(uint256 id) public view returns (uint32) {
         return _echo[id];
+    }
+
+    /// @notice The longest run this token has ever completed: what the earned Marks gate on.
+    function bestRunOf(uint256 id) external view returns (uint32) {
+        return _effectiveRun(_tokens[id]);
     }
 
     /// @inheritdoc ERC721
@@ -238,7 +247,23 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     // Dials
     // ---------------------------------------------------------------------
 
-    function setRenderer(address r) external onlyOwner { _setRenderer(r); }
+    /// @notice True once the renderer can never be swapped again.
+    bool public rendererFrozen;
+
+    error RendererIsFrozen();
+    event RendererFrozen(address renderer);
+
+    function setRenderer(address r) external onlyOwner {
+        if (rendererFrozen) revert RendererIsFrozen();
+        _setRenderer(r);
+    }
+
+    /// @notice Make the current renderer permanent. Irreversible.
+    function freezeRenderer() external onlyOwner {
+        if (rendererFrozen) revert RendererIsFrozen();
+        rendererFrozen = true;
+        emit RendererFrozen(renderer);
+    }
     function setWarden(address w) external onlyOwner { _setWarden(w); }
 
     /// @dev THE BAND IS SIXTEEN DIGITS WIDE, so this dial stops at 65,535.
@@ -378,7 +403,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
             mintedTo[to] += 1;
         }
 
-        _safeMint(to, id);
+        _mint(to, id);
         emit Minted(id, keyId);
     }
 
@@ -640,6 +665,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     error BadVariant(uint8 got);
     /// Ids 11-15 are given by finishing and can never be asked for.
     error MarkNotRequestable(uint8 upgradeId);
+    /// A finisher Mark's record (11-15) is written once and never edited.
+    error FinisherRecordSet(uint8 upgradeId);
 
     /// @dev The variant is part of what was bought, so it belongs in the event.
     /// Not indexed: nobody filters by shape.
@@ -678,6 +705,10 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// Mark.
     function setUpgrade(uint8 upgradeId, Upgrade calldata u) external onlyOwner {
         if (upgradeId == 0 || upgradeId > MAX_MARK_ID) revert MarkIdOutOfRange(upgradeId);
+        // The place table is constant, so its readable record is written once.
+        if (upgradeId >= FIRST_FINISHER_MARK && _upgrades[upgradeId].active) {
+            revert FinisherRecordSet(upgradeId);
+        }
         // THE TWO INVARIANTS A SINGLE ENTRY CAN BREAK ON ITS OWN. A Mark that
         // excludes itself can never be applied, because the moment it lands its
         // own bit satisfies its own exclusion; a Mark that requires itself can
@@ -811,8 +842,11 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// a sealed token can still be owned and traded, which is the point.
     function rest(uint256 id) external onlyTokenOwner(id) {
         Token storage s = _tokens[id];
+        if (s.resting) revert Resting(id);
+        uint32 d = today();
         s.resting = true;
-        emit Rested(id, today(), s.level, s.streak);
+        _restDay[id] = d;
+        emit Rested(id, d, s.level, s.streak);
         emit MetadataUpdate(id);
     }
 
@@ -890,7 +924,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
             mintedTo[to] += 1;
         }
 
-        _safeMint(to, childId);
+        _mint(to, childId);
         emit Seeded(parentId, childId, p.generation + 1);
         emit MetadataUpdate(parentId);
     }

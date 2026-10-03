@@ -24,6 +24,6 @@ pragma solidity ^0.8.30;
 /// re-measured 2026-09-26 when the band lost its row of air (DigitBand.MIN_BAND),
 /// which moved the canvas from 91 modules to 89.
 library WorstCase {
-    uint256 internal constant LARGEST_TOKEN_GAS = 3_539_773;
+    uint256 internal constant LARGEST_TOKEN_GAS = 3_540_213;
     uint256 internal constant LARGEST_TOKEN_BYTES = 22_158;
 }

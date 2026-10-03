@@ -117,6 +117,7 @@ contract HeartbeatTest is MroTestBase {
 
         uint32 closedOn = t.sunsetDay();
         vm.prank(WARDEN);
+        vm.expectRevert(MachineReadableOnly.Sunset.selector);
         t.heartbeat();
 
         assertTrue(t.isSunset(), "sunset is one-way");

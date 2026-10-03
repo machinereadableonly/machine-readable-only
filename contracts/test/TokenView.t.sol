@@ -22,6 +22,7 @@ contract TokenViewTest is Test {
             parent: 88,
             echo: 913,
             resting: false,
+            restDay: 0,
             sunset: false,
             sunsetDay: 0,
             fellRun: 0,

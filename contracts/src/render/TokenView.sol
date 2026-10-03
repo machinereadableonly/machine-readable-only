@@ -18,6 +18,7 @@ struct TokenView {
                          // 0 for a founding token. Sealed at the seed and
                          // never written again.
     bool resting;        // owner sealed it: the image is final and never pales
+    uint32 restDay;      // the day the owner sealed it; 0 while not resting
     bool sunset;         // operator closed the piece: same freeze, piece-wide
     uint32 sunsetDay;    // the day the piece closed; 0 while it is open
     uint16 fellRun;      // the run that most recently ended; 0 if none ever has

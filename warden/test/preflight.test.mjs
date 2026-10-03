@@ -149,8 +149,10 @@ const fixture = (name) =>
 /// The 2026-09-06 deployment's token 1, as the chain returned it. SEVENTEEN
 /// static fields: that contract predates the lineage `echo`.
 const DEPLOYED_17 = fixture("viewof-token1-deployed.hex");
-/// The EIGHTEEN-field shape this branch defines, token 7, frozen.
+/// The EIGHTEEN-field shape of the 2026-09-26 deployment, token 7, frozen.
 const POST_ECHO_18 = fixture("viewof-post-echo.hex");
+/// The NINETEEN-field shape this branch defines, token 7, frozen.
+const POST_REST_19 = fixture("viewof-post-restday.hex");
 
 const CONTRACT = "0x" + "22".repeat(20);
 /// An endpoint with a provider API key in the path, as a managed provider
@@ -164,10 +166,10 @@ const answering = (result) => async () => ({
 
 test("verifyDecoder returns the decoded view when the shapes agree", async () => {
   const view = await verifyDecoder({
-    rpcUrl: RPC, contract: CONTRACT, tokenId: 7, fetchImpl: answering(POST_ECHO_18),
+    rpcUrl: RPC, contract: CONTRACT, tokenId: 7, fetchImpl: answering(POST_REST_19),
   });
   assert.equal(Number(view.tokenId), 7);
-  assert.equal(typeof view.echo, "number", "the field the deployed contract does not have");
+  assert.equal(typeof view.restDay, "number", "the field the deployed contract does not have");
 });
 
 test("verifyDecoder REFUSES on a contract whose TokenView has moved", async () => {
@@ -179,6 +181,13 @@ test("verifyDecoder REFUSES on a contract whose TokenView has moved", async () =
       assert.ok(err.message.includes(CONTRACT), "and which deployment it disagreed with");
       return true;
     }
+  );
+});
+
+test("verifyDecoder REFUSES the eighteen-field contract live before this branch", async () => {
+  await assert.rejects(
+    verifyDecoder({ rpcUrl: RPC, contract: CONTRACT, tokenId: 7, fetchImpl: answering(POST_ECHO_18) }),
+    /cannot decode viewOf/
   );
 });
 
@@ -195,7 +204,7 @@ test("verifyDecoder refuses an address with no contract code at all", async () =
 // one equality catches a return whose fields have slid.
 test("verifyDecoder refuses a return that decodes but reports another token", async () => {
   await assert.rejects(
-    verifyDecoder({ rpcUrl: RPC, contract: CONTRACT, tokenId: 1, fetchImpl: answering(POST_ECHO_18) }),
+    verifyDecoder({ rpcUrl: RPC, contract: CONTRACT, tokenId: 1, fetchImpl: answering(POST_REST_19) }),
     /decoded, but reported tokenId 7/
   );
 });
@@ -227,7 +236,7 @@ test("a transient outage that clears is not a refusal", async () => {
   const fetchImpl = async (...args) => {
     calls += 1;
     if (calls < 3) throw new Error("ECONNREFUSED");
-    return answering(POST_ECHO_18)(...args);
+    return answering(POST_REST_19)(...args);
   };
   const view = await verifyDecoder({
     rpcUrl: RPC, contract: CONTRACT, tokenId: 7, fetchImpl, sleep: noSleep, log: () => {},

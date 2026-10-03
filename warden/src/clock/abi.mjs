@@ -135,6 +135,25 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "bestRunOf",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "checkInWithVoucher",
     "inputs": [
       {
@@ -249,6 +268,13 @@ export const MRO_ABI = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "freezeRenderer",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -502,6 +528,19 @@ export const MRO_ABI = [
         "name": "",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "rendererFrozen",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -1075,6 +1114,11 @@ export const MRO_ABI = [
             "internalType": "bool"
           },
           {
+            "name": "restDay",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
             "name": "sunset",
             "type": "bool",
             "internalType": "bool"
@@ -1430,6 +1474,19 @@ export const MRO_ABI = [
         "type": "bytes32",
         "indexed": true,
         "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RendererFrozen",
+    "inputs": [
+      {
+        "name": "renderer",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -1809,6 +1866,17 @@ export const MRO_ABI = [
   },
   {
     "type": "error",
+    "name": "FinisherRecordSet",
+    "inputs": [
+      {
+        "name": "upgradeId",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "FutureDay",
     "inputs": [
       {
@@ -1992,6 +2060,11 @@ export const MRO_ABI = [
   {
     "type": "error",
     "name": "ParentNotWhole",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RendererIsFrozen",
     "inputs": []
   },
   {
