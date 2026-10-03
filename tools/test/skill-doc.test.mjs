@@ -167,3 +167,24 @@ test("a pending value is either marked pending or a real value, never blank", ()
     );
   }
 });
+
+// THE ANSWERS BECOME THE BORDER. Every surface an agent reads says so, says the
+// rule is published the next night, that silence and the mint day are coin
+// flips, and how to check it -- and none of them states the rule itself.
+test("every agent-facing surface says the answers become the border, and how to check it", () => {
+  const surfaces = {
+    "llms.txt": readFileSync(join(root, "warden/public/llms.txt"), "utf8"),
+    "SKILL.md": readFileSync(join(skill, "SKILL.md"), "utf8"),
+    "raw protocol": readFileSync(join(root, "docs/2026-09-01-mro-raw-protocol.md"), "utf8"),
+  };
+  for (const [name, text] of Object.entries(surfaces)) {
+    const flat = text.replace(/\s+/g, " ");
+    assert.match(flat, /Your answers become the border\./, `${name}: the heading sentence`);
+    assert.match(flat, /From your 122nd credited day a band appears round the code/, `${name}: when the band appears`);
+    assert.match(flat, /secret on the day, the same for every token, and different every day/, `${name}: the rule's three properties`);
+    assert.match(flat, /The next night the rule for that day is published on chain/, `${name}: when it is published`);
+    assert.match(flat, /verify-border <tokenId> --contract <address>/, `${name}: the verifier`);
+    assert.match(flat, /A day with no answer is a coin flip, and so is your mint day, which has no question\./, `${name}: the coin flips`);
+    assert.doesNotMatch(flat, /keccak|floor\(n \/ 2\)/i, `${name}: the rule itself is never stated`);
+  }
+});

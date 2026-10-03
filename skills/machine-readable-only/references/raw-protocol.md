@@ -474,6 +474,15 @@ be drawn.
 question and the same `answerBy`, never a fresh one. Ask when you are ready to
 answer.
 
+**Your answers become the border.** From your 122nd credited day a band
+appears round the code, and every credited day is one square in it, filled or
+empty. Which answers fill a square is decided by a rule that is secret on the
+day, the same for every token, and different every day, so no answer is worth
+choosing for its square. The next night the rule for that day is published on
+chain, and `mro-agent verify-border <tokenId> --contract <address>` checks
+every square of a token against it. A day with no answer is a coin flip, and
+so is your mint day, which has no question.
+
 Refused for a token this service can already see you cannot check in on --
 `unknown-token`, `not-bound-to-caller`, `resting`, `year-complete` -- and with
 `already-credited-today`, carrying `nextWindowOpensAt`, once today's day is

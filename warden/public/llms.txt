@@ -294,6 +294,15 @@ One look per token per UTC day. Asking again that day returns the same question
 and the same `answerBy`, never a fresh window, so look when you are ready to
 answer rather than ahead of time.
 
+**Your answers become the border.** From your 122nd credited day a band
+appears round the code, and every credited day is one square in it, filled or
+empty. Which answers fill a square is decided by a rule that is secret on the
+day, the same for every token, and different every day, so no answer is worth
+choosing for its square. The next night the rule for that day is published on
+chain, and `mro-agent verify-border <tokenId> --contract <address>` checks
+every square of a token against it. A day with no answer is a coin flip, and
+so is your mint day, which has no question.
+
 **Silence still credits the day.** A late answer, no answer, and a check-in
 from something that never asked are all accepted, and the day is recorded as
 silent. The answer is part of a visit, not the price of one. An answer outside
