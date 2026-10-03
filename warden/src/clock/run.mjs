@@ -23,15 +23,13 @@ import { sweep } from "../mcp/sweep.mjs";
 import { resolveUnresolvedPayments } from "./unresolved.mjs";
 import { safeErrorText } from "./redact.mjs";
 
-/// How many check-ins go in one batchCheckIn. MEASURED 2026-09-11 against a
-/// real node's receipts (warden/tools/chunk-rehearsal.sh, Osaka rules with
-/// EIP-7825 enforced): 8,763 gas per entry plus 30,896 fixed.
+/// How many check-ins go in one batchCheckIn. MEASURED against a real node's
+/// receipts (warden/tools/chunk-rehearsal.sh, Osaka rules with EIP-7825
+/// enforced): 9,014 gas per entry plus 30,902 fixed.
 ///
 /// The rule: the largest multiple of 100 whose estimate, padded as write.mjs
-/// pads it, leaves at least 500,000 under MAX_TX_GAS. 1,400 pads to 13,836,282.
-/// The spec's 1,500 came from arithmetic at ~7k a check-in and passes by only
-/// 177,808 -- so one dearer opcode and every full night would be refused and
-/// halved into two transactions.
+/// pads it, leaves at least 500,000 under MAX_TX_GAS. 1,400 pads to 14,231,629;
+/// the spec's 1,500 is refused by the guard.
 ///
 /// contracts/test/CheckIn.t.sol measures this same chunk, and
 /// clock-run.test.mjs fails if its constant and this one disagree. Re-run the

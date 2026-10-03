@@ -432,13 +432,13 @@ Storage rule that decides the gas bill: daily writes **overwrite** the one
 
 | Function | Access | Behaviour |
 |---|---|---|
-| `mint(uint256 tokenId, address to, bytes32 keyId, bytes qr, uint32 day)` | `onlyWarden`, `whenNotPaused` | Reverts `AlreadyMinted` if the key has minted, `TokenExists` if the id is taken, `SupplyCap` if `totalMinted >= supplyCap`, `WalletCap` if `mintedTo[to] >= walletCap`, counting tokens ever MINTED to that address, not tokens currently held. Amended 2026-08-30: "holds" was ambiguous. Counting current holdings would let the cap be defeated by transferring out before re-minting, and would wrongly block someone who bought on the secondary market. Seeded children are counted the same way. The dial starts at 20. Amended 2026-08-30: reverts `IdTooLarge` if `tokenId > 2**32 - 1`, because `batchCheckIn` addresses ids in four packed bytes and a larger id could mint and render but never be checked in; and `ZeroKeyId` if `keyId` is zero, because a Warden serialising a missing thumbprint to zero would permanently burn the zero key and create a seed budget shared by every token that rebinds to it. Records `firstMintDay[key] = day`. Sets `level = 1`, `streak = 1`, `lastDay = mintDay = day`. Amended 2026-09-11: `day` is the day the agent PAID, as the Warden recorded it, not `today()` at the write -- the Clock writes at 00:05 the next day, and a token that began on the write day lost its first check-in and ran one level behind the Warden for good (found by the fast-days copy). Reverts `FutureDay` if `day > today()` and `StaleDay` if `day + 30 < today()` (`MAX_LAG`), so a Warden cannot backdate a history. Emits `Minted(tokenId, keyId)` |
-| `batchCheckIn(bytes packedIds, uint32[] days)` | `onlyWarden`, `whenNotPaused` | Ids packed as 4-byte values. Per entry: `require(day <= today())` else `FutureDay` -- amended 2026-08-30, because a day index is bounded ABOVE as well as below: a Warden passing a timestamp where a day index belongs would set `lastDay` to roughly 4.7M and every later check-in would revert `DayNotAdvanced` forever, with no admin path to reset it and no upgrade path to fix it; then `require(day > lastDay)` else `DayNotAdvanced`; `level += 1`; `streak = (day == lastDay + 1) ? streak + 1 : 1`; `lastDay = day`. Events: `BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count)`, then one ERC-4906 `MetadataUpdate(id)` per token written, emitted after the storage writes. Amended 2026-08-30: the range form was impossible, because a day's check-ins are a scattered subset and `minId..maxId` is therefore never the exact set written. Per-token emits are also reuse rather than a new cost -- the Clock already has to emit per token for paling-step crossers. Entries for the same token in ascending day order are legal (late writes after an outage) |
+| `mint(uint256 tokenId, address to, bytes32 keyId, bytes qr, uint32 day)` | `onlyWarden`, `whenNotPaused` | Reverts `AlreadyMinted` if the key has minted, `TokenExists` if the id is taken, `SupplyCap` if `totalMinted >= supplyCap`, `WalletCap` if `mintedTo[to] >= walletCap`, counting tokens ever MINTED to that address, not tokens currently held. Amended 2026-08-30: "holds" was ambiguous. Counting current holdings would let the cap be defeated by transferring out before re-minting, and would wrongly block someone who bought on the secondary market. Seeded children are counted the same way. The dial starts at 20. Amended 2026-08-30: reverts `IdTooLarge` if `tokenId > 2**32 - 1`, because `batchCheckIn` addresses ids in four packed bytes and a larger id could mint and render but never be checked in; and `ZeroKeyId` if `keyId` is zero, because a Warden serialising a missing thumbprint to zero would permanently burn the zero key and create a seed budget shared by every token that rebinds to it. Records `firstMintDay[key] = day`. Sets `level = 1`, `streak = 1`, `lastDay = mintDay = day`. Amended 2026-09-11: `day` is the day the agent PAID, as the Warden recorded it, not `today()` at the write -- the Clock writes at 00:05 the next day, and a token that began on the write day lost its first check-in and ran one level behind the Warden for good (found by the fast-days copy). Reverts `FutureDay` if `day > today()` and `StaleDay` if `day + 30 < today()` (`MAX_LAG`), so a Warden cannot backdate a history. Emits `Minted(tokenId, keyId)` Amended 2026-10-03: also reverts `BeforeDeploy(day)` if `day < DEPLOY_DAY`, the day the contract was deployed; uses `_mint`, not `_safeMint`. |
+| `batchCheckIn(bytes packedIds, uint32[] days)` | `onlyWarden`, `whenNotPaused` | Ids packed as 4-byte values. Per entry: `require(day <= today())` else `FutureDay` -- amended 2026-08-30, because a day index is bounded ABOVE as well as below: a Warden passing a timestamp where a day index belongs would set `lastDay` to roughly 4.7M and every later check-in would revert `DayNotAdvanced` forever, with no admin path to reset it and no upgrade path to fix it; then `require(day > lastDay)` else `DayNotAdvanced`; `level += 1`; `streak = (day == lastDay + 1) ? streak + 1 : 1`; `lastDay = day`. Events: `BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count)`, then one ERC-4906 `MetadataUpdate(id)` per token written, emitted after the storage writes. Amended 2026-08-30: the range form was impossible, because a day's check-ins are a scattered subset and `minId..maxId` is therefore never the exact set written. Per-token emits are also reuse rather than a new cost -- the Clock already has to emit per token for paling-step crossers. Entries for the same token in ascending day order are legal (late writes after an outage) Amended 2026-10-03: also reverts `StaleDay(day)` if `day + 30 < today()` (`MAX_LAG`), so no credit is written more than 30 days late. |
 | `applyMark(uint256 id, uint8 upgradeId)` | `onlyWarden`, `whenNotPaused` | Checks `active`, bit unset, `sold < maxSupply` (if capped), `level >= minLevel`, `streak >= minStreak`, `requiresWhole => level >= 365`. Increments `sold`. Emits `MarkApplied(id, upgradeId)`. Amended 2026-08-30 on two counts. First, `whenNotPaused` was MISSING from the implementation while the `pause()` row below claimed marks were blocked; the row now states it and the contract enforces it, because mark bits are unclearable and a compromised Warden could otherwise deface every token while the contract read as paused. Second, it now reverts `NoSuchToken` when `level == 0`: `minLevel` is an owner-settable dial, and at 0 a mark could be written to a never-minted id, consuming a capped supply slot, and `mint` does not clear `marks`, so that id would later mint already marked |
 | `rebind(uint256 id, bytes32 newKeyId)` | token owner only | Level, streak, marks untouched. Emits `Rebound(id, newKeyId)` |
-| `seed(uint256 childId, uint256 parentId, address to, bytes qr, uint32 day)` | `onlyWarden`, `whenNotPaused`, not sunset | Reverts `IdTooLarge` if `childId > 2**32 - 1`, the same ceiling `mint` enforces and for the same reason (amended 2026-08-30). Requires parent `level >= 365`, not resting, `seedsSpent[key] < (today - firstMintDay[key]) / 365` where `key` is the parent's bound key, `totalMinted < supplyCap`. Increments `seedsSpent[key]` and parent `seedsGiven`; child gets `generation = parent.generation + 1`, `parentOf[child] = parentId`, the parent's bound key, `level = 1`, `streak = 1`, `lastDay = mintDay = day`. Amended 2026-09-11: `day` is the day the seed was asked for, with `mint`'s `FutureDay` / `StaleDay` bounds and for the same reason. No fee. Emits `Seeded(parentId, childId, generation)` |
-| `rest(uint256 id)` | token owner only | Sets `resting = true`. Irreversible. From then on `batchCheckIn`, `applyMark` and `seed` revert `Resting` for this token; transfers and `rebind` still work. Emits `Rested(id, day, level, streak)` |
-| `checkInWithVoucher(uint256 id, uint32 day, bytes wardenSig)` | anyone, `whenVouchersEnabled` (off at launch) | The durability path: the bound agent submits its own check-in with a Warden-signed EIP-712 voucher and pays its own gas. Ships paused so tokens can outlive the operator if the Warden is ever switched to voucher-only mode. Same `day > lastDay` rule, and since 2026-08-30 the same `day <= today()` upper bound as `batchCheckIn`: the path ships disabled but can never be ADDED later either, so it cannot be left with a hole |
+| `seed(uint256 childId, uint256 parentId, address to, bytes qr, uint32 day, bytes32 expectedKeyId)` | `onlyWarden`, `whenNotPaused`, not sunset | Reverts `IdTooLarge` if `childId > 2**32 - 1`, the same ceiling `mint` enforces and for the same reason (amended 2026-08-30). Requires parent `level >= 365`, not resting, `seedsSpent[key] < (today - firstMintDay[key]) / 365` where `key` is the parent's bound key, `totalMinted < supplyCap`. Increments `seedsSpent[key]` and parent `seedsGiven`; child gets `generation = parent.generation + 1`, `parentOf[child] = parentId`, the parent's bound key, `level = 1`, `streak = 1`, `lastDay = mintDay = day`. Amended 2026-09-11: `day` is the day the seed was asked for, with `mint`'s `FutureDay` / `StaleDay` bounds and for the same reason. No fee. Emits `Seeded(parentId, childId, generation)` Amended 2026-10-03: takes the key the Warden verified at the request and reverts `KeyChanged(parentId)` if the parent has been rebound since; uses `_mint`, not `_safeMint`. |
+| `rest(uint256 id)` | token owner only | Sets `resting = true`. Irreversible. From then on `batchCheckIn`, `applyMark` and `seed` revert `Resting` for this token; transfers and `rebind` still work. Emits `Rested(id, day, level, streak)` Amended 2026-10-03: stores the rest day (read as `restDay` in `viewOf`), and a second call reverts `Resting`. The image is drawn as it stood on the rest day. |
+| `checkInWithVoucher(uint256 id, uint32 day, bytes wardenSig)` | anyone, `whenVouchersEnabled` (off at launch) | The durability path: the bound agent submits its own check-in with a Warden-signed EIP-712 voucher and pays its own gas. Ships paused so tokens can outlive the operator if the Warden is ever switched to voucher-only mode. Same `day > lastDay` rule, and since 2026-08-30 the same `day <= today()` upper bound as `batchCheckIn`: the path ships disabled but can never be ADDED later either, so it cannot be left with a hole Amended 2026-10-03: the same `StaleDay` floor as `batchCheckIn`. |
 | `sunset()` | contract owner | Sets `sunsetDay` and `isSunset`. Reverts `AlreadySunset` if called twice. Irreversible. `mint`, `batchCheckIn`, `applyMark`, `seed` revert `Sunset` for every token; the Renderer treats every token as resting. Transfers and `rebind` still work. Emits `SunsetAt(day)` |
 | `setWarden(address)`, `setRenderer(address)`, `setSupplyCap(uint32)`, `setUpgrade(uint8, Upgrade)` | contract owner | Dials. Emits an event each. Amended 2026-08-30: `setUpgrade` PRESERVES the stored `sold` and ignores the value in calldata. `sold` is owned by `applyMark`; taking it from calldata meant editing a Mark's price required re-supplying the current count by hand, and getting it wrong silently reset scarcity and re-opened a sold-out Mark. Halo x1000, Crown x100 and Singularity x10 are stated product properties, not conventions |
 | `pause()` / `unpause()` | contract owner | Blocks mint, check-in and marks; never transfers or `rebind` |
@@ -510,13 +510,14 @@ matters. Both contracts declare ERC-4906 support in `supportsInterface`
 ### Limits that must be respected
 
 - Base blocks carry ~400M gas; per-transaction cap 16,777,216 gas (EIP-7825,
-  live on Base since the Azul upgrade, 2026-05-28). A check-in costs 8,763 gas
-  plus 30,896 per transaction. The Clock uses chunks of 1,400, pads its
+  live on Base since the Azul upgrade, 2026-05-28). A check-in costs 9,014 gas
+  plus 30,902 per transaction. The Clock uses chunks of 1,400, pads its
   estimate by 12.5%, and refuses anything over 15M before sending. Amended
   2026-09-11: this line said ~7k gas a check-in and chunks of 1,500, both from
   arithmetic. Measured against a real node by `warden/tools/chunk-rehearsal.sh`,
-  1,500 passes the padded guard by only 177,808 gas; 1,400 is the largest
-  hundred leaving at least 500,000.
+  1,400 is the largest hundred leaving at least 500,000 under the guard.
+  Re-measured 2026-10-03 after the 30-day lateness floor (8,763 before it);
+  1,500 is now refused by the guard.
 - `forge build --sizes` must show positive margin under 24,576 bytes for both
   contracts, and a deploy to a plain `anvil` (strict code-size limit) must
   return non-empty `cast code`, before either is called deployable.
@@ -552,25 +553,13 @@ does not exist in this design:
   contract authorises them with `msg.sender == ownerOf(id)`. A smart account
   satisfies that natively, with no signature-verification path involved.
 
-One real touchpoint remains: **`mint` and `seed` use `_safeMint`**, so a
-contract recipient must implement `onERC721Received`. Every mainstream smart
-account does, but a bespoke one may not, and the revert is opaque to an agent
-that just paid.
-
-**NOT IMPLEMENTED, as of 2026-09-05.** This paragraph described a pre-flight
-the Warden has never performed, and the 2026-09-04 security review (12.7)
-found the gap. What actually protects the mint today is the Clock, which runs
-`simulateContract` before it sends: a recipient that cannot receive costs no
-gas and sends no transaction, and the gas the Clock will spend is capped at
-`MAX_TX_GAS` rather than left at the block limit. So the failure mode is not a
-drained wallet -- it is an agent that paid, got `ok: true`, and whose token
-never lands, with the failure visible only in the Clock's own log.
-
-The pre-flight below is still the right thing to build, and it is written here
-as a TODO rather than as a description: before charging, if `to` has code and
-does not answer the ERC-721 receiver interface, refuse the mint with a plain
-reason instead of taking the fee. Until that exists, do not describe it as
-something the Warden does.
+One real touchpoint remains: the recipient. **`mint` and `seed` use `_mint`**
+(amended 2026-10-03; they used `_safeMint`), so the chain delivers to any
+address and makes no callback. A contract that does not answer
+`onERC721Received` has declared it cannot handle ERC-721, and a token
+delivered there is stuck, so the Warden checks the recipient BEFORE any
+payment demand (`receiverBlock`, built 2026-09-16) and refuses it with a plain
+remedy line, charging nothing.
 
 If a future route ever does need to check a wallet signature, the rule is
 viem's **public-client** `verifyMessage` (not the standalone export, which is
@@ -1114,20 +1103,21 @@ for vetting delegation targets, not for avoiding the standard.
 
 Base gas was at its protocol floor (0.005-0.006 gwei) and ETH at $2,494 when
 checked; 1M gas cost $0.015. With one packed slot, a `MetadataUpdate` per token
-and a static QR, a check-in is **8,763 gas**, plus 30,896 per transaction.
+and a static QR, a check-in is **9,014 gas**, plus 30,902 per transaction.
 Only *active* tokens cost anything. Amended 2026-09-11: this said ~7k, which
-was arithmetic; 8,763 is measured against a real node, and every figure below
-is rescaled from it at the same 2026-08-27 prices.
+was arithmetic; the figure is measured against a real node (re-measured
+2026-10-03 at 9,014, up from 8,763, after the lateness floor), and every
+figure below is rescaled from it at the same 2026-08-27 prices.
 
 | Active tokens | Check-in gas per month | Mint income at 1 USDC (one-off) |
 |---|---|---|
-| 100 | $0.39 | $100 |
-| 1,000 | $3.94 | $1,000 |
-| 10,000 | $39 | $10,000 |
-| 100,000 | $394 | $100,000 |
+| 100 | $0.41 | $100 |
+| 1,000 | $4.06 | $1,000 |
+| 10,000 | $41 | $10,000 |
+| 100,000 | $406 | $100,000 |
 
-One mint fee covers roughly 21 years of that token's check-ins at today's gas
-(365 check-ins a year at 8,763 gas is 3.2M gas, about $0.048).
+One mint fee covers roughly 20 years of that token's check-ins at today's gas
+(365 check-ins a year at 9,014 gas is 3.3M gas, about $0.049).
 A 10x gas spike multiplies the gas column, and the gas guard means the site
 only pays it if the spike outlasts the deferral.
 
@@ -1135,7 +1125,7 @@ only pays it if the spike outlasts the deferral.
 |---|---|---|---|
 | Contract deploys (~4.5M gas, two contracts) | $0.07 | -- | n/a |
 | Mints (~120k gas each; static QR) | $0.002 each, covered by the fee | -- | n/a |
-| Daily `batchCheckIn` | -- | $3.94 | n/a |
+| Daily `batchCheckIn` | -- | $4.06 | n/a |
 | `applyMark` (~50k gas) | -- | $0.00075 each | n/a |
 | x402 (CDP facilitator) | $0 | $0 up to 1,000 settlements, then $0.001 flat (0.1% of the mint fee) | Yes |
 | Alchemy RPC | $0 | $0 | Yes: 30M CU/month, 300 CU/s |

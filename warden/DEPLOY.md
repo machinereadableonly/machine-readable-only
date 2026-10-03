@@ -622,13 +622,12 @@ handling of the real owner key.
    transfer with no standing allowance.
 
    **`--to` MUST BE ABLE TO RECEIVE AN ERC-721, and since 2026-09-16 the
-   Warden enforces it.** `mint` ends in `_safeMint`, which calls
-   `onERC721Received` on any recipient that has code. F5 was decided as option
-   1, so `receiverBlock` checks the recipient BEFORE any payment demand: one
-   that cannot hold the token is refused `recipient-cannot-receive` with a
-   remedy line, and nothing is charged. The 2026-09-15 rehearsal proved why on
-   a fork: a paid mint to an EIP-7702-delegated account can NEVER land, retries
-   every night until StaleDay, and condemns any check-in queued behind it.
+   Warden enforces it.** `receiverBlock` checks the recipient BEFORE any
+   payment demand: one with code that does not answer `onERC721Received` is
+   refused `recipient-cannot-receive` with a remedy line, and nothing is
+   charged. On the contract this branch builds, `mint` uses `_mint` and makes
+   no callback, so the chain itself would deliver -- into an address that has
+   declared it cannot move the token. The gate is what stops that.
 
    Use a plain wallet (no code) or one known to implement `onERC721Received`;
    `cast code <address>` returning `0x` means no code. **The gate covers the
@@ -742,6 +741,22 @@ two it was.
 
 7. **Verify through Cloudflare, not against localhost**, exactly as section 9
    says. Then check all four suites and commit.
+
+### What this contract fixes at deploy, for good
+
+- **`freezeRenderer` exists and is NOT called.** It makes the current renderer
+  permanent and cannot be undone. The renderer stays swappable until the
+  operator decides otherwise, as a separate, explicit step.
+- **The finisher Mark records 11-15 are written once**, by the deploy script's
+  `setUpgrade` loop, and `setUpgrade` refuses any later edit of them
+  (`FinisherRecordSet`). Read them back with `read-ladder.mjs` in step 3
+  before adopting the address: a wrong one is a new deployment, not an edit.
+- **`seed` takes the parent's key as its sixth argument**, and a rebind since
+  the request refuses it (`KeyChanged`). The Clock on this branch sends it, so
+  the Warden and the contract move together.
+- **Nothing may be dated before the deploy day (`DEPLOY_DAY`), and no check-in
+  may be more than 30 days late.** A Clock outage longer than 30 days loses the
+  oldest days for good: the Clock drops each `StaleDay` and writes the rest.
 
 ### What a redeploy does NOT carry over
 

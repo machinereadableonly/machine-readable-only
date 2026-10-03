@@ -628,12 +628,12 @@ mapping(address =&gt; uint32) mintedTo;      // tokens ever MINTED to an address
 <tbody><tr>
 <td><code>mint(uint256 tokenId, address to, bytes32 keyId, bytes qr, uint32 day)</code></td>
 <td><code>onlyWarden</code>, <code>whenNotPaused</code></td>
-<td>Reverts <code>AlreadyMinted</code> if the key has minted, <code>TokenExists</code> if the id is taken, <code>SupplyCap</code> if <code>totalMinted &gt;= supplyCap</code>, <code>WalletCap</code> if <code>mintedTo[to] &gt;= walletCap</code>, counting tokens ever MINTED to that address, not tokens currently held. Amended 2026-08-30: &quot;holds&quot; was ambiguous. Counting current holdings would let the cap be defeated by transferring out before re-minting, and would wrongly block someone who bought on the secondary market. Seeded children are counted the same way. The dial starts at 20. Amended 2026-08-30: reverts <code>IdTooLarge</code> if <code>tokenId &gt; 2**32 - 1</code>, because <code>batchCheckIn</code> addresses ids in four packed bytes and a larger id could mint and render but never be checked in; and <code>ZeroKeyId</code> if <code>keyId</code> is zero, because a Warden serialising a missing thumbprint to zero would permanently burn the zero key and create a seed budget shared by every token that rebinds to it. Records <code>firstMintDay[key] = day</code>. Sets <code>level = 1</code>, <code>streak = 1</code>, <code>lastDay = mintDay = day</code>. Amended 2026-09-11: <code>day</code> is the day the agent PAID, as the Warden recorded it, not <code>today()</code> at the write -- the Clock writes at 00:05 the next day, and a token that began on the write day lost its first check-in and ran one level behind the Warden for good (found by the fast-days copy). Reverts <code>FutureDay</code> if <code>day &gt; today()</code> and <code>StaleDay</code> if <code>day + 30 &lt; today()</code> (<code>MAX_LAG</code>), so a Warden cannot backdate a history. Emits <code>Minted(tokenId, keyId)</code></td>
+<td>Reverts <code>AlreadyMinted</code> if the key has minted, <code>TokenExists</code> if the id is taken, <code>SupplyCap</code> if <code>totalMinted &gt;= supplyCap</code>, <code>WalletCap</code> if <code>mintedTo[to] &gt;= walletCap</code>, counting tokens ever MINTED to that address, not tokens currently held. Amended 2026-08-30: &quot;holds&quot; was ambiguous. Counting current holdings would let the cap be defeated by transferring out before re-minting, and would wrongly block someone who bought on the secondary market. Seeded children are counted the same way. The dial starts at 20. Amended 2026-08-30: reverts <code>IdTooLarge</code> if <code>tokenId &gt; 2**32 - 1</code>, because <code>batchCheckIn</code> addresses ids in four packed bytes and a larger id could mint and render but never be checked in; and <code>ZeroKeyId</code> if <code>keyId</code> is zero, because a Warden serialising a missing thumbprint to zero would permanently burn the zero key and create a seed budget shared by every token that rebinds to it. Records <code>firstMintDay[key] = day</code>. Sets <code>level = 1</code>, <code>streak = 1</code>, <code>lastDay = mintDay = day</code>. Amended 2026-09-11: <code>day</code> is the day the agent PAID, as the Warden recorded it, not <code>today()</code> at the write -- the Clock writes at 00:05 the next day, and a token that began on the write day lost its first check-in and ran one level behind the Warden for good (found by the fast-days copy). Reverts <code>FutureDay</code> if <code>day &gt; today()</code> and <code>StaleDay</code> if <code>day + 30 &lt; today()</code> (<code>MAX_LAG</code>), so a Warden cannot backdate a history. Emits <code>Minted(tokenId, keyId)</code> Amended 2026-10-03: also reverts <code>BeforeDeploy(day)</code> if <code>day &lt; DEPLOY_DAY</code>, the day the contract was deployed; uses <code>_mint</code>, not <code>_safeMint</code>.</td>
 </tr>
 <tr>
 <td><code>batchCheckIn(bytes packedIds, uint32[] days)</code></td>
 <td><code>onlyWarden</code>, <code>whenNotPaused</code></td>
-<td>Ids packed as 4-byte values. Per entry: <code>require(day &lt;= today())</code> else <code>FutureDay</code> -- amended 2026-08-30, because a day index is bounded ABOVE as well as below: a Warden passing a timestamp where a day index belongs would set <code>lastDay</code> to roughly 4.7M and every later check-in would revert <code>DayNotAdvanced</code> forever, with no admin path to reset it and no upgrade path to fix it; then <code>require(day &gt; lastDay)</code> else <code>DayNotAdvanced</code>; <code>level += 1</code>; <code>streak = (day == lastDay + 1) ? streak + 1 : 1</code>; <code>lastDay = day</code>. Events: <code>BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count)</code>, then one ERC-4906 <code>MetadataUpdate(id)</code> per token written, emitted after the storage writes. Amended 2026-08-30: the range form was impossible, because a day&#39;s check-ins are a scattered subset and <code>minId..maxId</code> is therefore never the exact set written. Per-token emits are also reuse rather than a new cost -- the Clock already has to emit per token for paling-step crossers. Entries for the same token in ascending day order are legal (late writes after an outage)</td>
+<td>Ids packed as 4-byte values. Per entry: <code>require(day &lt;= today())</code> else <code>FutureDay</code> -- amended 2026-08-30, because a day index is bounded ABOVE as well as below: a Warden passing a timestamp where a day index belongs would set <code>lastDay</code> to roughly 4.7M and every later check-in would revert <code>DayNotAdvanced</code> forever, with no admin path to reset it and no upgrade path to fix it; then <code>require(day &gt; lastDay)</code> else <code>DayNotAdvanced</code>; <code>level += 1</code>; <code>streak = (day == lastDay + 1) ? streak + 1 : 1</code>; <code>lastDay = day</code>. Events: <code>BatchCheckedIn(uint32 fromDay, uint32 toDay, uint256 count)</code>, then one ERC-4906 <code>MetadataUpdate(id)</code> per token written, emitted after the storage writes. Amended 2026-08-30: the range form was impossible, because a day&#39;s check-ins are a scattered subset and <code>minId..maxId</code> is therefore never the exact set written. Per-token emits are also reuse rather than a new cost -- the Clock already has to emit per token for paling-step crossers. Entries for the same token in ascending day order are legal (late writes after an outage) Amended 2026-10-03: also reverts <code>StaleDay(day)</code> if <code>day + 30 &lt; today()</code> (<code>MAX_LAG</code>), so no credit is written more than 30 days late.</td>
 </tr>
 <tr>
 <td><code>applyMark(uint256 id, uint8 upgradeId)</code></td>
@@ -646,19 +646,19 @@ mapping(address =&gt; uint32) mintedTo;      // tokens ever MINTED to an address
 <td>Level, streak, marks untouched. Emits <code>Rebound(id, newKeyId)</code></td>
 </tr>
 <tr>
-<td><code>seed(uint256 childId, uint256 parentId, address to, bytes qr, uint32 day)</code></td>
+<td><code>seed(uint256 childId, uint256 parentId, address to, bytes qr, uint32 day, bytes32 expectedKeyId)</code></td>
 <td><code>onlyWarden</code>, <code>whenNotPaused</code>, not sunset</td>
-<td>Reverts <code>IdTooLarge</code> if <code>childId &gt; 2**32 - 1</code>, the same ceiling <code>mint</code> enforces and for the same reason (amended 2026-08-30). Requires parent <code>level &gt;= 365</code>, not resting, <code>seedsSpent[key] &lt; (today - firstMintDay[key]) / 365</code> where <code>key</code> is the parent&#39;s bound key, <code>totalMinted &lt; supplyCap</code>. Increments <code>seedsSpent[key]</code> and parent <code>seedsGiven</code>; child gets <code>generation = parent.generation + 1</code>, <code>parentOf[child] = parentId</code>, the parent&#39;s bound key, <code>level = 1</code>, <code>streak = 1</code>, <code>lastDay = mintDay = day</code>. Amended 2026-09-11: <code>day</code> is the day the seed was asked for, with <code>mint</code>&#39;s <code>FutureDay</code> / <code>StaleDay</code> bounds and for the same reason. No fee. Emits <code>Seeded(parentId, childId, generation)</code></td>
+<td>Reverts <code>IdTooLarge</code> if <code>childId &gt; 2**32 - 1</code>, the same ceiling <code>mint</code> enforces and for the same reason (amended 2026-08-30). Requires parent <code>level &gt;= 365</code>, not resting, <code>seedsSpent[key] &lt; (today - firstMintDay[key]) / 365</code> where <code>key</code> is the parent&#39;s bound key, <code>totalMinted &lt; supplyCap</code>. Increments <code>seedsSpent[key]</code> and parent <code>seedsGiven</code>; child gets <code>generation = parent.generation + 1</code>, <code>parentOf[child] = parentId</code>, the parent&#39;s bound key, <code>level = 1</code>, <code>streak = 1</code>, <code>lastDay = mintDay = day</code>. Amended 2026-09-11: <code>day</code> is the day the seed was asked for, with <code>mint</code>&#39;s <code>FutureDay</code> / <code>StaleDay</code> bounds and for the same reason. No fee. Emits <code>Seeded(parentId, childId, generation)</code> Amended 2026-10-03: takes the key the Warden verified at the request and reverts <code>KeyChanged(parentId)</code> if the parent has been rebound since; uses <code>_mint</code>, not <code>_safeMint</code>.</td>
 </tr>
 <tr>
 <td><code>rest(uint256 id)</code></td>
 <td>token owner only</td>
-<td>Sets <code>resting = true</code>. Irreversible. From then on <code>batchCheckIn</code>, <code>applyMark</code> and <code>seed</code> revert <code>Resting</code> for this token; transfers and <code>rebind</code> still work. Emits <code>Rested(id, day, level, streak)</code></td>
+<td>Sets <code>resting = true</code>. Irreversible. From then on <code>batchCheckIn</code>, <code>applyMark</code> and <code>seed</code> revert <code>Resting</code> for this token; transfers and <code>rebind</code> still work. Emits <code>Rested(id, day, level, streak)</code> Amended 2026-10-03: stores the rest day (read as <code>restDay</code> in <code>viewOf</code>), and a second call reverts <code>Resting</code>. The image is drawn as it stood on the rest day.</td>
 </tr>
 <tr>
 <td><code>checkInWithVoucher(uint256 id, uint32 day, bytes wardenSig)</code></td>
 <td>anyone, <code>whenVouchersEnabled</code> (off at launch)</td>
-<td>The durability path: the bound agent submits its own check-in with a Warden-signed EIP-712 voucher and pays its own gas. Ships paused so tokens can outlive the operator if the Warden is ever switched to voucher-only mode. Same <code>day &gt; lastDay</code> rule, and since 2026-08-30 the same <code>day &lt;= today()</code> upper bound as <code>batchCheckIn</code>: the path ships disabled but can never be ADDED later either, so it cannot be left with a hole</td>
+<td>The durability path: the bound agent submits its own check-in with a Warden-signed EIP-712 voucher and pays its own gas. Ships paused so tokens can outlive the operator if the Warden is ever switched to voucher-only mode. Same <code>day &gt; lastDay</code> rule, and since 2026-08-30 the same <code>day &lt;= today()</code> upper bound as <code>batchCheckIn</code>: the path ships disabled but can never be ADDED later either, so it cannot be left with a hole Amended 2026-10-03: the same <code>StaleDay</code> floor as <code>batchCheckIn</code>.</td>
 </tr>
 <tr>
 <td><code>sunset()</code></td>
@@ -744,13 +744,14 @@ matters. Both contracts declare ERC-4906 support in <code>supportsInterface</cod
 <h3>Limits that must be respected</h3>
 <ul>
 <li>Base blocks carry ~400M gas; per-transaction cap 16,777,216 gas (EIP-7825,
-live on Base since the Azul upgrade, 2026-05-28). A check-in costs 8,763 gas
-plus 30,896 per transaction. The Clock uses chunks of 1,400, pads its
+live on Base since the Azul upgrade, 2026-05-28). A check-in costs 9,014 gas
+plus 30,902 per transaction. The Clock uses chunks of 1,400, pads its
 estimate by 12.5%, and refuses anything over 15M before sending. Amended
 2026-09-11: this line said ~7k gas a check-in and chunks of 1,500, both from
 arithmetic. Measured against a real node by <code>warden/tools/chunk-rehearsal.sh</code>,
-1,500 passes the padded guard by only 177,808 gas; 1,400 is the largest
-hundred leaving at least 500,000.</li>
+1,400 is the largest hundred leaving at least 500,000 under the guard.
+Re-measured 2026-10-03 after the 30-day lateness floor (8,763 before it);
+1,500 is now refused by the guard.</li>
 <li><code>forge build --sizes</code> must show positive margin under 24,576 bytes for both
 contracts, and a deploy to a plain <code>anvil</code> (strict code-size limit) must
 return non-empty <code>cast code</code>, before either is called deployable.</li>
@@ -783,23 +784,13 @@ Warden is an EOA MRO controls.</li>
 contract authorises them with <code>msg.sender == ownerOf(id)</code>. A smart account
 satisfies that natively, with no signature-verification path involved.</li>
 </ul>
-<p>One real touchpoint remains: <strong><code>mint</code> and <code>seed</code> use <code>_safeMint</code></strong>, so a
-contract recipient must implement <code>onERC721Received</code>. Every mainstream smart
-account does, but a bespoke one may not, and the revert is opaque to an agent
-that just paid.</p>
-<p><strong>NOT IMPLEMENTED, as of 2026-09-05.</strong> This paragraph described a pre-flight
-the Warden has never performed, and the 2026-09-04 security review (12.7)
-found the gap. What actually protects the mint today is the Clock, which runs
-<code>simulateContract</code> before it sends: a recipient that cannot receive costs no
-gas and sends no transaction, and the gas the Clock will spend is capped at
-<code>MAX_TX_GAS</code> rather than left at the block limit. So the failure mode is not a
-drained wallet -- it is an agent that paid, got <code>ok: true</code>, and whose token
-never lands, with the failure visible only in the Clock&#39;s own log.</p>
-<p>The pre-flight below is still the right thing to build, and it is written here
-as a TODO rather than as a description: before charging, if <code>to</code> has code and
-does not answer the ERC-721 receiver interface, refuse the mint with a plain
-reason instead of taking the fee. Until that exists, do not describe it as
-something the Warden does.</p>
+<p>One real touchpoint remains: the recipient. <strong><code>mint</code> and <code>seed</code> use <code>_mint</code></strong>
+(amended 2026-10-03; they used <code>_safeMint</code>), so the chain delivers to any
+address and makes no callback. A contract that does not answer
+<code>onERC721Received</code> has declared it cannot handle ERC-721, and a token
+delivered there is stuck, so the Warden checks the recipient BEFORE any
+payment demand (<code>receiverBlock</code>, built 2026-09-16) and refuses it with a plain
+remedy line, charging nothing.</p>
 <p>If a future route ever does need to check a wallet signature, the rule is
 viem&#39;s <strong>public-client</strong> <code>verifyMessage</code> (not the standalone export, which is
 ECDSA-only), which covers ERC-1271 for deployed accounts and ERC-6492 for
@@ -1412,10 +1403,11 @@ for vetting delegation targets, not for avoiding the standard.</p>
 <h2>14. Costs (verified live 2026-08-27, revised for revision 2)</h2>
 <p>Base gas was at its protocol floor (0.005-0.006 gwei) and ETH at $2,494 when
 checked; 1M gas cost $0.015. With one packed slot, a <code>MetadataUpdate</code> per token
-and a static QR, a check-in is <strong>8,763 gas</strong>, plus 30,896 per transaction.
+and a static QR, a check-in is <strong>9,014 gas</strong>, plus 30,902 per transaction.
 Only <em>active</em> tokens cost anything. Amended 2026-09-11: this said ~7k, which
-was arithmetic; 8,763 is measured against a real node, and every figure below
-is rescaled from it at the same 2026-08-27 prices.</p>
+was arithmetic; the figure is measured against a real node (re-measured
+2026-10-03 at 9,014, up from 8,763, after the lateness floor), and every
+figure below is rescaled from it at the same 2026-08-27 prices.</p>
 <table>
 <thead>
 <tr>
@@ -1426,27 +1418,27 @@ is rescaled from it at the same 2026-08-27 prices.</p>
 </thead>
 <tbody><tr>
 <td>100</td>
-<td>$0.39</td>
+<td>$0.41</td>
 <td>$100</td>
 </tr>
 <tr>
 <td>1,000</td>
-<td>$3.94</td>
+<td>$4.06</td>
 <td>$1,000</td>
 </tr>
 <tr>
 <td>10,000</td>
-<td>$39</td>
+<td>$41</td>
 <td>$10,000</td>
 </tr>
 <tr>
 <td>100,000</td>
-<td>$394</td>
+<td>$406</td>
 <td>$100,000</td>
 </tr>
 </tbody></table>
-<p>One mint fee covers roughly 21 years of that token&#39;s check-ins at today&#39;s gas
-(365 check-ins a year at 8,763 gas is 3.2M gas, about $0.048).
+<p>One mint fee covers roughly 20 years of that token&#39;s check-ins at today&#39;s gas
+(365 check-ins a year at 9,014 gas is 3.3M gas, about $0.049).
 A 10x gas spike multiplies the gas column, and the gas guard means the site
 only pays it if the spike outlasts the deferral.</p>
 <table>
@@ -1473,7 +1465,7 @@ only pays it if the spike outlasts the deferral.</p>
 <tr>
 <td>Daily <code>batchCheckIn</code></td>
 <td>--</td>
-<td>$3.94</td>
+<td>$4.06</td>
 <td>n/a</td>
 </tr>
 <tr>
