@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Deploy the pair to BASE MAINNET (chain 8453) and write the ten Marks.
+# Deploy the pair to BASE MAINNET (chain 8453), write the Marks and set the split
+# anchor, read from the split seed (MRO_SPLIT_SEED_FILE, default ~/.mro-split/seed).
 # This is the deploy that CANNOT BE UNDONE (Hard Rule 1) and that spends real
 # funds (Hard Rule 2): the operator approves every broadcast, every time.
 #
@@ -33,6 +34,9 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 export PATH="$HOME/.foundry/bin:$PATH"
+
+# A resumed broadcast would re-send setUpgrade and setSplitAnchor to a configured contract.
+case " $* " in *" --resume "*) echo "FAIL: never resume a deploy; a fresh run deploys a fresh pair" >&2; exit 1;; esac
 
 WARDEN=""
 FORK=""
@@ -127,10 +131,30 @@ fi
 echo "pinning warden/src/clock/abi.mjs against the freshly compiled artifact"
 ( cd ../warden && node --test test/abi.test.mjs )
 
+# The anchor comes from the split seed and is set inside the deploy's broadcast. The mainnet
+# seed is its own, never the Sepolia one (DEPLOY.md section 10). A fork rehearsal must name a
+# throwaway seed explicitly, so the real one never anchors a fork.
+if [ -n "$FORK" ] && [ -z "${MRO_SPLIT_SEED_FILE:-}" ]; then
+  echo "FAIL: --fork needs MRO_SPLIT_SEED_FILE pointing at a throwaway seed." >&2
+  exit 1
+fi
+SEED_FILE="${MRO_SPLIT_SEED_FILE:-$HOME/.mro-split/seed}"
+if [ ! -f "$SEED_FILE" ]; then
+  echo "FAIL: no split seed. Make one first: node ../warden/tools/split-seed.mjs new $SEED_FILE" >&2
+  exit 1
+fi
+SPLIT_ANCHOR=$(node ../warden/tools/split-seed.mjs anchor "$SEED_FILE" | sed -n 's/^anchor //p')
+if [ -z "$SPLIT_ANCHOR" ]; then
+  echo "FAIL: could not read an anchor from $SEED_FILE" >&2
+  exit 1
+fi
+export SPLIT_ANCHOR
+
 echo
 echo "mode     $MODE"
 echo "chain    $ACTUAL  (expected $EXPECTED_CHAIN_ID)"
 echo "warden   $WARDEN_ADDRESS"
+echo "anchor   $SPLIT_ANCHOR"
 echo "send     ${BROADCAST:-no -- simulate only}"
 echo
 

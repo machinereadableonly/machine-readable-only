@@ -124,7 +124,13 @@ esac
 
 # --- 2. deploy -----------------------------------------------------------------
 step "2. deploy with contracts/script/deploy-mainnet.sh --fork"
-( cd "$TREE/contracts" && bash script/deploy-mainnet.sh --warden "$WARDEN" --fork "$FORK" --broadcast ) \
+SPLIT_SEED_FILE="$WORK/split-seed"
+if ( cd "$TREE/warden" && node tools/split-seed.mjs new "$SPLIT_SEED_FILE" ) > "$WORK/split-seed.log" 2>&1; then
+  ok "a throwaway split seed for the fork"
+else
+  bad "split-seed.mjs new -- see $WORK/split-seed.log"; exit 1
+fi
+( cd "$TREE/contracts" && MRO_SPLIT_SEED_FILE="$SPLIT_SEED_FILE" bash script/deploy-mainnet.sh --warden "$WARDEN" --fork "$FORK" --broadcast ) \
   > "$WORK/deploy.log" 2>&1
 DEPLOY_EXIT=$?
 REN="$(/bin/grep -oE "renderer +0x[0-9a-fA-F]{40}" "$WORK/deploy.log" | tail -1 | /bin/grep -oE "0x[0-9a-fA-F]{40}")"
@@ -197,7 +203,7 @@ fi
 # --- 6. the Clock, mainnet mode ------------------------------------------------------
 step "6. the Clock in MAINNET mode against the fork"
 MIRROR="$WORK/clock-mirror.db"
-CLOCK_ENV=(BASE_RPC_URL="$FORK" MRO_CONTRACT_ADDRESS="$TOK" MRO_CHAIN_ID=8453 CLOCK_PRIVATE_KEY="$(testkey 1)" STATE_DB_PATH="$MIRROR")
+CLOCK_ENV=(BASE_RPC_URL="$FORK" MRO_CONTRACT_ADDRESS="$TOK" MRO_CHAIN_ID=8453 CLOCK_PRIVATE_KEY="$(testkey 1)" STATE_DB_PATH="$MIRROR" MRO_SPLIT_SEED_FILE="$SPLIT_SEED_FILE")
 # clock <tree> <log> [NAME=value ...] -- extra settings for that run only.
 clock() {
   local tree="$1" log="$2"

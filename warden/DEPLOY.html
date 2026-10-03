@@ -566,6 +566,11 @@ handling of the real owner key.</p>
 <td><code>~/.mro/seed.env</code></td>
 <td>it holds the rehearsal day <code>2000-01-01</code>; left there, token #1 checks in from its mint and races ahead of every opening-day agent. The installer refuses it once the token is real</td>
 </tr>
+<tr>
+<td>the split seed</td>
+<td><code>~/.mro-split/seed</code></td>
+<td>it is the SEPOLIA chain&#39;s seed. Move it aside (never delete it while the testnet pair is in use) and make a new one with <code>split-seed.mjs new</code> before <code>deploy-mainnet.sh</code>, which reads it and sets its anchor in the deploy</td>
+</tr>
 </tbody></table>
 <h3>Before the cutover, in this order</h3>
 <ol start="0">
@@ -705,6 +710,19 @@ Warden&#39;s decoder now depends on that file being fresh. <code>deploy-plan7.sh
 therefore builds and then runs the pin itself, before it will deploy
 anything. If the pin fails: <code>cd warden &amp;&amp; node tools/gen-abi.mjs</code>.</p>
 </li>
+</ol>
+<p>1a. <strong>Make the split seed, once, OUTSIDE the worktree, BEFORE the deploy.</strong>
+   It is the secret end of the daily question&#39;s key chain: the Clock draws
+   every answer square from it, and it is never printed, logged or committed.</p>
+<pre><code>node ~/projects/machine-readable-only/warden/tools/split-seed.mjs new ~/.mro-split/seed
+</code></pre>
+<p>   It writes the seed with mode 600, refuses a file that already exists and
+   any path inside the repository, and prints only <code>anchor 0x...</code>. Back the
+   seed file up offline alongside the Clock key, and copy it nowhere else.
+   <code>~/.mro-split/seed</code> is where the Clock looks unless <code>MRO_SPLIT_SEED_FILE</code>
+   says otherwise. The deploy wrapper reads the same path and refuses to run
+   without it.</p>
+<ol start="2">
 <li><p><strong>Simulate, then deploy.</strong></p>
 <pre><code>bash script/deploy-plan7.sh              # simulation only
 bash script/deploy-plan7.sh --broadcast  # after the operator approves
@@ -722,24 +740,15 @@ every Mark was unwritable against a fully verified contract, and only reading
 the runtime bytecode found it.</p>
 </li>
 </ol>
-<p>3a. <strong>Make the split seed, once, OUTSIDE the worktree.</strong> It is the secret end
-   of the daily question&#39;s key chain: the Clock draws every answer square from
-   it, and it is never printed, logged or committed.</p>
-<pre><code>node ~/projects/machine-readable-only/warden/tools/split-seed.mjs new ~/.mro-split/seed
+<p>3a. <strong>Confirm the anchor.</strong> The deploy read it from the seed and set it in
+   its own broadcast, so no deployed contract is ever without one.</p>
+<pre><code>cast call &lt;token&gt; &quot;splitAnchor()(bytes32)&quot; --rpc-url &lt;rpc&gt;
 </code></pre>
-<p>   It writes the seed with mode 600, refuses a file that already exists and
-   any path inside the repository, and prints only <code>anchor 0x...</code>. Back the
-   seed file up offline alongside the Clock key, and copy it nowhere else.
-   <code>~/.mro-split/seed</code> is where the Clock looks unless <code>MRO_SPLIT_SEED_FILE</code>
-   says otherwise.</p>
-<p>3b. <strong>Set the anchor, from the OWNER, before the Warden starts.</strong></p>
-<pre><code>cast send &lt;token&gt; &quot;setSplitAnchor(bytes32)&quot; &lt;anchor&gt; --rpc-url &lt;rpc&gt; &lt;owner signing flags&gt;
-cast call &lt;token&gt; &quot;splitAnchor()(bytes32)&quot; --rpc-url &lt;rpc&gt;
-</code></pre>
-<p>   The anchor is set ONCE and can never move. The Warden refuses to start
-   against a contract with no anchor, and the Clock writes nothing if its seed
-   does not hash to it. <strong>A lost seed is permanent:</strong> no later square can be
-   written or verified, so the backup is not optional.</p>
+<p>   It must equal the <code>anchor</code> line the deploy printed. The anchor is set ONCE
+   and can never move. The Warden refuses to start against a contract with no
+   anchor, and the Clock writes nothing if its seed does not hash to it. <strong>A
+   lost seed is permanent:</strong> no later square can be written or verified, so the
+   backup is not optional.</p>
 <ol start="4">
 <li><p><strong>Adopt the address everywhere, in one command.</strong></p>
 <pre><code>bash contracts/script/adopt-deployment.sh &lt;renderer&gt; &lt;token&gt; &lt;deploy-block&gt;

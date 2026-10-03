@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
-# Deploy the current tree's pair to Base Sepolia and write the ten Marks.
+# Deploy the current tree's pair to Base Sepolia, write the Marks and set the split anchor.
+# Needs the split seed (MRO_SPLIT_SEED_FILE, default ~/.mro-split/seed). Never resumed:
+# --broadcast is the only argument, so a re-run always deploys a fresh pair.
 #
 #   bash script/deploy-plan7.sh             # simulate only
 #   bash script/deploy-plan7.sh --broadcast # actually send
@@ -79,9 +81,23 @@ fi
 echo "pinning warden/src/clock/abi.mjs against the freshly compiled artifact"
 ( cd ../warden && node --test test/abi.test.mjs )
 
+# The anchor comes from the operator's split seed and is set inside the deploy's broadcast.
+SEED_FILE="${MRO_SPLIT_SEED_FILE:-$HOME/.mro-split/seed}"
+if [ ! -f "$SEED_FILE" ]; then
+  echo "FAIL: no split seed. Make one first: node ../warden/tools/split-seed.mjs new $SEED_FILE" >&2
+  exit 1
+fi
+SPLIT_ANCHOR=$(node ../warden/tools/split-seed.mjs anchor "$SEED_FILE" | sed -n 's/^anchor //p')
+if [ -z "$SPLIT_ANCHOR" ]; then
+  echo "FAIL: could not read an anchor from $SEED_FILE" >&2
+  exit 1
+fi
+export SPLIT_ANCHOR
+
 echo
 echo "chain    $(cast chain-id --rpc-url "$RPC")  (expected $EXPECTED_CHAIN_ID)"
 echo "warden   $WARDEN_ADDRESS"
+echo "anchor   $SPLIT_ANCHOR"
 echo "mode     ${BROADCAST:-simulate}"
 echo
 
