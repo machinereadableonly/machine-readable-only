@@ -349,6 +349,26 @@ export function renderCases() {
     ...base, parent: 4242, generation: 3, echo: 3650,
   });
 
+  // THE ANSWER BAND, at each side's edges and under three bit patterns.
+  const words = (f) => {
+    const w = [0n, 0n];
+    for (let i = 0; i < 365; i++) if (f(i)) w[i >> 8] |= 1n << BigInt(i & 255);
+    return w;
+  };
+  const PATTERNS = [
+    ["all ones", words(() => true)],
+    ["alternate", words((i) => i % 2 === 0)],
+    ["thirds", words((i) => i % 3 === 1)],
+  ];
+  for (const level of [121, 122, 243, 244, 364]) {
+    for (const [name, answers] of PATTERNS) {
+      out.push({ label: `answers ${name}, day ${level}`, ...base, level, streak: level, answers });
+    }
+  }
+  for (const [name, answers] of PATTERNS) {
+    out.push({ label: `answers ${name}, finished 3rd`, ...base, answers, ordinal: 3, marks: [finisherMark(3)] });
+  }
+
   return out;
 }
 
@@ -399,9 +419,10 @@ export function soakCases() {
   //
   // Filtered on `c.echo` rather than on the "child" label, because a label is
   // prose and a typo in it would silently put a child back into the soak.
+  // SoakStates has no answers either, so the answer rows stay out too.
   // A rest day after the last check-in cannot be soaked either: SoakStates has
   // no restDay, so the row would be drawn as if sealed on its last day.
-  return renderCases().filter(c => !c.label.startsWith("mark ") && !c.echo
+  return renderCases().filter(c => !c.label.startsWith("mark ") && !c.echo && !c.answers
     && !((c.restDay ?? 0) > (c.lastDay ?? 0)));
 }
 

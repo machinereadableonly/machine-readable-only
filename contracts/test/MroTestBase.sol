@@ -61,9 +61,9 @@ abstract contract MroTestBase is Test {
     }
 
     /// @dev An all-silent record for a batch of `ds.length`.
-    function _silent(uint32[] memory ds) internal pure returns (bytes memory r) {
-        r = new bytes(ds.length);
-        for (uint256 i; i < r.length; ++i) r[i] = 0xff;
+    function _silent(uint32[] memory ds) internal pure returns (bytes memory out) {
+        out = new bytes(ds.length);
+        for (uint256 i; i < out.length; ++i) out[i] = 0xff;
     }
 
     /// @dev A short split chain: k[m] is the seed, k[i] = keccak256(k[i+1]), k[0] the anchor.

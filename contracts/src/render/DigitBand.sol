@@ -4,13 +4,12 @@ pragma solidity ^0.8.30;
 import {PathWriter} from "./PathWriter.sol";
 import {FrameGeometry} from "./FrameGeometry.sol";
 
-/// @notice The finisher's own number, written round the border in actual 1s
-/// and 0s.
+/// @notice The answer band: one square per credited day round three edges, and
+/// the finisher's own number along the top in actual 1s and 0s.
 ///
 /// @dev NO SVG <text>: a font depends on what the viewer has installed. Every
 /// digit here is a 3x3 cell bitmap emitted as a path, so the token carries its
-/// own letterforms. The glyph is square so a single STEP serves all four edges,
-/// and every edge is upright rather than rotated a quarter turn per side.
+/// own letterforms.
 library DigitBand {
     uint256 internal constant GW = 3; // a glyph is three cells wide
     uint256 internal constant GH = 3; // and three cells tall
@@ -73,72 +72,83 @@ library DigitBand {
         return canvasCells * FrameGeometry.CELL_UNITS + 2 * bandUnits(canvasCells);
     }
 
-    /// @notice The band as one path, drawn in QR MODULES.
-    ///
-    /// @param ordinal the finisher's number; 0 means the token is not a
-    /// finisher and nothing is drawn at all.
-    /// @param canvasCells the canvas WITHOUT the band, in frame cells.
-    /// @param fill the ink.
-    ///
+    /// @notice The credited day the band appears, with its first side of answers.
+    uint32 internal constant FIRST_SIDE = 122;
+    /// @dev Answers per side are two lanes of COLS columns.
+    uint256 internal constant COLS = 61;
+
+    struct Layout {
+        uint256 modules;
+        uint256 pad;
+        uint256 start;
+        uint256 sides;
+    }
+
+    /// @notice The band as one path, drawn in QR MODULES: answers on the right,
+    /// bottom and left edges as `level` unlocks them, the place on top once finished.
     /// @dev The caller wraps this in a group carrying scale(MODULE_UNITS).
-    function path(uint32 ordinal, uint256 canvasCells, string memory fill)
+    function path(uint32 ordinal, uint256[2] memory answers, uint32 level, uint256 canvasCells, string memory fill)
         internal
         pure
         returns (string memory)
     {
-        if (ordinal == 0) return "";
-
+        if (level < FIRST_SIDE) return "";
         uint256 modules = canvasUnits(canvasCells) / FrameGeometry.MODULE_UNITS;
-        uint256 pad = (modules - SPAN) / 2;
-        uint256 last = modules - GW;
-
-        // Two runs is the most a three-cell glyph row can take (101), so six is
-        // the most one glyph contributes, and sixty-four glyphs bound the
-        // buffer at 384. Sized to what the geometry CAN produce, not to what it
-        // typically does.
-        PathWriter.Buffer memory buf = PathWriter.create(4 * BITS * 2 * GH);
-
-        // Every row of the canvas that carries any digit, top to bottom.
+        Layout memory l =
+            Layout(modules, (modules - SPAN) / 2, (modules - COLS) / 2, level >= 365 ? 3 : level / FIRST_SIDE);
+        // Bounds: 3 glyph rows x 16 glyphs x 2 runs, 4 side squares per row
+        // over COLS rows, and 2 bottom rows of up to COLS runs.
+        PathWriter.Buffer memory buf = PathWriter.create(GH * BITS * 2 + 6 * COLS);
+        bool lit;
         for (uint256 y; y < modules; ++y) {
-            uint256 row = _rowBits(ordinal, y, modules, pad, last);
-            if (row != 0) PathWriter.writeRow(buf, row, modules, 0, y);
+            uint256 row = _rowBits(ordinal, answers, y, l);
+            if (row != 0) {
+                lit = true;
+                PathWriter.writeRow(buf, row, modules, 0, y);
+            }
         }
-
-        return string(
-            abi.encodePacked('<path fill="', fill, '" d="', PathWriter.seal(buf), '"/>')
-        );
+        if (!lit) return "";
+        return string(abi.encodePacked('<path fill="', fill, '" d="', PathWriter.seal(buf), '"/>'));
     }
 
-    /// @dev Which cells of canvas row `y` the four edges light, packed the way
-    /// PathWriter.writeRow expects: bit `modules - 1 - x` set means x is lit.
-    ///
-    /// Every edge reads the way a reader scans -- left to right along the top
-    /// and the bottom, top to bottom down each side -- so no glyph is ever
-    /// turned and one bitmap serves all four edges.
-    function _rowBits(uint32 ordinal, uint256 y, uint256 modules, uint256 pad, uint256 last)
+    /// @dev Bit `modules - 1 - x` set means x is lit, as PathWriter.writeRow expects.
+    function _rowBits(uint32 ordinal, uint256[2] memory answers, uint256 y, Layout memory l)
         private
         pure
         returns (uint256 row)
     {
-        // The top and the bottom edges: sixteen glyphs along the row, whenever
-        // `y` falls inside either band.
-        if (y < GH || y >= last) {
-            uint256 r = y < GH ? y : y - last;
+        uint256 m = l.modules;
+        if (ordinal != 0 && y < GH) {
             for (uint256 i; i < BITS; ++i) {
-                row |= _glyphRow(_digit(ordinal, i), r) << (modules - (pad + i * STEP) - GW);
+                row |= _glyphRow(_digit(ordinal, i), y) << (m - (l.pad + i * STEP) - GW);
             }
         }
+        // Right edge, bits 0..121: x = m - 1 - depth, y = along.
+        if (y >= l.start && y < l.start + COLS) {
+            uint256 a = y - l.start;
+            for (uint256 d = 1; d <= 2; ++d) {
+                if (_bit(answers, a * 2 + d - 1)) row |= uint256(1) << d;
+            }
+        }
+        // Bottom edge, bits 122..243: x = m - 1 - along, y = m - 1 - depth.
+        if (l.sides >= 2 && (y == m - 2 || y == m - 3)) {
+            uint256 d = m - 1 - y;
+            for (uint256 a; a < COLS; ++a) {
+                if (_bit(answers, FIRST_SIDE + a * 2 + d - 1)) row |= uint256(1) << (l.start + a);
+            }
+        }
+        // Left edge, bits 244..364: x = depth, y = m - 1 - along.
+        if (l.sides >= 3 && y <= m - 1 - l.start && y + COLS > m - 1 - l.start) {
+            uint256 a = (m - 1 - l.start) - y;
+            for (uint256 d = 1; d <= 2; ++d) {
+                uint256 p = a * 2 + d - 1;
+                if (p < 365 - 2 * FIRST_SIDE && _bit(answers, 2 * FIRST_SIDE + p)) row |= uint256(1) << (m - 1 - d);
+            }
+        }
+    }
 
-        // The left and the right edges: one glyph row from each, whenever `y`
-        // falls inside a side glyph rather than in the space between two.
-        if (y >= pad && y < pad + SPAN) {
-            uint256 off = y - pad;
-            if (off % STEP < GH) {
-                uint256 g = _glyphRow(_digit(ordinal, off / STEP), off % STEP);
-                row |= g << (modules - GW); // the left edge, at x = 0
-                row |= g << (modules - last - GW); // the right edge, at x = last
-            }
-        }
+    function _bit(uint256[2] memory w, uint256 i) private pure returns (bool) {
+        return (w[i >> 8] >> (i & 255)) & 1 == 1;
     }
 
     /// @dev Row `r` of the glyph for `d`, as GW bits, high bit leftmost.

@@ -11,9 +11,8 @@ import {MarkRenderer} from "../src/render/MarkRenderer.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 import {TokenView} from "../src/render/TokenView.sol";
 
-/// @notice The finisher's digit band through the whole renderer: that it
-/// changes nothing for a token without one, and exactly one thing for a token
-/// with one.
+/// @notice The answer band through the whole renderer: that it changes nothing
+/// below FIRST_SIDE credited days, and exactly one thing for a token with one.
 contract DigitBandRenderTest is Test {
     Renderer r;
 
@@ -55,13 +54,12 @@ contract DigitBandRenderTest is Test {
     // THE CONTROL
     // ---------------------------------------------------------------------
 
-    /// This is why the band is safe to ship before the finisher Marks exist.
-    /// Nothing can set an ordinal yet, so every token that exists must render
-    /// the bytes it rendered before the band was written. `TokenUriGolden` and
-    /// `RenderMatrix` prove that across the whole state matrix; this says what
-    /// the mechanism is, so a failure points at the cause.
-    function test_aTokenWithNoOrdinalCarriesNoBandAndNoShift() public view {
-        string memory plain = r.svg(_finished());
+    /// Below FIRST_SIDE credited days there is no band, and the picture keeps
+    /// the exact transforms it had before the band existed.
+    function test_aTokenBelowTheFirstSideCarriesNoBandAndNoShift() public view {
+        TokenView memory v = _finished();
+        v.level = DigitBand.FIRST_SIDE - 1;
+        string memory plain = r.svg(v);
 
         assertFalse(LibString.contains(plain, "translate(0 0)"), "an empty shift, not a zero one");
         assertEq(
@@ -101,12 +99,12 @@ contract DigitBandRenderTest is Test {
     /// That finding cost a measured A/B on two live Sepolia contracts.
     function test_theDeclaredSizeGrowsWithTheBandedCanvas() public view {
         TokenView memory v = _finished();
-        string memory plain = r.svg(v);
-        v.marks = uint256(1) << ORDINAL_SHIFT;
         string memory banded = r.svg(v);
+        v.level = DigitBand.FIRST_SIDE - 1;
+        string memory plain = r.svg(v);
 
-        assertTrue(LibString.contains(plain, 'width="848"'), "one ring is 848px unbanded");
-        assertFalse(LibString.contains(banded, 'width="848"'), "a banded token is wider than that");
+        assertTrue(LibString.contains(plain, 'width="816"'), "no ring and no band is 816px");
+        assertFalse(LibString.contains(banded, 'width="848"'), "a banded ring token is wider than one unbanded");
         // 747 units at 16px per 13-unit cell is 919px.
         assertTrue(LibString.contains(banded, 'width="919"'), "and 747 units declares 919px");
     }

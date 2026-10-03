@@ -94,25 +94,41 @@ contract DigitBandTest is Test {
         );
     }
 
-    function test_anOrdinalOfZeroDrawsNothing() public pure {
+    function _none() internal pure returns (uint256[2] memory) {}
+
+    function _all() internal pure returns (uint256[2] memory w) {
+        w[0] = type(uint256).max;
+        w[1] = (uint256(1) << (365 - 256)) - 1;
+    }
+
+    function test_belowTheFirstSideNothingIsDrawn() public pure {
+        assertEq(bytes(DigitBand.path(1, _all(), 121, FrameRenderer.canvas(0), INK)).length, 0);
+    }
+
+    function test_noPlaceAndNoAnswersDrawsNothing() public pure {
         assertEq(
-            bytes(DigitBand.path(0, FrameRenderer.canvas(1), INK)).length,
+            bytes(DigitBand.path(0, _none(), 365, FrameRenderer.canvas(1), INK)).length,
             0,
-            "a token with no ordinal is not a finisher and carries no band"
+            "an empty band emits no path at all"
         );
     }
 
-    /// 83 modules, span 63, pad 10, last 80. The four edges put a glyph cell at
-    /// each of those, and nothing else in the picture ever reaches them: the
-    /// band is drawn in its own group, outside everything.
-    function test_anOrdinalDrawsAllFourEdges() public pure {
-        string memory p = DigitBand.path(1, FrameRenderer.canvas(1), INK);
+    /// 83 modules, span 63, pad 10. The place is written along the top only;
+    /// the other three edges belong to the answers.
+    function test_thePlaceIsDrawnOnTheTopEdgeOnly() public pure {
+        string memory p = DigitBand.path(1, _none(), 365, FrameRenderer.canvas(1), INK);
 
-        assertGt(bytes(p).length, 0, "a finisher carries a band");
+        assertGt(bytes(p).length, 0, "a finisher carries its place");
         assertTrue(LibString.contains(p, "M10 0"), "the top edge starts at the pad");
-        assertTrue(LibString.contains(p, " 80"), "the bottom edge sits on the last module row");
-        assertTrue(LibString.contains(p, "M80 "), "the right edge sits on the last module column");
-        assertTrue(LibString.contains(p, "M0 "), "the left edge sits on column zero");
+        assertFalse(LibString.contains(p, "M80 "), "nothing on the right edge");
+        assertFalse(LibString.contains(p, "M0 "), "nothing on the left edge");
+    }
+
+    /// The right edge's outer lane holds answer 0, at x = 83 - 2, y = (83 - 61) / 2.
+    function test_theFirstAnswerSitsOnTheRightEdgeOuterLane() public pure {
+        uint256[2] memory one;
+        one[0] = 1;
+        assertEq(DigitBand.path(0, one, 122, FrameRenderer.canvas(1), INK), '<path fill="#2f2f2f" d="M81 11h1v1h-1z"/>');
     }
 
     /// The glyphs are the ones on the approved sheet. A `1` drawn as a plain
@@ -122,8 +138,8 @@ contract DigitBandTest is Test {
     /// than one that alternates.
     function test_theGlyphsAreTheApprovedBitmaps() public pure {
         uint256 cells = FrameRenderer.canvas(1);
-        string memory ones = DigitBand.path(0xFFFF, cells, INK);
-        string memory mixed = DigitBand.path(0xAAAA, cells, INK);
+        string memory ones = DigitBand.path(0xFFFF, _none(), 365, cells, INK);
+        string memory mixed = DigitBand.path(0xAAAA, _none(), 365, cells, INK);
 
         assertGt(
             bytes(mixed).length,
@@ -139,8 +155,8 @@ contract DigitBandTest is Test {
         uint256 cells = FrameRenderer.canvas(1);
 
         assertTrue(
-            keccak256(bytes(DigitBand.path(1, cells, INK)))
-                != keccak256(bytes(DigitBand.path(365, cells, INK))),
+            keccak256(bytes(DigitBand.path(1, _none(), 365, cells, INK)))
+                != keccak256(bytes(DigitBand.path(365, _none(), 365, cells, INK))),
             "the ring IS the rank"
         );
     }

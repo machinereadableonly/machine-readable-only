@@ -47,7 +47,7 @@ contract RenderMatrixTest is Test {
         // Asserted so a fixture that silently regenerates SMALLER -- a matrix
         // case dropped by an edit -- fails here rather than passing with less
         // coverage.
-        assertEq(cases.length, 68, "the fixture is not the size it should be");
+        assertEq(cases.length, 86, "the fixture is not the size it should be");
 
         for (uint256 i; i < cases.length; ++i) {
             RenderFixture.Case memory c = cases[i];
@@ -60,6 +60,7 @@ contract RenderMatrixTest is Test {
             v.today = c.today;
             v.mintDay = 900;
             v.marks = c.marks;
+            v.answers = [c.answers0, c.answers1];
             v.resting = c.resting;
             v.restDay = c.restDay;
             v.sunset = c.sunset;

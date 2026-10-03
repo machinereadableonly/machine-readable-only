@@ -91,8 +91,8 @@ contract RendererTest is Test {
     function test_aPartYearMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(200, 45, 1000, 1000);
         v.agentKeyId = bytes32(uint256(0xa9e));
-        _diff("day 200", v, 14764,
-            0x956167d665da84f15540b5bf329aa22fc7f86d5d145bd2d35704115270f6b831);
+        _diff("day 200", v, 14788,
+            0xcc63a233f5ea7921daf5e9d9ebc853cb848bff4f9c0aa2138f5830a9c001d8ab);
     }
 
     function test_aWholeHeartMatchesTheJavascriptReference() public view {
@@ -100,8 +100,8 @@ contract RendererTest is Test {
         v.generation = 1;
         v.parent = 7;
         v.seedsGiven = 2;
-        _diff("whole, one ring", v, 14778,
-            0x7571637819641759a61d4e2bbe5c8c9e383ebe8364d0d8921b3fdffff4d31b74);
+        _diff("whole, one ring", v, 14806,
+            0x636f58580b711427b4b21c2fceec48e058722f7df35b3aac415460b3375cde99);
     }
 
     function test_aLapsedTokenMatchesTheJavascriptReference() public view {
@@ -110,8 +110,8 @@ contract RendererTest is Test {
         // function it never called, so the image never paled while this
         // renderer's did. It was level 365 until Spec 10f, which is now a token
         // that cannot lapse at all -- at 364 the lapse is measured again.
-        _diff("lapsed, one day short", _view(364, 140, 1000, 1040), 14809,
-            0x6d870cf15d08c483a099d8ad22251d5140997acae1fe8dd2966b1d1b4dcf390f);
+        _diff("lapsed, one day short", _view(364, 140, 1000, 1040), 14833,
+            0x46b08072742791c66a93157700da7faf7cd91b542ff32216cce73b9cb16d583b);
     }
 
     /// The finish freezes the token on its last credited day, and this is the
@@ -123,15 +123,15 @@ contract RendererTest is Test {
         TokenView memory v = _view(365, 5, 1000, 1400);
         v.fellRun = 200;
         v.fellDay = 900;
-        _diff("finished after a slip", v, 14776,
-            0x56039186bf5a849080b337c9ff2df17eee1a4661990a442ab5e69b7d5c448101);
+        _diff("finished after a slip", v, 14804,
+            0x115566af8e29b450c963d80d2c7d34c2c9a40672ab68713a30b94b05603637cd);
     }
 
     function test_everyMarkAtOnceMatchesTheJavascriptReference() public view {
         TokenView memory v = _view(365, 400, 1000, 1000);
         v.marks = ALL_MARKS;
-        _diff("every drawn mark", v, 15983,
-            0x9ae226e8900a74049cf371483e03e75dc685e03ad97b826948b08fa3f2865a0f);
+        _diff("every drawn mark", v, 16011,
+            0x8321917dca3600a74b6b72ed3b2e2308412b353e879557ba531022c27d29f9a1);
     }
 
     function test_aSealedTokenMatchesTheJavascriptReference() public view {
@@ -140,8 +140,8 @@ contract RendererTest is Test {
         TokenView memory v = _view(300, 200, 1000, 9999);
         v.resting = true;
         v.restDay = 1000;
-        _diff("sealed at rest", v, 14812,
-            0xfed29c5818a87db651547bdbc8ba278e1509e8177c8a37377acaddee03837eac);
+        _diff("sealed at rest", v, 14836,
+            0x87864bcd0eb59a3b5c4a735cbfb637b503543fd38b40eab01a375822998dbb8e);
     }
 
     /// A seeded child, at both extremes of the echo ring.
@@ -178,8 +178,8 @@ contract RendererTest is Test {
         v.generation = 2;
         v.parent = 7;
         v.echo = 3650;
-        _diff("a finished child", v, 15789,
-            0x129a431472221f04b2b06c5959b038a9796e95ee1e53def977f2d0894e8621af);
+        _diff("a finished child", v, 15809,
+            0x97855f52d9159f7b5ce67a7128005a2abce1c6bc63d5728477c6b3f995a2ef75);
     }
 
     /// A child wearing the maximal LEGAL Mark set.
@@ -206,8 +206,8 @@ contract RendererTest is Test {
         // non-default on purpose, so the shape and ink bits are read rather
         // than defaulting to 0. Mirrors the packing applyMark writes.
         v.marks = ALL_MARKS_TINTED | (uint256(2) << 16) | (uint256(1) << 24);
-        _diff("a child with every drawn mark", v, 17568,
-            0x7a9f6a131463dd0412bca2739cda2d69b1d9b213222d34fa98b290de8264d34f);
+        _diff("a child with every drawn mark", v, 17592,
+            0x56be2a8d68a84e0ce8cc8477f6eb15ed70e52663768e2c0f512f09fda8ba8f62);
     }
 
     function test_theEyesAreDrawnLastOverTheNoise() public view {

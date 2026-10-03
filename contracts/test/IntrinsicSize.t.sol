@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {Renderer} from "../src/render/Renderer.sol";
 import {RendererUnsized} from "../src/render/RendererUnsized.sol";
+import {DigitBand} from "../src/render/DigitBand.sol";
 import {FrameGeometry} from "../src/render/FrameGeometry.sol";
 import {TokenView} from "../src/render/TokenView.sol";
 
@@ -64,17 +65,15 @@ contract RendererSizedTest is Test {
         return vm.indexOf(haystack, needle) != type(uint256).max;
     }
 
-    /// A ONE-RING canvas is 53 cells, so sixteen pixels a cell is 848 -- which is
-    /// what the assertions below render, at level 365. Year zero is 51 cells and
-    /// 816 px. This is
-    /// the number a third-party rasteriser reads instead of falling back to the
-    /// viewBox units, which is the whole point of declaring it.
+    /// Year zero below the band is 51 cells, so sixteen pixels a cell is 816.
+    /// This is the number a third-party rasteriser reads instead of falling
+    /// back to the viewBox units, which is the whole point of declaring it.
     function test_theShippedRendererDeclaresCanvasTimesSixteen() public view {
-        string memory s = shipped.svg(_view(365));
-        assertTrue(_has(s, "width=\"848\" height=\"848\""), "expected 53 x 16 = 848");
-        // The viewBox is in UNITS, not cells: 53 cells x CELL_UNITS. The pixel
+        string memory s = shipped.svg(_view(DigitBand.FIRST_SIDE - 1));
+        assertTrue(_has(s, "width=\"816\" height=\"816\""), "expected 51 x 16 = 816");
+        // The viewBox is in UNITS, not cells: 51 cells x CELL_UNITS. The pixel
         // size stays cells x 16, which is what a rasteriser is being told.
-        assertTrue(_has(s, _viewBox(53)), "the viewBox must be untouched");
+        assertTrue(_has(s, _viewBox(51)), "the viewBox must be untouched");
     }
 
     /// The declared size has to track the canvas, which grows with the rings --
@@ -85,17 +84,21 @@ contract RendererSizedTest is Test {
         TokenView memory v = _view(uint32(FrameGeometry.DAY_CELLS));
         v.echo = 3650;
         string memory s = shipped.svg(v);
-        assertTrue(_has(s, _viewBox(57)), "two rings should give a 57-cell canvas");
-        assertTrue(_has(s, "width=\"912\" height=\"912\""), "expected 57 x 16 = 912");
+        // Two rings give a 57-cell canvas, and the band widens it.
+        uint256 units = DigitBand.canvasUnits(57);
+        string memory u = vm.toString(units);
+        string memory px = vm.toString(units * 16 / FrameGeometry.CELL_UNITS);
+        assertTrue(_has(s, string.concat('viewBox="0 0 ', u, " ", u, '"')), "the banded 57-cell canvas");
+        assertTrue(_has(s, string.concat('width="', px, '" height="', px, '"')), "declared at 16 px a cell");
     }
 
     /// The control must stay what shipped before, or re-running the A/B measures
     /// something other than the intrinsic size.
     function test_theControlDeclaresNoIntrinsicSize() public view {
-        string memory s = control.svg(_view(365));
+        string memory s = control.svg(_view(DigitBand.FIRST_SIDE - 1));
         assertFalse(_has(s, "width=\"8"), "the control must not declare a width in pixels");
         assertTrue(
-            _has(s, string.concat("<svg xmlns=\"http://www.w3.org/2000/svg\" ", _viewBox(53))),
+            _has(s, string.concat("<svg xmlns=\"http://www.w3.org/2000/svg\" ", _viewBox(51))),
             "the control's open tag must be the pre-2026-08-29 bytes"
         );
     }

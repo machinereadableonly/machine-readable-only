@@ -80,13 +80,12 @@ contract Renderer is IRenderer {
         );
     }
 
-    /// @dev The finisher's digit band, in the common unit, and 0 for every token
-    /// that is not a finisher. Every layout expression below adds it, and each
-    /// reduces to exactly its pre-band form when the band is 0, which keeps a
-    /// token that is not a finisher byte-identical. Computed once here rather
-    /// than at each of the four places that need it, because it is a loop.
+    /// @dev The answer band, in the common unit, and 0 below FIRST_SIDE credited
+    /// days. Every layout expression below adds it, and each reduces to exactly
+    /// its pre-band form when the band is 0. Computed once here rather than at
+    /// each of the four places that need it, because it is a loop.
     function _band(TokenView memory v) private pure returns (uint256) {
-        if (MarkRenderer.ordinal(v.marks) == 0) return 0;
+        if (v.level < DigitBand.FIRST_SIDE) return 0;
         return DigitBand.bandUnits(FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)));
     }
 
@@ -238,14 +237,13 @@ contract Renderer is IRenderer {
         );
     }
 
-    /// @dev The finisher's number round the border, drawn in QR MODULES in its own
-    /// group, outside everything else on the canvas. It is written in the ink of
-    /// the finisher Mark the token holds (`MarkRenderer.finisherInk`), which
-    /// records the token's PLACE and never moves -- not the frame's fill or the
-    /// token's colour, both of which move with the streak.
+    /// @dev The answers and the finisher's place, drawn in QR MODULES in their own
+    /// group outside everything else, in the finisher Mark's ink, never a fill the streak moves.
     function _digitGroup(TokenView memory v) private pure returns (string memory) {
         string memory digits = DigitBand.path(
             MarkRenderer.ordinal(v.marks),
+            v.answers,
+            v.level,
             FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)),
             MarkRenderer.finisherInk(v.marks)
         );
@@ -318,7 +316,7 @@ contract Renderer is IRenderer {
     /// @dev The `width` and `height` pair when a size is declared, and the empty
     /// string when it is not -- so the unsized build emits the exact bytes it
     /// always has, down to the single space before `viewBox`.
-    /// @param band the finisher's digit band. The expression below is exactly
+    /// @param band the answer band. The expression below is exactly
     /// `canvas * k` when it is 0, because `units` is then `canvas * CELL_UNITS` and
     /// the division is exact.
     function _intrinsic(TokenView memory v, uint256 band) private pure returns (string memory) {

@@ -60,17 +60,16 @@
 // `@resvg/resvg-js` 2.6.2 does not report its native allocations to V8, so
 // nothing is collected under pressure and gc() does not help -- see the header
 // of combination-sweep.mjs, which had to split its 459 combinations into child
-// processes for that reason. This sweep is 54 rasters, not 2,295, so one
-// process is enough; what keeps it small is that only ONE svg and ONE raster
+// processes for that reason. This sweep is 324 rasters, not 2,295, so one
+// process fits the cap (about 2 GB peak); what keeps it small is that only ONE svg and ONE raster
 // are alive at a time (a state is rendered, decoded across every size, and
 // dropped before the next state is built). Peak RSS is printed at the end so
 // the claim is measured rather than asserted.
 //
-// EXPECT THAT PEAK TO MOVE between runs -- 951 to 968 MB over four runs of the
-// identical workload. The allocations are native, so V8 cannot see them and the
+// EXPECT THAT PEAK TO MOVE between runs of the identical workload. The allocations are native, so V8 cannot see them and the
 // peak follows collection timing rather than the work done. It is a sanity
 // check that the sweep is nowhere near the cap, not a figure to pin.
-import { renderSvg, canvasFor, finisherMark, HUSH, BEAT, IRIS_BOUGHT, VESSEL, TINT } from "./render-token.mjs";
+import { renderSvg, canvasFor, FIRST_SIDE, finisherMark, HUSH, BEAT, IRIS_BOUGHT, VESSEL, TINT } from "./render-token.mjs";
 import * as SHEET from "./sheet-code.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
@@ -128,6 +127,42 @@ const CASES = [
              marks: [...CAP_MARKS, finisherMark(1)], irisVariant: 2 } },
 ];
 
+// THE ANSWER BAND. From day 122 the band carries one square per credited day,
+// so a token is judged at the first side (122) and the second (244), founding
+// and child, bare, wearing every Mark legal at that level (no Vessel: that
+// needs a whole heart), and lapsed 30 days on a streak of 3; each under the
+// densest pattern (every square filled) and the most broken one (alternate).
+// Then the finished child and its founding twin, wearing every legal Mark and
+// their place, under both patterns.
+const answerWords = (f) => {
+  const w = [0n, 0n];
+  for (let i = 0; i < 365; i++) if (f(i)) w[i >> 8] |= 1n << BigInt(i & 255);
+  return w;
+};
+const PATTERNS = [["all ones", answerWords(() => true)], ["alternate", answerWords((i) => i % 2 === 0)]];
+const BAND_MARKS = [HUSH, BEAT, IRIS_BOUGHT, TINT];
+for (const level of [122, 244]) {
+  for (const [line, echo] of [["founding", 0], ["child", 365]]) {
+    for (const [look, extra] of [
+      ["bare", {}],
+      ["every legal Mark", { marks: BAND_MARKS, irisVariant: 2 }],
+      ["lapsed 30 days", { streak: 3, today: 1030 }],
+    ]) {
+      for (const [name, answers] of PATTERNS) {
+        CASES.push({ name: `${line}, day ${level}, ${look}, answers ${name}`,
+          state: { level, streak: level, years: 0, echo, answers, ...extra } });
+      }
+    }
+  }
+}
+for (const [line, echo] of [["finished child", 365], ["finished founding token", 0]]) {
+  for (const [name, answers] of PATTERNS) {
+    CASES.push({ name: `${line}, every legal Mark and its place, answers ${name}`,
+      state: { level: 365, streak: 365, years: 1, echo, ordinal: 1, answers,
+               marks: [...CAP_MARKS, finisherMark(1)], irisVariant: 2 } });
+  }
+}
+
 // Every state is live rather than lapsed or sealed, so the page is at full
 // contrast and the ring is judged on its own and not on a paled field.
 const DAY = { lastDay: 1000, today: 1000 };
@@ -144,7 +179,7 @@ for (const c of CASES) {
   // One svg alive at a time. It goes out of scope with the iteration.
   const svg = renderSvg(CODE.modules, TARGET.want, CODE.size, state);
   // The digit band sits outside the ring canvas, so it is named on top.
-  const canvas = `${canvasFor(state.years, state.echo)} cells${state.ordinal ? " plus the digit band" : ""}`;
+  const canvas = `${canvasFor(state.years, state.echo)} cells${state.level >= FIRST_SIDE ? " plus the band" : ""}`;
 
   const bad = [];
   for (const px of SIZES) {
