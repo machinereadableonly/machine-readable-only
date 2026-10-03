@@ -18,7 +18,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
 import { CODE_BYTES } from "../tools/code-bytes.mjs";
-import { splitArgs, firstAnswerFor } from "./split-rig.mjs";
+import { passingReveal, splitArgs, firstAnswerFor } from "./split-rig.mjs";
 
 const TODAY = 20_700;
 const QR = "ab".repeat(CODE_BYTES);
@@ -105,7 +105,7 @@ test("gas above the cap writes nothing at all", async () => {
     async gasOk() { return { ok: false, gasPrice: 900_000_000n, capWei: 50_000_000n }; },
   });
   const alerts = [];
-  const summary = await runClock({ ...baseArgs(q), writer, alert: (m) => alerts.push(m) });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer), alert: (m) => alerts.push(m) });
 
   assert.equal(summary.gasStopped, true);
   assert.deepEqual(summary.minted, []);
@@ -129,7 +129,7 @@ test("a gas stop skips the writes and still reconciles and scans", async () => {
   const writer = okWriter({
     async gasOk() { return { ok: false, gasPrice: 900_000_000n, capWei: 50_000_000n }; },
   });
-  const summary = await runClock({ ...baseArgs(q), publicClient: chain, writer, alert: () => {} });
+  const summary = await runClock({ ...baseArgs(q), publicClient: chain, writer: passingReveal(writer), alert: () => {} });
 
   assert.equal(summary.gasStopped, true);
   assert.equal(writer.sent.length, 0, "not one transaction was sent");
@@ -144,7 +144,7 @@ test("a gas stop on its own is not a failure: the same rows go out tomorrow", as
   const writer = okWriter({
     async gasOk() { return { ok: false, gasPrice: 900_000_000n, capWei: 50_000_000n }; },
   });
-  const summary = await runClock({ ...baseArgs(q), writer, alert: () => {} });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer), alert: () => {} });
 
   assert.equal(exitCodeFor(summary), 0);
 });
@@ -153,7 +153,7 @@ test("a solved, paid mint is written and both rows move to written", async () =>
   const { db, q } = mirror();
   queueMint(q, db, 1);
   const writer = okWriter();
-  const summary = await runClock({ ...baseArgs(q), writer });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
 
   assert.deepEqual(summary.minted, [1]);
   assert.equal(writer.sent[0].functionName, "mint");
@@ -170,7 +170,7 @@ test("a mint whose artwork never solved is NOT written, and a human is told", as
   queueMint(q, db, 1, { solveState: "failed" });
   const writer = okWriter();
   const alerts = [];
-  const summary = await runClock({ ...baseArgs(q), writer, alert: (m) => alerts.push(m) });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer), alert: (m) => alerts.push(m) });
 
   assert.deepEqual(summary.minted, []);
   assert.deepEqual(summary.stuck, [1]);
@@ -187,7 +187,7 @@ test("only days that have CLOSED are written: today's check-in waits for tomorro
   q.insertCredit(1, TODAY, "sig-today");
 
   const writer = okWriter();
-  const summary = await runClock({ ...baseArgs(q), writer });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
 
   assert.deepEqual(summary.credited.map((e) => e.day), [TODAY - 1]);
   const batch = writer.sent.find((s) => s.functionName === "batchCheckIn");
@@ -200,7 +200,7 @@ test("mints are written BEFORE check-ins, so a token minted this run can be cred
   queueMint(q, db, 1);
   q.insertCredit(1, TODAY - 1, "sig");
   const writer = okWriter();
-  await runClock({ ...baseArgs(q), writer });
+  await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
 
   const order = writer.sent.map((s) => s.functionName);
   assert.equal(order.indexOf("mint") < order.indexOf("batchCheckIn"), true, `order was ${order.join(", ")}`);
@@ -233,7 +233,7 @@ test("a refused entry is dropped, the rest land, and the dropped row goes termin
     },
   });
   const alerts = [];
-  const summary = await runClock({ ...baseArgs(q), writer, alert: (m) => alerts.push(m) });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer), alert: (m) => alerts.push(m) });
 
   assert.deepEqual(summary.credited.map((e) => e.tokenId), [1]);
   assert.deepEqual(summary.dropped.map((d) => [d.entry.tokenId, d.reason]), [[2, "Resting"]]);
@@ -274,7 +274,7 @@ test("the run reads a token's level from the chain to trim an AlreadyFinished re
       return { ok: true, hash: "0x1" };
     },
   });
-  const summary = await runClock({ ...baseArgs(q), publicClient: chain, writer });
+  const summary = await runClock({ ...baseArgs(q), publicClient: chain, writer: passingReveal(writer) });
 
   assert.deepEqual(summary.credited.map((e) => e.day), [TODAY - 3], "the finishing credit is written");
   assert.deepEqual(summary.dropped.map((d) => [d.entry.day, d.reason]), [[TODAY - 2, "AlreadyFinished"], [TODAY - 1, "AlreadyFinished"]]);
@@ -293,7 +293,7 @@ for (const errorName of ["NotWarden", "Sunset", "EnforcedPause"]) {
         return { ok: false, reason: "reverted-on-simulate", errorName, errorArgs: [] };
       },
     });
-    const summary = await runClock({ ...baseArgs(q), writer });
+    const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
     assert.equal(summary.aborted, errorName);
     assert.equal(writer.sent.length, 1, "one attempt, then stop");
   });
@@ -317,7 +317,7 @@ test("a mint the chain already has AS THIS MINT is marked written", async () => 
   const alerts = [];
   const summary = await runClock({
     ...baseArgs(q), publicClient: chainHolding(MINE),
-    writer: tokenExistsWriter(), alert: (m) => alerts.push(m),
+    writer: passingReveal(tokenExistsWriter()), alert: (m) => alerts.push(m),
   });
   assert.deepEqual(summary.minted, []);
   assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "written");
@@ -334,7 +334,7 @@ test("a mint blocked by SOMEBODY ELSE'S token is left queued, not closed", async
   const summary = await runClock({
     ...baseArgs(q),
     publicClient: chainHolding({ owner: "0x" + "99".repeat(20), agentKeyId: "someone-else" }),
-    writer: tokenExistsWriter(), alert: (m) => alerts.push(m),
+    writer: passingReveal(tokenExistsWriter()), alert: (m) => alerts.push(m),
   });
   assert.deepEqual(summary.minted, []);
   assert.equal(
@@ -354,7 +354,7 @@ test("a mint whose id cannot be identified on chain is left queued", async () =>
   const summary = await runClock({
     ...baseArgs(q),
     publicClient: { ...noChain, async readContract() { throw new Error("rpc down"); } },
-    writer: tokenExistsWriter(), alert: (m) => alerts.push(m),
+    writer: passingReveal(tokenExistsWriter()), alert: (m) => alerts.push(m),
   });
   assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued");
   assert.deepEqual(summary.stuckMints, [1]);
@@ -372,13 +372,13 @@ test("a mint the chain refuses as StaleDay is reported stuck, not retried in sil
   const alerts = [];
   const summary = await runClock({
     ...baseArgs(q),
-    writer: okWriter({
+    writer: passingReveal(okWriter({
       async send(fn, args, opts) {
         assertEncodable(fn, args);
         this.sent.push({ functionName: fn, args, label: opts?.label });
         return { ok: false, reason: "reverted-on-simulate", errorName: "StaleDay", errorArgs: ["100", "200"] };
       },
-    }),
+    })),
     alert: (m) => alerts.push(m),
   });
   assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued");
@@ -394,13 +394,13 @@ test("a mint the chain refuses as BeforeDeploy is reported stuck, not retried in
   const alerts = [];
   const summary = await runClock({
     ...baseArgs(q),
-    writer: okWriter({
+    writer: passingReveal(okWriter({
       async send(fn, args, opts) {
         assertEncodable(fn, args);
         this.sent.push({ functionName: fn, args, label: opts?.label });
         return { ok: false, reason: "reverted-on-simulate", errorName: "BeforeDeploy", errorArgs: ["100"] };
       },
-    }),
+    })),
     alert: (m) => alerts.push(m),
   });
   assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued");
@@ -414,7 +414,7 @@ test("a Mark that lands is written and its bit is set", async () => {
   db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
   q.reserveMark(1, 2);
   const writer = okWriter();
-  const summary = await runClock({ ...baseArgs(q), writer });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
 
   // Compared field by field, not deep-equal against a literal: node:sqlite
   // returns rows with a null prototype, so an identical-looking object is not
@@ -439,7 +439,7 @@ test("the Clock passes the variant to applyMark", async () => {
   db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
   q.reserveMark(1, 5, 2);                       // the bought Iris, leaf
   const writer = okWriter();
-  await runClock({ ...baseArgs(q), writer });
+  await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
 
   const call = writer.sent.find((c) => c.functionName === "applyMark");
   assert.deepEqual(call.args, [1n, 5, 2]);
@@ -451,7 +451,7 @@ test("a Mark with no variant still sends an explicit zero, never undefined", asy
   db.exec("UPDATE mints SET status = 'written' WHERE tokenId = 1");
   q.reserveMark(1, 1);
   const writer = okWriter();
-  await runClock({ ...baseArgs(q), writer });
+  await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
 
   const call = writer.sent.find((c) => c.functionName === "applyMark");
   assert.deepEqual(call.args, [1n, 1, 0]);
@@ -466,9 +466,9 @@ test("running twice writes each row exactly once", async () => {
   q.insertCredit(1, TODAY - 1, "sig");
 
   const first = okWriter();
-  await runClock({ ...baseArgs(q), writer: first });
+  await runClock({ ...baseArgs(q), writer: passingReveal(first) });
   const second = okWriter();
-  const summary = await runClock({ ...baseArgs(q), writer: second });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(second) });
 
   assert.deepEqual(summary.minted, [], "nothing left to mint");
   assert.deepEqual(summary.credited, [], "nothing left to credit");
@@ -478,7 +478,7 @@ test("running twice writes each row exactly once", async () => {
 test("an empty queue is a clean no-op, not an EmptyBatch revert", async () => {
   const { q } = mirror();
   const writer = okWriter();
-  const summary = await runClock({ ...baseArgs(q), writer });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
   assert.equal(writer.sent.length, 0);
   assert.equal(summary.aborted, null);
 });
@@ -501,7 +501,7 @@ test("the chunk size is the one the contract suite measures, and is applied", as
   for (let day = TODAY - 5; day < TODAY - 1; day += 1) q.insertCredit(1, day, `s${day}`);
 
   const writer = okWriter();
-  await runClock({ ...baseArgs(q), writer, chunkSize: 2 });
+  await runClock({ ...baseArgs(q), writer: passingReveal(writer), chunkSize: 2 });
   const batches = writer.sent.filter((s) => s.functionName === "batchCheckIn");
   assert.equal(batches.length, 2, "four entries at a chunk size of two");
 });
@@ -516,7 +516,7 @@ test("a mint is written with the day it was PAID for, not the day the Clock runs
   const { db, q } = mirror();
   queueMint(q, db, 1);
   const writer = okWriter();
-  await runClock({ ...baseArgs(q), writer });
+  await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
   const mint = writer.sent.find((s) => s.functionName === "mint");
   assert.ok(mint, "the queued mint was sent");
   assert.equal(Number(mint.args[4]), TODAY - 5, "the paid day, not today");
@@ -525,7 +525,7 @@ test("a mint is written with the day it was PAID for, not the day the Clock runs
 test("reconcile refuses to guess at its history on an unknown chain", async () => {
   const { q } = mirror();
   await assert.rejects(
-    () => runClock({ ...baseArgs(q), chainId: 1, writer: okWriter() }),
+    () => runClock({ ...baseArgs(q), chainId: 1, writer: passingReveal(okWriter()) }),
     /no deploy block recorded for chain 1/
   );
 });
@@ -559,7 +559,7 @@ test("a mark order the chain refuses is failed once, not retried nightly", async
   queueMark(q, db, {});
   const alerts = [];
   const first = refusingWriter("MarkExcluded");
-  const summary = await runClock({ ...baseArgs(q), writer: first, alert: (m) => alerts.push(m) });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(first), alert: (m) => alerts.push(m) });
 
   assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "failed");
   assert.equal(summary.stuckMarks.length, 1);
@@ -572,7 +572,7 @@ test("a mark order the chain refuses is failed once, not retried nightly", async
   const laterAlerts = [];
   const second = refusingWriter("MarkExcluded");
   const again = await runClock({
-    ...baseArgs(q), writer: second, alert: (m) => laterAlerts.push(m), log: (m) => logs.push(m),
+    ...baseArgs(q), writer: passingReveal(second), alert: (m) => laterAlerts.push(m), log: (m) => logs.push(m),
   });
   assert.equal(second.sent.filter((s) => s.functionName === "applyMark").length, 0,
     "the doomed call was sent a second time");
@@ -594,13 +594,13 @@ test("a transient send failure leaves the order queued and it is retried", async
       return { ok: false, reason: "send-failed", detail: "socket hang up" };
     },
   });
-  const summary = await runClock({ ...baseArgs(q), writer: flaky });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(flaky) });
 
   assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "queued");
   assert.deepEqual(summary.stuckMarks, []);
 
   const second = okWriter();
-  await runClock({ ...baseArgs(q), writer: second });
+  await runClock({ ...baseArgs(q), writer: passingReveal(second) });
   assert.equal(second.sent.filter((s) => s.functionName === "applyMark").length, 1,
     "the retry never happened");
   assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "written");
@@ -613,7 +613,7 @@ test("MarkAlreadyApplied catches the mirror up instead of failing the order", as
   queueMark(q, db, { upgradeId: 4 });
   const alerts = [];
   const writer = refusingWriter("MarkAlreadyApplied");
-  const summary = await runClock({ ...baseArgs(q), writer, alert: (m) => alerts.push(m) });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer), alert: (m) => alerts.push(m) });
 
   assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "written");
   assert.equal(q.getToken(1).marks, 1 << 4, "the mirror's mask caught up");
@@ -633,13 +633,13 @@ test("a revert that means the chain is behind stays queued, and lands on the ret
   // Ache in its pair, to one dropped socket.
   queueMark(q, db, { upgradeId: 1 });
   const behind = refusingWriter("NoSuchToken");
-  const summary = await runClock({ ...baseArgs(q), writer: behind });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(behind) });
 
   assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "queued");
   assert.deepEqual(summary.stuckMarks, []);
 
   const second = okWriter();
-  await runClock({ ...baseArgs(q), writer: second });
+  await runClock({ ...baseArgs(q), writer: passingReveal(second) });
   assert.equal(second.sent.filter((s) => s.functionName === "applyMark").length, 1,
     "the order was never retried once the token existed");
   assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "written");
@@ -652,7 +652,7 @@ test("the gates the mirror can be wrong about are not terminal either", async ()
   for (const errorName of ["MarkGate", "MarkRequires", "MarkInactive"]) {
     const { db, q } = mirror();
     queueMark(q, db, { upgradeId: 9 });
-    const summary = await runClock({ ...baseArgs(q), writer: refusingWriter(errorName) });
+    const summary = await runClock({ ...baseArgs(q), writer: passingReveal(refusingWriter(errorName)) });
     assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status,
       "queued", `${errorName} was treated as final`);
     assert.deepEqual(summary.stuckMarks, [], `${errorName} was reported as stuck`);
@@ -666,7 +666,7 @@ test("the gates the mirror can be wrong about are not terminal either", async ()
 test("a revert with no named error is not terminal", async () => {
   const { db, q } = mirror();
   queueMark(q, db, { upgradeId: 3 });
-  const summary = await runClock({ ...baseArgs(q), writer: refusingWriter(null) });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(refusingWriter(null)) });
 
   assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "queued");
   assert.deepEqual(summary.stuckMarks, []);
@@ -703,7 +703,7 @@ test("a run aborted by the contract still reconciles, and still sends nothing mo
     },
   });
 
-  const summary = await runClock({ ...baseArgs(q), publicClient: paused, writer });
+  const summary = await runClock({ ...baseArgs(q), publicClient: paused, writer: passingReveal(writer) });
 
   assert.equal(summary.aborted, "EnforcedPause", "the run still reports the abort, so it exits non-zero");
   assert.equal(writer.sent.length, 1, "it stopped at the first refusal rather than sending the queue");
@@ -745,7 +745,7 @@ test("a row still queued after three runs raises an alert naming what it is", as
       return { ok: true, hash: "0x1" };
     },
   });
-  const summary = await runClock({ ...baseArgs(q), writer: flaky, alert: (m) => alerts.push(m) });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(flaky), alert: (m) => alerts.push(m) });
 
   const stale = alerts.find((a) => a.includes("queued for 3 runs or more"));
   assert.ok(stale, `expected a staleness alert, got ${JSON.stringify(alerts)}`);
@@ -760,7 +760,7 @@ test("CONTROL: a fresh queue raises no staleness alert", async () => {
   queueMint(q, db, 1);
   db.exec(`UPDATE mints SET reservedAt = ${Date.now()} WHERE tokenId = 1`);
   const alerts = [];
-  await runClock({ ...baseArgs(q), writer: okWriter(), alert: (m) => alerts.push(m) });
+  await runClock({ ...baseArgs(q), writer: passingReveal(okWriter()), alert: (m) => alerts.push(m) });
   assert.equal(alerts.filter((a) => a.includes("queued for")).length, 0);
 });
 
@@ -803,7 +803,7 @@ test("reconcile trails the head, so a lagging replica cannot cost blocks", async
   const summary = await runClock({
     ...baseArgs(q),
     publicClient: laggingChain,
-    writer: okWriter(),
+    writer: passingReveal(okWriter()),
     lastReconciledBlock: HEAD - 100n,
   });
 
@@ -834,7 +834,7 @@ test("a head that has not advanced asks the node for nothing", async () => {
   const summary = await runClock({
     ...baseArgs(q),
     publicClient: stalled,
-    writer: okWriter(),
+    writer: passingReveal(okWriter()),
     lastReconciledBlock: HEAD - 12n,
   });
 
@@ -856,14 +856,14 @@ test("a head that moves backwards between runs does not drag the cursor back", a
   };
 
   const first = await runClock({
-    ...baseArgs(q), publicClient: flapping, writer: okWriter(), lastReconciledBlock: head - 100n,
+    ...baseArgs(q), publicClient: flapping, writer: passingReveal(okWriter()), lastReconciledBlock: head - 100n,
   });
   assert.equal(first.reconciled.to, FLOOR + 46_200n - 12n);
 
   // The next call lands on a replica 50 blocks behind.
   head = FLOOR + 46_150n;
   const second = await runClock({
-    ...baseArgs(q), publicClient: flapping, writer: okWriter(), lastReconciledBlock: first.reconciled.to,
+    ...baseArgs(q), publicClient: flapping, writer: passingReveal(okWriter()), lastReconciledBlock: first.reconciled.to,
   });
 
   // reconcile reports the window it could see. main.mjs writes that, so the
@@ -934,7 +934,7 @@ test("a credit refused NoSuchToken while its mint is unwritten is not condemned"
     },
   };
 
-  const summary = await runClock({ ...baseArgs(q), writer, alert: () => {} });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer), alert: () => {} });
 
   assert.deepEqual(summary.stuckCredits, [], "a day must not be condemned because its mint is late");
   assert.equal(
@@ -953,7 +953,7 @@ test("CONTROL: when the mint lands in the same run, its credit IS sent", async (
   q.insertCredit(1, TODAY - 1, "sig");
 
   const writer = okWriter();
-  const summary = await runClock({ ...baseArgs(q), writer, alert: () => {} });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer), alert: () => {} });
 
   assert.ok(
     writer.sent.some((s) => s.functionName === "batchCheckIn"),
@@ -971,7 +971,7 @@ test("an unnamed revert reports the detail and stays queued", async () => {
 
   const summary = await runClock({
     ...baseArgs(q),
-    writer: writerRefusingMint([]),
+    writer: passingReveal(writerRefusingMint([])),
     alert: (m) => alerts.push(m),
   });
 
@@ -1077,7 +1077,7 @@ test("a credit condemned on an earlier night keeps failing the run", async () =>
   q.failCredit(1, TODAY - 9);
 
   const alerts = [];
-  const summary = await runClock({ ...baseArgs(q), writer: okWriter(), alert: (m) => alerts.push(m) });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(okWriter()), alert: (m) => alerts.push(m) });
 
   assert.deepEqual(
     summary.stuckCredits.map((d) => [d.entry.tokenId, d.entry.day]),
@@ -1116,7 +1116,7 @@ test("condemning a credit writes the chain's own view over the mirror's", async 
       return { ok: true, hash: "0x1" };
     },
   });
-  await runClock({ ...baseArgs(q), publicClient, writer, alert: () => {} });
+  await runClock({ ...baseArgs(q), publicClient, writer: passingReveal(writer), alert: () => {} });
 
   const token = q.getToken(1);
   assert.equal(token.level, 3, "the level the CHAIN holds, not the one the Warden hoped for");
@@ -1138,7 +1138,7 @@ test("a cursor below the deploy block starts at the floor, not below it", async 
   await runClock({
     ...baseArgs(q),
     publicClient: chain,
-    writer: okWriter(),
+    writer: passingReveal(okWriter()),
     lastReconciledBlock: FLOOR - 100_000n,
   });
 
@@ -1163,7 +1163,7 @@ test("the cursor is saved as each page is applied, and survives a page that fail
     runClock({
       ...baseArgs(q),
       publicClient: chain,
-      writer: okWriter(),
+      writer: passingReveal(okWriter()),
       saveCursor: (block) => saved.push(block),
     })
   );
@@ -1193,7 +1193,7 @@ test("a chunk that judged nothing stops the night's remaining chunks", async () 
       return { ok: false, reason: "reverted-on-simulate", errorName: "NoSuchToken", errorArgs: [String(ids[0])] };
     },
   });
-  await runClock({ ...baseArgs(q), writer, chunkSize: 14, alert: () => {} });
+  await runClock({ ...baseArgs(q), writer: passingReveal(writer), chunkSize: 14, alert: () => {} });
 
   const idsSent = writer.sent
     .filter((s) => s.functionName === "batchCheckIn")
@@ -1320,7 +1320,7 @@ test("a run whose only outcome was a heal still sends the heartbeat", async () =
       return { ok: true, hash: "0x1" };
     },
   });
-  const summary = await runClock({ ...baseArgs(q), publicClient, writer });
+  const summary = await runClock({ ...baseArgs(q), publicClient, writer: passingReveal(writer) });
 
   assert.equal(summary.healed.length, 1, "the day was healed, not written");
   assert.deepEqual(summary.credited, []);

@@ -30,3 +30,15 @@ export function splitArgs(today) {
 /// The bit a mint or seed of `tokenId` on `day` carries.
 export const firstAnswerFor = (today, day, tokenId) =>
   silentBit(SPLIT_KEYS[keyIndexFor(day, anchorDayFor(today))], tokenId) === 1;
+
+/// Wrap a writer so the night's reveal lands without being recorded, for tests
+/// about what comes after it. Tests about the reveal itself use a plain writer.
+export function passingReveal(writer) {
+  const send = writer.send;
+  return Object.assign(writer, {
+    async send(functionName, args, opts) {
+      if (functionName === "revealSplitKeys") return { ok: true, hash: "0xreveal" };
+      return send.call(this, functionName, args, opts);
+    },
+  });
+}

@@ -368,34 +368,35 @@ export async function runClock({
 
   // 1c. THE REVEAL. Every key through yesterday goes out in its own call before
   //     any other write, with the questions those days asked, so a verifier can
-  //     check every square from the chain alone. Today's key stays secret.
+  //     check every square from the chain alone. Today's key stays secret. It
+  //     is sent on every run that writes, even with no new key: each reveal
+  //     points at the one before, and that pointer is how a verifier finds the
+  //     run's writes without scanning the whole chain.
   if (split && (q.pendingMints().length || q.pendingSeeds().length || q.pendingCredits(today - 1).length)) {
     const through = Math.min(keyIndexFor(today - 1, split.anchorDay), CHAIN_LENGTH);
-    if (through > split.revealed) {
-      const keys = splitKeys.slice(split.revealed + 1, through + 1);
-      const fromDay = split.anchorDay + split.revealed;
-      const asked = q.questionsForDays(fromDay, today - 1);
-      if (asked.some((row) => !bankById.has(row.questionId))) {
-        stopForSplit("a question issued on a day being revealed is missing from the bank");
+    const keys = through > split.revealed ? splitKeys.slice(split.revealed + 1, through + 1) : [];
+    const fromDay = split.anchorDay + split.revealed;
+    const asked = q.questionsForDays(fromDay, today - 1);
+    if (asked.some((row) => !bankById.has(row.questionId))) {
+      stopForSplit("a question issued on a day being revealed is missing from the bank");
+    } else {
+      const questions = asked.map(({ day, questionId }) => {
+        const b = bankById.get(questionId);
+        return b.answers
+          ? { day, question: b.text, answers: [...b.answers] }
+          : { day, question: b.text, range: { ...b.range } };
+      });
+      const result = await writer.send(
+        "revealSplitKeys",
+        [keys, stringToHex(JSON.stringify(questions))],
+        { label: `revealSplitKeys x${keys.length}` }
+      );
+      if (result.ok) {
+        summary.revealedKeys = keys.length;
+        summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
       } else {
-        const questions = asked.map(({ day, questionId }) => {
-          const b = bankById.get(questionId);
-          return b.answers
-            ? { day, question: b.text, answers: [...b.answers] }
-            : { day, question: b.text, range: { ...b.range } };
-        });
-        const result = await writer.send(
-          "revealSplitKeys",
-          [keys, stringToHex(JSON.stringify(questions))],
-          { label: `revealSplitKeys x${keys.length}` }
-        );
-        if (result.ok) {
-          summary.revealedKeys = keys.length;
-          summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
-        } else {
-          alert(`clock: revealing the split keys failed (${result.errorName ?? result.reason}) -- nothing else is written tonight`);
-          summary.aborted = `revealSplitKeys ${result.errorName ?? result.reason}`;
-        }
+        alert(`clock: revealing the split keys failed (${result.errorName ?? result.reason}) -- nothing else is written tonight`);
+        summary.aborted = `revealSplitKeys ${result.errorName ?? result.reason}`;
       }
     }
   }

@@ -105,10 +105,19 @@ test("a run with writes reveals every key through yesterday first", async () => 
   assert.deepEqual(questions, [{ day: TODAY - 1, question: "Fog or thunder?", answers: ["fog", "thunder"] }]);
 });
 
-test("a run whose keys are already revealed sends no reveal", async () => {
+test("a run whose keys are already revealed still marks the night with an empty reveal", async () => {
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
   await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
-  assert.deepEqual(writer.sent.map((s) => s.functionName), ["batchCheckIn"]);
+  assert.deepEqual(writer.sent.map((s) => s.functionName), ["revealSplitKeys", "batchCheckIn"]);
+  assert.deepEqual(writer.sent[0].args[0], []);
+});
+
+test("a run with nothing to write reveals nothing", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  const writer = writerRefusing();
+  await runClock({ ...baseArgs(q), publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK });
+  assert.deepEqual(writer.sent, []);
 });
 
 test("an answered credit carries the split's bit and its index", async () => {

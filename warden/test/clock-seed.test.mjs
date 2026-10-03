@@ -30,7 +30,7 @@ import { queries } from "../src/mirror/queries.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
 import { CODE_BYTES } from "../tools/code-bytes.mjs";
 import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
-import { splitArgs, firstAnswerFor } from "./split-rig.mjs";
+import { passingReveal, splitArgs, firstAnswerFor } from "./split-rig.mjs";
 
 const FLOOR = DEPLOY_BLOCK[84532];
 const TODAY = 20_700;
@@ -157,7 +157,7 @@ const baseArgs = (q) => ({
 
 test("a queued seed is sent as seed(), not mint()", async () => {
   const { q, writer } = seedRig();
-  const summary = await runClock({ ...baseArgs(q), writer });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
 
   assert.equal(writer.sent.length, 1, "exactly one write");
   assert.equal(writer.sent[0].functionName, "seed", "a child is created by seed, never by mint");
@@ -173,8 +173,8 @@ test("a queued seed is sent as seed(), not mint()", async () => {
 
 test("running twice writes the child exactly once", async () => {
   const { q, writer } = seedRig();
-  await runClock({ ...baseArgs(q), writer });
-  await runClock({ ...baseArgs(q), writer });
+  await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
+  await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
   assert.equal(writer.sent.filter((s) => s.functionName === "seed").length, 1);
 });
 
@@ -183,7 +183,7 @@ test("seeds are written after mints and before check-ins", async () => {
   // the same reason mints precede check-ins.
   const { db, q, writer } = seedRig();
   q.insertCredit(1, TODAY - 1, "sig");
-  await runClock({ ...baseArgs(q), writer });
+  await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
   const order = writer.sent.map((s) => s.functionName);
   assert.deepEqual(order, ["seed", "batchCheckIn"]);
   assert.equal(db.prepare("SELECT status FROM credits WHERE tokenId = 1").get().status, "written");
@@ -208,7 +208,7 @@ for (const errorName of [
   test(`${errorName} drops the row and returns the budget`, async () => {
     const { q, writer } = seedRig({ fail: errorName });
     const said = [];
-    const summary = await runClock({ ...baseArgs(q), writer, alert: (m) => said.push(m) });
+    const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer), alert: (m) => said.push(m) });
 
     assert.equal(q.getToken(2), undefined, "the child is gone");
     assert.equal(q.seedsSpent("k"), 0, "and the seed is spendable again");
@@ -232,7 +232,7 @@ for (const errorName of [
 // their own tests red. All three were run.
 test("a transient failure keeps the row for the next run", async () => {
   const { q, writer } = seedRig({ fail: "network" });
-  const summary = await runClock({ ...baseArgs(q), writer });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
 
   assert.ok(q.getToken(2), "an RPC outage must not burn a year's seed");
   assert.equal(q.seedsSpent("k"), 1);
@@ -248,7 +248,7 @@ test("a transient failure keeps the row for the next run", async () => {
 for (const fail of ["gas-estimate-failed", "receipt-unknown", "reverted-on-chain", "no-name"]) {
   test(`an unnamed failure (${fail}) is never permanent`, async () => {
     const { q, writer } = seedRig({ fail });
-    const summary = await runClock({ ...baseArgs(q), writer });
+    const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
     assert.ok(q.getToken(2), `${fail} does not say the chain refused this seed`);
     assert.equal(q.seedsSpent("k"), 1);
     assert.deepEqual(summary.droppedSeeds, []);
@@ -261,7 +261,7 @@ for (const fail of ["gas-estimate-failed", "receipt-unknown", "reverted-on-chain
 // it. A parent at 364 tonight is whole tomorrow night.
 test("ParentNotWhole keeps the row, because a parent's level only ever rises", async () => {
   const { q, writer } = seedRig({ fail: "ParentNotWhole" });
-  const summary = await runClock({ ...baseArgs(q), writer });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
   assert.ok(q.getToken(2), "a parent one day short is not a parent that never qualifies");
   assert.deepEqual(summary.droppedSeeds, []);
 });
@@ -272,7 +272,7 @@ test("ParentNotWhole keeps the row, because a parent's level only ever rises", a
 for (const errorName of ["SupplyCap", "WalletCap"]) {
   test(`${errorName} keeps the row, because the owner can raise the dial`, async () => {
     const { q, writer } = seedRig({ fail: errorName });
-    const summary = await runClock({ ...baseArgs(q), writer });
+    const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
     assert.ok(q.getToken(2));
     assert.deepEqual(summary.droppedSeeds, []);
   });
@@ -339,7 +339,7 @@ test("a child id that cannot be identified on chain is KEPT, never dropped on a 
 for (const errorName of ["NotWarden", "EnforcedPause", "Sunset"]) {
   test(`${errorName} aborts the run, drops nothing, and stops the queue`, async () => {
     const { q, writer } = seedRig({ fail: errorName, children: 2 });
-    const summary = await runClock({ ...baseArgs(q), writer });
+    const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
 
     assert.equal(summary.aborted, errorName);
     assert.ok(q.getToken(2), "the piece being shut is not this row's fault");
@@ -369,7 +369,7 @@ test("a seed is not attempted at all once the mint pass has aborted", async () =
       return { ok: false, reason: "reverted-on-simulate", errorName: "EnforcedPause" };
     },
   };
-  const summary = await runClock({ ...baseArgs(q), writer });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
 
   assert.equal(summary.aborted, "EnforcedPause");
   assert.deepEqual(writer.sent.map((s) => s.functionName), ["mint"], "the seed was never sent");
@@ -383,7 +383,7 @@ test("a seed is not attempted at all once the mint pass has aborted", async () =
 test("a child whose bitmap failed to solve is reported and NOT sent", async () => {
   const { q, writer } = seedRig({ solveState: "failed" });
   const said = [];
-  const summary = await runClock({ ...baseArgs(q), writer, alert: (m) => said.push(m) });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer), alert: (m) => said.push(m) });
 
   assert.equal(writer.sent.length, 0, "the contract takes `code` once and keeps it forever");
   assert.deepEqual(summary.stuckSeeds, [2]);
@@ -404,7 +404,7 @@ test("CONTROL: an empty seed queue sends nothing and reports nothing", async () 
   const { q } = mirror();
   parentToken(q);
   const writer = writerThat(null);
-  const summary = await runClock({ ...baseArgs(q), writer });
+  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer) });
   assert.equal(writer.sent.length, 0);
   assert.deepEqual(summary.seeded, []);
   assert.deepEqual(summary.droppedSeeds, []);

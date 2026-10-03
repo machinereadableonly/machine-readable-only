@@ -252,7 +252,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { runClock } from "../src/clock/run.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
-import { splitArgs } from "./split-rig.mjs";
+import { passingReveal, splitArgs } from "./split-rig.mjs";
 
 const TODAY = 20_700;
 
@@ -317,7 +317,7 @@ test("a run heals the landed day in the MIRROR and still credits the new one", a
     q,
     ...splitArgs(TODAY),
     publicClient: chainAt(lastDays),
-    writer: writerRefusingStale(lastDays),
+    writer: passingReveal(writerRefusingStale(lastDays)),
     contract: "0xcontract",
     chainId: 84532,
     today: TODAY,
@@ -415,7 +415,7 @@ test("a queued day the chain's level cannot account for stays queued", async () 
     q,
     ...splitArgs(TODAY),
     publicClient: chainAt(lastDays, new Map([[1, 2]])),
-    writer: writerRefusingStale(lastDays),
+    writer: passingReveal(writerRefusingStale(lastDays)),
     contract: "0xcontract",
     chainId: 84532,
     today: TODAY,
