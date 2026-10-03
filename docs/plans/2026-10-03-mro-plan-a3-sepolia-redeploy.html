@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan A3: the Base Sepolia redeploy</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan A3: the Base Sepolia redeploy</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<blockquote>
+<p>After completing any operator-only step, tell Claude so it can update memory
+immediately. Operator-only steps in this plan: approving it (which approves
+the Sepolia broadcast and the choices below); backing the split seed up
+offline (Task 4, recommended, not blocking on testnet); running the one
+switchover script (Task 7); approving the push (Task 8); and topping up test
+USDC at faucet.circle.com if the test wallet is short (Task 9).</p>
+</blockquote>
+<p><strong>Goal:</strong> Put A1 and A2 on Base Sepolia: deploy the new pair with its split
+anchor set in the same broadcast, adopt the address everywhere, switch the live
+Warden and Clock onto it, merge <code>plan-a</code> to main, and prove the daily question
+end to end with the test agent and <code>mro-agent verify-border</code>.</p>
+<p><strong>Why:</strong> A1 and A2 changed the token contract (answer bits, the split anchor,
+the stored rest day, contractURI, the date floors). A contract change means a
+new address, and until it is adopted the branch cannot be merged: the live
+Warden&#39;s boot check refuses the new <code>viewOf</code> shape against the old pair, and
+refuses any contract without a split anchor. The testnet redeploy is also the
+dress rehearsal for the mainnet deploy, which runs the same deploy script.
+This plan unblocks Plan E (key custody) and, after it, mainnet.</p>
+<table>
+<thead>
+<tr>
+<th>Plan</th>
+<th>What</th>
+<th>Deploys?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A1 (built, <code>plan-a</code>)</td>
+<td>Rulings 2 and 3, the date floors, contractURI</td>
+<td>No</td>
+</tr>
+<tr>
+<td>A2 (built, <code>plan-a</code>)</td>
+<td>The daily question on chain</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>A3 (this)</strong></td>
+<td>Anchor in the deploy, Builder Code, gates, the Sepolia redeploy, adoption, switchover, merge, live proof</td>
+<td><strong>Yes, Base Sepolia (testnet ETH only)</strong></td>
+</tr>
+</tbody></table>
+<p><strong>What approving this plan also approves.</strong></p>
+<ol>
+<li><strong>The broadcast.</strong> Task 5 sends real Base Sepolia transactions (testnet
+ETH, no real value) and replaces the live testnet pair. Every token on the
+current pair (<code>0x6a6f90E9...</code>) is superseded, as on every earlier redeploy.</li>
+<li><strong>The anchor is set inside the deploy, not by a separate <code>cast send</code>.</strong>
+<code>DeployPlan5.s.sol</code> takes <code>SPLIT_ANCHOR</code> and calls <code>setSplitAnchor</code> in the
+same broadcast, so no contract ever exists without its anchor, and the
+mainnet deploy (<code>deploy-mainnet.sh</code>, same script) gets the same guarantee.
+DEPLOY.md section 11 steps 3a/3b become &quot;make the seed, then deploy&quot;.</li>
+<li><strong>The Builder Code goes in now</strong> (Task 2): <code>BUILDER_CODE = &quot;bc_dfhlohlh&quot;</code>,
+so every Clock write on the new pair carries the ERC-8021 suffix
+<code>0x62635f6466686c6f686c680b0080218021802180218021802180218021</code>.</li>
+<li><strong>The Sepolia seed lives at the default path, <code>~/.mro-split/seed</code>.</strong> The
+mainnet deploy needs its OWN seed; DEPLOY.md section 10&#39;s cutover table
+gains the row that says so (move the Sepolia seed aside, make a new one).</li>
+<li><strong>Tonight&#39;s Clock run (00:05 UTC) on the OLD pair writes nothing</strong> if the
+switchover has not happened by then: the Clock runs from this checkout,
+which is on <code>plan-a</code>, and the old pair has no split anchor. Harmless: the
+switchover clears the old pair&#39;s queued rows anyway.</li>
+<li><strong>The merge.</strong> Task 8 fast-forwards <code>main</code> to <code>plan-a</code> locally; the PUSH
+still waits for your explicit yes at that moment.</li>
+</ol>
+<p><strong>Architecture:</strong> Two small code changes first (anchor in the deploy script,
+Builder Code), then the existing runbook, DEPLOY.md section 11, in order:
+gates, seed, deploy, verify, adopt, rehearse, switch over, prove.</p>
+<p><strong>Tech Stack:</strong> Foundry 1.7.1 (<code>forge script</code>, <code>cast</code>), Node 24.14.1, PM2,
+systemd user timer, Base Sepolia (chain 84532).</p>
+<p><strong>Spec:</strong> <code>docs/specs/2026-10-02-mro-daily-question-design.md</code> (section 11
+validation, the 2026-10-03 amendments); <code>warden/DEPLOY.md</code> section 11 (the
+redeploy order); <code>docs/plans/2026-09-30-mro-rulings-roadmap.md</code> row A.</p>
+<h2>Global Constraints</h2>
+<ul>
+<li>Plain ASCII in code, comments and docs.</li>
+<li>All four suites green through <code>~/scripts/safe-build.sh</code> before every commit:
+<code>cd contracts &amp;&amp; forge test</code>; <code>npm test</code> in <code>tools/</code>, <code>warden/</code>, <code>client/</code>.
+Never pipe a gate into anything.</li>
+<li><code>export PATH=$HOME/.foundry/bin:$PATH</code>; <code>source ~/.nvm/nvm.sh</code>; <code>/bin/grep</code>.</li>
+<li>The repository is PUBLIC: no absolute paths, session ids, real env values or
+AI attribution in tracked files or commits. The split seed and the question
+bank never enter the repo, a log or a commit. The Builder Code and the anchor
+are public by design and may appear.</li>
+<li>Claude never reads <code>warden/.env</code>, <code>contracts/.env</code>, <code>~/.mro-split/seed</code> or
+<code>~/.mro-test-wallet/wallet.key</code>; scripts that load them print no value.</li>
+<li>Every deploy script states its chain: <code>EXPECTED_CHAIN_ID=84532</code>.</li>
+<li><code>anvil</code> always with <code>--prune-history</code> (the size check script already does).</li>
+<li>The re-create of the live Warden (<code>pm2 delete</code> + <code>pm2 start</code>) is the
+operator&#39;s step, in one script he runs. Never <code>pm2 restart --update-env</code>.</li>
+<li>Never push without the operator&#39;s explicit approval at that moment.</li>
+</ul>
+<h2>Review Focus</h2>
+<ol>
+<li><strong>The deploy run without a seed, or with a zero anchor:</strong> it refuses before
+broadcasting anything. Pinned in Task 1.</li>
+<li><strong>A resumed or repeated deploy:</strong> a second run deploys a fresh pair rather
+than re-writing a configured one; <code>--resume</code> is refused by the wrapper.
+Pinned in Task 1.</li>
+<li><strong>The Warden booting against the new pair:</strong> decoder verified AND split
+anchor present, proven by <code>rehearse-start.sh</code> before PM2 sees it. Task 6.</li>
+<li><strong>The first night on the new pair:</strong> the Clock reveals keys, writes the
+test token&#39;s mint with its coin flip, and its log line names the Builder
+Code. Read off the Clock log and the chain in Task 9.</li>
+<li><strong><code>verify-border</code> on a real Sepolia token:</strong> every square <code>ok</code> (or
+<code>pending</code> for a day whose key is not out yet), read from chain data alone.
+Task 9.</li>
+</ol>
+<hr>
+<h3>Task 1: The deploy sets the split anchor</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/script/DeployPlan5.s.sol</code> (read <code>SPLIT_ANCHOR</code>, call <code>setSplitAnchor</code>, return the pair)</li>
+<li>Create: <code>contracts/test/DeployPlan5.t.sol</code></li>
+<li>Modify: <code>contracts/script/deploy-plan7.sh</code>, <code>contracts/script/deploy-mainnet.sh</code> (compute the anchor from the seed file; refuse <code>--resume</code>)</li>
+<li>Modify: <code>warden/DEPLOY.md</code> (+ <code>.html</code>): section 11 steps 3a/3b, section 10 cutover row</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>DeployPlan5.run() returns (Renderer r, MachineReadableOnly t)</code>; env <code>SPLIT_ANCHOR</code> (bytes32, required, non-zero); the wrappers export it from <code>node ../warden/tools/split-seed.mjs anchor &quot;${MRO_SPLIT_SEED_FILE:-$HOME/.mro-split/seed}&quot;</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong> <code>contracts/test/DeployPlan5.t.sol</code>:</p>
+</li>
+</ul>
+<pre><code class="language-solidity">// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+import {Test} from &quot;forge-std/Test.sol&quot;;
+import {DeployPlan5} from &quot;../script/DeployPlan5.s.sol&quot;;
+import {MachineReadableOnly} from &quot;../src/MachineReadableOnly.sol&quot;;
+import {Renderer} from &quot;../src/render/Renderer.sol&quot;;
+
+/// @notice The deploy script, run as the deploy runs it: the pair, the ladder
+/// and the split anchor in one broadcast.
+contract DeployPlan5Test is Test {
+    // Anvil&#39;s account 0 and 1: published, throwaway, local only.
+    uint256 constant KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+    address constant WARDEN = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
+    bytes32 constant ANCHOR = keccak256(&quot;a test anchor&quot;);
+
+    function setUp() public {
+        vm.setEnv(&quot;EXPECTED_CHAIN_ID&quot;, vm.toString(block.chainid));
+        vm.setEnv(&quot;WARDEN_ADDRESS&quot;, vm.toString(WARDEN));
+        vm.setEnv(&quot;SPIKE_DEPLOYER_KEY&quot;, vm.toString(KEY));
+        vm.deal(vm.addr(KEY), 10 ether);
+    }
+
+    function test_theDeploySetsTheAnchorInTheSameBroadcast() public {
+        vm.setEnv(&quot;SPLIT_ANCHOR&quot;, vm.toString(ANCHOR));
+        (, MachineReadableOnly t) = new DeployPlan5().run();
+        assertEq(t.splitAnchor(), ANCHOR);
+        assertEq(t.splitAnchorDay(), t.today());
+        assertEq(t.upgradeOf(15).maxSupply, 1, &quot;and the ladder is written&quot;);
+    }
+
+    function test_aZeroAnchorIsRefusedBeforeAnythingIsSent() public {
+        vm.setEnv(&quot;SPLIT_ANCHOR&quot;, vm.toString(bytes32(0)));
+        DeployPlan5 d = new DeployPlan5();
+        vm.expectRevert(bytes(&quot;SPLIT_ANCHOR must be set: run warden/tools/split-seed.mjs first&quot;));
+        d.run();
+    }
+}
+</code></pre>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run, watch it fail.</strong> <code>cd contracts &amp;&amp; forge test --match-path test/DeployPlan5.t.sol -vv</code>. Expected: compile FAIL (<code>run()</code> returns nothing).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement.</strong> In <code>DeployPlan5.run()</code>: change the signature to <code>returns (Renderer r, MachineReadableOnly t)</code>; before <code>vm.startBroadcast</code>, read <code>bytes32 anchor = vm.envOr(&quot;SPLIT_ANCHOR&quot;, bytes32(0));</code> and <code>require(anchor != bytes32(0), &quot;SPLIT_ANCHOR must be set: run warden/tools/split-seed.mjs first&quot;);</code>; after the ladder loop, <code>t.setSplitAnchor(anchor);</code>; log <code>console.log(&quot;anchor  &quot;); console.logBytes32(anchor);</code>. One NatSpec line on the contract: &quot;Deploy the pair, write the ladder and fix the split anchor, in one broadcast.&quot;</p>
+<p>In both wrappers, before <code>forge script</code>:</p>
+</li>
+</ul>
+<pre><code class="language-bash">SEED_FILE=&quot;${MRO_SPLIT_SEED_FILE:-$HOME/.mro-split/seed}&quot;
+if [ ! -f &quot;$SEED_FILE&quot; ]; then
+  echo &quot;FAIL: no split seed. Make one first: node ../warden/tools/split-seed.mjs new $SEED_FILE&quot; &gt;&amp;2
+  exit 1
+fi
+SPLIT_ANCHOR=$(node ../warden/tools/split-seed.mjs anchor &quot;$SEED_FILE&quot; | sed -n &#39;s/^anchor //p&#39;)
+export SPLIT_ANCHOR
+echo &quot;anchor   $SPLIT_ANCHOR&quot;
+</code></pre>
+<p>  and refuse a resume (a resumed broadcast would re-send <code>setUpgrade</code> and
+  <code>setSplitAnchor</code> to a configured contract, which both refuse):</p>
+<pre><code class="language-bash">case &quot; $* &quot; in *&quot; --resume &quot;*) echo &quot;FAIL: never resume a deploy; a fresh run deploys a fresh pair&quot; &gt;&amp;2; exit 1;; esac
+</code></pre>
+<p>  <code>deploy-plan7.sh</code>&#39;s argument check already refuses anything but <code>--broadcast</code>; add the <code>case</code> line to <code>deploy-mainnet.sh</code>, whose argument handling differs, and say in its header that the anchor comes from the seed. DEPLOY.md section 11: 3a stays (make the seed); 3b becomes &quot;the deploy reads the anchor from it and sets it in the same broadcast; confirm with <code>cast call &lt;token&gt; &quot;splitAnchor()(bytes32)&quot;</code>&quot;. Section 10 cutover table gains: <code>| the split seed | ~/.mro-split/seed | it is the SEPOLIA chain&#39;s seed; move it aside (never delete it while the testnet pair is in use) and make a new one with split-seed.mjs new before deploy-mainnet.sh, which reads it |</code>. Re-render DEPLOY.html.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Both tests pass; all four suites; commit.</strong></li>
+</ul>
+<pre><code class="language-bash">git add contracts/ warden/DEPLOY.md warden/DEPLOY.html
+git commit -m &quot;feat(deploy): the split anchor is set in the deploy&#39;s own broadcast&quot;
+</code></pre>
+<hr>
+<h3>Task 2: The Builder Code</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Modify: <code>warden/src/clock/builder-code.mjs</code> (<code>BUILDER_CODE</code>)</p>
+</li>
+<li><p>Modify: <code>warden/test/clock-builder-code.test.mjs</code></p>
+</li>
+<li><p>Modify: <code>warden/DEPLOY.md</code> (+ <code>.html</code>): the <code>BUILDER_CODE</code> cutover row says it is set</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Read the live docs first</strong> (<a href="https://docs.base.org/specifications/builder-codes/overview">https://docs.base.org/specifications/builder-codes/overview</a>) and confirm the suffix layout <code>code bytes, length byte, schema 0x00, 0x8021 x 8</code>. Record what you checked in the ledger.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Failing test</strong> in <code>clock-builder-code.test.mjs</code>:</p>
+</li>
+</ul>
+<pre><code class="language-js">test(&quot;the piece&#39;s Builder Code is set, and its suffix is the one Base issued&quot;, () =&gt; {
+  assert.equal(BUILDER_CODE, &quot;bc_dfhlohlh&quot;);
+  assert.equal(builderCodeSuffix(), &quot;0x62635f6466686c6f686c680b0080218021802180218021802180218021&quot;);
+});
+</code></pre>
+<p>  Run <code>cd warden &amp;&amp; node --test test/clock-builder-code.test.mjs</code>; expected FAIL (<code>null</code>).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3:</strong> <code>export const BUILDER_CODE = &quot;bc_dfhlohlh&quot;;</code>. Any existing test that pins <code>null</code> is updated to the issued code, each named in the ledger. DEPLOY.md&#39;s row: the code is issued and set; the row stays as a check that it survives the cutover.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 4: All four suites; commit.</strong></li>
+</ul>
+<pre><code class="language-bash">git add warden/
+git commit -m &quot;feat(clock): every write carries the piece&#39;s Builder Code&quot;
+</code></pre>
+<hr>
+<h3>Task 3: The gates over A1, A2 and A3</h3>
+<p>No code. Each command&#39;s output is read and recorded in the ledger.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <code>cd contracts &amp;&amp; ~/scripts/safe-build.sh forge build --sizes</code> -- both contracts show positive runtime margin.</li>
+<li><input disabled="" type="checkbox"> <code>bash contracts/script/anvil-size-check.sh</code> -- non-empty code for both, a real <code>tokenURI</code> back. Then <code>du -sh ~/.foundry/anvil/tmp</code> stays small.</li>
+<li><input disabled="" type="checkbox"> The four suites through <code>safe-build.sh</code>.</li>
+<li><input disabled="" type="checkbox"> <code>node tools/prepublish-check.mjs</code> and <code>node ~/scripts/id-scan.mjs</code> -- clean.</li>
+<li><input disabled="" type="checkbox"> <code>git log main..plan-a --format=%B | /bin/grep -iE &quot;co-authored|anthropic|claude&quot;</code> -- no output (attribution check; its exit status is not a gate).</li>
+</ul>
+<p>Expected: all pass. Any failure stops the plan here.</p>
+<hr>
+<h3>Task 4: The Sepolia split seed</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <code>node warden/tools/split-seed.mjs new ~/.mro-split/seed</code> -- prints ONLY <code>anchor 0x...</code>. Record the anchor (public) in the ledger.</li>
+<li><input disabled="" type="checkbox"> <code>stat -c %a ~/.mro-split/seed</code> -- <code>600</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Operator, recommended, not blocking on testnet:</strong> copy <code>~/.mro-split/seed</code> to offline storage with WinSCP. On mainnet this step is mandatory.</li>
+</ul>
+<hr>
+<h3>Task 5: Deploy on Base Sepolia</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <code>bash contracts/script/deployer-balance.sh</code> -- enough testnet ETH (the last pair cost well under 0.01). Stop if short and tell the operator.</li>
+<li><input disabled="" type="checkbox"> <code>bash contracts/script/deploy-plan7.sh</code> -- simulation: prints the chain (84532), the warden, the anchor, and the two addresses forge would create.</li>
+<li><input disabled="" type="checkbox"> <code>bash contracts/script/deploy-plan7.sh --broadcast</code> -- record renderer, token, and the deploy block (from <code>contracts/broadcast/DeployPlan5.s.sol/84532/run-latest.json</code>).</li>
+<li><input disabled="" type="checkbox"> <code>bash contracts/script/verify-plan7.sh &lt;renderer&gt; &lt;token&gt; 0xb919443Ecb8B73a6179a523734f2184d26fF4D7A</code> -- verified on Basescan and Blockscout.</li>
+<li><input disabled="" type="checkbox"> <code>cd warden &amp;&amp; node tools/check-deployed-abi.mjs &lt;token&gt;</code> -- exit 0. <code>node tools/read-ladder.mjs &lt;token&gt;</code> -- all 15 records match.</li>
+<li><input disabled="" type="checkbox"> <code>cast call &lt;token&gt; &quot;splitAnchor()(bytes32)&quot; --rpc-url https://sepolia.base.org</code> equals the Task 4 anchor; <code>splitAnchorDay()</code> equals <code>today()</code>; <code>lastRevealBlock()</code> is 0.</li>
+</ul>
+<hr>
+<h3>Task 6: Adopt and rehearse</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <code>bash contracts/script/adopt-deployment.sh &lt;renderer&gt; &lt;token&gt; &lt;deploy-block&gt;</code> -- rewrites llms.txt, the protocol doc, its HTML and skill copy, the two tools, CLAUDE.md and <code>DEPLOY_BLOCK[84532]</code>.</li>
+<li><input disabled="" type="checkbox"> <code>REHEARSE_OVERRIDE=&quot;MRO_CONTRACT_ADDRESS=&lt;token&gt;&quot; bash warden/tools/rehearse-start.sh</code> -- the log shows <code>decoder verified against &lt;token&gt;</code> and the boot passes the split anchor check.</li>
+<li><input disabled="" type="checkbox"> All four suites; <code>node tools/prepublish-check.mjs</code>; commit on <code>plan-a</code>:</li>
+</ul>
+<pre><code class="language-bash">git add -A contracts/ warden/ docs/ skills/ CLAUDE.md
+git commit -m &quot;chore: adopt the A3 pair on Base Sepolia&quot;
+</code></pre>
+<p>  (Check <code>git status</code> first: nothing outside those paths, nothing under <code>.superpowers/</code>.)</p>
+<hr>
+<h3>Task 7: The switchover -- OPERATOR runs one script</h3>
+<p>Claude writes <code>&lt;scratchpad&gt;/a3-switchover.sh</code> and hands over ONE line:
+<code>! bash &lt;scratchpad&gt;/a3-switchover.sh &lt;token&gt;</code>. The script, in order, stopping
+at the first failure and printing no secret:</p>
+<ol>
+<li><code>pm2 stop mro-warden</code> -- nothing serves while the mirror changes.</li>
+<li><code>bash warden/deploy/set-contract-address.sh &lt;token&gt;</code> -- the one env edit (it backs up outside the worktree).</li>
+<li><code>node warden/tools/mirror-snapshot.mjs ~/backups/state.db.pre-a3.$(date -u +%Y%m%dT%H%M%SZ)</code>.</li>
+<li><code>node warden/tools/mirror-reset-chain.mjs warden/state.db --yes</code>.</li>
+<li><code>pm2 delete mro-warden &amp;&amp; pm2 start warden/ecosystem.config.cjs &amp;&amp; pm2 save</code>.</li>
+<li>Wait 10 s; <code>pm2 describe mro-warden</code> status and restarts.</li>
+<li>Probe the public site: <code>/llms.txt</code> contains <code>&lt;token&gt;</code> and <code>Your answers become the border</code>; print <code>LIVE OK</code> or <code>NOT LIVE -- tell Claude</code>.</li>
+</ol>
+<p>Claude then confirms from outside: <code>curl</code> of <code>/llms.txt</code> and <code>/.well-known/mcp/server-card.json</code> through Cloudflare, and the Warden&#39;s boot lines in its log (<code>decoder verified</code>, day match). The Clock needs nothing: it reads the same env file at 00:05.</p>
+<hr>
+<h3>Task 8: Merge, then ask to push</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <code>git checkout main &amp;&amp; git merge --ff-only plan-a</code> (main has not moved since <code>ad1db7e</code>; if it has, STOP and report).</li>
+<li><input disabled="" type="checkbox"> The checkout stays on <code>main</code>, which is what the Warden and the Clock now run.</li>
+<li><input disabled="" type="checkbox"> <strong>Ask the operator before pushing.</strong> On a yes: <code>git push origin main</code> (the pre-push hook runs both guards; a finding stops the push).</li>
+<li><input disabled="" type="checkbox"> Leave <code>plan-a</code> in place until the operator says otherwise (deleting a branch is a deletion).</li>
+</ul>
+<hr>
+<h3>Task 9: Prove it live</h3>
+<p>Spans two Clock nights; check in with the operator after each.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Day 0, after the switchover.</strong> Test USDC: <code>cast call 0x036CbD53842c5426634e7929541eC2318f3dCF7e &quot;balanceOf(address)(uint256)&quot; 0xc1B97157DD95D94BAA9BcfC75044Bbc9238A9b3a --rpc-url https://sepolia.base.org</code> -- at least 1,000,000. If short, ask the operator for the faucet (one instruction).</li>
+<li><input disabled="" type="checkbox"> <code>bash ~/.mro-test-wallet/mro-agent.sh join --to &quot;$(cat ~/.mro-test-wallet/address)&quot; --expect-payto 0x000000000000000000000000000000000000dEaD --expect-amount 1000000</code> -- one paid mint; record the token id. <code>question</code> on the mint day is refused (the day is credited), which is the documented coin-flip day.</li>
+<li><input disabled="" type="checkbox"> <strong>Night 1 (00:05 UTC).</strong> From <code>~/logs/mro-clock.log</code>: <code>builder code bc_dfhlohlh</code>, a reveal sent, the mint written. On chain: <code>lastRevealBlock() &gt; 0</code>, <code>splitKeysRevealed()</code> equals today minus the anchor day.</li>
+<li><input disabled="" type="checkbox"> <strong>Day 1.</strong> <code>mro-agent.sh question --token &lt;id&gt;</code>, then within 30 s <code>mro-agent.sh beat --token &lt;id&gt; --answer &lt;one of them&gt;</code>; the reply says <code>answered: true</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Night 2.</strong> <code>node client/src/cli.mjs verify-border &lt;id&gt; --contract &lt;token&gt;</code> -- square 1 (mint day) and square 2 (day 1) both <code>ok</code>, exit 0. Paste the output into the ledger.</li>
+<li><input disabled="" type="checkbox"> Update memory (<code>resume-checklist</code>, <code>build-status</code>, <code>warden-deployed</code>): the A3 pair is live, Plan A is done, E is next.</li>
+</ul>
+<hr>
+<h2>Self-review</h2>
+<ul>
+<li><strong>Roadmap row A coverage:</strong> the size gate and strict-limit deploy (Task 3), the Sepolia redeploy (Task 5), <code>adopt-deployment.sh</code> (Task 6), <code>setSplitAnchor</code> (Tasks 1, 4, 5), re-pointing the test agent (Task 9). The question spec&#39;s section 11 live item -- <code>verify-border</code> reproduces every square of a Sepolia token from chain data alone -- is Task 9; its &quot;FAILS on a deliberately wrong bit&quot; half is pinned by <code>client/test/verify-border.test.mjs</code>, since a wrong bit cannot be written on chain on purpose.</li>
+<li><strong>Deferred A1 note</strong> (a re-run of <code>DeployPlan5</code> reverts on a configured contract): closed by Task 1&#39;s resume refusal; a plain re-run deploys a fresh pair.</li>
+<li><strong>Placeholders:</strong> <code>&lt;token&gt;</code>, <code>&lt;renderer&gt;</code>, <code>&lt;deploy-block&gt;</code> and <code>&lt;id&gt;</code> are values produced by Tasks 5 and 9, recorded in the ledger as they appear.</li>
+<li><strong>Names:</strong> <code>SPLIT_ANCHOR</code>, <code>MRO_SPLIT_SEED_FILE</code>, <code>BUILDER_CODE</code>, <code>builderCodeSuffix</code>, <code>split-seed.mjs new|anchor</code> are used identically throughout.</li>
+</ul>
+</body>
+</html>
