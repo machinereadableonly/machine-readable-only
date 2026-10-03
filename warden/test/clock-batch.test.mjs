@@ -387,7 +387,7 @@ test("a whole chunk of finishers is halved down to what fits, and every place la
   assert.deepEqual(r.dropped, [], "no finisher may be condemned for a chunk that was merely heavy");
   assert.equal(r.written.length, CHECKIN_CHUNK);
   const landed = writer.calls.filter((c) => c.count <= fits);
-  assert.equal(landed.length, 8, "1,400 halves to eight transactions of 175");
+  assert.equal(landed.length, 8, "a chunk halves to eight transactions of an eighth each");
   assert.deepEqual(
     landed.flatMap((c) => c.ids),
     entries.map((e) => e.tokenId),

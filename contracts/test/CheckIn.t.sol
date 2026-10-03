@@ -14,7 +14,7 @@ contract CheckInTest is MroTestBase {
     /// The Clock's chunk size, CHECKIN_CHUNK in warden/src/clock/run.mjs.
     /// warden/test/clock-run.test.mjs reads this line and fails if the two
     /// disagree, so a change to either one cannot go untested.
-    uint32 internal constant CHECKIN_CHUNK = 1400;
+    uint32 internal constant CHECKIN_CHUNK = 1200;
 
     /// The Clock's ceiling on a padded estimate, MAX_TX_GAS in write.mjs.
     uint256 internal constant MAX_TX_GAS = 15_000_000;
@@ -343,7 +343,7 @@ contract CheckInTest is MroTestBase {
         );
 
         // WHAT A CHUNK FULL OF FINISHERS WOULD COST, printed rather than
-        // asserted. `test_aFullChunkFitsTheGasGuard` above measures 1,400
+        // asserted. `test_aFullChunkFitsTheGasGuard` above measures a full chunk of
         // ORDINARY credits against MAX_TX_GAS; a finisher is dearer, so a night
         // on which many tokens seal is a dearer night.
         //
@@ -370,9 +370,9 @@ contract CheckInTest is MroTestBase {
     ///
     /// @dev WHY AN EIGHTH. A whole chunk of finishers does not fit -- the test
     /// above prints what it would add -- and the Clock does not need it to.
-    /// `batch.mjs` halves a chunk whose estimate is refused, and 1,400 halves
-    /// to 700, 350 and then 175 within three of its twelve shrinks. So the
-    /// promise worth pinning is that 175 finishers fit, with the same margin the
+    /// `batch.mjs` halves a chunk whose estimate is refused, and a chunk halves
+    /// to an eighth within three of its twelve shrinks. So the
+    /// promise worth pinning is that an eighth of finishers fit, with the same margin the
     /// full ordinary chunk must leave. warden/test/clock-batch.test.mjs drives
     /// the halving itself; this is the number that says the halving ends.
     ///

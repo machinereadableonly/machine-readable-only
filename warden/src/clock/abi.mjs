@@ -383,6 +383,32 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "lastRevealBlock",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "lastSplitKey",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "lastWardenDay",
     "inputs": [],
     "outputs": [
@@ -614,6 +640,24 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "revealSplitKeys",
+    "inputs": [
+      {
+        "name": "keys",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "questions",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "safeTransferFrom",
     "inputs": [
       {
@@ -758,6 +802,19 @@ export const MRO_ABI = [
   },
   {
     "type": "function",
+    "name": "setSplitAnchor",
+    "inputs": [
+      {
+        "name": "anchor",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setSupplyCap",
     "inputs": [
       {
@@ -872,6 +929,45 @@ export const MRO_ABI = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "splitAnchor",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "splitAnchorDay",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "splitKeysRevealed",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1625,6 +1721,56 @@ export const MRO_ABI = [
   },
   {
     "type": "event",
+    "name": "SplitAnchorSet",
+    "inputs": [
+      {
+        "name": "anchor",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "day",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SplitKeysRevealed",
+    "inputs": [
+      {
+        "name": "firstIndex",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      },
+      {
+        "name": "keys",
+        "type": "bytes32[]",
+        "indexed": false,
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "prevRevealBlock",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "questions",
+        "type": "bytes",
+        "indexed": false,
+        "internalType": "bytes"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "SunsetAt",
     "inputs": [
       {
@@ -1768,6 +1914,17 @@ export const MRO_ABI = [
         "name": "got",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "BadSplitKey",
+    "inputs": [
+      {
+        "name": "index",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ]
   },
@@ -2068,6 +2225,11 @@ export const MRO_ABI = [
   },
   {
     "type": "error",
+    "name": "NoSplitAnchor",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NoSuchToken",
     "inputs": [
       {
@@ -2153,6 +2315,22 @@ export const MRO_ABI = [
   },
   {
     "type": "error",
+    "name": "SplitAnchorAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SplitKeyTooEarly",
+    "inputs": [
+      {
+        "name": "index",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "StaleDay",
     "inputs": [
       {
@@ -2223,6 +2401,11 @@ export const MRO_ABI = [
   {
     "type": "error",
     "name": "ZeroRenderer",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroSplitAnchor",
     "inputs": []
   },
   {

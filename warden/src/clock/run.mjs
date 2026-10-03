@@ -23,18 +23,17 @@ import { sweep } from "../mcp/sweep.mjs";
 import { resolveUnresolvedPayments } from "./unresolved.mjs";
 import { safeErrorText } from "./redact.mjs";
 
-/// How many check-ins go in one batchCheckIn. MEASURED against a real node's
-/// receipts (warden/tools/chunk-rehearsal.sh, Osaka rules with EIP-7825
-/// enforced): 9,014 gas per entry plus 30,902 fixed.
+/// How many check-ins go in one batchCheckIn, measured by
+/// contracts/test/CheckIn.t.sol: a full chunk of 1,400 now pads to 14,539,768.
 ///
-/// The rule: the largest multiple of 100 whose estimate, padded as write.mjs
-/// pads it, leaves at least 500,000 under MAX_TX_GAS. 1,400 pads to 14,231,629;
-/// the spec's 1,500 is refused by the guard.
+/// The rule: the largest multiple of 200 whose estimate, padded as write.mjs
+/// pads it, leaves at least 500,000 under MAX_TX_GAS. A multiple of 200 halves
+/// exactly to the eighth that CheckIn.t.sol proves a night of finishers fits.
 ///
 /// contracts/test/CheckIn.t.sol measures this same chunk, and
 /// clock-run.test.mjs fails if its constant and this one disagree. Re-run the
 /// rehearsal whenever batchCheckIn, _credit or the Token struct changes.
-export const CHECKIN_CHUNK = 1_400;
+export const CHECKIN_CHUNK = 1_200;
 
 /// How far behind the chain head reconcile reads. Base's blocks are two
 /// seconds, so this is under a minute of lag against a nightly job -- and the

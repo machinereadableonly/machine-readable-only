@@ -66,6 +66,13 @@ abstract contract MroTestBase is Test {
         for (uint256 i; i < r.length; ++i) r[i] = 0xff;
     }
 
+    /// @dev A short split chain: k[m] is the seed, k[i] = keccak256(k[i+1]), k[0] the anchor.
+    function _splitChain(bytes32 seed, uint256 m) internal pure returns (bytes32[] memory k) {
+        k = new bytes32[](m + 1);
+        k[m] = seed;
+        for (uint256 i = m; i > 0; --i) k[i - 1] = keccak256(abi.encodePacked(k[i]));
+    }
+
     /// @dev Today's day number, computed HERE rather than read from `t`, so it
     /// can sit inside the arguments of a call under `vm.expectRevert`: an
     /// external `t.today()` there would be the call the cheatcode matched

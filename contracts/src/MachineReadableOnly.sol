@@ -87,6 +87,11 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
     mapping(uint8 => Upgrade) internal _upgrades;
 
+    /// @notice k[0] of the split's key chain, fixed once before the door opens.
+    bytes32 public splitAnchor;
+    /// @notice The last key revealed; the next must hash to it.
+    bytes32 public lastSplitKey;
+
     address public renderer;
     address public warden;
     uint32 public supplyCap;
@@ -96,6 +101,12 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// @notice The last day the Warden wrote anything at all. This is what
     /// `sunsetByAbsence` measures.
     uint32 public lastWardenDay;
+    /// @notice The day the anchor was set: key n belongs to day splitAnchorDay + n - 1.
+    uint32 public splitAnchorDay;
+    /// @notice How many keys have been revealed.
+    uint32 public splitKeysRevealed;
+    /// @notice The block of the last reveal, so a verifier can walk back night by night.
+    uint64 public lastRevealBlock;
     /// @notice The day this contract was deployed. Nothing may be dated before it.
     uint32 public immutable DEPLOY_DAY;
     /// @notice How many tokens have finished their year. The next finisher's
@@ -136,12 +147,25 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// guard.
     error Sunset();
     error AlreadySunset();
+    /// The split anchor is set once and never moves.
+    error SplitAnchorAlreadySet();
+    /// A zero anchor would leave the chain unset.
+    error ZeroSplitAnchor();
+    /// No key can be revealed before the anchor exists.
+    error NoSplitAnchor();
+    /// Key `index` does not hash to the key before it.
+    error BadSplitKey(uint32 index);
+    /// Key `index` belongs to a day that is not over yet.
+    error SplitKeyTooEarly(uint32 index);
 
     event RendererSet(address renderer);
     event WardenSet(address warden);
     event SupplyCapSet(uint32 cap);
     event WalletCapSet(uint32 cap);
     event SunsetAt(uint32 day);
+    event SplitAnchorSet(bytes32 anchor, uint32 day);
+    /// @notice Keys `firstIndex` onward; `prevRevealBlock` is the reveal before this one.
+    event SplitKeysRevealed(uint32 firstIndex, bytes32[] keys, uint64 prevRevealBlock, bytes questions);
 
     /// @dev Also the heartbeat. Stamping `lastWardenDay` HERE rather than in
     /// each Warden function means a new one cannot be added without it.
@@ -347,6 +371,38 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         isSunset = true;
         sunsetDay = lastWardenDay;
         emit SunsetAt(sunsetDay);
+    }
+
+    /// @notice Fix the split's key chain. Once, by the owner, before the door opens.
+    function setSplitAnchor(bytes32 anchor) external onlyOwner {
+        if (splitAnchor != bytes32(0)) revert SplitAnchorAlreadySet();
+        if (anchor == bytes32(0)) revert ZeroSplitAnchor();
+        uint32 d = today();
+        splitAnchor = anchor;
+        lastSplitKey = anchor;
+        splitAnchorDay = d;
+        emit SplitAnchorSet(anchor, d);
+    }
+
+    /// @notice Reveal the next keys of the split chain, each for a day that is over.
+    /// @param questions Each revealed day's question and answer set, as JSON; not read here.
+    /// @dev Not `notSunset`: a mint written on the last night still needs its key.
+    function revealSplitKeys(bytes32[] calldata keys, bytes calldata questions) external onlyWarden {
+        bytes32 last = lastSplitKey;
+        if (last == bytes32(0)) revert NoSplitAnchor();
+        uint32 n = splitKeysRevealed;
+        uint32 first = n + 1;
+        uint32 tday = today();
+        for (uint256 i; i < keys.length; ++i) {
+            ++n;
+            if (splitAnchorDay + n - 1 >= tday) revert SplitKeyTooEarly(n);
+            if (keccak256(abi.encodePacked(keys[i])) != last) revert BadSplitKey(n);
+            last = keys[i];
+        }
+        lastSplitKey = last;
+        splitKeysRevealed = n;
+        emit SplitKeysRevealed(first, keys, lastRevealBlock, questions);
+        lastRevealBlock = uint64(block.number);
     }
 
     function _setRenderer(address r) internal {
