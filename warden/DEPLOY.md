@@ -757,6 +757,18 @@ two it was.
 - **Nothing may be dated before the deploy day (`DEPLOY_DAY`), and no check-in
   may be more than 30 days late.** A Clock outage longer than 30 days loses the
   oldest days for good: the Clock drops each `StaleDay` and writes the rest.
+  One chunk drops at most 12 stale days a night (`maxAttempts`); past that the
+  log shows `attempts-exhausted`, NOTHING is written that night, and the
+  stale front drains over the following nights before fresh days land again.
+
+### What the redeploy does to the queue
+
+Every queued mint or seed in the mirror dated before the new contract's
+`DEPLOY_DAY` is refused `BeforeDeploy` on the first Clock run after the swap:
+one "this PAID mint can never land and needs a human" alert per mint row, and
+one dropped seed per seed row. Step 6 clears the mirror's chain rows first, so
+on a clean redeploy there are none; an alert after it means a row was queued
+between the reset and the swap.
 
 ### What a redeploy does NOT carry over
 

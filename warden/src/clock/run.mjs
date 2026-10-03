@@ -134,7 +134,6 @@ export async function chainRunOf({ publicClient, contract, tokenId }) {
   }
 }
 
-/// Just enough ABI to ask a recipient the one question that matters.
 export async function mintIsOnChain({ publicClient, contract, mint }) {
   try {
     const [owner, view] = await Promise.all([
@@ -902,7 +901,7 @@ function isFinalMark(result) {
  * reverted-on-chain, and a simulate revert whose error had no name -- leaves the
  * row exactly where it was.
  *
- * These are every named error `seed(uint256,uint256,address,bytes,uint32)` can
+ * These are every named error `seed(uint256,uint256,address,bytes,uint32,bytes32)` can
  * raise, read off MachineReadableOnly.sol's `seed` plus its three modifiers and
  * `_checkCreationDay`, and each is here or below the line for a stated reason.
  * `StaleDay` joined 2026-09-11 with the first-day fix: a seed's day is frozen in
@@ -930,10 +929,9 @@ function isFinalMark(result) {
  *                         no done row is ever re-solved -- nextPendingMint
  *                         selects `'pending'` and requeueSolving only requeues
  *                         `'solving'`.
- *   ERC721InvalidReceiver `to` is stored, and the child can be delivered
- *                         nowhere else. Dropping returns the year so the agent
- *                         can seed to an address that accepts ERC-721; keeping
- *                         delivers it nowhere, forever.
+ *   ERC721InvalidReceiver `to` is stored and is the zero address (`_mint`
+ *                         refuses only that). Dropping returns the year so the
+ *                         agent can seed to a real address.
  *   KeyChanged            the parent's key moved after the agent proved the old
  *                         one. Only a new request, signed with the new key, can
  *                         seed, so the year goes back for it.

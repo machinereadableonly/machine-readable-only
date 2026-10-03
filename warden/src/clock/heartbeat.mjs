@@ -48,8 +48,7 @@ export function heartbeatDue({
   const gap = today - lastWardenDay;
 
   // A closed piece cannot be held open and must not be pretended otherwise.
-  // `isSunset` is one-way; a heartbeat here would be a no-op that costs gas and
-  // reads, in a log, like the piece is still alive.
+  // `isSunset` is one-way, and the contract refuses a heartbeat after it.
   if (sunset) return { due: false, why: "sunset", gap };
 
   // Any real write already stamped the day inside `onlyWarden`. Sending a

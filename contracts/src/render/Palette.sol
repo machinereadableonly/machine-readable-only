@@ -77,9 +77,9 @@ library Palette {
     /// It steps at 3, 7 and 30 days, and at 30 the heart is back where it
     /// started.
     ///
-    /// A resting or sunset token is frozen by the CALLER, which passes the
-    /// stored streak to tier() instead of calling this. That keeps the palette a
-    /// pure function of colour, not of token lifecycle.
+    /// A resting, sunset or finished token is frozen by the CALLER, which passes
+    /// the day its picture stopped as `today`. That keeps the palette a pure
+    /// function of colour, not of token lifecycle.
     function lapsed(uint32 streak, uint32 lastDay, uint32 today)
         internal
         pure

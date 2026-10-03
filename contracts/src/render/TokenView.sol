@@ -17,7 +17,7 @@ struct TokenView {
     uint32 echo;         // days the LINE had run when this token was seeded;
                          // 0 for a founding token. Sealed at the seed and
                          // never written again.
-    bool resting;        // owner sealed it: the image is final and never pales
+    bool resting;        // owner sealed it: the image is fixed as it stood on restDay
     uint32 restDay;      // the day the owner sealed it; 0 while not resting
     bool sunset;         // operator closed the piece: same freeze, piece-wide
     uint32 sunsetDay;    // the day the piece closed; 0 while it is open

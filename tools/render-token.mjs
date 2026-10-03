@@ -698,10 +698,9 @@ export function renderSvg(modules, want, size, state) {
   const whole = level >= DAY_CELLS;
 
   // A token that has stopped checking in pales, walking back down the tier
-  // ladder. A sealed token does not: its image is final, so the stored streak
-  // colours it forever. A sunset token pales only up to the day the PIECE
-  // closed. A token that slipped keeps fading from the run it lost, capped one
-  // rung below it. Every branch must mirror Renderer._rung in Solidity exactly.
+  // ladder, up to stopDay: the rest day, the sunset day or its finishing day,
+  // whichever stopped it first. A token that slipped keeps fading from the run
+  // it lost, capped one rung below it. Must mirror Renderer._rung exactly.
   const rung = rungFor({ streak, lastDay, today, resting, restDay, sunset, sunsetDay, fellRun, fellDay, whole });
   const colour = colourAt(rung);
   // Static claims the noise ink -- the one surface no other Mark touches.

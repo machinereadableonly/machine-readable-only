@@ -124,6 +124,16 @@ contract VouchersTest is MroTestBase {
         assertEq(t.viewOf(1).lastDay, t.today(), "lastDay was never corrupted");
     }
 
+    function test_aVoucherThirtyDaysLateIsAccepted() public {
+        t.setVouchersEnabled(true);
+        uint32 d0 = _today();
+        uint32 late = d0 + 1;
+        _warpToDay(d0 + 31);
+        bytes memory sig = _sign(1, late);
+        t.checkInWithVoucher(1, late, sig);
+        assertEq(t.viewOf(1).level, 2);
+    }
+
     function test_aVoucherThirtyOneDaysLateIsRefused() public {
         t.setVouchersEnabled(true);
         uint32 d0 = _today();

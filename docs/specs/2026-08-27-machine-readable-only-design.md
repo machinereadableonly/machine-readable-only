@@ -516,7 +516,8 @@ matters. Both contracts declare ERC-4906 support in `supportsInterface`
   2026-09-11: this line said ~7k gas a check-in and chunks of 1,500, both from
   arithmetic. Measured against a real node by `warden/tools/chunk-rehearsal.sh`,
   1,400 is the largest hundred leaving at least 500,000 under the guard.
-  Re-measured 2026-10-03 after the 30-day lateness floor (8,763 before it);
+  Re-measured 2026-10-03 on the plan-a contract (8,763 before it; most of the
+  rise is compiler layout, not the lateness check's one comparison);
   1,500 is now refused by the guard.
 - `forge build --sizes` must show positive margin under 24,576 bytes for both
   contracts, and a deploy to a plain `anvil` (strict code-size limit) must
@@ -1106,7 +1107,7 @@ checked; 1M gas cost $0.015. With one packed slot, a `MetadataUpdate` per token
 and a static QR, a check-in is **9,014 gas**, plus 30,902 per transaction.
 Only *active* tokens cost anything. Amended 2026-09-11: this said ~7k, which
 was arithmetic; the figure is measured against a real node (re-measured
-2026-10-03 at 9,014, up from 8,763, after the lateness floor), and every
+2026-10-03 at 9,014, up from 8,763, on the plan-a contract), and every
 figure below is rescaled from it at the same 2026-08-27 prices.
 
 | Active tokens | Check-in gas per month | Mint income at 1 USDC (one-off) |
