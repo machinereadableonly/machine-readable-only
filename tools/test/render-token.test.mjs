@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
-import { canvasUnits, DIGIT_INK, tokenUri } from "../render-token.mjs";
+import { canvasUnits, DIGIT_INK, tokenUri, answerBandCells, FIRST_SIDE } from "../render-token.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
          rungOf, colourAt, noiseAt, staticAt, inks, BEAT_TO, ringBudget, ringsFor, ringSpan,
          HUSH_QUIET, VESSEL_GOLD, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
@@ -585,22 +585,21 @@ test("a finisher's digit band does not stop the code decoding", () => {
   }
 });
 
-test("the band is drawn only for a finisher, and grows the canvas when it is", () => {
-  // The control the whole change rests on: an ordinal of 0 is every token that
-  // exists, and it must render the bytes it rendered before the band was
-  // written. Asserted here as well as in Solidity because the two renderers
-  // are diffed against each other, so a drift in THIS one would move both.
+test("the place is drawn only for a finisher, in the band every 365-day token has", () => {
+  // An ordinal of 0 must render the bytes it rendered before the field was
+  // read. Asserted here as well as in Solidity because the two renderers are
+  // diffed against each other, so a drift in THIS one would move both.
   const base = { level: 365, streak: 365, years: 1, lastDay: 1000, today: 1000 };
   const plain = render(base);
   assert.equal(plain, render({ ...base, ordinal: 0 }),
     "an explicit zero ordinal must render identically to none at all");
   assert.ok(!plain.includes(DIGIT_INK),
-    "a token that is not a finisher carries no digit ink");
+    "with no place and no answers the band draws no ink");
+  assert.ok(plain.includes(`viewBox="0 0 ${canvasUnits(canvasFor(1), CODE.size)}`),
+    "but its canvas is the banded one");
 
   const banded = render({ ...base, ordinal: 1 });
-  assert.ok(banded.includes(DIGIT_INK), "a finisher does");
-  assert.ok(banded.includes(`viewBox="0 0 ${canvasUnits(canvasFor(1), CODE.size)}`),
-    "and its canvas is the banded one");
+  assert.ok(banded.includes(DIGIT_INK), "a finisher's place is drawn");
   assert.ok(banded.length > plain.length, "which costs bytes");
 });
 
@@ -709,4 +708,45 @@ test("the earliest stop wins, and a finished token stops at its last day", () =>
   assert.equal(stopDay({ ...base, sunset: true, sunsetDay: 1300, resting: true, restDay: 1200 }), 1200);
   assert.equal(stopDay({ ...base, whole: true, resting: true, restDay: 1200 }), 1000);
   assert.equal(stopDay(base), 5000);
+});
+
+// ---------------------------------------------------------------------------
+// The answer band: one square per credited day on three edges, the place on top.
+// ---------------------------------------------------------------------------
+
+const wordsFrom = (bits) => {
+  const w = [0n, 0n];
+  bits.forEach((b, i) => { if (b) w[i >> 8] |= 1n << BigInt(i & 255); });
+  return w;
+};
+const ALL = wordsFrom(Array(365).fill(1));
+const FOUNDING = canvasFor(0, 0);
+const FINISHED = canvasFor(1, 0);
+
+test("no band below 122 credited days", () => {
+  assert.equal(FIRST_SIDE, 122);
+  const state = { level: 121, streak: 121, lastDay: 1000, today: 1000 };
+  assert.equal(render({ ...state, answers: ALL }), render(state), "answers below 122 change nothing");
+});
+
+test("sides appear whole at 122, 244 and 365", () => {
+  const count = (level) =>
+    answerBandCells({ ordinal: 0, answers: ALL, level }, level >= 365 ? FINISHED : FOUNDING, CODE.size).cells.size;
+  assert.equal(count(122), 122);
+  assert.equal(count(243), 122);
+  assert.equal(count(244), 244);
+  assert.equal(count(364), 244);
+  assert.equal(count(365), 365);
+});
+
+test("the outer lane fills first, clockwise from the top right", () => {
+  const { cells, modules } = answerBandCells({ ordinal: 0, answers: wordsFrom([1]), level: 122 }, FOUNDING, CODE.size);
+  const start = Math.floor((modules - 61) / 2);
+  assert.deepEqual([...cells], [start * modules + (modules - 2)]);
+});
+
+test("the place is drawn on the top edge only", () => {
+  const { cells, modules } = answerBandCells({ ordinal: 1, answers: [0n, 0n], level: 365 }, FINISHED, CODE.size);
+  assert.ok(cells.size > 0);
+  for (const c of cells) assert.ok(Math.floor(c / modules) < 3, `cell ${c} is off the top edge`);
 });

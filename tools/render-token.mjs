@@ -338,10 +338,11 @@ export const canvasFor = (years, echoDays = 0) =>
   BLOCK + 2 * (THICK + GAP + ringSpan(ringsFor(years, echoDays)));
 
 // ---------------------------------------------------------------------------
-// THE FINISHER'S DIGIT BAND. Mirrors contracts/src/render/DigitBand.sol
-// exactly; RenderMatrix.t.sol fails if the two ever drift apart.
+// THE ANSWER BAND. Mirrors contracts/src/render/DigitBand.sol exactly;
+// RenderMatrix.t.sol fails if the two ever drift apart.
 //
-// The finisher's own number, written round the border in actual 1s and 0s: a
+// The token's answers, one square per credited day, and the finisher's own
+// number, written along the top in actual 1s and 0s: a
 // machine reads the rank off the artwork and a human reads it as writing.
 // Colour was the alternative and lost -- five inks are PEERS, so rank had to be
 // read from metadata, where a number IS the rank.
@@ -414,33 +415,50 @@ export function bandUnits(canvasCells, size) {
 export const canvasUnits = (canvasCells, size) =>
   canvasCells * unitsFor(size).cell + 2 * bandUnits(canvasCells, size);
 
-// The band, in modules, ready for a group carrying scale(module).
-//
-// UPRIGHT: every edge reads the way a reader scans -- left to right along the
-// top and the bottom, top to bottom down each side -- so no glyph is ever
-// turned and one bitmap serves all four. The rotated variant was rendered and
-// rejected: the bottom edge comes out upside down and reads as a printing
-// error on a screen.
-export function digitBandCells(ordinal, canvasCells, size) {
+// The credited day the band appears, with its first side of answers.
+// MUST match DigitBand.FIRST_SIDE.
+export const FIRST_SIDE = 122;
+// Answers per side are two lanes of ANSWER_COLS columns. MUST match DigitBand.COLS.
+export const ANSWER_COLS = 61;
+
+const answerBit = (answers, i) => ((answers[i >> 8] >> BigInt(i & 255)) & 1n) === 1n;
+
+// The band, in modules, ready for a group carrying scale(module): one square
+// per credited day on the right, bottom and left edges as `level` unlocks each
+// whole side, the outer lane first, and the finisher's place written along the
+// top. A filled square is a 1. Glyphs are upright and read left to right.
+export function answerBandCells({ ordinal = 0, answers = [0n, 0n], level = 0 }, canvasCells, size) {
   const cells = new Set();
-  if (!ordinal) return { cells, modules: 0 };
+  if (level < FIRST_SIDE) return { cells, modules: 0 };
 
   const modules = canvasUnits(canvasCells, size) / unitsFor(size).module;
   const pad = (modules - DIGIT_SPAN) / 2;
-  const last = modules - GLYPH_W;
-  const word = ordinal.toString(2).padStart(ORDINAL_BITS, "0");
+  const start = Math.floor((modules - ANSWER_COLS) / 2);
+  const sides = level >= DAY_CELLS ? 3 : Math.floor(level / FIRST_SIDE);
 
-  const put = (x, y, rows) => {
-    for (let r = 0; r < rows.length; r++)
-      for (let c = 0; c < GLYPH_W; c++)
-        if (rows[r][c] === "1") cells.add((y + r) * modules + (x + c));
-  };
-  for (let i = 0; i < ORDINAL_BITS; i++) {
-    const g = GLYPH[word[i]];
-    put(pad + i * GLYPH_STEP, 0, g);              // top,    left to right
-    put(last, pad + i * GLYPH_STEP, g);           // right,  top to bottom
-    put(pad + i * GLYPH_STEP, last, g);           // bottom, left to right
-    put(0, pad + i * GLYPH_STEP, g);              // left,   top to bottom
+  if (ordinal) {
+    const word = ordinal.toString(2).padStart(ORDINAL_BITS, "0");
+    for (let i = 0; i < ORDINAL_BITS; i++) {
+      const g = GLYPH[word[i]];
+      for (let r = 0; r < GLYPH_H; r++)
+        for (let c = 0; c < GLYPH_W; c++)
+          if (g[r][c] === "1") cells.add(r * modules + (pad + i * GLYPH_STEP + c));
+    }
+  }
+
+  const last = DAY_CELLS - 1;
+  for (let side = 0; side < sides; side++) {
+    for (let p = 0; p < 2 * ANSWER_COLS; p++) {
+      const bit = side * 2 * ANSWER_COLS + p;
+      if (bit > last || !answerBit(answers, bit)) continue;
+      const along = start + Math.floor(p / 2);
+      const depth = 1 + (p % 2);
+      const [x, y] =
+        side === 0 ? [modules - 1 - depth, along]
+        : side === 1 ? [modules - 1 - along, modules - 1 - depth]
+        : [depth, modules - 1 - along];
+      cells.add(y * modules + x);
+    }
   }
   return { cells, modules };
 }
@@ -664,9 +682,10 @@ export function renderSvg(modules, want, size, state) {
     // Tint's ink, and the streak the EARNED Iris stored when it was applied.
     irisVariant = 0, tintVariant = 0, irisRun = 0,
     // The finisher's ordinal, from bits 64-95 of the same word. 0 means the
-    // token is not a finisher and carries no band -- which is every token that
-    // exists, so this defaults to the picture as it has always been drawn.
+    // token is not a finisher and its band carries no place.
     ordinal = 0,
+    // One answer bit per credit, credit `level` at bit `level - 1`, as two words.
+    answers = [0n, 0n],
   } = state;
   // `years` is the token's OWN rings, which Spec 10f caps at ONE: the ring that
   // says the year is finished. A child's echo ring is a SECOND ring beside it,
@@ -682,12 +701,12 @@ export function renderSvg(modules, want, size, state) {
   // that carries its scale. `span` is the canvas in the common unit.
   const U = unitsFor(size);
   const CU = U.cell, MU = U.module;
-  // The finisher's digit band, and 0 for every token that is not a finisher.
+  // The answer band, present from FIRST_SIDE credited days, and 0 below it.
   // Every layout expression below adds it and each reduces to the one it was
   // before the band existed when it is 0 -- which is what keeps an unbanded
   // token byte-identical, down to the single space before viewBox. Mirrors
   // Renderer._band in Solidity.
-  const band = ordinal ? bandUnits(canvas, size) : 0;
+  const band = level >= FIRST_SIDE ? bandUnits(canvas, size) : 0;
   const span = canvas * CU + 2 * band;
   // Where the code's top-left module sits, in the common unit: past the band,
   // then the rings and the frame in CELLS, then the quiet zone in MODULES.
@@ -830,11 +849,11 @@ export function renderSvg(modules, want, size, state) {
   // on the finder patterns, and they must come after the code paths so the
   // erase-to-ground step lands on top. They never reach the frame, which is
   // outside the block entirely.
-  // The finisher's number round the border, drawn in MODULES in its own group,
-  // outside everything else on the canvas. It is written in the ink of the
-  // finisher Mark the token holds -- the token's PLACE, fixed for ever -- and
-  // not in any fill the streak can move. Mirrors Renderer._digitGroup.
-  const digits = digitBandCells(ordinal, canvas, size);
+  // The answers and the finisher's place round the border, drawn in MODULES in
+  // their own group, outside everything else on the canvas. Written in the ink
+  // of the finisher Mark the token holds, and not in any fill the streak can
+  // move. Mirrors Renderer._digitGroup.
+  const digits = answerBandCells({ ordinal, answers, level }, canvas, size);
   const digitBody = digits.cells.size
     ? asPath(finisherInk(marks), pathFor(digits.cells, digits.modules))
     : "";
@@ -962,6 +981,7 @@ export function tokenUri(modules, want, size, state) {
     // its default and nothing says so. RenderMatrix.t.sol caught exactly that
     // when this line was absent.
     ordinal = 0,
+    answers = [0n, 0n],
   } = state;
 
   const years = Math.floor(level / DAY_CELLS);
@@ -975,7 +995,7 @@ export function tokenUri(modules, want, size, state) {
   const keyHex = `0x${BigInt(agentKeyId).toString(16).padStart(64, "0")}`;
   const svg = renderSvg(modules, want, size,
     { level, streak, years, echo, marks, lastDay, today, resting, restDay, sunset,
-      sunsetDay, fellRun, fellDay, irisVariant, tintVariant, irisRun, ordinal });
+      sunsetDay, fellRun, fellDay, irisVariant, tintVariant, irisRun, ordinal, answers });
   const image = Buffer.from(svg, "utf8").toString("base64");
 
   // "Iris Shape" is emitted for BOTH routes -- the earned Iris does have a

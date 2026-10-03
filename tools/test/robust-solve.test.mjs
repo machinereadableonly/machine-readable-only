@@ -9,7 +9,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { solve, payloadFor, unpackModules } from "../qart.mjs";
 import { heartMaskBytes } from "../heart-mask.mjs";
-import { renderSvg, ACHE, HUSH, BEAT, AURA, VESSEL } from "../render-token.mjs";
+import { renderSvg, canvasFor, ACHE, HUSH, BEAT, AURA, VESSEL } from "../render-token.mjs";
 import { scanResult } from "./helpers/decode.mjs";
 import { tokenBitmap, SIZE } from "../token-bitmap.mjs";
 import { gateSolve, GATE_SIZES, gateStates, robustSolveFor, renderGateState, gateTarget } from "../robust-solve.mjs";
@@ -123,10 +123,12 @@ test("the banded gate states actually draw the digit band, at its declared size"
   const banded = gateStates().filter(s => s.ordinal);
   assert.equal(banded.length, 2, "expected two banded states in the gate");
   for (const state of banded) {
-    const withBand = renderGateState(solve, target, state);
+    const withPlace = renderGateState(solve, target, state);
     const without = renderGateState(solve, target, { ...state, ordinal: 0 });
+    assert.notEqual(withPlace, without, `"${state.label}" renders identically with and without its place -- the state is inert`);
     const width = (svg) => Number(svg.match(/ width="(\d+)"/)[1]);
-    assert.ok(width(withBand) > width(without), `"${state.label}" must be wider than the same token unbanded`);
+    const unbanded = canvasFor(Math.floor(state.level / 365), state.echo ?? 0) * 16;
+    assert.ok(width(withPlace) > unbanded, `"${state.label}" must be wider than the same token unbanded`);
   }
 });
 

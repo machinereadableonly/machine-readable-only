@@ -22,7 +22,7 @@
 // That asymmetry is why the gate is deliberately stricter than it needs to be.
 import { allMaskSolves, payloadFor, unpackModules } from "./qart.mjs";
 import { heartMaskBytes, SIZE } from "./heart-mask.mjs";
-import { renderSvg, canvasFor, finisherMark, ACHE, HUSH, BEAT, AURA, VESSEL } from "./render-token.mjs";
+import { renderSvg, canvasFor, FIRST_SIDE, finisherMark, ACHE, HUSH, BEAT, AURA, VESSEL } from "./render-token.mjs";
 import { scanResult } from "./test/helpers/decode.mjs";
 
 /// The raster sizes a candidate must clear. The two a third party picks
@@ -150,10 +150,11 @@ export function gateSolve(solve, expected, target = gateTarget()) {
     // of a token with no echo -- and the control would then be rendered at
     // some other token's exact multiple, which is not a control at all.
     //
-    // A BANDED token declares a different size: the band widens the canvas, so
-    // its declared width is read off the SVG, which is what a consumer honours.
+    // A BANDED token (FIRST_SIDE credited days or more) declares a different
+    // size: the band widens the canvas, so its declared width is read off the
+    // SVG, which is what a consumer honours.
     const declared = Number(svg.match(/ width="(\d+)"/)?.[1] ?? 0);
-    const control = state.ordinal ? declared : canvasFor(years, state.echo ?? 0) * 16;
+    const control = state.level >= FIRST_SIDE ? declared : canvasFor(years, state.echo ?? 0) * 16;
     const sizes = [...GATE_SIZES, control];
 
     for (const px of sizes) {
