@@ -191,6 +191,13 @@ test("a credit whose question left the bank writes nothing", async () => {
   assert.ok(summary.aborted);
 });
 
+test("a recorded answer outside its question's set writes nothing", async () => {
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1, answer: 5, questionId: "fog-or-thunder" });
+  const summary = await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  assert.deepEqual(writer.sent, []);
+  assert.ok(summary.aborted);
+});
+
 test("a failed reveal writes nothing else", async () => {
   const { q } = rigWithOneCredit({ day: TODAY - 1 });
   const writer = writerRefusing("revealSplitKeys");
@@ -243,4 +250,23 @@ test("a missing seed is refused without naming the path", () => {
 test("the seed path defaults outside the worktree and can be overridden", () => {
   assert.match(splitSeedPath({}), /\.mro-split[/\\]seed$/);
   assert.equal(splitSeedPath({ MRO_SPLIT_SEED_FILE: "/elsewhere/seed" }), "/elsewhere/seed");
+});
+
+test("the first question issued on a day is that day's question for every token", () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.issueQuestion(1, 500, "fog-or-thunder", 1);
+  // A bank edit and a restart would pick another; the day keeps the first.
+  assert.equal(q.issueQuestion(2, 500, "legs", 2).questionId, "fog-or-thunder");
+  assert.equal(q.issueQuestion(3, 501, "legs", 3).questionId, "legs", "a new day picks afresh");
+});
+
+test("a day that somehow holds two questions writes nothing", async () => {
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1, answer: 0, questionId: "fog-or-thunder" });
+  await runClock({
+    ...baseArgs(q),
+    q: { ...q, questionsForDays: () => [{ day: TODAY - 1, questionId: "fog-or-thunder" }, { day: TODAY - 1, questionId: "legs" }] },
+    publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK,
+  });
+  assert.deepEqual(writer.sent, []);
 });

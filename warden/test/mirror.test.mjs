@@ -464,7 +464,8 @@ test("a question is issued once per token and day; the first issue wins", () => 
   const { q } = fresh();
   assert.deepEqual(q.issueQuestion(1, 20700, "t-two", 1000), { questionId: "t-two", issuedAt: 1000 });
   assert.deepEqual(q.issueQuestion(1, 20700, "t-list", 5000), { questionId: "t-two", issuedAt: 1000 });
-  assert.deepEqual(q.issueQuestion(2, 20700, "t-list", 5000), { questionId: "t-list", issuedAt: 5000 });
+  // And the day's first question is every token's question that day.
+  assert.deepEqual(q.issueQuestion(2, 20700, "t-list", 5000), { questionId: "t-two", issuedAt: 5000 });
 });
 
 test("an answer is recorded against the issued question", () => {

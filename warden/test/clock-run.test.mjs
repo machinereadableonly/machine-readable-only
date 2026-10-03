@@ -1018,6 +1018,23 @@ test("an idle run with a stale stamp sends a heartbeat", async () => {
   assert.deepEqual(beats[0].args, [], "it takes no arguments and writes no token state");
 });
 
+// A LOST SEED HOLDS EVERY WRITE THAT CARRIES A BIT, AND NOTHING ELSE. A
+// heartbeat writes no bit and no token state; holding it would spend the
+// piece's absence clock on a condition only a human can clear.
+test("a run with no usable split seed still sends a due heartbeat", async () => {
+  const { q } = mirror();
+  const writer = okWriter();
+  const summary = await runClock({
+    ...baseArgs(q),
+    splitKeys: null,
+    publicClient: chainStampedAt(TODAY - 40),
+    writer,
+  });
+
+  assert.equal(summary.aborted, "split", "the night still fails");
+  assert.deepEqual(writer.sent.map((s) => s.functionName), ["heartbeat"]);
+});
+
 test("an idle run with a fresh stamp sends nothing", async () => {
   const { q } = mirror();
   const writer = okWriter();

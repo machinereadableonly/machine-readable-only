@@ -348,6 +348,10 @@ export async function runClock({
       else if (state.anchor !== splitKeys[0]) stopForSplit("the split seed does not hash to the contract's split anchor");
       else if (q.pendingCredits(today - 1).some((c) => c.questionId !== null && !bankById.has(c.questionId))) {
         stopForSplit("a queued credit's question is missing from the bank");
+      } else if (q.pendingCredits(today - 1).some((c) => c.answer !== null &&
+          !(Number.isInteger(c.answer) && c.answer >= 0 && c.answer < answerSetSize(bankById.get(c.questionId))))) {
+        // The bank's answer set changed under a recorded index: grading it would be a guess.
+        stopForSplit("a queued credit's answer is outside its question's answer set");
       } else {
         split = state;
       }
@@ -383,6 +387,8 @@ export async function runClock({
     const asked = q.questionsForDays(fromDay, today - 1);
     if (asked.some((row) => !bankById.has(row.questionId))) {
       stopForSplit("a question issued on a day being revealed is missing from the bank");
+    } else if (new Set(asked.map((row) => row.day)).size !== asked.length) {
+      stopForSplit("a day being revealed holds two different questions");
     } else {
       const questions = asked.map(({ day, questionId }) => {
         const b = bankById.get(questionId);
@@ -876,10 +882,12 @@ export async function runClock({
   //     ending -- and skipping the block on any abort handed that straight
   //     back: one row queued before the pause reverts EnforcedPause on the
   //     first write and the operator falls silent on chain. Every other abort
-  //     is a reason the heartbeat would fail for too.
+  //     is a reason the heartbeat would fail for too -- except a split abort:
+  //     a lost seed holds every write that carries an answer bit, and a
+  //     heartbeat carries none.
   //
   //     A heartbeat is a WRITE, so a gas stop skips it like any other.
-  if (!summary.gasStopped && (!summary.aborted || summary.aborted === "EnforcedPause")) {
+  if (!summary.gasStopped && (!summary.aborted || summary.aborted === "EnforcedPause" || summary.aborted === "split")) {
     // A HEAL IS NOT A WRITE. It is the discovery that a day landed on some
     // earlier night, and it sends no transaction, so it cannot have stamped
     // `lastWardenDay` -- counting it made a night of pure healing look busy

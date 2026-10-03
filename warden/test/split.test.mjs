@@ -39,3 +39,8 @@ test("the chain hashes back to its anchor", () => {
   assert.equal(keccak256(k[1]), k[0]);
   assert.equal(keyIndexFor(1005, 1000), 6);
 });
+
+test("an answer outside the set is refused, never graded", () => {
+  for (const answer of [2, 9, -1, 1.5]) assert.throws(() => splitBit(KEY, 2, answer), /outside/);
+  assert.throws(() => answerBit({ keyHex: KEY, n: 0, answer: 0, tokenId: 1 }), /outside/);
+});

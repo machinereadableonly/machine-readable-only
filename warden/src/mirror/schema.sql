@@ -248,3 +248,4 @@ CREATE TABLE IF NOT EXISTS questions (
   answeredAt INTEGER,
   PRIMARY KEY (tokenId, day)
 );
+CREATE INDEX IF NOT EXISTS questions_day ON questions (day);

@@ -391,8 +391,11 @@ export function queries(db) {
     setFinished: db.prepare(
       "UPDATE tokens SET finisher = ?, marks = marks | ? WHERE tokenId = ?"
     ),
+    // The day's FIRST question is every token's question that day, whatever the
+    // bank now picks: a bank edit and a restart mid-day must not split a day.
     issueQuestion: db.prepare(
-      "INSERT OR IGNORE INTO questions (tokenId, day, questionId, issuedAt) VALUES (?, ?, ?, ?)"
+      "INSERT OR IGNORE INTO questions (tokenId, day, questionId, issuedAt) VALUES (?, ?, " +
+        "COALESCE((SELECT questionId FROM questions WHERE day = ? ORDER BY issuedAt ASC, tokenId ASC LIMIT 1), ?), ?)"
     ),
     getQuestion: db.prepare("SELECT * FROM questions WHERE tokenId = ? AND day = ?"),
     issuedQuestionIds: db.prepare("SELECT DISTINCT questionId FROM questions"),
@@ -1115,7 +1118,7 @@ export function queries(db) {
     /// easier question, and the day's answer is drawn into the artwork against
     /// the question that was issued.
     issueQuestion(tokenId, day, questionId, issuedAt) {
-      s.issueQuestion.run(tokenId, day, questionId, issuedAt);
+      s.issueQuestion.run(tokenId, day, day, questionId, issuedAt);
       const row = s.getQuestion.get(tokenId, day);
       return { questionId: row.questionId, issuedAt: row.issuedAt };
     },

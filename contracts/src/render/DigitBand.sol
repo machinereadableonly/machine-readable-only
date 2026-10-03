@@ -20,21 +20,13 @@ library DigitBand {
     /// space, and centring on this true span gives every edge equal margins.
     uint256 internal constant SPAN = BITS * STEP - (STEP - GW);
 
-    /// @notice The fallback ink: what the band is written in when the token
-    /// holds an ordinal but no finisher Mark.
-    ///
-    /// @dev The band normally has one of five inks -- gold, silver, bronze,
-    /// blue or the heart's red -- selected by `MarkRenderer.finisherInk`. This
-    /// near-black is only what the renderer draws when it is handed an ordinal
-    /// with no Mark, which `_finish` cannot produce: it writes the Mark bit and
-    /// the ordinal in a single word.
-    ///
-    /// The ink must never be the frame's fill or the token's own colour. Those
-    /// walk down the tier ladder as a streak lapses, and a finisher's number
-    /// must not change colour because its holder missed a week.
-    ///
-    /// Seven characters, like all five of the real inks, so the byte count does
-    /// not depend on which one is chosen.
+    /// @notice The band's ink before a token finishes, and the fallback for a
+    /// place with no finisher Mark.
+    /// @dev Once finished, the band takes its finisher Mark's ink
+    /// (`MarkRenderer.finisherInk`). Never the frame's fill or the token's own
+    /// colour: those move as a streak lapses, and the band must not. Seven
+    /// characters, like the five finisher inks, so the byte count does not
+    /// depend on which is chosen.
     string internal constant INK = "#2f2f2f";
 
     /// @dev Three glyph cells, and no row of air: `bandUnits` then pads by up

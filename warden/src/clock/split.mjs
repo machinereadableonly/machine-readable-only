@@ -20,6 +20,7 @@ const h = (key, tag, i) => BigInt(keccak256(encodePacked(["bytes32", "string", "
 
 // Rank the n answers by (hash, index); the first floor(n / 2) give a 1.
 export function splitBit(keyHex, n, answer) {
+  if (!Number.isInteger(answer) || answer < 0 || answer >= n) throw new Error(`answer ${answer} is outside a set of ${n}`);
   const hs = Array.from({ length: n }, (_, i) => h(keyHex, "split", i));
   const order = [...hs.keys()].sort((a, b) => (hs[a] < hs[b] ? -1 : hs[a] > hs[b] ? 1 : a - b));
   return order.indexOf(answer) < Math.floor(n / 2) ? 1 : 0;

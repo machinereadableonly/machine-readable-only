@@ -61,8 +61,9 @@ function creditsIn(input, id) {
 export async function verifyBorder({ publicClient, contract, tokenId, maxRunBlocks = 5000 }) {
   const id = BigInt(tokenId);
   const read = (functionName, args) => publicClient.readContract({ address: contract, abi: BORDER_ABI, functionName, args });
-  const [view, words, anchorDayRaw, lastReveal] = await Promise.all([
+  const [view, words, anchorDayRaw, lastReveal, head] = await Promise.all([
     read("viewOf", [id]), read("answersOf", [id]), read("splitAnchorDay"), read("lastRevealBlock"),
+    publicClient.getBlockNumber(),
   ]);
   const level = Number(view.level);
   const mintDay = Number(view.mintDay);
@@ -96,13 +97,16 @@ export async function verifyBorder({ publicClient, contract, tokenId, maxRunBloc
     block = BigInt(prevRevealBlock);
   }
 
-  // 2. Each run's writes follow its reveal: scan to the next reveal, or a run's length.
+  // 2. Each run's writes follow its reveal: scan to the next reveal, or a run's
+  //    length. The newest night is scanned to the chain's head, which is also
+  //    where voucher credits land once the Warden has stopped revealing.
   nights.sort((a, b) => (a < b ? -1 : 1));
   const byDay = new Map();
   for (let n = 0; n < nights.length; n++) {
     const from = nights[n];
-    const cap = from + BigInt(maxRunBlocks);
-    const to = n + 1 < nights.length && nights[n + 1] - 1n < cap ? nights[n + 1] - 1n : cap;
+    const cap = n + 1 < nights.length ? from + BigInt(maxRunBlocks) : BigInt(head);
+    let to = n + 1 < nights.length && nights[n + 1] - 1n < cap ? nights[n + 1] - 1n : cap;
+    if (to > BigInt(head)) to = BigInt(head);
     const hashes = new Set();
     for (const log of await logsBetween(publicClient, contract, from, to)) {
       const mine =
@@ -117,18 +121,29 @@ export async function verifyBorder({ publicClient, contract, tokenId, maxRunBloc
     }
   }
 
-  // 3. Credit k, in day order, is square k.
+  // 3. Credit k, in day order, is square k -- but only when every credit was
+  //    found. The chain holds no day per credit, so with one missing there is
+  //    no telling which square it was, and grading the rest would accuse an
+  //    honest chain.
   const credits = [...byDay.values()].sort((a, b) => a.day - b.day);
-  if (credits.length > level) problems.push(`found ${credits.length} credits for a token at level ${level}`);
+  if (credits.length !== level) {
+    const days = credits.map((c) => c.day).join(", ") || "none";
+    return {
+      ok: false,
+      squares: Array.from({ length: level }, (_, i) => ({
+        level: i + 1, day: null, expected: null, actual: bitOf(words, i), status: "missing",
+      })),
+      problems: [
+        ...problems,
+        `found ${credits.length} credits for a token at level ${level} (days ${days}); ` +
+          "the border cannot be checked square by square until the rest are found",
+      ],
+    };
+  }
   const squares = [];
   for (let k = 1; k <= level; k++) {
     const actual = bitOf(words, k - 1);
     const c = credits[k - 1];
-    if (!c) {
-      squares.push({ level: k, day: null, expected: null, actual, status: "missing" });
-      problems.push(`square ${k}: no credit for it was found on chain`);
-      continue;
-    }
     const square = { level: k, day: c.day, expected: null, actual, status: "ok" };
     squares.push(square);
     if (c.kind === "voucher") {

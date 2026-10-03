@@ -36,7 +36,7 @@ function logOf(eventName, args, blockNumber, transactionHash) {
 /// A token minted on MINT_DAY, then credited once a day. `answers[0]` stands
 /// for the mint (always a coin flip); each later entry is that credit's answer
 /// index, or null for silence. One Clock run per day: a reveal, then its writes.
-function history({ answers, flipBit = null, hideBatch = null, unrevealedLast = false }) {
+function history({ answers, flipBit = null, hideBatch = null, unrevealedLast = false, voucherDays = 0, head = null }) {
   const logs = [];
   const txs = new Map();
   const bits = [];
@@ -78,6 +78,19 @@ function history({ answers, flipBit = null, hideBatch = null, unrevealedLast = f
     }
   }
 
+  // Voucher credits, after the Warden is gone: no reveal, an empty square, a
+  // MetadataUpdate far past the last reveal's run window.
+  for (let v = 0; v < voucherDays; v++) {
+    const day = MINT_DAY + credits + v;
+    const block = 100 * credits + 20_000 + 10 * v;
+    const hash = `0x${"3".repeat(62)}${v.toString(16).padStart(2, "0")}`;
+    bits.push(0);
+    txs.set(hash, { hash, to: CONTRACT, input: encodeFunctionData({ abi: MRO_ABI, functionName: "checkInWithVoucher", args: [BigInt(TOKEN), day, "0x"] }) });
+    logs.push(logOf("MetadataUpdate", { _tokenId: BigInt(TOKEN) }, block, hash));
+  }
+  const level = credits + voucherDays;
+  const headBlock = BigInt(head ?? 100 * credits + 30_000);
+
   if (flipBit !== null) bits[flipBit] ^= 1;
   const words = [0n, 0n];
   bits.forEach((b, i) => { if (b) words[i >> 8] |= 1n << BigInt(i & 255); });
@@ -87,14 +100,17 @@ function history({ answers, flipBit = null, hideBatch = null, unrevealedLast = f
       assert.equal(address, CONTRACT);
       // Every read must be one the inline ABI can make.
       assert.ok(BORDER_ABI.some((e) => e.name === functionName), `${functionName} is not in the inline ABI`);
-      if (functionName === "viewOf") return { tokenId: args[0], level: credits, mintDay: MINT_DAY, lastDay };
+      if (functionName === "viewOf") return { tokenId: args[0], level, mintDay: MINT_DAY, lastDay: lastDay + voucherDays };
       if (functionName === "answersOf") return words;
       if (functionName === "splitAnchorDay") return ANCHOR_DAY;
       if (functionName === "lastRevealBlock") return prevReveal;
       throw new Error(`unexpected read ${functionName}`);
     },
+    async getBlockNumber() { return headBlock; },
     async getLogs({ address, fromBlock, toBlock }) {
       assert.equal(address, CONTRACT);
+      // A public RPC refuses a range past its head.
+      if (toBlock > headBlock) throw new Error("block range extends beyond current head block");
       assert.ok(toBlock - fromBlock < 1000n, "a public RPC serves at most 1,000 blocks per query");
       return logs.filter((l) => l.blockNumber >= fromBlock && l.blockNumber <= toBlock);
     },
@@ -174,4 +190,25 @@ test("the command needs a contract, and never creates an identity", async () => 
     (err) => /--contract/.test(err.stderr)
   );
   assert.equal(existsSync(key), false, "no key was made for a read-only command");
+});
+
+test("one unfound credit never accuses another square of being wrong", async () => {
+  const h = history({ answers: [1, 1, 0, 0, 1, 0], hideBatch: 2 });
+  const r = await verifyBorder({ publicClient: h.client, contract: h.contract, tokenId: 1 });
+  assert.equal(r.ok, false);
+  assert.ok(!r.squares.some((s) => s.status === "wrong"), JSON.stringify(r.squares.map((s) => s.status)));
+  assert.match(r.problems.join("\n"), /found 5 credits for a token at level 6/);
+});
+
+test("a run that wrote moments ago is scanned only up to the chain's head", async () => {
+  const h = history({ answers: [1, null, 0], head: 100 * 3 + 50 });
+  const r = await verifyBorder({ publicClient: h.client, contract: h.contract, tokenId: 1 });
+  assert.equal(r.ok, true, JSON.stringify(r.problems));
+});
+
+test("voucher credits after the Warden is gone are found and reported as voucher days", async () => {
+  const h = history({ answers: [1, null, 0], voucherDays: 2 });
+  const r = await verifyBorder({ publicClient: h.client, contract: h.contract, tokenId: 1 });
+  assert.equal(r.ok, true, JSON.stringify(r.problems));
+  assert.deepEqual(r.squares.map((s) => s.status), ["ok", "ok", "ok", "voucher", "voucher"]);
 });
