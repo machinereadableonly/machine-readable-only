@@ -120,6 +120,26 @@ test("FutureDay drops every entry for that day, not one token", async () => {
   for (const d of r.dropped) assert.equal(d.reason, "FutureDay");
 });
 
+// StaleDay names a day more than MAX_LAG late: that day can never land, the
+// others in the chunk can.
+test("a StaleDay refusal condemns that day's entries and writes the rest", async () => {
+  const writer = {
+    calls: [],
+    async send(fn, args) {
+      const days = args[1];
+      this.calls.push(days);
+      if (days.includes(100)) return { ok: false, reason: "reverted-on-simulate", errorName: "StaleDay", errorArgs: ["100"] };
+      return { ok: true, hash: "0x1" };
+    },
+  };
+  const entries = [entry(1, 100), entry(2, 100), entry(3, 140)];
+  const r = await writeCheckInChunk(writer, entries);
+  assert.deepEqual(r.written.map((e) => e.tokenId), [3]);
+  assert.deepEqual(r.dropped.map((d) => [d.entry.tokenId, d.reason]), [[1, "StaleDay"], [2, "StaleDay"]]);
+  assert.equal(r.aborted, null);
+  assert.equal(writer.calls.length, 2, "the day is condemned in one step, not found by bisecting");
+});
+
 // A run-level refusal must stop the run. Bisecting on NotWarden would split
 // down to single entries and fail on every one -- 2n calls to learn nothing.
 for (const errorName of ["NotWarden", "Sunset", "EnforcedPause", "LengthMismatch", "EmptyBatch"]) {

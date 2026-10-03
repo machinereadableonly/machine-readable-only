@@ -357,20 +357,14 @@ export function makeChainReader({
      * true, false, or null when the chain could not be asked. Null is "could
      * not ask" and the gate refuses on it -- it is never read as "no".
      *
-     * WHY (F5, found on a Base mainnet fork 2026-09-15). `mint` ends in
-     * `_safeMint`, which calls `onERC721Received` on any recipient WITH CODE
-     * and reverts unless it answers the magic value. The Warden took payment
-     * without asking, so a mint to such an address was charged for and then
-     * reverted on simulate every night, forever, taking the check-in queued
-     * behind it down too. anvil's stock accounts carry an EIP-7702 delegation
-     * on real mainnet, and every fork mint to one failed.
+     * WHY. `mint` uses `_mint` and makes no callback, so the chain would
+     * deliver to any address. A contract that does not answer
+     * `onERC721Received` has declared it cannot handle ERC-721, and a token
+     * delivered there is stuck for good, so the Warden refuses it before the
+     * money moves. EIP-7702-delegated wallets are the common live shape.
      *
-     * THIS EXCLUDES NOBODY THE CONTRACT WOULD HAVE ACCEPTED. It refuses the
-     * same addresses `_safeMint` already refuses, before the money moves
-     * rather than after.
-     *
-     * A codeless address is accepted without a second round trip, because
-     * `_safeMint` makes no callback to one either.
+     * A codeless address is accepted without a second round trip: an ordinary
+     * wallet can always move what it holds.
      */
     async canReceiveERC721(address) {
       const code = await rpcCall("eth_getCode", [address, "latest"]);
@@ -386,7 +380,7 @@ export function makeChainReader({
       const data =
         ON_ERC721_RECEIVED +
         addressArg(ZERO_ADDRESS) + // operator
-        addressArg(ZERO_ADDRESS) + // from, which is what _safeMint passes
+        addressArg(ZERO_ADDRESS) + // from: a mint comes from nobody
         "0".repeat(64) + // tokenId: any id, since the id is not yet assigned
         (128).toString(16).padStart(64, "0") +
         "0".repeat(64);

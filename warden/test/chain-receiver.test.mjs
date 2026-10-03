@@ -1,11 +1,9 @@
 // Can the address an agent named actually HOLD the token it is paying for?
 //
-// WHY THIS EXISTS (F5, found on a Base mainnet fork 2026-09-15). `mint` ends
-// in `_safeMint`, which calls `onERC721Received` on any recipient WITH CODE
-// and reverts unless it answers the magic value 0x150b7a02. The Warden took
-// the 1 USDC without ever asking, so a mint to such an address was charged
-// for, queued, and then reverted on simulate every night forever -- and the
-// check-in queued behind it was condemned `NoSuchToken` with it.
+// WHY THIS EXISTS. `mint` makes no callback, so the chain would deliver to
+// any address, and a token delivered to a contract that does not answer
+// `onERC721Received` (the magic value 0x150b7a02) is stuck there for good. The
+// Warden asks before it takes the 1 USDC.
 //
 // The live shape is not exotic. anvil's stock test accounts carry an EIP-7702
 // delegation inherited from real mainnet (code `0xef0100` followed by the
@@ -71,9 +69,8 @@ function rpc({ code = "0x", call = MAGIC } = {}, counts = { getCode: 0, ethCall:
 const reader = (fetchImpl) => makeChainReader({ rpcUrl: RPC, contract: CONTRACT, fetchImpl, log: () => {} });
 
 test("an address with no code is an ordinary wallet, and is not asked anything further", async () => {
-  // The overwhelming majority of --to addresses. `_safeMint` makes no callback
-  // to a codeless address, so neither does this: a second round trip per mint
-  // for a question with a known answer is pure latency.
+  // The overwhelming majority of --to addresses. An ordinary wallet can always
+  // move what it holds, so a second round trip per mint is pure latency.
   const impl = rpc({ code: "0x" });
   assert.equal(await reader(impl).canReceiveERC721(TO), true);
   assert.equal(impl.counts.ethCall, 0, "a codeless address must not be called");
@@ -132,10 +129,10 @@ test("a rate-limited provider is null, NOT a refusal", async () => {
   assert.equal(await reader(rpc({ code: "0x60006000", call: "rate-limited" })).canReceiveERC721(TO), null);
 });
 
-test("the callback is simulated AS THE TOKEN CONTRACT, the way _safeMint makes it", async () => {
+test("the callback is simulated AS THE TOKEN CONTRACT", async () => {
   // A receiver may check `msg.sender` and accept only from the collection it
   // expects. Simulating from the default (the zero address) would answer a
-  // different question from the one the mint will actually ask.
+  // different question from the one a later transfer would ask.
   let seen = null;
   const impl = async (_url, init) => {
     const body = JSON.parse(init.body);

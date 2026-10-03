@@ -36,6 +36,8 @@ const ENTRY_ERRORS = {
   // credit that FINISHES a token down with the ones after it. It is trimmed by
   // trimPastTheFinish below, which keeps every entry the chain can still take.
   FutureDay: { by: "day" },
+  // More than MAX_LAG days late: that day can never land, the others can.
+  StaleDay: { by: "day" },
 };
 
 /**

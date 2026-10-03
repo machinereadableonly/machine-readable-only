@@ -137,62 +137,6 @@ export async function chainRunOf({ publicClient, contract, tokenId }) {
 }
 
 /// Just enough ABI to ask a recipient the one question that matters.
-const ERC721_RECEIVER_ABI = [
-  {
-    type: "function",
-    name: "onERC721Received",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "operator", type: "address" },
-      { name: "from", type: "address" },
-      { name: "tokenId", type: "uint256" },
-      { name: "data", type: "bytes" },
-    ],
-    outputs: [{ name: "", type: "bytes4" }],
-  },
-];
-const ZERO_ADDRESS = "0x" + "00".repeat(20);
-const ERC721_RECEIVED = "0x150b7a02";
-
-/**
- * Can `to` hold an ERC-721? true, false, or null for "could not ask".
- *
- * F6. A revert raised by the RECIPIENT's own code is not in MRO's ABI, so viem
- * decodes no error name and the Clock could only log a bare
- * `reverted-on-simulate` -- the least useful thing it could say about an
- * agent's paid mint. This turns that into a named cause.
- *
- * NULL IS NOT FALSE, and the difference is what stops a human being sent after
- * a problem that does not exist: a revert is the recipient's answer, while an
- * RPC blip is no answer at all, and only the first makes a PAID mint
- * permanently stuck. Same distinction the Warden's own gate makes before
- * taking the money (`chain/read.mjs canReceiveERC721`).
- *
- * The callback is asked AS THE TOKEN CONTRACT, because that is who `_safeMint`
- * makes the call as, and a receiver may accept only from the collection it
- * expects.
- */
-export async function recipientCanReceive({ publicClient, contract, to }) {
-  try {
-    // A client without getCode is a stub from an older test, not a chain that
-    // said no. Refusing to guess is the whole point of the null.
-    if (typeof publicClient?.getCode !== "function") return null;
-    const code = await publicClient.getCode({ address: to });
-    // No code, no callback: `_safeMint` does not make one either.
-    if (!code || code === "0x") return true;
-    const answer = await publicClient.readContract({
-      address: to,
-      abi: ERC721_RECEIVER_ABI,
-      functionName: "onERC721Received",
-      args: [ZERO_ADDRESS, ZERO_ADDRESS, 0n, "0x"],
-      account: contract,
-    });
-    return answer === ERC721_RECEIVED;
-  } catch (err) {
-    return /revert/i.test(String(err?.shortMessage ?? err?.message ?? "")) ? false : null;
-  }
-}
-
 export async function mintIsOnChain({ publicClient, contract, mint }) {
   try {
     const [owner, view] = await Promise.all([
@@ -417,45 +361,23 @@ export async function runClock({
       summary.stuckMints.push(mint.tokenId);
       continue;
     }
-    // STALEDAY NEVER CLEARS FOR THIS ROW. The day the agent paid is more than
-    // MAX_LAG behind the chain, and it only falls further behind, so
-    // the contract refuses the same argument every night. The agent has PAID:
-    // same treatment as a mint blocked by somebody else's token -- left queued
-    // for a human, never closed, and counted so the run fails.
-    if (result.errorName === "StaleDay") {
-      alert(`clock: mint ${mint.tokenId} was paid on day ${mint.day}, which the chain now refuses as StaleDay -- this PAID mint can never land and needs a human`);
+    // STALEDAY AND BEFOREDEPLOY NEVER CLEAR FOR THIS ROW. The day the agent
+    // paid is more than MAX_LAG behind the chain (and only falls further
+    // behind), or before the deploy day (which never moves), so the contract
+    // refuses the same argument every night. The agent has PAID: same treatment
+    // as a mint blocked by somebody else's token -- left queued for a human,
+    // never closed, and counted so the run fails.
+    if (result.errorName === "StaleDay" || result.errorName === "BeforeDeploy") {
+      alert(`clock: mint ${mint.tokenId} was paid on day ${mint.day}, which the chain now refuses as ${result.errorName} -- this PAID mint can never land and needs a human`);
       summary.stuckMints = summary.stuckMints ?? [];
       summary.stuckMints.push(mint.tokenId);
       continue;
     }
-    // F6. AN UNNAMED REVERT IS USUALLY THE RECIPIENT'S OWN CODE. `mint` ends in
-    // `_safeMint`, which calls `onERC721Received` on any recipient with code;
-    // that revert is not in MRO's ABI, so there is no error name to print and
-    // the line said only `reverted-on-simulate`.
     let failureLine = `clock: mint ${mint.tokenId} failed (${result.reason}${result.errorName ? ` ${result.errorName}` : ""})`;
-    if (result.reason === "reverted-on-simulate" && !result.errorName) {
-      const canReceive = await recipientCanReceive({ publicClient, contract, to: mint.toAddress });
-      if (canReceive === false) {
-        // It can NEVER land, so it gets the same treatment as StaleDay and a
-        // foreign TokenExists: left queued for a human and counted, rather
-        // than retried in silence every night until the day goes stale.
-        // The Warden refuses this recipient before payment now (F5), so a row
-        // in this state was either taken before that shipped or reached the
-        // mirror by some route other than the mint tool.
-        alert(
-          `clock: mint ${mint.tokenId} cannot land -- the recipient ${mint.toAddress} cannot hold an ` +
-            "ERC-721 (it has code and does not answer onERC721Received), so this PAID mint can never " +
-            "land and needs a human"
-        );
-        summary.stuckMints = summary.stuckMints ?? [];
-        summary.stuckMints.push(mint.tokenId);
-        continue;
-      }
-      // Not the recipient, so say what the node actually said. `detail` is
-      // routed through safeErrorText, which is why it is safe to print: the
-      // raw error message carries the RPC url and its provider key.
-      if (result.detail) failureLine += `: ${result.detail}`;
-      if (canReceive === null) failureLine += " (the recipient could not be checked)";
+    // `detail` is routed through safeErrorText, which is why it is safe to
+    // print: the raw error message carries the RPC url and its provider key.
+    if (result.reason === "reverted-on-simulate" && !result.errorName && result.detail) {
+      failureLine += `: ${result.detail}`;
     }
     alert(failureLine);
     if (isRunLevel(result)) {

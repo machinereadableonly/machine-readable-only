@@ -384,6 +384,28 @@ test("a mint the chain refuses as StaleDay is reported stuck, not retried in sil
   assert.ok(alerts.some((a) => /StaleDay/.test(a) && /needs a human/.test(a)), JSON.stringify(alerts));
 });
 
+// BeforeDeploy: the paid day predates the contract, and the deploy day never
+// moves, so this mint can never land either.
+test("a mint the chain refuses as BeforeDeploy is reported stuck, not retried in silence", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  const alerts = [];
+  const summary = await runClock({
+    ...baseArgs(q),
+    writer: okWriter({
+      async send(fn, args, opts) {
+        assertEncodable(fn, args);
+        this.sent.push({ functionName: fn, args, label: opts?.label });
+        return { ok: false, reason: "reverted-on-simulate", errorName: "BeforeDeploy", errorArgs: ["100"] };
+      },
+    }),
+    alert: (m) => alerts.push(m),
+  });
+  assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued");
+  assert.deepEqual(summary.stuckMints, [1]);
+  assert.ok(alerts.some((a) => /BeforeDeploy/.test(a) && /needs a human/.test(a)), JSON.stringify(alerts));
+});
+
 test("a Mark that lands is written and its bit is set", async () => {
   const { db, q } = mirror();
   queueMint(q, db, 1);
@@ -939,67 +961,14 @@ test("CONTROL: when the mint lands in the same run, its credit IS sent", async (
   db.close();
 });
 
-// --- F6: name the cause instead of logging a bare revert -------------------
-//
-// A revert raised by the RECIPIENT's own code is not in MRO's ABI, so viem
-// decodes no error name and the Clock logged only `reverted-on-simulate`. That
-// is the least useful line it could print about an agent's paid mint.
-
-/// A chain where `to` has code and refuses the ERC-721 callback: the
-/// EIP-7702-delegated shape the fork actually hit.
-const chainWithNonReceiver = {
-  ...noChain,
-  async getCode() { return "0xef0100" + "8a67b502".padEnd(40, "0"); },
-  async readContract({ functionName }) {
-    if (functionName === "onERC721Received") throw new Error("execution reverted");
-    throw new Error(`unexpected read: ${functionName}`);
-  },
-};
-
-/// The same, but the recipient accepts.
-const chainWithReceiver = {
-  ...noChain,
-  async getCode() { return "0x60006000"; },
-  async readContract({ functionName }) {
-    if (functionName === "onERC721Received") return "0x150b7a02";
-    throw new Error(`unexpected read: ${functionName}`);
-  },
-};
-
-test("an unnamed revert names the recipient when that is the cause, and the mint is stuck", async () => {
+// An unnamed revert says what the node said, and leaves the mint queued.
+test("an unnamed revert reports the detail and stays queued", async () => {
   const { db, q } = mirror();
   queueMint(q, db, 1);
   const alerts = [];
 
   const summary = await runClock({
     ...baseArgs(q),
-    publicClient: chainWithNonReceiver,
-    writer: writerRefusingMint([]),
-    alert: (m) => alerts.push(m),
-  });
-
-  assert.ok(
-    alerts.some((a) => /cannot hold an ERC-721|cannot receive/i.test(a)),
-    `the alert must name the cause, got: ${alerts.join(" | ")}`,
-  );
-  // It can NEVER land: same treatment as StaleDay and a foreign TokenExists --
-  // left queued for a human and counted, so the run fails rather than retrying
-  // in silence every night forever.
-  assert.deepEqual(summary.stuckMints, [1]);
-  db.close();
-});
-
-test("an unnamed revert with a GOOD recipient reports the detail and stays queued", async () => {
-  // The other half. The recipient is fine, so the cause is something else and
-  // the run must not condemn the mint -- but it must stop printing a bare
-  // `reverted-on-simulate` with nothing else on the line.
-  const { db, q } = mirror();
-  queueMint(q, db, 1);
-  const alerts = [];
-
-  const summary = await runClock({
-    ...baseArgs(q),
-    publicClient: chainWithReceiver,
     writer: writerRefusingMint([]),
     alert: (m) => alerts.push(m),
   });

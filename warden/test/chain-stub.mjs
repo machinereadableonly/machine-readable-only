@@ -97,10 +97,9 @@ export const supplyFullChain = () => openChain({ supplyRoom: async () => 0 });
 /// The parent's key has no seed left for this agent-year: NoSeedAvailable().
 export const noSeedChain = () => openChain({ seedsAvailable: async () => 0 });
 
-/// A recipient with code that does not answer onERC721Received: `_safeMint`
-/// reverts, so the mint can never land however many times it is retried. The
-/// live shape of this is an EIP-7702-delegated wallet whose delegate has no
-/// such callback.
+/// A recipient with code that does not answer onERC721Received: a token
+/// delivered there would be stuck. The live shape of this is an
+/// EIP-7702-delegated wallet whose delegate has no such callback.
 export const nonReceiverChain = () => openChain({ canReceiveERC721: async () => false });
 
 /// A chain whose ids are already taken, so freeIdFrom must skip past them.

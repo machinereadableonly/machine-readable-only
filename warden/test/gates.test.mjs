@@ -156,19 +156,9 @@ test("paidWriteBlock asks the supply cap only for a call that MINTS", async () =
 
 // --- the receiver gate (F5) ------------------------------------------------
 //
-// `mint` ends in `_safeMint`, which calls `onERC721Received` on any recipient
-// that has code and reverts unless it answers the magic value. The Warden took
-// the payment without ever asking, so a mint to such an address was charged
-// for, queued, and then reverted on simulate EVERY night, forever: the agent
-// paid a dollar for a token that could never exist.
-//
-// Measured on a Base MAINNET fork, 2026-09-15: anvil's test accounts carry an
-// EIP-7702 delegation inherited from real mainnet, and every mint to one
-// failed. That is not an exotic case -- it is where agent wallets are going.
-//
-// This gate excludes NOBODY the contract would have accepted. It refuses the
-// same addresses `_safeMint` already refuses, before the money moves instead
-// of after.
+// `mint` makes no callback, so the chain would deliver to any address, and a
+// token delivered to a contract that does not answer `onERC721Received` is
+// stuck there for good. The gate refuses that address before the money moves.
 test("receiverBlock passes an ordinary wallet and refuses one that cannot receive", async () => {
   assert.equal(await receiverBlock(openChain(), TO), null);
   assert.equal(await receiverBlock(nonReceiverChain(), TO), "recipient-cannot-receive");

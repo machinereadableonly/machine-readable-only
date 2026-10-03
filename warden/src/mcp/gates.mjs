@@ -160,18 +160,10 @@ export async function seedBudgetBlock(chain, q, parentId, keyId) {
 /**
  * Refuse when the recipient cannot hold an ERC-721.
  *
- * Mirrors no named MRO error, which is what makes it different from every
- * other gate here: the revert comes from OpenZeppelin's `_safeMint` calling
- * `onERC721Received` on the recipient, or from the recipient's own code. It is
- * not in our ABI, so the Clock could only ever log a bare
- * `reverted-on-simulate` for it (F6).
- *
- * THE COST OF NOT HAVING THIS, measured on a Base mainnet fork 2026-09-15: the
- * agent pays, the mint is queued, and it reverts on simulate every night
- * forever -- and a check-in queued behind it is condemned `NoSuchToken` into
- * `stuckCredits`, so one bad recipient also fails the whole Clock run (F7).
- *
- * IT EXCLUDES NOBODY THE CONTRACT WOULD ACCEPT. `--to` is the OWNER address the
+ * Mirrors no MRO error, which is what makes it different from every other
+ * gate here: `mint` makes no callback, so the chain would deliver the token
+ * and it would be stuck in a contract that has declared it cannot handle
+ * ERC-721. Refused before the money moves. `--to` is the OWNER address the
  * agent names, not the agent itself, so a refusal costs a retry with a
  * different address and no money at all.
  */
