@@ -327,17 +327,17 @@ contract RunHistoryTest is MroTestBase {
     ///
     /// BEING A SECOND IMPLEMENTATION IS THE POINT, and it is also the cost: it
     /// has to be brought in line by hand every time the shipped rule moves, and
-    /// nothing fails if it is not. It gained the `whole` branch with Spec 10f.
+    /// nothing fails if it is not.
     ///
     /// The alternative -- asserting on a colour inside a base64 SVG inside a
     /// data URI -- would test string decoding, not the ladder.
     function _rungOf(TokenView memory v) internal pure returns (uint256) {
-        if (v.resting) return Palette.tierIndex(v.streak);
-        // A token that reached 365 is FINISHED: the clock stops at its last
-        // credited day, and a sunset after that point has nothing left to seal.
-        bool whole = v.level >= FrameGeometry.DAY_CELLS;
-        if (v.sunset && !whole) return Palette.lapsedIndex(v.streak, v.lastDay, v.sunsetDay);
-        uint32 at = whole ? v.lastDay : v.today;
+        // The picture stops at the last credited day once whole, else at the
+        // earliest of the rest day, the sunset day and today.
+        uint32 at = v.today;
+        if (v.sunset && v.sunsetDay < at) at = v.sunsetDay;
+        if (v.resting && v.restDay < at) at = v.restDay;
+        if (v.level >= FrameGeometry.DAY_CELLS) at = v.lastDay;
         uint256 live = Palette.lapsedIndex(v.streak, v.lastDay, at);
         if (v.fellRun == 0) return live;
         uint256 fell = Palette.lapsedIndex(v.fellRun, v.fellDay, at);

@@ -268,55 +268,29 @@ export function mixHex(a, b) {
   return `#${mid(0)}${mid(1)}${mid(2)}`;
 }
 
-/**
- * How long the token has been away, in days.
- *
- * THE BRANCHES MIRROR rungFor DELIBERATELY. Rest seals the image at the moment
- * the owner chose, so a rested token's page is final however long the calendar
- * runs on; a FINISHED token's page is final for the same reason; a sunset ages
- * every token only to the day the PIECE closed. A gap rule that disagreed with
- * the rung rule about when a token stopped would draw one token whose heart
- * says kept and whose page says gone.
- *
- * @param whole the token reached 365 credited days. Its record is final, so
- * nothing it does not do can count against it -- and it cannot check in again,
- * because the contract stops crediting there. Spec 10f. MUST mirror
- * Renderer._absence in Solidity.
- */
-export function absenceOf({
-  lastDay, today, resting = false, sunset = false, sunsetDay = 0, whole = false,
-}) {
-  if (resting || whole) return 0;
-  const end = sunset ? sunsetDay : today;
-  return end > lastDay ? end - lastDay : 0;   // a backwards clock is not an absence
+/** The day the picture stops moving. MUST mirror Renderer._stopDay. */
+export function stopDay({ lastDay, today, resting = false, restDay = 0, sunset = false, sunsetDay = 0, whole = false }) {
+  if (whole) return lastDay;
+  let at = today;
+  if (sunset && sunsetDay < at) at = sunsetDay;
+  if (resting && restDay < at) at = restDay;
+  return at;
 }
 
-/**
- * @param whole the token reached 365 credited days, so it is FINISHED. Not the
- * same thing as resting, and the difference is load-bearing: resting blocks
- * `seed`, so a piece that rested every token on completion could never have a
- * second generation. Spec 10f. MUST mirror Renderer._rung in Solidity.
- */
-export function rungFor({
-  streak, lastDay, today,
-  resting = false, sunset = false, sunsetDay = 0, fellRun = 0, fellDay = 0, whole = false,
-}) {
-  if (resting) return rungOf(streak);
-  // A sunset BEFORE the year ended seals the token at the piece's last day;
-  // after it, the finish already did.
-  if (sunset && !whole) return lapsedRung(streak, lastDay, sunsetDay);
+/** How long the token has been away, up to stopDay. MUST mirror Renderer._absence. */
+export function absenceOf(s) {
+  const end = stopDay(s);
+  return end > s.lastDay ? end - s.lastDay : 0;   // a backwards clock is not an absence
+}
 
-  // A FINISHED token is read on the day it finished, forever: the same rules as
-  // a live one, with the clock stopped at its last credited day. Running the
-  // lapse rules with a stopped clock rather than short-circuiting to rungOf is
-  // what keeps a token that slipped during its year from being un-paled by
-  // finishing it.
-  const at = whole ? lastDay : today;
-  const live = lapsedRung(streak, lastDay, at);
-  if (!fellRun) return live;
+/** The palette rung, read at stopDay. MUST mirror Renderer._rung. */
+export function rungFor(s) {
+  const at = stopDay(s);
+  const live = lapsedRung(s.streak, s.lastDay, at);
+  if (!s.fellRun) return live;
 
-  const cap = Math.max(0, rungOf(fellRun) - 1);
-  const fell = Math.min(lapsedRung(fellRun, fellDay, at), cap);
+  const cap = Math.max(0, rungOf(s.fellRun) - 1);
+  const fell = Math.min(lapsedRung(s.fellRun, s.fellDay, at), cap);
   return Math.max(fell, live);
 }
 // The ring a token earns for finishing its year, and the ring a child carries
@@ -652,7 +626,7 @@ export function eyeOverlay(codeOff, shape, ink, ground, size) {
  * @param modules  the code's module bits, row major, size*size
  * @param want     the heart target bits, same shape, used to split heart from noise
  * @param state    { level, streak, years, marks, lastDay, today, resting,
- *                   sunset, irisVariant, tintVariant, irisRun }
+ *                   restDay, sunset, irisVariant, tintVariant, irisRun }
  *
  * state.marks is an array of Mark ids (1..10), not names -- see MARKS above
  * and hasMark below. Ids 5 and 6 both draw "iris", and Task 6 needs to tell
@@ -671,7 +645,7 @@ export function renderSvg(modules, want, size, state) {
     throw new Error(`heart target is ${want.length} modules, not ${size * size}`);
   const {
     level = 0, streak = 0, years: rawYears = 0, marks = [],
-    lastDay = 0, today = 0, resting = false, sunset = false,
+    lastDay = 0, today = 0, resting = false, restDay = 0, sunset = false,
     // The days this token's LINE had already run when it was seeded; 0 for a
     // founding token. Drawing only -- it never reaches the heart, the palette
     // or a Mark gate. See docs/specs/2026-09-06-mro-lineage-design.md.
@@ -728,7 +702,7 @@ export function renderSvg(modules, want, size, state) {
   // colours it forever. A sunset token pales only up to the day the PIECE
   // closed. A token that slipped keeps fading from the run it lost, capped one
   // rung below it. Every branch must mirror Renderer._rung in Solidity exactly.
-  const rung = rungFor({ streak, lastDay, today, resting, sunset, sunsetDay, fellRun, fellDay, whole });
+  const rung = rungFor({ streak, lastDay, today, resting, restDay, sunset, sunsetDay, fellRun, fellDay, whole });
   const colour = colourAt(rung);
   // Static claims the noise ink -- the one surface no other Mark touches.
   // Selected by RUNG, not by colour, so the heart and the noise can never be
@@ -740,7 +714,7 @@ export function renderSvg(modules, want, size, state) {
   const ghost = hasMark(marks, ACHE) ? ACHE_GHOST : GHOST;
   // C4.10: the page cools with absence, so a token that never returned stops
   // looking like one minted this morning. absenceOf mirrors rungFor's branches.
-  const field = fieldFor({ marks, gap: absenceOf({ lastDay, today, resting, sunset, sunsetDay, whole }) });
+  const field = fieldFor({ marks, gap: absenceOf({ lastDay, today, resting, restDay, sunset, sunsetDay, whole }) });
   const hush = hasMark(marks, HUSH);
   const beat = hasMark(marks, BEAT);
 
@@ -969,7 +943,7 @@ export function finisherMark(ordinal) {
 
 /**
  * @param state { tokenId, level, streak, lastDay, mintDay, today, generation,
- *                seedsGiven, parent, echo, agentKeyId, resting, sunset, marks,
+ *                seedsGiven, parent, echo, agentKeyId, resting, restDay, sunset, marks,
  *                irisVariant, tintVariant, irisRun }
  */
 // The attribute list is the spec's, in the spec's order. `Sunset` is the one
@@ -980,7 +954,7 @@ export function tokenUri(modules, want, size, state) {
   const {
     tokenId = 0, level = 0, streak = 0, lastDay = 0, mintDay = 0, today = 0,
     generation = 0, seedsGiven = 0, parent = 0, echo = 0, agentKeyId = 0,
-    resting = false, sunset = false, sunsetDay = 0, fellRun = 0, fellDay = 0,
+    resting = false, restDay = 0, sunset = false, sunsetDay = 0, fellRun = 0, fellDay = 0,
     marks = [],
     irisVariant = 0, tintVariant = 0, irisRun = 0,
     // The finisher's ordinal, bits 64-95 of the same word. Listed here as well
@@ -1001,7 +975,7 @@ export function tokenUri(modules, want, size, state) {
   // BigInt so a plain number and a 0x..n literal both render the same 66 chars.
   const keyHex = `0x${BigInt(agentKeyId).toString(16).padStart(64, "0")}`;
   const svg = renderSvg(modules, want, size,
-    { level, streak, years, echo, marks, lastDay, today, resting, sunset,
+    { level, streak, years, echo, marks, lastDay, today, resting, restDay, sunset,
       sunsetDay, fellRun, fellDay, irisVariant, tintVariant, irisRun, ordinal });
   const image = Buffer.from(svg, "utf8").toString("base64");
 

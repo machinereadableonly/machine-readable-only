@@ -6,7 +6,7 @@ import { canvasUnits, DIGIT_INK, tokenUri } from "../render-token.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
          rungOf, colourAt, noiseAt, staticAt, inks, BEAT_TO, ringBudget, ringsFor, ringSpan,
          HUSH_QUIET, VESSEL_GOLD, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
-         fieldFor, absenceOf, rungFor,
+         fieldFor, absenceOf, rungFor, stopDay,
          MARKS, markNames, finisherInk, finisherMark,
          AORTA, CHAMBER, VALVE, ATRIUM, APEX,
          AORTA_RED, CHAMBER_BLUE, VALVE_BRONZE, ATRIUM_SILVER, APEX_GOLD,
@@ -693,4 +693,20 @@ test("the token JSON links to the token's own page", () => {
   const uri = tokenUri(CODE.modules, TARGET.want, CODE.size,
     { tokenId: 1, mintDay: 900, level: 10, lastDay: 1000, today: 1000 });
   assert.ok(uri.includes('","external_url":"https://machinereadableonly.com/t/1","image":'));
+});
+
+test("a rested token is drawn as it was on its rest day, forever", () => {
+  const rested = { streak: 10, lastDay: 1000, resting: true, restDay: 1040 };
+  const liveThen = { streak: 10, lastDay: 1000, today: 1040 };
+  assert.equal(rungFor({ ...rested, today: 1040 }), rungFor(liveThen));
+  assert.equal(rungFor({ ...rested, today: 9999 }), rungFor(liveThen));
+  assert.equal(absenceOf({ ...rested, today: 9999 }), 40);
+});
+
+test("the earliest stop wins, and a finished token stops at its last day", () => {
+  const base = { lastDay: 1000, today: 5000 };
+  assert.equal(stopDay({ ...base, sunset: true, sunsetDay: 1100, resting: true, restDay: 1200 }), 1100);
+  assert.equal(stopDay({ ...base, sunset: true, sunsetDay: 1300, resting: true, restDay: 1200 }), 1200);
+  assert.equal(stopDay({ ...base, whole: true, resting: true, restDay: 1200 }), 1000);
+  assert.equal(stopDay(base), 5000);
 });

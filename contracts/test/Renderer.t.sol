@@ -139,6 +139,7 @@ contract RendererTest is Test {
         // a whole one would prove nothing about `resting`.
         TokenView memory v = _view(300, 200, 1000, 9999);
         v.resting = true;
+        v.restDay = 1000;
         _diff("sealed at rest", v, 14812,
             0xfed29c5818a87db651547bdbc8ba278e1509e8177c8a37377acaddee03837eac);
     }
@@ -342,14 +343,15 @@ contract RendererTest is Test {
     }
 
     function test_aRestingTokenNeverPales() public view {
-        // A sealed token keeps the colour it stopped at, however long ago that
-        // was. A live one with the same clock does not.
+        // A token sealed on its last check-in day keeps that colour, however
+        // long ago that was. A live one with the same clock does not.
         //
         // Level 200, not 365: since Spec 10f a FINISHED token does not pale
         // either, so at 365 the control could not fail and this test would have
         // passed with `resting` doing nothing at all.
         TokenView memory sealed_ = _view(200, 140, 1000, 9999);
         sealed_.resting = true;
+        sealed_.restDay = 1000;
         TokenView memory live = _view(200, 140, 1000, 9999);
         TokenView memory fresh = _view(200, 140, 1000, 1000);
 

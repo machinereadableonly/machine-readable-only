@@ -116,58 +116,34 @@ contract Renderer is IRenderer {
         );
     }
 
-    /// @dev How long the token has been away, in days.
-    ///
-    /// THE BRANCHES MIRROR `_rung` DELIBERATELY: rest, a finished year and a
-    /// sunset each stop this clock at the same moment they stop the rung's. A gap
-    /// rule that disagreed with the rung rule about when a token stopped would
-    /// draw one token whose heart says kept and whose frame says gone.
+    /// @dev The day the picture stops moving: the last credited day once whole,
+    /// else the earliest of the rest day, the piece's sunset day and today.
+    function _stopDay(TokenView memory v) private pure returns (uint32 stop) {
+        if (v.level >= FrameGeometry.DAY_CELLS) return v.lastDay;
+        stop = v.today;
+        if (v.sunset && v.sunsetDay < stop) stop = v.sunsetDay;
+        if (v.resting && v.restDay < stop) stop = v.restDay;
+    }
+
+    /// @dev How long the token has been away, in days, up to `_stopDay`.
     function _absence(TokenView memory v) private pure returns (uint256) {
-        // A finished token's record is final: it cannot check in again, because
-        // `_credit` refuses a token at 365, so on the live rule it would cool
-        // for ever.
-        if (v.resting || v.level >= FrameGeometry.DAY_CELLS) return 0;
-        uint32 end = v.sunset ? v.sunsetDay : v.today;
-        // A clock that runs backwards is not an absence. Guard the subtraction
-        // rather than letting it wrap into a gap of four billion days.
+        uint32 end = _stopDay(v);
+        // A clock that runs backwards is not an absence.
         return end > v.lastDay ? end - v.lastDay : 0;
     }
 
-    /// @dev The rung this token sits on. A sealed or sunset token keeps the one
-    /// it stopped at; a live one walks back down as it lapses. Kept here rather
-    /// than in Palette so the palette stays a pure function of colour, not of
-    /// token lifecycle.
-    ///
-    /// Returned as an INDEX, not a colour, because the heart ink and the noise
-    /// ink must come from the same rung -- they are matched in luminance, and a
-    /// mismatch stops the code decoding at large rasters. See Palette's header.
+    /// @dev The palette rung, read at `_stopDay`. Returned as an INDEX, not a
+    /// colour, because the heart ink and the noise ink must come from the same
+    /// rung (see Palette's header).
     function _rung(TokenView memory v) private pure returns (uint256) {
-        // Rest is the owner sealing the token at a chosen moment, and the stored
-        // run IS that moment.
-        if (v.resting) return Palette.tierIndex(v.streak);
-
-        // A token that reached 365 is FINISHED, and its image is final. Not the
-        // same thing as resting, and the difference is load-bearing: resting
-        // blocks `seed`, so a finished token must stay seedable.
-        bool whole = v.level >= FrameGeometry.DAY_CELLS;
-
-        // A sunset seals every token at the day the PIECE closed, not at today.
-        // A sunset BEFORE the year ended seals it there; after it, the finish
-        // already did.
-        if (v.sunset && !whole) return Palette.lapsedIndex(v.streak, v.lastDay, v.sunsetDay);
-
-        // A FINISHED token is read on the day it finished, forever: the same lapse
-        // rules as a live one with the clock stopped at its last credited day,
-        // which keeps a token that slipped during its year from being un-paled by
-        // finishing it.
-        uint32 at = whole ? v.lastDay : v.today;
-        uint256 live = Palette.lapsedIndex(v.streak, v.lastDay, at);
+        uint32 stop = _stopDay(v);
+        uint256 live = Palette.lapsedIndex(v.streak, v.lastDay, stop);
         if (v.fellRun == 0) return live;
 
         // THE RUN THAT FELL STILL COLOURS THE TOKEN AS IT FADES, capped one rung
         // below the run that fell so that a slip still costs something on the day
         // it happens.
-        uint256 fell = Palette.lapsedIndex(v.fellRun, v.fellDay, at);
+        uint256 fell = Palette.lapsedIndex(v.fellRun, v.fellDay, stop);
         uint256 cap = Palette.tierIndex(v.fellRun);
         cap = cap == 0 ? 0 : cap - 1;
         if (fell > cap) fell = cap;

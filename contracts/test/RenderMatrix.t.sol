@@ -44,20 +44,10 @@ contract RenderMatrixTest is Test {
 
     function test_everyStateInTheMatrixMatchesTheJavascriptReference() public view {
         RenderFixture.Case[] memory cases = RenderFixture.cases();
-        // 50 until C4.10 added the six absence states (the three fade steps,
-        // plus Ache and Aura against the last one), then 63 when seven seeded
-        // children were added so the echo ring stopped being invisible here,
-        // then 69 with the finisher's digit band: five ordinals spanning the
-        // range and one crossing the band with the Marks that change its ink.
-        // 64 since Spec 10f ended the year at 365: the ring sweep lost four of
-        // its seven year counts and the two-years-plus-echo child lost its
-        // premise, because no token can reach either state. 66 once the number
-        // was written in its Mark's ink: two more ordinals, so that all five
-        // finisher inks are diffed rather than the three the original five
-        // ordinals happened to earn. The count is asserted so a fixture that
-        // silently regenerates SMALLER -- a matrix case dropped by an edit --
-        // fails here rather than passing with less coverage.
-        assertEq(cases.length, 66, "the fixture is not the size it should be");
+        // Asserted so a fixture that silently regenerates SMALLER -- a matrix
+        // case dropped by an edit -- fails here rather than passing with less
+        // coverage.
+        assertEq(cases.length, 68, "the fixture is not the size it should be");
 
         for (uint256 i; i < cases.length; ++i) {
             RenderFixture.Case memory c = cases[i];
@@ -71,6 +61,7 @@ contract RenderMatrixTest is Test {
             v.mintDay = 900;
             v.marks = c.marks;
             v.resting = c.resting;
+            v.restDay = c.restDay;
             v.sunset = c.sunset;
             v.sunsetDay = c.sunsetDay;
             v.fellRun = c.fellRun;

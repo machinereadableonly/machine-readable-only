@@ -217,7 +217,8 @@ export function renderCases() {
   // or not, and neither could fail for the reason it is here. At 364 the seal
   // being tested is the one the row is named after.
   const nearlyWhole = { level: DAY_CELLS - 1 };
-  out.push({ label: "resting", ...base, ...nearlyWhole, today: 9999, resting: true });
+  // Rested on its last check-in day, so the seal is what holds the colour.
+  out.push({ label: "resting", ...base, ...nearlyWhole, today: 9999, resting: true, restDay: 1000 });
   out.push({ label: "sunset", ...base, ...nearlyWhole, today: 9999, sunset: true });
 
   // A sunset that closed while this token had ALREADY lapsed, ONE DAY SHORT OF
@@ -236,6 +237,21 @@ export function renderCases() {
   out.push({
     label: "sunset after this token lapsed",
     ...base, level: DAY_CELLS - 1, today: 9999, sunset: true, sunsetDay: 1040,
+  });
+
+  // Rested ten days after its last check-in: drawn as it stood on the rest
+  // day, paled by the ten days and no more, however late it is read.
+  out.push({
+    label: "rested after this token lapsed",
+    ...base, level: DAY_CELLS - 1, today: 9999, resting: true, restDay: 1010,
+  });
+
+  // A sunset keeps the fallen run's colour, read at the sunset day, under the
+  // same rule a live token follows.
+  out.push({
+    label: "sunset after a slip",
+    ...base, level: DAY_CELLS - 1, streak: 3, fellRun: 100, fellDay: 990,
+    today: 9999, sunset: true, sunsetDay: 1001,
   });
 
   // The slip, at each boundary of the ladder it now fades down. A token on a
@@ -317,7 +333,7 @@ export function renderCases() {
   // any non-zero echo, and does not depend on the token's own year being done.
   out.push({
     label: "child, resting",
-    ...base, ...child, ...nearlyWhole, today: 9999, resting: true, echo: 365,
+    ...base, ...child, ...nearlyWhole, today: 9999, resting: true, restDay: 1000, echo: 365,
   });
   out.push({
     label: "child, sunset",
@@ -383,7 +399,10 @@ export function soakCases() {
   //
   // Filtered on `c.echo` rather than on the "child" label, because a label is
   // prose and a typo in it would silently put a child back into the soak.
-  return renderCases().filter(c => !c.label.startsWith("mark ") && !c.echo);
+  // A rest day after the last check-in cannot be soaked either: SoakStates has
+  // no restDay, so the row would be drawn as if sealed on its last day.
+  return renderCases().filter(c => !c.label.startsWith("mark ") && !c.echo
+    && !((c.restDay ?? 0) > (c.lastDay ?? 0)));
 }
 
 // ---------------------------------------------------------------------------

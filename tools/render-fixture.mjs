@@ -64,7 +64,7 @@ export function fixtures(domain, tokenId) {
 export function render(all, domain, tokenId) {
   const lines = all.map(r =>
     `        c[i++] = Case(${r.level}, ${r.streak}, ${r.lastDay}, ${r.today}, `
-    + `${r.marksBits}, ${!!r.resting}, ${!!r.sunset}, ${r.sunsetDay ?? 0}, `
+    + `${r.marksBits}, ${!!r.resting}, ${r.restDay ?? 0}, ${!!r.sunset}, ${r.sunsetDay ?? 0}, `
     + `${r.fellRun ?? 0}, ${r.fellDay ?? 0}, `
     // The lineage three. They travel together because all three reach the
     // metadata as attributes: an echo without its generation and parent would
@@ -89,6 +89,7 @@ library RenderFixture {
         uint32 today;
         uint256 marks;
         bool resting;
+        uint32 restDay;
         bool sunset;
         uint32 sunsetDay;
         uint16 fellRun;

@@ -47,7 +47,8 @@ export const STAGES = [
                          marks: [HUSH, BEAT, IRIS_BOUGHT, VESSEL, AURA] }],
   // AT REST, AND NOT WHOLE. Level 300 rather than 365 * 3: a finished token
   // freezes on its own, so resting a whole one proves nothing about `resting`.
-  ["sealed at rest",   { level: 300,      streak: 200, lastDay: 1000, today: 9999, resting: true }],
+  ["sealed at rest",   { level: 300,      streak: 200, lastDay: 1000, today: 9999, resting: true,
+                         restDay: 1000 }],
   // The two echo-bearing extremes. Nothing else in either fixture family sets
   // `echo`: the render matrix does not carry the field, and RenderFixture is
   // generated from it, so without these two cases the dashed ring is never
