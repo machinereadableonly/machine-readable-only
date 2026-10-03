@@ -16,19 +16,20 @@
 //   2. CHECKIN_CHUNK lands in ONE transaction through writeCheckInChunk
 //   3. a chunk the guard refuses is halved, and still lands every entry
 //
+// Under three answer patterns: every bit 0; every bit 1 on tokens whose answer
+// word already holds a 1 (the steady state, which sets the chunk); and every
+// bit 1 on tokens writing their FIRST 1, a fresh-slot write per entry, which a
+// full chunk can only survive by being halved -- and must.
+//
 // It also REPORTS, without failing, what the writer says about a chunk past
 // EIP-7825's cap -- the case the halving backstop was written for.
-//
-// CHECKIN_CHUNK IS STALE UNTIL THIS IS RUN AGAIN: the finish logic landed in
-// `_credit` after the figure was measured, and the tool could not run at all
-// while it minted the wrong code length.
 import assert from "node:assert/strict";
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 import { MRO_ABI } from "../src/clock/abi.mjs";
 import { makeWriter, MAX_TX_GAS } from "../src/clock/write.mjs";
-import { writeCheckInChunk, packIds } from "../src/clock/batch.mjs";
+import { writeCheckInChunk, packIds, packBits, answerRecord } from "../src/clock/batch.mjs";
 import { CHECKIN_CHUNK } from "../src/clock/run.mjs";
 import { CODE_BYTES } from "./code-bytes.mjs";
 
@@ -45,6 +46,8 @@ const MARGIN = 500_000n;
 /// of the one that bites.
 const SIZES = [1, 250, 500, 750, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000];
 const MINTED = Math.max(...SIZES, CHECKIN_CHUNK);
+/// A second set, minted with a 0 so their answer words are empty: the FRESH pattern.
+const FRESH = CHECKIN_CHUNK;
 
 /// write.mjs pads every estimate by 12.5% and applies MAX_TX_GAS to the padded
 /// figure. Repeated here for the table only: the assertions below go through
@@ -81,8 +84,9 @@ const QR = "0x" + "ab".repeat(CODE_BYTES);
 const MINT_DAY = Number(await read("today"));
 let nonce = await pub.getTransactionCount({ address: account.address });
 const sent = [];
-for (let id = 1; id <= MINTED; id += 1) {
-  const args = [BigInt(id), `0x${(0x10000 + id).toString(16).padStart(40, "0")}`, `0x${id.toString(16).padStart(64, "0")}`, QR, MINT_DAY];
+for (let id = 1; id <= MINTED + FRESH; id += 1) {
+  // The first MINTED tokens start with a 1 in their answer word; the FRESH set with none.
+  const args = [BigInt(id), `0x${(0x10000 + id).toString(16).padStart(40, "0")}`, `0x${id.toString(16).padStart(64, "0")}`, QR, MINT_DAY, id <= MINTED];
   const hash = await wallet.writeContract({
     address: CONTRACT,
     abi: MRO_ABI,
@@ -118,35 +122,52 @@ for (const { id, args, hash } of sent) {
     throw new Error(`mint ${id} reverted on chain (gasUsed ${receipt.gasUsed}): ${why}`);
   }
 }
-assert.equal(Number(await read("totalMinted")), MINTED, "every mint landed");
+assert.equal(Number(await read("totalMinted")), MINTED + FRESH, "every mint landed");
 
 // Minting sets lastDay to today, so the check-in has to be tomorrow's.
 await pub.request({ method: "evm_increaseTime", params: [86_400] });
 await pub.request({ method: "evm_mine", params: [] });
 const day = Number(await read("today"));
-const entriesFor = (n) => Array.from({ length: n }, (_, i) => ({ tokenId: i + 1, day }));
-const argsFor = (n) => {
-  const entries = entriesFor(n);
-  return [packIds(entries.map((e) => e.tokenId)), entries.map((e) => e.day)];
+/// `zero`: every bit 0. `ones`: every bit 1, on words that already hold one.
+/// `fresh`: every bit 1, on the set whose words are empty.
+const entriesFor = (n, pattern = "ones") => Array.from({ length: n }, (_, i) => ({
+  tokenId: pattern === "fresh" ? MINTED + i + 1 : i + 1,
+  day,
+  bit: pattern === "zero" ? 0 : 1,
+  answerByte: pattern === "zero" ? 0xff : 0,
+}));
+const argsFor = (n, pattern = "ones") => {
+  const entries = entriesFor(n, pattern);
+  return [
+    packIds(entries.map((e) => e.tokenId)),
+    entries.map((e) => e.day),
+    packBits(entries.map((e) => e.bit)),
+    answerRecord(entries.map((e) => e.answerByte)),
+  ];
 };
 
 // -- 1. The curve -------------------------------------------------------------
 
-console.log(`\nbatchCheckIn on ${clientVersion}, day ${day}, ${MINTED} tokens minted`);
-console.log("entries  estimate     padded       verdict");
-const curve = [];
-for (const n of SIZES) {
-  try {
-    const gas = await pub.estimateContractGas({
-      address: CONTRACT, abi: MRO_ABI, functionName: "batchCheckIn", args: argsFor(n), account: account.address,
-    });
-    const verdict = gas > TX_CAP ? "over EIP-7825" : pad(gas) > MAX_TX_GAS ? "refused by the Clock's guard" : "fits";
-    curve.push({ n, gas });
-    console.log(`${String(n).padStart(7)}  ${String(gas).padStart(11)}  ${String(pad(gas)).padStart(11)}  ${verdict}`);
-  } catch (err) {
-    console.log(`${String(n).padStart(7)}  estimate FAILED: ${err.shortMessage ?? err.message}`);
+console.log(`\nbatchCheckIn on ${clientVersion}, day ${day}, ${MINTED + FRESH} tokens minted`);
+const curves = {};
+for (const pattern of ["zero", "ones", "fresh"]) {
+  console.log(`\n${pattern}: entries  estimate     padded       verdict`);
+  curves[pattern] = [];
+  for (const n of SIZES.filter((s) => pattern !== "fresh" || s <= FRESH)) {
+    try {
+      const gas = await pub.estimateContractGas({
+        address: CONTRACT, abi: MRO_ABI, functionName: "batchCheckIn", args: argsFor(n, pattern), account: account.address,
+      });
+      const verdict = gas > TX_CAP ? "over EIP-7825" : pad(gas) > MAX_TX_GAS ? "refused by the Clock's guard" : "fits";
+      curves[pattern].push({ n, gas });
+      console.log(`${String(n).padStart(7)}  ${String(gas).padStart(11)}  ${String(pad(gas)).padStart(11)}  ${verdict}`);
+    } catch (err) {
+      console.log(`${String(n).padStart(7)}  estimate FAILED: ${err.shortMessage ?? err.message}`);
+    }
   }
 }
+// The steady state sets the chunk.
+const curve = curves.ones;
 
 // Least squares over the sizes that estimated, from 250 up: the one-entry point
 // is dominated by the fixed cost and would bend the slope.
@@ -179,15 +200,16 @@ const recording = {
 
 /// Run one chunk through writeCheckInChunk on a snapshot, then roll it back so
 /// the next run finds the same untouched day.
-async function throughTheClock(n) {
+async function throughTheClock(n, pattern = "ones") {
   const snapshot = await pub.request({ method: "evm_snapshot", params: [] });
   sends = [];
   await writer.startRun();
   const lines = [];
-  const result = await writeCheckInChunk(recording, entriesFor(n), { log: (l) => lines.push(l) });
+  const entries = entriesFor(n, pattern);
+  const result = await writeCheckInChunk(recording, entries, { log: (l) => lines.push(l) });
   // The receipt is not the proof; the chain's state is.
-  const first = await read("viewOf", [1n]);
-  const last = await read("viewOf", [BigInt(n)]);
+  const first = await read("viewOf", [BigInt(entries[0].tokenId)]);
+  const last = await read("viewOf", [BigInt(entries.at(-1).tokenId)]);
   await pub.request({ method: "evm_revert", params: [snapshot] });
   return { result, sends, lines, firstLastDay: Number(first.lastDay), lastLastDay: Number(last.lastDay) };
 }
@@ -217,6 +239,14 @@ if (refused) {
   assert.equal(run.result.dropped.length, 0, "halving drops nothing");
   assert.equal(run.lastLastDay, day, "the last token was credited on chain");
 }
+
+// -- 3b. A full chunk of FIRST 1s is halved, and still lands every entry -------
+
+const fresh = await throughTheClock(CHECKIN_CHUNK, "fresh");
+console.log(`\n${CHECKIN_CHUNK} first 1s through the Clock: ${fresh.sends.map((s) => (s.ok ? `landed ${s.gasUsed}` : s.reason)).join(" -> ")}`);
+assert.equal(fresh.result.written.length, CHECKIN_CHUNK, "every first 1 written");
+assert.equal(fresh.result.dropped.length, 0, "nothing dropped");
+assert.equal(fresh.lastLastDay, day, "the last token was credited on chain");
 
 // -- Reported, not asserted: past EIP-7825 --------------------------------------
 

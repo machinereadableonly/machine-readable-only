@@ -83,13 +83,12 @@ bitmap; the real domain came out 554 bytes smaller.
 
 Gas is not the constraint: Base's own guidance puts the practical `tokenURI`
 ceiling near 300M read gas, and the dearest token the SHIPPING contract can
-produce spends 3,539,751 -- a finished child wearing every legal Mark, its echo
-ring and the finisher's digit band, at 22,158 bytes, with 460,249 gas and 1,842
-bytes of headroom. Measured by `RealTokenGas.t.sol` on 2026-09-26, after the
-band lost its row of air (`DigitBand.MIN_BAND`, a decode fix); the pin
-lives in `contracts/test/WorstCase.sol` and that test goes red if it moves. The
-2.87M this paragraph used to quote was the day-364 child, which stopped being
-the dearest token when the digit band landed.
+produce spends 3,400,263 -- a finished child wearing every legal Mark, its echo
+ring, its place along the top and a full band of answers, at 21,009 bytes, with
+599,737 gas and 2,991 bytes of headroom. Measured by `RealTokenGas.t.sol` on
+2026-10-03 (Plan A2: the place moved to the top edge and the answers took the
+other three); the pin lives in `contracts/test/WorstCase.sol` and that test
+goes red if it moves.
 
 **THE GAS LIMIT WAS RAISED TWICE ON 2026-09-21, by the operator, on
 measurement: 2,000,000 to 3,000,000 from a component estimate, then to

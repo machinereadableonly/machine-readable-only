@@ -125,12 +125,34 @@ abstract contract MroTestBase is Test {
         if (target > block.timestamp) vm.warp(target);
     }
 
+    /// @dev The answer pattern `_creditRun` and `_seedFrom` write: 0 none, 1 every
+    /// credit a 1, 2 alternate credits, 3 alternate pairs (lit and unlit columns
+    /// along each edge, the most separate runs a band can hold).
+    uint8 internal _pattern;
+
+    function _patternBit(uint32 level) internal view returns (bool) {
+        uint32 i = level - 1;
+        if (_pattern == 1) return true;
+        if (_pattern == 2) return i % 2 == 0;
+        if (_pattern == 3) return (i >> 1) & 1 == 0;
+        return false;
+    }
+
+    /// @dev Answer bits for `m` consecutive credits after `level`, high bit first.
+    function _bitsFrom(uint32 level, uint32 m) internal view returns (bytes memory b) {
+        b = new bytes((m + 7) / 8);
+        for (uint32 i; i < m; ++i) {
+            if (_patternBit(level + i + 1)) b[i >> 3] = bytes1(uint8(b[i >> 3]) | uint8(0x80 >> (i & 7)));
+        }
+    }
+
     /// @dev Credit `n` consecutive days from `firstDay`, at most 30 per batch,
     /// because the contract refuses a credit more than MAX_LAG days late.
     /// Ends with the clock on the last credited day.
     function _creditRun(uint256 id, uint32 firstDay, uint32 n) internal {
         address w = t.warden();
         uint32 done = 0;
+        uint32 level = _pattern == 0 ? 0 : t.viewOf(id).level;
         while (done < n) {
             uint32 m = n - done > 30 ? 30 : n - done;
             uint32[] memory ids = new uint32[](m);
@@ -140,8 +162,9 @@ abstract contract MroTestBase is Test {
                 ds[i] = firstDay + done + i;
             }
             _warpToDay(firstDay + done + m - 1);
+            bytes memory bits = _pattern == 0 ? _noBits(ds) : _bitsFrom(level + done, m);
             vm.prank(w);
-            t.batchCheckIn(_packed(ids), ds, _noBits(ds), _silent(ds));
+            t.batchCheckIn(_packed(ids), ds, bits, _silent(ds));
             done += m;
         }
     }
@@ -188,6 +211,6 @@ abstract contract MroTestBase is Test {
         childId = ++_nextSeedId;
         bytes32 key = t.viewOf(parentId).agentKeyId;
         vm.prank(WARDEN);
-        t.seed(childId, parentId, address(uint160(0x5EED0000 + childId)), _code(), _today(), key, false);
+        t.seed(childId, parentId, address(uint160(0x5EED0000 + childId)), _code(), _today(), key, _patternBit(1));
     }
 }

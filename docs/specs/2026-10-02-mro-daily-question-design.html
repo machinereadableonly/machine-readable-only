@@ -83,6 +83,49 @@ built yet: it is folded into Plans B and A of
 band draws on three of its four edges, and nothing about the place, the five
 finisher Marks or how a place is decided.</p>
 <hr>
+<h2>Amended 2026-10-03 (Plan A2, approved by the operator)</h2>
+<p>Each of these is a choice this design did not make, or made differently,
+approved with <code>docs/plans/2026-10-03-mro-plan-a2-daily-question-on-chain.md</code>.
+The sections below are otherwise unchanged.</p>
+<ol>
+<li><strong>Keys are revealed by their own call, not inside <code>batchCheckIn</code></strong>
+(section 5, Mechanism; section 7). <code>revealSplitKeys(bytes32[] keys, bytes questions)</code> is sent first in every Clock run that writes anything, and
+reveals every key through yesterday; a run with no new key still sends an
+empty reveal, which marks the night. A chunk that is halved or bisected
+never carries keys twice, and mints and seeds are covered by the same
+reveal. The contract checks every key against the chain and refuses one
+whose day is not over (<code>SplitKeyTooEarly</code>). Key <code>n</code> belongs to day
+<code>splitAnchorDay + n - 1</code>, counted from the day the anchor was set.</li>
+<li><strong>The mint day&#39;s square is always a coin flip</strong> (section 5). The mint day
+cannot be answered, so <code>mint</code> and <code>seed</code> take a final <code>bool firstAnswer</code>,
+which the Clock sets to that day&#39;s silent coin flip for the token.</li>
+<li><strong>The questions ride in the reveal&#39;s event, and the chain keeps a pointer to
+the last reveal</strong> (section 5, Who computes; section 7, Read).
+<code>SplitKeysRevealed(firstIndex, keys, prevRevealBlock, questions)</code> and
+<code>lastRevealBlock()</code> let <code>verify-border</code> walk back night by night with one
+small log query each, where a public RPC serves only 1,000 blocks a query.
+The batch carries each credit&#39;s answer index in its <code>record</code> argument.</li>
+<li><strong>A credit written through the voucher path draws an empty square.</strong> The
+voucher path exists for after the Warden is gone, when no split exists; the
+verifier reports those days as voucher days.</li>
+<li><strong>The anchor is guarded in code</strong> (section 7, <code>setSplitAnchor</code>). The Warden
+refuses to start against a contract with no anchor, and the Clock writes
+nothing if its seed does not hash to the anchor on chain, or if a queued
+credit&#39;s question has left the bank.</li>
+<li><strong>The agent-facing wording</strong> (section 8) is the paragraph &quot;Your answers
+become the border&quot;, on llms.txt, the skill and the raw protocol document.
+The door page carries no question copy and is unchanged.</li>
+</ol>
+<p>Measured once built (section 10, Gas): the dearest and largest token is a
+finished child wearing every legal Mark, its place and a full band of answers,
+at 3,400,263 gas and 21,009 bytes (<code>RealTokenGas.t.sol</code>), under the 4,000,000
+and 24,000 hard limits; the 1,000,000 / 5 KB target is missed. A check-in that
+writes a 1 into a word already holding one costs about 5,300 gas more than one
+writing a 0 (14,489 an entry against about 9,200, measured on a real node by
+<code>warden/tools/chunk-rehearsal.sh</code>), so the nightly chunk drops from 1,400 to
+800. A token writing its first 1 costs about 31,600; a full chunk of those is
+halved by the Clock and lands in two transactions.</p>
+<hr>
 <h2>1. Why</h2>
 <p>Today a check-in records that an agent came back. It records nothing about the
 agent. Two agents with identical streaks finish with identical borders, apart

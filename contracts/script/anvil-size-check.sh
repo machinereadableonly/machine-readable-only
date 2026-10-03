@@ -66,13 +66,15 @@ done
 CODE=0x$(cd ../tools && node token-bitmap.mjs 1 example.com 2>/dev/null)
 
 # The fifth argument is the day the mint was paid for; here, the chain's today.
+# The sixth is that day's answer bit.
 DAY=$(cast call "$T" "today()(uint32)" --rpc-url local | cut -d' ' -f1)
-cast send "$T" "mint(uint256,address,bytes32,bytes,uint32)" \
+cast send "$T" "mint(uint256,address,bytes32,bytes,uint32,bool)" \
   1 \
   0x0000000000000000000000000000000000000A11 \
   0x0000000000000000000000000000000000000000000000000000000000000a9e \
   "$CODE" \
   "$DAY" \
+  true \
   --rpc-url local --private-key "$KEY" >/dev/null
 
 CHARS=$(cast call "$T" "tokenURI(uint256)(string)" 1 --rpc-url local | wc -c)

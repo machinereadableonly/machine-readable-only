@@ -14,7 +14,7 @@ contract CheckInTest is MroTestBase {
     /// The Clock's chunk size, CHECKIN_CHUNK in warden/src/clock/run.mjs.
     /// warden/test/clock-run.test.mjs reads this line and fails if the two
     /// disagree, so a change to either one cannot go untested.
-    uint32 internal constant CHECKIN_CHUNK = 1200;
+    uint32 internal constant CHECKIN_CHUNK = 800;
 
     /// The Clock's ceiling on a padded estimate, MAX_TX_GAS in write.mjs.
     uint256 internal constant MAX_TX_GAS = 15_000_000;
@@ -162,11 +162,15 @@ contract CheckInTest is MroTestBase {
     ///   14,353,906 -- 1,178,624 over the node -- and made 1,500 look like a
     ///   size the Clock refuses. It is not; it passes by 177,808.
     /// forge-config: default.isolate = true
+    /// @dev THE STEADY STATE: every entry writes a 1 into an answer word that
+    /// already holds one (each mint wrote bit 0), the dearest shape a night
+    /// takes once its tokens have answered before. A token writing its FIRST 1
+    /// pays a fresh-slot write on top, and the Clock's halving absorbs that.
     function test_aFullChunkFitsTheGasGuard() public {
         uint32 n = CHECKIN_CHUNK;
         vm.startPrank(WARDEN);
         for (uint32 i = 2; i < 2 + n; i++) {
-            t.mint(i, address(uint160(0x10000 + i)), bytes32(uint256(i)), _code(), _today(), false);
+            t.mint(i, address(uint160(0x10000 + i)), bytes32(uint256(i)), _code(), _today(), true);
         }
         vm.stopPrank();
 
@@ -186,7 +190,9 @@ contract CheckInTest is MroTestBase {
         bytes memory packed = _packed(ids);
         // And the call's own ABI encoding, for the same reason: a high-level
         // call encodes its arguments after gasleft() has been read.
-        bytes memory callData = abi.encodeCall(MachineReadableOnly.batchCheckIn, (packed, ds, _noBits(ds), _silent(ds)));
+        bytes memory ones = _noBits(ds);
+        for (uint256 i; i < ones.length; ++i) ones[i] = 0xff;
+        bytes memory callData = abi.encodeCall(MachineReadableOnly.batchCheckIn, (packed, ds, ones, _silent(ds)));
 
         // Outside the gasleft() window: this is harness setup, not contract work.
         _warpToDay(d);

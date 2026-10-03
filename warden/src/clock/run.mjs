@@ -25,8 +25,12 @@ import { safeErrorText } from "./redact.mjs";
 import { stringToHex } from "viem";
 import { CHAIN_LENGTH, keyIndexFor, answerBit, silentBit } from "./split.mjs";
 
-/// How many check-ins go in one batchCheckIn, measured by
-/// contracts/test/CheckIn.t.sol: a full chunk of 1,400 now pads to 14,539,768.
+/// How many check-ins go in one batchCheckIn. MEASURED against a real node's
+/// estimates (warden/tools/chunk-rehearsal.sh, Osaka rules with EIP-7825
+/// enforced) in the steady state, every entry writing a 1 into an answer word
+/// that already holds one: 14,489 gas per entry plus 31,813 fixed. A token
+/// writing its FIRST 1 costs about 31,600 an entry; a full chunk of those is
+/// refused by the guard and halved, and lands in two.
 ///
 /// The rule: the largest multiple of 200 whose estimate, padded as write.mjs
 /// pads it, leaves at least 500,000 under MAX_TX_GAS. A multiple of 200 halves
@@ -35,7 +39,7 @@ import { CHAIN_LENGTH, keyIndexFor, answerBit, silentBit } from "./split.mjs";
 /// contracts/test/CheckIn.t.sol measures this same chunk, and
 /// clock-run.test.mjs fails if its constant and this one disagree. Re-run the
 /// rehearsal whenever batchCheckIn, _credit or the Token struct changes.
-export const CHECKIN_CHUNK = 1_200;
+export const CHECKIN_CHUNK = 800;
 
 /// How far behind the chain head reconcile reads. Base's blocks are two
 /// seconds, so this is under a minute of lag against a nightly job -- and the
@@ -1014,7 +1018,7 @@ function isFinalMark(result) {
  * reverted-on-chain, and a simulate revert whose error had no name -- leaves the
  * row exactly where it was.
  *
- * These are every named error `seed(uint256,uint256,address,bytes,uint32,bytes32)` can
+ * These are every named error `seed(uint256,uint256,address,bytes,uint32,bytes32,bool)` can
  * raise, read off MachineReadableOnly.sol's `seed` plus its three modifiers and
  * `_checkCreationDay`, and each is here or below the line for a stated reason.
  * `StaleDay` joined 2026-09-11 with the first-day fix: a seed's day is frozen in

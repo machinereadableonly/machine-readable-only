@@ -18,12 +18,11 @@ pragma solidity ^0.8.30;
 /// the published figure IS the measured one. A change of any size is a change
 /// worth writing down.
 ///
-/// Measured on a finished child wearing every legal Mark, its echo ring and
-/// the finisher's digit band -- the first token in the piece's history to hold
-/// both records at once. First pinned 2026-09-23 at 3,540,467 / 22,162;
-/// re-measured 2026-09-26 when the band lost its row of air (DigitBand.MIN_BAND),
-/// which moved the canvas from 91 modules to 89.
+/// Measured on a finished child wearing every legal Mark, its echo ring, its
+/// place along the top and a full band of answers. Of the answer patterns
+/// `RealTokenGas.t.sol` measures, every square filled is the largest on both
+/// counts.
 library WorstCase {
-    uint256 internal constant LARGEST_TOKEN_GAS = 2_990_898;
-    uint256 internal constant LARGEST_TOKEN_BYTES = 18_769;
+    uint256 internal constant LARGEST_TOKEN_GAS = 3_400_263;
+    uint256 internal constant LARGEST_TOKEN_BYTES = 21_009;
 }

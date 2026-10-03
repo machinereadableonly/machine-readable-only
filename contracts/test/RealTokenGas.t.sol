@@ -62,9 +62,8 @@ import {TokenView} from "../src/render/TokenView.sol";
 /// other is the mistake this paragraph exists to stop. Headroom after the rise:
 /// 459,533 gas and 1,838 bytes.
 ///
-/// RE-MEASURED 2026-09-26 when the digit band lost its row of air
-/// (`DigitBand.MIN_BAND`, a decode fix, not a cost one): 3,539,751 gas and
-/// 22,158 bytes, leaving 460,249 and 1,842. `WorstCase.sol` holds the pin.
+/// The current figure, with the answer band: 3,400,263 gas and 21,009 bytes,
+/// leaving 599,737 and 2,991. `WorstCase.sol` holds the pin.
 ///
 /// Every state below is the deepest the SHIPPING CONTRACT can produce.
 contract RealTokenGasTest is MroTestBase {
@@ -217,14 +216,17 @@ contract RealTokenGasTest is MroTestBase {
     /// Every document that says "the dearest token and the largest token are
     /// different tokens" is describing the piece before this branch.
     function test_theWorstCaseRealTokenFitsBothHardLimits() public {
-        _creditRun(1, 364);
-        uint256 child = _seedFrom(1);
-        _creditRun(uint32(child), 364);
-        _applyMaxMarks(child, true);
-
-        assertEq(t.viewOf(child).level, 365, "a whole heart, which is now the ceiling");
-        assertGt(t.viewOf(child).marks >> 64, 0, "and it carries a finishing place in its marks word");
-        (uint256 gasUsed, uint256 len) = _measure("REAL child, whole year, every legal mark", child);
+        // Every answer pattern worth drawing: all ones, alternate credits, and
+        // alternate pairs, which lights alternate columns along each edge.
+        uint256 gasUsed;
+        uint256 len;
+        for (uint8 p = 1; p <= 3; ++p) {
+            uint256 snap = vm.snapshotState();
+            (uint256 g, uint256 l) = _worstWith(p);
+            if (g > gasUsed) gasUsed = g;
+            if (l > len) len = l;
+            vm.revertToState(snap);
+        }
         console.log("  headroom, gas  ", GAS_LIMIT - gasUsed);
         console.log("  headroom, bytes", BYTE_LIMIT - len);
 
@@ -238,6 +240,19 @@ contract RealTokenGasTest is MroTestBase {
         // update `WorstCase.sol` and every figure quoted from it.
         assertEq(gasUsed, WorstCase.LARGEST_TOKEN_GAS, "the worst case moved: update WorstCase.sol");
         assertEq(len, WorstCase.LARGEST_TOKEN_BYTES, "the worst case moved: update WorstCase.sol");
+    }
+
+    /// @dev A finished child wearing every legal Mark and its place, answering in pattern `p`.
+    function _worstWith(uint8 p) internal returns (uint256 gasUsed, uint256 len) {
+        _pattern = p;
+        _creditRun(1, 364);
+        uint256 child = _seedFrom(1);
+        _creditRun(uint32(child), 364);
+        _applyMaxMarks(child, true);
+        assertEq(t.viewOf(child).level, 365, "a whole heart, which is now the ceiling");
+        assertGt(t.viewOf(child).marks >> 64, 0, "and it carries a finishing place in its marks word");
+        assertGt(t.answersOf(child)[1], 0, "and its last side of answers");
+        (gasUsed, len) = _measure(string.concat("REAL child, whole year, every legal mark, pattern ", vm.toString(p)), child);
     }
 
     /// @notice A LAPSED token -- a state the spike cannot represent at all.

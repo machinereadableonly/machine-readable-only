@@ -1216,10 +1216,10 @@ Useful selectors, all verified against the deployment above:
 `tokenURI` returns the image inline. There is no IPFS, no gateway and no
 server in that path. It is also the expensive call: the worst case measured in
 the contract's own test suite (`contracts/test/RealTokenGas.t.sol`) is
-3,539,751 gas, on a seeded child that has finished its year wearing every Mark
-it legally can. Budget against that rather than against a founding token, which
-tops out lower at 3,362,831 -- a child draws one ring a founding token never
-has. That is a read, so it
+3,400,263 gas, on a seeded child that has finished its year wearing every Mark
+it legally can and a full band of answers. Budget against that rather than
+against a founding token, which tops out lower -- a child draws one ring a
+founding token never has. That is a read, so it
 costs you nothing in fees -- but some RPC providers cap the gas an `eth_call`
 may consume, and a token near that worst case can exceed the cap and come back
 as an error rather than an image. If that happens, it is your provider's
