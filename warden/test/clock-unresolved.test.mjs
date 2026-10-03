@@ -27,6 +27,7 @@ import { resolveUnresolvedPayments, RELEASE_MARGIN_SECONDS } from "../src/clock/
 import { exitCodeFor } from "../src/clock/cursor.mjs";
 import { runClock } from "../src/clock/run.mjs";
 import { DEPLOY_BLOCK } from "../src/clock/reconcile.mjs";
+import { splitArgs } from "./split-rig.mjs";
 
 const KEY_ID = "k-unresolved";
 const TO = "0x1111111111111111111111111111111111111111";
@@ -336,6 +337,7 @@ test("a held MARK order is resolved the same way, and its Mark stays taken until
 function nightlyRun(q, chain, { alert = () => {} } = {}) {
   return runClock({
     q,
+    ...splitArgs(20_701),
     writer: {
       formatGas: (w) => `${w} wei`,
       async gasOk() { return { ok: true, gasPrice: 1n, capWei: 2n }; },

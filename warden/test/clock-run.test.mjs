@@ -18,6 +18,7 @@ import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
 import { CODE_BYTES } from "../tools/code-bytes.mjs";
+import { splitArgs, firstAnswerFor } from "./split-rig.mjs";
 
 const TODAY = 20_700;
 const QR = "ab".repeat(CODE_BYTES);
@@ -85,6 +86,7 @@ const MINE = { owner: "0x" + "11".repeat(20), agentKeyId: keyIdToBytes32("k1") }
 
 const baseArgs = (q) => ({
   q,
+  ...splitArgs(TODAY),
   publicClient: noChain,
   contract: "0xcontract",
   chainId: 84532,

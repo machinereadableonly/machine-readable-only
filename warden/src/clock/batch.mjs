@@ -185,6 +185,18 @@ export function packIds(ids) {
   return "0x" + ids.map((id) => id.toString(16).padStart(8, "0")).join("");
 }
 
+/// One answer bit per entry, high bit first, as batchCheckIn reads them.
+export function packBits(bits) {
+  const bytes = new Uint8Array(Math.ceil(bits.length / 8));
+  bits.forEach((b, i) => { if (b) bytes[i >> 3] |= 0x80 >> (i & 7); });
+  return "0x" + [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/// One byte per entry: the answer index, or 0xff for silence.
+export function answerRecord(bytes) {
+  return "0x" + bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 /**
  * Can this id travel as the 4 bytes the contract decodes?
  *
@@ -283,8 +295,10 @@ export async function writeCheckInChunk(
       [
         packIds(remaining.map((e) => e.tokenId)),
         remaining.map((e) => e.day),
-        "0x" + "00".repeat(Math.ceil(remaining.length / 8)),
-        "0x" + "ff".repeat(remaining.length),
+        // Packed from `remaining` after the sort, so a reordered or shrunken
+        // chunk still carries each entry's own bit and answer.
+        packBits(remaining.map((e) => e.bit ?? 0)),
+        answerRecord(remaining.map((e) => e.answerByte ?? 0xff)),
       ],
       { label: `batchCheckIn x${remaining.length}` }
     );

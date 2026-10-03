@@ -30,6 +30,7 @@ import { queries } from "../src/mirror/queries.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
 import { CODE_BYTES } from "../tools/code-bytes.mjs";
 import { keyIdToBytes32 } from "../src/mcp/keyId.mjs";
+import { splitArgs, firstAnswerFor } from "./split-rig.mjs";
 
 const FLOOR = DEPLOY_BLOCK[84532];
 const TODAY = 20_700;
@@ -141,6 +142,7 @@ function seedRig({ fail = null, solveState = "done", children = 1 } = {}) {
 
 const baseArgs = (q) => ({
   q,
+  ...splitArgs(TODAY),
   publicClient: noChain,
   contract: "0xcontract",
   chainId: 84532,
@@ -161,8 +163,8 @@ test("a queued seed is sent as seed(), not mint()", async () => {
   assert.equal(writer.sent[0].functionName, "seed", "a child is created by seed, never by mint");
   // The fifth argument is the day the seed was ASKED for (reserveChild records
   // TODAY), not the day the Clock writes it; the sixth is the key the agent
-  // signed the request with.
-  assert.deepEqual(writer.sent[0].args, [2n, 1n, CHILD_OWNER, `0x${QR}`, TODAY, keyIdToBytes32("k"), false]);
+  // signed the request with; the seventh is that day's coin flip.
+  assert.deepEqual(writer.sent[0].args, [2n, 1n, CHILD_OWNER, `0x${QR}`, TODAY, keyIdToBytes32("k"), firstAnswerFor(TODAY, TODAY, 2)]);
   assert.deepEqual(summary.seeded, [2]);
   assert.deepEqual(summary.droppedSeeds, []);
   assert.equal(q.getToken(2).status, "written");

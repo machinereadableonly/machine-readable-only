@@ -21,6 +21,9 @@ import { lockOwner, takeLock, releaseLock } from "./lock.mjs";
 import { MRO_ABI } from "./abi.mjs";
 import { utcDay } from "../mcp/tools/checkin.mjs";
 import { safeErrorText } from "./redact.mjs";
+import { chainKeys } from "./split.mjs";
+import { loadSplitSeed, splitSeedPath } from "./splitSeed.mjs";
+import { loadBank, bankPath } from "../mcp/question.mjs";
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -118,8 +121,26 @@ async function main() {
   // log rather than discovered on a leaderboard. See builder-code.mjs.
   console.log(`clock: builder code ${writer.builderCode ?? "none yet -- see DEPLOY.md section 10"}`);
 
+  // The split seed and the question bank. Neither failure throws: without
+  // them runClock writes nothing and fails the night, which is a red line in
+  // the log rather than a crash loop. Both messages are fixed sentences.
+  let splitKeys = null;
+  try {
+    splitKeys = chainKeys(loadSplitSeed(splitSeedPath()));
+  } catch (err) {
+    console.error(`clock: ${err.message}`);
+  }
+  let bank = null;
+  try {
+    bank = loadBank(bankPath());
+  } catch (err) {
+    console.error(`clock: ${err.message}`);
+  }
+
   const summary = await runClock({
     q,
+    splitKeys,
+    bank,
     writer,
     publicClient,
     contract,
@@ -141,7 +162,7 @@ async function main() {
   console.log(
     `clock: run finished in ${Date.now() - started}ms -- ` +
       `${summary.minted.length} minted, ${summary.seeded.length} seeded, ` +
-      `${summary.credited.length} credited, ` +
+      `${summary.revealedKeys} split keys revealed, ${summary.credited.length} credited, ` +
       `${summary.healed.length} healed, ${summary.marks.length} marks, ` +
       `${summary.dropped.length} dropped, ${summary.stuck.length} stuck, ` +
       // Both seed counts are named in full, because a bare number next to

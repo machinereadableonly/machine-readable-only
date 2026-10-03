@@ -576,3 +576,31 @@ test("a chunk exhausted before its first send still reports its entries in order
   );
   for (const d of r.dropped) assert.equal(d.reason, "attempts-exhausted");
 });
+
+test("a halved chunk keeps each entry's own bit and answer byte", async () => {
+  const sent = [];
+  const writer = {
+    async send(fn, args) {
+      sent.push(args);
+      if (args[1].length > 2) return { ok: false, reason: "gas-estimate-too-large" };
+      return { ok: true, hash: "0x1" };
+    },
+  };
+  const entries = [
+    { tokenId: 4, day: 100, bit: 1, answerByte: 3 },
+    { tokenId: 1, day: 100, bit: 0, answerByte: 0xff },
+    { tokenId: 2, day: 100, bit: 1, answerByte: 0 },
+  ];
+  await writeCheckInChunk(writer, entries);
+  assert.ok(sent.length > 1, "the chunk was halved");
+  for (const args of sent) {
+    const ids = unpackIds(args[0]);
+    ids.forEach((id, i) => {
+      const e = entries.find((x) => x.tokenId === id);
+      const bit = (parseInt(args[2].slice(2 + 2 * (i >> 3), 4 + 2 * (i >> 3)), 16) >> (7 - (i & 7))) & 1;
+      const byte = parseInt(args[3].slice(2 + 2 * i, 4 + 2 * i), 16);
+      assert.equal(bit, e.bit, `token ${id} bit`);
+      assert.equal(byte, e.answerByte, `token ${id} byte`);
+    });
+  }
+});

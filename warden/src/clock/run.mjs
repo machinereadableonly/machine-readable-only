@@ -22,6 +22,8 @@ import { keyIdToBytes32 } from "../mcp/keyId.mjs";
 import { sweep } from "../mcp/sweep.mjs";
 import { resolveUnresolvedPayments } from "./unresolved.mjs";
 import { safeErrorText } from "./redact.mjs";
+import { stringToHex } from "viem";
+import { CHAIN_LENGTH, keyIndexFor, answerBit, silentBit } from "./split.mjs";
 
 /// How many check-ins go in one batchCheckIn, measured by
 /// contracts/test/CheckIn.t.sol: a full chunk of 1,400 now pads to 14,539,768.
@@ -173,6 +175,21 @@ export async function seedIsOnChain({ publicClient, contract, seed }) {
   }
 }
 
+/// The contract's split state: its anchor, the anchor's day, and how many keys are out.
+export async function readSplitState({ publicClient, contract }) {
+  const read = (functionName) => publicClient.readContract({ address: contract, abi: MRO_ABI, functionName });
+  const [anchor, anchorDay, revealed] = await Promise.all([
+    read("splitAnchor"), read("splitAnchorDay"), read("splitKeysRevealed"),
+  ]);
+  return { anchor: String(anchor).toLowerCase(), anchorDay: Number(anchorDay), revealed: Number(revealed) };
+}
+
+const ZERO_WORD = "0x" + "00".repeat(32);
+
+/// How many answers a question offers: its options, or every integer in its range.
+const answerSetSize = (question) =>
+  question.answers ? question.answers.length : question.range.max - question.range.min + 1;
+
 export async function runClock({
   q,
   writer,
@@ -189,6 +206,11 @@ export async function runClock({
   alert = console.error,
   // Injected so the staleness window can be tested without waiting three days.
   now = () => Date.now(),
+  // The split's key chain (chainKeys of the seed), or null when no usable seed
+  // was loaded; and the question bank. Without either nothing is written.
+  splitKeys = null,
+  bank = null,
+  readSplit = readSplitState,
 }) {
   const summary = {
     gasStopped: false,
@@ -224,6 +246,8 @@ export async function runClock({
     /// silent nightly drop is how this class of defect stayed invisible.
     stuckCredits: [],
     aborted: null,
+    /// How many split keys this run revealed.
+    revealedKeys: 0,
     reconciled: null,
     /// The block the last successful write landed in, or null. Anything that
     /// reads state back to verify a write must wait for a node that has this
@@ -297,6 +321,85 @@ export async function runClock({
   /// Read-only work carries on.
   const noWrites = () => summary.gasStopped || Boolean(summary.aborted);
 
+  // 1b. THE DAILY SPLIT, BEFORE ANY WRITE. Every mint, seed and credit carries
+  //     an answer bit drawn from the day's key, so a run that cannot vouch for
+  //     its keys writes nothing at all rather than bits nobody can verify. No
+  //     alert here ever carries the seed, a key or a question.
+  const bankById = new Map((bank ?? []).map((b) => [b.id, b]));
+  let split = null;
+  const stopForSplit = (why) => {
+    alert(`clock: ${why} -- nothing is written tonight`);
+    summary.aborted = "split";
+  };
+  if (!noWrites()) {
+    let state = null;
+    try {
+      state = await readSplit({ publicClient, contract });
+    } catch (err) {
+      stopForSplit(`the contract's split anchor could not be read (${safeErrorText(err)})`);
+    }
+    if (state) {
+      if (!splitKeys) stopForSplit("no usable split seed is loaded");
+      else if (state.anchor === ZERO_WORD) stopForSplit("the contract has no split anchor yet");
+      else if (state.anchor !== splitKeys[0]) stopForSplit("the split seed does not hash to the contract's split anchor");
+      else if (q.pendingCredits(today - 1).some((c) => c.questionId !== null && !bankById.has(c.questionId))) {
+        stopForSplit("a queued credit's question is missing from the bank");
+      } else {
+        split = state;
+      }
+    }
+  }
+
+  // A day before the anchor has no key: its bit is 0, and that is said once.
+  let saidNoKey = false;
+  const keyFor = (day) => {
+    const n = keyIndexFor(day, split.anchorDay);
+    if (n >= 1 && n <= CHAIN_LENGTH) return splitKeys[n];
+    if (!saidNoKey) {
+      saidNoKey = true;
+      alert(`clock: day ${day} has no split key (the anchor is day ${split.anchorDay}), so its answer bit is 0`);
+    }
+    return null;
+  };
+  const firstAnswerOf = (day, tokenId) => {
+    const key = keyFor(day);
+    return key ? silentBit(key, tokenId) === 1 : false;
+  };
+
+  // 1c. THE REVEAL. Every key through yesterday goes out in its own call before
+  //     any other write, with the questions those days asked, so a verifier can
+  //     check every square from the chain alone. Today's key stays secret.
+  if (split && (q.pendingMints().length || q.pendingSeeds().length || q.pendingCredits(today - 1).length)) {
+    const through = Math.min(keyIndexFor(today - 1, split.anchorDay), CHAIN_LENGTH);
+    if (through > split.revealed) {
+      const keys = splitKeys.slice(split.revealed + 1, through + 1);
+      const fromDay = split.anchorDay + split.revealed;
+      const asked = q.questionsForDays(fromDay, today - 1);
+      if (asked.some((row) => !bankById.has(row.questionId))) {
+        stopForSplit("a question issued on a day being revealed is missing from the bank");
+      } else {
+        const questions = asked.map(({ day, questionId }) => {
+          const b = bankById.get(questionId);
+          return b.answers
+            ? { day, question: b.text, answers: [...b.answers] }
+            : { day, question: b.text, range: { ...b.range } };
+        });
+        const result = await writer.send(
+          "revealSplitKeys",
+          [keys, stringToHex(JSON.stringify(questions))],
+          { label: `revealSplitKeys x${keys.length}` }
+        );
+        if (result.ok) {
+          summary.revealedKeys = keys.length;
+          summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
+        } else {
+          alert(`clock: revealing the split keys failed (${result.errorName ?? result.reason}) -- nothing else is written tonight`);
+          summary.aborted = `revealSplitKeys ${result.errorName ?? result.reason}`;
+        }
+      }
+    }
+  }
+
   // 2. A MINT WHOSE ARTWORK NEVER SOLVED CAN NEVER BE WRITTEN. The contract
   //    takes `code` once and keeps it forever, so minting a placeholder makes a
   //    permanently broken artwork out of a merely delayed one. The agent has
@@ -321,7 +424,7 @@ export async function runClock({
       // today() at the write, and since the Clock writes at 00:05 the next day
       // every token began a day later on chain than here, and lost its first
       // check-in (found by the fast-days copy, 2026-09-11).
-      [BigInt(mint.tokenId), mint.toAddress, keyIdToBytes32(mint.agentKeyId), `0x${mint.qr}`, mint.day, false],
+      [BigInt(mint.tokenId), mint.toAddress, keyIdToBytes32(mint.agentKeyId), `0x${mint.qr}`, mint.day, firstAnswerOf(mint.day, mint.tokenId)],
       { label: `mint ${mint.tokenId}` }
     );
     if (result.ok) {
@@ -429,7 +532,7 @@ export async function runClock({
       "seed",
       // The fifth argument is the day the seed was asked for -- the same
       // first-day rule as the mint above, and for the same reason.
-      [BigInt(s.tokenId), BigInt(s.parentId), s.toAddress, `0x${s.qr}`, s.day, keyIdToBytes32(s.agentKeyId), false],
+      [BigInt(s.tokenId), BigInt(s.parentId), s.toAddress, `0x${s.qr}`, s.day, keyIdToBytes32(s.agentKeyId), firstAnswerOf(s.day, s.tokenId)],
       { label: `seed ${s.tokenId} from ${s.parentId}` }
     );
     if (result.ok) {
@@ -526,7 +629,17 @@ export async function runClock({
 
   // Nothing is sent once a write phase has aborted -- see the mints loop for
   // why the run continues to reconcile anyway.
-  const pending = noWrites() ? [] : q.pendingCredits(today - 1);
+  // Each entry carries its answer bit and the answer byte the verifier reads.
+  const pending = (noWrites() ? [] : q.pendingCredits(today - 1)).map(({ tokenId, day, questionId, answer }) => {
+    const key = keyFor(day);
+    const n = questionId === null ? 0 : answerSetSize(bankById.get(questionId));
+    return {
+      tokenId,
+      day,
+      bit: key ? answerBit({ keyHex: key, n, answer, tokenId }) : 0,
+      answerByte: answer === null ? 0xff : answer,
+    };
+  });
 
   // 15.8. ONE BAD ROW IS ONE ROW'S PROBLEM. packIds throws on an id that will
   // not fit in four bytes, it is called with no `try`, and the throw

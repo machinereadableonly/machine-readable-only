@@ -326,8 +326,15 @@ export function queries(db) {
         "JOIN tokens t ON t.tokenId = m.tokenId " +
         "WHERE m.status = 'queued' AND m.solveState = 'failed' AND t.parentId IS NOT NULL"
     ),
+    // With the day's question and answer, if one was issued: the Clock draws
+    // the answer bit from them.
     pendingCredits: db.prepare(
-      "SELECT tokenId, day FROM credits WHERE status = 'queued' AND day <= ? ORDER BY day ASC, tokenId ASC"
+      "SELECT c.tokenId, c.day, qn.questionId, qn.answer FROM credits c " +
+        "LEFT JOIN questions qn ON qn.tokenId = c.tokenId AND qn.day = c.day " +
+        "WHERE c.status = 'queued' AND c.day <= ? ORDER BY c.day ASC, c.tokenId ASC"
+    ),
+    questionsForDays: db.prepare(
+      "SELECT DISTINCT day, questionId FROM questions WHERE day BETWEEN ? AND ? ORDER BY day ASC, questionId ASC"
     ),
     pendingMarkOrders: db.prepare(
       "SELECT tokenId, upgradeId, variant FROM mark_orders WHERE status = 'queued' ORDER BY tokenId ASC"
@@ -959,6 +966,9 @@ export function queries(db) {
     /// Credits for days that have CLOSED. A check-in at 00:03 belongs to
     /// tomorrow's batch, which is why this is bounded rather than "everything".
     pendingCredits: (throughDay) => s.pendingCredits.all(throughDay),
+
+    /// Each question issued on a day in [fromDay, toDay], once per day.
+    questionsForDays: (fromDay, toDay) => s.questionsForDays.all(fromDay, toDay),
     awaitingMint: () => s.awaitingMint.all().map((r) => r.tokenId),
 
     pendingMarkOrders: () => s.pendingMarkOrders.all(),
