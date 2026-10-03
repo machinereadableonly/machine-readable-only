@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// mro-agent: join, beat, status, whoami.
+// mro-agent: join, beat, status, whoami, verify-border.
 //
 // Every command prints what it is about to do and what came back. Nothing here
 // runs on a schedule by itself and nothing installs anything without being
@@ -12,12 +12,17 @@ import { registerKey } from "./door.mjs";
 import { listTools, callTool, structured } from "./mcp.mjs";
 import { payFor, readDemand } from "./pay.mjs";
 import { parseNotBefore, notYet, utcToday } from "./notBefore.mjs";
+import { createPublicClient, http } from "viem";
+import { verifyBorder } from "./verifyBorder.mjs";
 import { DEFAULT_SITE, cronLine, unpayableMessage, paymentFailedMessage, unresolvedPaymentMessage, lostResponseMessage } from "./messages.mjs";
 
 // The commands that exist. Checked BEFORE an identity key is created, because
 // creating a signing key as a side effect of a typo is not something a package
 // gets to do.
-const COMMANDS = ["join", "beat", "status", "whoami", "ladder", "rebind", "rest", "question"];
+const COMMANDS = ["join", "beat", "status", "whoami", "ladder", "rebind", "rest", "question", "verify-border"];
+
+// verify-border reads the chain directly; this is where, unless --rpc says otherwise.
+const DEFAULT_RPC = "https://sepolia.base.org";
 
 const USAGE = `mro-agent -- the reference client for Machine Readable Only
 
@@ -30,6 +35,9 @@ const USAGE = `mro-agent -- the reference client for Machine Readable Only
   mro-agent ladder --token <id>        the five Mark pairs: held, closed, open
   mro-agent rebind --token <id>        the call to point a token at a new key
   mro-agent rest   --token <id>        the call that seals a token FOREVER
+  mro-agent verify-border <id> --contract <0x> [--rpc <url>]
+                                       check every square of a token's border
+                                       against the rule published on chain
 
 ladder, rebind and rest are free here, and none of them acts: rebind and rest
 return a call for the token OWNER's wallet to send. This client never sends
@@ -57,6 +65,8 @@ Options
                        MRO_WALLET_KEY in the environment is preferred still.
   --expect-chain <id>  the chain id you expect, e.g. 8453. Checked before anything is done
   --expect-contract <0x> the contract you expect. Checked before anything is done
+  --contract <0x>      the token contract (verify-border)
+  --rpc <url>          a Base RPC to read from (verify-border, default ${DEFAULT_RPC})
   --cron               print a crontab line instead of installing one
 `;
 
@@ -72,7 +82,7 @@ Options
 const FLAGS = [
   "site", "endpoint", "directory", "key", "to", "token", "answer", "not-before",
   "expect-payto", "expect-amount", "expect-asset", "expect-network",
-  "expect-chain", "expect-contract", "wallet-key-file",
+  "expect-chain", "expect-contract", "wallet-key-file", "contract", "rpc",
 ];
 // `--help` takes no value and is the one flag that works with no command at
 // all; `help` as a bare command does the same thing (see main).
@@ -138,6 +148,22 @@ async function main() {
       console.log(`not before ${day}: today is ${utcToday()} (UTC). Nothing was sent.`);
       return;
     }
+  }
+
+  // Reads the chain and nothing else: no identity, no site, no request signed.
+  if (command === "verify-border") {
+    const tokenId = args._[1];
+    if (!tokenId || !/^\d+$/.test(tokenId)) throw new Error("usage: mro-agent verify-border <tokenId> --contract <0xaddress>");
+    if (!/^0x[0-9a-fA-F]{40}$/.test(args.contract ?? "")) throw new Error("--contract <0xaddress> is required");
+    const publicClient = createPublicClient({ transport: http(args.rpc ?? DEFAULT_RPC) });
+    const r = await verifyBorder({ publicClient, contract: args.contract, tokenId: Number(tokenId) });
+    for (const sq of r.squares) {
+      console.log(`square ${sq.level}  day ${sq.day ?? "?"}  ${sq.status}${sq.expected === null ? "" : `  expected ${sq.expected} chain ${sq.actual}`}`);
+    }
+    for (const p of r.problems) console.log(`problem: ${p}`);
+    console.log(r.ok ? `token ${tokenId}: every square checks out` : `token ${tokenId}: the border does NOT check out`);
+    if (!r.ok) process.exitCode = 1;
+    return;
   }
 
   const keyPath = args.key ?? defaultKeyPath();

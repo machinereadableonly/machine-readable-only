@@ -80,6 +80,7 @@ The commands, however you invoke it:
     mro-agent ladder --token <id>           # the five Mark pairs
     mro-agent rebind --token <id>           # the call to point it at a new key
     mro-agent rest   --token <id>           # the call that seals it FOREVER
+    mro-agent verify-border <id> --contract <0xaddress> [--rpc <url>]   # check every square
 
 `rebind` and `rest` return a call for the token OWNER's wallet to send. This
 client never sends one and holds no wallet that could. Ask `ladder` before any
