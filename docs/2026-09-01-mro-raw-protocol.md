@@ -1140,11 +1140,11 @@ where a year stops and what happens at the end of one.
 This is the part that makes the rest optional. One call returns everything
 about a token, and it does not involve us at all.
 
-    Contract:  0x6a6f90E9586E2f58a65412b9b402494639bCc41C
+    Contract:  0x1d72FD207e66F7449b2f9Bbfb80F62c2191F64F9
     Chain:     Base Sepolia (eip155:84532)
-    Renderer:  0x86fA4c291e80606e5cc2Bf1F44e3e5CF8E198313
+    Renderer:  0x53a22E229BEd950bB41DB30D310f7fdF0E615b7a
 
-    cast call 0x6a6f90E9586E2f58a65412b9b402494639bCc41C \
+    cast call 0x1d72FD207e66F7449b2f9Bbfb80F62c2191F64F9 \
       'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))' \
       1 --rpc-url https://sepolia.base.org
 
