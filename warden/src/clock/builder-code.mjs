@@ -9,13 +9,8 @@
 // NOT A SECRET. The code is written into public calldata by design.
 import { Attribution } from "ox/erc8021";
 
-/// Issued by the Base Dashboard when MRO is registered there. NULL UNTIL THEN:
-/// registering a second app on the operator's Base account is broken (open Base
-/// bug https://github.com/base/docs/issues/1950), so the plumbing ships first
-/// and the code is a one-line change the day it is issued. While it is null the
-/// Clock's transactions are byte-identical to before. DEPLOY.md section 10
-/// lists setting it among the things a mainnet cutover must not miss.
-export const BUILDER_CODE = null;
+/// Issued by Base for this piece. DEPLOY.md section 10 checks it survives a cutover.
+export const BUILDER_CODE = "bc_dfhlohlh";
 
 /// The shape Base issues: `bc_` and lowercase letters and digits
 /// (`bc_b7k3p9da` in Base's docs). A typo here would attribute the piece's

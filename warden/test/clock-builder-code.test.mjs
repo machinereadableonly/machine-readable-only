@@ -110,11 +110,10 @@ test("the suffix is ERC-8021 schema 0, identical to one rebuilt by hand", () => 
   assert.equal((HAND_BUILT.length - 2) / 2, 29, "29 bytes for an 11-character code");
 });
 
-// Pinned on purpose. The day Base issues the piece's code, set BUILDER_CODE and
-// change this assertion to the issued code -- see DEPLOY.md section 10.
-test("no code has been issued yet, so there is no suffix", () => {
-  assert.equal(BUILDER_CODE, null);
-  assert.equal(builderCodeSuffix(), undefined);
+// Pinned to the suffix Base issued with the code, not one derived here.
+test("the piece's Builder Code is set, and its suffix is the one Base issued", () => {
+  assert.equal(BUILDER_CODE, "bc_dfhlohlh");
+  assert.equal(builderCodeSuffix(), "0x62635f6466686c6f686c680b0080218021802180218021802180218021");
 });
 
 test("a code not in Base's bc_... form is refused rather than attached", () => {
