@@ -8,7 +8,7 @@
 //
 // Nothing here holds a signer. Both are eth_call / eth_chainId reads.
 import { getDefaultAsset } from "@x402/evm";
-import { decodeFunctionResult } from "viem";
+import { decodeFunctionResult, encodeFunctionData } from "viem";
 import { MRO_ABI } from "../clock/abi.mjs";
 import { safeErrorText } from "../clock/redact.mjs";
 import { DAY_MS, utcDay, dayMismatch } from "../day.mjs";
@@ -243,6 +243,31 @@ export async function verifyDecoder({
       "to start rather than serve with an unverified decoder, because a decode failure and an RPC " +
       "outage are the same null at every call site"
   );
+}
+
+/**
+ * Refuse to start against a contract whose split anchor is not set.
+ *
+ * Every mint carries an answer bit drawn from the split's key chain, so a door
+ * that opened before the anchor existed would sell tokens whose first square
+ * nobody can ever verify. An unreadable answer refuses as well.
+ */
+export async function verifySplitAnchor({ rpcUrl, contract, fetchImpl = fetch }) {
+  const data = encodeFunctionData({ abi: MRO_ABI, functionName: "splitAnchor" });
+  const result = await rpc(rpcUrl, "eth_call", [{ to: contract, data }, "latest"], fetchImpl);
+  let anchor = null;
+  try {
+    if (result !== null) anchor = decodeFunctionResult({ abi: MRO_ABI, functionName: "splitAnchor", data: result });
+  } catch {
+    anchor = null;
+  }
+  if (anchor === null) {
+    throw new Error(`the contract at ${contract} did not answer splitAnchor(): refusing to start without its split anchor`);
+  }
+  if (BigInt(anchor) === 0n) {
+    throw new Error("contract has no split anchor: set it (DEPLOY.md section 11) before the door opens");
+  }
+  return anchor;
 }
 
 /// `today()`'s selector (`cast sig "today()"`), for the same raw eth_call the

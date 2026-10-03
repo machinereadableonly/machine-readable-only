@@ -29,7 +29,7 @@ import { tokenView } from "./mcp/tokenView.mjs";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
 import { makeChainReader } from "./chain/read.mjs";
-import { verifyChainId, verifyDecoder, verifyDay, treasuryBalance } from "./chain/preflight.mjs";
+import { verifyChainId, verifyDecoder, verifyDay, verifySplitAnchor, treasuryBalance } from "./chain/preflight.mjs";
 import { DAY_MS } from "./day.mjs";
 import { requeueOrphans, runSolver } from "./solve/queue.mjs";
 import { utcDay } from "./mcp/tools/checkin.mjs";
@@ -220,6 +220,10 @@ async function main() {
   // stops here instead.
   const dayCheck = await verifyDay({ rpcUrl, contract });
   console.error(`warden: day ${dayCheck.chainDay} on chain matches this box (${DAY_MS / 1000} s days)`);
+
+  // NO DOOR WITHOUT A SPLIT ANCHOR: every mint carries an answer bit drawn
+  // from the key chain the anchor fixes. See chain/preflight.mjs.
+  await verifySplitAnchor({ rpcUrl, contract });
 
   // NOT A GATE. The treasury is validated for shape and checksum and nothing
   // else, so a valid-but-wrong address is invisible: settlements to it succeed.

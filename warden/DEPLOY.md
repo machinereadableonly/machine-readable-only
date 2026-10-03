@@ -406,6 +406,12 @@ the only thing that bounds the damage of the NEXT leak. A cap of 10,000 set on
 day one is 10,000 free mints sitting behind one key; set it near actual demand
 and raise it deliberately as the collection fills.
 
+**The split seed sits beside the Clock key** (`~/.mro-split/seed`, or
+`MRO_SPLIT_SEED_FILE`). It cannot be rotated: the anchor is set once. A leaked
+seed takes no money and writes nothing, but it publishes every future day's
+answer rule, so agents could choose answers for their squares. The squares
+stay verifiable; they stop being unchosen.
+
 **What not to bother with.** There is no point pausing first -- `pause` blocks
 `applyMark` but the attacker's mints are the expensive part, and rotation
 revokes everything in one transaction. Do not try to out-mint the attacker.
@@ -702,6 +708,32 @@ two it was.
    every Mark was unwritable against a fully verified contract, and only reading
    the runtime bytecode found it.
 
+3a. **Make the split seed, once, OUTSIDE the worktree.** It is the secret end
+   of the daily question's key chain: the Clock draws every answer square from
+   it, and it is never printed, logged or committed.
+
+   ```
+   node ~/projects/machine-readable-only/warden/tools/split-seed.mjs new ~/.mro-split/seed
+   ```
+
+   It writes the seed with mode 600, refuses a file that already exists and
+   any path inside the repository, and prints only `anchor 0x...`. Back the
+   seed file up offline alongside the Clock key, and copy it nowhere else.
+   `~/.mro-split/seed` is where the Clock looks unless `MRO_SPLIT_SEED_FILE`
+   says otherwise.
+
+3b. **Set the anchor, from the OWNER, before the Warden starts.**
+
+   ```
+   cast send <token> "setSplitAnchor(bytes32)" <anchor> --rpc-url <rpc> <owner signing flags>
+   cast call <token> "splitAnchor()(bytes32)" --rpc-url <rpc>
+   ```
+
+   The anchor is set ONCE and can never move. The Warden refuses to start
+   against a contract with no anchor, and the Clock writes nothing if its seed
+   does not hash to it. **A lost seed is permanent:** no later square can be
+   written or verified, so the backup is not optional.
+
 4. **Adopt the address everywhere, in one command.**
 
    ```
@@ -744,6 +776,9 @@ two it was.
 
 ### What this contract fixes at deploy, for good
 
+- **The split anchor is set once (step 3b), from a seed that never leaves the
+  box.** There is no setter after it: a lost seed means no square can ever be
+  written or verified again, and a leaked one cannot be replaced.
 - **`freezeRenderer` exists and is NOT called.** It makes the current renderer
   permanent and cannot be undone. The renderer stays swappable until the
   operator decides otherwise, as a separate, explicit step.

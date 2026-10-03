@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { getAddress } from "viem";
-import { readChainId, verifyChainId, verifyDecoder, treasuryBalance } from "../src/chain/preflight.mjs";
+import { readChainId, verifyChainId, verifyDecoder, verifySplitAnchor, treasuryBalance } from "../src/chain/preflight.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MRO_ABI } from "../src/clock/abi.mjs";
@@ -313,4 +313,23 @@ test("the probe decodes with the SAME abi module chain/read.mjs uses", () => {
   const names = fn.outputs[0].components.map((c) => c.name);
   assert.ok(names.includes("echo"), "this branch's TokenView carries the Echo");
   assert.equal(names[0], "tokenId", "the probe's echo check depends on this being the id");
+});
+
+// THE SPLIT ANCHOR. No door may open on a contract whose split is not fixed:
+// every paid mint carries an answer bit drawn from that chain of keys.
+test("a contract with no split anchor is refused at boot", async () => {
+  await assert.rejects(
+    verifySplitAnchor({ rpcUrl: RPC, contract: CONTRACT, fetchImpl: answering("0x" + "00".repeat(32)) }),
+    { message: "contract has no split anchor: set it (DEPLOY.md section 11) before the door opens" }
+  );
+});
+
+test("a contract with a split anchor passes", async () => {
+  const anchor = "0x" + "ab".repeat(32);
+  assert.equal(await verifySplitAnchor({ rpcUrl: RPC, contract: CONTRACT, fetchImpl: answering(anchor) }), anchor);
+});
+
+test("an unreadable split anchor refuses too", async () => {
+  const dead = async () => { throw new Error("ECONNREFUSED"); };
+  await assert.rejects(verifySplitAnchor({ rpcUrl: RPC, contract: CONTRACT, fetchImpl: dead }), /split anchor/);
 });
