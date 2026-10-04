@@ -6,10 +6,10 @@
 // checked by tools/clock-live-check.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { packIds, chunk, writeCheckInChunk } from "../src/clock/batch.mjs";
+import { packIds, packBits, answerRecord, chunk, writeCheckInChunk } from "../src/clock/batch.mjs";
 import { CHECKIN_CHUNK } from "../src/clock/run.mjs";
 
-const entry = (tokenId, day) => ({ tokenId, day });
+const entry = (tokenId, day) => ({ tokenId, day, bit: 0, answerByte: 0xff });
 
 /// Ids back out of the packed calldata, the way the contract slices them.
 const unpackIds = (packed) => {
@@ -603,4 +603,28 @@ test("a halved chunk keeps each entry's own bit and answer byte", async () => {
       assert.equal(byte, e.answerByte, `token ${id} byte`);
     });
   }
+});
+
+// The bit and the answer byte go on chain for good, so a value the encoders
+// cannot represent is refused rather than written as 0 or as silence.
+test("packBits refuses anything but 0 or 1", () => {
+  assert.equal(packBits([1, 0, 1]), "0xa0");
+  for (const bad of [undefined, null, 2, -1, true]) {
+    assert.throws(() => packBits([0, bad]), /answer bit/, `${bad} was packed`);
+  }
+});
+
+test("answerRecord refuses anything that is not one byte", () => {
+  assert.equal(answerRecord([0, 3, 0xff]), "0x0003ff");
+  for (const bad of [undefined, null, -1, 256, 1.5]) {
+    assert.throws(() => answerRecord([0, bad]), /answer byte/, `${bad} was recorded`);
+  }
+});
+
+test("a check-in with no bit or answer byte is refused before anything is sent", async () => {
+  const writer = stubWriter();
+  for (const e of [{ tokenId: 1, day: 100, answerByte: 0xff }, { tokenId: 1, day: 100, bit: 0 }]) {
+    await assert.rejects(writeCheckInChunk(writer, [e]), /answer (bit|byte)/);
+  }
+  assert.equal(writer.calls.length, 0);
 });

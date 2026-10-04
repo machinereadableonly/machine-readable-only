@@ -1046,13 +1046,13 @@ function isFinalMark(result) {
  * These are every named error `seed(uint256,uint256,address,bytes,uint32,bytes32,bool)` can
  * raise, read off MachineReadableOnly.sol's `seed` plus its three modifiers and
  * `_checkCreationDay`, and each is here or below the line for a stated reason.
- * `StaleDay` joined 2026-09-11 with the first-day fix: a seed's day is frozen in
- * its row and the chain's today() only moves forward, so a day more than
- * MAX_LAG behind can never become writable. `FutureDay` cannot fire
- * here -- the day is recorded when the seed is asked for, so it is never ahead.
+ * `StaleDay`: a seed's day is frozen in its row and the chain's today() only
+ * moves forward, so a day more than MAX_LAG behind can never become writable.
+ * `FutureDay` cannot fire here -- the day is recorded when the seed is asked
+ * for, so it is never ahead.
  *
  * PERMANENT, because no later run can clear it:
- *   Resting               `rest` sets `s.resting = true` at :780 and NOTHING in
+ *   Resting               `rest` sets `s.resting = true` and NOTHING in
  *                         the contract ever clears it. The parent can never
  *                         seed again, so the year belongs somewhere else.
  *   NoSeedAvailable       the CHAIN says this key has no unspent seed, and the
@@ -1083,10 +1083,10 @@ function isFinalMark(result) {
  * NOT permanent, and each for a reason:
  *   ParentNotWhole   THE BRIEF CALLED THIS PERMANENT AND THE CONTRACT SAYS
  *                    OTHERWISE. `seed` refuses `p.level < 365`, and `level` is
- *                    only ever `+= 1` (:417) with no path anywhere that lowers
+ *                    only ever `+= 1` (in `_credit`) with no path anywhere that lowers
  *                    it. A parent one day short tonight is whole tomorrow.
  *                    The one parent whose level IS frozen forever is a sealed
- *                    one -- and `:816` checks `p.resting` BEFORE `:817` checks
+ *                    one -- and `seed` checks `p.resting` BEFORE it checks
  *                    the level, so that parent answers Resting and is dropped
  *                    above. There is no state in which waiting is futile.
  *   SupplyCap        `totalMinted >= supplyCap`, and supplyCap is an owner dial
@@ -1094,7 +1094,7 @@ function isFinalMark(result) {
  *                    whether the AGENT can act on it, it is whether any later
  *                    run could succeed -- and raising a cap makes one succeed.
  *                    There is always somebody who can: renounceOwnership()
- *                    reverts at :266, so this contract can never be ownerless.
+ *                    always reverts, so this contract can never be ownerless.
  *   TokenExists      has three answers and only the chain knows which; handled
  *                    above, where one of them is a drop and one is a write.
  *   NotWarden        run-level, and cleared by setWarden

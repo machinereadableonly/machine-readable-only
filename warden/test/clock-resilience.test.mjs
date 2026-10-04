@@ -85,7 +85,7 @@ function tooBigOver(limit) {
   };
 }
 
-const entriesFor = (n) => Array.from({ length: n }, (_, i) => ({ tokenId: i + 1, day: 100 }));
+const entriesFor = (n) => Array.from({ length: n }, (_, i) => ({ tokenId: i + 1, day: 100, bit: 0, answerByte: 0xff }));
 
 test("a chunk too big to estimate is halved, and BOTH halves are written", async () => {
   const writer = tooBigOver(4);
@@ -125,7 +125,7 @@ test("a single entry that cannot be estimated is condemned by name, not silently
   const result = await writeCheckInChunk(writer, entriesFor(1));
 
   assert.equal(result.aborted, null);
-  assert.deepEqual(result.dropped, [{ entry: { tokenId: 1, day: 100 }, reason: "gas-estimate-too-large" }]);
+  assert.deepEqual(result.dropped, [{ entry: entriesFor(1)[0], reason: "gas-estimate-too-large" }]);
 });
 
 // -- 15.8: one malformed row is one row's problem ---------------------------

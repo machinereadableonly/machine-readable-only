@@ -123,18 +123,18 @@ async function main() {
 
   // The split seed and the question bank. Neither failure throws: without
   // them runClock writes nothing and fails the night, which is a red line in
-  // the log rather than a crash loop. Both messages are fixed sentences.
+  // the log rather than a crash loop.
   let splitKeys = null;
   try {
     splitKeys = chainKeys(loadSplitSeed(splitSeedPath()));
   } catch (err) {
-    console.error(`clock: ${err.message}`);
+    console.error(`clock: ${safeErrorText(err)}`);
   }
   let bank = null;
   try {
     bank = loadBank(bankPath());
   } catch (err) {
-    console.error(`clock: ${err.message}`);
+    console.error(`clock: ${safeErrorText(err)}`);
   }
 
   const summary = await runClock({
@@ -192,8 +192,8 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
 main()
   .catch((err) => {
     // 16.10. Anything uncaught lands here, and reconcile's getBlockNumber and
-    // getLogs are uncaught by design (run.mjs:367), so a viem error reaches
-    // this line with the endpoint url inside it.
+    // getLogs are uncaught by design (runClock's reconcile step), so a viem
+    // error reaches this line with the endpoint url inside it.
     console.error("clock: run failed:", safeErrorText(err));
     process.exitCode = 1;
   })

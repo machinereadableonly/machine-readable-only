@@ -187,6 +187,9 @@ export function packIds(ids) {
 
 /// One answer bit per entry, high bit first, as batchCheckIn reads them.
 export function packBits(bits) {
+  for (const b of bits) {
+    if (b !== 0 && b !== 1) throw new Error(`answer bit ${b} is neither 0 nor 1`);
+  }
   const bytes = new Uint8Array(Math.ceil(bits.length / 8));
   bits.forEach((b, i) => { if (b) bytes[i >> 3] |= 0x80 >> (i & 7); });
   return "0x" + [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -194,6 +197,9 @@ export function packBits(bits) {
 
 /// One byte per entry: the answer index, or 0xff for silence.
 export function answerRecord(bytes) {
+  for (const b of bytes) {
+    if (!Number.isInteger(b) || b < 0 || b > 0xff) throw new Error(`answer byte ${b} does not fit in one byte`);
+  }
   return "0x" + bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -297,8 +303,8 @@ export async function writeCheckInChunk(
         remaining.map((e) => e.day),
         // Packed from `remaining` after the sort, so a reordered or shrunken
         // chunk still carries each entry's own bit and answer.
-        packBits(remaining.map((e) => e.bit ?? 0)),
-        answerRecord(remaining.map((e) => e.answerByte ?? 0xff)),
+        packBits(remaining.map((e) => e.bit)),
+        answerRecord(remaining.map((e) => e.answerByte)),
       ],
       { label: `batchCheckIn x${remaining.length}` }
     );

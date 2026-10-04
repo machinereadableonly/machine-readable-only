@@ -2,6 +2,7 @@
 // client's copy are tested against the SAME values, so they cannot drift apart.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { keccak256 } from "viem";
 import { chainKeys, CHAIN_LENGTH, keyIndexFor, splitBit, silentBit, answerBit } from "../src/clock/split.mjs";
 
@@ -43,4 +44,11 @@ test("the chain hashes back to its anchor", () => {
 test("an answer outside the set is refused, never graded", () => {
   for (const answer of [2, 9, -1, 1.5]) assert.throws(() => splitBit(KEY, 2, answer), /outside/);
   assert.throws(() => answerBit({ keyHex: KEY, n: 0, answer: 0, tokenId: 1 }), /outside/);
+});
+
+// The vectors cover the functions they call; this covers every other line.
+test("the client's copy is this file, apart from the line naming the other copy", () => {
+  const body = (rel) =>
+    readFileSync(new URL(rel, import.meta.url), "utf8").split("\n").filter((l) => !/split\.mjs is an identical copy/.test(l));
+  assert.deepEqual(body("../../client/src/split.mjs"), body("../src/clock/split.mjs"));
 });

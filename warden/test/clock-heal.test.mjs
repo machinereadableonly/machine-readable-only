@@ -24,7 +24,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { writeCheckInChunk } from "../src/clock/batch.mjs";
 
-const entry = (tokenId, day) => ({ tokenId, day });
+const entry = (tokenId, day) => ({ tokenId, day, bit: 0, answerByte: 0xff });
 
 /**
  * A writer that behaves like the contract: it refuses any entry whose day is at
@@ -43,7 +43,7 @@ function chainWriter({ onChain = new Map() } = {}) {
       const ids = [];
       for (let i = 2; i < args[0].length; i += 8) ids.push(parseInt(args[0].slice(i, i + 8), 16));
       const days = args[1];
-      calls.push({ functionName, ids, days, label: opts?.label });
+      calls.push({ functionName, ids, days, bits: args[2], answers: args[3], label: opts?.label });
       for (let i = 0; i < ids.length; i += 1) {
         const last = onChain.get(ids[i]);
         if (last !== undefined && days[i] <= last) {
@@ -434,4 +434,29 @@ test("a queued day the chain's level cannot account for stays queued", async () 
     alerts.some((a) => a.includes("not-accounted-on-chain")),
     `the skipped day must be reported, got: ${alerts.join(" | ")}`,
   );
+});
+
+// A heal rebuilds `remaining` from survivors, so the packed bits and answer
+// bytes must be re-derived from the entries rather than kept from the first try.
+test("a healed chunk keeps each entry's own bit and answer byte", async () => {
+  const onChain = new Map([[42, 100]]);
+  const writer = chainWriter({ onChain });
+  const entries = [
+    { tokenId: 42, day: 100, bit: 0, answerByte: 0xff },
+    { tokenId: 1, day: 101, bit: 1, answerByte: 3 },
+    { tokenId: 42, day: 101, bit: 1, answerByte: 1 },
+    { tokenId: 3, day: 101, bit: 0, answerByte: 2 },
+  ];
+  const r = await writeCheckInChunk(writer, entries, { lastDayOf: lastDayReader(onChain) });
+  assert.deepEqual(r.healed, [entries[0]]);
+
+  const landed = writer.calls.at(-1);
+  assert.equal(landed.ids.length, 3, "the healed entry left the chunk");
+  landed.ids.forEach((id, i) => {
+    const e = entries.find((x) => x.tokenId === id && x.day === landed.days[i]);
+    const bit = (parseInt(landed.bits.slice(2 + 2 * (i >> 3), 4 + 2 * (i >> 3)), 16) >> (7 - (i & 7))) & 1;
+    const byte = parseInt(landed.answers.slice(2 + 2 * i, 4 + 2 * i), 16);
+    assert.equal(bit, e.bit, `token ${id} bit`);
+    assert.equal(byte, e.answerByte, `token ${id} byte`);
+  });
 });
