@@ -5,12 +5,12 @@
 # This is the deploy that CANNOT BE UNDONE (Hard Rule 1) and that spends real
 # funds (Hard Rule 2): the operator approves every broadcast, every time.
 #
-#   bash script/deploy-mainnet.sh --warden <address>               # simulate against mainnet
-#   bash script/deploy-mainnet.sh --warden <address> --broadcast   # SEND. Operator approval.
+#   bash script/deploy-mainnet.sh --warden <address> --owner <safe>               # simulate
+#   bash script/deploy-mainnet.sh --warden <address> --owner <safe> --broadcast   # SEND. Operator approval.
 #
 # REHEARSAL ONLY, against a local anvil fork of Base mainnet:
 #
-#   bash script/deploy-mainnet.sh --warden <address> --fork http://127.0.0.1:<port> --broadcast
+#   bash script/deploy-mainnet.sh --warden <address> --owner <safe> --fork http://127.0.0.1:<port> --broadcast
 #
 # WHY THIS FILE EXISTS. Until 2026-09-15 the only deploy wrapper was
 # deploy-plan7.sh, which hard-codes Base Sepolia -- chain, RPC and the Sepolia
@@ -26,10 +26,9 @@
 # afterwards, and the mainnet Clock is a new key chosen at cutover, not the
 # Sepolia one.
 #
-# THE OWNER. The key that signs becomes the piece's PERMANENT owner (see
-# MroScript.deployerKey). It is MAINNET_DEPLOYER_KEY from the environment file,
-# never the throwaway spike key; prefer transferring ownership to a hardware
-# wallet or Safe straight after (Ownable2Step makes that two steps).
+# --owner IS REQUIRED: the 2-of-3 Safe. MAINNET_DEPLOYER_KEY signs the deploy
+# and offers ownership to the Safe as the broadcast's last call; it stays owner
+# only until the Safe calls acceptOwnership (warden/tools/safe-tx.mjs).
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -39,11 +38,13 @@ export PATH="$HOME/.foundry/bin:$PATH"
 case " $* " in *" --resume "*) echo "FAIL: never resume a deploy; a fresh run deploys a fresh pair" >&2; exit 1;; esac
 
 WARDEN=""
+OWNER=""
 FORK=""
 BROADCAST=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --warden) WARDEN="${2:?--warden needs an address}"; shift 2 ;;
+    --owner) OWNER="${2:?--owner needs the Safe address}"; shift 2 ;;
     --fork) FORK="${2:?--fork needs a URL}"; shift 2 ;;
     # THE LITERAL WORD, as in deploy-plan7.sh: a typo must never broadcast.
     --broadcast) BROADCAST="--broadcast"; shift ;;
@@ -59,6 +60,15 @@ fi
 # check both apply: a mistyped digit would otherwise be a well-formed address.
 if [ "$WARDEN" != "$(cast to-check-sum-address "$WARDEN")" ]; then
   echo "FAIL: --warden $WARDEN is not in EIP-55 checksummed form ($(cast to-check-sum-address "$WARDEN"))." >&2
+  exit 1
+fi
+
+if [ -z "$OWNER" ]; then
+  echo "FAIL: --owner <safe> is required -- the 2-of-3 Safe that will own the piece." >&2
+  exit 1
+fi
+if [ "$OWNER" != "$(cast to-check-sum-address "$OWNER")" ]; then
+  echo "FAIL: --owner $OWNER is not in EIP-55 checksummed form ($(cast to-check-sum-address "$OWNER"))." >&2
   exit 1
 fi
 
@@ -108,6 +118,11 @@ if [ "$ACTUAL" != "8453" ]; then
   echo "FAIL: $RPC reports chain $ACTUAL, not Base mainnet (8453)." >&2
   exit 1
 fi
+# DeployPlan5 refuses an owner with no code too; this says so before a build.
+if [ "$(cast code "$OWNER" --rpc-url "$RPC")" = "0x" ]; then
+  echo "FAIL: --owner $OWNER has no code on chain $ACTUAL. Create the Safe first (DEPLOY.md section 10)." >&2
+  exit 1
+fi
 
 # DEPLOYABLE, NOT MERELY COMPILING (Hard Rule 7). `--sizes` PRINTS the runtime
 # sizes -- forge's own help says only that, so it is not relied on as a gate.
@@ -154,11 +169,13 @@ echo
 echo "mode     $MODE"
 echo "chain    $ACTUAL  (expected $EXPECTED_CHAIN_ID)"
 echo "warden   $WARDEN_ADDRESS"
+echo "owner    $OWNER  (pending until the Safe accepts)"
 echo "anchor   $SPLIT_ANCHOR"
 echo "send     ${BROADCAST:-no -- simulate only}"
 echo
 
 forge script script/DeployPlan5.s.sol:DeployPlan5 \
+  --sig "run(address)" "$OWNER" \
   --rpc-url "$RPC" \
   $BROADCAST \
   -vvv
@@ -169,4 +186,5 @@ echo "  1. bash script/verify-plan7.sh <renderer> <token> $WARDEN 8453"
 echo "  2. cd ../warden && node tools/check-deployed-abi.mjs <token> $RPC"
 echo "  3. cd ../warden && node tools/read-ladder.mjs <token> $RPC"
 echo "  4. bash contracts/script/adopt-deployment.sh --chain 8453 <renderer> <token> <deploy-block>"
-echo "  5. warden/DEPLOY.md section 10, in order."
+echo "  5. the Safe accepts ownership: node tools/safe-tx.mjs accept-ownership (DEPLOY.md section 10)"
+echo "  6. warden/DEPLOY.md section 10, in order."

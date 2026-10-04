@@ -49,19 +49,11 @@ abstract contract MroScript is Script {
     /**
      * @notice The key that will sign, chosen by the chain rather than by habit.
      *
-     * On Base mainnet the deployer becomes the PERMANENT OWNER of the piece:
-     * `Ownable(msg.sender)` in the constructor, `renounceOwnership` reverts, and
-     * the owner powers are setRenderer, setWarden, setSunset, pause and
-     * setUpgrade. SPIKE_DEPLOYER_KEY is described in .env.example as a throwaway
-     * generated for the rendering spike, and it has signed every testnet
-     * deploy, soak and rehearsal since 2026-08-29. It is not a key whose
-     * handling has ever been owner-grade, and there was no separate variable to
-     * make anyone stop and think about that.
-     *
-     * So mainnet reads a DIFFERENT variable, and refuses if it holds the same
-     * value as the throwaway. Prefer a hardware wallet or a Safe over either
-     * (`--ledger`), and transfer ownership to a multisig once deployed --
-     * Ownable2Step is in use, so that handover is two steps and recoverable.
+     * On Base mainnet the deployer owns the piece from the constructor until
+     * the Safe accepts the ownership DeployPlan5 offers it, and it signs the
+     * owner-only setup in between. SPIKE_DEPLOYER_KEY is a throwaway that has
+     * signed every testnet run, so mainnet reads a DIFFERENT variable and
+     * refuses if it holds the same value.
      */
     function deployerKey() internal view returns (uint256 key) {
         if (block.chainid == BASE_MAINNET) {
@@ -75,7 +67,7 @@ abstract contract MroScript is Script {
             require(key != 0, "MAINNET_DEPLOYER_KEY must be set");
             require(
                 key != throwaway,
-                "MAINNET_DEPLOYER_KEY is the throwaway spike key -- it would become the permanent owner"
+                "MAINNET_DEPLOYER_KEY is the throwaway spike key -- it would own the mainnet deploy"
             );
             console.log("signing with MAINNET_DEPLOYER_KEY", vm.addr(key));
         } else {
