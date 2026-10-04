@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan E: key custody</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan E: key custody</h1>
+<blockquote>
+<p>After completing any operator-only step, tell Claude so it can update memory
+immediately.</p>
+</blockquote>
+<p><strong>Why:</strong> this is the last plan before the mainnet deploy. Ruling 1 (2026-09-30)
+asked for two protections, and this plan builds both.</p>
+<ol>
+<li><strong>The owner becomes a 2-of-3 Safe.</strong> A stolen owner key can do three things
+in one transaction each, and none can be undone: <code>sunset()</code> closes the
+piece, <code>setRenderer</code> then <code>freezeRenderer</code> replaces every token&#39;s art for
+good, and <code>transferOwnership</code> hands the contract to the thief. A Safe needs
+two of three signers for each of these, so one stolen or lost device does
+nothing. The same Safe is the TREASURY, so the money gets the same
+protection.</li>
+<li><strong>The Clock runs as its own Unix user.</strong> Today anything running as the main
+user can read the Clock&#39;s key, and a stolen Clock key can mint out the
+collection. After this plan, only the Clock&#39;s own user can read it.</li>
+</ol>
+<p><strong>Decided by the operator 2026-10-04:</strong> a 2-of-3 Safe (the Ledger, the Trezor,
+and a spare), acting as both owner and treasury.</p>
+<p><strong>Starts after</strong> Night 2&#39;s <code>verify-border</code> passes and <code>followups</code> is merged.
+The work happens in a worktree on a branch <code>plan-e</code>.</p>
+<h2>What was checked, live, 2026-10-04</h2>
+<ul>
+<li>Safe&#39;s own config gives version <strong>1.5.0</strong> as the default on Base (8453) and
+Base Sepolia (84532). Both chains have Safe&#39;s transaction service running.</li>
+<li>Safe charges no fees. Creating a Safe costs gas, in real ETH on Base.</li>
+<li>A Transaction Builder file with ONE transaction executes as a plain call from
+the Safe. Two or more are wrapped in a MultiSend, which changes the hash. So
+every file this plan writes holds exactly one transaction. A raw <code>data</code> field
+is accepted, and no checksum is needed.</li>
+<li><strong>What the devices show:</strong> a Trezor signs the Safe&#39;s transaction hash
+directly and shows that one hash. A Ledger shows two hashes (domain and
+message), and needs blind signing switched on. So the tool prints all three.</li>
+<li><strong>Safe&#39;s website disables Trezor on Base Sepolia</strong> (enabled on mainnet). It
+also disables Safe&#39;s phone app as a signer on both Base chains. So the
+rehearsal signs with the Ledger and the spare, and the Trezor proves itself
+on the first mainnet transaction.</li>
+<li>USDC&#39;s <code>transferWithAuthorization</code> (what x402 payments use) has no rule
+against paying a contract address, so a Safe can be the treasury.</li>
+<li>The contract is <code>Ownable2Step</code>, and its handover is already tested in
+<code>test/MachineReadableOnly.t.sol</code>.</li>
+</ul>
+<h2>Open question for the operator</h2>
+<p><strong>The spare signer.</strong> Recommended: a third hardware wallet (a Ledger Nano S
+Plus is $69 on Ledger&#39;s US shop), kept somewhere other than the other two. The
+alternative is a browser wallet key (MetaMask or Rabby) on the operator&#39;s PC,
+which Safe&#39;s own guidance accepts for an individual. It is cheaper, but it is a
+key on a computer. The plan works either way, and Phase 2 waits for this
+answer.</p>
+<h2>What cannot be undone</h2>
+<ul>
+<li><strong>Nothing on mainnet happens in this plan.</strong> The mainnet Safe is created on
+deploy day, following the rewritten runbook.</li>
+<li>The Sepolia token&#39;s ownership moves to the Sepolia Safe in Task 8. That is
+reversible: the Safe can hand it back.</li>
+<li>Phase 3 moves the live mirror database. That is reversible, and the old file
+is kept until the first night on the new layout passes.</li>
+<li><strong>Two files are deleted, and approving this plan approves those deletions:</strong>
+<code>contracts/script/SwapRenderer.s.sol</code> and
+<code>contracts/script/SetClockWarden.s.sol</code>. They sign with the deployer&#39;s hot
+key, which will no longer be the owner. The Safe tool replaces them.</li>
+</ul>
+<h2>The cost</h2>
+<ul>
+<li><strong>Emergency speed.</strong> Swapping a stolen Clock key takes two approvals:
+roughly 10 to 20 minutes instead of 2. The runbook is rewritten around that
+time.</li>
+<li><strong>The Safe website is part of what the operator trusts</strong> (the Bybit lesson).
+The defence is one habit, built into the tool: it computes the hash locally,
+checks it against the Safe contract&#39;s own <code>getTransactionHash</code>, and the
+operator signs only if the device shows the same hash.</li>
+<li><strong>Every Clock code change needs one sudo command from the operator</strong>, because
+the Clock&#39;s code copy must be one the main user cannot write. That is the
+point of the separation, and its price.</li>
+</ul>
+<h2>Phase 1 -- the tooling (Claude alone)</h2>
+<ol>
+<li><p><strong>The deploy hands ownership to the Safe in its own broadcast.</strong></p>
+<ul>
+<li><code>DeployPlan5.s.sol</code> reads <code>OWNER_ADDRESS</code>. It is required on 8453 and
+optional on Sepolia. As the broadcast&#39;s last call, after <code>setUpgrade</code> and
+<code>setSplitAnchor</code> (both owner-only), it calls <code>transferOwnership(owner)</code>.</li>
+<li>It refuses an owner with no code on chain, because a Safe is a contract,
+so a typed EOA or a typo is caught before the send. <code>Ownable2Step</code> is the
+second net: a wrong pending owner simply never accepts.</li>
+<li><code>deploy-mainnet.sh</code> takes <code>--owner &lt;safe&gt;</code>, EIP-55 only, like <code>--warden</code>.</li>
+<li>Test first: after the script, <code>pendingOwner</code> is the Safe and <code>owner</code> is
+still the deployer.</li>
+</ul>
+</li>
+<li><p><strong><code>warden/tools/safe-tx.mjs</code>: one owner action, as one Safe transaction.</strong></p>
+<ul>
+<li>Actions: <code>accept-ownership</code>, <code>set-warden</code>, <code>set-renderer</code>,
+<code>set-supply-cap</code>, <code>pause</code>, <code>unpause</code>.</li>
+<li>It reads the chain first:<ul>
+<li>the Safe&#39;s threshold, owners and nonce;</li>
+<li>the contract&#39;s <code>owner</code> and <code>pendingOwner</code>;</li>
+<li>an <code>eth_call</code> of the action FROM the Safe, so a call that would revert
+never reaches a device.</li>
+</ul>
+</li>
+<li>It writes a one-transaction Transaction Builder file to a directory
+outside the repository.</li>
+<li>It prints the Safe transaction hash (for the Trezor) and the domain and
+message hashes (for the Ledger). Each is computed locally AND read from
+the Safe&#39;s own <code>getTransactionHash</code>. If they differ, it refuses.</li>
+<li>Tests first: the EIP-712 encoding pinned to a vector, a refusal when the
+Safe is not the owner, a refusal on a reverting simulation, and a refusal
+on a hash mismatch.</li>
+</ul>
+</li>
+<li><p><strong>The scripts that signed as the owner go.</strong> <code>swap-renderer.sh</code> and DEPLOY.md
+section 9b call <code>safe-tx.mjs</code>. <code>SwapRenderer.s.sol</code> and
+<code>SetClockWarden.s.sol</code> are deleted (listed above).</p>
+</li>
+<li><p><strong>The fork rehearsal runs a REAL Safe.</strong> On the mainnet fork it:</p>
+<ul>
+<li>creates a 2-of-3 Safe from the canonical 1.5.0 factory, with three test
+keys;</li>
+<li>deploys with <code>--owner</code> that Safe;</li>
+<li>builds <code>accept-ownership</code> and <code>set-warden</code> with <code>safe-tx.mjs</code>;</li>
+<li>signs each with two test keys and executes it through <code>execTransaction</code>;</li>
+<li>checks <code>owner()</code> and <code>warden()</code> from the chain.</li>
+</ul>
+<p>This proves the tool&#39;s hash against Safe&#39;s real contracts, end to end.</p>
+</li>
+<li><p><strong>The runbook.</strong></p>
+<ul>
+<li>DEPLOY.md section 10 gains:<ul>
+<li>&quot;create the Safe&quot; (the operator, with each device);</li>
+<li><code>--owner</code>;</li>
+<li>the accept-ownership step, signed with the Ledger AND the Trezor (the
+Trezor&#39;s first real signature);</li>
+<li><code>TREASURY_ADDRESS</code> set to the Safe.</li>
+</ul>
+</li>
+<li>Section 9b is rewritten as a timed Safe procedure.</li>
+<li>Section 11 swaps the renderer through the Safe.</li>
+<li>DEPLOY.html is re-rendered.</li>
+</ul>
+</li>
+<li><p><strong>Gates:</strong> all four suites, the size gate, the fork rehearsal at 0 FAILs,
+the publish guard. Commit on <code>plan-e</code>.</p>
+</li>
+</ol>
+<h2>Phase 2 -- the Sepolia rehearsal with the real devices</h2>
+<ol start="7">
+<li><p><strong>[OPERATOR] Create a 2-of-3 Safe on Base Sepolia</strong> at app.safe.global,
+following the steps Claude gives one at a time. The owners are the Ledger,
+the spare, and the Trezor&#39;s address (added by address, since the website
+cannot connect a Trezor on Sepolia). Threshold 2. No modules, no recovery,
+no spending limits: each is a second way into the Safe.</p>
+</li>
+<li><p><strong>Hand the live Sepolia token to the Safe.</strong></p>
+<ul>
+<li>Claude sends <code>transferOwnership(safe)</code> from the deployer key (testnet
+gas).</li>
+<li>The operator imports the <code>accept-ownership</code> file, checks the hash on the
+Ledger against the one the tool printed, and signs with the Ledger and
+the spare.</li>
+<li>Claude confirms <code>owner()</code> from the chain.</li>
+</ul>
+</li>
+<li><p><strong>The emergency drill, timed.</strong> The same path as a Clock-key rotation, using
+a harmless call: <code>set-supply-cap</code> to its current value. It runs from
+&quot;Claude prints the file&quot; to &quot;mined&quot;, and the time is written into section
+9b.</p>
+</li>
+</ol>
+<h2>Phase 3 -- the Clock under its own user</h2>
+<ol start="10">
+<li><p><strong>[OPERATOR, one sudo command] Create the user and prove the shared database
+first.</strong> A script Claude writes:</p>
+<ul>
+<li>creates the group <code>mro</code> and the system user <code>mro-clock</code>;</li>
+<li>adds the main user to <code>mro</code>;</li>
+<li>makes <code>/var/lib/mro</code> (setgid, group <code>mro</code>, mode 2770);</li>
+<li>then, as each user in turn, writes to one test SQLite database in WAL
+mode, including its <code>-wal</code> and <code>-shm</code> side files, and prints PASS or
+FAIL.</li>
+</ul>
+<p><strong>If it fails, stop and re-plan.</strong> Whether two users can share a WAL
+database is the one assumption here that has not been measured.</p>
+</li>
+<li><p><strong>The installer</strong> (<code>warden/deploy/install-clock-user.sh</code>, run with sudo,
+re-runnable after every Clock code change):</p>
+<ul>
+<li>copies the code to <code>/opt/mro-clock</code> (owned by root, so neither the main
+user nor the Clock can change it);</li>
+<li>copies a Node binary the Clock can run;</li>
+<li>moves the split seed, and <code>CLOCK_PRIVATE_KEY</code> out of <code>warden/.env</code>, into
+<code>/etc/mro-clock/clock.env</code> (mode 600, owned by <code>mro-clock</code>). Neither
+value is ever printed;</li>
+<li>makes the question bank readable by the group;</li>
+<li>installs system units with <code>User=mro-clock</code> and the current hardening.
+They are installed DISABLED.</li>
+</ul>
+</li>
+<li><p><strong>The cutover on the live Sepolia piece:</strong></p>
+<ul>
+<li>stop the Warden briefly;</li>
+<li>move <code>state.db</code> and its cursor and lock to <code>/var/lib/mro</code>;</li>
+<li>the operator updates <code>STATE_DB_PATH</code>;</li>
+<li>re-create the Warden;</li>
+<li>disable the old user timer and enable the system timer.</li>
+</ul>
+<p>Checks:</p>
+<ul>
+<li>the next 00:05 run succeeds;</li>
+<li><code>test -r</code> as the main user shows the Clock&#39;s file is NOT readable, which
+checks access without reading it;</li>
+<li>the operator removes the old <code>CLOCK_PRIVATE_KEY</code> line from <code>warden/.env</code>.</li>
+</ul>
+</li>
+<li><p><strong>Docs and memory:</strong></p>
+<ul>
+<li>DEPLOY.md gets the new layout and the sudo step for code updates;</li>
+<li>the Warden&#39;s and Clock&#39;s <code>.env.example</code> files are split;</li>
+<li>update the <code>warden-deployed</code> and <code>clock-timer-installed</code> memories.</li>
+</ul>
+</li>
+</ol>
+<h2>Phase 4 -- review and merge</h2>
+<ol start="14">
+<li>A fresh reviewer goes over the branch, and its findings are fixed. All four
+suites pass, then the commits. Merge to <code>main</code> and push only with the
+operator&#39;s approval.</li>
+</ol>
+<p>Phases 1, 2 and 3 each end with a summary and a check-in, because each can
+change the next: Phase 2 tests Phase 1&#39;s tool on real devices, and Phase 3
+starts with a test that can stop it.</p>
+</body>
+</html>
