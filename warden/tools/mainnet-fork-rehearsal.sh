@@ -140,7 +140,7 @@ SALT="$(date +%s)"
 SAFE="$(cast call "$SAFE_FACTORY" 'createProxyWithNonce(address,bytes,uint256)(address)' "$SAFE_L2" "$SETUP" "$SALT" \
   --from "$(acct 0)" --rpc-url "$FORK" 2>>"$WORK/safe.log")"
 cast send "$SAFE_FACTORY" 'createProxyWithNonce(address,bytes,uint256)' "$SAFE_L2" "$SETUP" "$SALT" \
-  --private-key "$(testkey 0)" --rpc-url "$FORK" > "$WORK/safe.log" 2>&1
+  --private-key "$(testkey 0)" --rpc-url "$FORK" >> "$WORK/safe.log" 2>&1
 if [ -n "$SAFE" ] && [ "$(cast call "$SAFE" 'getThreshold()(uint256)' --rpc-url "$FORK" 2>/dev/null)" = "2" ]; then
   ok "Safe $SAFE: version $(cast call "$SAFE" 'VERSION()(string)' --rpc-url "$FORK"), 2 of 3"
 else

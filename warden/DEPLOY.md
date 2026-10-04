@@ -399,7 +399,9 @@ hand.
     #    and on each device compare the hash with the one the tool printed:
     #    a Trezor shows the safeTxHash, a Ledger the domain and message
     #    hashes. A different hash means a different transaction -- stop.
-    #    Then execute.
+    #    Then execute. If the website proposes a higher nonce than the tool
+    #    printed, a transaction is already queued: reject or execute it first,
+    #    or set the nonce to the printed one in the advanced parameters.
 
     # 4. Confirm the chain agrees, from the chain and not from a log.
     cast call <contract> "warden()(address)" --rpc-url <rpc>
@@ -574,7 +576,7 @@ handling of the real owner key.
    cast call <the Safe> "VERSION()(string)"       --rpc-url https://mainnet.base.org   # 1.5.0
    ```
 
-2b. **Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].** First the
+3. **Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].** First the
    simulation, then the send:
 
    ```
@@ -584,9 +586,9 @@ handling of the real owner key.
    ```
 
    The broadcast's last call offers ownership to the Safe. The deploying key
-   stays owner until step 2c.
+   stays owner until step 4.
 
-2c. **The Safe accepts ownership -- [OPERATOR, two signers].** Sign it with the
+4. **The Safe accepts ownership -- [OPERATOR, two signers].** Sign it with the
    Ledger AND the Trezor: this is the Trezor's first real signature, and the
    one that proves it works with the Safe on Base.
 
@@ -605,7 +607,7 @@ handling of the real owner key.
    ABI pin, and prints the renderer and token. Rehearsed on the fork with
    `--fork`; the real run differs only in the RPC and the key.
 
-3. **Verify the source on both explorers, then read it back, against mainnet:**
+5. **Verify the source on both explorers, then read it back, against mainnet:**
 
    ```
    bash script/verify-plan7.sh <renderer> <token> <the mainnet Clock's address> 8453
@@ -614,7 +616,7 @@ handling of the real owner key.
    node tools/read-ladder.mjs <token> https://mainnet.base.org
    ```
 
-4. **Adopt it, which also records the deploy block:**
+6. **Adopt it, which also records the deploy block:**
 
    ```
    bash contracts/script/adopt-deployment.sh --chain 8453 <renderer> <token> <deploy-block>
@@ -626,7 +628,7 @@ handling of the real owner key.
    alternative was doing every write and then failing on the last step, every
    night, with the mirror never learning about a `rest`, a transfer or a rebind.
 
-5. **Change the settings together, rehearse the start, then restart.** The
+7. **Change the settings together, rehearse the start, then restart.** The
    operator sets the rows in the table above in the Warden's settings file (and
    the Clock's key) via WinSCP. Then, before PM2 sees them:
 
@@ -642,7 +644,7 @@ handling of the real owner key.
    proven on the fork). Bitmaps need nothing: they are solved at mint from
    `MRO_DOMAIN`.
 
-6. **Mint token #1 and start the seed agent -- [OPERATOR GATE, real funds].**
+8. **Mint token #1 and start the seed agent -- [OPERATOR GATE, real funds].**
    This is C4.5, and it is the last step because it is the one that cannot be
    undone: token #1 is minted once, and the first 72 hours happen once.
 

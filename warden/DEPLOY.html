@@ -406,7 +406,9 @@ node tools/safe-tx.mjs set-warden &lt;the new address&gt; \
 #    and on each device compare the hash with the one the tool printed:
 #    a Trezor shows the safeTxHash, a Ledger the domain and message
 #    hashes. A different hash means a different transaction -- stop.
-#    Then execute.
+#    Then execute. If the website proposes a higher nonce than the tool
+#    printed, a transaction is already queued: reject or execute it first,
+#    or set the nonce to the printed one in the advanced parameters.
 
 # 4. Confirm the chain agrees, from the chain and not from a log.
 cast call &lt;contract&gt; &quot;warden()(address)&quot; --rpc-url &lt;rpc&gt;
@@ -619,30 +621,30 @@ cast call &lt;the Safe&gt; &quot;getOwners()(address[])&quot;  --rpc-url https:/
 cast call &lt;the Safe&gt; &quot;VERSION()(string)&quot;       --rpc-url https://mainnet.base.org   # 1.5.0
 </code></pre>
 </li>
-</ol>
-<p>2b. <strong>Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].</strong> First the
-   simulation, then the send:</p>
+<li><p><strong>Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].</strong> First the
+simulation, then the send:</p>
 <pre><code>cd ~/projects/machine-readable-only/contracts
 bash script/deploy-mainnet.sh --warden &lt;the mainnet Clock&#39;s address&gt; --owner &lt;the Safe&gt;
 bash script/deploy-mainnet.sh --warden &lt;the mainnet Clock&#39;s address&gt; --owner &lt;the Safe&gt; --broadcast
 </code></pre>
-<p>   The broadcast&#39;s last call offers ownership to the Safe. The deploying key
-   stays owner until step 2c.</p>
-<p>2c. <strong>The Safe accepts ownership -- [OPERATOR, two signers].</strong> Sign it with the
-   Ledger AND the Trezor: this is the Trezor&#39;s first real signature, and the
-   one that proves it works with the Safe on Base.</p>
+<p>The broadcast&#39;s last call offers ownership to the Safe. The deploying key
+stays owner until step 4.</p>
+</li>
+<li><p><strong>The Safe accepts ownership -- [OPERATOR, two signers].</strong> Sign it with the
+Ledger AND the Trezor: this is the Trezor&#39;s first real signature, and the
+one that proves it works with the Safe on Base.</p>
 <pre><code>cd ~/projects/machine-readable-only/warden
 node tools/safe-tx.mjs accept-ownership --contract &lt;token&gt; --safe &lt;the Safe&gt; --rpc https://mainnet.base.org
 </code></pre>
-<p>   Import the file it names in the Transaction Builder, compare the hashes on
-   each device, sign, execute. Then <code>cast call &lt;token&gt; &quot;owner()(address)&quot;</code>
-   must print the Safe. Until it does, the deploying key is still the owner.</p>
-<p>   It states chain 8453, refuses any <code>--warden</code> or <code>--owner</code> that is not
-   EIP-55 and an owner with no code, signs with <code>MAINNET_DEPLOYER_KEY</code>
-   (<code>MroScript</code> refuses the throwaway spike key), gates on <code>test/ContractSize.t.sol</code> and the
-   ABI pin, and prints the renderer and token. Rehearsed on the fork with
-   <code>--fork</code>; the real run differs only in the RPC and the key.</p>
-<ol start="3">
+<p>Import the file it names in the Transaction Builder, compare the hashes on
+each device, sign, execute. Then <code>cast call &lt;token&gt; &quot;owner()(address)&quot;</code>
+must print the Safe. Until it does, the deploying key is still the owner.</p>
+<p>It states chain 8453, refuses any <code>--warden</code> or <code>--owner</code> that is not
+EIP-55 and an owner with no code, signs with <code>MAINNET_DEPLOYER_KEY</code>
+(<code>MroScript</code> refuses the throwaway spike key), gates on <code>test/ContractSize.t.sol</code> and the
+ABI pin, and prints the renderer and token. Rehearsed on the fork with
+<code>--fork</code>; the real run differs only in the RPC and the key.</p>
+</li>
 <li><p><strong>Verify the source on both explorers, then read it back, against mainnet:</strong></p>
 <pre><code>bash script/verify-plan7.sh &lt;renderer&gt; &lt;token&gt; &lt;the mainnet Clock&#39;s address&gt; 8453
 cd ../warden

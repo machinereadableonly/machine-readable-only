@@ -5,13 +5,18 @@ import assert from "node:assert/strict";
 import { encodeFunctionData, getAddress, hashTypedData, keccak256, toHex } from "viem";
 
 import {
-  DOMAIN_TYPEHASH, SAFE_TX_TYPEHASH, safeTxHashes, encodeAction, batchFile, prepare,
+  DOMAIN_TYPEHASH, SAFE_TX_TYPEHASH, safeTxHashes, encodeAction, batchFile, prepare, txBuilderChecksum,
 } from "../tools/safe-tx-lib.mjs";
 import { MRO_ABI } from "../src/clock/abi.mjs";
 
 const SAFE = getAddress("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 const TOKEN = "0x1d72FD207e66F7449b2f9Bbfb80F62c2191F64F9";
 const CLOCK = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+const SIGNERS = [
+  "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+  "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+  "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+];
 
 test("the type hashes are Safe's own type strings", () => {
   assert.equal(DOMAIN_TYPEHASH, keccak256(toHex("EIP712Domain(uint256 chainId,address verifyingContract)")));
@@ -73,16 +78,55 @@ test("the batch file holds one raw call, every number a string", () => {
   assert.equal(typeof f.createdAt, "number");
 });
 
+// The vector from the Transaction Builder's own checksum.test.js.
+test("the checksum is the Transaction Builder's own", () => {
+  const upstream = {
+    version: "1.0", chainId: "4", createdAt: 1646321521061,
+    meta: {
+      name: "test batch file", txBuilderVersion: "1.4.0", checksum: "",
+      createdFromSafeAddress: "0xDF8a1Ce35c9a6ACE153B4e0767942f1E2291a1Aa",
+      createdFromOwnerAddress: "0x49d4450977E2c95362C13D3a31a09311E0Ea26A6",
+    },
+    transactions: [
+      {
+        to: "0x49d4450977E2c95362C13D3a31a09311E0Ea26A6", value: "0",
+        contractMethod: { inputs: [{ internalType: "address", name: "paramAddress", type: "address" }], name: "testAddress", payable: false },
+        contractInputsValues: { paramAddress: "0x49d4450977E2c95362C13D3a31a09311E0Ea26A6" },
+      },
+      {
+        to: "0x49d4450977E2c95362C13D3a31a09311E0Ea26A6", value: "0",
+        contractMethod: { inputs: [{ internalType: "bool", name: "paramBool", type: "bool" }], name: "testBool", payable: false },
+        contractInputsValues: { paramAddress: "", paramBool: "false" },
+      },
+      {
+        to: "0x49d4450977E2c95362C13D3a31a09311E0Ea26A6", value: "2000000000000000000",
+        data: "0x42f4579000000000000000000000000049d4450977e2c95362c13d3a31a09311e0ea26a6",
+      },
+    ],
+  };
+  assert.equal(txBuilderChecksum(upstream), "0x4ecbfd364aa6759983915644e73f8bd411e85a2dc306f252a387c2728c4db64c");
+});
+
+// What validateChecksum does on import: drop the checksum, recompute, compare.
+test("a written file passes the Transaction Builder's import check", () => {
+  const f = JSON.parse(JSON.stringify(batchFile({ chainId: 8453, safe: SAFE, to: TOKEN, data: encodeAction("pause", []), name: "pause" })));
+  const { checksum, ...meta } = f.meta;
+  assert.match(checksum, /^0x[0-9a-f]{64}$/);
+  assert.equal(txBuilderChecksum({ ...f, meta }), checksum);
+  assert.notEqual(txBuilderChecksum({ ...f, meta, transactions: [{ ...f.transactions[0], to: CLOCK }] }), checksum);
+});
+
 /// A chain as the tool reads it, with the Safe as owner and a 2-of-3 threshold.
 function chain(over = {}) {
   const state = {
     chainId: 8453, owner: SAFE, pendingOwner: "0x0000000000000000000000000000000000000000",
-    threshold: 2n, owners: [CLOCK, TOKEN, SAFE], nonce: 3n, simulate: "ok", version: "1.5.0", ...over,
+    threshold: 2n, owners: SIGNERS, warden: CLOCK, nonce: 3n, simulate: "ok", version: "1.5.0", ...over,
   };
   return {
     async chainId() { return state.chainId; },
     async version() { if (state.version === null) throw new Error("reverted"); return state.version; },
     async owner() { return state.owner; },
+    async warden() { return state.warden; },
     async pendingOwner() { return state.pendingOwner; },
     async threshold() { return state.threshold; },
     async owners() { return state.owners; },
@@ -95,8 +139,9 @@ function chain(over = {}) {
 }
 
 test("a prepared transaction carries the file and all three hashes", async () => {
-  const r = await prepare({ reader: chain(), action: "set-warden", args: [CLOCK], contract: TOKEN, safe: SAFE });
-  const want = safeTxHashes({ chainId: 8453, safe: SAFE, to: TOKEN, data: encodeAction("set-warden", [CLOCK]), nonce: 3n });
+  const NEXT = "0x976EA74026E726554dB657fA54763abd0C3a0aa9";
+  const r = await prepare({ reader: chain(), action: "set-warden", args: [NEXT], contract: TOKEN, safe: SAFE });
+  const want = safeTxHashes({ chainId: 8453, safe: SAFE, to: TOKEN, data: encodeAction("set-warden", [NEXT]), nonce: 3n });
   assert.deepEqual(r.hashes, want);
   assert.equal(r.nonce, 3n);
   assert.equal(r.file.transactions.length, 1);
@@ -158,4 +203,24 @@ test("an address that is not a Safe is named as such", async () => {
     prepare({ reader: chain({ version: null }), action: "pause", args: [], contract: TOKEN, safe: SAFE }),
     /is not a Safe/,
   );
+});
+
+test("the Clock key must never be one of the Safe's signers", async () => {
+  await assert.rejects(
+    prepare({ reader: chain({ owners: [SIGNERS[0], SIGNERS[1], CLOCK] }), action: "pause", args: [], contract: TOKEN, safe: SAFE }),
+    /is one of the Safe's signers/,
+  );
+  for (const next of [SAFE, SIGNERS[2]]) {
+    await assert.rejects(
+      prepare({ reader: chain(), action: "set-warden", args: [next], contract: TOKEN, safe: SAFE }),
+      /the Clock key must be separate/,
+    );
+  }
+});
+
+test("the remaining owner actions prepare on the same path", async () => {
+  for (const [action, args] of [["set-renderer", [CLOCK]], ["set-supply-cap", ["500"]], ["unpause", []]]) {
+    const r = await prepare({ reader: chain(), action, args, contract: TOKEN, safe: SAFE });
+    assert.equal(r.file.transactions[0].data, encodeAction(action, args));
+  }
 });

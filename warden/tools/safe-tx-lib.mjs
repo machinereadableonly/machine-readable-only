@@ -47,8 +47,8 @@ export function encodeAction(action, args) {
 
 /**
  * The three hashes a signer can be shown for a plain CALL from the Safe with
- * no value and no gas refund: a Trezor shows `safeTxHash`, a Ledger shows
- * `domainHash` and `messageHash`.
+ * no value and no gas refund: a Trezor shows `safeTxHash`; a Ledger that
+ * blind-signs shows `domainHash` and `messageHash`.
  */
 export function safeTxHashes({ chainId, safe, to, data, nonce }) {
   const domainHash = keccak256(encodeAbiParameters(
@@ -67,16 +67,35 @@ export function safeTxHashes({ chainId, safe, to, data, nonce }) {
   return { domainHash, messageHash, safeTxHash };
 }
 
+// The Transaction Builder's own serialisation (tx-builder src/lib/checksum.ts):
+// sorted keys, then each value, undefined as null.
+function serialize(json) {
+  if (Array.isArray(json)) return `[${json.map(serialize).join(",")}]`;
+  if (typeof json === "object" && json !== null) {
+    const keys = Object.keys(json).sort();
+    return `{${JSON.stringify(keys)}${keys.map((k) => `${serialize(json[k])},`).join("")}}`;
+  }
+  return JSON.stringify(json === undefined ? null : json);
+}
+
+/// The Transaction Builder's `calculateChecksum`. Without a matching checksum
+/// it warns on import that the file was modified.
+export function txBuilderChecksum(file) {
+  return keccak256(toHex(serialize({ ...file, meta: { ...file.meta, name: null } })));
+}
+
 /// A Transaction Builder file with ONE call: two or more would be wrapped in a
 /// MultiSend delegatecall, and the hash above would describe nothing.
 export function batchFile({ chainId, safe, to, data, name }) {
-  return {
+  const file = {
     version: "1.0",
     chainId: String(chainId),
     createdAt: Date.now(),
     meta: { name, description: `Machine Readable Only: ${name}`, createdFromSafeAddress: safe },
     transactions: [{ to, value: "0", data }],
   };
+  file.meta.checksum = txBuilderChecksum(file);
+  return file;
 }
 
 /**
@@ -98,6 +117,15 @@ export async function prepare({ reader, action, args, contract, safe }) {
 
   const threshold = await reader.threshold();
   if (threshold < 2n) throw new Error(`the Safe has threshold ${threshold}: one signer could act alone`);
+  const owners = (await reader.owners()).map((a) => getAddress(a));
+  const warden = getAddress(await reader.warden());
+  if (owners.includes(warden)) throw new Error(`the Clock key ${warden} is one of the Safe's signers`);
+  if (action === "set-warden") {
+    const next = getAddress(args[0]);
+    if (next === getAddress(safe) || owners.includes(next)) {
+      throw new Error(`${next} is the Safe or one of its signers; the Clock key must be separate`);
+    }
+  }
 
   if (action === "accept-ownership") {
     const pending = await reader.pendingOwner();
@@ -120,7 +148,7 @@ export async function prepare({ reader, action, args, contract, safe }) {
     throw new Error(`the local hash ${hashes.safeTxHash} does not match the Safe's own ${onChain}`);
   }
   return {
-    chainId, version, nonce, threshold, owners: await reader.owners(), hashes,
+    chainId, version, nonce, threshold, owners, hashes,
     file: batchFile({ chainId, safe, to: contract, data, name: [action, ...args].join(" ") }),
   };
 }

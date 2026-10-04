@@ -54,7 +54,7 @@ echo "owner    $SAFE"
 echo "mode     ${BROADCAST:-simulate}"
 echo
 
-OUT="$(forge script script/DeployRenderer.s.sol:DeployRenderer --rpc-url "$RPC" $BROADCAST -vvv)"
+OUT="$(forge script script/DeployRenderer.s.sol:DeployRenderer --sig "run(address)" "$TOKEN" --rpc-url "$RPC" $BROADCAST -vvv)"
 echo "$OUT"
 if [ -z "$BROADCAST" ]; then
   exit 0

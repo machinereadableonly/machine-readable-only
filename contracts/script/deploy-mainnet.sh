@@ -123,6 +123,22 @@ if [ "$(cast code "$OWNER" --rpc-url "$RPC")" = "0x" ]; then
   echo "FAIL: --owner $OWNER has no code on chain $ACTUAL. Create the Safe first (DEPLOY.md section 10)." >&2
   exit 1
 fi
+# Any contract has code; only the Safe can ever accept. safe-tx.mjs makes the same checks.
+SAFE_VERSION="$(cast call "$OWNER" "VERSION()(string)" --rpc-url "$RPC" 2>/dev/null || true)"
+case "$SAFE_VERSION" in
+  '"1.4.1"' | '"1.5.0"') ;;
+  *) echo "FAIL: --owner $OWNER does not answer VERSION() as a Safe 1.4.1 or 1.5.0 (got '${SAFE_VERSION:-nothing}')." >&2; exit 1 ;;
+esac
+SAFE_THRESHOLD="$(cast call "$OWNER" "getThreshold()(uint256)" --rpc-url "$RPC")"
+if [ "$SAFE_THRESHOLD" -lt 2 ]; then
+  echo "FAIL: the Safe $OWNER has threshold $SAFE_THRESHOLD: one signer could act alone." >&2
+  exit 1
+fi
+SAFE_OWNERS="$(cast call "$OWNER" "getOwners()(address[])" --rpc-url "$RPC")"
+if printf '%s' "$SAFE_OWNERS" | tr 'A-F' 'a-f' | /bin/grep -qi "$(printf '%s' "$WARDEN" | tr 'A-F' 'a-f')"; then
+  echo "FAIL: the Clock key $WARDEN is one of the Safe's signers." >&2
+  exit 1
+fi
 
 # DEPLOYABLE, NOT MERELY COMPILING (Hard Rule 7). `--sizes` PRINTS the runtime
 # sizes -- forge's own help says only that, so it is not relied on as a gate.
@@ -169,7 +185,7 @@ echo
 echo "mode     $MODE"
 echo "chain    $ACTUAL  (expected $EXPECTED_CHAIN_ID)"
 echo "warden   $WARDEN_ADDRESS"
-echo "owner    $OWNER  (pending until the Safe accepts)"
+echo "owner    $OWNER  (Safe $SAFE_VERSION, $SAFE_THRESHOLD of $(printf '%s' "$SAFE_OWNERS" | tr ',' '\n' | wc -l); pending until it accepts)"
 echo "anchor   $SPLIT_ANCHOR"
 echo "send     ${BROADCAST:-no -- simulate only}"
 echo
@@ -186,5 +202,6 @@ echo "  1. bash script/verify-plan7.sh <renderer> <token> $WARDEN 8453"
 echo "  2. cd ../warden && node tools/check-deployed-abi.mjs <token> $RPC"
 echo "  3. cd ../warden && node tools/read-ladder.mjs <token> $RPC"
 echo "  4. bash contracts/script/adopt-deployment.sh --chain 8453 <renderer> <token> <deploy-block>"
-echo "  5. the Safe accepts ownership: node tools/safe-tx.mjs accept-ownership (DEPLOY.md section 10)"
+echo "  5. the Safe accepts ownership (DEPLOY.md section 10):"
+echo "     cd ../warden && node tools/safe-tx.mjs accept-ownership --contract <token> --safe $OWNER --rpc $RPC"
 echo "  6. warden/DEPLOY.md section 10, in order."

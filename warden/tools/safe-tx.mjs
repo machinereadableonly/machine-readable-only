@@ -60,6 +60,7 @@ function liveReader({ rpc, contract, safe }) {
     owners: () => onSafe("getOwners"),
     nonce: () => onSafe("nonce"),
     owner: () => onToken("owner"),
+    warden: () => onToken("warden"),
     pendingOwner: () => onToken("pendingOwner"),
     simulate: ({ to, data }) => client.call({ account: safe, to, data }),
     safeHash: ({ to, data, nonce }) => onSafe("getTransactionHash", [to, 0n, data, 0, 0n, 0n, 0n, ZERO, ZERO, nonce]),
@@ -87,7 +88,9 @@ async function main() {
   console.log(`  Ledger     domain hash  ${r.hashes.domainHash}`);
   console.log(`             message hash ${r.hashes.messageHash}`);
   console.log("");
-  console.log(`If the Safe website shows a nonce other than ${r.nonce}, stop: these hashes are for nonce ${r.nonce}.`);
+  console.log(`The hashes are for nonce ${r.nonce}, the Safe's next on chain. If the website proposes a`);
+  console.log(`higher one, something is queued: reject or execute it first, or set the nonce to ${r.nonce}`);
+  console.log("under the transaction's advanced parameters before signing.");
 }
 
 main().catch((err) => {
