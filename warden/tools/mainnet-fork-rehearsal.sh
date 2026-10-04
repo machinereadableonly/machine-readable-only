@@ -29,6 +29,9 @@
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# The checkout whose Warden settings and database step 5 boots against. A
+# worktree has neither, so it can point at the main checkout.
+REHEARSE_REPO="${REHEARSE_REPO:-$REPO}"
 export PATH="$HOME/.foundry/bin:$PATH"
 # shellcheck source=/dev/null
 . "$HOME/.nvm/nvm.sh" >/dev/null
@@ -100,15 +103,13 @@ fi
 DEPLOYER="$(acct 0)"; WARDEN="$(acct 1)"; TREASURY="$(acct 2)"
 note "deployer $DEPLOYER, warden (Clock) $WARDEN, treasury stand-in $TREASURY"
 
-# TWO RECIPIENTS, ON PURPOSE (found 2026-09-15). anvil's test accounts carry an
-# EIP-7702 delegation on REAL Base mainnet -- their keys are public, so somebody
-# attached code to them -- and a fork inherits it. `mint` ends in `_safeMint`,
-# which calls onERC721Received on any recipient with code, and that code
-# refuses. So:
-#   HOLDER    a fresh address with no code: the mint that must land.
-#   DELEGATED anvil account 3, delegated on mainnet: the mint that must NOT,
-#             which is exactly what an agent paying to a wallet that cannot
-#             receive an ERC-721 would meet on mainnet.
+# TWO RECIPIENTS, ON PURPOSE. anvil's test accounts carry an EIP-7702
+# delegation on REAL Base mainnet -- their keys are public, so somebody attached
+# code to them -- and a fork inherits it. `mint` uses `_mint`, which never calls
+# onERC721Received, so a paid mint to a wallet with code still lands:
+#   HOLDER    a fresh address with no code.
+#   DELEGATED anvil account 3, delegated on mainnet: what an agent paying from
+#             a smart or delegated wallet meets.
 # The fresh key is generated inside the substitution and never printed.
 HOLDER="$(cast wallet address --private-key "0x$(openssl rand -hex 32)")"
 DELEGATED="$(acct 3)"
@@ -119,7 +120,7 @@ else
 fi
 case "$(cast code "$DELEGATED" --rpc-url "$FORK")" in
   0xef0100*) ok "delegated recipient $DELEGATED carries an EIP-7702 delegation on the fork" ;;
-  *) note "anvil account 3 is no longer delegated on mainnet; the negative mint below is not a 7702 case" ;;
+  *) note "anvil account 3 is no longer delegated on mainnet; the second mint below is not a 7702 case" ;;
 esac
 
 # --- 2. deploy -----------------------------------------------------------------
@@ -183,7 +184,7 @@ SERVED="$(/bin/grep -c "$TOK" "$TREE/warden/public/llms.txt" || true)"
 # --- 5. the Warden, mainnet mode -------------------------------------------------
 step "5. boot the Warden in MAINNET mode against the fork (rehearse-start.sh, real settings, IPv4)"
 OVR="MRO_CHAIN_ID=8453 MRO_CONTRACT_ADDRESS=$TOK BASE_RPC_URL=$FORK X402_FACILITATOR_URL=$CDP_URL TREASURY_ADDRESS=$TREASURY"
-REHEARSE_OVERRIDE="$OVR" bash "$REPO/warden/tools/rehearse-start.sh" 25 > "$WORK/warden-boot.log" 2>&1
+REHEARSE_OVERRIDE="$OVR" bash "$REHEARSE_REPO/warden/tools/rehearse-start.sh" 25 > "$WORK/warden-boot.log" 2>&1
 BOOT=$?
 if [ "$BOOT" -eq 0 ] && /bin/grep -q "payment ready (eip155:8453" "$WORK/warden-boot.log"; then
   ok "the Warden booted on 8453: $(/bin/grep -o 'payment ready.*' "$WORK/warden-boot.log" | head -1)"
@@ -191,13 +192,16 @@ else
   bad "the Warden's mainnet boot (exit $BOOT) -- see $WORK/warden-boot.log"
 fi
 OVR_DEAD="MRO_CHAIN_ID=8453 MRO_CONTRACT_ADDRESS=$TOK BASE_RPC_URL=$FORK X402_FACILITATOR_URL=$CDP_URL TREASURY_ADDRESS=$PLACEHOLDER"
-REHEARSE_OVERRIDE="$OVR_DEAD" bash "$REPO/warden/tools/rehearse-start.sh" 15 > "$WORK/warden-placeholder.log" 2>&1
+REHEARSE_OVERRIDE="$OVR_DEAD" bash "$REHEARSE_REPO/warden/tools/rehearse-start.sh" 15 > "$WORK/warden-placeholder.log" 2>&1
 # The REASON is asserted, not just the exit: a boot that died for any other
 # cause would otherwise pass this line.
-if [ $? -ne 0 ] && /bin/grep -q "TREASURY_ADDRESS is a placeholder" "$WORK/warden-placeholder.log"; then
+DEAD=$?
+if [ "$DEAD" -ne 0 ] && /bin/grep -q "TREASURY_ADDRESS is a placeholder" "$WORK/warden-placeholder.log"; then
   ok "the placeholder treasury on 8453 is REFUSED at boot: $(/bin/grep -o -m1 'TREASURY_ADDRESS is a placeholder[^:]*' "$WORK/warden-placeholder.log")"
-else
+elif [ "$DEAD" -eq 0 ]; then
   bad "the Warden STARTED on 8453 with the 0x...dEaD placeholder treasury -- see $WORK/warden-placeholder.log"
+else
+  bad "the placeholder boot exited $DEAD for some other reason, so the refusal was not tested -- see $WORK/warden-placeholder.log"
 fi
 
 # --- 6. the Clock, mainnet mode ------------------------------------------------------
@@ -229,7 +233,7 @@ else
 fi
 if ( cd "$TREE/warden" && node tools/mainnet-fork-clock.mjs seed-mint --db "$MIRROR" --token 2 \
      --to "$DELEGATED" --day "$TODAY" --domain "$DOMAIN" ) > "$WORK/seed-mint2.log" 2>&1; then
-  ok "seeded a paid mint for token 2 to the DELEGATED recipient, expected never to land"
+  ok "seeded a paid mint for token 2 to the DELEGATED recipient"
 else
   bad "seeding the delegated mint -- see $WORK/seed-mint2.log"
 fi
@@ -251,10 +255,10 @@ clock "$TREE" "$WORK/clock-run1.log" MAX_GAS_GWEI=5
 RUN1=$?
 MINT_GAS="$(/bin/grep -oE "mint 1 ok, tx 0x[0-9a-f]+, gas [0-9]+" "$WORK/clock-run1.log" | /bin/grep -oE "[0-9]+$")"
 [ "$RUN1" -eq 0 ] && [ -n "$MINT_GAS" ] && ok "Clock run 1: token 1 minted on the fork ($MINT_GAS gas)" || bad "Clock run 1 (exit $RUN1) -- see $WORK/clock-run1.log"
-if /bin/grep -q "mint 2 failed" "$WORK/clock-run1.log"; then
-  ok "the PAID mint to a delegated wallet cannot land: $(/bin/grep -o 'mint 2 failed.*' "$WORK/clock-run1.log" | head -1)"
+if /bin/grep -q "mint 2 ok" "$WORK/clock-run1.log"; then
+  ok "the PAID mint to a delegated wallet lands: $(/bin/grep -o 'mint 2 ok.*' "$WORK/clock-run1.log" | head -1)"
 else
-  bad "the mint to the delegated recipient did not fail as expected -- see $WORK/clock-run1.log"
+  bad "the mint to the delegated recipient did not land -- see $WORK/clock-run1.log"
 fi
 /bin/grep -q "builder code none yet" "$WORK/clock-run1.log" && note "Builder Code still null: every mainnet write would go unattributed (DEPLOY.md section 10)"
 
@@ -271,8 +275,10 @@ MARK_GAS="$(/bin/grep -oE "applyMark 1 on 1 ok, tx 0x[0-9a-f]+, gas [0-9]+" "$WO
 [ -n "$CHECKIN_GAS" ] && ok "Clock run 2: the day-$((TODAY + 1)) check-in written ($CHECKIN_GAS gas)" || bad "no check-in written in run 2 -- see $WORK/clock-run2.log"
 [ -n "$MARK_GAS" ] && ok "Clock run 2: Hush applied ($MARK_GAS gas)" || bad "no Mark applied in run 2 -- see $WORK/clock-run2.log"
 [ "$RUN2" -eq 0 ] && ok "Clock run 2 exited 0" || bad "Clock run 2 exited $RUN2"
+# Both mints were closed by the mint pass in run 1; reconcile reads their
+# Minted events back and counts each as confirmed.
 RECON="$(/bin/grep -o 'reconciled .*' "$WORK/clock-run2.log" | tail -1)"
-echo "$RECON" | /bin/grep -q '"Minted":1' && ok "reconcile read the mint back from the fork: $RECON" || bad "reconcile did not see the mint: ${RECON:-no reconcile line}"
+echo "$RECON" | /bin/grep -q '"Minted":2' && ok "reconcile read both mints back from the fork: $RECON" || bad "reconcile did not see both mints: ${RECON:-no reconcile line}"
 
 # --- 7. what it costs on real mainnet today --------------------------------------
 step "7. cost at today's real Base mainnet gas price"
