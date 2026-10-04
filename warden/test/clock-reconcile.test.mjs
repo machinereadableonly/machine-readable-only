@@ -231,6 +231,18 @@ test("Minted moves both the mint row and the token row to written", () => {
   assert.equal(q.getToken(1).status, "written");
 });
 
+// The mint pass closes the row on its receipt, so reconcile usually reads the
+// event for a mint that is already written. That is the mint confirmed, not a
+// skip -- counting it as skipped made a clean night's log read as a miss.
+test("a Minted for a mint the mint pass already closed is counted, and changes nothing", () => {
+  const { db, q } = mirrorWithToken();
+  q.markMintWritten(1);
+  const applied = applyEvents(q, [ev("Minted", { id: 1n, keyId: keyIdToBytes32("k1") })]);
+  assert.equal(applied.Minted, 1);
+  assert.equal(applied.skipped, 0);
+  assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "written");
+});
+
 // AN ID IS NOT AN IDENTITY. The mint pass checks owner AND key before it
 // believes a `TokenExists`; this one believed the id alone, so a foreign token
 // at a reserved id -- a restored or second mirror -- closed a PAID row that had

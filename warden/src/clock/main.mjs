@@ -16,7 +16,7 @@ import { queries } from "../mirror/queries.mjs";
 import { makeWriter, chainFor } from "./write.mjs";
 import { runClock } from "./run.mjs";
 import { DEPLOY_BLOCK } from "./reconcile.mjs";
-import { readCursor, writeCursor, nextCursor, exitCodeFor } from "./cursor.mjs";
+import { readCursor, writeCursor, nextCursor, exitCodeFor, runFinishedLine } from "./cursor.mjs";
 import { lockOwner, takeLock, releaseLock } from "./lock.mjs";
 import { MRO_ABI } from "./abi.mjs";
 import { utcDay } from "../mcp/tools/checkin.mjs";
@@ -159,23 +159,7 @@ async function main() {
   const advanceTo = nextCursor(summary);
   if (advanceTo !== null) writeCursor(CURSOR, advanceTo, { chainId, contract });
 
-  console.log(
-    `clock: run finished in ${Date.now() - started}ms -- ` +
-      `${summary.minted.length} minted, ${summary.seeded.length} seeded, ` +
-      `${summary.revealedKeys} split keys revealed, ${summary.credited.length} credited, ` +
-      `${summary.healed.length} healed, ${summary.marks.length} marks, ` +
-      `${summary.dropped.length} dropped, ${summary.stuck.length} stuck, ` +
-      // Both seed counts are named in full, because a bare number next to
-      // "dropped" would read as the credit kind. A returned seed is a year
-      // handed back; a stuck one is a year still held.
-      `${summary.droppedSeeds.length} seeds returned, ${summary.stuckSeeds.length} seeds stuck, ` +
-      // Named in full for the same reason: "2 payments" beside a list of counts
-      // would read as two sales. These are payments whose outcome was unknown
-      // and now is not -- and any left unresolved fail the run.
-      `${summary.resolvedPaid.length} held payments found paid, ` +
-      `${summary.resolvedUnpaid.length} released, ${summary.deferredPayments.length} deferred, ` +
-      `${summary.unresolvedPayments.length} still unresolved`
-  );
+  console.log(runFinishedLine(summary, Date.now() - started));
   db.close();
 
   // What the run reports to systemd. The rule lives in exitCodeFor, which is

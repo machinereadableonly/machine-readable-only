@@ -259,7 +259,9 @@ export function applyEvents(q, events, { log = () => {} } = {}) {
           );
           break;
         }
-        if (q.markMintWrittenFromChain(tokenId)) applied.Minted += 1;
+        // Already written is the usual case: the mint pass closed it on its
+        // receipt, so this event confirms it. Only a row awaiting payment skips.
+        if (q.markMintWrittenFromChain(tokenId) || q.getMint(tokenId)?.status === "written") applied.Minted += 1;
         else applied.skipped += 1;
         break;
       }

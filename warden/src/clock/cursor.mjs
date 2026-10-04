@@ -175,5 +175,31 @@ export function exitCodeFor(summary) {
   // resolved, which is the point -- the defect this replaced was silent.
   if ((summary.unresolvedPayments?.length ?? 0) > 0) return 1;
   if (summary.sweepFailed) return 1;
+  if (summary.resolveFailed) return 1;
   return 0;
+}
+
+/** The one line a run ends with, naming any housekeeping step that failed. */
+export function runFinishedLine(summary, ms) {
+  const failed = [
+    summary.sweepFailed ? "expiry sweep FAILED" : null,
+    summary.resolveFailed ? "held-payment check FAILED" : null,
+  ].filter(Boolean);
+  return (
+    `clock: run finished in ${ms}ms -- ` +
+    `${summary.minted.length} minted, ${summary.seeded.length} seeded, ` +
+    `${summary.revealedKeys} split keys revealed, ${summary.credited.length} credited, ` +
+    `${summary.healed.length} healed, ${summary.marks.length} marks, ` +
+    `${summary.dropped.length} dropped, ${summary.stuck.length} stuck, ` +
+    // Both seed counts are named in full, because a bare number next to
+    // "dropped" would read as the credit kind. A returned seed is a year
+    // handed back; a stuck one is a year still held.
+    `${summary.droppedSeeds.length} seeds returned, ${summary.stuckSeeds.length} seeds stuck, ` +
+    // Named in full for the same reason: "2 payments" beside a list of counts
+    // would read as two sales.
+    `${summary.resolvedPaid.length} held payments found paid, ` +
+    `${summary.resolvedUnpaid.length} released, ${summary.deferredPayments.length} deferred, ` +
+    `${summary.unresolvedPayments.length} still unresolved` +
+    (failed.length ? ` -- ${failed.join(", ")}` : "")
+  );
 }

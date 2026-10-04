@@ -46,6 +46,12 @@ export const CHECKIN_CHUNK = 800;
 /// reads it guards (resting, transfers, rebinds) are one-way in the mirror.
 export const CONFIRMATIONS = 12;
 
+/// A failed step's text, never empty: exitCodeFor fails the run on a truthy
+/// value, so an error with no message must still leave one.
+function failureText(err) {
+  return safeErrorText(err) || "an error with no message";
+}
+
 /// How many runs a row may survive before a human is told. A row that fails
 /// three nights running is not going to fix itself.
 export const STALE_AFTER_RUNS = 3;
@@ -272,6 +278,8 @@ export async function runClock({
     /// Why the expiry sweep threw, or null. It fails the run at the END: a
     /// reservation past its window went unlooked-at, and only a human notices.
     sweepFailed: null,
+    /// Why the held-payment check threw, or null. Fails the run the same way.
+    resolveFailed: null,
   };
 
   // 0. MONEY WHOSE FATE IS UNKNOWN, BEFORE ANYTHING ELSE. It costs no gas, it
@@ -294,13 +302,22 @@ export async function runClock({
   try {
     sweep(q, "clock", alert);
   } catch (err) {
-    summary.sweepFailed = safeErrorText(err);
+    summary.sweepFailed = failureText(err);
     alert(
       `clock: the expiry sweep failed (${summary.sweepFailed}) -- any reservation past its payment window ` +
         "is unlooked-at tonight, and the rest of the run carries on"
     );
   }
-  Object.assign(summary, await resolveUnresolvedPayments({ q, publicClient, alert, log }));
+  // Guarded for the same reason: it reads and writes the shared database.
+  try {
+    Object.assign(summary, await resolveUnresolvedPayments({ q, publicClient, alert, log }));
+  } catch (err) {
+    summary.resolveFailed = failureText(err);
+    alert(
+      `clock: checking held payments failed (${summary.resolveFailed}) -- they stay held until a run ` +
+        "gets an answer, and the rest of the run carries on"
+    );
+  }
 
   // 1. THE GAS GUARD, BEFORE ANYTHING IS SENT. It stops every WRITE pass and
   //    not the run: skipping one write and making another would leave the

@@ -24,7 +24,7 @@ import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { resolveUnresolvedPayments, RELEASE_MARGIN_SECONDS } from "../src/clock/unresolved.mjs";
-import { exitCodeFor } from "../src/clock/cursor.mjs";
+import { exitCodeFor, runFinishedLine } from "../src/clock/cursor.mjs";
 import { runClock } from "../src/clock/run.mjs";
 import { DEPLOY_BLOCK } from "../src/clock/reconcile.mjs";
 import { splitArgs } from "./split-rig.mjs";
@@ -493,4 +493,59 @@ test("a sweep that throws is reported and the night's writes still go out", asyn
   assert.match(said.join(" "), /sweep/i, "the operator is told which step failed");
   assert.match(said.join(" "), /SQLITE_BUSY/, "and what it failed with");
   assert.equal(exitCodeFor(summary), 1, "and systemd is told the night was not clean");
+});
+
+// The resolve step reads and writes the same shared database, so it can throw
+// for the same reason the sweep can.
+test("a resolve step that throws is reported and the night's writes still go out", async () => {
+  const { db, q } = awaitingMint();
+  q.insertCredit(1, 20_700, "sig-yesterday");
+  const said = [];
+  const brokenResolve = {
+    ...q,
+    unresolvedPayments() {
+      throw new Error("SQLITE_BUSY: database is locked");
+    },
+  };
+
+  const summary = await nightlyRun(brokenResolve, chainWith({ logs: settlementLogs() }), {
+    alert: (m) => said.push(m),
+  });
+
+  assert.deepEqual(summary.credited.map((e) => e.day), [20_700], "the night's check-in goes out");
+  assert.equal(db.prepare("SELECT status FROM credits WHERE day = 20700").get().status, "written");
+  assert.ok(summary.reconciled, "and the mirror still learns what the chain did");
+  assert.match(said.join(" "), /held payments/i, "the operator is told which step failed");
+  assert.match(said.join(" "), /SQLITE_BUSY/, "and what it failed with");
+  assert.equal(exitCodeFor(summary), 1, "and systemd is told the night was not clean");
+});
+
+test("a housekeeping error with an empty message still fails the run", async () => {
+  const { q } = awaitingMint();
+  const silent = {
+    ...q,
+    sweepExpiredReservations() {
+      throw new Error("");
+    },
+    unresolvedPayments() {
+      throw new Error("");
+    },
+  };
+
+  const summary = await nightlyRun(silent, chainWith({ logs: settlementLogs() }));
+
+  assert.ok(summary.sweepFailed, "an empty message is still a failure");
+  assert.ok(summary.resolveFailed, "an empty message is still a failure");
+  assert.equal(exitCodeFor(summary), 1);
+});
+
+test("the run-finished line names a failed sweep or resolve step", () => {
+  const base = {
+    minted: [], seeded: [], revealedKeys: 0, credited: [], healed: [], marks: [], dropped: [], stuck: [],
+    droppedSeeds: [], stuckSeeds: [], resolvedPaid: [], resolvedUnpaid: [], deferredPayments: [],
+    unresolvedPayments: [], sweepFailed: null, resolveFailed: null,
+  };
+  assert.doesNotMatch(runFinishedLine(base, 5), /FAILED/);
+  assert.match(runFinishedLine({ ...base, sweepFailed: "locked" }, 5), /expiry sweep FAILED/);
+  assert.match(runFinishedLine({ ...base, resolveFailed: "locked" }, 5), /held-payment check FAILED/);
 });
