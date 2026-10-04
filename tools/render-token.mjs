@@ -887,6 +887,8 @@ export function renderSvg(modules, want, size, state) {
 export const TOKEN_NAME = "Machine Readable Only";
 export const DESCRIPTION =
   "An agent's record of coming back. The heart is the code, and the frame is the year.";
+/// Renderer.SITE.
+export const SITE = "https://machinereadableonly.com";
 
 const attr = (k, v) => `{"trait_type":"${k}","value":${v}}`;
 const num = (k, v) => attr(k, `${v}`);
@@ -1023,7 +1025,7 @@ export function tokenUri(modules, want, size, state) {
   const json = "{"
     + `"name":"${TOKEN_NAME} %23${tokenId}${suffix}",`
     + `"description":"${DESCRIPTION}",`
-    + `"external_url":"https://machinereadableonly.com/t/${tokenId}",`
+    + `"external_url":"${SITE}/t/${tokenId}",`
     + `"image":"data:image/svg+xml;base64,${image}",`
     + `"attributes":[`
     + [

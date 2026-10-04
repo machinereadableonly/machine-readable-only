@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { solve, payloadFor } from "../qart.mjs";
 import { heartTarget } from "../heart-target.mjs";
-import { canvasUnits, DIGIT_INK, tokenUri, answerBandCells, FIRST_SIDE } from "../render-token.mjs";
+import { readFileSync } from "node:fs";
+import { canvasUnits, DIGIT_INK, tokenUri, answerBandCells, FIRST_SIDE, SITE } from "../render-token.mjs";
 import { renderSvg, canvasFor, tierColour, lapsedColour, TIERS, NOISE_BY_TIER,
          rungOf, colourAt, noiseAt, staticAt, inks, BEAT_TO, ringBudget, ringsFor, ringSpan,
          HUSH_QUIET, VESSEL_GOLD, hasMark, ACHE, STATIC, HUSH, BEAT, VESSEL, BREAK, AURA,
@@ -749,4 +750,9 @@ test("the place is drawn on the top edge only", () => {
   const { cells, modules } = answerBandCells({ ordinal: 1, answers: [0n, 0n], level: 365 }, FINISHED, CODE.size);
   assert.ok(cells.size > 0);
   for (const c of cells) assert.ok(Math.floor(c / modules) < 3, `cell ${c} is off the top edge`);
+});
+
+test("SITE is the Renderer contract's SITE", () => {
+  const sol = readFileSync(new URL("../../contracts/src/render/Renderer.sol", import.meta.url), "utf8");
+  assert.equal(sol.match(/string internal constant SITE = "([^"]+)";/)?.[1], SITE);
 });
