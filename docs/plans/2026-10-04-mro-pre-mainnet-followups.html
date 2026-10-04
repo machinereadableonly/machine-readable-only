@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pre-mainnet follow-ups</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Pre-mainnet follow-ups</h1>
+<p><strong>Why:</strong> these are the leftovers from the Plan C, Plan A and accelerated-year
+reviews that touch the mainnet deploy or the nightly Clock. Clearing them now,
+while Night 2 waits, means Plan E (key custody) is the last thing between the
+code and the mainnet mint.</p>
+<p><strong>Scope:</strong> four items. Two of the six first listed are closed by inspection,
+with no code change:</p>
+<ul>
+<li><code>DeployPlan5.s.sol</code> &quot;re-run reverts FinisherRecordSet(11)&quot;: stale. Since A3
+the script deploys a NEW pair every run, so it never writes the ladder into a
+contract that already holds it. <code>forge script --resume</code> only sends the
+transactions that never landed.</li>
+<li>&quot;<code>rendererFrozen</code> costs its own slot&quot;: wrong. <code>forge inspect ... storageLayout</code>
+puts it in slot 27 at offset 30, packed beside <code>vouchersEnabled</code>. Solidity
+packs by declaration order, not by where in the file a variable sits.</li>
+</ul>
+<p><strong>Where the work happens:</strong> a worktree on a branch <code>followups</code>, NOT the main
+checkout. The Clock runs from the main checkout at 00:05 UTC, and Night 2 must
+prove the code A3 deployed, unchanged. The branch merges to <code>main</code> only after
+Night 2&#39;s <code>verify-border</code> passes. Cost: the merge waits until tomorrow.</p>
+<p><strong>Nothing here is irreversible.</strong> No contract source changes, so no bytecode
+moves and no redeploy. The fork rehearsal writes only to a local anvil copy
+that dies with the script. The push stops for the operator&#39;s approval.</p>
+<h2>Tasks</h2>
+<ol>
+<li><p><strong>Clock: a housekeeping failure cannot end or hide the night.</strong></p>
+<ul>
+<li><code>run.mjs</code>: wrap <code>resolveUnresolvedPayments</code> the way <code>sweep</code> already is.
+On a throw, record <code>summary.resolveFailed</code>, alert, and carry on to the
+gas guard and the writes.</li>
+<li><code>sweepFailed</code> (and the new <code>resolveFailed</code>) becomes a fixed sentence when
+the error text is empty, so <code>exitCodeFor</code> still returns 1.</li>
+<li><code>exitCodeFor</code> returns 1 on <code>resolveFailed</code>.</li>
+<li><code>main.mjs</code>: the run-finished line names a sweep or resolve failure.</li>
+<li>Tests first: a database whose <code>unresolvedPayments()</code> throws still runs the
+gas guard and the writes, and exits 1; an error with an empty message
+exits 1; the finished line carries the failure.</li>
+</ul>
+</li>
+<li><p><strong>Verification script covers both explorers and both chains.</strong></p>
+<ul>
+<li><code>verify-plan7.sh</code> takes the chain id (84532 or 8453, anything else
+refused) instead of hard-coding 84532, and after Basescan also verifies
+on Blockscout (<code>base-sepolia.blockscout.com</code> / <code>base.blockscout.com</code>,
+each URL confirmed live before use).</li>
+<li>Prove it by re-running it against the live Sepolia pair: both contracts
+already verified, so each explorer must answer &quot;already verified&quot;.</li>
+<li><code>deploy-mainnet.sh</code>&#39;s printed next steps name the new invocation.</li>
+</ul>
+</li>
+<li><p><strong>Run the mainnet fork rehearsal end to end.</strong>
+<code>~/scripts/safe-build.sh bash warden/tools/mainnet-fork-rehearsal.sh</code>,
+from the worktree once Tasks 1-2 are in. Every step must report ok. A FAIL
+is diagnosed and fixed in this plan, or reported if the fix is the
+operator&#39;s. Check <code>~/.foundry/anvil/tmp</code> is near zero afterwards.</p>
+</li>
+<li><p><strong>Year checker: a gas stop is a HOLD, not a FAIL.</strong></p>
+<ul>
+<li><code>warden/tools/year/checker.mjs</code>: when the Clock&#39;s latest run reported
+&quot;above the cap -- nothing written&quot;, a token whose chain state trails the
+mirror by unwritten queued credits is reported with severity <code>HOLD</code>, not
+<code>FAIL</code>. Any other mismatch still FAILs.</li>
+<li>Tests first in <code>year-checker.test.mjs</code>: gas-stopped lag is HOLD; the same
+lag with no gas stop is FAIL; a real mismatch during a gas stop is FAIL.</li>
+</ul>
+</li>
+<li><p><strong>Gates, review, commit.</strong> All four suites green, the prepublish guard
+clean, one fresh-context reviewer over the branch, findings fixed, then
+commits on <code>followups</code> (auto-commit rule).</p>
+</li>
+<li><p><strong>After Night 2 passes (tomorrow):</strong> fast-forward <code>main</code> to <code>followups</code>,
+then ask the operator to push. Update <code>deferred-review-items</code> memory.</p>
+</li>
+</ol>
+</body>
+</html>
