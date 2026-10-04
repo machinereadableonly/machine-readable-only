@@ -384,7 +384,9 @@ PUBLIC key directory, backfill every token&#39;s level and streak, and apply the
 free earned Marks to close the bought side of each pair forever. None of it can
 be undone; there is no burn, and neither level nor streak can be reduced.</p>
 <p><strong>Rotate first, investigate second.</strong> <code>setWarden</code> is one owner call and
-<code>onlyWarden</code> reads <code>warden</code> live, so the old key is revoked the moment it mines.</p>
+<code>onlyWarden</code> reads <code>warden</code> live, so the old key is revoked the moment it mines.
+The owner is a 2-of-3 Safe, so allow 10 to 20 minutes and have two signers to
+hand.</p>
 <pre><code># 1. Stop the Clock, so it cannot race the rotation with a run of its own.
 systemctl --user stop mro-clock.timer mro-clock.service
 
@@ -393,14 +395,18 @@ systemctl --user stop mro-clock.timer mro-clock.service
 #    configuration file first (WinSCP).
 bash ~/projects/machine-readable-only/scripts/make-clock-key.sh
 
-# 3. Point the contract at the new address. Signed by the OWNER key, not
-#    the Clock&#39;s -- on mainnet that is MAINNET_DEPLOYER_KEY. The contract
-#    and the new address are ARGUMENTS, not environment variables.
-cd ~/projects/machine-readable-only/contracts
-EXPECTED_CHAIN_ID=&lt;8453 or 84532&gt; \
-  forge script script/SetClockWarden.s.sol:SetClockWarden \
-  --sig &quot;run(address,address)&quot; &lt;contract&gt; &lt;the new address&gt; \
-  --rpc-url &lt;base or base_sepolia&gt; --broadcast
+# 3. Point the contract at the new address. The OWNER is the 2-of-3 Safe,
+#    so this prepares a Safe transaction; nothing is sent here.
+cd ~/projects/machine-readable-only/warden
+node tools/safe-tx.mjs set-warden &lt;the new address&gt; \
+  --contract &lt;contract&gt; --safe &lt;the Safe&gt; --rpc &lt;https://mainnet.base.org or https://sepolia.base.org&gt;
+
+#    At app.safe.global: Apps &gt; Transaction Builder &gt; drag in the file it
+#    names. Check the nonce matches. Sign with two of the three signers,
+#    and on each device compare the hash with the one the tool printed:
+#    a Trezor shows the safeTxHash, a Ledger the domain and message
+#    hashes. A different hash means a different transaction -- stop.
+#    Then execute.
 
 # 4. Confirm the chain agrees, from the chain and not from a log.
 cast call &lt;contract&gt; &quot;warden()(address)&quot; --rpc-url &lt;rpc&gt;
@@ -408,7 +414,8 @@ cast call &lt;contract&gt; &quot;warden()(address)&quot; --rpc-url &lt;rpc&gt;
 # 5. Fund the new address with gas, then start the timer again.
 systemctl --user start mro-clock.timer
 </code></pre>
-<p><strong>Then lower <code>supplyCap</code>.</strong> It is an owner call, needs no redeploy, and it is
+<p><strong>Then lower <code>supplyCap</code></strong> (<code>node tools/safe-tx.mjs set-supply-cap &lt;n&gt; ...</code>,
+signed the same way). It is an owner call, needs no redeploy, and it is
 the only thing that bounds the damage of the NEXT leak. A cap of 10,000 set on
 day one is 10,000 free mints sitting behind one key; set it near actual demand
 and raise it deliberately as the collection fills.</p>
@@ -504,7 +511,7 @@ handling of the real owner key.</p>
 <tr>
 <td><code>TREASURY_ADDRESS</code></td>
 <td>the configuration file</td>
-<td>a placeholder is REFUSED at startup off Sepolia; USDC sent to one is gone</td>
+<td>the 2-of-3 Safe&#39;s address. A placeholder is REFUSED at startup off Sepolia; USDC sent to one is gone</td>
 </tr>
 <tr>
 <td><code>X402_FACILITATOR_URL</code></td>
@@ -602,18 +609,40 @@ the IPv4 address, which is why <code>ecosystem.config.cjs</code> pins the Warden
 IPv4. The 2026-09-05 reading -- that the key itself was bad -- never varied
 the route, and was wrong.</p>
 </li>
-<li><p><strong>Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].</strong> First the
-simulation, then the send:</p>
-<pre><code>cd ~/projects/machine-readable-only/contracts
-bash script/deploy-mainnet.sh --warden &lt;the mainnet Clock&#39;s address&gt;
-bash script/deploy-mainnet.sh --warden &lt;the mainnet Clock&#39;s address&gt; --broadcast
+<li><p><strong>Create the owner Safe -- [OPERATOR ONLY, real funds: a little ETH].</strong> At
+app.safe.global, on Base: a new Safe with three signers (the Ledger, the
+Trezor, the Rabby spare) and a threshold of 2. Enable no modules, no
+recovery and no spending limits: each is a second way in. It is also the
+treasury. Check it from the chain, not the website:</p>
+<pre><code>cast call &lt;the Safe&gt; &quot;getThreshold()(uint256)&quot; --rpc-url https://mainnet.base.org   # 2
+cast call &lt;the Safe&gt; &quot;getOwners()(address[])&quot;  --rpc-url https://mainnet.base.org   # the three
+cast call &lt;the Safe&gt; &quot;VERSION()(string)&quot;       --rpc-url https://mainnet.base.org   # 1.5.0
 </code></pre>
-<p>It states chain 8453, refuses any <code>--warden</code> that is not EIP-55, signs with
-<code>MAINNET_DEPLOYER_KEY</code> (which becomes the permanent owner; <code>MroScript</code>
-refuses the throwaway spike key), gates on <code>test/ContractSize.t.sol</code> and the
-ABI pin, and prints the renderer and token. Rehearsed on the fork with
-<code>--fork</code>; the real run differs only in the RPC and the key.</p>
 </li>
+</ol>
+<p>2b. <strong>Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].</strong> First the
+   simulation, then the send:</p>
+<pre><code>cd ~/projects/machine-readable-only/contracts
+bash script/deploy-mainnet.sh --warden &lt;the mainnet Clock&#39;s address&gt; --owner &lt;the Safe&gt;
+bash script/deploy-mainnet.sh --warden &lt;the mainnet Clock&#39;s address&gt; --owner &lt;the Safe&gt; --broadcast
+</code></pre>
+<p>   The broadcast&#39;s last call offers ownership to the Safe. The deploying key
+   stays owner until step 2c.</p>
+<p>2c. <strong>The Safe accepts ownership -- [OPERATOR, two signers].</strong> Sign it with the
+   Ledger AND the Trezor: this is the Trezor&#39;s first real signature, and the
+   one that proves it works with the Safe on Base.</p>
+<pre><code>cd ~/projects/machine-readable-only/warden
+node tools/safe-tx.mjs accept-ownership --contract &lt;token&gt; --safe &lt;the Safe&gt; --rpc https://mainnet.base.org
+</code></pre>
+<p>   Import the file it names in the Transaction Builder, compare the hashes on
+   each device, sign, execute. Then <code>cast call &lt;token&gt; &quot;owner()(address)&quot;</code>
+   must print the Safe. Until it does, the deploying key is still the owner.</p>
+<p>   It states chain 8453, refuses any <code>--warden</code> or <code>--owner</code> that is not
+   EIP-55 and an owner with no code, signs with <code>MAINNET_DEPLOYER_KEY</code>
+   (<code>MroScript</code> refuses the throwaway spike key), gates on <code>test/ContractSize.t.sol</code> and the
+   ABI pin, and prints the renderer and token. Rehearsed on the fork with
+   <code>--fork</code>; the real run differs only in the RPC and the key.</p>
+<ol start="3">
 <li><p><strong>Verify the source on both explorers, then read it back, against mainnet:</strong></p>
 <pre><code>bash script/verify-plan7.sh &lt;renderer&gt; &lt;token&gt; &lt;the mainnet Clock&#39;s address&gt; 8453
 cd ../warden
