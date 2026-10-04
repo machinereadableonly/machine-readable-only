@@ -20,9 +20,10 @@
 # assembles its own temporary copy of that outside every tree, never printed.
 #
 # Keys are anvil's own PUBLIC test accounts, derived from anvil's public test
-# mnemonic: account 0 deploys (and so owns the fork's copy), account 1 is the
-# Clock (the contract's warden), account 2 stands in for the treasury and
-# account 3 receives the rehearsal's token. They hold fork money only.
+# mnemonic: account 0 deploys, account 1 is the Clock (the contract's warden),
+# account 2 stands in for the treasury, account 3 receives the rehearsal's
+# token, accounts 4-6 sign for a 2-of-3 Safe that becomes the owner, and
+# account 7 is the Clock key the Safe rotates to. They hold fork money only.
 #
 # Exits non-zero if any step FAILs. Every result is also in report.txt in the
 # work directory, which is kept (and named at the end) so the logs can be read.
@@ -123,15 +124,60 @@ case "$(cast code "$DELEGATED" --rpc-url "$FORK")" in
   *) note "anvil account 3 is no longer delegated on mainnet; the second mint below is not a 7702 case" ;;
 esac
 
+# --- 1b. the owner Safe ------------------------------------------------------
+# Safe's own 1.5.0 contracts, already on Base mainnet and so on the fork. The
+# addresses are from safe-global/safe-deployments; their code hashes were
+# checked against the chain when this step was written.
+step "1b. create a 2-of-3 Safe from Safe's own 1.5.0 factory"
+SAFE_FACTORY="0x14F2982D601c9458F93bd70B218933A6f8165e7b"
+SAFE_L2="0xEdd160fEBBD92E350D4D398fb636302fccd67C7e"
+SAFE_FALLBACK="0x3EfCBb83A4A7AfcB4F68D501E2c2203a38be77f4"
+ZERO_ADDR="0x0000000000000000000000000000000000000000"
+SIGNERS="$(acct 4),$(acct 5),$(acct 6)"
+SETUP="$(cast calldata 'setup(address[],uint256,address,bytes,address,address,uint256,address)' \
+  "[$SIGNERS]" 2 "$ZERO_ADDR" 0x "$SAFE_FALLBACK" "$ZERO_ADDR" 0 "$ZERO_ADDR")"
+SALT="$(date +%s)"
+SAFE="$(cast call "$SAFE_FACTORY" 'createProxyWithNonce(address,bytes,uint256)(address)' "$SAFE_L2" "$SETUP" "$SALT" \
+  --from "$(acct 0)" --rpc-url "$FORK" 2>>"$WORK/safe.log")"
+cast send "$SAFE_FACTORY" 'createProxyWithNonce(address,bytes,uint256)' "$SAFE_L2" "$SETUP" "$SALT" \
+  --private-key "$(testkey 0)" --rpc-url "$FORK" > "$WORK/safe.log" 2>&1
+if [ -n "$SAFE" ] && [ "$(cast call "$SAFE" 'getThreshold()(uint256)' --rpc-url "$FORK" 2>/dev/null)" = "2" ]; then
+  ok "Safe $SAFE: version $(cast call "$SAFE" 'VERSION()(string)' --rpc-url "$FORK"), 2 of 3"
+else
+  bad "the Safe was not created -- see $WORK/safe.log"; exit 1
+fi
+
+# Sign a Safe transaction file the way two owners would, then execute it.
+# Signatures go in ascending signer order, which is what the Safe checks.
+safe_exec() {
+  local label="$1" file="$2" hash="$3" data sigs
+  data="$(node -e 'console.log(require(process.argv[1]).transactions[0].data)' "$file")"
+  sigs="0x"
+  for i in $(for k in 4 5; do echo "$(lower "$(acct $k)") $k"; done | sort | cut -d' ' -f2); do
+    sigs="$sigs$(cast wallet sign --no-hash "$hash" --private-key "$(testkey "$i")" | sed 's/^0x//')"
+  done
+  cast send "$SAFE" 'execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)' \
+    "$TOK" 0 "$data" 0 0 0 0 "$ZERO_ADDR" "$ZERO_ADDR" "$sigs" \
+    --private-key "$(testkey 0)" --rpc-url "$FORK" > "$WORK/safe-$label.log" 2>&1
+}
+
+# Prepare one action with safe-tx.mjs; prints the file path and the safeTxHash.
+safe_prepare() {
+  local label="$1"; shift
+  ( cd "$TREE/warden" && MRO_SAFE_TX_OUT="$WORK/safe-tx" node tools/safe-tx.mjs "$@" \
+      --contract "$TOK" --safe "$SAFE" --rpc "$FORK" ) > "$WORK/safe-tx-$label.log" 2>&1 || return 1
+  echo "$(sed -n 's/^file *//p' "$WORK/safe-tx-$label.log") $(sed -n 's/^ *Trezor *safeTxHash *//p' "$WORK/safe-tx-$label.log")"
+}
+
 # --- 2. deploy -----------------------------------------------------------------
-step "2. deploy with contracts/script/deploy-mainnet.sh --fork"
+step "2. deploy with contracts/script/deploy-mainnet.sh --fork --owner <the Safe>"
 SPLIT_SEED_FILE="$WORK/split-seed"
 if ( cd "$TREE/warden" && node tools/split-seed.mjs new "$SPLIT_SEED_FILE" ) > "$WORK/split-seed.log" 2>&1; then
   ok "a throwaway split seed for the fork"
 else
   bad "split-seed.mjs new -- see $WORK/split-seed.log"; exit 1
 fi
-( cd "$TREE/contracts" && MRO_SPLIT_SEED_FILE="$SPLIT_SEED_FILE" bash script/deploy-mainnet.sh --warden "$WARDEN" --fork "$FORK" --broadcast ) \
+( cd "$TREE/contracts" && MRO_SPLIT_SEED_FILE="$SPLIT_SEED_FILE" bash script/deploy-mainnet.sh --warden "$WARDEN" --owner "$SAFE" --fork "$FORK" --broadcast ) \
   > "$WORK/deploy.log" 2>&1
 DEPLOY_EXIT=$?
 REN="$(/bin/grep -oE "renderer +0x[0-9a-fA-F]{40}" "$WORK/deploy.log" | tail -1 | /bin/grep -oE "0x[0-9a-fA-F]{40}")"
@@ -164,8 +210,21 @@ else
 fi
 OWNER="$(cast call "$TOK" 'owner()(address)' --rpc-url "$FORK")"
 ONCHAIN_WARDEN="$(cast call "$TOK" 'warden()(address)' --rpc-url "$FORK")"
-[ "$(lower "$OWNER")" = "$(lower "$DEPLOYER")" ] && ok "owner is the deploying key" || bad "owner is $OWNER, expected $DEPLOYER"
+PENDING="$(cast call "$TOK" 'pendingOwner()(address)' --rpc-url "$FORK")"
+[ "$(lower "$OWNER")" = "$(lower "$DEPLOYER")" ] && ok "owner is the deploying key until the Safe accepts" || bad "owner is $OWNER, expected $DEPLOYER"
+[ "$(lower "$PENDING")" = "$(lower "$SAFE")" ] && ok "pending owner is the Safe" || bad "pending owner is $PENDING, expected $SAFE"
 [ "$(lower "$ONCHAIN_WARDEN")" = "$(lower "$WARDEN")" ] && ok "warden is the Clock key given to --warden" || bad "warden is $ONCHAIN_WARDEN, expected $WARDEN"
+
+# --- 3b. the Safe accepts ownership ---------------------------------------------
+step "3b. the Safe accepts ownership through safe-tx.mjs"
+if read -r FILE HASH < <(safe_prepare accept accept-ownership) && [ -n "$HASH" ]; then
+  ok "safe-tx.mjs accept-ownership: its hash matches the Safe's own ($HASH)"
+  safe_exec accept "$FILE" "$HASH" || bad "execTransaction for acceptOwnership -- see $WORK/safe-accept.log"
+  OWNER="$(cast call "$TOK" 'owner()(address)' --rpc-url "$FORK")"
+  [ "$(lower "$OWNER")" = "$(lower "$SAFE")" ] && ok "owner is now the Safe, signed by two of its three keys" || bad "owner is $OWNER after acceptOwnership"
+else
+  bad "safe-tx.mjs accept-ownership -- see $WORK/safe-tx-accept.log"
+fi
 
 # --- 4. adopt ------------------------------------------------------------------
 step "4. adopt-deployment.sh --chain 8453, in the exported copy"
@@ -279,6 +338,18 @@ MARK_GAS="$(/bin/grep -oE "applyMark 1 on 1 ok, tx 0x[0-9a-f]+, gas [0-9]+" "$WO
 # Minted events back and counts each as confirmed.
 RECON="$(/bin/grep -o 'reconciled .*' "$WORK/clock-run2.log" | tail -1)"
 echo "$RECON" | /bin/grep -q '"Minted":2' && ok "reconcile read both mints back from the fork: $RECON" || bad "reconcile did not see both mints: ${RECON:-no reconcile line}"
+
+# --- 6c. the emergency rotation, through the Safe ---------------------------------
+step "6c. rotate the Clock key through the Safe (DEPLOY.md section 9b)"
+NEW_WARDEN="$(acct 7)"
+if read -r FILE HASH < <(safe_prepare rotate set-warden "$NEW_WARDEN") && [ -n "$HASH" ]; then
+  ok "safe-tx.mjs set-warden: its hash matches the Safe's own ($HASH)"
+  safe_exec rotate "$FILE" "$HASH" || bad "execTransaction for setWarden -- see $WORK/safe-rotate.log"
+  ONCHAIN_WARDEN="$(cast call "$TOK" 'warden()(address)' --rpc-url "$FORK")"
+  [ "$(lower "$ONCHAIN_WARDEN")" = "$(lower "$NEW_WARDEN")" ] && ok "warden is now $NEW_WARDEN" || bad "warden is $ONCHAIN_WARDEN after setWarden"
+else
+  bad "safe-tx.mjs set-warden -- see $WORK/safe-tx-rotate.log"
+fi
 
 # --- 7. what it costs on real mainnet today --------------------------------------
 step "7. cost at today's real Base mainnet gas price"
