@@ -254,6 +254,10 @@ first.</strong> A script Claude writes:</p>
 mode, including its <code>-wal</code> and <code>-shm</code> side files, and prints PASS or
 FAIL.</li>
 </ul>
+<p>The script is <code>warden/deploy/create-clock-user.sh</code>, run as
+<code>sudo bash warden/deploy/create-clock-user.sh &lt;node&gt;</code>. Each user writes
+with umask 022, the default a service has, and the side files must still
+come out 0660 group <code>mro</code>.</p>
 <p><strong>If it fails, stop and re-plan.</strong> Whether two users can share a WAL
 database is the one assumption here that has not been measured.</p>
 </li>
@@ -273,7 +277,10 @@ They are installed DISABLED.</li>
 </li>
 <li><p><strong>The cutover on the live Sepolia piece:</strong></p>
 <ul>
-<li>stop the Warden briefly;</li>
+<li>stop the Warden briefly, and restart pm2 itself so it carries the new
+<code>mro</code> group: a running process keeps the groups it started with, and
+pm2&#39;s daemon and this tmux session both predate the <code>usermod</code>. Start
+it under <code>sg mro</code>, and check <code>/proc/&lt;pid&gt;/status</code> lists the group;</li>
 <li>move <code>state.db</code> and its cursor and lock to <code>/var/lib/mro</code>;</li>
 <li>the operator updates <code>STATE_DB_PATH</code>;</li>
 <li>re-create the Warden;</li>

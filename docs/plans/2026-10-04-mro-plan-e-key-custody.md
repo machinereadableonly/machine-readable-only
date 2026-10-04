@@ -167,6 +167,11 @@ needs two of the three signers, so this key alone can do nothing.
       mode, including its `-wal` and `-shm` side files, and prints PASS or
       FAIL.
 
+    The script is `warden/deploy/create-clock-user.sh`, run as
+    `sudo bash warden/deploy/create-clock-user.sh <node>`. Each user writes
+    with umask 022, the default a service has, and the side files must still
+    come out 0660 group `mro`.
+
     **If it fails, stop and re-plan.** Whether two users can share a WAL
     database is the one assumption here that has not been measured.
 
@@ -183,7 +188,10 @@ needs two of the three signers, so this key alone can do nothing.
       They are installed DISABLED.
 
 12. **The cutover on the live Sepolia piece:**
-    - stop the Warden briefly;
+    - stop the Warden briefly, and restart pm2 itself so it carries the new
+      `mro` group: a running process keeps the groups it started with, and
+      pm2's daemon and this tmux session both predate the `usermod`. Start
+      it under `sg mro`, and check `/proc/<pid>/status` lists the group;
     - move `state.db` and its cursor and lock to `/var/lib/mro`;
     - the operator updates `STATE_DB_PATH`;
     - re-create the Warden;
