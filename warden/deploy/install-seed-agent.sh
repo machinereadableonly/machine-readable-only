@@ -209,7 +209,9 @@ elif [ "$CURRENT_TOKEN" = "$REHEARSAL_TOKEN" ]; then
     fi
 else
     ok "token is $CURRENT_TOKEN, not the rehearsal id -- deploy day has happened"
-    if [ "$RESULT" = "success" ] && tail -1 "$LOG" | grep -q '^not before '; then
+    if [ "$RESULT" = "success" ] && [ ! -f "$LOG" ]; then
+        bad "the run succeeded but $LOG does not exist, so whether it checked in or waited cannot be told"
+    elif [ "$RESULT" = "success" ] && tail -1 "$LOG" | grep -q '^not before '; then
         ok "the guard held: token $CURRENT_TOKEN waits until $NOT_BEFORE"
     elif [ "$RESULT" = "success" ]; then
         ok "the real check-in SUCCEEDED"
