@@ -570,9 +570,10 @@ handling of the real owner key.
    ABI pin, and prints the renderer and token. Rehearsed on the fork with
    `--fork`; the real run differs only in the RPC and the key.
 
-3. **Read it back, against mainnet:**
+3. **Verify the source on both explorers, then read it back, against mainnet:**
 
    ```
+   bash script/verify-plan7.sh <renderer> <token> <the mainnet Clock's address> 8453
    cd ../warden
    node tools/check-deployed-abi.mjs <token> https://mainnet.base.org
    node tools/read-ladder.mjs <token> https://mainnet.base.org
@@ -714,13 +715,13 @@ two it was.
 3. **Verify the source, then verify the interface.** They are different claims.
 
    ```
-   bash script/verify-plan7.sh <renderer> <token> <warden>
+   bash script/verify-plan7.sh <renderer> <token> <warden> 84532
    cd ../warden
    node tools/check-deployed-abi.mjs <token>   # exits non-zero on any mismatch
    node tools/read-ladder.mjs <token>          # the ten Mark records, by value
    ```
 
-   Basescan verification proves the SOURCE compiles to that bytecode. It says
+   Explorer verification proves the SOURCE compiles to that bytecode. It says
    nothing about whether the ABI in this repository describes it. On 2026-09-02
    every Mark was unwritable against a fully verified contract, and only reading
    the runtime bytecode found it.

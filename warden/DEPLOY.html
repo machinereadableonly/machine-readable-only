@@ -614,8 +614,9 @@ refuses the throwaway spike key), gates on <code>test/ContractSize.t.sol</code> 
 ABI pin, and prints the renderer and token. Rehearsed on the fork with
 <code>--fork</code>; the real run differs only in the RPC and the key.</p>
 </li>
-<li><p><strong>Read it back, against mainnet:</strong></p>
-<pre><code>cd ../warden
+<li><p><strong>Verify the source on both explorers, then read it back, against mainnet:</strong></p>
+<pre><code>bash script/verify-plan7.sh &lt;renderer&gt; &lt;token&gt; &lt;the mainnet Clock&#39;s address&gt; 8453
+cd ../warden
 node tools/check-deployed-abi.mjs &lt;token&gt; https://mainnet.base.org
 node tools/read-ladder.mjs &lt;token&gt; https://mainnet.base.org
 </code></pre>
@@ -729,12 +730,12 @@ bash script/deploy-plan7.sh --broadcast  # after the operator approves
 </code></pre>
 </li>
 <li><p><strong>Verify the source, then verify the interface.</strong> They are different claims.</p>
-<pre><code>bash script/verify-plan7.sh &lt;renderer&gt; &lt;token&gt; &lt;warden&gt;
+<pre><code>bash script/verify-plan7.sh &lt;renderer&gt; &lt;token&gt; &lt;warden&gt; 84532
 cd ../warden
 node tools/check-deployed-abi.mjs &lt;token&gt;   # exits non-zero on any mismatch
 node tools/read-ladder.mjs &lt;token&gt;          # the ten Mark records, by value
 </code></pre>
-<p>Basescan verification proves the SOURCE compiles to that bytecode. It says
+<p>Explorer verification proves the SOURCE compiles to that bytecode. It says
 nothing about whether the ABI in this repository describes it. On 2026-09-02
 every Mark was unwritable against a fully verified contract, and only reading
 the runtime bytecode found it.</p>

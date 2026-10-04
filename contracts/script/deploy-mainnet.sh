@@ -165,7 +165,8 @@ forge script script/DeployPlan5.s.sol:DeployPlan5 \
 
 echo
 echo "Next, in order:"
-echo "  1. cd ../warden && node tools/check-deployed-abi.mjs <token> $RPC"
-echo "  2. cd ../warden && node tools/read-ladder.mjs <token> $RPC"
-echo "  3. bash contracts/script/adopt-deployment.sh --chain 8453 <renderer> <token> <deploy-block>"
-echo "  4. warden/DEPLOY.md section 10, in order."
+echo "  1. bash script/verify-plan7.sh <renderer> <token> $WARDEN 8453"
+echo "  2. cd ../warden && node tools/check-deployed-abi.mjs <token> $RPC"
+echo "  3. cd ../warden && node tools/read-ladder.mjs <token> $RPC"
+echo "  4. bash contracts/script/adopt-deployment.sh --chain 8453 <renderer> <token> <deploy-block>"
+echo "  5. warden/DEPLOY.md section 10, in order."

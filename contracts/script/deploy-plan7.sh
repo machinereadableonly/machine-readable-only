@@ -108,7 +108,7 @@ forge script script/DeployPlan5.s.sol:DeployPlan5 \
 
 echo
 echo "Next, in order:"
-echo "  1. bash script/verify-plan7.sh <renderer> <token> $WARDEN_ADDRESS"
+echo "  1. bash script/verify-plan7.sh <renderer> <token> $WARDEN_ADDRESS 84532"
 echo "  2. cd warden && node tools/check-deployed-abi.mjs <token>"
 echo "  3. cd warden && node tools/read-ladder.mjs <token>"
 echo "  4. bash contracts/script/adopt-deployment.sh <renderer> <token> <deploy-block>"

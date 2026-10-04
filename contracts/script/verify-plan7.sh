@@ -1,28 +1,32 @@
 #!/usr/bin/env bash
 #
-# Verify the deployed pair on Basescan. Addresses are arguments so this is not
-# a script that silently verifies whatever it was last pointed at.
+# Verify the deployed pair on Basescan and Blockscout. Addresses and chain are
+# arguments so this is not a script that silently verifies whatever it was last
+# pointed at.
 #
-#   bash script/verify-plan7.sh <renderer> <token> <warden-address>
+#   bash script/verify-plan7.sh <renderer> <token> <warden-address> <chain-id>
 #
-# Identical in shape to verify-plan6.sh: Plan 7 changed neither contract's
-# constructor, so the encoded arguments are the same two addresses.
+# chain-id is 84532 (Base Sepolia) or 8453 (Base mainnet). ENV_FILE names the
+# environment file holding BASESCAN_API_KEY; it defaults to ./.env.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 export PATH="$HOME/.foundry/bin:$PATH"
 
-set -a
-# shellcheck disable=SC1091
-. ./.env
-set +a
-
 REN="${1:?renderer address}"
 TOK="${2:?token address}"
 WARDEN="${3:?warden address}"
-# THE CHAIN, STATED, in the script that talks to the explorer as well as in the
-# one that deploys. 84532 is Base Sepolia.
-CHAIN=84532
+CHAIN="${4:?chain id: 84532 (Base Sepolia) or 8453 (Base mainnet)}"
+case "$CHAIN" in
+  84532) BLOCKSCOUT="https://base-sepolia.blockscout.com/api/" ;;
+  8453) BLOCKSCOUT="https://base.blockscout.com/api/" ;;
+  *) echo "chain $CHAIN is neither Base Sepolia (84532) nor Base mainnet (8453)" >&2; exit 2 ;;
+esac
+
+set -a
+# shellcheck disable=SC1090
+. "${ENV_FILE:-./.env}"
+set +a
 
 KEY="${BASESCAN_API_KEY:-${ETHERSCAN_API_KEY:-}}"
 if [ -z "$KEY" ]; then
@@ -31,18 +35,35 @@ if [ -z "$KEY" ]; then
   exit 2
 fi
 
-echo "verifying Renderer $REN"
-forge verify-contract "$REN" src/render/Renderer.sol:Renderer \
-  --chain "$CHAIN" --etherscan-api-key "$KEY" --watch || true
+ARGS="$(cast abi-encode 'constructor(address,address)' "$REN" "$WARDEN")"
+FAILED=()
+
+# Each explorer is tried even when an earlier one fails, and every failure is
+# named at the end. Blockscout takes no key, but forge insists on one.
+verify() {
+  local explorer="$1"; shift
+  echo
+  echo "verifying Renderer $REN on $explorer"
+  forge verify-contract "$REN" src/render/Renderer.sol:Renderer --chain "$CHAIN" --watch "$@" \
+    || FAILED+=("Renderer on $explorer")
+  echo
+  echo "verifying MachineReadableOnly $TOK on $explorer"
+  forge verify-contract "$TOK" src/MachineReadableOnly.sol:MachineReadableOnly --chain "$CHAIN" --watch \
+    --constructor-args "$ARGS" "$@" \
+    || FAILED+=("MachineReadableOnly on $explorer")
+}
+
+verify Basescan --verifier etherscan --etherscan-api-key "$KEY"
+verify Blockscout --verifier blockscout --verifier-url "$BLOCKSCOUT" --etherscan-api-key placeholder
 
 echo
-echo "verifying MachineReadableOnly $TOK"
-forge verify-contract "$TOK" src/MachineReadableOnly.sol:MachineReadableOnly \
-  --chain "$CHAIN" --etherscan-api-key "$KEY" --watch \
-  --constructor-args "$(cast abi-encode 'constructor(address,address)' "$REN" "$WARDEN")" || true
-
-echo
-echo "Basescan verification proves the SOURCE. It does not prove the ABI this"
+echo "Explorer verification proves the SOURCE. It does not prove the ABI this"
 echo "repository carries matches the runtime bytecode -- run"
 echo "  cd warden && node tools/check-deployed-abi.mjs $TOK"
 echo "for that. Every Mark was once unwritable against a verified contract."
+
+if [ "${#FAILED[@]}" -gt 0 ]; then
+  echo >&2
+  printf 'FAILED: %s\n' "${FAILED[@]}" >&2
+  exit 1
+fi
