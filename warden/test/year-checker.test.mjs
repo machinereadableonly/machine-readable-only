@@ -415,7 +415,7 @@ function fakeChain({ today = 1010, wardenDay = 1010, views = {}, fail = {} } = {
   };
 }
 
-function harness({ chain, mirror = {}, lines = [], state, memory = emptyMemory(), decode } = {}) {
+function harness({ chain, mirror = {}, lines = [], clockLines = [], state, memory = emptyMemory(), decode } = {}) {
   const logged = [];
   const slept = [];
   const decoded = [];
@@ -427,7 +427,7 @@ function harness({ chain, mirror = {}, lines = [], state, memory = emptyMemory()
     logged, slept, decoded, memory,
     run: () => runPass({
       chain, readMirror: mirrorFor, state, log: (fields) => logged.push(fields),
-      readLog: () => lines, memory, sleep: async (ms) => { slept.push(ms); },
+      readLog: () => lines, readClockLog: () => clockLines, memory, sleep: async (ms) => { slept.push(ms); },
       decode: decode ?? (async (args) => { decoded.push(args); return { decoded: true, exit: 0 }; }),
     }),
   };
@@ -778,4 +778,110 @@ test("the place the lower id should have held is a FAIL when the chain gave it a
   const { said } = await quietly(swapped.run);
   assert.equal(said.length, 2);
   assert.deepEqual(swapped.logged.filter((l) => l.ok === false).map((l) => l.tokenId), [1, 2]);
+});
+
+// THE CLOCK'S GAS GUARD WRITES NOTHING ON PURPOSE, and a pending row keeps its own
+// day, so a chain trailing the runner during a gas stop is the designed state.
+const gasStop = [{ ts: "t", chainDay: 1009, exit: 0, gasStopped: true }];
+const clean = [{ ts: "t", chainDay: 1009, exit: 0, gasStopped: false }];
+const trailing = view({ level: 9, streak: 9, lastDay: 1008, runFloor: 9 });
+
+test("a chain trailing the runner while the Clock is gas-stopped is a HOLD, not a FAIL", async () => {
+  const h = harness({
+    chain: fakeChain({ today: 1010, views: { 1: trailing } }),
+    mirror: { 1: mirrorView({ tokenId: 1 }) },
+    lines: checkins(1, 1001, 9),
+    clockLines: gasStop,
+    state: { tokens: { A1: 1 } },
+  });
+  const { said } = await quietly(h.run);
+  const line = h.logged.find((l) => l.tokenId === 1);
+  assert.equal(line.ok, true, "nothing failed");
+  assert.equal(line.hold, true);
+  assert.deepEqual(line.findings.map((f) => f.severity), ["HOLD", "HOLD", "HOLD"]);
+  assert.equal(said.length, 1);
+  assert.match(said[0], /HOLD/);
+  assert.doesNotMatch(said[0], /FAIL/);
+});
+
+test("the same lag with no gas stop is still a FAIL", async () => {
+  const h = harness({
+    chain: fakeChain({ today: 1010, views: { 1: trailing } }),
+    mirror: { 1: mirrorView({ tokenId: 1 }) },
+    lines: checkins(1, 1001, 9),
+    clockLines: clean,
+    state: { tokens: { A1: 1 } },
+  });
+  await quietly(h.run);
+  const line = h.logged.find((l) => l.tokenId === 1);
+  assert.equal(line.ok, false);
+  assert.deepEqual(line.findings.map((f) => f.severity), ["FAIL", "FAIL", "FAIL"]);
+});
+
+test("a mismatch that is not lag is a FAIL even during a gas stop", async () => {
+  const h = harness({
+    chain: fakeChain({ today: 1010, views: { 1: view({ level: 11 }) } }),
+    mirror: { 1: mirrorView({ tokenId: 1 }) },
+    lines: checkins(1, 1001, 9),
+    clockLines: gasStop,
+    state: { tokens: { A1: 1 } },
+  });
+  await quietly(h.run);
+  const line = h.logged.find((l) => l.tokenId === 1);
+  assert.equal(line.ok, false);
+  assert.deepEqual(line.findings.map((f) => [f.field, f.severity]), [["level", "FAIL"]]);
+});
+
+test("a mint the gas-stopped Clock has not written yet is a HOLD", async () => {
+  // Queued on 1000: pending through 1001, and one stopped run holds it to 1002.
+  const h = harness({
+    chain: fakeChain({ today: 1002, views: { 1: view({ level: 0, streak: 0, lastDay: 0, mintDay: 0, runFloor: 0 }) } }),
+    mirror: { 1: mirrorView({ tokenId: 1, level: 1, streak: 1, lastDay: 1000 }) },
+    lines: [{ action: "mint", ok: true, tokenId: 1, chainDay: 1000 }],
+    clockLines: gasStop,
+    state: { tokens: { A1: 1 } },
+  });
+  await quietly(h.run);
+  const line = h.logged.find((l) => l.tokenId === 1);
+  assert.equal(line.ok, true);
+  assert.deepEqual(line.findings.map((f) => [f.field, f.severity]), [["onChain", "HOLD"]]);
+});
+
+test("the year Clock loop detects a gas stop by the Clock's own wording", async () => {
+  const { readFileSync } = await import("node:fs");
+  const here = new URL(".", import.meta.url);
+  const loop = readFileSync(new URL("../tools/year/clock-loop.sh", here), "utf8");
+  const run = readFileSync(new URL("../src/clock/run.mjs", here), "utf8");
+  const phrase = loop.match(/grep -qF "([^"]+)" "\$DIR\/clock-last-run\.txt"/)?.[1];
+  assert.ok(phrase, "the loop greps the run's output for a fixed phrase");
+  assert.ok(run.includes(phrase), `run.mjs no longer says "${phrase}" when gas stops it`);
+});
+
+test("lag longer than the gas-stopped runs is a FAIL", async () => {
+  const h = harness({
+    chain: fakeChain({ today: 1010, views: { 1: view({ level: 7, streak: 7, lastDay: 1006, runFloor: 7 }) } }),
+    mirror: { 1: mirrorView({ tokenId: 1 }) },
+    lines: checkins(1, 1001, 9),
+    clockLines: [...clean, ...gasStop],
+    state: { tokens: { A1: 1 } },
+  });
+  await quietly(h.run);
+  const line = h.logged.find((l) => l.tokenId === 1);
+  assert.equal(line.ok, false, "three days behind after one stopped run is not the gas guard's doing");
+});
+
+test("a wrong mint day or a runFloor breach is a FAIL during a gas stop", async () => {
+  const h = harness({
+    chain: fakeChain({ today: 1010, views: { 1: view({ level: 9, streak: 9, lastDay: 1008, runFloor: 50, mintDay: 999 }) } }),
+    mirror: { 1: mirrorView({ tokenId: 1 }) },
+    lines: [{ action: "mint", ok: true, tokenId: 1, chainDay: 1000 }, ...checkins(1, 1001, 9)],
+    clockLines: gasStop,
+    state: { tokens: { A1: 1 } },
+  });
+  await quietly(h.run);
+  const line = h.logged.find((l) => l.tokenId === 1);
+  assert.equal(line.ok, false);
+  const fails = line.findings.filter((f) => f.severity === "FAIL").map((f) => f.field);
+  assert.ok(fails.includes("mintDay"), `mintDay must FAIL, got ${fails}`);
+  assert.ok(fails.includes("runFloor"), `runFloor must FAIL, got ${fails}`);
 });

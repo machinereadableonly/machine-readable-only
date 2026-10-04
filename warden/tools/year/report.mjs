@@ -163,13 +163,15 @@ export function renderReport(runnerLines, checkerLines, state) {
   // Only from a row that PASSED. A place read in a failing row is the value the
   // finding is about, so calling the band proven from it would report the bug as
   // the proof.
-  const passing = rows.filter((l) => l.ok);
+  // A HOLD is not a pass either: its chain values are the stale ones.
+  const passing = rows.filter((l) => l.ok && !l.hold);
+  const holds = rows.filter((l) => l.hold).length;
   const placesSeen = new Set(passing.map((l) => l.place).filter((p) => p > 0));
   const marksSeen = new Set(passing.flatMap((l) => markBitsOf(l.marks ?? 0)));
 
-  const summary = table(["Fast days covered", "Tokens", "Checker FAILs", "Milestones", "QR decodes"], [
+  const summary = table(["Fast days covered", "Tokens", "Checker FAILs", "Gas-stop HOLDs", "Milestones", "QR decodes"], [
     `<tr>${td(fastDays === null ? NONE : fastDays)}${td(Object.keys(state?.tokens ?? {}).length)}` +
-      `${td(fails.length, fails.length ? "fail" : null)}${td(milestones.length)}` +
+      `${td(fails.length, fails.length ? "fail" : null)}${td(holds)}${td(milestones.length)}` +
       `${td(`${decoded} decoded, ${failedDecodes} failed`, failedDecodes ? "fail" : null)}</tr>`,
   ]);
 

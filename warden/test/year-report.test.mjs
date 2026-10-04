@@ -175,3 +175,11 @@ test("a state with no tokens at all still renders every scripted agent's row", (
     assert.match(html, /never minted/);
   }
 });
+
+test("a gas-stop HOLD is counted on its own and proves no place", () => {
+  const held = { chainDay: 5, agent: "A1", tokenId: 1, ok: true, hold: true, level: 9, streak: 9, place: 1, marks: "0", findings: [] };
+  const html = renderReport([], [held], { tokens: { A1: 1 }, startDay: 1 });
+  assert.match(html, /Gas-stop HOLDs/);
+  assert.match(html, /<th>Apex<\/th><td>[^<]*<\/td><td class="thin">not reached<\/td>/,
+    "a held row's place is stale, so it proves nothing");
+});

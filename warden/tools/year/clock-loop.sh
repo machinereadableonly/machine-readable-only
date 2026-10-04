@@ -71,10 +71,14 @@ while true; do
   # The fast day that has just closed: the one the run about to start writes.
   day=$(( next / DAY - 1 ))
 
+  # The run's output is kept so a gas stop can be recorded: it exits 0 by
+  # design, and the checker must tell a held chain from a broken one.
   code=0
   "$NODE" --dns-result-order=ipv4first --no-network-family-autoselection \
-    --env-file="$CONF" src/clock/main.mjs || code=$?
+    --env-file="$CONF" src/clock/main.mjs 2>&1 | tee "$DIR/clock-last-run.txt" || code=$?
+  gas=false
+  if /bin/grep -qF "above the cap of" "$DIR/clock-last-run.txt"; then gas=true; fi
 
-  printf '{"ts":"%s","chainDay":%d,"exit":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$day" "$code" >> "$LOG"
+  printf '{"ts":"%s","chainDay":%d,"exit":%d,"gasStopped":%s}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$day" "$code" "$gas" >> "$LOG"
   echo "year-clock: fast day $day exited $code"
 done

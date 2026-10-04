@@ -303,12 +303,14 @@ const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 export async function runPass({
   chain, readMirror, state, readLog, log, memory,
+  readClockLog = () => [],
   decode = async () => ({ decoded: null, exit: null }),
   sleep = defaultSleep,
 }) {
   const today = await chain.today();
   const wardenDay = await chain.lastWardenDay();
   const lines = readLog();
+  const stoppedRuns = gasStoppedRuns(readClockLog());
   const readOne = (tokenId) => readToken({ chain, readMirror, tokenId, lines, today });
 
   // Read everything first: the places a finish earns depend on every token's
@@ -320,7 +322,7 @@ export async function runPass({
   // reconcile-only fields are allowed to still be holding. Read before the loop
   // below writes this pass's views over it.
   const previous = (tokenId) => memory.tokens.get(tokenId)?.view ?? null;
-  let judged = judge(reads, previous);
+  let judged = judge(reads, previous, { stoppedRuns, today });
   // ONE pause for the whole pass, not one per token. A public RPC is not
   // read-after-write consistent, so a disagreement is re-read before it is
   // believed -- but twelve tokens disagreeing at 20 s each would spend four
@@ -332,7 +334,7 @@ export async function runPass({
     for (const j of judged) {
       again.push(j.findings.length ? { agent: j.read.agent, ...(await readOne(j.read.tokenId)) } : j.read);
     }
-    judged = judge(again, previous);
+    judged = judge(again, previous, { stoppedRuns, today });
   }
 
   let lastDaysMoved = false;
@@ -341,9 +343,12 @@ export async function runPass({
     const prev = memory.tokens.get(tokenId) ?? null;
     if (prev && settled.chain && prev.view.lastDay !== settled.chain.lastDay) lastDaysMoved = true;
 
+    const failed = findings.filter((f) => f.severity === "FAIL");
+    const held = findings.length > 0 && failed.length === 0;
     log({
-      chainDay: today, agent, tokenId, ok: findings.length === 0,
+      chainDay: today, agent, tokenId, ok: failed.length === 0,
       ...(settled.pending ? { pending: true } : {}),
+      ...(held ? { hold: true } : {}),
       level: settled.chain?.level ?? null,
       streak: settled.chain?.streak ?? null,
       place: settled.chain?.finisherPlace ?? null,
@@ -351,7 +356,8 @@ export async function runPass({
       findings,
     });
     if (findings.length) {
-      console.error(`CHECKER FAIL: ${agent} token ${tokenId} on day ${today} -- ${findings.map(describeFinding).join("; ")}`);
+      const verdict = held ? "HOLD (the Clock is gas-stopped)" : "FAIL";
+      console.error(`CHECKER ${verdict}: ${agent} token ${tokenId} on day ${today} -- ${findings.map(describeFinding).join("; ")}`);
     }
 
     if (!settled.chain || !settled.onChain) continue;
@@ -421,7 +427,7 @@ async function readToken({ chain, readMirror, tokenId, lines, today }) {
 
 /// A chain that would not answer is itself the finding: nothing about this token
 /// can be judged, and silence must not read as agreement.
-function findingsFor(read, place, prevChain = null) {
+function findingsFor(read, place, prevChain = null, { stoppedRuns = 0, today = null } = {}) {
   if (!read.chain) return [{ field: "read", chain: read.error, expected: "a token view", severity: "FAIL" }];
   // Nothing to compare: the chain has not been given this token yet, and it is
   // not due to have been.
@@ -429,13 +435,36 @@ function findingsFor(read, place, prevChain = null) {
   if (!read.onChain) {
     return [{
       field: "onChain", chain: "no such token",
-      expected: `written by the Clock; queued on day ${read.queued ?? "never"}`, severity: "FAIL",
+      expected: `written by the Clock; queued on day ${read.queued ?? "never"}`,
+      // Pending already covers one run; each gas-stopped run holds one more.
+      severity: stoppedRuns > 0 && read.queued !== null && today - read.queued <= 1 + stoppedRuns ? "HOLD" : "FAIL",
     }];
   }
-  return compare({
+  const findings = compare({
     chain: read.chain, mirror: read.mirror, tally: read.tally, mirrorTally: read.mirrorTally,
     place, queued: read.queued, prevChain,
   });
+  const lag = read.tally.lastDay - read.chain.lastDay;
+  return lag > 0 && lag <= stoppedRuns ? holdLag(findings) : findings;
+}
+
+/// The chain-side fields a gas stop holds back. The mint day, every mirror field
+/// and runFloor (an upper bound a lagging chain cannot breach) still FAIL.
+const LAG_FIELDS = ["level", "streak", "lastDay", "place", "finisherMark"];
+
+/// A token whose chain trails its credited days by no more than the gas-stopped
+/// runs: its chain-side findings are the designed wait, not a fault.
+function holdLag(findings) {
+  return findings.map((f) =>
+    f.chain !== undefined && f.mirror === undefined && LAG_FIELDS.includes(f.field) ? { ...f, severity: "HOLD" } : f
+  );
+}
+
+/// How many of the Clock's most recent runs, in a row, its gas guard stopped.
+function gasStoppedRuns(clockLines) {
+  let n = 0;
+  for (let i = clockLines.length - 1; i >= 0 && clockLines[i]?.gasStopped === true; i--) n++;
+  return n;
 }
 
 /**
@@ -445,14 +474,14 @@ function findingsFor(read, place, prevChain = null) {
  * is a token's position among all of them -- so they are recomputed here rather
  * than carried, which keeps a re-read from being judged against the old order.
  */
-function judge(reads, previous = () => null) {
+function judge(reads, previous = () => null, hold = {}) {
   const finishes = reads
     .filter((r) => r.tally?.level >= FINISH_LEVEL)
     .map((r) => ({ tokenId: r.tokenId, day: r.finishDay }));
   const placeOf = places(finishes);
   return reads.map((read) => ({
     read,
-    findings: findingsFor(read, placeOf.get(read.tokenId) ?? null, previous(read.tokenId)),
+    findings: findingsFor(read, placeOf.get(read.tokenId) ?? null, previous(read.tokenId), hold),
   }));
 }
 
@@ -497,7 +526,7 @@ export async function main({ env = process.env } = {}) {
     try {
       await runPass({
         chain: readersOf(chain), readMirror, state: loadState(paths.state),
-        readLog: () => readJsonl(paths.runnerLog), log, memory, decode,
+        readLog: () => readJsonl(paths.runnerLog), readClockLog: () => readJsonl(paths.clockLog), log, memory, decode,
       });
     } catch (err) {
       log({ chainDay: null, agent: null, tokenId: null, ok: false, findings: [{ field: "pass", chain: safeErrorText(err), severity: "FAIL" }] });
