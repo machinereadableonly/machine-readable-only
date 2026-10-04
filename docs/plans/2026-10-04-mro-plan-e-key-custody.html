@@ -94,9 +94,9 @@ user can read the Clock&#39;s key, and a stolen Clock key can mint out the
 collection. After this plan, only the Clock&#39;s own user can read it.</li>
 </ol>
 <p><strong>Decided by the operator 2026-10-04:</strong> a 2-of-3 Safe (the Ledger, the Trezor,
-and a spare), acting as both owner and treasury.</p>
-<p><strong>Starts after</strong> Night 2&#39;s <code>verify-border</code> passes and <code>followups</code> is merged.
-The work happens in a worktree on a branch <code>plan-e</code>.</p>
+and a Rabby browser wallet as the spare), acting as both owner and treasury.
+Approved 2026-10-04.</p>
+<p><strong>Phase 1 starts at once</strong> on <code>plan-e</code>, branched from <code>followups</code>; it touches neither <code>main</code> nor the live Clock. <strong>Phase 2 waits</strong> until Night 2 passes and <code>followups</code> is merged.</p>
 <h2>What was checked, live, 2026-10-04</h2>
 <ul>
 <li>Safe&#39;s own config gives version <strong>1.5.0</strong> as the default on Base (8453) and
@@ -118,13 +118,10 @@ against paying a contract address, so a Safe can be the treasury.</li>
 <li>The contract is <code>Ownable2Step</code>, and its handover is already tested in
 <code>test/MachineReadableOnly.t.sol</code>.</li>
 </ul>
-<h2>Open question for the operator</h2>
-<p><strong>The spare signer.</strong> Recommended: a third hardware wallet (a Ledger Nano S
-Plus is $69 on Ledger&#39;s US shop), kept somewhere other than the other two. The
-alternative is a browser wallet key (MetaMask or Rabby) on the operator&#39;s PC,
-which Safe&#39;s own guidance accepts for an individual. It is cheaper, but it is a
-key on a computer. The plan works either way, and Phase 2 waits for this
-answer.</p>
+<h2>The spare signer -- DECIDED 2026-10-04</h2>
+<p>A Rabby browser wallet on a NEW seed phrase, used for nothing else. Its phrase
+is kept on paper, apart from the two hardware wallets&#39; phrases. A thief still
+needs two of the three signers, so this key alone can do nothing.</p>
 <h2>What cannot be undone</h2>
 <ul>
 <li><strong>Nothing on mainnet happens in this plan.</strong> The mainnet Safe is created on

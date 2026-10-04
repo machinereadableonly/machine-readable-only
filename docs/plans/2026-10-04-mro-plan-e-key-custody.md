@@ -18,10 +18,11 @@ asked for two protections, and this plan builds both.
    collection. After this plan, only the Clock's own user can read it.
 
 **Decided by the operator 2026-10-04:** a 2-of-3 Safe (the Ledger, the Trezor,
-and a spare), acting as both owner and treasury.
+and a Rabby browser wallet as the spare), acting as both owner and treasury.
+Approved 2026-10-04.
 
-**Starts after** Night 2's `verify-border` passes and `followups` is merged.
-The work happens in a worktree on a branch `plan-e`.
+**Phase 1 starts at once** on `plan-e`, branched from `followups`; it touches neither `main` nor the live Clock. **Phase 2 waits** until Night 2 passes and `followups` is merged.
+
 
 ## What was checked, live, 2026-10-04
 
@@ -44,14 +45,11 @@ The work happens in a worktree on a branch `plan-e`.
 - The contract is `Ownable2Step`, and its handover is already tested in
   `test/MachineReadableOnly.t.sol`.
 
-## Open question for the operator
+## The spare signer -- DECIDED 2026-10-04
 
-**The spare signer.** Recommended: a third hardware wallet (a Ledger Nano S
-Plus is $69 on Ledger's US shop), kept somewhere other than the other two. The
-alternative is a browser wallet key (MetaMask or Rabby) on the operator's PC,
-which Safe's own guidance accepts for an individual. It is cheaper, but it is a
-key on a computer. The plan works either way, and Phase 2 waits for this
-answer.
+A Rabby browser wallet on a NEW seed phrase, used for nothing else. Its phrase
+is kept on paper, apart from the two hardware wallets' phrases. A thief still
+needs two of the three signers, so this key alone can do nothing.
 
 ## What cannot be undone
 
