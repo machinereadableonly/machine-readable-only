@@ -1,0 +1,46 @@
+[Unit]
+Description=Machine Readable Only -- the Clock, writing the day's queue to Base
+After=network-online.target
+Wants=network-online.target
+OnFailure=mro-clock-alert.service
+
+[Service]
+Type=oneshot
+# Its own user: the main user can neither read its key nor change its code.
+# Installed by deploy/install-clock-user.sh; see DEPLOY.md section 12.
+User=mro-clock
+Group=mro
+WorkingDirectory=/opt/mro-clock/warden
+# --env-file, not EnvironmentFile=, so the key never appears in `systemctl show`.
+ExecStart=/opt/mro-clock/bin/node --env-file=/etc/mro-clock/clock.env src/clock/main.mjs
+# A run still going after ten minutes is stuck; the next run re-reads the world.
+TimeoutStartSec=600
+
+# The Warden shares state.db and its side files through the mro group.
+UMask=0007
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mro
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+OOMPolicy=continue
+MemoryMax=1G
+
+StandardOutput=append:/var/log/mro/clock.log
+StandardError=append:/var/log/mro/clock.log

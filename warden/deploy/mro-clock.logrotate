@@ -1,0 +1,12 @@
+# Installed as /etc/logrotate.d/mro-clock by install-clock-user.sh.
+/var/log/mro/clock.log {
+    su mro-clock mro
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    # systemd holds the file open in append mode, so it is copied, not moved.
+    copytruncate
+}

@@ -353,6 +353,8 @@ should return the served key directory.</li>
 connect -- confirming the UFW rule and loopback binding both hold.</li>
 </ul>
 <h2>9a. The Clock&#39;s log -- [the operator runs one command]</h2>
+<p>For the user-unit Clock before section 12&#39;s cutover. After it, the log is
+<code>/var/log/mro/clock.log</code> and <code>install-clock-user.sh</code> sets up its rotation.</p>
 <p>Run once per machine, after the Clock&#39;s timer is installed:</p>
 <pre><code>bash ~/projects/machine-readable-only/warden/deploy/install-clock-logging.sh
 </code></pre>
@@ -388,12 +390,15 @@ be undone; there is no burn, and neither level nor streak can be reduced.</p>
 The owner is a 2-of-3 Safe, so allow 10 to 20 minutes and have two signers to
 hand.</p>
 <pre><code># 1. Stop the Clock, so it cannot race the rotation with a run of its own.
-systemctl --user stop mro-clock.timer mro-clock.service
+#    (Before section 12&#39;s cutover: systemctl --user, no sudo.)
+sudo systemctl stop mro-clock.timer mro-clock.service
 
-# 2. Generate a replacement. Prints only the public address.
-#    It REFUSES to overwrite, so move the old key line out of the
-#    configuration file first (WinSCP).
+# 2. Generate a replacement into the Warden&#39;s .env. Prints only the public
+#    address. It REFUSES to overwrite, so move any CLOCK_PRIVATE_KEY and
+#    CLOCK_ADDRESS lines out of that file first (WinSCP). Then copy the new
+#    key into the Clock&#39;s own file (section 12, step 2).
 bash ~/projects/machine-readable-only/scripts/make-clock-key.sh
+sudo bash ~/projects/machine-readable-only/warden/deploy/install-clock-user.sh
 
 # 3. Point the contract at the new address. The OWNER is the 2-of-3 Safe,
 #    so this prepares a Safe transaction; nothing is sent here.
@@ -413,8 +418,9 @@ node tools/safe-tx.mjs set-warden &lt;the new address&gt; \
 # 4. Confirm the chain agrees, from the chain and not from a log.
 cast call &lt;contract&gt; &quot;warden()(address)&quot; --rpc-url &lt;rpc&gt;
 
-# 5. Fund the new address with gas, then start the timer again.
-systemctl --user start mro-clock.timer
+# 5. Fund the new address with gas, then start the timer again, and
+#    remove the key line from the Warden&#39;s .env once more.
+sudo systemctl start mro-clock.timer
 </code></pre>
 <p><strong>Then lower <code>supplyCap</code></strong> (<code>node tools/safe-tx.mjs set-supply-cap &lt;n&gt; ...</code>,
 signed the same way). It is an owner call, needs no redeploy, and it is
@@ -865,5 +871,103 @@ mirror&#39;s rows for them now describe a contract nobody is reading.</li>
 survive a Sepolia redeploy. A MAINNET move is the case where every one must be
 re-solved -- see section 10.</li>
 </ul>
+<h2>12. The Clock under its own user -- [the operator runs three sudo commands]</h2>
+<p>The Clock signs with a key the main user should not be able to read, and runs
+code the main user should not be able to change. So it runs as the system user
+<code>mro-clock</code>, from a root-owned copy of the code, with its key in a file only it
+can read. The Warden and the Clock share the mirror through group <code>mro</code>.</p>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Where</th>
+<th>Owner and mode</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>the Clock&#39;s code and its Node</td>
+<td><code>/opt/mro-clock</code></td>
+<td>root, not writable by anyone else</td>
+</tr>
+<tr>
+<td>its key, RPC url and paths</td>
+<td><code>/etc/mro-clock/clock.env</code></td>
+<td><code>mro-clock</code>, 600</td>
+</tr>
+<tr>
+<td>the split seed</td>
+<td><code>/etc/mro-clock/split-seed</code></td>
+<td><code>mro-clock</code>, 600</td>
+</tr>
+<tr>
+<td>the mirror, its cursor and lock</td>
+<td><code>/var/lib/mro/state.db*</code></td>
+<td>group <code>mro</code>, 660</td>
+</tr>
+<tr>
+<td>the question bank</td>
+<td><code>/var/lib/mro/questions/bank.json</code></td>
+<td>main user, group <code>mro</code>, 640</td>
+</tr>
+<tr>
+<td>the log</td>
+<td><code>/var/log/mro/clock.log</code></td>
+<td><code>mro-clock</code>, group <code>mro</code>, 640, rotated weekly</td>
+</tr>
+<tr>
+<td>the units</td>
+<td><code>/etc/systemd/system/mro-clock.{service,timer}</code>, <code>mro-clock-alert.service</code></td>
+<td>root</td>
+</tr>
+</tbody></table>
+<p>A failed night starts <code>mro-clock-alert.service</code>, which runs as the main user
+and sends a push with <code>~/scripts/notify.sh</code>.</p>
+<h3>Once, in this order</h3>
+<ol>
+<li><p><strong>Create the user and prove the shared database</strong> (done 2026-10-04):</p>
+<pre><code>sudo bash warden/deploy/create-clock-user.sh &lt;path to node v24.14.1&gt;
+</code></pre>
+</li>
+<li><p><strong>Install</strong> (re-runnable; the timer is installed disabled):</p>
+<pre><code>sudo bash warden/deploy/install-clock-user.sh
+</code></pre>
+<p>It ends with PASS, or names the step that failed. <code>--dry-run</code> checks the
+preconditions as the main user and changes nothing.</p>
+</li>
+<li><p><strong>Cut over</strong>, between 00:30 and 23:45 UTC:</p>
+<pre><code>sudo bash warden/deploy/cutover-clock-user.sh
+</code></pre>
+<p>It saves pm2&#39;s list, disables the user Clock timer, stops the Warden,
+copies the mirror to <code>/var/lib/mro</code> with an integrity and row-count check,
+points <code>STATE_DB_PATH</code> and <code>MRO_QUESTION_BANK</code> in the Warden&#39;s <code>.env</code> at the
+shared files (backup in <code>~/.mro-env-backups</code>), <strong>restarts every pm2 app</strong>
+(the daemon must restart to carry group <code>mro</code>), checks the Warden answers
+200, and enables the system timer.</p>
+</li>
+<li><p><strong>After the first night passes</strong> (<code>sg mro -c &quot;tail /var/log/mro/clock.log&quot;</code>):
+remove the <code>CLOCK_PRIVATE_KEY</code> line from the Warden&#39;s <code>.env</code> (WinSCP). The
+old <code>state.db</code> and the home copies of the split seed and the question bank
+are no longer read; deleting them is the operator&#39;s call.</p>
+</li>
+</ol>
+<p>A shell started before the main user joined <code>mro</code> cannot open <code>/var/lib/mro</code> or
+read the log. Use <code>sg mro -c &quot;&lt;command&gt;&quot;</code>, or a fresh login.</p>
+<h3>After any Clock code change, or a change to its keys</h3>
+<p>Re-run step 2. The Clock runs the copy in <code>/opt/mro-clock</code>, not the checkout,
+so a merged fix does nothing until then. The same applies when the Warden&#39;s
+<code>.env</code> changes <code>BASE_RPC_URL</code>, <code>MRO_CONTRACT_ADDRESS</code>, <code>MRO_CHAIN_ID</code> or
+<code>MAX_GAS_GWEI</code> (a redeploy does): the installer copies those four into
+<code>clock.env</code>. The key itself is copied from the Warden&#39;s <code>.env</code> when it is
+there and kept from the existing <code>clock.env</code> when it is not.</p>
+<h3>The way back</h3>
+<pre><code>sudo systemctl disable --now mro-clock.timer
+# In the Warden&#39;s .env, set STATE_DB_PATH back to the old file (backup in
+# ~/.mro-env-backups) and put CLOCK_PRIVATE_KEY back if it was removed:
+pm2 restart mro-warden
+systemctl --user enable --now mro-clock.timer
+</code></pre>
+<p>The old database is the state as it was at the cutover. Anything the Warden
+recorded since lives only in <code>/var/lib/mro/state.db</code>; copy it back the same way
+before switching, or those rows are lost.</p>
 </body>
 </html>

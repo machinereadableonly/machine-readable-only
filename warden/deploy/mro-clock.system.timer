@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Machine Readable Only Clock at 00:05 UTC
+
+[Timer]
+# Five minutes after the day closes: a check-in at 00:03 belongs to the new day.
+OnCalendar=*-*-* 00:05:00 UTC
+# A run missed while the box was down happens at the next boot.
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

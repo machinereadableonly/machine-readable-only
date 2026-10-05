@@ -1,0 +1,11 @@
+# Template: install-clock-user.sh fills @MAIN_USER@ and @NOTIFY@ and installs
+# the result as /etc/systemd/system/mro-clock-alert.service.
+[Unit]
+Description=Tell the operator the Machine Readable Only Clock run failed
+
+[Service]
+Type=oneshot
+# The operator's user, because the alert topic lives in its home and the Clock
+# must not be able to read anything there.
+User=@MAIN_USER@
+ExecStart=@NOTIFY@ "MRO Clock failed" "The nightly Clock run failed on %H. Read /var/log/mro/clock.log." high
