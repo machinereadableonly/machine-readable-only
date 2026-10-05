@@ -99,6 +99,16 @@ test("neither the report nor any refusal carries a value", () => {
   }
 });
 
+// A variable the Clock starts requiring must reach its file, or the first sign
+// is a failed night.
+test("every variable the Clock requires is one the builder writes", () => {
+  const main = readFileSync(new URL("../src/clock/main.mjs", import.meta.url), "utf8");
+  const required = [...main.matchAll(/requireEnv\("([A-Z0-9_]+)"\)/g)].map((m) => m[1]);
+  assert.ok(required.length >= 5);
+  const { text } = buildClockEnv({ wardenEnvText: wardenEnv });
+  for (const name of required) assert.match(text, new RegExp(`^${name}=.`, "m"), name);
+});
+
 test("clock.env.example lists exactly the keys the builder writes", () => {
   const names = (text) =>
     new Set(lines(text).map((l) => /^#?([A-Z][A-Z0-9_]*)=/.exec(l)?.[1]).filter(Boolean));

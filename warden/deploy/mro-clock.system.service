@@ -6,7 +6,8 @@ OnFailure=mro-clock-alert.service
 
 [Service]
 Type=oneshot
-# Its own user: the main user can neither read its key nor change its code.
+# Its own user: no process running as the main user can read its key or
+# change its code (the operator, through sudo, still can).
 # Installed by deploy/install-clock-user.sh; see DEPLOY.md section 12.
 User=mro-clock
 Group=mro

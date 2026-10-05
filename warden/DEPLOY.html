@@ -872,10 +872,16 @@ survive a Sepolia redeploy. A MAINNET move is the case where every one must be
 re-solved -- see section 10.</li>
 </ul>
 <h2>12. The Clock under its own user -- [the operator runs three sudo commands]</h2>
-<p>The Clock signs with a key the main user should not be able to read, and runs
-code the main user should not be able to change. So it runs as the system user
-<code>mro-clock</code>, from a root-owned copy of the code, with its key in a file only it
-can read. The Warden and the Clock share the mirror through group <code>mro</code>.</p>
+<p>The Clock signs with a key that no process running as the main user -- the
+Warden, any pm2 app, a stray script -- should be able to read, and runs code
+none of them can change. So it runs as the system user <code>mro-clock</code>, from a
+root-owned copy of the code, with its key in a file only it can read. The
+Warden and the Clock share the mirror through group <code>mro</code>. This is a boundary
+against the main user&#39;s PROCESSES, not against the operator: the main user is
+in <code>sudo</code>, and the installer is run with it.</p>
+<p>The log is readable by group <code>mro</code> (the main user), not only by the Clock. Its
+text is redacted at source (<code>src/clock/redact.mjs</code>), so an RPC url&#39;s api key
+does not reach it.</p>
 <table>
 <thead>
 <tr>
@@ -932,7 +938,9 @@ and sends a push with <code>~/scripts/notify.sh</code>.</p>
 <pre><code>sudo bash warden/deploy/install-clock-user.sh
 </code></pre>
 <p>It ends with PASS, or names the step that failed. <code>--dry-run</code> checks the
-preconditions as the main user and changes nothing.</p>
+preconditions as the main user and changes nothing. It refuses to replace
+an installed split seed with a different home copy unless <code>--replace-seed</code>
+is passed, which is only right after a redeploy with a new seed.</p>
 </li>
 <li><p><strong>Cut over</strong>, between 00:30 and 23:45 UTC:</p>
 <pre><code>sudo bash warden/deploy/cutover-clock-user.sh
@@ -942,7 +950,11 @@ copies the mirror to <code>/var/lib/mro</code> with an integrity and row-count c
 points <code>STATE_DB_PATH</code> and <code>MRO_QUESTION_BANK</code> in the Warden&#39;s <code>.env</code> at the
 shared files (backup in <code>~/.mro-env-backups</code>), <strong>restarts every pm2 app</strong>
 (the daemon must restart to carry group <code>mro</code>), checks the Warden answers
-200, and enables the system timer.</p>
+200, runs the Clock once inside its sandbox, sends one test alert (a push
+titled &quot;MRO Clock failed&quot;), and only then enables the system timer.</p>
+<p><strong>It refuses while pm2 holds any app that is not online</strong>, because
+restarting pm2 runs <code>pm2 resurrect</code>, which STARTS every saved app, stopped
+ones included. <code>pm2 delete</code> each one it names, <code>pm2 save</code>, and re-run.</p>
 </li>
 <li><p><strong>After the first night passes</strong> (<code>sg mro -c &quot;tail /var/log/mro/clock.log&quot;</code>):
 remove the <code>CLOCK_PRIVATE_KEY</code> line from the Warden&#39;s <code>.env</code> (WinSCP). The
@@ -961,11 +973,14 @@ so a merged fix does nothing until then. The same applies when the Warden&#39;s
 there and kept from the existing <code>clock.env</code> when it is not.</p>
 <h3>The way back</h3>
 <pre><code>sudo systemctl disable --now mro-clock.timer
-# In the Warden&#39;s .env, set STATE_DB_PATH back to the old file (backup in
-# ~/.mro-env-backups) and put CLOCK_PRIVATE_KEY back if it was removed:
+# In the Warden&#39;s .env (backup in ~/.mro-env-backups): set STATE_DB_PATH
+# back to the old file, remove the MRO_QUESTION_BANK line, and put
+# CLOCK_PRIVATE_KEY back if it was removed. Then:
 pm2 restart mro-warden
 systemctl --user enable --now mro-clock.timer
 </code></pre>
+<p>The system units stay installed and disabled; the cutover can be run again
+once <code>/var/lib/mro/state.db</code> is moved aside.</p>
 <p>The old database is the state as it was at the cutover. Anything the Warden
 recorded since lives only in <code>/var/lib/mro/state.db</code>; copy it back the same way
 before switching, or those rows are lost.</p>

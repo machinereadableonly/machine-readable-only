@@ -63,7 +63,15 @@ test("its log is the one logrotate rotates, and rotation keeps the file", () => 
   assert.equal(one(service, "StandardError"), out);
   assert.match(rotate, /^\/var\/log\/mro\/clock\.log \{/m);
   assert.match(rotate, /^\s*copytruncate$/m);
-  assert.match(rotate, /^\s*su mro-clock mro$/m);
+  assert.doesNotMatch(rotate, /^\s*su\s/m, "mro-clock cannot create files in the 2750 log directory");
+});
+
+test("a differing split seed is refused unless replacing it is asked for", () => {
+  assert.match(installer, /! cmp -s "\$SEED_SRC" "\$ETC\/split-seed" && \[ "\$REPLACE_SEED" -eq 0 \]; then\n\s*die /);
+});
+
+test("the logrotate check reads error lines, since --debug exits 0 on them", () => {
+  assert.match(installer, /\/bin\/grep -q '\^error:' <<<"\$ROTATE_CHECK"/);
 });
 
 // The repository is public: a username or home path here would leak, and the

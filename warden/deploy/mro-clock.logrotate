@@ -1,6 +1,7 @@
 # Installed as /etc/logrotate.d/mro-clock by install-clock-user.sh.
+# Runs as root, with no `su`: the directory is 2750 root:mro, which mro-clock
+# cannot write, so it could not create clock.log.1.
 /var/log/mro/clock.log {
-    su mro-clock mro
     weekly
     rotate 8
     compress

@@ -46,6 +46,30 @@ test("the Clock timer is enabled only after the Warden answers again", () => {
   assert.ok(healthy !== -1 && enable !== -1 && healthy < enable);
 });
 
+// pm2 resurrect starts every saved app, stopped ones included.
+test("the cutover refuses while pm2 holds an app that is not online", () => {
+  const check = cutover.indexOf('[ -z "$NOT_ONLINE" ] || die');
+  const restart = cutover.indexOf('systemctl restart "pm2-$MAIN_USER"');
+  assert.ok(check !== -1 && check < restart);
+  assert.match(cutover, /status !== "online"/);
+});
+
+test("the old user timer must read 'disabled', not merely 'not enabled'", () => {
+  assert.match(cutover, /\[ "\$OLD_TIMER" = disabled \] \|\| die/);
+});
+
+test("one real run and the alert both pass before the timer is enabled", () => {
+  const run = cutover.indexOf("systemctl start mro-clock.service");
+  const alert = cutover.indexOf("systemctl start mro-clock-alert.service");
+  const enable = cutover.indexOf("systemctl enable --now mro-clock.timer");
+  assert.ok(run !== -1 && alert !== -1 && run < enable && alert < enable);
+  assert.match(cutover, /\/bin\/grep -q '\^clock: run finished'/);
+});
+
+test("a key appended to a file with no final newline starts its own line", () => {
+  assert.match(cutover, /\[ -z "\$\(tail -c1 "\$WARDEN_ENV"\)" \] \|\| echo/);
+});
+
 test("the cutover never deletes the old database", () => {
   assert.doesNotMatch(cutover, /\brm\b[^\n]*OLD_DB/);
 });

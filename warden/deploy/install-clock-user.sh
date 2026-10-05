@@ -17,11 +17,13 @@ set -euo pipefail
 
 DRY=0
 NOTIFY=""
+REPLACE_SEED=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1; shift ;;
     --notify) NOTIFY="${2:?--notify needs a path}"; shift 2 ;;
-    *) echo "usage: sudo bash install-clock-user.sh [--notify <path>] | --dry-run" >&2; exit 2 ;;
+    --replace-seed) REPLACE_SEED=1; shift ;;
+    *) echo "usage: sudo bash install-clock-user.sh [--notify <path>] [--replace-seed] | --dry-run" >&2; exit 2 ;;
   esac
 done
 
@@ -77,8 +79,11 @@ if [ "$DRY" -eq 1 ]; then
   exit 0
 fi
 
+[ ! -e "$STATE/state.db.run-lock" ] || die "a Clock run lock exists in $STATE: a run is in progress or died; check the log"
+
 step "1. the code, owned by root"
 STAGE="$(mktemp -d "$OPT.new.XXXXXX")"
+trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/warden/node_modules" "$STAGE/bin"
 cp -a "$WARDEN/src" "$WARDEN/package.json" "$STAGE/warden/"
 cp -a "$WARDEN/node_modules/." "$STAGE/warden/node_modules/"
@@ -90,6 +95,7 @@ if [ -d "$OPT" ]; then
   mv "$OPT" "$OPT.prev"
 fi
 mv "$STAGE" "$OPT"
+trap - EXIT
 ok "$OPT from commit $(sudo -u "$MAIN_USER" git -C "$WARDEN" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 step "2. the key and the split seed, readable by mro-clock only"
@@ -98,8 +104,10 @@ install -d -o mro-clock -g mro -m 700 "$ETC"
 chown mro-clock:mro "$ETC/clock.env"
 chmod 600 "$ETC/clock.env"
 if [ -f "$SEED_SRC" ]; then
-  if [ -f "$ETC/split-seed" ] && ! cmp -s "$SEED_SRC" "$ETC/split-seed"; then
-    ok "the split seed in the home directory DIFFERS from the installed one; installing the home copy"
+  # Every day's key derives from the seed, so a stale home copy must never
+  # replace the live one on a routine re-install.
+  if [ -f "$ETC/split-seed" ] && ! cmp -s "$SEED_SRC" "$ETC/split-seed" && [ "$REPLACE_SEED" -eq 0 ]; then
+    die "the split seed in the home directory differs from the installed one; remove one, or pass --replace-seed after a redeploy"
   fi
   install -o mro-clock -g mro -m 600 "$SEED_SRC" "$ETC/split-seed"
   ok "split seed installed"
@@ -127,7 +135,13 @@ step "4. the log"
 install -d -o root -g mro -m 2750 "$LOG_DIR"
 [ -f "$LOG_DIR/clock.log" ] || install -o mro-clock -g mro -m 640 /dev/null "$LOG_DIR/clock.log"
 install -m 644 "$WARDEN/deploy/mro-clock.logrotate" /etc/logrotate.d/mro-clock
-logrotate --debug /etc/logrotate.d/mro-clock >/dev/null 2>&1 && ok "$LOG_DIR/clock.log, rotated weekly" || bad "logrotate rejects /etc/logrotate.d/mro-clock"
+# --debug exits 0 even on unknown directives, so its error lines are the check.
+ROTATE_CHECK="$(logrotate --debug /etc/logrotate.d/mro-clock 2>&1 || true)"
+if /bin/grep -q '^error:' <<<"$ROTATE_CHECK"; then
+  bad "logrotate reports errors in /etc/logrotate.d/mro-clock: run logrotate --debug on it"
+else
+  ok "$LOG_DIR/clock.log, rotated weekly"
+fi
 
 step "5. the units, installed DISABLED"
 install -m 644 "$WARDEN/deploy/mro-clock.system.service" "$UNITS/mro-clock.service"

@@ -7,7 +7,8 @@
 #
 # RESTARTS EVERY PM2 APP OF THE MAIN USER, not only the Warden: the pm2 daemon
 # was started before the main user joined group mro, and only a fresh daemon
-# carries the group the Warden needs to open /var/lib/mro/state.db.
+# carries the group the Warden needs to open /var/lib/mro/state.db. It refuses
+# while pm2 holds a stopped app, because the restart would start it.
 #
 # Keeps the old state.db in place, untouched, as the way back (DEPLOY.md
 # section 12). Prints no secret.
@@ -53,6 +54,16 @@ ok "system units installed"
 ok "pm2 at $PM2"
 [ -x "$NODE" ] || die "no node at $NODE"
 
+# Restarting pm2 runs `pm2 resurrect`, which starts EVERY app in the saved
+# list, stopped ones included. Names only reach the terminal, never settings.
+NOT_ONLINE="$(as_main "$PM2" jlist | "$NODE" -e '
+  let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
+    const names = JSON.parse(s).filter((a) => a.pm2_env.status !== "online").map((a) => a.name);
+    console.log([...new Set(names)].join(" "));
+  });')"
+[ -z "$NOT_ONLINE" ] || die "pm2 holds apps that are not running ($NOT_ONLINE); restarting pm2 would START them. Remove them with pm2 delete, then pm2 save, then re-run"
+ok "every pm2 app is online, so a restart starts nothing new"
+
 # The old database is wherever the Warden's .env points today. Read that one
 # key only; its value is a path, not a secret.
 OLD_DB_REL="$(/bin/grep -E '^STATE_DB_PATH=' "$WARDEN_ENV" | tail -1 | cut -d= -f2- | tr -d "\"'")"
@@ -71,15 +82,19 @@ ok "outside the nightly window"
 if [ "$DRY" -eq 1 ]; then
   printf '\nWould: pm2 save; disable the user Clock timer; stop mro-warden; copy %s to %s;\n' "$OLD_DB" "$NEW_DB"
   printf '       set STATE_DB_PATH and MRO_QUESTION_BANK in the Warden'"'"'s .env (backed up first);\n'
-  printf '       restart pm2-%s (ALL pm2 apps); check the Warden; enable the system Clock timer.\n' "$MAIN_USER"
+  printf '       restart pm2-%s (ALL pm2 apps); check the Warden; run the Clock once as mro-clock;\n' "$MAIN_USER"
+  printf '       send one test alert; enable the system Clock timer.\n'
   exit 0
 fi
 
 step "1. stop the old Clock and the Warden"
 as_main "$PM2" save >/dev/null
 ok "pm2 process list saved"
-user_ctl disable --now mro-clock.timer >/dev/null 2>&1 || true
-[ "$(user_ctl is-enabled mro-clock.timer 2>/dev/null || true)" != enabled ] || die "the user Clock timer is still enabled"
+user_ctl disable --now mro-clock.timer >/dev/null
+# is-enabled exits non-zero for a disabled unit, so read its word instead: an
+# empty answer means the user manager was never reached.
+OLD_TIMER="$(user_ctl is-enabled mro-clock.timer 2>/dev/null || true)"
+[ "$OLD_TIMER" = disabled ] || die "the user Clock timer is '$OLD_TIMER', not disabled; two Clocks would sign at 00:05"
 ok "user Clock timer disabled"
 as_main "$PM2" stop mro-warden >/dev/null
 ok "mro-warden stopped"
@@ -123,7 +138,9 @@ set_key() {
   if /bin/grep -qE "^$key=" "$WARDEN_ENV"; then
     sed "s|^$key=.*|$key=$value|" "$WARDEN_ENV" | as_main tee "$tmp" >/dev/null
   else
-    { cat "$WARDEN_ENV"; printf '%s=%s\n' "$key" "$value"; } | as_main tee "$tmp" >/dev/null
+    # A file without a final newline would glue the new key onto its last line.
+    { cat "$WARDEN_ENV"; [ -z "$(tail -c1 "$WARDEN_ENV")" ] || echo; printf '%s=%s\n' "$key" "$value"; } \
+      | as_main tee "$tmp" >/dev/null
   fi
   as_main mv "$tmp" "$WARDEN_ENV"
 }
@@ -150,14 +167,28 @@ done
 [ "$CODE" = 200 ] || die "the Warden answers $CODE on /llms.txt; read: pm2 logs mro-warden"
 ok "the Warden answers 200"
 
-step "5. start the Clock under mro-clock"
+step "5. one real Clock run, inside its sandbox, now"
+# Mid-day this writes only what is already due (queued mints, reconcile): the
+# day's check-ins wait for the day to close.
+LOG=/var/log/mro/clock.log
+BEFORE="$(wc -l < "$LOG")"
+systemctl start mro-clock.service || die "the run under mro-clock failed; read $LOG, then DEPLOY.md section 12, the way back"
+tail -n +"$((BEFORE + 1))" "$LOG" | /bin/grep -q '^clock: run finished' || die "the run left no 'run finished' line in $LOG"
+ok "the Clock ran as mro-clock and finished"
+
+step "6. the failure alert"
+echo "   A test push titled 'MRO Clock failed' is sent now. It is this test."
+systemctl start mro-clock-alert.service || die "the alert unit failed; read: journalctl -u mro-clock-alert"
+ok "alert sent"
+
+step "7. the nightly timer"
 systemctl enable --now mro-clock.timer >/dev/null 2>&1
 ok "system timer $(systemctl is-enabled mro-clock.timer), next run $(systemctl show mro-clock.timer -p NextElapseUSecRealtime --value)"
 as_main test -r /etc/mro-clock/clock.env && die "$MAIN_USER CAN read the Clock's env file" || ok "$MAIN_USER cannot read the Clock's env file"
 
 echo
-echo "PASS: the Clock runs as mro-clock from the next 00:05 UTC."
-echo "After that night passes:"
+echo "PASS: the Clock runs as mro-clock, nightly at 00:05 UTC."
+echo "After the first night passes:"
 echo "  - remove the CLOCK_PRIVATE_KEY line from the Warden's .env;"
 echo "  - the old $OLD_DB and the home copies of the split seed and question bank"
 echo "    are no longer read; delete them only once the operator approves."
