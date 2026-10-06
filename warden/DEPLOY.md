@@ -380,8 +380,10 @@ be undone; there is no burn, and neither level nor streak can be reduced.
 
 **Rotate first, investigate second.** `setWarden` is one owner call and
 `onlyWarden` reads `warden` live, so the old key is revoked the moment it mines.
-The owner is a 2-of-3 Safe, so allow 10 to 20 minutes and have two signers to
-hand.
+The owner is a 2-of-3 Safe, so have two signers to hand. The Sepolia drill
+(a harmless `set-supply-cap`, 2026-10-06) took 2 minutes from the file being
+printed to the transaction mined, with both signers already set up and no
+emergency; allow 10 to 20 minutes for a real one.
 
     # 1. Stop the Clock, so it cannot race the rotation with a run of its own.
     #    (Before section 12's cutover: systemctl --user, no sudo.)
@@ -405,6 +407,9 @@ hand.
     #    and on each device compare the hash with the one the tool printed:
     #    a Trezor shows the safeTxHash, a Ledger the domain and message
     #    hashes. A different hash means a different transaction -- stop.
+    #    The LEDGER SIGNS FIRST, never last: the signer who executes approves
+    #    by sending, so its device shows no hash at all. Whoever executes pays
+    #    the gas, so that signer needs ETH.
     #    Then execute. If the website proposes a higher nonce than the tool
     #    printed, a transaction is already queued: reject or execute it first,
     #    or set the nonce to the printed one in the advanced parameters.
@@ -605,7 +610,9 @@ handling of the real owner key.
    ```
 
    Import the file it names in the Transaction Builder, compare the hashes on
-   each device, sign, execute. Then `cast call <token> "owner()(address)"`
+   each device, and sign with both. The second signer UNTICKS "Execute": a
+   signer who executes approves by sending, and its device shows no hash. Then
+   execute from any connected owner that holds ETH. Then `cast call <token> "owner()(address)"`
    must print the Safe. Until it does, the deploying key is still the owner.
 
    It states chain 8453, refuses any `--warden` or `--owner` that is not
