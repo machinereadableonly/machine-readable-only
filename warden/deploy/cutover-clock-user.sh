@@ -45,12 +45,16 @@ MAIN_UID="$(id -u "$MAIN_USER")"
 NODE="$MAIN_HOME/.nvm/versions/node/v24.14.1/bin/node"
 PM2_UNIT="$UNITS/pm2-$MAIN_USER.service"
 PM2="$(sed -n 's|^ExecStart=\(.*/pm2\) resurrect$|\1|p' "$PM2_UNIT" 2>/dev/null || true)"
-as_main() { sudo -u "$MAIN_USER" HOME="$MAIN_HOME" PM2_HOME="$MAIN_HOME/.pm2" "$@"; }
+# pm2 starts with `#!/usr/bin/env node`, and sudo resets PATH, so it gets the
+# PATH its own daemon runs with.
+PM2_PATH="$(sed -n 's|^Environment=PATH=||p' "$PM2_UNIT" 2>/dev/null | tail -1 || true)"
+as_main() { sudo -u "$MAIN_USER" HOME="$MAIN_HOME" PM2_HOME="$MAIN_HOME/.pm2" PATH="$PM2_PATH" "$@"; }
 user_ctl() { sudo -u "$MAIN_USER" XDG_RUNTIME_DIR="/run/user/$MAIN_UID" systemctl --user "$@"; }
 
 [ -f "$UNITS/mro-clock.service" ] && [ -f "$UNITS/mro-clock.timer" ] || die "the system units are not installed: run install-clock-user.sh"
 ok "system units installed"
 [ -n "$PM2" ] && [ -x "$PM2" ] || die "cannot find pm2 from $PM2_UNIT"
+[ -n "$PM2_PATH" ] || die "no Environment=PATH= in $PM2_UNIT, so pm2 cannot find node under sudo"
 ok "pm2 at $PM2"
 [ -x "$NODE" ] || die "no node at $NODE"
 

@@ -73,3 +73,18 @@ test("a key appended to a file with no final newline starts its own line", () =>
 test("the cutover never deletes the old database", () => {
   assert.doesNotMatch(cutover, /\brm\b[^\n]*OLD_DB/);
 });
+
+// pm2 is a `#!/usr/bin/env node` script and sudo resets PATH: without its
+// daemon's PATH the first pm2 call under sudo cannot find node.
+test("pm2 runs under sudo with the PATH its own daemon uses", () => {
+  assert.match(cutover, /PM2_PATH="\$\(sed -n 's\|\^Environment=PATH=\|\|p' "\$PM2_UNIT"/);
+  assert.match(cutover, /as_main\(\) \{ sudo -u "\$MAIN_USER" [^}]*PATH="\$PM2_PATH" "\$@"; \}/);
+});
+
+test("any exit while no Clock timer is enabled says so", () => {
+  const disable = cutover.indexOf("user_ctl disable --now mro-clock.timer");
+  const trap = cutover.indexOf("trap no_timer_notice EXIT");
+  const enable = cutover.indexOf("systemctl enable --now mro-clock.timer");
+  const done = cutover.indexOf("CUT_DONE=1");
+  assert.ok(disable !== -1 && disable < trap && trap < enable && enable < done);
+});
