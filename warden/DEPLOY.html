@@ -680,6 +680,20 @@ came from the same server that quoted it, it is not a check.</p>
 hours before anything is announced</strong> -- that window is C4.6, the OpenSea
 check, and it needs a token that already exists.</p>
 </li>
+<li><p><strong>Confirm Base attributes the first mainnet Clock write.</strong> After the first
+00:05 UTC run on mainnet (the one that mints token #1), take a transaction
+hash from section 9a&#39;s log and check its calldata ends with the issued
+suffix:</p>
+<pre><code>cast tx &lt;hash&gt; input --rpc-url https://mainnet.base.org | tail -c 59
+</code></pre>
+<p>It must print <code>62635f6466686c6f686c680b0080218021802180218021802180218021</code>
+(<code>bc_dfhlohlh</code>, length <code>0b</code>, schema <code>00</code>, the <code>8021</code> marker). Then enter the
+same hash in Base&#39;s Builder Code Validation tool, linked from
+<a href="https://docs.base.org/specifications/builder-codes/overview">https://docs.base.org/specifications/builder-codes/overview</a>, and press
+Check Attribution. The suffix check proves the bytes; only Base&#39;s tool
+proves Base credits them. A write sent without attribution can never be
+attributed afterwards, so do this on the first night, not later.</p>
+</li>
 </ol>
 <hr>
 <h2>11. Redeploying the contract pair -- [OPERATOR APPROVAL REQUIRED]</h2>

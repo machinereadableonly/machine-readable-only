@@ -652,6 +652,23 @@ handling of the real owner key.
    hours before anything is announced** -- that window is C4.6, the OpenSea
    check, and it needs a token that already exists.
 
+7. **Confirm Base attributes the first mainnet Clock write.** After the first
+   00:05 UTC run on mainnet (the one that mints token #1), take a transaction
+   hash from section 9a's log and check its calldata ends with the issued
+   suffix:
+
+   ```
+   cast tx <hash> input --rpc-url https://mainnet.base.org | tail -c 59
+   ```
+
+   It must print `62635f6466686c6f686c680b0080218021802180218021802180218021`
+   (`bc_dfhlohlh`, length `0b`, schema `00`, the `8021` marker). Then enter the
+   same hash in Base's Builder Code Validation tool, linked from
+   <https://docs.base.org/specifications/builder-codes/overview>, and press
+   Check Attribution. The suffix check proves the bytes; only Base's tool
+   proves Base credits them. A write sent without attribution can never be
+   attributed afterwards, so do this on the first night, not later.
+
 ---
 
 ## 11. Redeploying the contract pair -- [OPERATOR APPROVAL REQUIRED]
