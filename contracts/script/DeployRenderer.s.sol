@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Script, console} from "forge-std/Script.sol";
+import {console} from "forge-std/Script.sol";
 import {MroScript} from "./MroScript.sol";
 
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";

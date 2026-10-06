@@ -21,8 +21,16 @@ PORT="${REHEARSAL_PORT:-4399}"
 # The WAL matters: copying only the .db file would replay a database missing
 # everything written since the last checkpoint, which is not what production
 # would start from.
-for f in state.db state.db-wal state.db-shm; do
-  [ -f "$REPO/warden/$f" ] && cp "$REPO/warden/$f" "$D/$f"
+# The live mirror is wherever the Warden keeps it; only that key is read.
+DB_SETTING="$(grep -sE '^STATE_DB_PATH=' "$REPO/warden/.env" | tail -1 | cut -d= -f2- | tr -d "\"'")"
+case "$DB_SETTING" in
+  "") LIVE_DB="$REPO/warden/state.db" ;;
+  /*) LIVE_DB="$DB_SETTING" ;;
+  *) LIVE_DB="$REPO/warden/$DB_SETTING" ;;
+esac
+cp "$LIVE_DB" "$D/state.db" || { echo "RESULT: cannot copy production state from $LIVE_DB"; exit 1; }
+for s in wal shm; do
+  if [ -f "$LIVE_DB-$s" ]; then cp "$LIVE_DB-$s" "$D/state.db-$s" || exit 1; fi
 done
 echo "copied production state: $(stat -c %s "$D/state.db") bytes"
 

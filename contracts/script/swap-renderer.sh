@@ -36,6 +36,13 @@ export PATH="$HOME/.foundry/bin:$PATH"
 . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1 || true
 
 # Refused before anything is deployed: a renderer nobody can point at is waste.
+# safe-tx.mjs refuses a non-EIP-55 address, so catch one here, first.
+for a in "$TOKEN" "$SAFE"; do
+  if [ "$(cast to-check-sum-address "$a" 2>/dev/null)" != "$a" ]; then
+    echo "FAIL: $a is not an EIP-55 checksummed address" >&2
+    exit 2
+  fi
+done
 OWNER="$(cast call "$TOKEN" "owner()(address)" --rpc-url "$RPC")"
 if [ "$OWNER" != "$SAFE" ]; then
   echo "FAIL: the token's owner is $OWNER, not the Safe $SAFE." >&2

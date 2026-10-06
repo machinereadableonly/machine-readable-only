@@ -185,7 +185,7 @@ echo
 echo "mode     $MODE"
 echo "chain    $ACTUAL  (expected $EXPECTED_CHAIN_ID)"
 echo "warden   $WARDEN_ADDRESS"
-echo "owner    $OWNER  (Safe $SAFE_VERSION, $SAFE_THRESHOLD of $(printf '%s' "$SAFE_OWNERS" | tr ',' '\n' | wc -l); pending until it accepts)"
+echo "owner    $OWNER  (Safe $SAFE_VERSION, $SAFE_THRESHOLD of $(printf '%s' "$SAFE_OWNERS" | /bin/grep -o '0x[0-9a-fA-F]\{40\}' | wc -l); pending until it accepts)"
 echo "anchor   $SPLIT_ANCHOR"
 echo "send     ${BROADCAST:-no -- simulate only}"
 echo

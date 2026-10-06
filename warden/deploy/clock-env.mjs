@@ -18,6 +18,11 @@ export const CLOCK_PATHS = {
 const COPIED = ["BASE_RPC_URL", "MRO_CONTRACT_ADDRESS", "MRO_CHAIN_ID"];
 const OPTIONAL = ["MAX_GAS_GWEI"];
 const KEY = "CLOCK_PRIVATE_KEY";
+// Read by the Clock but never set for it. The two paths default beside
+// STATE_DB_PATH, where the Warden and the cutover look; a copied one would point
+// into the main user's home. The installed Clock counts real days only, and a
+// Warden counting fast ones would disagree with it about which day it is.
+export const REFUSED = ["CLOCK_CURSOR_PATH", "CLOCK_LOCK_PATH", "MRO_DAY_SECONDS", "MRO_CLOCK_OFFSET_SECONDS"];
 
 /// KEY -> the raw line, so quoting reaches node's --env-file untouched. A key
 /// written twice is refused only if the Clock reads it.
@@ -44,6 +49,9 @@ export function buildClockEnv({ wardenEnvText, existingClockEnvText = "" }) {
   const out = ["# Written by install-clock-user.sh. Re-run it after changing the Warden's .env."];
   const report = [];
 
+  for (const name of REFUSED) {
+    if (warden.has(name)) throw new Error(`${name} is set in the Warden's .env; the installed Clock never takes it, so remove it and re-run`);
+  }
   for (const name of COPIED) {
     if (!usable(warden, name)) throw new Error(`${name} is missing or empty in the Warden's .env`);
     out.push(warden.get(name).line);
@@ -72,14 +80,25 @@ export function buildClockEnv({ wardenEnvText, existingClockEnvText = "" }) {
 }
 
 function main() {
-  const { values } = parseArgs({ options: { "warden-env": { type: "string" }, out: { type: "string" } } });
+  const { values } = parseArgs({
+    options: { "warden-env": { type: "string" }, out: { type: "string" }, check: { type: "boolean" } },
+  });
   const src = values["warden-env"];
   const dest = values.out;
-  if (!src || !dest) throw new Error("usage: clock-env.mjs --warden-env <path> --out <path>");
-  const { text, report } = buildClockEnv({
-    wardenEnvText: readFileSync(src, "utf8"),
-    existingClockEnvText: existsSync(dest) ? readFileSync(dest, "utf8") : "",
-  });
+  if (!src || !dest) throw new Error("usage: clock-env.mjs --warden-env <path> --out <path> [--check]");
+  // --check builds the file and writes nothing; dest may be unreadable to a
+  // non-root caller, which only means its key cannot be the fallback.
+  let existing = "";
+  try {
+    existing = existsSync(dest) ? readFileSync(dest, "utf8") : "";
+  } catch (err) {
+    if (!values.check) throw err;
+  }
+  const { text, report } = buildClockEnv({ wardenEnvText: readFileSync(src, "utf8"), existingClockEnvText: existing });
+  if (values.check) {
+    for (const line of report) console.log(`   ${line}`);
+    return;
+  }
   const tmp = `${dest}.tmp-${process.pid}`;
   writeFileSync(tmp, text, { mode: 0o600 });
   renameSync(tmp, dest);

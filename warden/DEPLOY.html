@@ -885,7 +885,9 @@ none of them can change. So it runs as the system user <code>mro-clock</code>, f
 root-owned copy of the code, with its key in a file only it can read. The
 Warden and the Clock share the mirror through group <code>mro</code>. This is a boundary
 against the main user&#39;s PROCESSES, not against the operator: the main user is
-in <code>sudo</code>, and the installer is run with it.</p>
+in <code>sudo</code>, and the installer is run with it. The installer also runs the main
+user&#39;s Node and checkout as root and copies them into <code>/opt</code>, so a compromised
+main user account becomes root, and holds the Clock&#39;s key, at the next install.</p>
 <p>The log is readable by group <code>mro</code> (the main user), not only by the Clock. Its
 text is redacted at source (<code>src/clock/redact.mjs</code>), so an RPC url&#39;s api key
 does not reach it.</p>
@@ -944,8 +946,10 @@ and sends a push with <code>~/scripts/notify.sh</code>.</p>
 <li><p><strong>Install</strong> (re-runnable; the timer is installed disabled):</p>
 <pre><code>sudo bash warden/deploy/install-clock-user.sh
 </code></pre>
-<p>It ends with PASS, or names the step that failed. <code>--dry-run</code> checks the
-preconditions as the main user and changes nothing. It refuses to replace
+<p>Between 00:30 and 23:45 UTC: it swaps the code a nightly run loads. It ends
+with PASS, or names the step that failed. <code>--dry-run</code> checks the
+preconditions as the main user, builds the Clock&#39;s env file without writing
+it, and changes nothing. It refuses to replace
 an installed split seed with a different home copy unless <code>--replace-seed</code>
 is passed, which is only right after a redeploy with a new seed.</p>
 </li>
@@ -958,7 +962,9 @@ points <code>STATE_DB_PATH</code> and <code>MRO_QUESTION_BANK</code> in the Ward
 shared files (backup in <code>~/.mro-env-backups</code>), <strong>restarts every pm2 app</strong>
 (the daemon must restart to carry group <code>mro</code>), checks the Warden answers
 200, runs the Clock once inside its sandbox, sends one test alert (a push
-titled &quot;MRO Clock failed&quot;), and only then enables the system timer.</p>
+titled &quot;MRO Clock failed&quot;), and only then enables the system timer. If it
+stops anywhere after disabling the user timer, it says that NEITHER timer
+is enabled: finish the cutover or take the way back below.</p>
 <p><strong>It refuses while pm2 holds any app that is not online</strong>, because
 restarting pm2 runs <code>pm2 resurrect</code>, which STARTS every saved app, stopped
 ones included. <code>pm2 delete</code> each one it names, <code>pm2 save</code>, and re-run.</p>
@@ -977,7 +983,14 @@ so a merged fix does nothing until then. The same applies when the Warden&#39;s
 <code>.env</code> changes <code>BASE_RPC_URL</code>, <code>MRO_CONTRACT_ADDRESS</code>, <code>MRO_CHAIN_ID</code> or
 <code>MAX_GAS_GWEI</code> (a redeploy does): the installer copies those four into
 <code>clock.env</code>. The key itself is copied from the Warden&#39;s <code>.env</code> when it is
-there and kept from the existing <code>clock.env</code> when it is not.</p>
+there and kept from the existing <code>clock.env</code> when it is not. It refuses a
+Warden <code>.env</code> that sets <code>CLOCK_CURSOR_PATH</code>, <code>CLOCK_LOCK_PATH</code>,
+<code>MRO_DAY_SECONDS</code> or <code>MRO_CLOCK_OFFSET_SECONDS</code>: the installed Clock never
+takes them, and the Warden would disagree with it.</p>
+<p>To run the Clock once now, <code>bash warden/tools/run-clock-now.sh</code> starts the
+system unit once its timer is enabled. <code>rehearse-start.sh</code> copies the mirror
+from wherever <code>STATE_DB_PATH</code> points, so after the cutover run it from a shell
+that carries group <code>mro</code>.</p>
 <h3>The way back</h3>
 <pre><code>sudo systemctl disable --now mro-clock.timer
 # In the Warden&#39;s .env (backup in ~/.mro-env-backups): set STATE_DB_PATH

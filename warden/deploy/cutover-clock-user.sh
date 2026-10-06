@@ -96,6 +96,15 @@ user_ctl disable --now mro-clock.timer >/dev/null
 OLD_TIMER="$(user_ctl is-enabled mro-clock.timer 2>/dev/null || true)"
 [ "$OLD_TIMER" = disabled ] || die "the user Clock timer is '$OLD_TIMER', not disabled; two Clocks would sign at 00:05"
 ok "user Clock timer disabled"
+# From here until step 7 no Clock timer is enabled; any exit, die or set -e,
+# must say so.
+CUT_DONE=0
+no_timer_notice() {
+  [ "$CUT_DONE" = 1 ] && return
+  printf '\n   NEITHER Clock timer is enabled: nothing runs at 00:05 UTC until one is.\n' >&2
+  printf '   Finish the cutover, or take the way back in DEPLOY.md section 12.\n' >&2
+}
+trap no_timer_notice EXIT
 as_main "$PM2" stop mro-warden >/dev/null
 ok "mro-warden stopped"
 
@@ -135,14 +144,17 @@ set_key() {
   local key="$1" value="$2" tmp
   tmp="$(as_main mktemp "$WARDEN/.env.tmp.XXXXXX")"
   as_main chmod 600 "$tmp"
+  # The temporary file holds the whole .env, key included: never leave it behind.
   if /bin/grep -qE "^$key=" "$WARDEN_ENV"; then
-    sed "s|^$key=.*|$key=$value|" "$WARDEN_ENV" | as_main tee "$tmp" >/dev/null
+    sed "s|^$key=.*|$key=$value|" "$WARDEN_ENV" | as_main tee "$tmp" >/dev/null \
+      || { as_main rm -f "$tmp"; die "could not write $key into the Warden's .env"; }
   else
     # A file without a final newline would glue the new key onto its last line.
     { cat "$WARDEN_ENV"; [ -z "$(tail -c1 "$WARDEN_ENV")" ] || echo; printf '%s=%s\n' "$key" "$value"; } \
-      | as_main tee "$tmp" >/dev/null
+      | as_main tee "$tmp" >/dev/null \
+      || { as_main rm -f "$tmp"; die "could not write $key into the Warden's .env"; }
   fi
-  as_main mv "$tmp" "$WARDEN_ENV"
+  as_main mv "$tmp" "$WARDEN_ENV" || { as_main rm -f "$tmp"; die "could not replace the Warden's .env"; }
 }
 set_key STATE_DB_PATH "$NEW_DB"
 set_key MRO_QUESTION_BANK "$BANK"
@@ -183,6 +195,8 @@ ok "alert sent"
 
 step "7. the nightly timer"
 systemctl enable --now mro-clock.timer >/dev/null 2>&1
+[ "$(systemctl is-enabled mro-clock.timer 2>/dev/null || true)" = enabled ] || die "the system Clock timer did not enable"
+CUT_DONE=1
 ok "system timer $(systemctl is-enabled mro-clock.timer), next run $(systemctl show mro-clock.timer -p NextElapseUSecRealtime --value)"
 as_main test -r /etc/mro-clock/clock.env && die "$MAIN_USER CAN read the Clock's env file" || ok "$MAIN_USER cannot read the Clock's env file"
 

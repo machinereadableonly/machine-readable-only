@@ -36,7 +36,6 @@ set -uo pipefail
 SECONDS_TO_RUN="${1:-20}"
 WARDEN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$WARDEN_DIR/.env"
-LIVE_DB="$WARDEN_DIR/state.db"
 
 BACKUP_DIR="$HOME/backups"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -51,10 +50,23 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 2
 fi
 
+# The live mirror is wherever the Warden is configured to keep it (after the
+# Clock cutover, /var/lib/mro). Only that key is read; its value is a path.
+DB_SETTING="$(grep -E '^STATE_DB_PATH=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d "\"'")"
+case "$DB_SETTING" in
+  "") LIVE_DB="$WARDEN_DIR/state.db" ;;
+  /*) LIVE_DB="$DB_SETTING" ;;
+  *) LIVE_DB="$WARDEN_DIR/$DB_SETTING" ;;
+esac
+if [ -n "$DB_SETTING" ] && [ ! -f "$LIVE_DB" ]; then
+  echo "rehearse: STATE_DB_PATH names $LIVE_DB, which does not exist -- refusing to rehearse against nothing" >&2
+  exit 2
+fi
+
 # 1. BACK UP FIRST, ALWAYS. This is what made the 2026-09-05 recovery cheap.
 mkdir -p "$BACKUP_DIR"
 if [ -f "$LIVE_DB" ]; then
-  cp "$LIVE_DB" "$BACKUP_DIR/state.db.$STAMP"
+  cp "$LIVE_DB" "$BACKUP_DIR/state.db.$STAMP" || { echo "rehearse: cannot read $LIVE_DB (a shell from before joining group mro?)" >&2; exit 2; }
   chmod 600 "$BACKUP_DIR/state.db.$STAMP"
   echo "rehearse: backed up state.db to ~/backups/state.db.$STAMP"
 else
@@ -65,9 +77,9 @@ fi
 #    last checkpoint rather than what the service is actually running on.
 COPY_DB="$WORK/state.db"
 if [ -f "$LIVE_DB" ]; then
-  cp "$LIVE_DB" "$COPY_DB"
-  [ -f "$LIVE_DB-wal" ] && cp "$LIVE_DB-wal" "$COPY_DB-wal"
-  [ -f "$LIVE_DB-shm" ] && cp "$LIVE_DB-shm" "$COPY_DB-shm"
+  cp "$LIVE_DB" "$COPY_DB" || exit 2
+  if [ -f "$LIVE_DB-wal" ]; then cp "$LIVE_DB-wal" "$COPY_DB-wal" || exit 2; fi
+  if [ -f "$LIVE_DB-shm" ]; then cp "$LIVE_DB-shm" "$COPY_DB-shm" || exit 2; fi
 fi
 
 # 3. The rehearsal environment: the real one, with the two settings that must

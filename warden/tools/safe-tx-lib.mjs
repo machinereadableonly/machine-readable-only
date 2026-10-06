@@ -14,7 +14,7 @@ const CHAINS = new Set([8453, 84532]);
 // The versions whose type hashes above were read from source.
 const SAFE_VERSIONS = new Set(["1.4.1", "1.5.0"]);
 
-const eip55 = (value) => {
+export const eip55 = (value) => {
   if (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value) || getAddress(value) !== value) {
     throw new Error(`${value} is not an EIP-55 checksummed address`);
   }

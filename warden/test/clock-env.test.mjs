@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { buildClockEnv, CLOCK_PATHS } from "../deploy/clock-env.mjs";
+import { buildClockEnv, CLOCK_PATHS, REFUSED } from "../deploy/clock-env.mjs";
 
 // Values no report or error may ever contain.
 const KEY = "0x" + "ab".repeat(32);
@@ -109,6 +109,32 @@ test("every variable the Clock requires is one the builder writes", () => {
   for (const name of required) assert.match(text, new RegExp(`^${name}=.`, "m"), name);
 });
 
+// Optional reads too: one the builder silently drops runs on its default under
+// mro-clock while the Warden runs on the value.
+test("every variable the Clock's code reads is written or refused", () => {
+  const dir = new URL("../src/clock/", import.meta.url);
+  const files = readdirSync(dir).filter((f) => f.endsWith(".mjs")).map((f) => new URL(f, dir));
+  files.push(new URL("../src/day.mjs", import.meta.url), new URL("../src/mcp/question.mjs", import.meta.url));
+  const read = new Set();
+  for (const file of files) {
+    const src = readFileSync(file, "utf8");
+    for (const re of [/requireEnv\("([A-Z0-9_]+)"\)/g, /\benv\.([A-Z][A-Z0-9_]+)/g, /\(process\.env, "([A-Z0-9_]+)"/g]) {
+      for (const m of src.matchAll(re)) read.add(m[1]);
+    }
+  }
+  assert.ok(read.has("MAX_GAS_GWEI") && read.has("MRO_DAY_SECONDS") && read.has("MRO_SPLIT_SEED_FILE"), "the scan sees the Clock");
+  const { text } = buildClockEnv({ wardenEnvText: wardenEnv + "MAX_GAS_GWEI=0.1\n" });
+  for (const name of read) {
+    assert.ok(new RegExp(`^${name}=.`, "m").test(text) || REFUSED.includes(name), `${name} is read but neither written nor refused`);
+  }
+});
+
+test("a variable the installed Clock never takes is refused, not dropped", () => {
+  for (const name of REFUSED) {
+    assert.throws(() => buildClockEnv({ wardenEnvText: wardenEnv + `${name}=1\n` }), new RegExp(name));
+  }
+});
+
 test("clock.env.example lists exactly the keys the builder writes", () => {
   const names = (text) =>
     new Set(lines(text).map((l) => /^#?([A-Z][A-Z0-9_]*)=/.exec(l)?.[1]).filter(Boolean));
@@ -129,6 +155,23 @@ test("the command writes the file mode 600 and prints no value", () => {
   assert.equal(statSync(out).mode & 0o777, 0o600);
   assert.ok(readFileSync(out, "utf8").includes(`CLOCK_PRIVATE_KEY=${KEY}`));
   assert.ok(!leaks(r.stdout + r.stderr));
+});
+
+test("--check reports the keys and writes nothing", () => {
+  const dir = mkdtempSync(join(tmpdir(), "clock-env-"));
+  const src = join(dir, "warden.env");
+  const out = join(dir, "clock.env");
+  writeFileSync(src, wardenEnv, { mode: 0o600 });
+  const script = new URL("../deploy/clock-env.mjs", import.meta.url).pathname;
+  const r = spawnSync(process.execPath, [script, "--warden-env", src, "--out", out, "--check"], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /CLOCK_PRIVATE_KEY\s+set/);
+  assert.deepEqual(readdirSync(dir), ["warden.env"]);
+  assert.ok(!leaks(r.stdout + r.stderr));
+  writeFileSync(src, wardenEnv + "MRO_DAY_SECONDS=60\n", { mode: 0o600 });
+  const refused = spawnSync(process.execPath, [script, "--warden-env", src, "--out", out, "--check"], { encoding: "utf8" });
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /MRO_DAY_SECONDS/);
 });
 
 test("the command reads an existing clock.env at --out when it is there", () => {

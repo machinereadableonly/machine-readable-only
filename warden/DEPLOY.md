@@ -894,7 +894,9 @@ none of them can change. So it runs as the system user `mro-clock`, from a
 root-owned copy of the code, with its key in a file only it can read. The
 Warden and the Clock share the mirror through group `mro`. This is a boundary
 against the main user's PROCESSES, not against the operator: the main user is
-in `sudo`, and the installer is run with it.
+in `sudo`, and the installer is run with it. The installer also runs the main
+user's Node and checkout as root and copies them into `/opt`, so a compromised
+main user account becomes root, and holds the Clock's key, at the next install.
 
 The log is readable by group `mro` (the main user), not only by the Clock. Its
 text is redacted at source (`src/clock/redact.mjs`), so an RPC url's api key
@@ -923,8 +925,10 @@ and sends a push with `~/scripts/notify.sh`.
 
        sudo bash warden/deploy/install-clock-user.sh
 
-   It ends with PASS, or names the step that failed. `--dry-run` checks the
-   preconditions as the main user and changes nothing. It refuses to replace
+   Between 00:30 and 23:45 UTC: it swaps the code a nightly run loads. It ends
+   with PASS, or names the step that failed. `--dry-run` checks the
+   preconditions as the main user, builds the Clock's env file without writing
+   it, and changes nothing. It refuses to replace
    an installed split seed with a different home copy unless `--replace-seed`
    is passed, which is only right after a redeploy with a new seed.
 
@@ -938,7 +942,9 @@ and sends a push with `~/scripts/notify.sh`.
    shared files (backup in `~/.mro-env-backups`), **restarts every pm2 app**
    (the daemon must restart to carry group `mro`), checks the Warden answers
    200, runs the Clock once inside its sandbox, sends one test alert (a push
-   titled "MRO Clock failed"), and only then enables the system timer.
+   titled "MRO Clock failed"), and only then enables the system timer. If it
+   stops anywhere after disabling the user timer, it says that NEITHER timer
+   is enabled: finish the cutover or take the way back below.
 
    **It refuses while pm2 holds any app that is not online**, because
    restarting pm2 runs `pm2 resurrect`, which STARTS every saved app, stopped
@@ -959,7 +965,15 @@ so a merged fix does nothing until then. The same applies when the Warden's
 `.env` changes `BASE_RPC_URL`, `MRO_CONTRACT_ADDRESS`, `MRO_CHAIN_ID` or
 `MAX_GAS_GWEI` (a redeploy does): the installer copies those four into
 `clock.env`. The key itself is copied from the Warden's `.env` when it is
-there and kept from the existing `clock.env` when it is not.
+there and kept from the existing `clock.env` when it is not. It refuses a
+Warden `.env` that sets `CLOCK_CURSOR_PATH`, `CLOCK_LOCK_PATH`,
+`MRO_DAY_SECONDS` or `MRO_CLOCK_OFFSET_SECONDS`: the installed Clock never
+takes them, and the Warden would disagree with it.
+
+To run the Clock once now, `bash warden/tools/run-clock-now.sh` starts the
+system unit once its timer is enabled. `rehearse-start.sh` copies the mirror
+from wherever `STATE_DB_PATH` points, so after the cutover run it from a shell
+that carries group `mro`.
 
 ### The way back
 

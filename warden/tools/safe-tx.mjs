@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { createPublicClient, http } from "viem";
 
 import { MRO_ABI } from "../src/clock/abi.mjs";
-import { prepare } from "./safe-tx-lib.mjs";
+import { eip55, prepare } from "./safe-tx-lib.mjs";
 import { safeErrorText } from "../src/clock/redact.mjs";
 
 const SAFE_ABI = [
@@ -43,6 +43,13 @@ function parse(argv) {
   }
   for (const f of ["contract", "safe", "rpc"]) {
     if (!flags[f]) throw new Error(`--${f} is required. Usage: safe-tx.mjs <action> [argument] --contract <token> --safe <safe> --rpc <url>`);
+  }
+  for (const f of ["contract", "safe"]) {
+    try {
+      eip55(flags[f]);
+    } catch (err) {
+      throw new Error(`--${f}: ${err.message}`);
+    }
   }
   const [action, ...args] = rest;
   if (!action) throw new Error("name an action: accept-ownership, set-warden, set-renderer, set-supply-cap, pause, unpause");

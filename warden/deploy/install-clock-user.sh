@@ -67,11 +67,16 @@ ok "group mro, user mro-clock, $MAIN_USER in mro, $STATE 2770 root:mro"
 [ -d "$WARDEN/node_modules" ] || die "no $WARDEN/node_modules: run npm ci in warden/"
 [ -f "$WARDEN_ENV" ] || die "no Warden .env in $WARDEN"
 ok "node $NODE_VERSION, warden/node_modules, the Warden's .env"
-case "$NOTIFY" in *[[:space:]\|\&]*) die "the notify path may not contain whitespace, | or &" ;; esac
+# It is substituted into a unit file by sed: % is a systemd specifier, and
+# | & \ are sed's own.
+case "$NOTIFY" in *[[:space:]\|\&%\\]*) die "the notify path may not contain whitespace, |, &, % or \\" ;; esac
 [ -x "$NOTIFY" ] || die "no executable alert script at $NOTIFY (pass --notify <path>)"
 ok "alert script $NOTIFY"
 
 if [ "$DRY" -eq 1 ]; then
+  "$NODE" "$WARDEN/deploy/clock-env.mjs" --warden-env "$WARDEN_ENV" --out "$ETC/clock.env" --check \
+    || die "the Clock's env file could not be built from the Warden's .env (above)"
+  ok "the Clock's env file builds from the Warden's .env"
   [ -f "$SEED_SRC" ] && ok "split seed found in the home directory" || ok "no split seed in the home directory; the installer needs one there or already in $ETC"
   [ -f "$BANK_SRC" ] && ok "question bank found in the home directory" || ok "no question bank in the home directory; the installer needs one there or already in $BANK_DIR"
   printf '\nWould install: %s, %s, %s, %s/clock.log, /etc/logrotate.d/mro-clock,\n' "$OPT" "$ETC" "$BANK_DIR" "$LOG_DIR"
@@ -80,6 +85,10 @@ if [ "$DRY" -eq 1 ]; then
 fi
 
 [ ! -e "$STATE/state.db.run-lock" ] || die "a Clock run lock exists in $STATE: a run is in progress or died; check the log"
+# The lock only sees a run already going; step 1 swaps the code a timer run
+# could be about to load.
+NOW="$(date -u +%H%M)"
+{ [ "$NOW" -ge 0030 ] && [ "$NOW" -lt 2345 ]; } || die "it is $(date -u +%H:%M) UTC; run between 00:30 and 23:45 so the nightly run cannot start mid-install"
 
 step "1. the code, owned by root"
 STAGE="$(mktemp -d "$OPT.new.XXXXXX")"

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Run the Clock once, NOW, the way its systemd unit runs it: the same working
-# directory, the same configuration file loaded by node itself, the same log.
+# Run the Clock once, NOW, the way its timer runs it.
 #
 #   bash warden/tools/run-clock-now.sh
 #
@@ -9,10 +8,17 @@
 # by design: every write is chosen from rows still queued, check-ins only for
 # days that have closed, and the Clock's own lock refuses a concurrent run.
 #
-# Nothing here reads or prints the configuration file; the key reaches only the
-# process that signs with it. What systemd adds and this does not: the unit's
-# sandboxing (ProtectSystem, MemoryMax=1G) and the logrotate pre-step.
+# After the cutover (DEPLOY.md section 12) the Clock is the system unit run as
+# mro-clock, with its own env file and log, so this starts that unit. Before
+# it, the Clock is the main user's, and this runs it the way that user unit
+# did, minus its sandboxing and logrotate pre-step. Prints no configuration.
 set -euo pipefail
+
+if [ "$(systemctl is-enabled mro-clock.timer 2>/dev/null || true)" = enabled ]; then
+  echo "clock: starting mro-clock.service; the run logs to /var/log/mro/clock.log"
+  exec sudo systemctl start mro-clock.service
+fi
+
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 # shellcheck source=/dev/null
 . "$HOME/.nvm/nvm.sh" >/dev/null
