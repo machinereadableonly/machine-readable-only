@@ -9,8 +9,16 @@ import { keyIndexFor, answerBit, silentBit } from "./split.mjs";
 
 export { BORDER_ABI };
 
-// A public RPC serves at most this many blocks per log query.
+// A public RPC serves at most this many blocks per log query, and may lower it
+// without notice: a refused width is halved and the page retried.
 const LOG_SPAN = 1000n;
+
+// Mirrors refusedTheRange in warden/src/clock/reconcile.mjs; the client ships
+// without the warden, so it keeps its own copy.
+function refusedTheRange(err) {
+  const said = `${err?.details ?? ""} ${err?.shortMessage ?? ""}`;
+  return /\brange\b|too many results|block limit/i.test(said);
+}
 
 const bitOf = (words, i) => Number((BigInt(words[i >> 8]) >> BigInt(i & 255)) & 1n);
 
@@ -28,9 +36,19 @@ function decodeLogs(logs) {
 
 async function logsBetween(publicClient, contract, fromBlock, toBlock) {
   const out = [];
-  for (let from = fromBlock; from <= toBlock; from += LOG_SPAN) {
-    const to = from + LOG_SPAN - 1n < toBlock ? from + LOG_SPAN - 1n : toBlock;
-    out.push(...decodeLogs(await publicClient.getLogs({ address: contract, fromBlock: from, toBlock: to })));
+  let width = LOG_SPAN;
+  for (let from = fromBlock; from <= toBlock; ) {
+    const to = from + width - 1n < toBlock ? from + width - 1n : toBlock;
+    let logs;
+    try {
+      logs = await publicClient.getLogs({ address: contract, fromBlock: from, toBlock: to });
+    } catch (err) {
+      if (width <= 1n || !refusedTheRange(err)) throw err;
+      width /= 2n;
+      continue;
+    }
+    out.push(...decodeLogs(logs));
+    from = to + 1n;
   }
   return out;
 }

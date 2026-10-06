@@ -36,7 +36,7 @@ function logOf(eventName, args, blockNumber, transactionHash) {
 /// A token minted on MINT_DAY, then credited once a day. `answers[0]` stands
 /// for the mint (always a coin flip); each later entry is that credit's answer
 /// index, or null for silence. One Clock run per day: a reveal, then its writes.
-function history({ answers, flipBit = null, hideBatch = null, unrevealedLast = false, voucherDays = 0, head = null }) {
+function history({ answers, flipBit = null, hideBatch = null, unrevealedLast = false, voucherDays = 0, head = null, logLimit = 1000, logFailure = null }) {
   const logs = [];
   const txs = new Map();
   const bits = [];
@@ -95,6 +95,7 @@ function history({ answers, flipBit = null, hideBatch = null, unrevealedLast = f
   const words = [0n, 0n];
   bits.forEach((b, i) => { if (b) words[i >> 8] |= 1n << BigInt(i & 255); });
 
+  let wideQueries = 0;
   const client = {
     async readContract({ address, functionName, args }) {
       assert.equal(address, CONTRACT);
@@ -112,6 +113,15 @@ function history({ answers, flipBit = null, hideBatch = null, unrevealedLast = f
       // A public RPC refuses a range past its head.
       if (toBlock > headBlock) throw new Error("block range extends beyond current head block");
       assert.ok(toBlock - fromBlock < 1000n, "a public RPC serves at most 1,000 blocks per query");
+      // Single-block reads walk the reveals; a failure aimed at the paged scan skips them.
+      if (logFailure && toBlock > fromBlock) {
+        wideQueries += 1;
+        throw logFailure;
+      }
+      // viem's shape for a node that refuses the width of a log query.
+      if (toBlock - fromBlock >= BigInt(logLimit)) {
+        throw Object.assign(new Error("RPC Request failed."), { details: `eth_getLogs is limited to a ${logLimit} range` });
+      }
       return logs.filter((l) => l.blockNumber >= fromBlock && l.blockNumber <= toBlock);
     },
     async getTransaction({ hash }) {
@@ -120,7 +130,7 @@ function history({ answers, flipBit = null, hideBatch = null, unrevealedLast = f
       return tx;
     },
   };
-  return { client, contract: CONTRACT };
+  return { client, contract: CONTRACT, wideQueries: () => wideQueries };
 }
 
 test("the inline ABI matches the contract's", () => {
@@ -211,4 +221,17 @@ test("voucher credits after the Warden is gone are found and reported as voucher
   const r = await verifyBorder({ publicClient: h.client, contract: h.contract, tokenId: 1 });
   assert.equal(r.ok, true, JSON.stringify(r.problems));
   assert.deepEqual(r.squares.map((s) => s.status), ["ok", "ok", "ok", "voucher", "voucher"]);
+});
+
+test("a node that serves fewer blocks per query is paged narrower, not failed", async () => {
+  const h = history({ answers: [1, null, 0], voucherDays: 2, logLimit: 500 });
+  const r = await verifyBorder({ publicClient: h.client, contract: h.contract, tokenId: 1 });
+  assert.equal(r.ok, true, JSON.stringify(r.problems));
+  assert.deepEqual(r.squares.map((s) => s.status), ["ok", "ok", "ok", "voucher", "voucher"]);
+});
+
+test("a log query failing for another reason is not mistaken for a narrow node", async () => {
+  const h = history({ answers: [1, null, 0], logFailure: new Error("socket hang up") });
+  await assert.rejects(verifyBorder({ publicClient: h.client, contract: h.contract, tokenId: 1 }), /socket hang up/);
+  assert.equal(h.wideQueries(), 1, "the page was retried narrower instead of failing");
 });
