@@ -58,6 +58,10 @@ const MAX_MARK_ID = 15;
 /// that lost its argument, not a Mark.
 const MIN_FINISHER_MARK_ID = 11;
 
+/// The contract's HOUSE_TOKEN: it finishes with Aorta and no place.
+const HOUSE_TOKEN = 1;
+const AORTA = 11;
+
 /**
  * Does this failure mean the node refused the WIDTH of the page?
  *
@@ -295,12 +299,14 @@ export function applyEvents(q, events, { log = () => {} } = {}) {
         // and for the same reason: a decode that lost one would write a bit no
         // Mark owns, or a place of 0 that reads back as "never finished", and
         // nothing ever clears either. Places start at 1 -- the contract's
-        // `ordinal = ++finishers` cannot hand out a 0 -- and the Mark is one of
-        // the five in the finisher band.
+        // `ordinal = ++finishers` cannot hand out a 0 -- except for token 1,
+        // which the contract gives Aorta and no place. The Mark is one of the
+        // five in the finisher band.
         const ordinal = Number(event.args?.ordinal);
         const markId = Number(event.args?.markId);
+        const house = tokenId === HOUSE_TOKEN && ordinal === 0 && markId === AORTA;
         if (
-          !Number.isInteger(ordinal) || ordinal < 1 ||
+          !Number.isInteger(ordinal) || (ordinal < 1 && !house) ||
           !Number.isInteger(markId) || markId < MIN_FINISHER_MARK_ID || markId > MAX_MARK_ID
         ) {
           applied.skipped += 1;
@@ -312,7 +318,11 @@ export function applyEvents(q, events, { log = () => {} } = {}) {
         }
         q.setFinished(tokenId, ordinal, markId);
         applied.Finished += 1;
-        log(`clock: token ${tokenId} finished its year in place ${ordinal}, mark ${markId}`);
+        log(
+          house
+            ? `clock: token ${tokenId} finished its year with Aorta and no place`
+            : `clock: token ${tokenId} finished its year in place ${ordinal}, mark ${markId}`
+        );
         break;
       }
     }

@@ -231,6 +231,20 @@ test("a token that has not finished carries finisher: null, not a place of 0", a
   assert.equal(view.finisher, null);
 });
 
+// Token 1 finishes with Aorta and no place: it has finished, so not null, and
+// it has no place, so null rather than a 0 that would read as one.
+test("token 1's view names Aorta and no place once it finishes", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 20_700, mintDay: 20_336 });
+  q.creditDay(1, 20_700, 365, 365);
+  q.setFinished(1, 0, 11);
+  const tool = makeStatusTool({ q, chain: openChain() });
+
+  const view = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.deepEqual(view.finisher, { place: null, mark: "aorta" });
+  assert.equal(view.whole, true);
+});
+
 // The half of this that was a live contradiction: the door refuses a finished
 // token FOREVER, and `status` was still handing it a time to come back and a
 // deadline to keep a run by. An agent that schedules from those two fields

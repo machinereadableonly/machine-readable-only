@@ -49,8 +49,9 @@ export function tokenView(q, tokenId, links = null, now = Date.now()) {
     // What replaces it is the thing that DOES distinguish one finished token
     // from another: the place it came in. `null` until the chain says so, which
     // is the finishing credit's `Finished` event and nothing else.
-    finisher: t.finisher
-      ? { place: t.finisher, mark: markNameIn(t.marks & FINISHER_MASK, LADDER) }
+    // Keyed on the Mark, not the place: token 1 finishes with Aorta and no place.
+    finisher: t.marks & FINISHER_MASK
+      ? { place: t.finisher || null, mark: markNameIn(t.marks & FINISHER_MASK, LADDER) }
       : null,
     marks: t.marks,
     lastDay: t.lastDay,

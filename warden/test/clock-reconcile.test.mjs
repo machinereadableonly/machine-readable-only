@@ -341,6 +341,22 @@ test("a Finished with no usable ordinal is skipped, not written", () => {
   assert.equal(q.getToken(1).marks, 0);
 });
 
+// Token 1 is the house token: the contract gives it Aorta and no place.
+test("token 1's Finished with no place records Aorta and no place", () => {
+  const { q } = mirrorWithToken();
+  const applied = applyEvents(q, [chainEvent("Finished", { id: 1n, ordinal: 0, markId: 11 })], { log: () => {} });
+  assert.equal(applied.Finished, 1);
+  assert.equal(q.getToken(1).finisher, 0);
+  assert.notEqual(BigInt(q.getToken(1).marks) & (1n << 11n), 0n);
+});
+
+test("a Finished with no place is still skipped for any other token", () => {
+  const { q } = mirrorWithToken(2);
+  const applied = applyEvents(q, [chainEvent("Finished", { id: 2n, ordinal: 0, markId: 11 })], { log: () => {} });
+  assert.equal(applied.Finished, 0);
+  assert.equal(applied.skipped, 1);
+});
+
 // A token minted by some other warden, or one this mirror was restored without,
 // is not this service's to invent.
 test("an event for a token the mirror never heard of is skipped, not inserted", () => {
