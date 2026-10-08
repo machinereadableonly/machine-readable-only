@@ -19,6 +19,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getAddress } from "viem";
 import { createServer } from "./server.mjs";
+import { houseKeyIdFor } from "./mcp/houseToken.mjs";
 import { makeAllowRegistration, makeAllowToolCall, makeSpawnSolve } from "./bootstrap.mjs";
 import { makePaymentGateway, warmUp, bootDecisionFor } from "./pay/x402.mjs";
 import { makeCdpAuthHeaders, isCdpFacilitator } from "./pay/cdp.mjs";
@@ -141,6 +142,9 @@ if (chainId !== BASE_SEPOLIA && PLACEHOLDER_TREASURIES.has(treasuryAddress.toLow
       "set the real treasury address before running anywhere real money can arrive"
   );
 }
+
+// Only this key may be minted as token 1, the contract's house token.
+const houseKeyId = houseKeyIdFor(process.env, chainId);
 
 // The facilitator that verifies and settles USDC payments. Required, never
 // defaulted: a wrong default here charges agents into the void.
@@ -362,6 +366,7 @@ async function main() {
 
   const mcp = makeMcpHandler({
     q,
+    houseKeyId,
     bank,
     chain,
     today: utcDay,

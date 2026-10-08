@@ -5,8 +5,9 @@ import { MINT_PRICE, MINT_RESOURCE } from "../../pay/x402.mjs";
 import { paidWriteBlock, requireChain, RECIPIENT_REMEDY } from "../gates.mjs";
 import { sweep } from "../sweep.mjs";
 import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
+import { mintIdFloor } from "../houseToken.mjs";
 
-export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
+export function makeMintTool({ q, chain, paid, today, alert = console.error, houseKeyId = null }) {
   requireChain(chain, "mint");
   return {
     name: "mint",
@@ -90,7 +91,7 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error }) {
         // mint() reverts on, and the agent has already paid by this line.
         // Same rule as every other gate above -- read the chain, never assume
         // this database is the world.
-        const tokenId = await chain.freeIdFrom(q.nextTokenId());
+        const tokenId = await chain.freeIdFrom(mintIdFloor(q.nextTokenId(), ctx.keyId, houseKeyId));
         if (tokenId === null) {
           alert(`mint refused for key ${ctx.keyId} after payment was verified: no free token id could be established on chain`);
           return { ok: false, reason: "paid-but-unavailable", detail: "chain-unavailable" };

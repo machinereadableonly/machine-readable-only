@@ -242,7 +242,7 @@ SERVED="$(/bin/grep -c "$TOK" "$TREE/warden/public/llms.txt" || true)"
 
 # --- 5. the Warden, mainnet mode -------------------------------------------------
 step "5. boot the Warden in MAINNET mode against the fork (rehearse-start.sh, real settings, IPv4)"
-OVR="MRO_CHAIN_ID=8453 MRO_CONTRACT_ADDRESS=$TOK BASE_RPC_URL=$FORK X402_FACILITATOR_URL=$CDP_URL TREASURY_ADDRESS=$TREASURY"
+OVR="MRO_CHAIN_ID=8453 MRO_CONTRACT_ADDRESS=$TOK BASE_RPC_URL=$FORK X402_FACILITATOR_URL=$CDP_URL TREASURY_ADDRESS=$TREASURY MRO_HOUSE_KEY_ID=rehearsal-house"
 REHEARSE_OVERRIDE="$OVR" bash "$REHEARSE_REPO/warden/tools/rehearse-start.sh" 25 > "$WORK/warden-boot.log" 2>&1
 BOOT=$?
 if [ "$BOOT" -eq 0 ] && /bin/grep -q "payment ready (eip155:8453" "$WORK/warden-boot.log"; then
@@ -250,7 +250,7 @@ if [ "$BOOT" -eq 0 ] && /bin/grep -q "payment ready (eip155:8453" "$WORK/warden-
 else
   bad "the Warden's mainnet boot (exit $BOOT) -- see $WORK/warden-boot.log"
 fi
-OVR_DEAD="MRO_CHAIN_ID=8453 MRO_CONTRACT_ADDRESS=$TOK BASE_RPC_URL=$FORK X402_FACILITATOR_URL=$CDP_URL TREASURY_ADDRESS=$PLACEHOLDER"
+OVR_DEAD="MRO_CHAIN_ID=8453 MRO_CONTRACT_ADDRESS=$TOK BASE_RPC_URL=$FORK X402_FACILITATOR_URL=$CDP_URL TREASURY_ADDRESS=$PLACEHOLDER MRO_HOUSE_KEY_ID=rehearsal-house"
 REHEARSE_OVERRIDE="$OVR_DEAD" bash "$REHEARSE_REPO/warden/tools/rehearse-start.sh" 15 > "$WORK/warden-placeholder.log" 2>&1
 # The REASON is asserted, not just the exit: a boot that died for any other
 # cause would otherwise pass this line.
