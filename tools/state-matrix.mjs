@@ -367,6 +367,8 @@ export function renderCases() {
   }
   for (const [name, answers] of PATTERNS) {
     out.push({ label: `answers ${name}, finished 3rd`, ...base, answers, ordinal: 3, marks: [finisherMark(3)] });
+    // Token 1 finishes with Aorta's ink and no place, so no number.
+    out.push({ label: `answers ${name}, token 1 finished`, ...base, answers, ordinal: 0, marks: [finisherMark(65)] });
   }
 
   return out;

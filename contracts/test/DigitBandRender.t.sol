@@ -199,6 +199,22 @@ contract DigitBandRenderTest is Test {
         );
     }
 
+    /// Token 1 finishes with Aorta and no place: its band is red and carries
+    /// no number. A numbered red band is a different picture. Its squares are
+    /// set, as a real token's are: a silent day is filled by the coin flip.
+    function test_theHouseTokenDrawsARedBandWithNoNumber() public view {
+        TokenView memory v = _finished();
+        v.answers[0] = type(uint256).max;
+        v.answers[1] = type(uint256).max;
+        v.marks = MarkRenderer.AORTA;
+        string memory house = r.svg(v);
+        assertTrue(LibString.contains(house, _bandIn(MarkRenderer.AORTA_RED)), "the band is red");
+        v.marks = MarkRenderer.AORTA | (uint256(1) << ORDINAL_SHIFT);
+        assertTrue(
+            keccak256(bytes(house)) != keccak256(bytes(r.svg(v))), "and it draws no number"
+        );
+    }
+
     /// An ordinal with no finisher Mark cannot be reached on chain -- `_finish`
     /// writes both in one word -- so this is what the renderer does when it is
     /// handed a state the chain cannot produce: the near-black it always had.
