@@ -86,9 +86,22 @@ test("a mirror ahead of the chain by the credits accepted since the last Clock r
   assert.deepEqual(findings, []);
 });
 
+// Token 1 finishes with Aorta and no place; `status` says place null, the chain 0.
+test("token 1 finished with Aorta and no place is not a finding", () => {
+  const finished = expected(days(1000, 365));
+  const place = places([{ tokenId: 1, day: 1364 }]).get(1);
+  const findings = compare({
+    chain: view({ level: 365, streak: 365, lastDay: 1364, runFloor: 365, marks: 1n << 11n, finisherPlace: 0 }),
+    mirror: mirrorView({ level: 365, streak: 365, lastDay: 1364, marks: 1 << 11, finisher: { place: null, mark: "aorta" } }),
+    tally: finished,
+    place,
+  });
+  assert.deepEqual(findings, []);
+});
+
 test("a finished token whose chain place differs from places() is a FAIL on place", () => {
   const finished = expected(days(1000, 365));
-  const place = places([{ tokenId: 1, day: 1364 }, { tokenId: 2, day: 1364 }]).get(1);
+  const place = places([{ tokenId: 2, day: 1364 }, { tokenId: 3, day: 1364 }]).get(2);
   const findings = compare({
     chain: view({ level: 365, streak: 365, lastDay: 1364, runFloor: 365, marks: 1n << 15n, finisherPlace: 2 }),
     mirror: mirrorView({ level: 365, streak: 365, lastDay: 1364, marks: 1 << 15, finisher: { place: 1, mark: "Apex" } }),
@@ -654,7 +667,8 @@ test("the heartbeat is logged once, and never puts a decode on the chain's own w
 /// night has landed. The mirror is a day AHEAD in both: it credited the day the
 /// Clock has not written yet, and it carries no place until the chain says so.
 function finishingPair() {
-  const lines = [...checkins(1, 1001, 364), ...checkins(2, 1001, 364)];
+  // Tokens 2 and 3: token 1 takes no place.
+  const lines = [...checkins(2, 1001, 364), ...checkins(3, 1001, 364)];
   const nearly = (id) => ({
     chain: view({ level: 364, streak: 364, lastDay: 1363, runFloor: 364 }),
     mirror: mirrorView({ tokenId: id, level: 365, streak: 365, lastDay: 1364 }),
@@ -748,36 +762,36 @@ test("a Mark the mirror reconciles one pass late is not a FAIL, two passes late 
 
 test("two tokens finishing the same day take their places by lowest id", async () => {
   const { lines, nearly, done } = finishingPair();
-  const state = { tokens: { A1: 1, A2: 2 } };
+  const state = { tokens: { A1: 2, A2: 3 } };
   const memory = emptyMemory();
   const before = harness({
-    chain: fakeChain({ today: 1364, views: { 1: nearly(1).chain, 2: nearly(2).chain } }),
-    mirror: { 1: nearly(1).mirror, 2: nearly(2).mirror }, lines, state, memory,
+    chain: fakeChain({ today: 1364, views: { 2: nearly(2).chain, 3: nearly(3).chain } }),
+    mirror: { 2: nearly(2).mirror, 3: nearly(3).mirror }, lines, state, memory,
   });
   const quiet = await quietly(before.run);
   assert.deepEqual(quiet.said, []);
 
   const after = harness({
-    chain: fakeChain({ today: 1365, views: { 1: done(1, 1).chain, 2: done(2, 2).chain } }),
-    mirror: { 1: done(1, 1, "Apex").mirror, 2: done(2, 2, "Atrium").mirror }, lines, state, memory,
+    chain: fakeChain({ today: 1365, views: { 2: done(2, 1).chain, 3: done(3, 2).chain } }),
+    mirror: { 2: done(2, 1, "Apex").mirror, 3: done(3, 2, "Atrium").mirror }, lines, state, memory,
   });
   const { said } = await quietly(after.run);
   assert.deepEqual(said, []);
   const rows = after.logged.filter((l) => l.ok !== undefined);
-  assert.deepEqual(rows.map((l) => [l.tokenId, l.place, l.ok]), [[1, 1, true], [2, 2, true]]);
-  assert.deepEqual(after.logged.filter((l) => l.milestone === "finished").map((l) => l.tokenId), [1, 2]);
+  assert.deepEqual(rows.map((l) => [l.tokenId, l.place, l.ok]), [[2, 1, true], [3, 2, true]]);
+  assert.deepEqual(after.logged.filter((l) => l.milestone === "finished").map((l) => l.tokenId), [2, 3]);
 });
 
 test("the place the lower id should have held is a FAIL when the chain gave it away", async () => {
   const { lines, done } = finishingPair();
   const swapped = harness({
-    chain: fakeChain({ today: 1365, views: { 1: done(1, 2).chain, 2: done(2, 1).chain } }),
-    mirror: { 1: done(1, 2, "Atrium").mirror, 2: done(2, 1, "Apex").mirror },
-    lines, state: { tokens: { A1: 1, A2: 2 } },
+    chain: fakeChain({ today: 1365, views: { 2: done(2, 2).chain, 3: done(3, 1).chain } }),
+    mirror: { 2: done(2, 2, "Atrium").mirror, 3: done(3, 1, "Apex").mirror },
+    lines, state: { tokens: { A1: 2, A2: 3 } },
   });
   const { said } = await quietly(swapped.run);
   assert.equal(said.length, 2);
-  assert.deepEqual(swapped.logged.filter((l) => l.ok === false).map((l) => l.tokenId), [1, 2]);
+  assert.deepEqual(swapped.logged.filter((l) => l.ok === false).map((l) => l.tokenId), [2, 3]);
 });
 
 // THE CLOCK'S GAS GUARD WRITES NOTHING ON PURPOSE, and a pending row keeps its own

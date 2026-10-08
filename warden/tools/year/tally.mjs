@@ -45,7 +45,19 @@ export function expected(days) {
  * Ties within a day break by lowest token id, which is the order the Clock
  * lists a batch in and therefore the order the contract assigns ordinals.
  */
+/// The contract's HOUSE_TOKEN: given Aorta, never a place.
+export const HOUSE_TOKEN = 1;
+
 export function places(finishes) {
   const order = [...finishes].sort((a, b) => a.day - b.day || a.tokenId - b.tokenId);
-  return new Map(order.map((f, i) => [f.tokenId, { place: i + 1, markId: finisherMark(i + 1) }]));
+  const out = new Map();
+  let place = 0;
+  for (const f of order) {
+    if (f.tokenId === HOUSE_TOKEN) out.set(f.tokenId, { place: 0, markId: 11 });
+    else {
+      place += 1;
+      out.set(f.tokenId, { place, markId: finisherMark(place) });
+    }
+  }
+  return out;
 }

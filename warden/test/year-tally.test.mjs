@@ -111,10 +111,18 @@ test("the bands issue exactly the five finisher ids the ladder knows", () => {
 });
 
 test("places orders by day, then by lowest token id within a day", () => {
-  const order = places([{ tokenId: 3, day: 9 }, { tokenId: 1, day: 9 }, { tokenId: 2, day: 8 }]);
+  const order = places([{ tokenId: 4, day: 9 }, { tokenId: 2, day: 9 }, { tokenId: 3, day: 8 }]);
+  assert.deepEqual(order.get(3), { place: 1, markId: 15 });
+  assert.deepEqual(order.get(2), { place: 2, markId: 14 });
+  assert.deepEqual(order.get(4), { place: 3, markId: 14 });
+});
+
+// The contract's house token: Aorta, and no place taken from anyone.
+test("places gives token 1 Aorta and no place", () => {
+  const order = places([{ tokenId: 1, day: 10 }, { tokenId: 2, day: 10 }, { tokenId: 3, day: 11 }]);
+  assert.deepEqual(order.get(1), { place: 0, markId: 11 });
   assert.deepEqual(order.get(2), { place: 1, markId: 15 });
-  assert.deepEqual(order.get(1), { place: 2, markId: 14 });
-  assert.deepEqual(order.get(3), { place: 3, markId: 14 });
+  assert.deepEqual(order.get(3), { place: 2, markId: 14 });
 });
 
 test("places does not reorder the list it was handed", () => {
