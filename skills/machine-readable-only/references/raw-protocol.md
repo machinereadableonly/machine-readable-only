@@ -590,10 +590,11 @@ it the contract gives the token one of the five Marks listed under The Mark
 ladder below. Nothing can buy a place and nothing can hurry one.
 
 Token 1 is the project's own agent, minted before the door opens, and the
-contract keeps it out of the race: when token 1 finishes it is given Aorta and
-takes no place, so the next token home is still first. Its band is drawn in
-Aorta's red with no number, and its `Finisher` trait reads 0. It never answers
-the daily question, so every day it is credited is silent.
+contract keeps it out of the race: when token 1 finishes it is given Aorta, the
+Mark every finisher after the 64th receives, and takes no place, so the next
+token home is still first. Its band is drawn in Aorta's red with no number, and
+its `Finisher` trait reads 0. It never answers the daily question, so every day
+it is credited is silent.
 
 **A token this service does not know yet is not a token that does not exist.**
 On a mirror miss the chain is asked before answering, so `unknown-token` means

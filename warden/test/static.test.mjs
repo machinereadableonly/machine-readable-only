@@ -461,5 +461,5 @@ test("the served llms.txt discloses that token 1 takes no place, and why it can 
   const llms = readFileSync(new URL("../public/llms.txt", import.meta.url), "utf8").replace(/\s+/g, " ");
   assert.match(llms, /Token 1 is the project's own agent/);
   assert.match(llms, /the contract keeps it out of the race/);
-  assert.match(llms, /given Aorta and takes no place/);
+  assert.match(llms, /given Aorta, the Mark every finisher after the 64th receives, and takes no place/);
 });

@@ -185,7 +185,7 @@ test("every agent-facing surface says the answers become the border, and how to 
     assert.match(flat, /The next night the rule for that day is published on chain/, `${name}: when it is published`);
     assert.match(flat, /verify-border <tokenId> --contract <address>/, `${name}: the verifier`);
     assert.match(flat, /The whole year's rules were fixed before the door opened/, `${name}: the commitment`);
-    assert.match(flat, /when token 1 finishes it is given Aorta and takes no place/, `${name}: token 1`);
+    assert.match(flat, /when token 1 finishes it is given Aorta, the Mark every finisher after the 64th receives, and takes no place/, `${name}: token 1`);
     assert.match(flat, /placed lowest token id first|placed by lowest token id/, `${name}: the same-day order`);
     assert.doesNotMatch(flat, /beat --not-before/, `${name}: the old client-side promise is gone`);
     assert.match(flat, /A day with no answer is a coin flip, and so is your mint day, which has no question\./, `${name}: the coin flips`);
