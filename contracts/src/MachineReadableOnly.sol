@@ -109,8 +109,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     uint64 public lastRevealBlock;
     /// @notice The day this contract was deployed. Nothing may be dated before it.
     uint32 public immutable DEPLOY_DAY;
-    /// @notice How many tokens have finished their year. The next finisher's
-    /// place is this plus one.
+    /// @notice How many tokens have taken a finishing place. Token 1 never
+    /// does. The next finisher's place is this plus one.
     uint32 public finishers;
     bool public isSunset;
     bool public vouchersEnabled;
@@ -134,6 +134,11 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// @dev The first of the five finisher Marks. Ids at or above this are
     /// given by finishing a year and can never be asked for.
     uint8 internal constant FIRST_FINISHER_MARK = 11;
+
+    /// @dev The project's own agent. It never takes a finishing place.
+    uint256 internal constant HOUSE_TOKEN = 1;
+    /// @dev The uncapped finisher Mark, which the house token is given.
+    uint8 internal constant AORTA = 11;
 
     /// @dev ERC-4906's interface id. OpenZeppelin ships the interface, not a mixin.
     bytes4 internal constant ERC4906_ID = 0x49064906;
@@ -569,12 +574,20 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     }
 
     /// @dev Called once in a token's life, by the credit that makes it whole.
-    /// The place is the ORDER finishes are credited in: across days by day, and
-    /// within one batch by the order the Warden listed them, which it sorts by
-    /// token id. The ordinal lands in bits 64-95 of the marks word, the slot
+    /// Token 1 is given Aorta and no place. For every other token the place is
+    /// the ORDER finishes are credited in: across days by day, and within one
+    /// batch by the order the Warden listed them, which it sorts by token id. The ordinal lands in bits 64-95 of the marks word, the slot
     /// TokenView reserves for it; bits 32-63 are the earned Iris's run and are
     /// never touched here.
     function _finish(uint256 id) private {
+        // The house token leaves `finishers` alone, so the next token home
+        // still takes the first place.
+        if (id == HOUSE_TOKEN) {
+            _marks[id] |= uint256(1) << AORTA;
+            unchecked { _upgrades[AORTA].sold += 1; }
+            emit Finished(id, 0, AORTA);
+            return;
+        }
         uint32 ordinal;
         unchecked { ordinal = ++finishers; }
         uint8 markId = finisherMark(ordinal);

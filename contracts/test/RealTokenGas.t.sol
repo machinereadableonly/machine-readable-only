@@ -245,8 +245,12 @@ contract RealTokenGasTest is MroTestBase {
     /// @dev A finished child wearing every legal Mark and its place, answering in pattern `p`.
     function _worstWith(uint8 p) internal returns (uint256 gasUsed, uint256 len) {
         _pattern = p;
-        _creditRun(1, 364);
-        uint256 child = _seedFrom(1);
+        // Token 2 founds the line: token 1 takes no place, so a line from it
+        // would move the child from the second place to the first.
+        vm.prank(WARDEN);
+        t.mint(2, ALICE, keccak256("founder"), _code(), _today(), false);
+        _creditRun(2, 364);
+        uint256 child = _seedFrom(2);
         _creditRun(uint32(child), 364);
         _applyMaxMarks(child, true);
         assertEq(t.viewOf(child).level, 365, "a whole heart, which is now the ceiling");
@@ -320,16 +324,16 @@ contract RealTokenGasTest is MroTestBase {
         // The credit that seals the heart also FINISHES the token, so from here
         // the word carries a finisher Mark and its ordinal as well. Named here
         // rather than folded into MAX_MARKS: that constant describes what
-        // `applyMark` writes, and nothing applied these -- this token is the
-        // first to finish, so the bit is Apex.
+        // `applyMark` writes, and nothing applied these -- this is token 1, so
+        // the bit is Aorta and there is no place.
         _creditRun(1, 1);
         vm.prank(WARDEN);
         t.applyMark(1, VESSEL_ID, 0);
         assertEq(
             t.viewOf(1).marks & 0xFFFFFFFF,
-            MAX_MARKS | (uint256(1) << 15),
+            MAX_MARKS | (uint256(1) << 11),
             "and pair four opens the day the heart seals"
         );
-        assertEq(t.viewOf(1).marks >> 64, 1, "the place it finished in, given by the same credit");
+        assertEq(t.viewOf(1).marks >> 64, 0, "token 1 takes no place");
     }
 }

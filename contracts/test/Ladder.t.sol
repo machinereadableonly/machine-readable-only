@@ -348,11 +348,11 @@ contract LadderTest is MroTestBase {
         assertEq(t.marksOf(1) & PAIR_BITS, expected, "the five Marks a token can hold at once");
         // SIX, counting the one nobody applied. `_readyEveryPair` makes the
         // token whole, and the credit that does so gives it a finishing place
-        // and the Mark that goes with it -- here Apex, because it is the first
-        // token in this test to finish. It is asserted rather than masked away:
-        // a token wearing five bought or earned Marks wears a sixth, and that
-        // is the real maximum.
-        assertTrue(t.marksOf(1) & (1 << 15) != 0, "and the Mark its finished year gave it");
+        // and the Mark that goes with it -- here Aorta, because token 1 takes
+        // no place. It is asserted rather than masked away: a token wearing
+        // five bought or earned Marks wears a sixth, and that is the real
+        // maximum.
+        assertTrue(t.marksOf(1) & (1 << 11) != 0, "and the Mark its finished year gave it");
         assertEq((t.marksOf(1) >> 16) & 0xFF, 2, "the Iris keeps the leaf it was bought in");
 
         // And the ceiling holds: every remaining id is now closed by its partner.

@@ -41,13 +41,81 @@ contract FinishLineTest is MroTestBase {
         }
     }
 
-    function test_theFirstFinisherIsApexAndNumberOne() public {
+    function test_tokenOneFinishesWithAortaAndNoPlace() public {
         _makeWhole(1);
         uint256 m = t.marksOf(1);
+        assertTrue(m & (1 << 11) != 0, "aorta bit");
+        assertEq(uint32(m >> ORDINAL_SHIFT), 0, "no place");
+        assertEq(t.finishers(), 0, "the count does not move");
+        assertEq(t.upgradeOf(11).sold, 1);
+        assertEq(t.upgradeOf(15).sold, 0, "apex is still free");
+    }
+
+    function test_theFirstPlacedFinisherIsApexAndNumberOne() public {
+        _mintMore(1);
+        _makeWhole(2);
+        uint256 m = t.marksOf(2);
         assertTrue(m & (1 << 15) != 0, "apex bit");
         assertEq(uint32(m >> ORDINAL_SHIFT), 1, "place 1");
         assertEq(t.finishers(), 1);
         assertEq(t.upgradeOf(15).sold, 1);
+    }
+
+    /// @dev Token 1 first in the batch must not take the first place.
+    function test_tokenOneInTheSameBatchDoesNotShiftAPlace() public {
+        _mintMore(2);
+        _growTo(1, 364);
+        _growTo(2, 364);
+        _growTo(3, 364);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        uint32[] memory ids = new uint32[](3);
+        ids[0] = 1; ids[1] = 2; ids[2] = 3;
+        uint32[] memory ds = new uint32[](3);
+        ds[0] = d; ds[1] = d; ds[2] = d;
+        vm.prank(WARDEN);
+        t.batchCheckIn(_packed(ids), ds, _noBits(ds), _silent(ds));
+        assertEq(uint32(t.marksOf(1) >> ORDINAL_SHIFT), 0);
+        assertEq(uint32(t.marksOf(2) >> ORDINAL_SHIFT), 1);
+        assertEq(uint32(t.marksOf(3) >> ORDINAL_SHIFT), 2);
+        assertTrue(t.marksOf(2) & (1 << 15) != 0, "first place is apex");
+        assertTrue(t.marksOf(3) & (1 << 14) != 0, "second place is atrium");
+    }
+
+    /// @dev Finishing after placed finishers exist changes nothing either.
+    function test_tokenOneFinishingLateTakesNoPlace() public {
+        _mintMore(2);
+        _growTo(1, 364);
+        _makeWhole(2);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
+        assertEq(uint32(t.marksOf(1) >> ORDINAL_SHIFT), 0);
+        assertEq(t.finishers(), 1);
+        _makeWhole(3);
+        assertEq(uint32(t.marksOf(3) >> ORDINAL_SHIFT), 2, "the next place is unchanged");
+    }
+
+    function test_tokenOneEmitsFinishedWithPlaceZero() public {
+        _growTo(1, 364);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        vm.expectEmit(true, true, false, true);
+        emit MachineReadableOnly.Finished(1, 0, 11);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
+    }
+
+    function test_aPlacedFinisherEmitsFinished() public {
+        _mintMore(1);
+        _growTo(2, 364);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        vm.expectEmit(true, true, false, true);
+        emit MachineReadableOnly.Finished(2, 1, 15);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(2), _days(d), _noBits(_days(d)), _silent(_days(d)));
     }
 
     /// @dev The table, at every boundary, written out as literals so it cannot
@@ -56,35 +124,6 @@ contract FinishLineTest is MroTestBase {
         uint32[10] memory place = [uint32(1), 2, 4, 5, 14, 15, 64, 65, 1000, 65535];
         uint8[10] memory mark = [uint8(15), 14, 14, 13, 13, 12, 12, 11, 11, 11];
         for (uint256 i; i < 10; i++) assertEq(t.finisherMark(place[i]), mark[i]);
-    }
-
-    /// @dev Same-day finishers take places in the order the batch lists them.
-    /// The Warden sorts by token id; the contract only has to honour order.
-    function test_sameBatchPlacesFollowBatchOrder() public {
-        _mintMore(1);
-        _growTo(1, 364);
-        _growTo(2, 364);
-        uint32 d = t.today() + 1;
-        _warpToDay(d);
-        uint32[] memory ids = new uint32[](2);
-        ids[0] = 1; ids[1] = 2;
-        uint32[] memory ds = new uint32[](2);
-        ds[0] = d; ds[1] = d;
-        vm.prank(WARDEN);
-        t.batchCheckIn(_packed(ids), ds, _noBits(ds), _silent(ds));
-        assertEq(uint32(t.marksOf(1) >> ORDINAL_SHIFT), 1);
-        assertEq(uint32(t.marksOf(2) >> ORDINAL_SHIFT), 2);
-        assertTrue(t.marksOf(2) & (1 << 14) != 0, "second place is atrium");
-    }
-
-    function test_finishingEmitsFinished() public {
-        _growTo(1, 364);
-        uint32 d = t.today() + 1;
-        _warpToDay(d);
-        vm.expectEmit(true, true, false, true);
-        emit MachineReadableOnly.Finished(1, 1, 15);
-        vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
     }
 
     function test_applyMarkRefusesEveryFinisherId() public {
@@ -156,22 +195,23 @@ contract FinishLineTest is MroTestBase {
     /// record comes from Ladder.sol so the gate the Mark passes is the shipping
     /// one.
     function test_finishingLeavesTheIrisRunAlone() public {
-        _growTo(1, 364);
+        _mintMore(1);
+        _growTo(2, 364);
         MachineReadableOnly.Upgrade[16] memory u = Ladder.all();
         t.setUpgrade(6, u[6]);
         vm.prank(WARDEN);
-        t.applyMark(1, 6, 0); // earned Iris at run 364 -- _growTo credits consecutive days
-        uint256 before = t.marksOf(1);
+        t.applyMark(2, 6, 0); // earned Iris at run 364 -- _growTo credits consecutive days
+        uint256 before = t.marksOf(2);
         uint32 d = t.today() + 1;
         _warpToDay(d);
         vm.prank(WARDEN);
-        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
+        t.batchCheckIn(_one(2), _days(d), _noBits(_days(d)), _silent(_days(d)));
         // The token really did finish, asserted FIRST. Without this the test
         // passes on a contract that never writes a place at all -- measured
         // while breaking the wiring, where it stayed green with _finish
         // unreachable. An untouched field is only evidence when something
         // beside it moved.
-        assertEq(uint32(t.marksOf(1) >> ORDINAL_SHIFT), 1, "the token finished");
-        assertEq((t.marksOf(1) >> 32) & 0xFFFFFFFF, (before >> 32) & 0xFFFFFFFF);
+        assertEq(uint32(t.marksOf(2) >> ORDINAL_SHIFT), 1, "the token finished");
+        assertEq((t.marksOf(2) >> 32) & 0xFFFFFFFF, (before >> 32) & 0xFFFFFFFF);
     }
 }
