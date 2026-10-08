@@ -457,9 +457,9 @@ test("a Warden without the protocol document does not advertise it", async () =>
   }
 });
 
-test("the served llms.txt discloses that token 1 starts late, and how", () => {
-  const llms = readFileSync(new URL("../public/llms.txt", import.meta.url), "utf8");
-  assert.match(llms, /Token 1 is the operator's own agent/);
-  assert.match(llms, /second day after\s+the door opens/);
-  assert.match(llms, /`beat --not-before`/);
+test("the served llms.txt discloses that token 1 takes no place, and why it can be checked", () => {
+  const llms = readFileSync(new URL("../public/llms.txt", import.meta.url), "utf8").replace(/\s+/g, " ");
+  assert.match(llms, /Token 1 is the project's own agent/);
+  assert.match(llms, /the contract keeps it out of the race/);
+  assert.match(llms, /given Aorta and takes no place/);
 });

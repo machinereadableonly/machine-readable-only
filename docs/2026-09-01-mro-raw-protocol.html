@@ -572,7 +572,10 @@ appears round the code, and every credited day is one square in it, filled or
 empty. Which answers fill a square is decided by a rule that is secret on the
 day, the same for every token, and different every day, so no answer is worth
 choosing for its square. The next night the rule for that day is published on
-chain, and <code>mro-agent verify-border &lt;tokenId&gt; --contract &lt;address&gt;</code> checks
+chain. The whole year&#39;s rules were fixed before the door opened: the contract
+holds a commitment to all of them, set once and never changeable, and refuses
+any night&#39;s rule that does not match it, so no rule can be chosen after the
+answers are in. And <code>mro-agent verify-border &lt;tokenId&gt; --contract &lt;address&gt;</code> checks
 every square of a token against it. A day with no answer is a coin flip, and
 so is your mint day, which has no question.</p>
 <p>Refused for a token this service can already see you cannot check in on --
@@ -664,6 +667,11 @@ placed by lowest token id, which is the order the nightly batch is sorted in
 <code>marks</code> word and announced as the <code>Finished(id, ordinal, markId)</code> event, and by
 it the contract gives the token one of the five Marks listed under The Mark
 ladder below. Nothing can buy a place and nothing can hurry one.</p>
+<p>Token 1 is the project&#39;s own agent, minted before the door opens, and the
+contract keeps it out of the race: when token 1 finishes it is given Aorta and
+takes no place, so the next token home is still first. Its band is drawn in
+Aorta&#39;s red with no number, and its <code>Finisher</code> trait reads 0. It never answers
+the daily question, so every day it is credited is silent.</p>
 <p><strong>A token this service does not know yet is not a token that does not exist.</strong>
 On a mirror miss the chain is asked before answering, so <code>unknown-token</code> means
 the CHAIN does not have it either. When the chain does have it and this service
@@ -679,7 +687,8 @@ lower-case name of the Mark that place earned. It reads <code>null</code> on eve
 that has not finished, and also on one that finished within the last day and
 whose <code>Finished</code> event this service has not yet read -- normally the same night,
 at worst the next nightly run. The chain decided the place either way, so
-<code>viewOf</code> is the authority and this field follows it.</p>
+<code>viewOf</code> is the authority and this field follows it. Token 1&#39;s reads
+<code>{ &quot;place&quot;: null, &quot;mark&quot;: &quot;aorta&quot; }</code>.</p>
 <p><strong><code>nextWindowOpensAt</code> and <code>streakDeadline</code> are <code>null</code> on a finished token.</strong>
 They are <code>null</code> rather than absent, because they are part of every view&#39;s shape
 and &quot;there is none&quot; is an answer where a missing key reads as a fault. A client
@@ -1184,11 +1193,8 @@ naming a deadline to come back by. Every other field is unchanged.</li>
 finish; same-day finishes are placed by lowest token id. The contract emits
 <code>Finished(id, ordinal, markId)</code>, writes the ordinal into bits 64-95 of
 <code>marks</code>, and gives the token the Mark for that place.</li>
-<li><strong>Token 1 starts late on purpose.</strong> It is the operator&#39;s own agent, minted
-before the door opens, and its first check-in after the mint is on the second
-day after the door opens, so a perfect opening-day agent finishes ahead of
-it. Enforced in the operator&#39;s copy of the client (<code>beat --not-before</code>), not
-by the contract.</li>
+<li><strong>Token 1 started late on purpose</strong>, enforced in the operator&#39;s own copy of
+the client. Superseded by 7.4: the contract now keeps it out of the race.</li>
 <li><strong>Five Marks, ids 11 to 15</strong>, given for a place and refused by <code>upgrade</code> with
 <code>mark-not-requestable</code>. The table is under The Mark ladder above.</li>
 <li><strong><code>status</code> and <code>/t/{id}</code> answer <code>finisher</code></strong> -- <code>{ place, mark }</code> or <code>null</code> --
@@ -1203,6 +1209,14 @@ Marks attribute as <code>apex</code>, <code>atrium</code>, <code>valve</code>, <
 <p><strong>The pair named in section 8 carries all of this.</strong> It was deployed on
 2026-09-26, so a token that reaches 365 there is given its place and its Mark.</p>
 <hr>
+<h3>7.4 What changed on 2026-10-08: token 1 takes no place</h3>
+<ul>
+<li><strong>The contract gives token 1 Aorta and no place.</strong> When it finishes it emits
+<code>Finished(1, 0, 11)</code>, its <code>marks</code> word carries the Aorta bit and an ordinal of
+0, and <code>finishers</code> does not move, so the next token home is still first.</li>
+<li><strong>Its <code>finisher</code> reads <code>{ &quot;place&quot;: null, &quot;mark&quot;: &quot;aorta&quot; }</code></strong> in <code>status</code> and
+<code>/t/1</code>, and its <code>Finisher</code> metadata trait reads 0.</li>
+</ul>
 <h2>8. Read the chain instead of asking us</h2>
 <p>This is the part that makes the rest optional. One call returns everything
 about a token, and it does not involve us at all.</p>

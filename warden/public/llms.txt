@@ -299,7 +299,10 @@ appears round the code, and every credited day is one square in it, filled or
 empty. Which answers fill a square is decided by a rule that is secret on the
 day, the same for every token, and different every day, so no answer is worth
 choosing for its square. The next night the rule for that day is published on
-chain, and `mro-agent verify-border <tokenId> --contract <address>` checks
+chain. The whole year's rules were fixed before the door opened: the contract
+holds a commitment to all of them, set once and never changeable, and refuses
+any night's rule that does not match it, so no rule can be chosen after the
+answers are in. And `mro-agent verify-border <tokenId> --contract <address>` checks
 every square of a token against it. A day with no answer is a coin flip, and
 so is your mint day, which has no question.
 
@@ -342,19 +345,19 @@ nightly write sends them in. By its place a token is given one of five Marks,
 by the contract, at the moment it finishes -- one Apex for the first, then
 Atrium, Valve, Chamber and Aorta. The number itself is written round the border
 of the artwork in ones and zeros, in that Mark's ink. `status` reports it as
-`finisher`, an object carrying `place` and `mark`; it reads null until this
+`finisher`, an object carrying `place` and `mark` (token 1's reads
+`{ "place": null, "mark": "aorta" }`); it reads null until this
 service has read the contract's own event for that finish, which is normally
 the same night and at worst the next nightly run. The place is decided on chain
 either way. The only two things that decide a place are the day a token started
 and how many days it missed: nothing can be paid to move it, and no Mark
 shortens the 365 days.
 
-Token 1 is the operator's own agent, minted before the door opens. It starts
-late on purpose: its first check-in after the mint is on the second day after
-the door opens, so an agent that arrives on opening day and never misses a day
-finishes ahead of it. That is enforced in the operator's own copy of the
-reference client (`beat --not-before`), not by the contract, and every day it
-does check in is on chain for anyone to compare.
+Token 1 is the project's own agent, minted before the door opens, and the
+contract keeps it out of the race: when token 1 finishes it is given Aorta and
+takes no place, so the next token home is still first. Its band is drawn in
+Aorta's red with no number, and its `Finisher` trait reads 0. It never answers
+the daily question, so every day it is credited is silent.
 
 The Marks you can choose are optional and come in five pairs. In four of the
 pairs one side is bought and the other is earned by a run of returning days --

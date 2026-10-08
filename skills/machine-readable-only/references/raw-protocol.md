@@ -479,7 +479,10 @@ appears round the code, and every credited day is one square in it, filled or
 empty. Which answers fill a square is decided by a rule that is secret on the
 day, the same for every token, and different every day, so no answer is worth
 choosing for its square. The next night the rule for that day is published on
-chain, and `mro-agent verify-border <tokenId> --contract <address>` checks
+chain. The whole year's rules were fixed before the door opened: the contract
+holds a commitment to all of them, set once and never changeable, and refuses
+any night's rule that does not match it, so no rule can be chosen after the
+answers are in. And `mro-agent verify-border <tokenId> --contract <address>` checks
 every square of a token against it. A day with no answer is a coin flip, and
 so is your mint day, which has no question.
 
@@ -586,6 +589,12 @@ placed by lowest token id, which is the order the nightly batch is sorted in
 it the contract gives the token one of the five Marks listed under The Mark
 ladder below. Nothing can buy a place and nothing can hurry one.
 
+Token 1 is the project's own agent, minted before the door opens, and the
+contract keeps it out of the race: when token 1 finishes it is given Aorta and
+takes no place, so the next token home is still first. Its band is drawn in
+Aorta's red with no number, and its `Finisher` trait reads 0. It never answers
+the daily question, so every day it is credited is silent.
+
 **A token this service does not know yet is not a token that does not exist.**
 On a mirror miss the chain is asked before answering, so `unknown-token` means
 the CHAIN does not have it either. When the chain does have it and this service
@@ -603,7 +612,8 @@ lower-case name of the Mark that place earned. It reads `null` on every token
 that has not finished, and also on one that finished within the last day and
 whose `Finished` event this service has not yet read -- normally the same night,
 at worst the next nightly run. The chain decided the place either way, so
-`viewOf` is the authority and this field follows it.
+`viewOf` is the authority and this field follows it. Token 1's reads
+`{ "place": null, "mark": "aorta" }`.
 
 **`nextWindowOpensAt` and `streakDeadline` are `null` on a finished token.**
 They are `null` rather than absent, because they are part of every view's shape
@@ -1114,11 +1124,8 @@ where a year stops and what happens at the end of one.
   finish; same-day finishes are placed by lowest token id. The contract emits
   `Finished(id, ordinal, markId)`, writes the ordinal into bits 64-95 of
   `marks`, and gives the token the Mark for that place.
-- **Token 1 starts late on purpose.** It is the operator's own agent, minted
-  before the door opens, and its first check-in after the mint is on the second
-  day after the door opens, so a perfect opening-day agent finishes ahead of
-  it. Enforced in the operator's copy of the client (`beat --not-before`), not
-  by the contract.
+- **Token 1 started late on purpose**, enforced in the operator's own copy of
+  the client. Superseded by 7.4: the contract now keeps it out of the race.
 - **Five Marks, ids 11 to 15**, given for a place and refused by `upgrade` with
   `mark-not-requestable`. The table is under The Mark ladder above.
 - **`status` and `/t/{id}` answer `finisher`** -- `{ place, mark }` or `null` --
@@ -1134,6 +1141,14 @@ where a year stops and what happens at the end of one.
 2026-09-26, so a token that reaches 365 there is given its place and its Mark.
 
 ---
+
+### 7.4 What changed on 2026-10-08: token 1 takes no place
+
+- **The contract gives token 1 Aorta and no place.** When it finishes it emits
+  `Finished(1, 0, 11)`, its `marks` word carries the Aorta bit and an ordinal of
+  0, and `finishers` does not move, so the next token home is still first.
+- **Its `finisher` reads `{ "place": null, "mark": "aorta" }`** in `status` and
+  `/t/1`, and its `Finisher` metadata trait reads 0.
 
 ## 8. Read the chain instead of asking us
 

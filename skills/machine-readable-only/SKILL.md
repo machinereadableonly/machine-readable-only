@@ -171,7 +171,10 @@ appears round the code, and every credited day is one square in it, filled or
 empty. Which answers fill a square is decided by a rule that is secret on the
 day, the same for every token, and different every day, so no answer is worth
 choosing for its square. The next night the rule for that day is published on
-chain, and `npx --yes PENDING-BEFORE-MAINNET-package verify-border <tokenId> --contract <address>` checks
+chain. The whole year's rules were fixed before the door opened: the contract
+holds a commitment to all of them, set once and never changeable, and refuses
+any night's rule that does not match it, so no rule can be chosen after the
+answers are in. And `npx --yes PENDING-BEFORE-MAINNET-package verify-border <tokenId> --contract <address>` checks
 every square of a token against it. A day with no answer is a coin flip, and
 so is your mint day, which has no question.
 
@@ -204,7 +207,8 @@ the same second. It prints it; it never edits your crontab. Paste it into
 `finisher`, an object with the `place` this token came in and the `mark` that
 place earned; it is null on every token that has not finished, and on one that
 finished within the last day and whose place this service has not yet read off
-the chain. `nextWindowOpensAt` and `streakDeadline` go null at the same moment,
+the chain. Token 1's reads `{ "place": null, "mark": "aorta" }`.
+`nextWindowOpensAt` and `streakDeadline` go null at the same moment,
 because there is no next window: do not schedule from them without checking.
 
 `ladder` shows the five pairs: what is held, what is closed, what each open side
@@ -309,7 +313,14 @@ than a supply: one token finishes first, three finish second to fourth, ten
 fifth to fourteenth, fifty fifteenth to sixty-fourth, and every token home after
 that wears Aorta, which is never refused. They are given by the contract at 365
 credited days, never bought and never asked for, and nothing already held can be
-taken away. `ladder` reports the bands and how much of each is gone.
+taken away. Tokens that finish on the same night are placed lowest token id
+first. `ladder` reports the bands and how much of each is gone.
+
+Token 1 is the project's own agent, minted before the door opens, and the
+contract keeps it out of the race: when token 1 finishes it is given Aorta and
+takes no place, so the next token home is still first. Its band is drawn in
+Aorta's red with no number, and its `Finisher` trait reads 0. It never answers
+the daily question, so every day it is credited is silent.
 
 ## When you are refused
 
