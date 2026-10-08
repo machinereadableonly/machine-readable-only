@@ -119,3 +119,51 @@ It exposes the Low finding that the mirror's binding stays stale.
 8. Permit2 stays refused.
 9. Token 1 races on equal terms: the seed agent skips check-ins until the day
    after the door opens, disclosed in `llms.txt`.
+
+## Status (2026-10-08)
+
+Checked against the tree at 8866ebc. **Every finding above is closed except
+one left open by design.** Fix commits are on main and live on Base Sepolia.
+
+| Finding | Status |
+|---|---|
+| Dot-segment target escapes the domain pin | DONE 5da35c2 |
+| Challenge not bound to the signature | DONE, Plan B (ruling 4) |
+| Replay set is process memory only | OPEN BY DESIGN: in-memory cache, disclosed in the raw-protocol doc |
+| Directory fetch has no deadline | DONE 7b5223c |
+| JWK stored verbatim | DONE 4fc1145 |
+| `signature-agent;key=` | DONE, Plan B (ruling 5) |
+| `refusals.md` lists four components | DONE 2c06a02 |
+| Client exits 0 on 429/500 | DONE b3a5339 |
+| `success:false` with a hash released | DONE 7b07063, 6e5c22e, 00b43ca |
+| Cancelled nonce promoted to paid | DONE 7b07063 (decided from the transfer log) |
+| Expiry sweep deletes on silence | DONE 7b07063, 5f34f41 (moves to payment-unresolved) |
+| Held row released inside its validity window | DONE 7b07063 |
+| Unknown outcome told as "nothing was minted" | DONE 538d61a, 0c86302, 0cbfe2f (ruling 6 wording) |
+| Sweep runs after `hasMinted` | DONE 7b07063 |
+| Receipt in `structuredContent._meta` | DONE 7b07063 |
+| warden.md false statements | DONE 2bd7bed |
+| `seed` charges the key bound at write time | DONE, Plan A (`expectedKeyId` on `seed`) |
+| Same drift on `applyMark` | ACCEPTED (ruling 2), no change |
+| `closeThePiece` has no chain guard | DONE 70069f9 |
+| Owner key as plain text | DONE, Plan E (`deploy-mainnet.sh --owner <safe>`) |
+| contractURI / freezeRenderer / bestRunOf | DONE 3a037bd, 773e41b |
+| Rest day not stored | DONE 773e41b |
+| No DEPLOY_DAY floor / no lateness floor | DONE 637fd93 |
+| rest() re-emits / setUpgrade 11-15 / heartbeat after sunset | DONE 773e41b |
+| `_safeMint` -> `_mint` | DONE 773e41b |
+| Clock key readable, code writable, by the Warden | DONE, Plan E (Clock under user `mro-clock`, key out of the Warden's env 2026-10-08) |
+| Wallet/supply cap ignores unwritten mints | DONE 914df1a |
+| Leftover lock halts every run / no OnFailure | DONE df349f0; OnFailure live since the 2026-10-07 cutover |
+| Heartbeat skipped while paused; sunset not passed | DONE 6c183b4 |
+| A day that never landed healed as written | DONE 54fa70a |
+| Reconcile Minted ignores keyId | DONE 77a946c |
+| Reconcile all-or-nothing; cursor not atomic | DONE afc9f76 |
+| Condemned credit never rolls back the mirror | DONE c9d03dc |
+| robust-solve unpacks the mask at 37 | DONE a49b23a |
+| Rehearsal tooling builds 172-byte codes | DONE b8fefec, 7abb3ff |
+| Gas stop skips reconcile | DONE a675a0f |
+| warden.md "the Warden holds NO private key" | DONE 2bd7bed |
+
+All nine operator decisions are ruled (above) and built: Plans C, B, D, A and E
+are merged, pushed and live.

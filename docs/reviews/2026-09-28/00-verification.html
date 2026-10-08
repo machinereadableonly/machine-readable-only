@@ -338,5 +338,166 @@ reservation is held, do not pay again, the chain is checked at the next
 <li>Token 1 races on equal terms: the seed agent skips check-ins until the day
 after the door opens, disclosed in <code>llms.txt</code>.</li>
 </ol>
+<h2>Status (2026-10-08)</h2>
+<p>Checked against the tree at 8866ebc. <strong>Every finding above is closed except
+one left open by design.</strong> Fix commits are on main and live on Base Sepolia.</p>
+<table>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Dot-segment target escapes the domain pin</td>
+<td>DONE 5da35c2</td>
+</tr>
+<tr>
+<td>Challenge not bound to the signature</td>
+<td>DONE, Plan B (ruling 4)</td>
+</tr>
+<tr>
+<td>Replay set is process memory only</td>
+<td>OPEN BY DESIGN: in-memory cache, disclosed in the raw-protocol doc</td>
+</tr>
+<tr>
+<td>Directory fetch has no deadline</td>
+<td>DONE 7b5223c</td>
+</tr>
+<tr>
+<td>JWK stored verbatim</td>
+<td>DONE 4fc1145</td>
+</tr>
+<tr>
+<td><code>signature-agent;key=</code></td>
+<td>DONE, Plan B (ruling 5)</td>
+</tr>
+<tr>
+<td><code>refusals.md</code> lists four components</td>
+<td>DONE 2c06a02</td>
+</tr>
+<tr>
+<td>Client exits 0 on 429/500</td>
+<td>DONE b3a5339</td>
+</tr>
+<tr>
+<td><code>success:false</code> with a hash released</td>
+<td>DONE 7b07063, 6e5c22e, 00b43ca</td>
+</tr>
+<tr>
+<td>Cancelled nonce promoted to paid</td>
+<td>DONE 7b07063 (decided from the transfer log)</td>
+</tr>
+<tr>
+<td>Expiry sweep deletes on silence</td>
+<td>DONE 7b07063, 5f34f41 (moves to payment-unresolved)</td>
+</tr>
+<tr>
+<td>Held row released inside its validity window</td>
+<td>DONE 7b07063</td>
+</tr>
+<tr>
+<td>Unknown outcome told as &quot;nothing was minted&quot;</td>
+<td>DONE 538d61a, 0c86302, 0cbfe2f (ruling 6 wording)</td>
+</tr>
+<tr>
+<td>Sweep runs after <code>hasMinted</code></td>
+<td>DONE 7b07063</td>
+</tr>
+<tr>
+<td>Receipt in <code>structuredContent._meta</code></td>
+<td>DONE 7b07063</td>
+</tr>
+<tr>
+<td>warden.md false statements</td>
+<td>DONE 2bd7bed</td>
+</tr>
+<tr>
+<td><code>seed</code> charges the key bound at write time</td>
+<td>DONE, Plan A (<code>expectedKeyId</code> on <code>seed</code>)</td>
+</tr>
+<tr>
+<td>Same drift on <code>applyMark</code></td>
+<td>ACCEPTED (ruling 2), no change</td>
+</tr>
+<tr>
+<td><code>closeThePiece</code> has no chain guard</td>
+<td>DONE 70069f9</td>
+</tr>
+<tr>
+<td>Owner key as plain text</td>
+<td>DONE, Plan E (<code>deploy-mainnet.sh --owner &lt;safe&gt;</code>)</td>
+</tr>
+<tr>
+<td>contractURI / freezeRenderer / bestRunOf</td>
+<td>DONE 3a037bd, 773e41b</td>
+</tr>
+<tr>
+<td>Rest day not stored</td>
+<td>DONE 773e41b</td>
+</tr>
+<tr>
+<td>No DEPLOY_DAY floor / no lateness floor</td>
+<td>DONE 637fd93</td>
+</tr>
+<tr>
+<td>rest() re-emits / setUpgrade 11-15 / heartbeat after sunset</td>
+<td>DONE 773e41b</td>
+</tr>
+<tr>
+<td><code>_safeMint</code> -&gt; <code>_mint</code></td>
+<td>DONE 773e41b</td>
+</tr>
+<tr>
+<td>Clock key readable, code writable, by the Warden</td>
+<td>DONE, Plan E (Clock under user <code>mro-clock</code>, key out of the Warden&#39;s env 2026-10-08)</td>
+</tr>
+<tr>
+<td>Wallet/supply cap ignores unwritten mints</td>
+<td>DONE 914df1a</td>
+</tr>
+<tr>
+<td>Leftover lock halts every run / no OnFailure</td>
+<td>DONE df349f0; OnFailure live since the 2026-10-07 cutover</td>
+</tr>
+<tr>
+<td>Heartbeat skipped while paused; sunset not passed</td>
+<td>DONE 6c183b4</td>
+</tr>
+<tr>
+<td>A day that never landed healed as written</td>
+<td>DONE 54fa70a</td>
+</tr>
+<tr>
+<td>Reconcile Minted ignores keyId</td>
+<td>DONE 77a946c</td>
+</tr>
+<tr>
+<td>Reconcile all-or-nothing; cursor not atomic</td>
+<td>DONE afc9f76</td>
+</tr>
+<tr>
+<td>Condemned credit never rolls back the mirror</td>
+<td>DONE c9d03dc</td>
+</tr>
+<tr>
+<td>robust-solve unpacks the mask at 37</td>
+<td>DONE a49b23a</td>
+</tr>
+<tr>
+<td>Rehearsal tooling builds 172-byte codes</td>
+<td>DONE b8fefec, 7abb3ff</td>
+</tr>
+<tr>
+<td>Gas stop skips reconcile</td>
+<td>DONE a675a0f</td>
+</tr>
+<tr>
+<td>warden.md &quot;the Warden holds NO private key&quot;</td>
+<td>DONE 2bd7bed</td>
+</tr>
+</tbody></table>
+<p>All nine operator decisions are ruled (above) and built: Plans C, B, D, A and E
+are merged, pushed and live.</p>
 </body>
 </html>
