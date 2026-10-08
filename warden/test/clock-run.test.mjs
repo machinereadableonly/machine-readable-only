@@ -206,14 +206,9 @@ test("mints are written BEFORE check-ins, so a token minted this run can be cred
   assert.equal(order.indexOf("mint") < order.indexOf("batchCheckIn"), true, `order was ${order.join(", ")}`);
 });
 
-// CHANGED 2026-09-05, deliberately. This used to assert the refused row "stays
-// queued for another night", which was the defect rather than the intent: a
-// `Resting` credit is condemned for a reason that will be identical tomorrow,
-// so re-offering it every night forever produced one alert a night and no
-// progress -- and `mints` and `mark_orders` both had a terminal state for
-// exactly this while `credits` did not. The row is now terminal and the run
-// fails, so somebody sees it once and can act.
-test("a refused entry is dropped, the rest land, and the dropped row goes terminal", async () => {
+/// Two tokens with a credit each, where the chain refuses token 2's credit as
+/// `errorName` and accepts token 1's.
+async function runRefusingToken2(errorName) {
   const { db, q } = mirror();
   for (const id of [1, 2]) {
     queueMint(q, db, id);
@@ -227,22 +222,53 @@ test("a refused entry is dropped, the rest land, and the dropped row goes termin
     async send(fn, args, opts) {
       this.sent.push({ functionName: fn, args, label: opts?.label });
       if (fn === "batchCheckIn" && ++call === 1) {
-        return { ok: false, reason: "reverted-on-simulate", errorName: "Resting", errorArgs: ["2"] };
+        return { ok: false, reason: "reverted-on-simulate", errorName, errorArgs: ["2"] };
       }
       return { ok: true, hash: "0x1" };
     },
   });
   const alerts = [];
-  const summary = await runClock({ ...baseArgs(q), writer: passingReveal(writer), alert: (m) => alerts.push(m) });
+  const logs = [];
+  const summary = await runClock({
+    ...baseArgs(q),
+    writer: passingReveal(writer),
+    alert: (m) => alerts.push(m),
+    log: (m) => logs.push(m),
+  });
+  const statusOf = (id) => db.prepare(`SELECT status FROM credits WHERE tokenId = ${id}`).get().status;
+  return { q, summary, alerts, logs, statusOf };
+}
+
+// A condemned credit is terminal and fails the run, so somebody sees it once
+// and can act -- re-offering it nightly produced an alert a night and no progress.
+test("a refused entry is dropped, the rest land, and the dropped row goes terminal", async () => {
+  const { q, summary, alerts, statusOf } = await runRefusingToken2("NoSuchToken");
+
+  assert.deepEqual(summary.credited.map((e) => e.tokenId), [1]);
+  assert.deepEqual(summary.dropped.map((d) => [d.entry.tokenId, d.reason]), [[2, "NoSuchToken"]]);
+  assert.equal(statusOf(1), "written");
+  assert.equal(statusOf(2), "failed");
+  assert.deepEqual(summary.stuckCredits.map((d) => d.entry.tokenId), [2]);
+  assert.equal(exitCodeFor(summary), 1);
+  assert.ok(alerts.some((a) => /token 2 day .* was refused \(NoSuchToken\) and needs a human/.test(a)));
+  // And it is not offered again: the next run sees nothing to do for token 2.
+  assert.deepEqual(q.pendingCredits(TODAY).map((e) => e.tokenId), []);
+});
+
+// The owner sealed the token after the Warden accepted the check-in. The chain
+// is right to refuse it and nothing is wrong, so it must not fail the night.
+test("a credit refused because its token is sealed is closed quietly, not left for a human", async () => {
+  const { q, summary, alerts, logs, statusOf } = await runRefusingToken2("Resting");
 
   assert.deepEqual(summary.credited.map((e) => e.tokenId), [1]);
   assert.deepEqual(summary.dropped.map((d) => [d.entry.tokenId, d.reason]), [[2, "Resting"]]);
-  assert.equal(db.prepare("SELECT status FROM credits WHERE tokenId = 1").get().status, "written");
-  assert.equal(db.prepare("SELECT status FROM credits WHERE tokenId = 2").get().status, "failed");
-  assert.deepEqual(summary.stuckCredits.map((d) => d.entry.tokenId), [2]);
-  assert.ok(alerts.some((a) => /token 2 day .* was refused \(Resting\) and needs a human/.test(a)));
-  // And it is not offered again: the next run sees nothing to do for token 2.
+  assert.equal(statusOf(2), "sealed");
+  assert.deepEqual(summary.stuckCredits, []);
+  assert.equal(exitCodeFor(summary), 0);
+  assert.ok(!alerts.some((a) => /token 2/.test(a)), `alerts were: ${alerts.join(" | ")}`);
+  assert.ok(logs.some((l) => /token 2 day .* was refused because the token is sealed/.test(l)));
   assert.deepEqual(q.pendingCredits(TODAY).map((e) => e.tokenId), []);
+  assert.deepEqual(q.stuckCredits(), [], "and no later night reports it either");
 });
 
 // THE WIRING, not the helper. runClock must hand writeCheckInChunk a `levelOf`

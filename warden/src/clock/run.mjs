@@ -758,9 +758,18 @@ export async function runClock({
         );
         continue;
       }
-      q.failCredit(drop.entry.tokenId, drop.entry.day);
-      summary.stuckCredits.push(drop);
-      alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was refused (${drop.reason}) and needs a human`);
+      // A SEALED TOKEN IS NOT A FAULT. The Warden reads a lagging public RPC,
+      // so it can accept a check-in seconds after the owner seals the token;
+      // the chain is right to refuse it, and the token can never take another
+      // day. Closed without a human, so one owner's rest cannot fail the night.
+      if (drop.reason === "Resting") {
+        q.sealCredit(drop.entry.tokenId, drop.entry.day);
+        log(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was refused because the token is sealed; closed`);
+      } else {
+        q.failCredit(drop.entry.tokenId, drop.entry.day);
+        summary.stuckCredits.push(drop);
+        alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was refused (${drop.reason}) and needs a human`);
+      }
       // AND THE MIRROR STOPS CLAIMING THE DAY. The Warden advanced level,
       // streak and lastDay when it accepted the check-in; the chain has just
       // refused it, so those three are wrong until something writes the

@@ -77,14 +77,12 @@ CREATE TABLE IF NOT EXISTS credits (
   tokenId INTEGER NOT NULL,
   day     INTEGER NOT NULL,
   sigHash TEXT NOT NULL,
-  -- queued | written | failed.
+  -- queued | written | failed | sealed.
   --
-  -- 'failed' is the terminal state, added 2026-09-05, and its absence was a
-  -- defect rather than a simplification: a credit the chain condemned -- a
-  -- token that does not exist, or one its owner has sealed -- was re-offered
-  -- every single night, refused every night, and logged every night as
-  -- "stays queued". `mints` and `mark_orders` both had a terminal state for
-  -- exactly this and `credits` did not.
+  -- 'failed' is terminal and waits for a human: the chain condemned the
+  -- credit, and re-offering it would be refused every night. 'sealed' is
+  -- terminal and needs nobody: the owner sealed the token after the Warden
+  -- accepted the check-in, so the chain is right to refuse it.
   --
   -- Note what is NOT terminal: a day the chain already holds. That is the
   -- mirror being behind, and it is marked 'written' by the Clock's heal path,

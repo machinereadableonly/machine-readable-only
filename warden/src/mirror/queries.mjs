@@ -370,6 +370,7 @@ export function queries(db) {
     markTokenWritten: db.prepare("UPDATE tokens SET status = 'written' WHERE tokenId = ?"),
     markCreditWritten: db.prepare("UPDATE credits SET status = 'written' WHERE tokenId = ? AND day = ?"),
     failCredit: db.prepare("UPDATE credits SET status = 'failed' WHERE tokenId = ? AND day = ?"),
+    sealCredit: db.prepare("UPDATE credits SET status = 'sealed' WHERE tokenId = ? AND day = ?"),
     stuckCredits: db.prepare(
       "SELECT tokenId, day FROM credits WHERE status = 'failed' ORDER BY day ASC, tokenId ASC"
     ),
@@ -1067,6 +1068,10 @@ export function queries(db) {
      * would tell an operator a landed day had been lost.
      */
     failCredit: (tokenId, day) => s.failCredit.run(tokenId, day),
+
+    /// A credit the chain refused because the owner sealed the token after the
+    /// Warden accepted it. Terminal, and not stuck: nothing is wrong.
+    sealCredit: (tokenId, day) => s.sealCredit.run(tokenId, day),
 
     /// Credits waiting for a human. The `stuckMints` / `stuckMarkOrders`
     /// pattern, applied to the one queue that lacked it.
