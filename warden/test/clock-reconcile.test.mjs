@@ -189,7 +189,7 @@ test("the Base Sepolia deploy block is recorded, so reconcile floors instead of 
   // red after an otherwise clean adoption. That is the pin doing its job, but
   // the script claims to change the address "everywhere at once", so it now
   // rewrites this line too.
-  assert.equal(DEPLOY_BLOCK[84532], 47_640_616n);
+  assert.equal(DEPLOY_BLOCK[84532], 47_847_201n);
 });
 
 // --- applying what the chain said ------------------------------------------

@@ -41,7 +41,7 @@ const TREASURY = "0x000000000000000000000000000000000000dEaD";
 // Held as a constant rather
 // than read from the environment so the capture is reproducible from a
 // clean checkout, the same reason DOMAIN and SECRET are constants here.
-const CONTRACT = "0x1d72FD207e66F7449b2f9Bbfb80F62c2191F64F9";
+const CONTRACT = "0x7E0BE303a1756e620591F788bfC57C39Ebbff96A";
 const RPC = process.env.BASE_RPC_URL ?? "https://sepolia.base.org";
 const COMPONENTS = ["@authority", "@method", "@path", "signature-agent", "content-digest", "challenge", "challenge-response"];
 
