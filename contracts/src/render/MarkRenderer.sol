@@ -219,7 +219,7 @@ library MarkRenderer {
     }
 
     /// @notice The finisher's ordinal, from bits 64-95 of the marks word.
-    /// 0 means the token is not a finisher.
+    /// 0 means no place: not finished, or token 1, which finishes with Aorta.
     ///
     /// @dev BITS 64-95, NOT 32-63: bits 32-63 are `irisRun` above, so an ordinal
     /// written there would corrupt every earned Iris silently. `TokenView.sol`

@@ -30,7 +30,8 @@ struct TokenView {
     //   bits 16-23  the Iris shape  (0 target, 1 squircle, 2 leaf)
     //   bits 24-31  the Tint ink    (0 violet, 1 gold)
     //   bits 32-63  the run the earned Iris was taken at
-    //   bits 64-95  the finisher's ordinal; 0 while the token is not a finisher
+    //   bits 64-95  the finisher's ordinal; 0 until it finishes, and for ever
+    //               on token 1, which finishes with Aorta and no place
     // MarkRenderer is the only reader of the packing; nothing else should shift
     // this word by hand. THIS COMMENT IS THE AUTHORITY on the packing -- the
     // ordinal lives at bits 64-95, never at 32-63, which the earned Iris's run

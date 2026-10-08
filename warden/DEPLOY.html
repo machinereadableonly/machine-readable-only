@@ -470,9 +470,9 @@ breaking streak looked healthy to every supervisor watching it.</p>
 <h3>On deploy day, after the mint</h3>
 <ol>
 <li>in <code>~/.mro/seed.env</code>, put token #1&#39;s id as <code>MRO_SEED_TOKEN</code> and the door&#39;s
-opening day plus 2 as <code>MRO_SEED_NOT_BEFORE</code> (<code>YYYY-MM-DD</code>, UTC). Not plus 1:
-a mint credits its own day and same-day finishers are placed by lowest token
-id, so starting the day after opening leaves a tie that token #1 wins</li>
+opening day plus 2 as <code>MRO_SEED_NOT_BEFORE</code> (<code>YYYY-MM-DD</code>, UTC). No place
+rides on it -- the contract gives token #1 Aorta and no place (spec 10n) --
+but it keeps the project&#39;s own token from leading the run in the first days</li>
 <li><code>systemctl --user enable --now mro-seed.timer</code></li>
 <li>re-run the installer -- step 7 now reports either &quot;the guard held&quot; (before
 that day: the run sent nothing and exited 0) or the REAL check-in. It refuses

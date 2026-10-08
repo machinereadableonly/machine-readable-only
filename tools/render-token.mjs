@@ -681,8 +681,8 @@ export function renderSvg(modules, want, size, state) {
     // The bits _marks packs on chain for the eyes: the BOUGHT Iris's shape,
     // Tint's ink, and the streak the EARNED Iris stored when it was applied.
     irisVariant = 0, tintVariant = 0, irisRun = 0,
-    // The finisher's ordinal, from bits 64-95 of the same word. 0 means the
-    // token is not a finisher and its band carries no place.
+    // The finisher's ordinal, from bits 64-95 of the same word. 0 means no
+    // place: not finished, or token 1, which finishes with Aorta.
     ordinal = 0,
     // One answer bit per credit, credit `level` at bit `level - 1`, as two words.
     answers = [0n, 0n],

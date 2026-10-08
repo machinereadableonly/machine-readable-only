@@ -576,9 +576,10 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// @dev Called once in a token's life, by the credit that makes it whole.
     /// Token 1 is given Aorta and no place. For every other token the place is
     /// the ORDER finishes are credited in: across days by day, and within one
-    /// batch by the order the Warden listed them, which it sorts by token id. The ordinal lands in bits 64-95 of the marks word, the slot
-    /// TokenView reserves for it; bits 32-63 are the earned Iris's run and are
-    /// never touched here.
+    /// batch by the order the Warden listed them, which it sorts by token id.
+    /// The ordinal lands in bits 64-95 of the marks word, the slot TokenView
+    /// reserves for it; bits 32-63 are the earned Iris's run and are never
+    /// touched here.
     function _finish(uint256 id) private {
         // The house token leaves `finishers` alone, so the next token home
         // still takes the first place.
@@ -769,8 +770,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// @dev The variant is part of what was bought, so it belongs in the event.
     /// Not indexed: nobody filters by shape.
     event MarkApplied(uint256 indexed id, uint8 indexed upgradeId, uint8 variant);
-    /// @dev The one record of a place. Not MarkApplied: nobody applied this,
-    /// the year's end did.
+    /// @dev The one record of a finish. Not MarkApplied: nobody applied this,
+    /// the year's end did. Token 1 emits ordinal 0: Aorta and no place.
     event Finished(uint256 indexed id, uint32 ordinal, uint8 indexed markId);
     event UpgradeSet(uint8 indexed upgradeId);
 

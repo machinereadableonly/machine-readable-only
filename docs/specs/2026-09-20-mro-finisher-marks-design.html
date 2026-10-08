@@ -1619,6 +1619,30 @@ is at 64-95, and that is what was built.</li>
 it&quot;. There is no reservation guard to break.</li>
 </ul>
 <hr>
+<h2>10n. DECIDED and BUILT 2026-10-08: token 1 takes no place</h2>
+<p>Decided by the operator on 2026-10-08, after two rounds of cold reads in which
+every reader objected that token 1&#39;s late start was &quot;enforced in the operator&#39;s
+copy of the client, not the contract&quot;. Plan:
+<code>docs/plans/2026-10-08-mro-plan-f-token-one-outside-the-count.md</code>.</p>
+<p><strong>Where this section disagrees with 10l or 10m, this section is right.</strong></p>
+<ul>
+<li><strong><code>_finish</code> gives token id 1 (<code>HOUSE_TOKEN</code>) Aorta and no place.</strong> It sets the
+Aorta bit, adds one to <code>_upgrades[11].sold</code>, writes NO ordinal (bits 64-95
+stay 0), leaves <code>finishers</code> alone, and emits <code>Finished(1, 0, 11)</code>. The next
+token home still takes place 1 and Apex. See <code>MachineReadableOnly._finish</code>.</li>
+<li><strong>10l&#39;s &quot;every finished token carries the digit band&quot;</strong> now reads &quot;every
+finished token except token 1&quot;. Token 1&#39;s band is drawn in Aorta&#39;s red with no
+number: the renderer did not change, because <code>DigitBand</code> already draws no
+digits for an ordinal of 0 and <code>finisherInk</code> reads the Mark bit.</li>
+<li><strong>10m&#39;s &quot;<code>_finish</code> increments <code>finishers</code> and writes the ordinal and the Mark
+in one statement&quot;</strong> holds for every token but 1. A finished token with a Mark
+and ordinal 0 exists exactly once, on id 1.</li>
+<li><strong>The Warden</strong> accepts <code>Finished</code> with ordinal 0 only for token 1 with Aorta,
+and <code>status</code> reports <code>finisher: { place: null, mark: &quot;aorta&quot; }</code> for it.</li>
+<li><strong>Mainnet order is load-bearing:</strong> the id, not the owner, decides. Token 1
+must be the operator&#39;s own agent, minted before the door opens.</li>
+</ul>
+<hr>
 <h2>11. Non-goals</h2>
 <p>Stated so they are not re-litigated mid-build:</p>
 <ul>

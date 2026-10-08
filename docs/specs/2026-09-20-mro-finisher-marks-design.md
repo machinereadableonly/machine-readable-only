@@ -1331,6 +1331,33 @@ heart's red and a string search would pass on the fallback near-black.
 
 ---
 
+## 10n. DECIDED and BUILT 2026-10-08: token 1 takes no place
+
+Decided by the operator on 2026-10-08, after two rounds of cold reads in which
+every reader objected that token 1's late start was "enforced in the operator's
+copy of the client, not the contract". Plan:
+`docs/plans/2026-10-08-mro-plan-f-token-one-outside-the-count.md`.
+
+**Where this section disagrees with 10l or 10m, this section is right.**
+
+- **`_finish` gives token id 1 (`HOUSE_TOKEN`) Aorta and no place.** It sets the
+  Aorta bit, adds one to `_upgrades[11].sold`, writes NO ordinal (bits 64-95
+  stay 0), leaves `finishers` alone, and emits `Finished(1, 0, 11)`. The next
+  token home still takes place 1 and Apex. See `MachineReadableOnly._finish`.
+- **10l's "every finished token carries the digit band"** now reads "every
+  finished token except token 1". Token 1's band is drawn in Aorta's red with no
+  number: the renderer did not change, because `DigitBand` already draws no
+  digits for an ordinal of 0 and `finisherInk` reads the Mark bit.
+- **10m's "`_finish` increments `finishers` and writes the ordinal and the Mark
+  in one statement"** holds for every token but 1. A finished token with a Mark
+  and ordinal 0 exists exactly once, on id 1.
+- **The Warden** accepts `Finished` with ordinal 0 only for token 1 with Aorta,
+  and `status` reports `finisher: { place: null, mark: "aorta" }` for it.
+- **Mainnet order is load-bearing:** the id, not the owner, decides. Token 1
+  must be the operator's own agent, minted before the door opens.
+
+---
+
 ## 11. Non-goals
 
 Stated so they are not re-litigated mid-build:
