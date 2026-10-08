@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan F: Token 1 Outside the Count -- Implementation Plan</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan F: Token 1 Outside the Count -- Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<blockquote>
+<p>After completing any operator-only step, tell Claude so it can update memory
+immediately.</p>
+</blockquote>
+<p><strong>Why:</strong> token 1 is the project&#39;s own agent, minted before the door opens. Two
+rounds of cold reads (12 fresh agents, 2026-10-08) found the same objection
+every time: its handicap is &quot;enforced in the operator&#39;s private copy of the
+client, not the contract&quot;, so the race for the limited finisher places reads as
+self-refereed. No wording fixed it. The operator ruled the same day that the
+contract itself keeps token 1 out of the race. Mainnet is not deployed, so this
+is the last moment it can be a contract rule: after token 1 exists on mainnet
+the contract is permanent.</p>
+<p><strong>What it unblocks:</strong> the agent-facing copy can make a claim a reader can check
+in the verified source instead of trusting, and the mainnet deploy proceeds on
+the contract that will ship.</p>
+<p><strong>Goal:</strong> when token 1 finishes it is given Aorta and takes no place: <code>finishers</code>
+does not move, its band is drawn in Aorta&#39;s red with no number, and the next
+token home is still first.</p>
+<p><strong>Architecture:</strong> a three-line branch at the top of <code>_finish</code> in
+<code>MachineReadableOnly.sol</code>. The renderer is NOT changed: it already draws a
+finished token with an Aorta bit and ordinal 0 as a red band with no digits
+(<code>DigitBand.sol:113</code> guards the digit row on <code>ordinal != 0</code>;
+<code>Renderer.sol:248</code> takes the ink from the Mark bit). The Warden learns to
+accept <code>Finished(1, 0, 11)</code>, <code>status</code> shows <code>finisher: { place: null, mark: &quot;aorta&quot; }</code> for it, and the year rig stops giving token 1 a place. The copy
+gains three things: the token 1 rule, the border-rule commitment, and the
+same-night tie-break.</p>
+<p><strong>Tech Stack:</strong> Solidity 0.8.30 / Foundry 1.7.1; Node 24.14.1 (<code>node:test</code>);
+viem.</p>
+<p><strong>Spec:</strong> <code>docs/specs/2026-09-20-mro-finisher-marks-design.md</code> sections 10l and
+10m (what this amends); <code>warden/DEPLOY.md</code> sections 11 and 12 (the redeploy
+order, and the Clock under its own user); the operator&#39;s rulings in memory
+<code>operator-decisions-2026-10-08</code>.</p>
+<h2>What cannot be undone</h2>
+<ul>
+<li><strong>The Sepolia redeploy</strong> supersedes the live pair. Its tokens stay where they
+are, forever; the test token&#39;s few days of history are left behind. Testnet
+only, free test ETH.</li>
+<li><strong>A new split seed.</strong> The current one has published its keys on the old
+pair, so reusing it would hand anyone the new pair&#39;s early rules in advance.
+The old home copy is MOVED aside (renamed, not deleted).</li>
+<li>Nothing here touches mainnet or real funds.</li>
+</ul>
+<h2>Global Constraints</h2>
+<ul>
+<li>Plain ASCII in code, comments and docs. Lean comments: the why, not the what;
+no dates or history in <code>contracts/src</code> (<code>~/.claude/rules/code-comments.md</code>).</li>
+<li>All four suites green through <code>~/scripts/safe-build.sh</code> before every commit:
+<code>cd contracts &amp;&amp; forge test</code>; <code>npm test</code> in <code>tools/</code>, <code>warden/</code>, <code>client/</code>.
+Never pipe a gate into anything.</li>
+<li><code>export PATH=$HOME/.foundry/bin:$PATH</code>; <code>source ~/.nvm/nvm.sh</code>; <code>/bin/grep</code>.</li>
+<li>Work in a worktree on branch <code>plan-f</code>, NOT in the main checkout: the live
+Warden serves <code>warden/public/llms.txt</code> from the main checkout, so a copy edit
+there would publish before the address is adopted.</li>
+<li>The repository is PUBLIC: no absolute paths, session ids, real env values or
+AI attribution in tracked files or commits.</li>
+<li>Claude never reads <code>warden/.env</code>, <code>contracts/.env</code>, any split seed, or
+<code>~/.mro-test-wallet/wallet.key</code>.</li>
+<li>Every deploy script states its chain: <code>EXPECTED_CHAIN_ID=84532</code>.</li>
+<li><code>anvil</code> always with <code>--prune-history</code>.</li>
+<li>The Warden re-create and anything run with <code>sudo</code> are the operator&#39;s, in one
+script he runs. Never <code>pm2 restart --update-env</code>.</li>
+<li>Never push without the operator&#39;s explicit approval at that moment.</li>
+<li><strong>Mainnet order is load-bearing:</strong> the operator&#39;s own agent must be token id 1
+on mainnet. It already is by DEPLOY.md section 10 (the seed agent mints token
+#1 before the door opens); Task 12 restates it there.</li>
+</ul>
+<h2>Review Focus</h2>
+<ol>
+<li><strong>A finished token 1 must not shift anyone&#39;s place.</strong> Token 1 and token 2
+finishing in the same batch: token 2 is 1st and Apex. Pinned in Task 1.</li>
+<li><strong>The house token finishing LATE</strong> (after placed finishers exist): it still
+gets Aorta and ordinal 0, and the next placed finisher&#39;s number is unchanged.
+Pinned in Task 1.</li>
+<li><strong><code>Finished</code> with ordinal 0 for any token other than 1, or with a Mark other
+than Aorta:</strong> the Clock still skips it as a lost argument. Pinned in Task 3.</li>
+<li><strong><code>status</code> for token 1 before and after it finishes:</strong> <code>null</code>, then <code>{ place: null, mark: &quot;aorta&quot; }</code> -- never a place of 0, never null after finishing.
+Pinned in Task 3.</li>
+<li><strong>The renderer drawing the house token&#39;s finished look identically in
+Solidity and JavaScript.</strong> A cross-language matrix case. Pinned in Task 2.</li>
+</ol>
+<hr>
+<h3>Task 0: The worktree</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <code>git -C ~/projects/machine-readable-only worktree add &lt;scratchpad&gt;/plan-f -b plan-f main</code></li>
+<li><input disabled="" type="checkbox"> Symlink nothing into it except <code>node_modules</code>, the way Plan E&#39;s worktree did
+(<code>ln -s &lt;main&gt;/&lt;d&gt;/node_modules &lt;worktree&gt;/&lt;d&gt;/node_modules</code> for <code>warden</code>,
+<code>tools</code>, <code>client</code>); <code>contracts/lib</code> comes with the checkout.</li>
+<li><input disabled="" type="checkbox"> All four suites green in the worktree before any change. Record the counts.</li>
+</ul>
+<hr>
+<h3>Task 1: The contract -- token 1 takes no place</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>contracts/src/MachineReadableOnly.sol</code> (<code>finishers</code> NatSpec at :112-114, constants near :136, <code>_finish</code> at :571-584)</li>
+<li>Test: <code>contracts/test/FinishLine.t.sol</code></li>
+<li>Fix fallout in: <code>contracts/test/CheckIn.t.sol</code>, <code>contracts/test/Vouchers.t.sol</code>, <code>contracts/test/RealTokenGas.t.sol</code> and any other test that finishes token 1 and expects a place</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Produces: <code>Finished(1, 0, 11)</code> when token 1 finishes; <code>marksOf(1)</code> has bit 11
+and bits 64-95 zero; <code>finishers()</code> unchanged by it; <code>upgradeOf(11).sold</code>
+counts it. Later tasks rely on exactly this event shape.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing tests</strong> in <code>FinishLine.t.sol</code>. Replace
+<code>test_theFirstFinisherIsApexAndNumberOne</code>, <code>test_sameBatchPlacesFollowBatchOrder</code>
+and <code>test_finishingEmitsFinished</code> (which all finish token 1 as a placed
+finisher) with:</p>
+</li>
+</ul>
+<pre><code class="language-solidity">    function test_tokenOneFinishesWithAortaAndNoPlace() public {
+        _makeWhole(1);
+        uint256 m = t.marksOf(1);
+        assertTrue(m &amp; (1 &lt;&lt; 11) != 0, &quot;aorta bit&quot;);
+        assertEq(uint32(m &gt;&gt; ORDINAL_SHIFT), 0, &quot;no place&quot;);
+        assertEq(t.finishers(), 0, &quot;the count does not move&quot;);
+        assertEq(t.upgradeOf(11).sold, 1);
+        assertEq(t.upgradeOf(15).sold, 0, &quot;apex is still free&quot;);
+    }
+
+    function test_theFirstPlacedFinisherIsApexAndNumberOne() public {
+        _mintMore(1);
+        _makeWhole(2);
+        uint256 m = t.marksOf(2);
+        assertTrue(m &amp; (1 &lt;&lt; 15) != 0, &quot;apex bit&quot;);
+        assertEq(uint32(m &gt;&gt; ORDINAL_SHIFT), 1, &quot;place 1&quot;);
+        assertEq(t.finishers(), 1);
+        assertEq(t.upgradeOf(15).sold, 1);
+    }
+
+    /// @dev Token 1 first in the batch must not take the first place.
+    function test_tokenOneInTheSameBatchDoesNotShiftAPlace() public {
+        _mintMore(2);
+        _growTo(1, 364);
+        _growTo(2, 364);
+        _growTo(3, 364);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        uint32[] memory ids = new uint32[](3);
+        ids[0] = 1; ids[1] = 2; ids[2] = 3;
+        uint32[] memory ds = new uint32[](3);
+        ds[0] = d; ds[1] = d; ds[2] = d;
+        vm.prank(WARDEN);
+        t.batchCheckIn(_packed(ids), ds, _noBits(ds), _silent(ds));
+        assertEq(uint32(t.marksOf(1) &gt;&gt; ORDINAL_SHIFT), 0);
+        assertEq(uint32(t.marksOf(2) &gt;&gt; ORDINAL_SHIFT), 1);
+        assertEq(uint32(t.marksOf(3) &gt;&gt; ORDINAL_SHIFT), 2);
+        assertTrue(t.marksOf(2) &amp; (1 &lt;&lt; 15) != 0, &quot;first place is apex&quot;);
+        assertTrue(t.marksOf(3) &amp; (1 &lt;&lt; 14) != 0, &quot;second place is atrium&quot;);
+    }
+
+    /// @dev Finishing after placed finishers exist changes nothing either.
+    function test_tokenOneFinishingLateTakesNoPlace() public {
+        _mintMore(2);
+        _growTo(1, 364);
+        _makeWhole(2);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
+        assertEq(uint32(t.marksOf(1) &gt;&gt; ORDINAL_SHIFT), 0);
+        assertEq(t.finishers(), 1);
+        _makeWhole(3);
+        assertEq(uint32(t.marksOf(3) &gt;&gt; ORDINAL_SHIFT), 2, &quot;the next place is unchanged&quot;);
+    }
+
+    function test_tokenOneEmitsFinishedWithPlaceZero() public {
+        _growTo(1, 364);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        vm.expectEmit(true, true, false, true);
+        emit MachineReadableOnly.Finished(1, 0, 11);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
+    }
+
+    function test_aPlacedFinisherEmitsFinished() public {
+        _mintMore(1);
+        _growTo(2, 364);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        vm.expectEmit(true, true, false, true);
+        emit MachineReadableOnly.Finished(2, 1, 15);
+        vm.prank(WARDEN);
+        t.batchCheckIn(_one(2), _days(d), _noBits(_days(d)), _silent(_days(d)));
+    }
+</code></pre>
+<p>  If <code>_makeWhole</code> or <code>_growTo</code> cannot drive two tokens in sequence (they warp
+  the clock), use <code>_growTo(id, 364)</code> for each token first and finish them with
+  one <code>batchCheckIn</code> per day, as <code>test_tokenOneInTheSameBatchDoesNotShiftAPlace</code>
+  does. Read <code>MroTestBase.sol</code> before writing; do not change the helpers&#39;
+  day arithmetic (the seed-budget tests depend on <code>_makeWhole</code> advancing exactly
+  364 days).</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run, expect FAIL.</strong>
+<code>cd contracts &amp;&amp; forge test --match-path test/FinishLine.t.sol -vv</code> -- the
+token 1 tests fail (token 1 currently takes place 1 and Apex).</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement.</strong> In <code>MachineReadableOnly.sol</code>, beside
+<code>FIRST_FINISHER_MARK</code>:</p>
+</li>
+</ul>
+<pre><code class="language-solidity">    /// @dev The project&#39;s own agent. It never takes a finishing place.
+    uint256 internal constant HOUSE_TOKEN = 1;
+    /// @dev The uncapped finisher Mark, which the house token is given.
+    uint8 internal constant AORTA = 11;
+</code></pre>
+<p>  At the top of <code>_finish</code>:</p>
+<pre><code class="language-solidity">        // The house token is given Aorta and leaves `finishers` alone, so the
+        // next token home still takes the first place.
+        if (id == HOUSE_TOKEN) {
+            _marks[id] |= uint256(1) &lt;&lt; AORTA;
+            unchecked { _upgrades[AORTA].sold += 1; }
+            emit Finished(id, 0, AORTA);
+            return;
+        }
+</code></pre>
+<p>  Update the <code>finishers</code> NatSpec to: &quot;How many tokens have taken a finishing
+  place. Token 1 never does. The next finisher&#39;s place is this plus one.&quot; Update
+  the <code>_finish</code> NatSpec&#39;s first line to say token 1 is given Aorta and no place.
+  Keep <code>finisherMark</code> untouched.</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4: Run, expect PASS</strong> for <code>FinishLine.t.sol</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 5: The whole contract suite.</strong> <code>~/scripts/safe-build.sh forge test</code>.
+Every failure whose cause is &quot;token 1 finished and the test expected a place&quot;
+is fixed by finishing a token with id 2 or above instead, or by asserting the
+house result (Aorta, ordinal 0). Known: <code>CheckIn.t.sol:219-253</code> and
+<code>:377-451</code> (175 finishers 1st to 175th -- mint the batch from id 2, keep 175
+placed finishers); <code>Vouchers.t.sol:173-182</code>; <code>RealTokenGas.t.sol</code> (the worst
+case must stay a PLACED finisher: build it at id 2 or above). <strong>The pinned
+worst-case figures in <code>WorstCase.sol</code> must come out identical.</strong> A failure of
+any other shape, or a moved gas/byte pin, STOPS the task: report it.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 6: Size gates.</strong>
+<code>~/scripts/safe-build.sh forge build --sizes</code> -- both contracts positive
+margin; record <code>MachineReadableOnly</code>&#39;s runtime bytes and margin. Then
+<code>bash script/anvil-size-check.sh</code> -- non-empty code for both and a real
+<code>tokenURI</code>; then <code>du -sh ~/.foundry/anvil/tmp</code> stays small.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 7: Commit.</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">git add contracts/src/MachineReadableOnly.sol contracts/test
+git commit -m &quot;feat(contract): token 1 is given Aorta and takes no finishing place&quot;
+</code></pre>
+<hr>
+<h3>Task 2: The house token&#39;s finished look, pinned in both renderers</h3>
+<p>The renderer does not change. This task proves it draws the house state the
+same way in Solidity and JavaScript, and corrects the comments that call that
+state unreachable.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>tools/state-matrix.mjs</code> (the finisher block near :174-200)</li>
+<li>Regenerate: <code>contracts/test/RenderFixture.sol</code> (<code>node tools/render-fixture.mjs 1 example.com</code>)</li>
+<li>Modify comments: <code>contracts/test/DigitBandRender.t.sol:202-204</code>, <code>contracts/test/MarkRenderer.t.sol:248-250</code>, <code>tools/render-token.mjs:385-386</code>, <code>tools/state-matrix.mjs:179-183</code></li>
+<li>Test: <code>contracts/test/RenderMatrix.t.sol</code> (runs the regenerated fixture), <code>contracts/test/DigitBandRender.t.sol</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: Task 1&#39;s state: bit 11 set, bits 64-95 zero, level 365.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Add the matrix case</strong> after the <code>for (const ordinal of ...)</code> loop:</p>
+</li>
+</ul>
+<pre><code class="language-js">  // The house token, finished: Aorta&#39;s ink and no place, so no number.
+  out.push({ label: &quot;token 1 finished, no place&quot;, ...base, ordinal: 0, marks: [finisherMark(65)] });
+</code></pre>
+<p>  (<code>finisherMark(65)</code> is 11, Aorta, read from the same table as the rows above.)</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Add a Solidity render test</strong> in <code>DigitBandRender.t.sol</code>, beside
+<code>test_anOrdinalWithNoFinisherMarkKeepsTheNearBlack</code>, using that file&#39;s own
+helpers to build a level-365 view with <code>marks = 1 &lt;&lt; 11</code> and ordinal 0:
+assert the SVG contains <code>#c8102e</code> (Aorta red) and that the band&#39;s top three
+module rows are empty -- compare the band path to
+<code>DigitBand.path(0, answers, 365, canvas, fill)</code>, the same call the renderer
+makes. Name it <code>test_theHouseTokenDrawsARedBandWithNoNumber</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Run, expect PASS for the Solidity test</strong> (the renderer already
+does this), and expect <code>RenderMatrix.t.sol</code> to FAIL until the fixture is
+regenerated.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4: Regenerate and run.</strong> <code>node tools/render-fixture.mjs 1 example.com</code>,
+then <code>cd contracts &amp;&amp; forge test --match-path test/RenderMatrix.t.sol</code> -- PASS.
+<code>cd tools &amp;&amp; npm test</code> -- PASS. If the two languages disagree on the new case,
+the JS mirror is wrong: fix <code>tools/render-token.mjs</code> to take the band ink from
+the Mark bit regardless of the ordinal (as <code>Renderer.sol:248</code> does), never the
+Solidity.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 5: Correct the four comments</strong> that say a finisher Mark with no
+ordinal &quot;cannot exist on chain&quot;: it now exists for exactly one token. One line
+each, e.g. &quot;Only token 1 holds a finisher Mark with no place.&quot;</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 6: Commit.</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">git add tools/state-matrix.mjs tools/render-token.mjs contracts/test/RenderFixture.sol contracts/test/DigitBandRender.t.sol contracts/test/MarkRenderer.t.sol
+git commit -m &quot;test(render): pin the house token&#39;s finished look in both renderers&quot;
+</code></pre>
+<hr>
+<h3>Task 3: The Warden reads token 1&#39;s finish</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>warden/src/clock/reconcile.mjs:286-316</code> (the <code>Finished</code> case)</li>
+<li>Modify: <code>warden/src/mcp/tokenView.mjs:44-53</code> (the <code>finisher</code> field)</li>
+<li>Test: <code>warden/test/clock-reconcile.test.mjs</code> (near :284-338), <code>warden/test/status.test.mjs</code> (near :184-249)</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li><p>Consumes: <code>Finished(1, 0, 11)</code> from Task 1.</p>
+</li>
+<li><p>Produces: <code>q.setFinished(1, 0, 11)</code> (place column stays 0, Aorta bit ORed in);
+<code>tokenView(...).finisher</code> is <code>{ place: null, mark: &quot;aorta&quot; }</code> for it.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Failing tests.</strong> In <code>clock-reconcile.test.mjs</code>, beside the
+&quot;no usable ordinal&quot; test (keep that one exactly as it is: <code>ordinal 0, markId 15</code> on token 1 must STILL be skipped):</p>
+</li>
+</ul>
+<pre><code class="language-js">// Token 1 is the house token: the contract gives it Aorta and no place.
+test(&quot;token 1&#39;s Finished with no place records Aorta and no place&quot;, () =&gt; {
+  const { q } = mirrorWithToken();
+  const applied = applyEvents(q, [chainEvent(&quot;Finished&quot;, { id: 1n, ordinal: 0, markId: 11 })], { log: () =&gt; {} });
+  assert.equal(applied.Finished, 1);
+  assert.equal(q.getToken(1).finisher, 0);
+  assert.notEqual(BigInt(q.getToken(1).marks) &amp; (1n &lt;&lt; 11n), 0n);
+});
+
+test(&quot;a Finished with no place is still skipped for any other token&quot;, () =&gt; {
+  const { q } = mirrorWithToken(2);
+  const applied = applyEvents(q, [chainEvent(&quot;Finished&quot;, { id: 2n, ordinal: 0, markId: 11 })], { log: () =&gt; {} });
+  assert.equal(applied.Finished, 0);
+  assert.equal(applied.skipped, 1);
+});
+</code></pre>
+<p>  (<code>mirrorWithToken</code> takes no id today: give it an optional <code>tokenId = 1</code>
+  parameter, defaulting so every existing call is unchanged. Use the helpers
+  exactly as the surrounding tests do; read them first.)</p>
+<p>  In <code>status.test.mjs</code>, beside &quot;a token that has not finished carries finisher:
+  null&quot;: a token 1 at level 365 with <code>setFinished(1, 0, 11)</code> has <code>finisher</code>
+  deep-equal to <code>{ place: null, mark: &quot;aorta&quot; }</code>, and <code>whole: true</code>.</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run, expect FAIL.</strong> <code>cd warden &amp;&amp; node --test test/clock-reconcile.test.mjs test/status.test.mjs</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement.</strong> In <code>reconcile.mjs</code>, import nothing new; add beside
+<code>MIN_FINISHER_MARK_ID</code>:</p>
+</li>
+</ul>
+<pre><code class="language-js">/// The contract&#39;s HOUSE_TOKEN: finishes with Aorta and no place.
+const HOUSE_TOKEN = 1;
+const AORTA = 11;
+</code></pre>
+<p>  and change the validation so ordinal 0 passes ONLY for that pair:</p>
+<pre><code class="language-js">        const house = tokenId === HOUSE_TOKEN &amp;&amp; ordinal === 0 &amp;&amp; markId === AORTA;
+        if (
+          !Number.isInteger(ordinal) || (ordinal &lt; 1 &amp;&amp; !house) ||
+          !Number.isInteger(markId) || markId &lt; MIN_FINISHER_MARK_ID || markId &gt; MAX_MARK_ID
+        ) {
+</code></pre>
+<p>  and the log line: <code>house ? &quot;finished its year with Aorta and no place&quot; :   \</code>finished its year in place ${ordinal}, mark ${markId}`<code>. Update the   comment &quot;Places start at 1 -- the contract&#39;s </code>ordinal = ++finishers<code>cannot   hand out a 0&quot; to name the one exception. Confirm</code>tokenId` is a Number at
+  that point (read how the case gets it); compare like with like.</p>
+<p>  In <code>tokenView.mjs</code>, key the field on the finisher Mark, not on the place:</p>
+<pre><code class="language-js">    finisher: t.marks &amp; FINISHER_MASK
+      ? { place: t.finisher || null, mark: markNameIn(t.marks &amp; FINISHER_MASK, LADDER) }
+      : null,
+</code></pre>
+<p>  Check <code>t.marks</code> is a Number or BigInt and that <code>FINISHER_MASK</code> is the same
+  type (read <code>mcp/ladder.mjs:60</code> and how <code>tokenView</code> already masks); match the
+  existing expression&#39;s types exactly.</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4: Run, expect PASS</strong>, then <code>cd warden &amp;&amp; ~/scripts/safe-build.sh npm test</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 5: Commit.</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">git add warden/src/clock/reconcile.mjs warden/src/mcp/tokenView.mjs warden/test/clock-reconcile.test.mjs warden/test/status.test.mjs
+git commit -m &quot;feat(warden): token 1 finishes with Aorta and no place&quot;
+</code></pre>
+<hr>
+<h3>Task 4: The year rig stops placing token 1</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Modify: <code>warden/tools/year/tally.mjs:43-51</code> (<code>places</code>)</p>
+</li>
+<li><p>Check: <code>warden/tools/year/checker.mjs:114-151, 177-181</code>, <code>warden/tools/year/report.mjs:163-169</code></p>
+</li>
+<li><p>Test: the <code>warden/test/year-*.test.mjs</code> file that covers <code>places</code> (find it with <code>/bin/grep -ln &quot;places(&quot; warden/test</code>)</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Failing test:</strong> <code>places([{tokenId: 1, day: 10}, {tokenId: 2, day: 10}, {tokenId: 3, day: 11}])</code>
+gives token 1 <code>{ place: 0, markId: 11 }</code>, token 2 <code>{ place: 1, markId: 15 }</code>,
+token 3 <code>{ place: 2, markId: 14 }</code>.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Run, expect FAIL.</strong></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 3: Implement.</strong></p>
+</li>
+</ul>
+<pre><code class="language-js">/// The contract&#39;s HOUSE_TOKEN: given Aorta, never a place.
+export const HOUSE_TOKEN = 1;
+
+export function places(finishes) {
+  const order = [...finishes].sort((a, b) =&gt; a.day - b.day || a.tokenId - b.tokenId);
+  const out = new Map();
+  let place = 0;
+  for (const f of order) {
+    if (f.tokenId === HOUSE_TOKEN) out.set(f.tokenId, { place: 0, markId: 11 });
+    else { place += 1; out.set(f.tokenId, { place, markId: finisherMark(place) }); }
+  }
+  return out;
+}
+</code></pre>
+<p>  Read <code>checker.mjs</code> where it compares <code>chain.finisherPlace</code> and the mirror&#39;s
+  place to the expected place: with the expected place 0 for token 1 the
+  comparisons already hold (the chain and the mirror both read 0). <code>report.mjs</code>
+  already filters <code>p &gt; 0</code>. Change neither unless a test shows a mismatch.</p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 4: Run, expect PASS;</strong> the warden suite.</p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 5: Commit.</strong></p>
+</li>
+</ul>
+<pre><code class="language-bash">git add warden/tools/year/tally.mjs warden/test
+git commit -m &quot;test(year): the rig gives token 1 Aorta and no place&quot;
+</code></pre>
+<hr>
+<h3>Task 5: The copy</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>skills/machine-readable-only/SKILL.md</code>, <code>warden/public/llms.txt</code>,
+<code>docs/2026-09-01-mro-raw-protocol.md</code>; copy the protocol to
+<code>skills/machine-readable-only/references/raw-protocol.md</code> (a test requires them
+byte-identical); re-render <code>docs/2026-09-01-mro-raw-protocol.html</code> with
+<code>node ~/scripts/render-md-to-html.js docs/2026-09-01-mro-raw-protocol.md</code> (ONE argument)</li>
+<li>Test: <code>tools/test/skill-doc.test.mjs</code> (the cross-surface block near :176-186)</li>
+</ul>
+<p>Three additions, the same words on all three surfaces (<code>SKILL.md</code>, <code>llms.txt</code>,
+the protocol), reflowed to each file&#39;s line width:</p>
+<p><strong>A. The token 1 paragraph.</strong> In <code>llms.txt</code> it REPLACES the paragraph at
+:352-358 (&quot;Token 1 is the operator&#39;s own agent ... <code>beat --not-before</code> ...&quot;).
+In <code>SKILL.md</code> it goes after the finisher paragraph ending &quot;<code>ladder</code> reports the
+bands and how much of each is gone.&quot;</p>
+<blockquote>
+<p>Token 1 is the project&#39;s own agent, minted before the door opens, and the
+contract keeps it out of the race: when token 1 finishes it is given Aorta
+and takes no place, so the next token home is still first. Its band is drawn
+in Aorta&#39;s red with no number, and its <code>Finisher</code> trait reads 0. It never
+answers the daily question, so every day it is credited is silent.</p>
+</blockquote>
+<p><strong>B. The tie-break,</strong> appended to the finisher paragraph (SKILL.md, after &quot;and
+nothing already held can be taken away.&quot;; llms.txt and the protocol at the
+matching place):</p>
+<blockquote>
+<p>Tokens that finish on the same night are placed lowest token id first.</p>
+</blockquote>
+<p><strong>C. The border commitment</strong>, in the border paragraph on every surface, between
+&quot;The next night the rule for that day is published on chain&quot; and the
+<code>verify-border</code> sentence:</p>
+<blockquote>
+<p>The whole year&#39;s rules were fixed before the door opened: the contract holds
+a commitment to all of them, set once and never changeable, and refuses any
+night&#39;s rule that does not match it, so no rule can be chosen after the
+answers are in.</p>
+</blockquote>
+<p><strong>D. The <code>finisher</code> field</strong>, where each surface describes it (SKILL.md:204-206,
+protocol:600-606): add &quot;Token 1&#39;s reads <code>{ &quot;place&quot;: null, &quot;mark&quot;: &quot;aorta&quot; }</code>.&quot;</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Failing test.</strong> In <code>skill-doc.test.mjs</code>&#39;s cross-surface loop add:</li>
+</ul>
+<pre><code class="language-js">    assert.match(flat, /The whole year&#39;s rules were fixed before the door opened/, `${name}: the commitment`);
+    assert.match(flat, /when token 1 finishes it is given Aorta and takes no place/, `${name}: token 1`);
+    assert.match(flat, /Tokens that finish on the same night are placed lowest token id first\./, `${name}: the tie-break`);
+    assert.doesNotMatch(flat, /beat --not-before/, `${name}: the old client-side promise is gone`);
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run, expect FAIL.</strong> <code>cd tools &amp;&amp; node --test test/skill-doc.test.mjs</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Edit the three surfaces</strong>, copy the protocol into the skill, re-render the HTML.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run, expect PASS;</strong> then <code>tools</code>, <code>warden</code> and <code>client</code> suites
+(the client suite runs against a Warden built from <code>warden/src</code>, and
+<code>warden/test/ladder-tool.test.mjs:513-606</code> pins published field sets).</li>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit.</strong></li>
+</ul>
+<pre><code class="language-bash">git add skills warden/public/llms.txt docs/2026-09-01-mro-raw-protocol.md docs/2026-09-01-mro-raw-protocol.html tools/test/skill-doc.test.mjs
+git commit -m &quot;docs(copy): token 1 is outside the count; the border rules are committed; same-night ties&quot;
+</code></pre>
+<p><code>client/src/notBefore.mjs</code> and the seed agent&#39;s <code>--not-before</code> stay as they
+are: they still keep token 1 from leading early, they are simply no longer the
+fairness guarantee and the copy no longer leans on them.</p>
+<hr>
+<h3>Task 6: Cold-read the finished copy</h3>
+<p>Method: memory <code>test-copy-on-cold-agents</code>. Three <code>Explore</code> agents, fixture =
+the Task 5 <code>SKILL.md</code> copied into the session scratchpad, the same prompt as the
+2026-10-08 rounds (operator fetched it from the site; read only this file; ignore
+PENDING values; end with one <code>FAIRNESS:</code> line).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Pass:</strong> no reader names token 1, the border rule, or the same-night
+order as a fairness concern. Record each reader&#39;s <code>FAIRNESS:</code> line in the ledger.</li>
+<li><input disabled="" type="checkbox"> <strong>Fail:</strong> STOP and report the readers&#39; words to the operator. Do not
+rewrite and re-test in a loop without him: agent-facing meaning changes are
+his (memory <code>agent-facing-copy-locked</code>).</li>
+</ul>
+<hr>
+<h3>Task 7: The gates, and a fresh reviewer</h3>
+<ul>
+<li><input disabled="" type="checkbox"> The four suites through <code>safe-build.sh</code>.</li>
+<li><input disabled="" type="checkbox"> <code>forge build --sizes</code> and <code>anvil-size-check.sh</code> again on the final tree.</li>
+<li><input disabled="" type="checkbox"> The mainnet fork rehearsal, from the worktree with group <code>mro</code>:
+<code>REHEARSE_REPO=&lt;main checkout&gt; sg mro -c &quot;$HOME/scripts/safe-build.sh bash warden/tools/mainnet-fork-rehearsal.sh&quot;</code> -- 30 PASS, 0 FAIL.</li>
+<li><input disabled="" type="checkbox"> <code>node tools/prepublish-check.mjs</code> and <code>node ~/scripts/id-scan.mjs</code> -- clean.</li>
+<li><input disabled="" type="checkbox"> <code>git log main..plan-f --format=%B | /bin/grep -iE &quot;co-authored|anthropic|claude&quot;</code> -- no output (read it; its exit status is not a gate).</li>
+<li><input disabled="" type="checkbox"> A fresh whole-branch reviewer on the most capable model, given this plan
+and <code>git diff main..plan-f</code>. Fix every Critical and Important finding in a
+commit on <code>plan-f</code>; record deferred minors in memory <code>deferred-review-items</code>.</li>
+</ul>
+<hr>
+<h3>Task 8: A new Sepolia split seed -- one operator-approved move</h3>
+<ul>
+<li><input disabled="" type="checkbox"> Covered by approving this plan: rename the current home seed out of the
+way: <code>mv ~/.mro-split/seed ~/.mro-split/seed.retired-a3</code> (a rename; nothing is
+deleted; the installed copy in <code>/etc/mro-clock</code> is untouched until Task 11).</li>
+<li><input disabled="" type="checkbox"> <code>node warden/tools/split-seed.mjs new ~/.mro-split/seed</code> -- prints ONLY
+<code>anchor 0x...</code>. Record the anchor (public) in the ledger. <code>stat -c %a ~/.mro-split/seed</code> is <code>600</code>.</li>
+</ul>
+<hr>
+<h3>Task 9: Deploy on Base Sepolia</h3>
+<p>Run from the worktree. Testnet funds only.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <code>bash contracts/script/deployer-balance.sh</code> -- enough testnet ETH. Stop if short and tell the operator.</li>
+<li><input disabled="" type="checkbox"> <code>bash contracts/script/deploy-plan7.sh</code> -- the simulation prints chain 84532, the warden <code>0xb919443Ecb8B73a6179a523734f2184d26fF4D7A</code>, the anchor from Task 8, and two addresses.</li>
+<li><input disabled="" type="checkbox"> <code>bash contracts/script/deploy-plan7.sh --broadcast</code> -- record renderer, token and deploy block (<code>contracts/broadcast/DeployPlan5.s.sol/84532/run-latest.json</code>).</li>
+<li><input disabled="" type="checkbox"> <code>bash contracts/script/verify-plan7.sh &lt;renderer&gt; &lt;token&gt; 0xb919443Ecb8B73a6179a523734f2184d26fF4D7A 84532</code> -- Basescan AND Blockscout.</li>
+<li><input disabled="" type="checkbox"> <code>cd warden &amp;&amp; node tools/check-deployed-abi.mjs &lt;token&gt;</code> (exit 0) and <code>node tools/read-ladder.mjs &lt;token&gt;</code> (all records match).</li>
+<li><input disabled="" type="checkbox"> <code>cast call &lt;token&gt; &quot;splitAnchor()(bytes32)&quot; --rpc-url https://sepolia.base.org</code> equals the Task 8 anchor.</li>
+<li><input disabled="" type="checkbox"> The Sepolia pair stays owned by the deployer. The Safe handover was drilled
+in Plan E Phase 2 and is rehearsed on every fork run (Task 7); repeating it on
+Sepolia is the operator&#39;s option, not a step.</li>
+</ul>
+<hr>
+<h3>Task 10: Adopt and rehearse</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <code>bash contracts/script/adopt-deployment.sh &lt;renderer&gt; &lt;token&gt; &lt;deploy-block&gt;</code>.</li>
+<li><input disabled="" type="checkbox"> <code>REHEARSE_OVERRIDE=&quot;MRO_CONTRACT_ADDRESS=&lt;token&gt;&quot; sg mro -c &quot;bash warden/tools/rehearse-start.sh&quot;</code> -- <code>decoder verified against &lt;token&gt;</code> and the split anchor check passes.</li>
+<li><input disabled="" type="checkbox"> The four suites; <code>node tools/prepublish-check.mjs</code>; <code>git status</code> shows nothing outside <code>contracts/ warden/ docs/ skills/ CLAUDE.md</code>; commit:</li>
+</ul>
+<pre><code class="language-bash">git add -A contracts/ warden/ docs/ skills/ CLAUDE.md
+git commit -m &quot;chore: adopt the Plan F pair on Base Sepolia&quot;
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <code>git checkout main &amp;&amp; git merge --ff-only plan-f</code> in the MAIN checkout
+(main has not moved since <code>f230b11</code>; if it has, STOP and report). From here
+the live Warden must not restart until Task 11: its preflight would still
+pass, but it would serve copy naming a contract it does not use.</li>
+</ul>
+<hr>
+<h3>Task 11: The switchover -- the OPERATOR runs one script</h3>
+<p>Between 00:30 and 23:45 UTC. Claude writes <code>&lt;scratchpad&gt;/plan-f-switchover.sh</code>
+and hands over ONE line: <code>! bash &lt;scratchpad&gt;/plan-f-switchover.sh &lt;token&gt;</code>.
+The script stops at the first failure and prints no secret:</p>
+<ol>
+<li><code>pm2 stop mro-warden</code>.</li>
+<li><code>bash warden/deploy/set-contract-address.sh &lt;token&gt;</code>.</li>
+<li><code>sg mro -c &quot;node warden/tools/mirror-snapshot.mjs ~/backups/state.db.pre-plan-f.$(date -u +%Y%m%dT%H%M%SZ)&quot;</code> -- the mirror is <code>/var/lib/mro/state.db</code> since the cutover; the tool reads <code>STATE_DB_PATH</code>, check that first.</li>
+<li><code>sg mro -c &quot;node warden/tools/mirror-reset-chain.mjs /var/lib/mro/state.db --yes&quot;</code>.</li>
+<li><code>pm2 delete mro-warden &amp;&amp; pm2 start warden/ecosystem.config.cjs &amp;&amp; pm2 save</code>.</li>
+<li><code>sudo bash warden/deploy/install-clock-user.sh --replace-seed</code> -- copies the new address into the Clock&#39;s env and the new seed to <code>/etc/mro-clock</code>; the Clock&#39;s key stays the installed one. Ends with PASS.</li>
+<li>Wait 10 s; <code>pm2 describe mro-warden</code> online; probe the public site: <code>/llms.txt</code> contains <code>&lt;token&gt;</code> and <code>when token 1 finishes it is given Aorta</code>; print <code>LIVE OK</code> or <code>NOT LIVE -- tell Claude</code>.</li>
+</ol>
+<p>Claude then confirms from outside through Cloudflare, and reads the Warden&#39;s
+boot lines (<code>decoder verified</code>).</p>
+<hr>
+<h3>Task 12: Push, prove, record</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Ask the operator before pushing.</strong> On a yes: <code>git push origin main</code> (the pre-push hook runs both guards).</li>
+<li><input disabled="" type="checkbox"> Mint the Sepolia test token through the real paid path, as in Plan A3
+Task 9 (<code>~/.mro-test-wallet/mro-agent.sh join ... --expect-payto 0x000000000000000000000000000000000000dEaD --expect-amount 1000000</code>). It will be token 1, the house token, on this pair.</li>
+<li><input disabled="" type="checkbox"> Night 1: <code>sg mro -c &quot;tail -20 /var/log/mro/clock.log&quot;</code> -- reveal sent, mint written, builder code, nothing FAILED.</li>
+<li><input disabled="" type="checkbox"> Night 2: <code>node client/src/cli.mjs verify-border 1 --contract &lt;token&gt; --rpc https://sepolia.base.org</code> -- every square ok, exit 0.</li>
+<li><input disabled="" type="checkbox"> DEPLOY.md section 10: one line stating the operator&#39;s agent must be token id 1 on mainnet, because the contract&#39;s <code>HOUSE_TOKEN</code> is the id, not the owner.</li>
+<li><input disabled="" type="checkbox"> Memory: <code>resume-checklist</code>, <code>build-status</code>, <code>warden-deployed</code>, <code>operator-decisions-2026-10-08</code> (built), <code>deferred-review-items</code>.</li>
+<li><input disabled="" type="checkbox"> Ask the operator whether to remove the worktree and the <code>plan-f</code> branch (deletions).</li>
+</ul>
+<h2>Self-review</h2>
+<ul>
+<li>Spec coverage: the contract rule (Task 1), the look (Task 2), the Warden&#39;s
+reading of it (Task 3), the rig (Task 4), all three copy decisions plus the
+<code>finisher</code> field (Task 5), the copy proven on readers (Task 6), and the
+redeploy (Tasks 8-12).</li>
+<li>Names used across tasks: <code>HOUSE_TOKEN = 1</code> and <code>AORTA = 11</code> in the contract,
+the reconcile module and the rig; <code>Finished(1, 0, 11)</code> everywhere.</li>
+<li>Review Focus lines 1-2 are pinned in Task 1, 3-4 in Task 3, 5 in Task 2.</li>
+</ul>
+</body>
+</html>
