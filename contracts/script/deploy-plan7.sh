@@ -101,7 +101,9 @@ echo "anchor   $SPLIT_ANCHOR"
 echo "mode     ${BROADCAST:-simulate}"
 echo
 
+# run(), the deployer as owner: DeployPlan5 also has run(address), for mainnet.
 forge script script/DeployPlan5.s.sol:DeployPlan5 \
+  --sig "run()" \
   --rpc-url "$RPC" \
   $BROADCAST \
   -vvv
