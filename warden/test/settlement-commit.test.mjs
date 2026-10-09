@@ -446,7 +446,7 @@ test("CONTROL: a settled Mark is queued for the Clock and carries its receipt", 
   const { result, q, db } = await upgradePaying({ settle: "ok" });
   assert.equal(result.structuredContent.ok, true);
   assert.equal(result._meta["x402/payment-response"].transaction, SETTLE_TX, "the receipt reaches the agent");
-  assert.deepEqual(q.pendingMarkOrders().map((o) => ({ ...o })), [{ tokenId: 1, upgradeId: 3, variant: 0 }]);
+  assert.deepEqual(q.pendingMarkOrders().map(({ tokenId, upgradeId, variant }) => ({ tokenId, upgradeId, variant })), [{ tokenId: 1, upgradeId: 3, variant: 0 }]);
   assert.equal(db.prepare("SELECT paymentTx FROM mark_orders").get().paymentTx, SETTLE_TX);
 });
 

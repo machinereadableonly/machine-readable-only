@@ -253,6 +253,7 @@ import { queries } from "../src/mirror/queries.mjs";
 import { runClock } from "../src/clock/run.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
 import { passingReveal, splitArgs } from "./split-rig.mjs";
+import { trustingProver } from "./trusting-prover.mjs";
 
 const TODAY = 20_700;
 
@@ -313,7 +314,7 @@ test("a run heals the landed day in the MIRROR and still credits the new one", a
   q.insertCredit(1, TODAY - 1, "sig-new");
 
   const lastDays = new Map([[1, TODAY - 2]]);
-  const summary = await runClock({
+  const summary = await runClock({ prover: trustingProver(),
     q,
     ...splitArgs(TODAY),
     publicClient: chainAt(lastDays),
@@ -374,7 +375,7 @@ test("a lastDay the node would not answer leaves the credit queued", async () =>
     },
   };
 
-  const summary = await runClock({
+  const summary = await runClock({ prover: trustingProver(),
     q,
     ...splitArgs(TODAY),
     publicClient: unreadable,
@@ -411,7 +412,7 @@ test("a queued day the chain's level cannot account for stays queued", async () 
 
   const lastDays = new Map([[1, TODAY - 1]]);
   const alerts = [];
-  const summary = await runClock({
+  const summary = await runClock({ prover: trustingProver(),
     q,
     ...splitArgs(TODAY),
     publicClient: chainAt(lastDays, new Map([[1, 2]])),

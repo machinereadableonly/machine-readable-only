@@ -258,6 +258,7 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
       let recorded = false;
       const credited = q.transact(() => {
         if (!q.insertCredit(tokenId, day, ctx.sigHash ?? "")) return false;
+        q.putEvidence("credit", `${tokenId}:${day}`, ctx.evidence);
         q.creditDay(tokenId, day, level, streak);
         // Inside the transaction and only once the credit was new, so the
         // answer and the day it belongs to land or roll back together.

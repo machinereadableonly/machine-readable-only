@@ -176,6 +176,7 @@ export function exitCodeFor(summary) {
   if ((summary.unresolvedPayments?.length ?? 0) > 0) return 1;
   if (summary.sweepFailed) return 1;
   if (summary.resolveFailed) return 1;
+  if ((summary.unproven?.length ?? 0) > 0) return 1;
   return 0;
 }
 
@@ -199,7 +200,7 @@ export function runFinishedLine(summary, ms) {
     // would read as two sales.
     `${summary.resolvedPaid.length} held payments found paid, ` +
     `${summary.resolvedUnpaid.length} released, ${summary.deferredPayments.length} deferred, ` +
-    `${summary.unresolvedPayments.length} still unresolved` +
+    `${summary.unresolvedPayments.length} still unresolved, ${summary.unproven?.length ?? 0} unproven` +
     (failed.length ? ` -- ${failed.join(", ")}` : "")
   );
 }

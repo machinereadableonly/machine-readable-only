@@ -201,7 +201,7 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         if (nowBlocking) {
           return { ok: false, reason: "mark-excluded", detail: markNameIn(nowBlocking, catalogue) };
         }
-        if (nowHeld & (1 << upgradeId) || !q.reserveMark(tokenId, upgradeId, variant)) {
+        if (nowHeld & (1 << upgradeId) || !q.reserveMark(tokenId, upgradeId, variant, ctx.evidence)) {
           return { ok: false, reason: "mark-already-applied" };
         }
         return { ok: true, accepted: true, upgradeId, variant, closed: markNameIn(mark.excludes, catalogue), appliedBy: "the next Clock run" };
@@ -289,7 +289,7 @@ export function makeUpgradeTool({ q, chain, catalogue, paid, alert = console.err
         const reservedBlock = blocked ? null : await chain.blockNumber();
         let reserved = false;
         try {
-          reserved = !blocked && q.reserveMarkPaid(tokenId, upgradeId, variant, payNonce);
+          reserved = !blocked && q.reserveMarkPaid(tokenId, upgradeId, variant, payNonce, Date.now(), ctx.evidence);
         } catch (err) {
           // See the same branch in mint.mjs: one signed authorisation presented
           // for a second effect, refused before settlement so nothing is

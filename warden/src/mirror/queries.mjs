@@ -50,6 +50,10 @@ export const RESERVATION_TTL_MS = 10 * 60_000;
 
 export function queries(db) {
   const s = {
+    putEvidence: db.prepare("INSERT OR REPLACE INTO evidence (kind, ref, json) VALUES (?, ?, ?)"),
+    getEvidence: db.prepare("SELECT json FROM evidence WHERE kind = ? AND ref = ?"),
+    // A written row's evidence has done its job; the credit keeps its sigHash.
+    dropEvidence: db.prepare("DELETE FROM evidence WHERE kind = ? AND ref = ?"),
     insertCredit: db.prepare("INSERT INTO credits (tokenId, day, sigHash) VALUES (?, ?, ?)"),
     insertToken: db.prepare(
       "INSERT INTO tokens (tokenId, keyId, owner, lastDay, mintDay) VALUES (?, ?, ?, ?, ?)"
@@ -297,7 +301,7 @@ export function queries(db) {
       // `day` is the day the agent PAID, which the contract now takes as
       // mint's fifth argument (the first-day fix, 2026-09-11). The token row
       // has held it since payment; the Clock only has to send it.
-      "SELECT m.tokenId, m.toAddress, m.keyId, m.qr, t.keyId AS agentKeyId, t.mintDay AS day FROM mints m " +
+      "SELECT m.tokenId, m.toAddress, m.keyId, m.qr, m.payNonce, m.paymentTx, t.keyId AS agentKeyId, t.mintDay AS day FROM mints m " +
         "JOIN tokens t ON t.tokenId = m.tokenId " +
         // A CHILD IS NOT A MINT. `seed` and `mint` are different functions with
         // different arguments, and a child sent through the mint pass reverts
@@ -337,7 +341,7 @@ export function queries(db) {
       "SELECT DISTINCT day, questionId FROM questions WHERE day BETWEEN ? AND ? ORDER BY day ASC, questionId ASC"
     ),
     pendingMarkOrders: db.prepare(
-      "SELECT tokenId, upgradeId, variant FROM mark_orders WHERE status = 'queued' ORDER BY tokenId ASC"
+      "SELECT tokenId, upgradeId, variant, payNonce, paymentTx FROM mark_orders WHERE status = 'queued' ORDER BY tokenId ASC"
     ),
     // 4.L3. Rows that have survived N runs without landing, counted from data
     // the mirror already holds rather than from a new column: a credit carries
@@ -409,6 +413,23 @@ export function queries(db) {
   };
 
   return {
+    /// Store the signed request behind a row. A null `evidence` stores nothing,
+    /// and the Clock then refuses to write the row.
+    putEvidence(kind, ref, evidence) {
+      if (evidence) s.putEvidence.run(kind, String(ref), JSON.stringify(evidence));
+    },
+
+    /// The signed request behind a row, parsed, or null.
+    evidenceFor(kind, ref) {
+      const row = s.getEvidence.get(kind, String(ref));
+      if (!row) return null;
+      try {
+        return JSON.parse(row.json);
+      } catch {
+        return null;
+      }
+    },
+
     /**
      * Credit one day to one token.
      *
@@ -617,10 +638,11 @@ export function queries(db) {
      * A key earns one seed per completed agent-year and can never earn that
      * year again, so the rollback is what makes a failed reservation free.
      */
-    insertSeed({ childId, parentId, toAddress, keyId, lastDay, mintDay }) {
+    insertSeed({ childId, parentId, toAddress, keyId, lastDay, mintDay, evidence = null }) {
       return this.transact(() => {
         s.insertSeedToken.run(childId, keyId, toAddress, lastDay, mintDay, parentId, parentId);
         s.insertSeedMint.run(childId, toAddress, keyId);
+        this.putEvidence("seed", childId, evidence);
       });
     },
 
@@ -661,19 +683,22 @@ export function queries(db) {
      * holds that mark. Any OTHER database error is rethrown -- the same
      * discrimination insertCredit makes, and for the same reason.
      */
-    reserveMark(tokenId, upgradeId, variant = 0) {
-      try {
-        s.reserveMark.run(tokenId, upgradeId, variant);
+    reserveMark(tokenId, upgradeId, variant = 0, evidence = null) {
+      return this.transact(() => {
+        try {
+          s.reserveMark.run(tokenId, upgradeId, variant);
+        } catch (err) {
+          if (UNIQUE_VIOLATION.test(err.message)) return false;
+          throw err;
+        }
+        this.putEvidence("mark", `${tokenId}:${upgradeId}`, evidence);
         return true;
-      } catch (err) {
-        if (UNIQUE_VIOLATION.test(err.message)) return false;
-        throw err;
-      }
+      });
     },
 
     /// Reserve a BOUGHT Mark against a payment that has not yet settled. Same
     /// contract as reserveMark, and the same false on a duplicate.
-    reserveMarkPaid(tokenId, upgradeId, variant, payNonce, now = Date.now()) {
+    reserveMarkPaid(tokenId, upgradeId, variant, payNonce, now = Date.now(), evidence = null) {
       if (!payNonce) throw new Error("reserveMarkPaid needs the payment nonce that will settle it");
       // One transaction, so a claimed nonce and the order it paid for land
       // together or not at all. Unlike mint's path this one owns the
@@ -691,6 +716,7 @@ export function queries(db) {
         if (!this.claimPayNonce(payNonce, "upgrade", now)) {
           throw new PaymentNonceReusedError(payNonce);
         }
+        this.putEvidence("mark", `${tokenId}:${upgradeId}`, evidence);
         return true;
       });
     },
@@ -1030,6 +1056,7 @@ export function queries(db) {
       this.transact(() => {
         s.markMintWritten.run(tokenId);
         s.markTokenWritten.run(tokenId);
+        s.dropEvidence.run("mint", String(tokenId));
       });
     },
     /// Reconcile's route, and deliberately not markMintWritten. A `Minted` read
@@ -1040,7 +1067,10 @@ export function queries(db) {
     markMintWrittenFromChain(tokenId) {
       return this.transact(() => {
         const changed = s.markMintWrittenIfQueued.run(tokenId).changes > 0;
-        if (changed) s.markTokenWritten.run(tokenId);
+        if (changed) {
+          s.markTokenWritten.run(tokenId);
+          s.dropEvidence.run("mint", String(tokenId));
+        }
         return changed;
       });
     },
@@ -1054,9 +1084,15 @@ export function queries(db) {
       this.transact(() => {
         s.markMintWritten.run(tokenId);
         s.markTokenWritten.run(tokenId);
+        s.dropEvidence.run("seed", String(tokenId));
       });
     },
-    markCreditWritten: (tokenId, day) => s.markCreditWritten.run(tokenId, day),
+    markCreditWritten(tokenId, day) {
+      this.transact(() => {
+        s.markCreditWritten.run(tokenId, day);
+        s.dropEvidence.run("credit", `${tokenId}:${day}`);
+      });
+    },
 
     /**
      * A credit the chain condemned. Terminal, and deliberately with no way back:
@@ -1104,6 +1140,7 @@ export function queries(db) {
       this.transact(() => {
         s.markOrderWritten.run(tokenId, upgradeId);
         s.setMarkBit.run(1 << upgradeId, tokenId);
+        s.dropEvidence.run("mark", `${tokenId}:${upgradeId}`);
       });
     },
 

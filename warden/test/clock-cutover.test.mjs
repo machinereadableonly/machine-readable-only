@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { CLOCK_PATHS } from "../deploy/clock-env.mjs";
+import { CLOCK_PATHS, WARDEN_BANK } from "../deploy/clock-env.mjs";
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 const cutover = read("../deploy/cutover-clock-user.sh");
@@ -18,12 +18,15 @@ const assigned = (text, name) => {
 test("the cutover points the Warden at the Clock's own database and bank", () => {
   const state = assigned(cutover, "STATE");
   assert.equal(assigned(cutover, "NEW_DB").replace("$STATE", state), CLOCK_PATHS.stateDb);
-  assert.equal(assigned(cutover, "BANK").replace("$STATE", state), CLOCK_PATHS.bank);
+  assert.equal(assigned(cutover, "BANK").replace("$STATE", state), WARDEN_BANK);
 });
 
-test("the installer puts the bank where clock-env.mjs says the Clock reads it", () => {
+test("the installer puts both banks where the Warden and the Clock read them", () => {
   const dir = assigned(installer, "BANK_DIR").replace("$STATE", assigned(installer, "STATE"));
-  assert.equal(dir, dirname(CLOCK_PATHS.bank));
+  assert.equal(dir, dirname(WARDEN_BANK));
+  assert.equal(dirname(CLOCK_PATHS.bank), assigned(installer, "ETC"));
+  assert.match(installer, /"\$ETC\/bank\.json"/);
+  assert.equal(dirname(CLOCK_PATHS.ledger), assigned(installer, "LEDGER_DIR"));
   assert.equal(dirname(CLOCK_PATHS.splitSeed), assigned(installer, "ETC"));
   assert.match(installer, /"\$ETC\/split-seed"/);
 });

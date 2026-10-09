@@ -12,17 +12,24 @@ import { pathToFileURL } from "node:url";
 export const CLOCK_PATHS = {
   stateDb: "/var/lib/mro/state.db",
   splitSeed: "/etc/mro-clock/split-seed",
-  bank: "/var/lib/mro/questions/bank.json",
+  // The Clock's own copy: the Warden's sits where the main user can replace it.
+  bank: "/etc/mro-clock/bank.json",
+  // Outside /var/lib/mro, which the main user can write: the ledger is what
+  // stops one proof backing two rows, so only mro-clock may write it.
+  ledger: "/var/lib/mro-clock/ledger.db",
 };
 
-const COPIED = ["BASE_RPC_URL", "MRO_CONTRACT_ADDRESS", "MRO_CHAIN_ID"];
-const OPTIONAL = ["MAX_GAS_GWEI"];
+/// The Warden's copy of the question bank, which the cutover points it at.
+export const WARDEN_BANK = "/var/lib/mro/questions/bank.json";
+
+const COPIED = ["BASE_RPC_URL", "MRO_CONTRACT_ADDRESS", "MRO_CHAIN_ID", "MRO_DOMAIN", "TREASURY_ADDRESS"];
+const OPTIONAL = ["MAX_GAS_GWEI", "MRO_HOUSE_KEY_ID", "CLOCK_MAX_MINTS", "CLOCK_MAX_SEEDS", "CLOCK_MAX_MARKS", "CLOCK_MAX_CREDITS"];
 const KEY = "CLOCK_PRIVATE_KEY";
 // Read by the Clock but never set for it. The two paths default beside
 // STATE_DB_PATH, where the Warden and the cutover look; a copied one would point
 // into the main user's home. The installed Clock counts real days only, and a
 // Warden counting fast ones would disagree with it about which day it is.
-export const REFUSED = ["CLOCK_CURSOR_PATH", "CLOCK_LOCK_PATH", "MRO_DAY_SECONDS", "MRO_CLOCK_OFFSET_SECONDS"];
+export const REFUSED = ["CLOCK_CURSOR_PATH", "CLOCK_LOCK_PATH", "CLOCK_LEDGER_PATH", "MRO_DAY_SECONDS", "MRO_CLOCK_OFFSET_SECONDS"];
 
 /// KEY -> the raw line, so quoting reaches node's --env-file untouched. A key
 /// written twice is refused only if the Clock reads it.
@@ -76,6 +83,7 @@ export function buildClockEnv({ wardenEnvText, existingClockEnvText = "" }) {
   out.push(`STATE_DB_PATH=${CLOCK_PATHS.stateDb}`);
   out.push(`MRO_SPLIT_SEED_FILE=${CLOCK_PATHS.splitSeed}`);
   out.push(`MRO_QUESTION_BANK=${CLOCK_PATHS.bank}`);
+  out.push(`CLOCK_LEDGER_PATH=${CLOCK_PATHS.ledger}`);
   return { text: out.join("\n") + "\n", report };
 }
 

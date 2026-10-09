@@ -10,10 +10,15 @@ Loaded only when working under `warden/` or `client/`.
 
 ## Architecture invariants
 
-- **The Warden never signs.** Every chain write is the Clock's, and the signer
-  is separated on chain. But both run as the same user from one shared env
-  file, and the Warden only deletes `CLOCK_PRIVATE_KEY` at startup: defence in
-  depth, not a process boundary.
+- **The Warden never signs.** Every chain write is the Clock's, which runs as
+  its own user (`mro-clock`) with its key, split seed and question bank in
+  `/etc/mro-clock`. The Warden still runs as the main user and writes the
+  shared mirror.
+- **The Clock trusts no row.** `src/clock/prove.mjs` re-verifies the signed
+  request stored with each row (`evidence` table), the token's key on chain and
+  any payment's receipt before writing, and `ledger.mjs` spends each proof
+  once. A tool that creates a row the Clock writes must store `ctx.evidence`
+  with it, in the same transaction.
 - **`BASE_RPC_URL` is load-bearing for EVERY write**, not just the rebind
   re-check, because the gates are read live from the chain.
 - **A gate is read from the CHAIN, never from the mirror.** WalletCap, Resting,

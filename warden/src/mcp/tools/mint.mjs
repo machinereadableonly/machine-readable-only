@@ -127,6 +127,7 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error, hou
             // Clock run. The solver only ever writes a bitmap into the row; it
             // cannot promote it, so a solved unpaid row is still unwritable.
             q.insertMint({ tokenId, toAddress: args.to, keyId: ctx.keyId, payNonce });
+            q.putEvidence("mint", tokenId, ctx.evidence);
             q.insertToken({ tokenId, keyId: ctx.keyId, owner: args.to, lastDay: day, mintDay: day });
             q.setTokenAwaitingPayment(tokenId);
             // In the same transaction as the row they describe: a reservation

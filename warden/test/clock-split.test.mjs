@@ -98,7 +98,7 @@ function rigWithOneMint({ day, tokenId }) {
 
 test("a run with writes reveals every key through yesterday first", async () => {
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1, questionId: "fog-or-thunder" });
-  await runClock({ ...baseArgs(q), publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK });
+  await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK });
   assert.equal(writer.sent[0].functionName, "revealSplitKeys");
   assert.deepEqual(writer.sent[0].args[0], KEYS.slice(6, keyIndexFor(TODAY - 1, ANCHOR_DAY) + 1));
   const questions = JSON.parse(hexToString(writer.sent[0].args[1]));
@@ -107,7 +107,7 @@ test("a run with writes reveals every key through yesterday first", async () => 
 
 test("a run whose keys are already revealed still marks the night with an empty reveal", async () => {
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
-  await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
   assert.deepEqual(writer.sent.map((s) => s.functionName), ["revealSplitKeys", "batchCheckIn"]);
   assert.deepEqual(writer.sent[0].args[0], []);
 });
@@ -116,13 +116,13 @@ test("a run with nothing to write reveals nothing", async () => {
   const db = openDb(":memory:");
   const q = queries(db);
   const writer = writerRefusing();
-  await runClock({ ...baseArgs(q), publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK });
+  await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK });
   assert.deepEqual(writer.sent, []);
 });
 
 test("an answered credit carries the split's bit and its index", async () => {
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1, answer: 1, questionId: "fog-or-thunder" });
-  await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
   const batch = writer.sent.find((s) => s.functionName === "batchCheckIn");
   const want = answerBit({ keyHex: keyOf(TODAY - 1), n: 2, answer: 1, tokenId: 1 });
   assert.equal(batch.args[2], want ? "0x80" : "0x00");
@@ -131,7 +131,7 @@ test("an answered credit carries the split's bit and its index", async () => {
 
 test("a range answer's set size is max - min + 1", async () => {
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1, answer: 37, questionId: "legs" });
-  await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
   const batch = writer.sent.find((s) => s.functionName === "batchCheckIn");
   const want = answerBit({ keyHex: keyOf(TODAY - 1), n: 101, answer: 37, tokenId: 1 });
   assert.equal(batch.args[2], want ? "0x80" : "0x00");
@@ -140,7 +140,7 @@ test("a range answer's set size is max - min + 1", async () => {
 
 test("a silent credit carries the token's coin flip and 0xff", async () => {
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
-  await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
   const batch = writer.sent.find((s) => s.functionName === "batchCheckIn");
   assert.equal(batch.args[2], silentBit(keyOf(TODAY - 1), 1) ? "0x80" : "0x00");
   assert.equal(batch.args[3], "0xff");
@@ -149,7 +149,7 @@ test("a silent credit carries the token's coin flip and 0xff", async () => {
 test("a mint carries the mint day's coin flip", async () => {
   for (const tokenId of [7, 8, 9, 10]) {
     const { q, writer } = rigWithOneMint({ day: TODAY - 1, tokenId });
-    await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+    await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
     const mint = writer.sent.find((s) => s.functionName === "mint");
     assert.equal(mint.args.at(-1), silentBit(keyOf(TODAY - 1), tokenId) === 1);
   }
@@ -158,7 +158,7 @@ test("a mint carries the mint day's coin flip", async () => {
 test("no seed: nothing is written", async () => {
   const said = [];
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
-  const summary = await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: null, bank: BANK, alert: (m) => said.push(m) });
+  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: null, bank: BANK, alert: (m) => said.push(m) });
   assert.deepEqual(writer.sent, []);
   assert.ok(summary.aborted);
   assert.ok(said.some((m) => /split seed/.test(m)));
@@ -167,7 +167,7 @@ test("no seed: nothing is written", async () => {
 test("a seed that does not hash to the chain's anchor writes nothing, and names no key", async () => {
   const said = [];
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
-  const summary = await runClock({ ...baseArgs(q), publicClient: chainWith({ anchor: "0x" + "44".repeat(32) }), writer, splitKeys: KEYS, bank: BANK, alert: (m) => said.push(m) });
+  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith({ anchor: "0x" + "44".repeat(32) }), writer, splitKeys: KEYS, bank: BANK, alert: (m) => said.push(m) });
   assert.deepEqual(writer.sent, []);
   assert.ok(summary.aborted);
   assert.ok(said.length > 0);
@@ -179,21 +179,21 @@ test("a seed that does not hash to the chain's anchor writes nothing, and names 
 
 test("a contract with no anchor writes nothing", async () => {
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
-  const summary = await runClock({ ...baseArgs(q), publicClient: chainWith({ anchor: "0x" + "00".repeat(32) }), writer, splitKeys: KEYS, bank: BANK });
+  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith({ anchor: "0x" + "00".repeat(32) }), writer, splitKeys: KEYS, bank: BANK });
   assert.deepEqual(writer.sent, []);
   assert.ok(summary.aborted);
 });
 
 test("a credit whose question left the bank writes nothing", async () => {
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1, answer: 0, questionId: "gone" });
-  const summary = await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
   assert.deepEqual(writer.sent, []);
   assert.ok(summary.aborted);
 });
 
 test("a recorded answer outside its question's set writes nothing", async () => {
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1, answer: 5, questionId: "fog-or-thunder" });
-  const summary = await runClock({ ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
   assert.deepEqual(writer.sent, []);
   assert.ok(summary.aborted);
 });
@@ -201,7 +201,7 @@ test("a recorded answer outside its question's set writes nothing", async () => 
 test("a failed reveal writes nothing else", async () => {
   const { q } = rigWithOneCredit({ day: TODAY - 1 });
   const writer = writerRefusing("revealSplitKeys");
-  const summary = await runClock({ ...baseArgs(q), publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK });
+  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK });
   assert.deepEqual(writer.landed, []);
   assert.ok(summary.aborted);
 });
@@ -215,6 +215,7 @@ import { mkdtempSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadSplitSeed, splitSeedPath } from "../src/clock/splitSeed.mjs";
+import { trustingProver } from "./trusting-prover.mjs";
 
 const seedFile = (text, mode = 0o600) => {
   const path = join(mkdtempSync(join(tmpdir(), "mro-seed-")), "seed");
@@ -263,7 +264,7 @@ test("the first question issued on a day is that day's question for every token"
 
 test("a day that somehow holds two questions writes nothing", async () => {
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1, answer: 0, questionId: "fog-or-thunder" });
-  await runClock({
+  await runClock({ prover: trustingProver(),
     ...baseArgs(q),
     q: { ...q, questionsForDays: () => [{ day: TODAY - 1, questionId: "fog-or-thunder" }, { day: TODAY - 1, questionId: "legs" }] },
     publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK,

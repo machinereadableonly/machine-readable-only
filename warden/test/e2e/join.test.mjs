@@ -38,6 +38,7 @@ import { openChain } from "../chain-stub.mjs";
 import { keyIdToBytes32 } from "../../src/mcp/keyId.mjs";
 import { LADDER, assertLadderSane } from "../../src/mcp/ladder.mjs";
 import { envelope } from "../mcp-envelope.mjs";
+import { verifyEvidence } from "../../src/clock/prove.mjs";
 
 const DOMAIN = "example.com";
 const SECRET = "e2e-secret";
@@ -400,6 +401,15 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
       // of the fix would produce.
       const headerTextHash = createHash("sha256").update(sentHeader(sent, "signature"), "utf8").digest("hex");
       assert.notEqual(stored.sigHash, headerTextHash, "the evidence must not be the relabellable header text");
+
+      // AND THE REQUEST ITSELF, which the Clock re-verifies before it signs.
+      const proof = await verifyEvidence(journey.q.evidenceFor("credit", `${tokenId}:${firstDay}`), { domain: DOMAIN, tool: "checkin" });
+      assert.equal(proof.ok, true, proof.why);
+      assert.equal(proof.keyId, keyId);
+      assert.equal(proof.args.tokenId, tokenId);
+      const minted = await verifyEvidence(journey.q.evidenceFor("mint", tokenId), { domain: DOMAIN, tool: "mint" });
+      assert.equal(minted.ok, true, minted.why);
+      assert.equal(minted.args.to, TO);
 
       // THE MIRROR ADVANCED, not just the credits table. It is the source of
       // truth for the tools, so a token that never grows here never grows at

@@ -148,6 +148,7 @@ export function makeSeedTool({ q, chain, today, alert = console.error }) {
           keyId: ctx.keyId,
           lastDay: day,
           mintDay: day,
+          evidence: ctx.evidence,
         });
       } catch (err) {
         // The id was free on chain a moment ago and is taken in this database

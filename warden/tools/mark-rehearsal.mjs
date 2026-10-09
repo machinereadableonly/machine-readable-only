@@ -34,6 +34,7 @@ import { utcDay } from "../src/mcp/tools/checkin.mjs";
 import { MRO_ABI } from "../src/clock/abi.mjs";
 import { LADDER } from "../src/mcp/ladder.mjs";
 import { CODE_BYTES, CODE_HEX_CHARS } from "./code-bytes.mjs";
+import { trustingProver } from "../test/trusting-prover.mjs";
 
 const CONTRACT = process.env.MRO_CONTRACT_ADDRESS;
 const RPC = process.env.BASE_RPC_URL;
@@ -102,7 +103,7 @@ const agentKey = `0x${TOKEN.toString(16).padStart(64, "0")}`;
 db.exec(`UPDATE tokens SET keyId = '${agentKey}' WHERE tokenId = ${TOKEN}`);
 
 const clockArgs = () => ({
-  q, writer, publicClient, contract: CONTRACT, chainId: CHAIN_ID,
+  q, prover: trustingProver(), writer, publicClient, contract: CONTRACT, chainId: CHAIN_ID,
   today: utcDay() + 1, lastReconciledBlock: null,
 });
 

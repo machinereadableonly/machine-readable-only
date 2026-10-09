@@ -465,7 +465,7 @@ export function createServer(config) {
       // back OUTSIDE this try, so a rejecting handler becomes an unhandled
       // rejection -- which under Node's default takes the process down and
       // leaves the caller hanging rather than getting the 500 below.
-      if (path === "/mcp") return await config.mcp.nodeHandler(req, res, decision.keyId, decision.sigHash, raw);
+      if (path === "/mcp") return await config.mcp.nodeHandler(req, res, decision.keyId, decision.sigHash, raw, decision.evidence);
 
       return json(res, 404, { ok: false, reason: "unknown-route" });
     } catch (err) {

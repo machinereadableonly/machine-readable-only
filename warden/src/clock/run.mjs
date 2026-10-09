@@ -52,6 +52,11 @@ function failureText(err) {
   return safeErrorText(err) || "an error with no message";
 }
 
+/// The most rows of each kind one run will write. More than this in one night is
+/// not a busy night but a fault or a flood, so the run writes nothing and fails.
+/// main.mjs reads overrides from CLOCK_MAX_MINTS, _SEEDS, _MARKS and _CREDITS.
+export const DEFAULT_CEILINGS = { mints: 500, seeds: 100, marks: 500, credits: 20_000 };
+
 /// How many runs a row may survive before a human is told. A row that fails
 /// three nights running is not going to fix itself.
 export const STALE_AFTER_RUNS = 3;
@@ -221,7 +226,12 @@ export async function runClock({
   splitKeys = null,
   bank = null,
   readSplit = readSplitState,
+  // Proves each row before it is written: see prove.mjs. Required, so no
+  // caller can run the Clock without it by leaving an argument out.
+  prover,
+  ceilings = DEFAULT_CEILINGS,
 }) {
+  if (!prover) throw new Error("runClock needs a prover: every row is proven before it is written");
   const summary = {
     gasStopped: false,
     minted: [],
@@ -280,6 +290,13 @@ export async function runClock({
     sweepFailed: null,
     /// Why the held-payment check threw, or null. Fails the run the same way.
     resolveFailed: null,
+    /// Rows the Clock could not prove and did not write: { kind, ref, why }.
+    /// They stay queued, and the run fails while any remain.
+    unproven: [],
+  };
+  const unproven = (kind, ref, why) => {
+    summary.unproven.push({ kind, ref, why });
+    alert(`clock: ${kind} ${ref} is not written: ${why} -- it stays queued and needs a human`);
   };
 
   // 0. MONEY WHOSE FATE IS UNKNOWN, BEFORE ANYTHING ELSE. It costs no gas, it
@@ -375,6 +392,21 @@ export async function runClock({
     }
   }
 
+  // 1b'. THE CEILINGS, BEFORE ANY WRITE.
+  if (!noWrites()) {
+    const counts = {
+      mints: q.pendingMints().length,
+      seeds: q.pendingSeeds().length,
+      marks: q.pendingMarkOrders().length,
+      credits: q.pendingCredits(today - 1).length,
+    };
+    const over = Object.keys(counts).filter((k) => counts[k] > ceilings[k]);
+    if (over.length) {
+      alert(`clock: ${over.map((k) => `${counts[k]} ${k} queued, over the ceiling of ${ceilings[k]}`).join("; ")} -- nothing is written tonight`);
+      summary.aborted = "ceiling";
+    }
+  }
+
   // A day before the anchor has no key: its bit is 0, and that is said once.
   let saidNoKey = false;
   const keyFor = (day) => {
@@ -437,8 +469,27 @@ export async function runClock({
     alert(`clock: token ${stuck.tokenId} is paid for but its artwork failed to solve after ${stuck.solveTries} tries -- it cannot be minted and needs a human`);
   }
 
+  // ONE PAYMENT, ONE ROW. Two queued rows carrying the same authorisation (in
+  // any letter case) are both held: the Clock cannot tell which request came
+  // first, so it writes neither and says so.
+  const payClaims = new Map();
+  for (const row of [...q.pendingMints(), ...q.pendingMarkOrders()]) {
+    if (row.payNonce) payClaims.set(row.payNonce.toLowerCase(), (payClaims.get(row.payNonce.toLowerCase()) ?? 0) + 1);
+  }
+  const contested = (row) => Boolean(row.payNonce) && payClaims.get(row.payNonce.toLowerCase()) > 1;
+  const CONTESTED = "its payment is also claimed by another queued row";
+
   // 3. MINTS.
   for (const mint of noWrites() ? [] : q.pendingMints()) {
+    if (contested(mint)) {
+      unproven("mint", mint.tokenId, CONTESTED);
+      continue;
+    }
+    const proof = await prover.mint(mint);
+    if (!proof.ok) {
+      unproven("mint", mint.tokenId, proof.why);
+      continue;
+    }
     const result = await writer.send(
       "mint",
       // The mirror stores the RFC 7638 thumbprint as base64url; the contract
@@ -457,6 +508,7 @@ export async function runClock({
     );
     if (result.ok) {
       q.markMintWritten(mint.tokenId);
+      prover.written(mint.tokenId);
       summary.minted.push(mint.tokenId);
       summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
       continue;
@@ -476,6 +528,7 @@ export async function runClock({
       const mine = await mintIsOnChain({ publicClient, contract, mint });
       if (mine === true) {
         q.markMintWritten(mint.tokenId);
+        prover.written(mint.tokenId);
         alert(`clock: token ${mint.tokenId} was already on chain as this mint; the mirror was behind and is now caught up`);
         continue;
       }
@@ -554,6 +607,11 @@ export async function runClock({
   // Nothing is sent once a write phase has aborted: NotWarden, Sunset and
   // EnforcedPause refuse `seed` for exactly the reasons they refuse `mint`.
   for (const s of noWrites() ? [] : q.pendingSeeds()) {
+    const proof = await prover.seed(s);
+    if (!proof.ok) {
+      unproven("seed", s.tokenId, proof.why);
+      continue;
+    }
     // The last argument is the key the agent signed with when it asked; a
     // rebind since refuses it as KeyChanged.
     const result = await writer.send(
@@ -565,6 +623,7 @@ export async function runClock({
     );
     if (result.ok) {
       q.markSeedWritten(s.tokenId);
+      prover.written(s.tokenId);
       summary.seeded.push(s.tokenId);
       summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
       continue;
@@ -588,6 +647,7 @@ export async function runClock({
       const mine = await seedIsOnChain({ publicClient, contract, seed: s });
       if (mine === true) {
         q.markSeedWritten(s.tokenId);
+        prover.written(s.tokenId);
         alert(`clock: child ${s.tokenId} was already on chain as this seed; the mirror was behind and is now caught up`);
         continue;
       }
@@ -658,7 +718,15 @@ export async function runClock({
   // Nothing is sent once a write phase has aborted -- see the mints loop for
   // why the run continues to reconcile anyway.
   // Each entry carries its answer bit and the answer byte the verifier reads.
-  const pending = (noWrites() ? [] : q.pendingCredits(today - 1)).map(({ tokenId, day, questionId, answer }) => {
+  // The answer is the one the agent SIGNED; one the database holds without a
+  // signature behind it is written as silence.
+  const proven = [];
+  for (const row of noWrites() ? [] : q.pendingCredits(today - 1)) {
+    const proof = await prover.credit(row);
+    if (proof.ok) proven.push({ ...row, answer: proof.answer });
+    else unproven("credit", `${row.tokenId}:${row.day}`, proof.why);
+  }
+  const pending = proven.map(({ tokenId, day, questionId, answer }) => {
     const key = keyFor(day);
     const n = questionId === null ? 0 : answerSetSize(bankById.get(questionId));
     return {
@@ -817,6 +885,15 @@ export async function runClock({
   }
 
   for (const order of noWrites() ? [] : q.pendingMarkOrders()) {
+    if (contested(order)) {
+      unproven("mark", `${order.tokenId}:${order.upgradeId}`, CONTESTED);
+      continue;
+    }
+    const proof = await prover.mark(order);
+    if (!proof.ok) {
+      unproven("mark", `${order.tokenId}:${order.upgradeId}`, proof.why);
+      continue;
+    }
     // THREE arguments. The variant is the shape or ink the agent chose and paid
     // for, and it exists nowhere else -- the contract writes it into the token's
     // own word, permanently. Dropping it would silently hand out the default.

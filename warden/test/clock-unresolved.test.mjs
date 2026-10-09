@@ -28,6 +28,7 @@ import { exitCodeFor, runFinishedLine } from "../src/clock/cursor.mjs";
 import { runClock } from "../src/clock/run.mjs";
 import { DEPLOY_BLOCK } from "../src/clock/reconcile.mjs";
 import { splitArgs } from "./split-rig.mjs";
+import { trustingProver } from "./trusting-prover.mjs";
 
 const KEY_ID = "k-unresolved";
 const TO = "0x1111111111111111111111111111111111111111";
@@ -335,7 +336,7 @@ test("a held MARK order is resolved the same way, and its Mark stays taken until
 
 /// One real Clock run against a chain that answers the resolver's questions.
 function nightlyRun(q, chain, { alert = () => {} } = {}) {
-  return runClock({
+  return runClock({ prover: trustingProver(),
     q,
     ...splitArgs(20_701),
     writer: {

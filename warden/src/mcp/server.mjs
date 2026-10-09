@@ -133,10 +133,11 @@ export function makeMcpHandler(deps) {
       const keyId = ctx.authInfo?.extra?.keyId ?? null;
 
       // The SAME channel, for the same reason: the SHA-256 of the RFC 9421
-      // Signature header the door verified for this request. `checkin` writes
-      // it into credits.sigHash, which is the only record of which signed
-      // request bought a day. Nothing outside our own door can put it here.
+      // signature base the door verified for this request. `checkin` writes
+      // it into credits.sigHash. Nothing outside our own door can put it here.
       const sigHash = ctx.authInfo?.extra?.sigHash ?? null;
+      // The signed request itself, stored beside every row the Clock will sign.
+      const evidence = ctx.authInfo?.extra?.evidence ?? null;
 
       // EVERY tool this service has, the paid two included. They were built
       // after this list and were never added to it, so `mint` and `upgrade`
@@ -153,7 +154,7 @@ export function makeMcpHandler(deps) {
           deps.onToolCall?.(tool.name, keyId);
           let result;
           try {
-            result = await tool.handler(args, { keyId, sigHash, mcpCtx });
+            result = await tool.handler(args, { keyId, sigHash, evidence, mcpCtx });
           } catch (err) {
             // THE SDK FORWARDS A THROWN MESSAGE VERBATIM. Measured on
             // 2026-07-28's server 2.0.0: createToolError puts Error.message
@@ -225,8 +226,8 @@ export function makeMcpHandler(deps) {
     /// `raw` is the body the door already consumed to check content-digest.
     /// The adapter reads the request as a stream, so it is replayed here rather
     /// than re-read -- the stream is at its end by the time this is called.
-    nodeHandler(req, res, keyId, sigHash = null, raw = null) {
-      const auth = { token: "web-bot-auth", clientId: keyId, scopes: [], extra: { keyId, sigHash } };
+    nodeHandler(req, res, keyId, sigHash = null, raw = null, evidence = null) {
+      const auth = { token: "web-bot-auth", clientId: keyId, scopes: [], extra: { keyId, sigHash, evidence } };
       if (raw === null) {
         req.auth = auth;
         return node(req, res);

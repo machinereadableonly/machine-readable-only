@@ -14,7 +14,9 @@ import { createPublicClient, http } from "viem";
 import { openDb } from "../mirror/db.mjs";
 import { queries } from "../mirror/queries.mjs";
 import { makeWriter, chainFor } from "./write.mjs";
-import { runClock } from "./run.mjs";
+import { runClock, DEFAULT_CEILINGS } from "./run.mjs";
+import { makeProver } from "./prove.mjs";
+import { openLedger } from "./ledger.mjs";
 import { DEPLOY_BLOCK } from "./reconcile.mjs";
 import { readCursor, writeCursor, nextCursor, exitCodeFor, runFinishedLine } from "./cursor.mjs";
 import { lockOwner, takeLock, releaseLock } from "./lock.mjs";
@@ -36,6 +38,28 @@ const contract = requireEnv("MRO_CONTRACT_ADDRESS");
 const stateDbPath = requireEnv("STATE_DB_PATH");
 const privateKey = requireEnv("CLOCK_PRIVATE_KEY");
 const chainId = Number(requireEnv("MRO_CHAIN_ID"));
+// What every row is proven against. Read from the Clock's own configuration,
+// never from the shared database the rows are in.
+const domain = requireEnv("MRO_DOMAIN");
+const treasury = requireEnv("TREASURY_ADDRESS");
+const houseKeyId = process.env.MRO_HOUSE_KEY_ID || null;
+/// Where the Clock records which proofs it has spent. Must be writable by the
+/// Clock alone: the installed Clock keeps it in /var/lib/mro-clock.
+const LEDGER = process.env.CLOCK_LEDGER_PATH ?? `${stateDbPath}.clock-ledger`;
+
+function ceilingFrom(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n < 0) throw new Error(`${name} must be a whole number, got ${JSON.stringify(raw)}`);
+  return n;
+}
+const ceilings = {
+  mints: ceilingFrom("CLOCK_MAX_MINTS", DEFAULT_CEILINGS.mints),
+  seeds: ceilingFrom("CLOCK_MAX_SEEDS", DEFAULT_CEILINGS.seeds),
+  marks: ceilingFrom("CLOCK_MAX_MARKS", DEFAULT_CEILINGS.marks),
+  credits: ceilingFrom("CLOCK_MAX_CREDITS", DEFAULT_CEILINGS.credits),
+};
 
 // The owner's dial, in gwei. Default 0.05, about eight times Base's 0.006
 // floor. Above it the run writes NOTHING and tries again tomorrow -- pending
@@ -137,8 +161,13 @@ async function main() {
     console.error(`clock: ${safeErrorText(err)}`);
   }
 
+  const ledger = openLedger(LEDGER);
+  const prover = makeProver({ q, publicClient, contract, chainId, domain, treasury, houseKeyId, ledger, bank });
+
   const summary = await runClock({
     q,
+    prover,
+    ceilings,
     splitKeys,
     bank,
     writer,
@@ -160,6 +189,7 @@ async function main() {
   if (advanceTo !== null) writeCursor(CURSOR, advanceTo, { chainId, contract });
 
   console.log(runFinishedLine(summary, Date.now() - started));
+  ledger.close();
   db.close();
 
   // What the run reports to systemd. The rule lives in exitCodeFor, which is

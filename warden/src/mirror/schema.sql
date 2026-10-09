@@ -247,3 +247,15 @@ CREATE TABLE IF NOT EXISTS questions (
   PRIMARY KEY (tokenId, day)
 );
 CREATE INDEX IF NOT EXISTS questions_day ON questions (day);
+
+-- The signed request behind each row the Clock signs: the RFC 9421 base the
+-- door verified, the signature over it, the key, and the body (base64). The
+-- Clock re-verifies it before writing, so a row this database holds without
+-- one is never sent. kind: mint | seed | credit | mark. ref: tokenId, or
+-- tokenId:day for a credit, or tokenId:upgradeId for a mark.
+CREATE TABLE IF NOT EXISTS evidence (
+  kind TEXT NOT NULL,
+  ref  TEXT NOT NULL,
+  json TEXT NOT NULL,
+  PRIMARY KEY (kind, ref)
+);

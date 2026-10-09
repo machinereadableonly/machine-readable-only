@@ -125,7 +125,7 @@ const WEB_BOT_AUTH_TAG = "web-bot-auth";
 /// an attacker spending a victim's only mint. Found 2026-09-02 by a fresh
 /// reader of the protocol doc; the comment here previously claimed method and
 /// path prevented exactly this.
-const REQUIRED = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
+export const REQUIRED = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
 
 /**
  * The component list a signature ACTUALLY covered.
@@ -380,6 +380,7 @@ export async function verifyRequest(request, lookupKey) {
   let verifiedExpiresAt = null;
   let verifiedSigHash = null;
   let verifiedCovered = null;
+  let verifiedEvidence = null;
 
   try {
     await verifyWebBotAuth(message, async (data, signature, params) => {
@@ -449,6 +450,9 @@ export async function verifyRequest(request, lookupKey) {
       // The list the cryptography actually checked, so a caller adding a rule
       // of its own cannot be told a component was covered when it was not.
       verifiedCovered = covered;
+      // What the Clock re-verifies before it signs anything this request
+      // queued: the exact base, the signature over it, and the key that held.
+      verifiedEvidence = { base: data, signature: Buffer.from(signature).toString("base64"), jwk };
       reason = null;
     });
   } catch {
@@ -475,6 +479,7 @@ export async function verifyRequest(request, lookupKey) {
     expiresAt: verifiedExpiresAt,
     sigHash: verifiedSigHash,
     covered: verifiedCovered,
+    evidence: verifiedEvidence,
   };
 }
 

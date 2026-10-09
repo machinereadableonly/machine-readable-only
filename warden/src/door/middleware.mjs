@@ -193,7 +193,9 @@ export async function admit(req, deps) {
   // until its own `expires`, which is the exact instant after which the library
   // would reject it anyway -- longer wastes memory, shorter reopens the window.
   spent.set(sigHash, verified.expiresAt ?? now + MAX_WINDOW_MS);
-  return { ok: true, keyId: verified.keyId, sigHash };
+  const bodyBytes = Buffer.isBuffer(body) ? body : Buffer.from(body ?? "", "utf8");
+  const evidence = verified.evidence && { ...verified.evidence, body: bodyBytes.toString("base64") };
+  return { ok: true, keyId: verified.keyId, sigHash, evidence };
 }
 
 // `sigHashOf` IS GONE. It hashed the raw `Signature` header, which is what the

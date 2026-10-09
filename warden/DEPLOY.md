@@ -908,7 +908,9 @@ does not reach it.
 | its key, RPC url and paths | `/etc/mro-clock/clock.env` | `mro-clock`, 600 |
 | the split seed | `/etc/mro-clock/split-seed` | `mro-clock`, 600 |
 | the mirror, its cursor and lock | `/var/lib/mro/state.db*` | group `mro`, 660 |
-| the question bank | `/var/lib/mro/questions/bank.json` | main user, group `mro`, 640 |
+| the Warden's question bank | `/var/lib/mro/questions/bank.json` | root, group `mro`, 640 |
+| the Clock's question bank | `/etc/mro-clock/bank.json` | `mro-clock`, 600 |
+| the Clock's ledger | `/var/lib/mro-clock/ledger.db` | `mro-clock`, directory 700 |
 | the log | `/var/log/mro/clock.log` | `mro-clock`, group `mro`, 640, rotated weekly |
 | the units | `/etc/systemd/system/mro-clock.{service,timer}`, `mro-clock-alert.service` | root |
 
@@ -962,13 +964,33 @@ read the log. Use `sg mro -c "<command>"`, or a fresh login.
 
 Re-run step 2. The Clock runs the copy in `/opt/mro-clock`, not the checkout,
 so a merged fix does nothing until then. The same applies when the Warden's
-`.env` changes `BASE_RPC_URL`, `MRO_CONTRACT_ADDRESS`, `MRO_CHAIN_ID` or
-`MAX_GAS_GWEI` (a redeploy does): the installer copies those four into
-`clock.env`. The key itself is copied from the Warden's `.env` when it is
-there and kept from the existing `clock.env` when it is not. It refuses a
-Warden `.env` that sets `CLOCK_CURSOR_PATH`, `CLOCK_LOCK_PATH`,
-`MRO_DAY_SECONDS` or `MRO_CLOCK_OFFSET_SECONDS`: the installed Clock never
-takes them, and the Warden would disagree with it.
+`.env` changes any key the installer copies into `clock.env` (a redeploy does):
+`BASE_RPC_URL`, `MRO_CONTRACT_ADDRESS`, `MRO_CHAIN_ID`, `MRO_DOMAIN` and
+`TREASURY_ADDRESS` always, and `MAX_GAS_GWEI`, `MRO_HOUSE_KEY_ID` and the four
+`CLOCK_MAX_*` ceilings when set. The key itself is copied from the Warden's
+`.env` when it is there and kept from the existing `clock.env` when it is not.
+It refuses a Warden `.env` that sets `CLOCK_CURSOR_PATH`, `CLOCK_LOCK_PATH`,
+`CLOCK_LEDGER_PATH`, `MRO_DAY_SECONDS` or `MRO_CLOCK_OFFSET_SECONDS`: the
+installed Clock never takes them, and the Warden would disagree with it.
+
+### The Clock proves every row before it signs it
+
+A row in the shared database is a claim. Before writing one, the Clock
+re-verifies the agent's own signed request that created it (stored beside the
+row in the `evidence` table), checks the token's key on chain, and for a paid
+row reads the settlement receipt: an `AuthorizationUsed` for the signed nonce,
+followed by a `Transfer` of the exact price to `TREASURY_ADDRESS`. Domain,
+treasury and prices come from `clock.env` and the code, never from the row.
+Each proof is recorded in `/var/lib/mro-clock/ledger.db`, so one signed request
+or one payment backs one row only. A row that fails any check is not written,
+stays queued, and fails the night with a line naming why. A night with more
+queued rows than a `CLOCK_MAX_*` ceiling (defaults in `src/clock/run.mjs`)
+writes nothing.
+
+**Deploying this change, in order.** Restart the Warden first, so that every row
+queued from then on carries its evidence; then re-run step 2. Rows queued
+before the Warden restart have no evidence and are held: on Base Sepolia that
+costs those tokens one day; on mainnet, deploy before the door opens.
 
 To run the Clock once now, `bash warden/tools/run-clock-now.sh` starts the
 system unit once its timer is enabled. `rehearse-start.sh` copies the mirror

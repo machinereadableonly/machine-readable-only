@@ -1067,7 +1067,7 @@ test("with nothing racing, the same call settles and reserves", async () => {
     .handler({ tokenId: 1, upgradeId: 3, variant: 0 }, { keyId: "k1" });
   assert.equal(r.ok, true);
   assert.equal(r.upgradeId, 3);
-  assert.deepEqual(q.pendingMarkOrders().map((o) => ({ ...o })),
+  assert.deepEqual(q.pendingMarkOrders().map(({ tokenId, upgradeId, variant }) => ({ tokenId, upgradeId, variant })),
     [{ tokenId: 1, upgradeId: 3, variant: 0 }]);
 });
 

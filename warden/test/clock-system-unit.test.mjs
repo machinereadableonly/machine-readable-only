@@ -33,12 +33,13 @@ test("it reads its environment from the root-held file, through node", () => {
   assert.deepEqual(values(service, "EnvironmentFile"), [], "systemd would show the key in `systemctl show`");
 });
 
-test("it can write the shared state directory and nothing else", () => {
+test("it can write the shared state directory and its own ledger, and nothing else", () => {
   assert.equal(one(service, "ProtectSystem"), "strict");
   assert.equal(one(service, "ProtectHome"), "true");
-  assert.equal(one(service, "ReadWritePaths"), "/var/lib/mro");
+  assert.equal(one(service, "ReadWritePaths"), "/var/lib/mro /var/lib/mro-clock");
   assert.ok(CLOCK_PATHS.stateDb.startsWith("/var/lib/mro/"));
-  assert.ok(CLOCK_PATHS.bank.startsWith("/var/lib/mro/"));
+  assert.ok(CLOCK_PATHS.ledger.startsWith("/var/lib/mro-clock/"));
+  assert.ok(CLOCK_PATHS.bank.startsWith("/etc/mro-clock/"), "the Clock's bank is out of the main user's reach");
 });
 
 test("files it creates stay inside the mro group", () => {

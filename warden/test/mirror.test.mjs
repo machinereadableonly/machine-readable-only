@@ -48,7 +48,7 @@ test("a reservation carries its variant all the way to the Clock's queue", () =>
   assert.equal(q.reserveMark(1, 5, 2), true);
   // node:sqlite hands back null-prototype rows, which assert/strict will not
   // match against an object literal. Copy the shape, not the prototype.
-  assert.deepEqual(q.pendingMarkOrders().map((o) => ({ ...o })),
+  assert.deepEqual(q.pendingMarkOrders().map(({ tokenId, upgradeId, variant }) => ({ tokenId, upgradeId, variant })),
     [{ tokenId: 1, upgradeId: 5, variant: 2 }]);
 });
 
@@ -89,7 +89,7 @@ test("an older mirror without the column is migrated rather than left broken", (
 
   migrate(db);
   const q = queries(db);
-  assert.deepEqual(q.pendingMarkOrders().map((o) => ({ ...o })),
+  assert.deepEqual(q.pendingMarkOrders().map(({ tokenId, upgradeId, variant }) => ({ tokenId, upgradeId, variant })),
     [{ tokenId: 7, upgradeId: 3, variant: 0 }]);
 });
 

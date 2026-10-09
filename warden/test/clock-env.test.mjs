@@ -16,6 +16,8 @@ const wardenEnv = [
   `BASE_RPC_URL="${RPC}"`,
   "MRO_CONTRACT_ADDRESS=0x1111111111111111111111111111111111111111",
   "MRO_CHAIN_ID=84532",
+  "TREASURY_ADDRESS=0x2222222222222222222222222222222222222222",
+  "MRO_HOUSE_KEY_ID=house-key-thumbprint",
   "CHALLENGE_SECRET=not-the-clocks-business",
   `CLOCK_PRIVATE_KEY=${KEY}`,
   "",
@@ -34,8 +36,12 @@ test("copies only the Clock's keys, verbatim, and sets the fixed paths", () => {
   assert.ok(out.includes(`STATE_DB_PATH=${CLOCK_PATHS.stateDb}`));
   assert.ok(out.includes(`MRO_SPLIT_SEED_FILE=${CLOCK_PATHS.splitSeed}`));
   assert.ok(out.includes(`MRO_QUESTION_BANK=${CLOCK_PATHS.bank}`));
+  assert.ok(out.includes(`CLOCK_LEDGER_PATH=${CLOCK_PATHS.ledger}`));
+  // What every row is proven against.
+  assert.ok(out.includes("MRO_DOMAIN=machinereadableonly.com"));
+  assert.ok(out.includes("TREASURY_ADDRESS=0x2222222222222222222222222222222222222222"));
+  assert.ok(out.includes("MRO_HOUSE_KEY_ID=house-key-thumbprint"));
   assert.ok(!text.includes("CHALLENGE_SECRET"), "the Warden's secrets stay in the Warden's file");
-  assert.ok(!text.includes("MRO_DOMAIN"));
 });
 
 test("MAX_GAS_GWEI is copied when set and left out when not", () => {
@@ -139,7 +145,8 @@ test("clock.env.example lists exactly the keys the builder writes", () => {
   const names = (text) =>
     new Set(lines(text).map((l) => /^#?([A-Z][A-Z0-9_]*)=/.exec(l)?.[1]).filter(Boolean));
   const example = readFileSync(new URL("../deploy/clock.env.example", import.meta.url), "utf8");
-  const { text } = buildClockEnv({ wardenEnvText: wardenEnv + "MAX_GAS_GWEI=0.1\n" });
+  const optional = ["MAX_GAS_GWEI=0.1", "CLOCK_MAX_MINTS=1", "CLOCK_MAX_SEEDS=1", "CLOCK_MAX_MARKS=1", "CLOCK_MAX_CREDITS=1"];
+  const { text } = buildClockEnv({ wardenEnvText: wardenEnv + optional.join("\n") + "\n" });
   assert.deepEqual([...names(example)].sort(), [...names(text)].sort());
   for (const [, path] of Object.entries(CLOCK_PATHS)) assert.ok(example.includes(path), path);
 });
