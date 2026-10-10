@@ -1,6 +1,6 @@
 // A CONSISTENT backup of the mirror, WAL included.
 //
-//   node tools/mirror-snapshot.mjs <destination> [source]
+//   node tools/mirror-snapshot.mjs <destination> [absolute source]   (default: the Warden's STATE_DB_PATH)
 //
 // `cp state.db` IS NOT A BACKUP while the Warden is running. The mirror is in
 // WAL mode, so recent commits live in state.db-wal until a checkpoint: on
@@ -10,9 +10,10 @@
 // contents, which is what a restore needs.
 import { DatabaseSync } from "node:sqlite";
 import { existsSync } from "node:fs";
+import { liveDbPath } from "./live-db.mjs";
 
 const dest = process.argv[2];
-const src = process.argv[3] ?? "state.db";
+const src = liveDbPath(process.argv[3]);
 if (!dest) throw new Error("usage: mirror-snapshot.mjs <destination> [source]");
 if (existsSync(dest)) throw new Error(`refusing to overwrite ${dest}`);
 

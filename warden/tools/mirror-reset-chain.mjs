@@ -1,6 +1,6 @@
 // Clear the mirror's CHAIN-DERIVED rows after a redeploy, and nothing else.
 //
-//   node tools/mirror-reset-chain.mjs [path] --yes
+//   node tools/mirror-reset-chain.mjs [absolute path] --yes   (default: the Warden's STATE_DB_PATH)
 //
 // A redeploy gives the piece a new contract at a new address. Every token, mint,
 // credit, Mark order and issued question in the mirror belongs to the OLD one:
@@ -15,9 +15,10 @@
 // `keyIdHash` is what makes a later `rebind` resolvable. Wiping it would
 // deregister live agents for no reason.
 import { DatabaseSync } from "node:sqlite";
+import { liveDbPath } from "./live-db.mjs";
 
 const args = process.argv.slice(2);
-const path = args.find((a) => !a.startsWith("--")) ?? "state.db";
+const path = liveDbPath(args.find((a) => !a.startsWith("--")));
 if (!args.includes("--yes")) {
   console.error("This DELETES rows. Re-run with --yes once a snapshot exists.");
   process.exit(2);
@@ -25,7 +26,7 @@ if (!args.includes("--yes")) {
 
 // Every table whose rows are derived from the chain. Ordered children first so
 // a foreign key cannot block the parent's delete.
-const CHAIN_TABLES = ["mark_orders", "credits", "mints", "questions", "tokens"];
+const CHAIN_TABLES = ["evidence", "mark_orders", "credits", "mints", "questions", "tokens"];
 
 const db = new DatabaseSync(path);
 const before = {}, after = {};

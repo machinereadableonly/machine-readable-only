@@ -28,6 +28,7 @@ test("the reset clears every chain-derived table, questions included, and keeps 
     q.insertCredit(1, 101, "f".repeat(64));
     q.issueQuestion(1, 101, "t-two", 1_000);
     q.recordAnswer(1, 101, 1, 2_000);
+    q.putEvidence("credit", "1:101", { base: "old contract's request" });
     assert.ok(q.getQuestion(1, 101), "the row to be cleared must exist first");
     db.close();
 
@@ -35,7 +36,7 @@ test("the reset clears every chain-derived table, questions included, and keeps 
 
     const after = openDb(path);
     const rows = (table) => after.prepare(`select count(*) as c from "${table}"`).get().c;
-    for (const table of ["tokens", "mints", "credits", "mark_orders", "questions"]) {
+    for (const table of ["tokens", "mints", "credits", "mark_orders", "questions", "evidence"]) {
       assert.equal(rows(table), 0, `${table} still holds rows of the old contract`);
     }
     assert.equal(rows("keys"), 1, "a registered key is door state and must survive");

@@ -271,7 +271,7 @@ echo "     and issued question in it belongs to the OLD contract, and the mint p
 echo "     them: a returning agent is told \"already-minted\" for a token this"
 echo "     pair has never heard of. Found the hard way on 2026-09-22, by a mint"
 echo "     refused against a contract that held no tokens at all."
-echo "       cd warden && node tools/mirror-reset-chain.mjs state.db --yes"
+echo "       cd warden && node tools/mirror-reset-chain.mjs --yes"
 echo "     Registered KEYS are kept -- door state, not chain state."
 echo "  5. pm2 restart mro-warden"
 echo "  6. Verify THROUGH CLOUDFLARE, not against localhost:"
