@@ -846,6 +846,22 @@ test("a mismatch that is not lag is a FAIL even during a gas stop", async () => 
   assert.deepEqual(line.findings.map((f) => [f.field, f.severity]), [["level", "FAIL"]]);
 });
 
+test("a lagging chain at the wrong level is a FAIL even during a gas stop", async () => {
+  // One day behind, which a stop explains -- but at level 4, which it does not.
+  const h = harness({
+    chain: fakeChain({ today: 1010, views: { 1: { ...trailing, level: 4 } } }),
+    mirror: { 1: mirrorView({ tokenId: 1 }) },
+    lines: checkins(1, 1001, 9),
+    clockLines: gasStop,
+    state: { tokens: { A1: 1 } },
+  });
+  const { said } = await quietly(h.run);
+  const line = h.logged.find((l) => l.tokenId === 1);
+  assert.equal(line.ok, false);
+  assert.deepEqual(line.findings.map((f) => [f.field, f.severity]), [["level", "FAIL"], ["streak", "HOLD"], ["lastDay", "HOLD"]]);
+  assert.match(said[0], /FAIL/);
+});
+
 test("a mint the gas-stopped Clock has not written yet is a HOLD", async () => {
   // Queued on 1000: pending through 1001, and one stopped run holds it to 1002.
   const h = harness({

@@ -183,3 +183,11 @@ test("a gas-stop HOLD is counted on its own and proves no place", () => {
   assert.match(html, /<th>Apex<\/th><td>[^<]*<\/td><td class="thin">not reached<\/td>/,
     "a held row's place is stale, so it proves nothing");
 });
+
+test("a held row's findings are listed, marked HOLD, so a held value can be read", () => {
+  const held = { chainDay: 5, agent: "A1", tokenId: 1, ok: true, hold: true, level: 9, streak: 9, place: 0, marks: "0",
+    findings: [{ field: "level", chain: 9, expected: 10, severity: "HOLD" }] };
+  const html = renderReport([], [held], { tokens: { A1: 1 }, startDay: 1 });
+  assert.match(html, /<td>HOLD level: chain 9, expected 10<\/td>/);
+  assert.doesNotMatch(html, /No token has ever differed/);
+});

@@ -213,10 +213,13 @@ export function renderReport(runnerLines, checkerLines, state) {
         `${td(l.decoded === null || l.decoded === undefined ? "not run" : l.decoded ? `decoded (exit ${l.exit})` : `FAILED (exit ${l.exit})`, l.decoded === false ? "fail" : null)}</tr>`))
     : "<p class=\"thin\">No milestone has been reached yet.</p>";
 
-  const findingTable = fails.length
-    ? table(["Day", "Agent", "Token", "Findings"], fails.map((l) =>
+  // HOLDs are listed too: a held finding is a value nobody has yet seen proven.
+  const listed = [...fails, ...rows.filter((l) => l.hold)]
+    .sort((a, b) => (a.chainDay ?? Infinity) - (b.chainDay ?? Infinity));
+  const findingTable = listed.length
+    ? table(["Day", "Agent", "Token", "Findings"], listed.map((l) =>
         `<tr>${td(l.chainDay ?? NONE)}${td(l.agent ?? NONE)}${td(l.tokenId ?? NONE)}` +
-        `${td((l.findings ?? []).map(describeFinding).join("; "))}</tr>`))
+        `${td((l.findings ?? []).map((f) => `${f.severity ?? "FAIL"} ${describeFinding(f)}`).join("; "))}</tr>`))
     : "<p>No token has ever differed from what the rules say it should be.</p>";
 
   const refused = new Map();

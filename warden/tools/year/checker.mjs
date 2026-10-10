@@ -417,6 +417,8 @@ async function readToken({ chain, readMirror, tokenId, lines, today }) {
       tokenId, chain: view, mirror, onChain, queued,
       pending: !onChain && queued !== null && today - queued <= 1,
       tally: expected(chainDays),
+      // What the chain should read if it is only behind: the same days, cut at its lastDay.
+      lagTally: expected(chainDays.filter((d) => d <= view.lastDay)),
       mirrorTally: expected(days.filter((d) => d <= today)),
       finishDay: onChain ? (chainDays[FINISH_LEVEL - 1] ?? null) : null,
     };
@@ -445,7 +447,15 @@ function findingsFor(read, place, prevChain = null, { stoppedRuns = 0, today = n
     place, queued: read.queued, prevChain,
   });
   const lag = read.tally.lastDay - read.chain.lastDay;
-  return lag > 0 && lag <= stoppedRuns ? holdLag(findings) : findings;
+  if (!(lag > 0 && lag <= stoppedRuns)) return findings;
+  // Held only where the chain matches the tally cut at its own lastDay. A
+  // chain that is behind AND wrong is still a FAIL.
+  const asIfBehind = compare({
+    chain: read.chain, mirror: read.mirror, tally: read.lagTally, mirrorTally: read.mirrorTally,
+    place: read.lagTally.level >= FINISH_LEVEL ? place : null, queued: read.queued, prevChain,
+  });
+  const stillWrong = new Set(asIfBehind.filter((f) => f.chain !== undefined && f.mirror === undefined).map((f) => f.field));
+  return holdLag(findings, stillWrong);
 }
 
 /// The chain-side fields a gas stop holds back. The mint day, every mirror field
@@ -453,10 +463,13 @@ function findingsFor(read, place, prevChain = null, { stoppedRuns = 0, today = n
 const LAG_FIELDS = ["level", "streak", "lastDay", "place", "finisherMark"];
 
 /// A token whose chain trails its credited days by no more than the gas-stopped
-/// runs: its chain-side findings are the designed wait, not a fault.
-function holdLag(findings) {
+/// runs: its chain-side findings are the designed wait, not a fault -- except
+/// the fields in `stillWrong`, which the lag does not explain.
+function holdLag(findings, stillWrong) {
   return findings.map((f) =>
-    f.chain !== undefined && f.mirror === undefined && LAG_FIELDS.includes(f.field) ? { ...f, severity: "HOLD" } : f
+    f.chain !== undefined && f.mirror === undefined && LAG_FIELDS.includes(f.field) && !stillWrong.has(f.field)
+      ? { ...f, severity: "HOLD" }
+      : f
   );
 }
 
