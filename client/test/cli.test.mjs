@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, chmodSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, readdirSync, writeFileSync, chmodSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -837,4 +837,11 @@ test("public-key prints a JWKS with the public half and nothing else", async () 
   assert.equal(jwks.keys.length, 1);
   assert.deepEqual(Object.keys(jwks.keys[0]).sort(), ["crv", "kty", "x"]);
   assert.equal(jwks.keys[0].d, undefined);
+});
+
+// 16 Low. The README said nine files and listed nine; thirteen ship.
+test("the README's file table names every file that ships", () => {
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  const shipped = readdirSync(new URL("../src/", import.meta.url)).filter((f) => f.endsWith(".mjs"));
+  for (const f of shipped) assert.match(readme, new RegExp("\\| `src/" + f.replace(".", "\\.") + "` \\|"), `${f} is not in the README`);
 });

@@ -4,7 +4,7 @@
 // server per request. So a "call" here really is one HTTP request, and there
 // is no connection to keep alive.
 import { admittedFetch } from "./door.mjs";
-import { doorMessage } from "./messages.mjs";
+import { doorMessage, VERSION } from "./messages.mjs";
 
 /**
  * The revision this client speaks, sent in two places that MUST agree.
@@ -23,7 +23,7 @@ import { doorMessage } from "./messages.mjs";
 export const PROTOCOL_VERSION = "2026-07-28";
 
 /// Identifies this client on every request, which the revision SHOULDs.
-const CLIENT_INFO = { name: "mro-agent", version: "0.1.0" };
+const CLIENT_INFO = { name: "mro-agent", version: VERSION };
 
 /**
  * Header-safe, or the Base64 sentinel the spec requires.
