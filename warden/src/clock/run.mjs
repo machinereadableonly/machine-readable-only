@@ -1077,7 +1077,9 @@ export async function runClock({
 
   // 7. RECONCILE. Last, so it sees this run's own writes as well as whatever
   //    the token owners did during the day.
-  summary.reconciled = await reconcile({ q, publicClient, contract, chainId, lastReconciledBlock, log, saveCursor });
+  // Reconcile settles one-way state (a mint written, a token sealed) from events,
+  // so it reads them through the same two-RPC check.
+  summary.reconciled = await reconcile({ q, publicClient: checkClient, contract, chainId, lastReconciledBlock, log, saveCursor });
 
   // 4.L10. `skipped` IS A DIVERGENCE SIGNAL, not a statistic. Every skip is an
   // event the CHAIN emitted about a token this mirror has never heard of -- a

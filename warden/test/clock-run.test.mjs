@@ -642,7 +642,7 @@ test("MarkAlreadyApplied catches the mirror up instead of failing the order", as
   queueMark(q, db, { upgradeId: 4 });
   const alerts = [];
   const writer = refusingWriter("MarkAlreadyApplied");
-  const wears = { readContract: async () => ({ marks: 1n << 4n }) };
+  const wears = { ...noChain, readContract: async () => ({ marks: 1n << 4n }) };
   const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), checkClient: wears, writer: passingReveal(writer), alert: (m) => alerts.push(m) });
 
   assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "written");
@@ -1433,8 +1433,19 @@ test("MarkAlreadyApplied that the chain does not confirm leaves the order queued
   const { db, q } = mirror();
   queueMark(q, db, { upgradeId: 4 });
   const alerts = [];
-  const bare = { readContract: async () => ({ marks: 0n }) };
+  const bare = { ...noChain, readContract: async () => ({ marks: 0n }) };
   await runClock({ prover: trustingProver(), ...baseArgs(q), checkClient: bare, writer: passingReveal(refusingWriter("MarkAlreadyApplied")), alert: (m) => alerts.push(m) });
   assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "queued");
   assert.ok(alerts.some((a) => /did not confirm/.test(a)));
+});
+
+test("reconcile reads events through the two-RPC check", async () => {
+  const { q } = mirror();
+  const asked = [];
+  const checkClient = {
+    async getBlockNumber() { return FLOOR + 100n; },
+    async getLogs(p) { asked.push(p); return []; },
+  };
+  await runClock({ prover: trustingProver(), ...baseArgs(q), checkClient, writer: passingReveal(okWriter()) });
+  assert.ok(asked.length > 0, "reconcile went around the check");
 });

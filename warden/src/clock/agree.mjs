@@ -17,6 +17,16 @@ const receiptFacts = (r) => r && {
   })),
 };
 
+/// What a log says that matters, so two nodes' answers compare field by field.
+const logFacts = (logs) => (logs ?? []).map((l) => ({
+  address: String(l.address).toLowerCase(),
+  blockNumber: String(l.blockNumber),
+  transactionHash: l.transactionHash,
+  logIndex: Number(l.logIndex),
+  topics: l.topics,
+  data: l.data,
+}));
+
 /// viewOf carries the reading node's own `today`, which two nodes a block apart
 /// may answer differently without either lying.
 const readFacts = (params, value) => {
@@ -35,5 +45,12 @@ export function agreeingClient(primary, secondary) {
   return {
     readContract: (params) => both((c) => c.readContract(params), (v) => readFacts(params, v)),
     getTransactionReceipt: (params) => both((c) => c.getTransactionReceipt(params), receiptFacts),
+    // Reconcile's two calls: the lower of the two heads, so neither node is
+    // asked about blocks it has not seen, and the events both report.
+    getBlockNumber: async () => {
+      const [a, b] = await Promise.all([primary.getBlockNumber(), secondary.getBlockNumber()]);
+      return a < b ? a : b;
+    },
+    getLogs: (params) => both((c) => c.getLogs(params), logFacts),
   };
 }

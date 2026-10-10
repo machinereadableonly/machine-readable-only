@@ -44,3 +44,14 @@ test("a Mark the chain does not show is not on chain", async () => {
   assert.equal(await markIsOnChain({ publicClient: node({ view: { marks: 0n } }), contract: "0x", tokenId: 1, upgradeId: 7 }), false);
   assert.equal(await markIsOnChain({ publicClient: { readContract: async () => { throw new Error("down"); } }, contract: "0x", tokenId: 1, upgradeId: 7 }), false);
 });
+
+test("reconcile reads the lower head, and events only both RPCs report", async () => {
+  const log = { address: "0xC", blockNumber: 5n, transactionHash: "0xt", logIndex: 1, topics: ["0x1"], data: "0x" };
+  const a = { getBlockNumber: async () => 120n, getLogs: async () => [log] };
+  const b = { getBlockNumber: async () => 100n, getLogs: async () => [{ ...log }] };
+  const c = agreeingClient(a, b);
+  assert.equal(await c.getBlockNumber(), 100n);
+  assert.deepEqual(await c.getLogs({}), [log]);
+  const liar = { ...b, getLogs: async () => [log, { ...log, logIndex: 2, topics: ["0x2"] }] };
+  await assert.rejects(() => agreeingClient(a, liar).getLogs({}), /disagree/);
+});
