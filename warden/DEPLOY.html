@@ -568,9 +568,9 @@ handling of the real owner key.</p>
 <td>Base credits the piece&#39;s on-chain activity only through this ERC-8021 suffix, and a write sent without it can never be attributed afterwards. It is SET to the issued code, <code>bc_dfhlohlh</code>, and pinned by <code>test/clock-builder-code.test.mjs</code>. <strong>Nothing refuses to start without it</strong>, so this row is the check that it survives the cutover; the Clock logs the code on every run</td>
 </tr>
 <tr>
-<td><code>DEFAULT_RPC</code></td>
+<td><code>verify-border</code>&#39;s chain</td>
 <td><code>client/src/cli.mjs</code></td>
-<td><code>mro-agent verify-border</code> reads the chain directly and defaults to <code>https://sepolia.base.org</code>; left there, the command every agent-facing surface advertises looks up a mainnet address on a Sepolia node and answers <code>token N does not exist</code>. Set it to <code>https://mainnet.base.org</code> with the cutover</td>
+<td>it defaults to Base mainnet (8453) and its public RPC, the chain SKILL.md declares, refuses an RPC serving any other chain, and prints the contract, chain and RPC host it reads. Sepolia checks pass <code>--chain 84532</code></td>
 </tr>
 <tr>
 <td>the Clock&#39;s gas float</td>

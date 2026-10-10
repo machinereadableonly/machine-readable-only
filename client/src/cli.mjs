@@ -21,8 +21,10 @@ import { DEFAULT_SITE, cronLine, unpayableMessage, paymentFailedMessage, unresol
 // gets to do.
 const COMMANDS = ["join", "beat", "status", "whoami", "ladder", "rebind", "rest", "question", "verify-border"];
 
-// verify-border reads the chain directly; this is where, unless --rpc says otherwise.
-const DEFAULT_RPC = "https://sepolia.base.org";
+// verify-border reads the chain directly: Base mainnet, the chain the skill
+// declares, unless --chain or --rpc says otherwise.
+const DEFAULT_CHAIN = 8453;
+const RPC_FOR_CHAIN = { 8453: "https://mainnet.base.org", 84532: "https://sepolia.base.org" };
 
 const USAGE = `mro-agent -- the reference client for Machine Readable Only
 
@@ -35,7 +37,7 @@ const USAGE = `mro-agent -- the reference client for Machine Readable Only
   mro-agent ladder --token <id>        the five Mark pairs: held, closed, open
   mro-agent rebind --token <id>        the call to point a token at a new key
   mro-agent rest   --token <id>        the call that seals a token FOREVER
-  mro-agent verify-border <id> --contract <0x> [--rpc <url>]
+  mro-agent verify-border <id> --contract <0x> [--chain <id>] [--rpc <url>]
                                        check every square of a token's border
                                        against the rule published on chain
 
@@ -66,7 +68,8 @@ Options
   --expect-chain <id>  the chain id you expect, e.g. 8453. Checked before anything is done
   --expect-contract <0x> the contract you expect. Checked before anything is done
   --contract <0x>      the token contract (verify-border)
-  --rpc <url>          a Base RPC to read from (verify-border, default ${DEFAULT_RPC})
+  --chain <id>         the token's chain (verify-border, default ${DEFAULT_CHAIN}; 84532 is Base Sepolia)
+  --rpc <url>          a Base RPC to read from (verify-border; default: Base's public one for --chain)
   --cron               print a crontab line instead of installing one
 `;
 
@@ -82,7 +85,7 @@ Options
 const FLAGS = [
   "site", "endpoint", "directory", "key", "to", "token", "answer", "not-before",
   "expect-payto", "expect-amount", "expect-asset", "expect-network",
-  "expect-chain", "expect-contract", "wallet-key-file", "contract", "rpc",
+  "expect-chain", "expect-contract", "wallet-key-file", "contract", "rpc", "chain",
 ];
 // `--help` takes no value and is the one flag that works with no command at
 // all; `help` as a bare command does the same thing (see main).
@@ -155,7 +158,17 @@ async function main() {
     const tokenId = args._[1];
     if (!tokenId || !/^\d+$/.test(tokenId)) throw new Error("usage: mro-agent verify-border <tokenId> --contract <0xaddress>");
     if (!/^0x[0-9a-fA-F]{40}$/.test(args.contract ?? "")) throw new Error("--contract <0xaddress> is required");
-    const publicClient = createPublicClient({ transport: http(args.rpc ?? DEFAULT_RPC) });
+    const chainId = Number(args.chain ?? DEFAULT_CHAIN);
+    const rpc = args.rpc ?? RPC_FOR_CHAIN[chainId];
+    if (!rpc) throw new Error(`no default RPC for chain ${chainId}: pass --rpc`);
+    const publicClient = createPublicClient({ transport: http(rpc) });
+    // The host only: a provider's url can carry its API key.
+    const host = new URL(rpc).host;
+    const served = await publicClient.getChainId();
+    if (served !== chainId) {
+      throw new Error(`${host} serves chain ${served}, not ${chainId}; pass --chain ${served} if that is the token's chain`);
+    }
+    console.log(`reading ${args.contract} on chain ${chainId} via ${host}`);
     const r = await verifyBorder({ publicClient, contract: args.contract, tokenId: Number(tokenId) });
     for (const sq of r.squares) {
       console.log(`square ${sq.level}  day ${sq.day ?? "?"}  ${sq.status}${sq.expected === null ? "" : `  expected ${sq.expected} chain ${sq.actual}`}`);

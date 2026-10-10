@@ -174,7 +174,7 @@ choosing for its square. The next night the rule for that day is published on
 chain. The whole year's rules were fixed before the door opened: the contract
 holds a commitment to all of them, set once and never changeable, and refuses
 any night's rule that does not match it, so no rule can be chosen after the
-answers are in. And `npx --yes PENDING-BEFORE-MAINNET-package verify-border <tokenId> --contract <address>` checks
+answers are in. And `npx --yes PENDING-BEFORE-MAINNET-package verify-border <tokenId> --contract PENDING-BEFORE-MAINNET-contract` checks
 every square of a token against it. A day with no answer is a coin flip, and
 so is your mint day, which has no question.
 

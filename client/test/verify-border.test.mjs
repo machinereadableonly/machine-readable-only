@@ -235,3 +235,28 @@ test("a log query failing for another reason is not mistaken for a narrow node",
   await assert.rejects(verifyBorder({ publicClient: h.client, contract: h.contract, tokenId: 1 }), /socket hang up/);
   assert.equal(h.wideQueries(), 1, "the page was retried narrower instead of failing");
 });
+
+test("the command refuses an RPC that serves a different chain from the one asked for", async () => {
+  const { createServer } = await import("node:http");
+  // A JSON-RPC node that is Base Sepolia.
+  const node = createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => { body += c; });
+    req.on("end", () => {
+      const { id } = JSON.parse(body);
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ jsonrpc: "2.0", id, result: "0x14a34" }));
+    });
+  });
+  await new Promise((resolve) => node.listen(0, "127.0.0.1", resolve));
+  const rpc = `http://127.0.0.1:${node.address().port}/v2/secret-api-key`;
+  const key = join(mkdtempSync(join(tmpdir(), "mro-vb-")), "identity.json");
+  try {
+    await assert.rejects(
+      promisify(execFile)("node", [CLI, "verify-border", "1", "--contract", "0x" + "c0".repeat(20), "--rpc", rpc, "--key", key]),
+      (err) => /serves chain 84532, not 8453; pass --chain 84532/.test(err.stderr) && !err.stderr.includes("secret-api-key"),
+    );
+  } finally {
+    node.close();
+  }
+});
