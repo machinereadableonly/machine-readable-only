@@ -7,7 +7,10 @@
 #     sudo bash ~/projects/machine-readable-only/warden/deploy/install-warden-site.sh
 #
 # Idempotent: re-running installs the same vhost, and certbot reuses an
-# existing certificate rather than issuing a duplicate.
+# existing certificate rather than issuing a duplicate. An installed vhost that
+# differs from the template (an origin lock turned on, a hand edit) is never
+# overwritten silently: an active origin lock is carried across, and any other
+# difference is shown and refused unless --replace is given.
 #
 # PRECONDITION, checked below: the domain must already resolve to this host
 # and the Cloudflare proxy must be OFF (grey cloud). certbot answers an
@@ -24,6 +27,9 @@ TEMPLATE="${REPO}/nginx.conf.example"
 
 say() { printf '\n== %s\n' "$1"; }
 die() { printf '\nFAILED: %s\n' "$1" >&2; exit 1; }
+
+REPLACE=0
+[ "${1:-}" = "--replace" ] && REPLACE=1
 
 [ "$(id -u)" -eq 0 ] || die "run this with sudo"
 [ -f "$TEMPLATE" ] || die "template not found at $TEMPLATE"
@@ -45,8 +51,22 @@ fi
 
 say "2. install the vhost"
 # Substitute the domain into every <domain> placeholder.
-sed "s/<domain>/${DOMAIN}/g" "$TEMPLATE" > "$SITE"
-chmod 644 "$SITE"
+NEW="$(mktemp)"
+trap 'rm -f "$NEW"' EXIT
+sed "s/<domain>/${DOMAIN}/g" "$TEMPLATE" > "$NEW"
+LOCK_COMMENTED='#   if ($cf_real_ip_ok = 0) { return 403; }'
+LOCK_ACTIVE='if ($cf_real_ip_ok = 0) { return 403; }'
+if [ -f "$SITE" ]; then
+  if /bin/grep -qF "$LOCK_ACTIVE" "$SITE" && ! /bin/grep -qF "$LOCK_COMMENTED" "$SITE"; then
+    sed -i "s|$(printf '%s' "$LOCK_COMMENTED" | sed 's/[][\.*^$|]/\\&/g')|$LOCK_ACTIVE|" "$NEW"
+    echo "   the origin lock was on, and stays on"
+  fi
+  if ! cmp -s "$SITE" "$NEW"; then
+    diff -u "$SITE" "$NEW" || true
+    [ "$REPLACE" -eq 1 ] || die "the installed vhost differs from the template (above). Re-run with --replace to overwrite it."
+  fi
+fi
+install -m 644 "$NEW" "$SITE"
 echo "   wrote $SITE"
 ln -sfn "$SITE" "$LINK"
 echo "   enabled $LINK"
