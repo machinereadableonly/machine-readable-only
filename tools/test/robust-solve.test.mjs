@@ -121,7 +121,7 @@ test("the banded gate states actually draw the digit band, at its declared size"
   const target = unpackModules(heartMaskBytes(), SIZE);
   const solve = robustSolveFor(DOMAIN, 1);
   const banded = gateStates().filter(s => s.ordinal);
-  assert.equal(banded.length, 2, "expected two banded states in the gate");
+  assert.equal(banded.length, 4, "expected four banded states in the gate, two of them with answers");
   for (const state of banded) {
     const withPlace = renderGateState(solve, target, state);
     const without = renderGateState(solve, target, { ...state, ordinal: 0 });
@@ -129,6 +129,19 @@ test("the banded gate states actually draw the digit band, at its declared size"
     const width = (svg) => Number(svg.match(/ width="(\d+)"/)[1]);
     const unbanded = canvasFor(Math.floor(state.level / 365), state.echo ?? 0) * 16;
     assert.ok(width(withPlace) > unbanded, `"${state.label}" must be wider than the same token unbanded`);
+  }
+});
+
+test("the answer gate states actually draw their answer squares", () => {
+  // Inert, they would pass every mask and the sweep would read "nothing moved".
+  const target = unpackModules(heartMaskBytes(), SIZE);
+  const solve = robustSolveFor(DOMAIN, 1);
+  const answered = gateStates().filter(s => s.answers);
+  assert.equal(answered.length, 3, "expected three answer states in the gate");
+  for (const state of answered) {
+    const withAnswers = renderGateState(solve, target, state);
+    const without = renderGateState(solve, target, { ...state, answers: undefined });
+    assert.notEqual(withAnswers, without, `"${state.label}" renders identically with and without its answers -- the state is inert`);
   }
 });
 

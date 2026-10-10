@@ -111,8 +111,20 @@ export function gateStates() {
     // in both, on the mask each already shipped.
     { label: "finished, banded",       ...base, level: 365, streak: 365, marks: [...marks, finisherMark(1)], ordinal: 1 },
     { label: "child, finished, banded", ...base, level: 365, streak: 365, marks: [...marks, finisherMark(1)], ordinal: 1, echo: 365 },
+
+    // WITH ANSWER SQUARES. From the 122nd credited day a token's answers are
+    // drawn round the code, one square per day, and until these states no mask
+    // had been judged against them. Every square filled is the most ink the
+    // band can carry; alternating squares is the busiest pattern. Measured
+    // before they were added, on the seventeen ids listed above.
+    { label: "day 364, every answer",       ...base, level: 364, streak: 100, marks, answers: [ALL_ANSWERS, ALL_ANSWERS] },
+    { label: "finished, every answer",      ...base, level: 365, streak: 365, marks: [...marks, finisherMark(1)], ordinal: 1, answers: [ALL_ANSWERS, ALL_ANSWERS] },
+    { label: "finished, alternate answers", ...base, level: 365, streak: 365, marks: [...marks, finisherMark(1)], ordinal: 1, answers: [ALTERNATE_ANSWERS, ALTERNATE_ANSWERS] },
   ];
 }
+
+const ALL_ANSWERS = (1n << 256n) - 1n;
+const ALTERNATE_ANSWERS = BigInt("0x" + "55".repeat(32));
 
 /// The heart target the gate renders against, at the mask's own side. Exported
 /// so a test can assert it spans the whole code rather than a corner of it.
