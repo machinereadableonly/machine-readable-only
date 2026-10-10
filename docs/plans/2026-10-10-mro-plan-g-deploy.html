@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan G deploy: the fix sprint and the rulings, live on Base Sepolia</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan G deploy: the fix sprint and the rulings, live on Base Sepolia</h1>
+<blockquote>
+<p>After completing any operator-only step, tell Claude so it can update memory
+immediately.</p>
+</blockquote>
+<h2>Why</h2>
+<p>The fix sprint and Plan G are built and pushed, but nothing runs them yet. The
+live Warden is the 2026-10-08 process and the Clock is the copy installed on
+2026-10-07. Until both run <code>main</code>, Base Sepolia is not rehearsing what mainnet
+will run, so this deploy is the gate for everything after it: the Warden under
+its own user (D1, DEPLOY section 13), the next Sepolia pair (D15), and the
+mainnet rehearsal.</p>
+<p>The Clock and the Warden must change together. <code>main</code> changed how requests are
+signed (D16) and binds each payment to what it pays for (D17), and the Clock
+re-verifies every queued row against the evidence the Warden stored with it.
+DEPLOY section 12: rows queued by the old Warden carry no evidence, so the new
+Clock holds them, and on Sepolia that costs those tokens a day.</p>
+<h2>The one trade-off: when</h2>
+<table>
+<thead>
+<tr>
+<th>Window</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>2026-10-11, 00:30 to 12:00 UTC (recommended)</strong></td>
+<td>None. The 00:05 run empties the queue, and the test agent&#39;s daily check-in comes at 12:17, after the switch</td>
+</tr>
+<tr>
+<td>Today, after 15:30 UTC</td>
+<td>Test token 1&#39;s 12:17 check-in is already queued by the old Warden. The new Clock holds it, token 1 misses a day, its run resets, and the night reports a failure</td>
+</tr>
+</tbody></table>
+<p>The installer refuses to run between 23:45 and 00:30 UTC either way.</p>
+<h2>What is already proven (2026-10-10)</h2>
+<ul>
+<li>All four suites green at <code>bfd25a1</code>.</li>
+<li><code>rehearse-start.sh</code> PASS: <code>main</code>&#39;s Warden booted against a copy of the live
+database with the new secrets (decoder, day, treasury and payment checks).</li>
+<li>The Clock installer&#39;s dry run passes.</li>
+<li>The one PM2 daemon carries group <code>mro</code>, so a delete and start keeps the
+Warden&#39;s access to <code>/var/lib/mro</code>.</li>
+</ul>
+<h2>Nothing here is irreversible</h2>
+<p>Every step has a way back (below). The Clock&#39;s chain writes after the switch
+are permanent, as every night&#39;s are, on testnet.</p>
+<h2>Steps</h2>
+<h3>Before the window (Claude, today)</h3>
+<ol>
+<li><strong>Push <code>bfd25a1</code></strong> (the installer dry-run fix). Needs the operator&#39;s yes:
+it is outward-facing.</li>
+<li>Write and test a helper that adds <code>MRO_QUESTION_BANK=/etc/mro/bank.json</code> to
+the Warden&#39;s settings, printing presence only, as the secrets helper did.</li>
+</ol>
+<h3>In the window (2026-10-11, 00:30 to 12:00 UTC)</h3>
+<ol start="3">
+<li><strong>Claude:</strong> read the 00:05 run&#39;s log line and confirm the queue holds no
+row awaiting a write or a payment. If it does, stop and report.</li>
+<li><strong>Claude:</strong> re-run <code>rehearse-start.sh</code>. It must PASS.</li>
+<li><strong>Operator:</strong> run the bank-setting helper (one line, at the <code>!</code> prompt).</li>
+<li><strong>Operator:</strong> run the Clock installer in a real terminal, because <code>sudo</code>
+asks for a password and the <code>!</code> prompt cannot answer one:
+<code>sudo bash warden/deploy/install-clock-user.sh --commit &lt;sha&gt;</code> from the
+repository root, with the sha Claude gives. Expect a final <code>PASS</code> line.
+The timer stays enabled; the installer does not turn it off.</li>
+<li><strong>Claude (CAUTION, live site):</strong> restart the Warden the way DEPLOY section 5
+requires after an <code>ecosystem.config.cjs</code> change, which <code>46d57c4</code> made:
+<code>pm2 delete mro-warden</code>, <code>pm2 start ecosystem.config.cjs</code> from <code>warden/</code>,
+<code>pm2 save</code>. A few seconds of downtime.</li>
+<li><strong>Claude:</strong> check the site answers 200, <code>/mcp</code> answers 401 with a
+challenge, and the boot lines match the rehearsal.</li>
+<li><strong>Claude:</strong> run test token 1&#39;s check-in by hand through the new client, so
+the day&#39;s row is created by the new Warden. The 12:17 cron then finds the
+day already done.</li>
+</ol>
+<h3>The night after (2026-10-12, 00:05 UTC)</h3>
+<ol start="10">
+<li><strong>Claude:</strong> read the Clock log: the row proved and credited, nothing held,
+nothing FAILED. Then <code>verify-border 1 --chain 84532</code>.</li>
+</ol>
+<h2>The way back</h2>
+<ul>
+<li><strong>Warden will not boot after step 7:</strong> <code>pm2 logs mro-warden</code> names the
+missing setting. If it cannot be fixed on the spot, run the 2026-10-08 code:
+check out <code>8866ebc</code> in the checkout, <code>pm2 delete mro-warden</code>, <code>pm2 start ecosystem.config.cjs</code>, <code>pm2 save</code>. The settings stay as they are: the old
+code ignores <code>QUESTION_SECRET</code>, and <code>/etc/mro/bank.json</code> exists by then. Put
+the Clock back too (next item), because the two change together.</li>
+<li><strong>Clock wrong after step 6:</strong> the installer keeps the previous code as
+<code>/opt/mro-clock.prev</code>. Disable the timer
+(<code>sudo systemctl disable --now mro-clock.timer</code>), move the previous copy
+back, enable the timer.</li>
+</ul>
+<h2>Not in this plan</h2>
+<ul>
+<li>D1, the Warden under its own user (DEPLOY section 13). It comes next, once
+this has run a night.</li>
+<li>The Renderer pass, which waits on the operator&#39;s sheet.</li>
+</ul>
+</body>
+</html>
