@@ -12,8 +12,10 @@ Loaded only when working under `warden/` or `client/`.
 
 - **The Warden never signs.** Every chain write is the Clock's, which runs as
   its own user (`mro-clock`) with its key, split seed and question bank in
-  `/etc/mro-clock`. The Warden still runs as the main user and writes the
-  shared mirror.
+  `/etc/mro-clock`. The Warden writes the shared mirror; it runs as the main
+  user under pm2 until DEPLOY.md section 13 moves it to `mro-warden`
+  (`/opt/mro-warden`, settings in `/etc/mro-warden`). After that, a Warden
+  change needs `install-warden-user.sh` re-run, not `pm2 restart`.
 - **The Clock trusts no row.** `src/clock/prove.mjs` re-verifies the signed
   request stored with each row (`evidence` table), the token's key on chain and
   any payment's receipt before writing, and `ledger.mjs` spends each proof

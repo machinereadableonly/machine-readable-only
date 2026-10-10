@@ -1,0 +1,13 @@
+# Installed as /etc/logrotate.d/mro-warden by install-warden-user.sh.
+# Runs as root, with no `su`: the directory is 2750 root:mro, which mro-warden
+# cannot write, so it could not create warden.log.1.
+/var/log/mro/warden.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    # systemd holds the file open in append mode, so it is copied, not moved.
+    copytruncate
+}

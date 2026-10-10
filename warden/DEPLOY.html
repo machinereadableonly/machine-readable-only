@@ -1150,5 +1150,88 @@ once <code>/var/lib/mro/state.db</code> is moved aside.</p>
 <p>The old database is the state as it was at the cutover. Anything the Warden
 recorded since lives only in <code>/var/lib/mro/state.db</code>; copy it back the same way
 before switching, or those rows are lost.</p>
+<hr>
+<h2>13. The Warden under its own user -- [the operator runs two sudo commands]</h2>
+<p>Decision D1 (2026-10-10), before mainnet. Until this runs, the Warden -- the
+internet-facing process -- runs as the main user under pm2, and anything that
+takes it over can read every file that user can: the GitHub, Cloudflare and
+deployer secrets, and the Warden&#39;s own settings. After it, the Warden runs as
+<code>mro-warden</code> from a root-owned copy of the code, and can read only its own
+settings file, the question bank and the shared mirror.</p>
+<table>
+<thead>
+<tr>
+<th>what</th>
+<th>where</th>
+<th>owner, mode</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>the code and its own Node</td>
+<td><code>/opt/mro-warden</code></td>
+<td>root, read-only to everyone else</td>
+</tr>
+<tr>
+<td>its settings</td>
+<td><code>/etc/mro-warden/warden.env</code></td>
+<td>root, group <code>mro-warden</code>, 640</td>
+</tr>
+<tr>
+<td>the mirror</td>
+<td><code>/var/lib/mro/state.db</code></td>
+<td>shared with the Clock through group <code>mro</code></td>
+</tr>
+<tr>
+<td>its log</td>
+<td><code>/var/log/mro/warden.log</code></td>
+<td><code>mro-warden</code>, rotated weekly</td>
+</tr>
+<tr>
+<td>the unit</td>
+<td><code>/etc/systemd/system/mro-warden.service</code></td>
+<td>enabled by the cutover</td>
+</tr>
+</tbody></table>
+<p>The settings file is built from the Warden&#39;s <code>.env</code> in the checkout, which
+stays the one place the operator edits (WinSCP). Only the settings the
+Warden&#39;s code reads are copied (<code>deploy/warden-env.mjs</code>); everything else in
+that file -- a Clock key, another project&#39;s token -- never reaches the
+service.</p>
+<h3>Before it</h3>
+<p>Section 12&#39;s Clock install must be current: it puts the question bank in
+<code>/etc/mro</code>. The dry run says what is missing:</p>
+<pre><code>cd ~/projects/machine-readable-only
+sg mro -c &quot;bash warden/deploy/install-warden-user.sh --dry-run&quot;
+</code></pre>
+<p>It must end without a FAIL line.</p>
+<h3>Once, in this order</h3>
+<ol>
+<li><p><strong>Install</strong> (builds the code at the commit, writes the settings, installs the
+unit disabled; the running Warden is untouched):</p>
+<pre><code>sudo bash warden/deploy/install-warden-user.sh --commit &quot;$(git rev-parse HEAD)&quot;
+</code></pre>
+<p>It must end <code>PASS</code>.</p>
+</li>
+<li><p><strong>Cut over</strong> (the site is away for a few seconds):</p>
+<pre><code>sudo bash warden/deploy/cutover-warden-user.sh
+</code></pre>
+<p>It stops the pm2 Warden, starts the service, and waits for it to answer.
+On any failure it stops the service and starts the pm2 Warden again. Only
+when the service answers 200 does it enable the unit and delete the pm2
+copy. It must end <code>PASS</code>.</p>
+</li>
+</ol>
+<h3>After any Warden code or settings change</h3>
+<pre><code>sudo bash warden/deploy/install-warden-user.sh --commit &quot;$(git rev-parse HEAD)&quot;
+sudo systemctl restart mro-warden
+</code></pre>
+<p><code>rehearse-start.sh</code> still rehearses a start as the main user, against a copy
+of the state, before either.</p>
+<h3>The way back</h3>
+<pre><code>sudo systemctl disable --now mro-warden
+pm2 start ~/projects/machine-readable-only/warden/ecosystem.config.cjs
+pm2 save
+</code></pre>
+<p>The unit and <code>/opt/mro-warden</code> stay installed; the cutover can run again.</p>
 </body>
 </html>

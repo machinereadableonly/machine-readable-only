@@ -2,10 +2,12 @@
 # Build the Clock's installed tree from one commit, owning nothing of the
 # working checkout.
 #
-#   bash build-clock-tree.sh <repo> <commit> <dest> <node-version> [<bundle-maker>]
+#   bash build-clock-tree.sh <repo> <commit> <dest> <node-version> [<bundle-maker>] [clock|warden]
 #
-# install-clock-user.sh runs it as root. It runs as anyone too, which is how it
-# is rehearsed.
+# install-clock-user.sh and install-warden-user.sh run it as root. It runs as
+# anyone too, which is how it is rehearsed. The `warden` profile adds what the
+# Warden serves and solves with: warden/public, tools/, SKILL.md, the protocol
+# document and server.json.
 #
 # - The code comes from <commit> through a git bundle, so git checks every
 #   object against its hash: nothing the checkout's owner changed after that
@@ -25,10 +27,12 @@ COMMIT="${2:?commit}"
 DEST="${3:?dest}"
 NODE_VERSION="${4:?node version, e.g. v24.14.1}"
 MAKER="${5:-}"
+PROFILE="${6:-clock}"
 
 die() { printf 'build-clock-tree: %s\n' "$1" >&2; exit 1; }
 [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "the commit must be a full 40-character sha"
 [[ "$NODE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "the node version must look like v24.14.1"
+case "$PROFILE" in clock|warden) ;; *) die "the profile must be clock or warden" ;; esac
 [ ! -e "$DEST" ] || die "$DEST already exists"
 mkdir -p "$DEST"
 built=0
@@ -48,6 +52,14 @@ $MAKER rm -rf "$BUNDLE_DIR"
 
 mkdir -p "$DEST/warden" "$DEST/bin"
 cp -a "$SRC/warden/src" "$SRC/warden/deploy" "$SRC/warden/package.json" "$SRC/warden/package-lock.json" "$DEST/warden/"
+if [ "$PROFILE" = warden ]; then
+  cp -a "$SRC/warden/public" "$DEST/warden/"
+  cp -a "$SRC/tools" "$SRC/server.json" "$DEST/"
+  rm -rf "$DEST/tools/out"
+  mkdir -p "$DEST/docs" "$DEST/skills"
+  cp -a "$SRC/docs/2026-09-01-mro-raw-protocol.md" "$DEST/docs/"
+  cp -a "$SRC/skills/machine-readable-only" "$DEST/skills/"
+fi
 rm -rf "$SRC"
 
 # 2. Node, checked against the release's published SHA-256.
@@ -67,6 +79,10 @@ install -m 755 "$NODE_HOME/bin/node" "$DEST/bin/node"
 # 3. Dependencies from the commit's lockfile, with no install scripts.
 ( cd "$DEST/warden" && PATH="$NODE_HOME/bin:$PATH" npm ci --ignore-scripts --omit=dev --no-audit --no-fund >/dev/null ) \
   || die "npm ci failed"
+if [ "$PROFILE" = warden ]; then
+  ( cd "$DEST/tools" && PATH="$NODE_HOME/bin:$PATH" npm ci --ignore-scripts --omit=dev --no-audit --no-fund >/dev/null ) \
+    || die "npm ci failed in tools"
+fi
 rm -rf "$DL"
 
 # 4. No link may lead out of the tree.

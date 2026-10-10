@@ -1,0 +1,56 @@
+[Unit]
+Description=Machine Readable Only -- the Warden, the door on 127.0.0.1:3006
+After=network-online.target
+Wants=network-online.target
+# A boot that refuses its configuration exits; ten tries in ten minutes, then stop.
+StartLimitIntervalSec=600
+StartLimitBurst=10
+
+[Service]
+Type=simple
+# Its own user (D1): it cannot read the main user's files or secrets, and the
+# main user cannot change its code. Installed by deploy/install-warden-user.sh;
+# see DEPLOY.md section 13.
+User=mro-warden
+Group=mro
+SupplementaryGroups=mro-warden
+WorkingDirectory=/opt/mro-warden/warden
+Environment=NODE_ENV=production PORT=3006
+# IPv4 for every outgoing connection: CDP refuses the key over IPv6.
+# --env-file, not EnvironmentFile=, so no secret appears in `systemctl show`.
+ExecStart=/opt/mro-warden/bin/node --dns-result-order=ipv4first --no-network-family-autoselection --env-file=/etc/mro-warden/warden.env src/main.mjs
+Restart=on-failure
+RestartSec=2
+
+# The Clock shares state.db and its side files through the mro group.
+UMask=0007
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mro
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+OOMPolicy=continue
+# The service plus one solver child at its 768 MB heap.
+MemoryMax=1536M
+
+StandardOutput=append:/var/log/mro/warden.log
+StandardError=append:/var/log/mro/warden.log
+
+[Install]
+WantedBy=multi-user.target
