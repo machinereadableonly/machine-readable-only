@@ -503,3 +503,17 @@ test("a second answer does not overwrite the first", () => {
   assert.equal(row.answer, 1);
   assert.equal(row.answeredAt, 3000);
 });
+
+test("an existing upper-case payment nonce is lower-cased when the mirror opens", () => {
+  const dir = mkdtempSync(join(tmpdir(), "mro-nonce-"));
+  const path = join(dir, "state.db");
+  const upper = "0x" + "AB".repeat(32);
+  const first = openDb(path);
+  first.prepare("INSERT INTO pay_nonces (payNonce, tool, claimedAt) VALUES (?, 'mint', 1)").run(upper);
+  first.prepare("INSERT INTO mints (tokenId, toAddress, keyId, payNonce) VALUES (1, '0xabc', 'k', ?)").run(upper);
+  first.close();
+  const db = openDb(path);
+  assert.equal(db.prepare("SELECT payNonce FROM mints").get().payNonce, upper.toLowerCase());
+  assert.equal(db.prepare("SELECT payNonce FROM pay_nonces").get().payNonce, upper.toLowerCase());
+  db.close();
+});

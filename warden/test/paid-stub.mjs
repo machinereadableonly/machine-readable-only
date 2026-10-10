@@ -19,7 +19,7 @@ let n = 0;
 /// A fresh payment nonce. Unique per call, because that is what lets two
 /// concurrent calls be told apart -- which is the whole point of
 /// settleAfterBothGated below.
-export const nextNonce = () => `0xstub${(n += 1)}`;
+export const nextNonce = () => `0x${(n += 1).toString(16).padStart(64, "0")}`;
 
 /// The success path: run the handler straight through, with no gap between its
 /// pre-check and its write. Right for a single call, useless for a race.

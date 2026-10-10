@@ -166,8 +166,11 @@ export async function paymentVerdict({ publicClient, row, head }) {
         fromBlock: u.blockNumber,
         toBlock: u.blockNumber,
       });
+      // The Transfer the authorisation itself caused is the very next log.
+      // Any other transfer in the same transaction was put there by whoever
+      // built it.
       const paid = transfers.find(
-        (t) => t.transactionHash === u.transactionHash && t.args?.value === amount
+        (t) => t.transactionHash === u.transactionHash && t.logIndex === u.logIndex + 1 && t.args?.value === amount
       );
       if (paid) return { kind: "paid", transaction: u.transactionHash };
     }
@@ -230,6 +233,14 @@ export async function resolveUnresolvedPayments({ q, publicClient, alert = conso
     if (verdict.kind === "unknown") {
       summary.unresolvedPayments.push(row.tokenId);
       alert(`clock: ${what} has an unknown payment outcome and ${verdict.why}. A human must check it.`);
+      continue;
+    }
+
+    // ONE TRANSACTION PAYS FOR ONE ROW. A transaction already recorded against
+    // another row cannot be this one's payment as well.
+    if (verdict.kind === "paid" && q.paymentTxPaysAnother(verdict.transaction, row.payNonce)) {
+      summary.unresolvedPayments.push(row.tokenId);
+      alert(`clock: ${what} names transaction ${verdict.transaction}, which already pays for another row. A human must check it.`);
       continue;
     }
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adaptContext, makePaymentGateway, warmUp, bootDecisionFor, isDeclined, MINT_PRICE, MINT_RESOURCE } from "../src/pay/x402.mjs";
+import { adaptContext, makePaymentGateway, warmUp, bootDecisionFor, isDeclined, MINT_PRICE, MINT_RESOURCE, payNonceOf } from "../src/pay/x402.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeUpgradeTool } from "../src/mcp/tools/upgrade.mjs";
@@ -503,7 +503,7 @@ test("a handler is given the nonce that will settle it, and refuses without one"
       x402Version: 2,
       scheme: "exact",
       network: "eip155:84532",
-      payload: { authorization: { nonce: "0xfeed" }, signature: "0x00" },
+      payload: { authorization: { nonce: "0x000000000000000000000000000000000000000000000000000000000000FEED" }, signature: "0x00" },
     },
   };
   let seen;
@@ -512,7 +512,7 @@ test("a handler is given the nonce that will settle it, and refuses without one"
     { mcpCtx: { mcpReq: { _meta: meta } } }
   );
   assert.equal(ran.structuredContent.ok, true);
-  assert.equal(seen.payNonce, "0xfeed");
+  assert.equal(seen.payNonce, "0x000000000000000000000000000000000000000000000000000000000000feed", "one spelling: lower case");
 
   // And with no payment in the context at all, the handler must never run.
   let handlerRan = false;
@@ -1253,4 +1253,33 @@ test("a mainnet boot exits on a credential failure and stays up through an outag
     "on the rehearsal chain nothing is worth exiting for"
   );
   assert.equal(bootDecisionFor({ ready: true, authFailure: false, chainId: MAINNET }), "ready");
+});
+
+test("a nonce that is not 32 bytes of hex reserves nothing", async () => {
+  const paid = makePaymentGateway({
+    network: "eip155:84532",
+    payTo: "0xdead",
+    build: async () => fakeServer(),
+    wrapFactory: fakeWrap(),
+    alert: () => {},
+  });
+  let ran = false;
+  const r = await paid(async () => { ran = true; return { ok: true }; }, "$0.10")(
+    {}, { mcpCtx: { mcpReq: { _meta: metaWithPayment("0xfeed") } } },
+  );
+  assert.equal(ran, false);
+  assert.equal(r.structuredContent.reason, "payment-unavailable");
+});
+
+test("two spellings of one authorisation cannot reserve two things", () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  const lower = "0x" + "ab".repeat(32);
+  assert.equal(payNonceOf({ payload: { authorization: { nonce: lower.toUpperCase().replace("0X", "0x") } } }), lower);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  assert.equal(q.reserveMarkPaid(1, 1, 0, payNonceOf({ payload: { authorization: { nonce: lower } } })), true);
+  assert.throws(
+    () => q.reserveMarkPaid(1, 3, 0, payNonceOf({ payload: { authorization: { nonce: lower.toUpperCase().replace("0X", "0x") } } })),
+    /already/i,
+  );
 });

@@ -120,6 +120,14 @@ export function migrate(db) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN reservedBlock INTEGER`);
   }
 
+  // Payment nonces in one spelling. pay_nonces keeps any old upper-case twin of
+  // a lower-case row: rows there are never deleted and never read by value.
+  // Read first, so an ordinary open takes no write lock.
+  for (const table of ["mints", "mark_orders", "pay_nonces"]) {
+    if (!db.prepare(`SELECT 1 FROM ${table} WHERE payNonce <> lower(payNonce) LIMIT 1`).get()) continue;
+    db.exec(`UPDATE OR IGNORE ${table} SET payNonce = lower(payNonce) WHERE payNonce <> lower(payNonce)`);
+  }
+
   // ONE PAID MINT PER KEY, which is narrower than what this guard used to say
   // and is what it always meant.
   //

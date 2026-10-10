@@ -60,7 +60,10 @@ export function adaptContext(mcpCtx) {
  */
 export function payNonceOf(paymentPayload) {
   const p = paymentPayload?.payload;
-  return p?.authorization?.nonce ?? p?.permit2Authorization?.nonce ?? null;
+  const nonce = p?.authorization?.nonce ?? p?.permit2Authorization?.nonce ?? null;
+  // Lower case, because the chain does not care and a database key does: two
+  // spellings of one authorisation must not reserve two things.
+  return typeof nonce === "string" ? nonce.toLowerCase() : null;
 }
 
 /// The EIP-3009 authorisation itself, or null for any other envelope.
@@ -82,7 +85,7 @@ export function paymentFactsOf(paymentPayload, requirement) {
   if (!auth) return null;
   const validBefore = Number(auth.validBefore);
   return {
-    payNonce: auth.nonce ?? null,
+    payNonce: typeof auth.nonce === "string" ? auth.nonce.toLowerCase() : null,
     payer: auth.from ?? null,
     asset: requirement?.asset ?? null,
     payTo: requirement?.payTo ?? null,
@@ -616,7 +619,7 @@ export function makePaymentGateway({
           ? extractPaymentFromMeta({ name: tool, arguments: handlerArgs, _meta: x402Ctx.meta })
           : null;
         const payNonce = payNonceOf(payload);
-        if (!payNonce) {
+        if (!payNonce || !/^0x[0-9a-f]{64}$/.test(payNonce)) {
           alert(`${tool}: a verified payment carried no usable nonce, so nothing could be reserved`);
           return { ok: false, reason: "payment-unavailable", detail: "no-nonce" };
         }

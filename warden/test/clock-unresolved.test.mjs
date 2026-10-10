@@ -68,8 +68,8 @@ function heldMint({ facts = {}, payNonce = NONCE } = {}) {
 /// The two logs a genuine settlement leaves: the authorisation spent, and the
 /// money moving to the treasury, in one transaction.
 const settlementLogs = ({ to = TREASURY, value = AMOUNT, transactionHash = SETTLE_TX, nonce = NONCE } = {}) => [
-  { event: "AuthorizationUsed", address: USDC, blockNumber: BLOCK + 3, transactionHash, args: { authorizer: PAYER, nonce } },
-  { event: "Transfer", address: USDC, blockNumber: BLOCK + 3, transactionHash, args: { from: PAYER, to, value: BigInt(value) } },
+  { event: "AuthorizationUsed", address: USDC, blockNumber: BLOCK + 3, logIndex: 7, transactionHash, args: { authorizer: PAYER, nonce } },
+  { event: "Transfer", address: USDC, blockNumber: BLOCK + 3, logIndex: 8, transactionHash, args: { from: PAYER, to, value: BigInt(value) } },
 ];
 
 const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
@@ -549,4 +549,24 @@ test("the run-finished line names a failed sweep or resolve step", () => {
   assert.doesNotMatch(runFinishedLine(base, 5), /FAILED/);
   assert.match(runFinishedLine({ ...base, sweepFailed: "locked" }, 5), /expiry sweep FAILED/);
   assert.match(runFinishedLine({ ...base, resolveFailed: "locked" }, 5), /held-payment check FAILED/);
+});
+
+test("a transfer in the same transaction that the authorisation did not cause is not this payment", async () => {
+  const { q } = heldMint();
+  const logs = settlementLogs();
+  logs[1].logIndex = 12;
+  const summary = await run(q, chainWith({ logs }));
+  assert.deepEqual(summary.resolvedPaid, []);
+});
+
+test("a transaction already paying for another row cannot pay for a held one too", async () => {
+  const { db, q } = heldMint();
+  q.insertToken({ tokenId: 2, keyId: "other", owner: TO, lastDay: 20_700, mintDay: 20_700 });
+  q.insertMint({ tokenId: 2, toAddress: TO, keyId: "other", payNonce: "0x" + "99".repeat(32), now: RESERVED_AT });
+  db.exec(`UPDATE mints SET paymentTx = '${SETTLE_TX.toUpperCase().replace("0X", "0x")}', status = 'queued' WHERE tokenId = 2`);
+  const said = [];
+  const summary = await run(q, chainWith({ logs: settlementLogs() }), said);
+  assert.deepEqual(summary.resolvedPaid, []);
+  assert.deepEqual(summary.unresolvedPayments, [1]);
+  assert.ok(said.some((m) => /already pays for another row/.test(m)));
 });

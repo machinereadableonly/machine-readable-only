@@ -52,6 +52,10 @@ export function queries(db) {
   const s = {
     putEvidence: db.prepare("INSERT OR REPLACE INTO evidence (kind, ref, json) VALUES (?, ?, ?)"),
     getEvidence: db.prepare("SELECT json FROM evidence WHERE kind = ? AND ref = ?"),
+    paymentTxElsewhere: db.prepare(
+      "SELECT 1 FROM mints WHERE lower(paymentTx) = lower(?) AND payNonce IS NOT ? " +
+        "UNION ALL SELECT 1 FROM mark_orders WHERE lower(paymentTx) = lower(?) AND payNonce IS NOT ? LIMIT 1"
+    ),
     // A written row's evidence has done its job; the credit keeps its sigHash.
     dropEvidence: db.prepare("DELETE FROM evidence WHERE kind = ? AND ref = ?"),
     insertCredit: db.prepare("INSERT INTO credits (tokenId, day, sigHash) VALUES (?, ?, ?)"),
@@ -418,6 +422,9 @@ export function queries(db) {
     putEvidence(kind, ref, evidence) {
       if (evidence) s.putEvidence.run(kind, String(ref), JSON.stringify(evidence));
     },
+
+    /// Does any row other than the one paid by `payNonce` record `tx` as its payment?
+    paymentTxPaysAnother: (tx, payNonce) => Boolean(s.paymentTxElsewhere.get(tx, payNonce, tx, payNonce)),
 
     /// The signed request behind a row, parsed, or null.
     evidenceFor(kind, ref) {
