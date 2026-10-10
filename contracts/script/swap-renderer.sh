@@ -6,11 +6,12 @@
 #   bash contracts/script/swap-renderer.sh <token> <safe> <chain-id> --broadcast  # deploy, then prepare
 #
 # chain-id is 84532 (Base Sepolia) or 8453 (Base mainnet, real funds: operator
-# approval). After a broadcast, in order:
+# approval). A broadcast deploys, VERIFIES the source, and only then prints the
+# Safe file -- the signers must be able to read what they are pointing the token
+# at. Then, in order:
 #   1. sign and execute the printed Safe file at app.safe.global, checking the hashes on each device
 #   2. cast call <token> "renderer()(address)" --rpc-url <rpc>    -- must print the new renderer
-#   3. forge verify-contract <new-renderer> src/render/Renderer.sol:Renderer --chain <chain-id> --watch
-#   4. bash contracts/script/adopt-deployment.sh --chain <chain-id> <new-renderer> <token> <token's deploy block>
+#   3. bash contracts/script/adopt-deployment.sh --chain <chain-id> <new-renderer> <token> <token's deploy block>
 #      -- the token did not move, so its deploy block does not either.
 set -euo pipefail
 
@@ -70,6 +71,13 @@ fi
 NEXT="$(printf '%s\n' "$OUT" | sed -n 's/^ *renderer \(0x[0-9a-fA-F]\{40\}\)$/\1/p' | tail -1)"
 if [ -z "$NEXT" ] || [ "$(cast code "$NEXT" --rpc-url "$RPC")" = "0x" ]; then
   echo "FAIL: could not find the new renderer's address with code on chain in forge's output." >&2
+  exit 1
+fi
+
+echo "verifying $NEXT before anything is prepared for the Safe"
+if ! forge verify-contract "$NEXT" src/render/Renderer.sol:Renderer --chain "$CHAIN" --watch; then
+  echo "FAIL: the new renderer's source did not verify, so no Safe file was prepared. Verify it, then run:" >&2
+  echo "  (cd warden && node tools/safe-tx.mjs set-renderer $NEXT --contract $TOKEN --safe $SAFE --rpc $RPC)" >&2
   exit 1
 fi
 
