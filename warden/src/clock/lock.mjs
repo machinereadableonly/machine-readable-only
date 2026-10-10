@@ -27,8 +27,20 @@ export function currentBootId(path = BOOT_ID_PATH) {
   }
 }
 
+/// When a process started, in clock ticks since boot (/proc/<pid>/stat field
+/// 22), or null where it cannot be read. With the boot id it names one process,
+/// where a pid alone can be reused.
+export function processStart(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function lockOwner(bootIdPath = BOOT_ID_PATH) {
-  return { pid: process.pid, bootId: currentBootId(bootIdPath) };
+  return { pid: process.pid, bootId: currentBootId(bootIdPath), start: processStart(process.pid) };
 }
 
 /// Signal 0 asks whether a pid exists without touching it. EPERM means it
@@ -64,7 +76,7 @@ function claim(path, owner) {
  * bare `wx` file the old lock left, and guessing about it is how one guard
  * becomes the race it exists to prevent.
  */
-export function takeLock(path, owner, { isAlive = processIsAlive } = {}) {
+export function takeLock(path, owner, { isAlive = processIsAlive, startOf = processStart } = {}) {
   try {
     claim(path, owner);
     return;
@@ -80,7 +92,8 @@ export function takeLock(path, owner, { isAlive = processIsAlive } = {}) {
     );
   }
   const rebooted = holder.bootId && owner.bootId && holder.bootId !== owner.bootId;
-  if (!rebooted && isAlive(holder.pid)) {
+  const reused = holder.start != null && startOf(holder.pid) !== holder.start;
+  if (!rebooted && !reused && isAlive(holder.pid)) {
     throw new Error(
       `another clock run (pid ${holder.pid}) holds ${path}. Only one may write at a time: ` +
         "two signers on one account build two transactions on the same nonce."

@@ -177,3 +177,35 @@ test("a run that loses the reclaim race leaves the winner's lock in place", () =
     cleanup();
   }
 });
+
+// 16 Low. On the same boot a dead run's pid can be reused by any long-lived
+// process, and a live pid alone then reads as a live Clock for ever. The lock
+// records the process's start time; a different one is a different process.
+test("a lock whose pid now belongs to a different process is reclaimed", () => {
+  const { dir, cleanup } = tempDir();
+  try {
+    const path = join(dir, "run-lock");
+    writeFileSync(path, JSON.stringify({ pid: 4242, bootId: "boot-a", start: "100" }));
+    takeLock(path, owner(9999, "boot-a"), { isAlive: alive, startOf: () => "200" });
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).pid, 9999);
+  } finally {
+    cleanup();
+  }
+});
+
+test("CONTROL: the same pid with the same start time is a live run", () => {
+  const { dir, cleanup } = tempDir();
+  try {
+    const path = join(dir, "run-lock");
+    writeFileSync(path, JSON.stringify({ pid: 4242, bootId: "boot-a", start: "100" }));
+    assert.throws(() => takeLock(path, owner(9999, "boot-a"), { isAlive: alive, startOf: () => "100" }), /another clock run/);
+  } finally {
+    cleanup();
+  }
+});
+
+test("the lock this process takes records its own start time", () => {
+  const me = lockOwner();
+  assert.equal(me.pid, process.pid);
+  assert.match(String(me.start), /^\d+$/);
+});
