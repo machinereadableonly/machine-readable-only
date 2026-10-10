@@ -56,3 +56,11 @@ test("MRO_DAY_SECONDS really does shorten the day, in a process of its own", () 
   ).trim();
   assert.equal(out, "300000 30000");
 });
+
+test("a day that is not a whole number is always a mismatch", () => {
+  for (const bad of [NaN, undefined, 1.5]) {
+    assert.ok(dayMismatch(100, bad), `box day ${bad}`);
+    assert.ok(dayMismatch(bad, 100), `chain day ${bad}`);
+  }
+  assert.equal(dayMismatch(100, 101), 0);
+});

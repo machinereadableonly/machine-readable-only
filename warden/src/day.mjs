@@ -47,6 +47,8 @@ export const dayStartIso = (day) => new Date(day * DAY_MS).toISOString();
 /// because a read can straddle a boundary; more than that means the day length
 /// here is not the contract's.
 export function dayMismatch(chainDay, boxDay = utcDay()) {
+  // A day that is not a whole number is no day at all: never "no mismatch".
+  if (!Number.isInteger(Number(chainDay)) || !Number.isInteger(boxDay)) return Infinity;
   const gap = Math.abs(Number(chainDay) - boxDay);
   return gap > 1 ? gap : 0;
 }

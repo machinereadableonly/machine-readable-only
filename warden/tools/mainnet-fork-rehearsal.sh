@@ -165,7 +165,7 @@ safe_exec() {
 safe_prepare() {
   local label="$1"; shift
   ( cd "$TREE/warden" && MRO_SAFE_TX_OUT="$WORK/safe-tx" node tools/safe-tx.mjs "$@" \
-      --contract "$TOK" --safe "$SAFE" --rpc "$FORK" ) > "$WORK/safe-tx-$label.log" 2>&1 || return 1
+      --contract "$TOK" --safe "$SAFE" --signers "$SIGNERS" --rpc "$FORK" ) > "$WORK/safe-tx-$label.log" 2>&1 || return 1
   echo "$(sed -n 's/^file *//p' "$WORK/safe-tx-$label.log") $(sed -n 's/^ *Trezor *safeTxHash *//p' "$WORK/safe-tx-$label.log")"
 }
 
@@ -177,7 +177,7 @@ if ( cd "$TREE/warden" && node tools/split-seed.mjs new "$SPLIT_SEED_FILE" ) > "
 else
   bad "split-seed.mjs new -- see $WORK/split-seed.log"; exit 1
 fi
-( cd "$TREE/contracts" && MRO_SPLIT_SEED_FILE="$SPLIT_SEED_FILE" bash script/deploy-mainnet.sh --warden "$WARDEN" --owner "$SAFE" --fork "$FORK" --broadcast ) \
+( cd "$TREE/contracts" && MRO_SPLIT_SEED_FILE="$SPLIT_SEED_FILE" bash script/deploy-mainnet.sh --warden "$WARDEN" --owner "$SAFE" --signers "$SIGNERS" --fork "$FORK" --broadcast ) \
   > "$WORK/deploy.log" 2>&1
 DEPLOY_EXIT=$?
 REN="$(/bin/grep -oE "renderer +0x[0-9a-fA-F]{40}" "$WORK/deploy.log" | tail -1 | /bin/grep -oE "0x[0-9a-fA-F]{40}")"
@@ -228,7 +228,7 @@ fi
 
 # --- 4. adopt ------------------------------------------------------------------
 step "4. adopt-deployment.sh --chain 8453, in the exported copy"
-( cd "$TREE" && bash contracts/script/adopt-deployment.sh --chain 8453 "$REN" "$TOK" "$DEPLOY_BLOCK" ) \
+( cd "$TREE" && MRO_OWNER_SAFE="$SAFE" MRO_ADOPT_RPC="$FORK" bash contracts/script/adopt-deployment.sh --chain 8453 "$REN" "$TOK" "$DEPLOY_BLOCK" ) \
   > "$WORK/adopt.log" 2>&1
 ADOPT_EXIT=$?
 LINE="$(/bin/grep "^export const DEPLOY_BLOCK" "$TREE/warden/src/clock/reconcile.mjs")"
@@ -242,7 +242,7 @@ SERVED="$(/bin/grep -c "$TOK" "$TREE/warden/public/llms.txt" || true)"
 
 # --- 5. the Warden, mainnet mode -------------------------------------------------
 step "5. boot the Warden in MAINNET mode against the fork (rehearse-start.sh, real settings, IPv4)"
-OVR="MRO_CHAIN_ID=8453 MRO_CONTRACT_ADDRESS=$TOK BASE_RPC_URL=$FORK X402_FACILITATOR_URL=$CDP_URL TREASURY_ADDRESS=$TREASURY MRO_HOUSE_KEY_ID=rehearsal-house"
+OVR="MRO_CHAIN_ID=8453 MRO_CONTRACT_ADDRESS=$TOK BASE_RPC_URL=$FORK X402_FACILITATOR_URL=$CDP_URL TREASURY_ADDRESS=$TREASURY MRO_HOUSE_KEY_ID=rehearsal-house MRO_OWNER_SAFE=$SAFE"
 REHEARSE_OVERRIDE="$OVR" bash "$REHEARSE_REPO/warden/tools/rehearse-start.sh" 25 > "$WORK/warden-boot.log" 2>&1
 BOOT=$?
 if [ "$BOOT" -eq 0 ] && /bin/grep -q "payment ready (eip155:8453" "$WORK/warden-boot.log"; then
@@ -250,7 +250,7 @@ if [ "$BOOT" -eq 0 ] && /bin/grep -q "payment ready (eip155:8453" "$WORK/warden-
 else
   bad "the Warden's mainnet boot (exit $BOOT) -- see $WORK/warden-boot.log"
 fi
-OVR_DEAD="MRO_CHAIN_ID=8453 MRO_CONTRACT_ADDRESS=$TOK BASE_RPC_URL=$FORK X402_FACILITATOR_URL=$CDP_URL TREASURY_ADDRESS=$PLACEHOLDER MRO_HOUSE_KEY_ID=rehearsal-house"
+OVR_DEAD="MRO_CHAIN_ID=8453 MRO_CONTRACT_ADDRESS=$TOK BASE_RPC_URL=$FORK X402_FACILITATOR_URL=$CDP_URL TREASURY_ADDRESS=$PLACEHOLDER MRO_HOUSE_KEY_ID=rehearsal-house MRO_OWNER_SAFE=$SAFE"
 REHEARSE_OVERRIDE="$OVR_DEAD" bash "$REHEARSE_REPO/warden/tools/rehearse-start.sh" 15 > "$WORK/warden-placeholder.log" 2>&1
 # The REASON is asserted, not just the exit: a boot that died for any other
 # cause would otherwise pass this line.
@@ -271,7 +271,7 @@ HOUSE_KEY="$(cd "$TREE/warden" && node tools/mainnet-fork-clock.mjs key-id --tok
 CLOCK_ENV=(BASE_RPC_URL="$FORK" MRO_CONTRACT_ADDRESS="$TOK" MRO_CHAIN_ID=8453 CLOCK_PRIVATE_KEY="$(testkey 1)" STATE_DB_PATH="$MIRROR" MRO_SPLIT_SEED_FILE="$SPLIT_SEED_FILE"
   MRO_DOMAIN="$DOMAIN" TREASURY_ADDRESS="$TREASURY" MRO_HOUSE_KEY_ID="$HOUSE_KEY"
   # Mainnet requires a second RPC; the fork is the only chain here, so it is both.
-  CLOCK_CHECK_RPC_URL="$FORK")
+  CLOCK_CHECK_RPC_URL="$FORK" MRO_OWNER_SAFE="$SAFE")
 # What every seeded row needs. Each payment is made by a fresh payer the
 # fork funds, never by an anvil test account.
 SEED_ARGS=(--db "$MIRROR" --domain "$DOMAIN" --rpc "$FORK" --treasury "$TREASURY")
@@ -340,7 +340,8 @@ cast rpc anvil_mine 0x1 --rpc-url "$FORK" >/dev/null
   || bad "seeding the check-in and the Mark -- see $WORK/seed-2.log"
 cast rpc evm_increaseTime 86400 --rpc-url "$FORK" >/dev/null
 cast rpc anvil_mine 0xd --rpc-url "$FORK" >/dev/null
-clock "$TREE" "$WORK/clock-run2.log" MAX_GAS_GWEI=5
+# The fork is two days ahead of this box now; the Clock refuses that gap unless told.
+clock "$TREE" "$WORK/clock-run2.log" MAX_GAS_GWEI=5 CLOCK_TEST_BOX_DAY_OFFSET=2
 RUN2=$?
 CHECKIN_GAS="$(/bin/grep -oE "batchCheckIn x1 ok, tx 0x[0-9a-f]+, gas [0-9]+" "$WORK/clock-run2.log" | /bin/grep -oE "[0-9]+$")"
 MARK_GAS="$(/bin/grep -oE "applyMark 1 on 1 ok, tx 0x[0-9a-f]+, gas [0-9]+" "$WORK/clock-run2.log" | /bin/grep -oE "[0-9]+$")"

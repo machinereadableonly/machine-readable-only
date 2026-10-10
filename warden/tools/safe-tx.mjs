@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { createPublicClient, http } from "viem";
 
 import { MRO_ABI } from "../src/clock/abi.mjs";
-import { eip55, prepare } from "./safe-tx-lib.mjs";
+import { eip55, prepare, GUARD_STORAGE_SLOT, MODULES_SENTINEL } from "./safe-tx-lib.mjs";
 import { safeErrorText } from "../src/clock/redact.mjs";
 
 const SAFE_ABI = [
@@ -21,6 +21,11 @@ const SAFE_ABI = [
   { type: "function", name: "getThreshold", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "getOwners", stateMutability: "view", inputs: [], outputs: [{ type: "address[]" }] },
   { type: "function", name: "nonce", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  {
+    type: "function", name: "getModulesPaginated", stateMutability: "view",
+    inputs: [{ name: "start", type: "address" }, { name: "pageSize", type: "uint256" }],
+    outputs: [{ name: "array", type: "address[]" }, { name: "next", type: "address" }],
+  },
   {
     type: "function", name: "getTransactionHash", stateMutability: "view",
     inputs: [
@@ -65,6 +70,10 @@ function liveReader({ rpc, contract, safe }) {
     version: () => onSafe("VERSION"),
     threshold: () => onSafe("getThreshold"),
     owners: () => onSafe("getOwners"),
+    // A Safe proxy keeps its singleton in storage slot 0.
+    singleton: async () => "0x" + (await client.getStorageAt({ address: safe, slot: "0x0" })).slice(-40),
+    guard: () => client.getStorageAt({ address: safe, slot: GUARD_STORAGE_SLOT }),
+    modules: async () => (await onSafe("getModulesPaginated", [MODULES_SENTINEL, 10n]))[0],
     nonce: () => onSafe("nonce"),
     owner: () => onToken("owner"),
     warden: () => onToken("warden"),
@@ -76,7 +85,8 @@ function liveReader({ rpc, contract, safe }) {
 
 async function main() {
   const opts = parse(process.argv.slice(2));
-  const r = await prepare({ reader: liveReader(opts), ...opts });
+  const signers = opts.signers ? opts.signers.split(",").map((a) => eip55(a.trim())) : null;
+  const r = await prepare({ reader: liveReader(opts), ...opts, signers });
 
   const dir = process.env.MRO_SAFE_TX_OUT || join(homedir(), "mro-safe-tx");
   mkdirSync(dir, { recursive: true });

@@ -39,12 +39,14 @@ case " $* " in *" --resume "*) echo "FAIL: never resume a deploy; a fresh run de
 
 WARDEN=""
 OWNER=""
+SIGNERS=""
 FORK=""
 BROADCAST=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --warden) WARDEN="${2:?--warden needs an address}"; shift 2 ;;
     --owner) OWNER="${2:?--owner needs the Safe address}"; shift 2 ;;
+    --signers) SIGNERS="${2:?--signers needs the signer addresses, comma-separated}"; shift 2 ;;
     --fork) FORK="${2:?--fork needs a URL}"; shift 2 ;;
     # THE LITERAL WORD, as in deploy-plan7.sh: a typo must never broadcast.
     --broadcast) BROADCAST="--broadcast"; shift ;;
@@ -69,6 +71,10 @@ if [ -z "$OWNER" ]; then
 fi
 if [ "$OWNER" != "$(cast to-check-sum-address "$OWNER")" ]; then
   echo "FAIL: --owner $OWNER is not in EIP-55 checksummed form ($(cast to-check-sum-address "$OWNER"))." >&2
+  exit 1
+fi
+if [ -z "$SIGNERS" ]; then
+  echo "FAIL: --signers <a,b,c> is required -- the exact signer set the Safe must have, read off the devices." >&2
   exit 1
 fi
 
@@ -137,6 +143,29 @@ fi
 SAFE_OWNERS="$(cast call "$OWNER" "getOwners()(address[])" --rpc-url "$RPC")"
 if printf '%s' "$SAFE_OWNERS" | tr 'A-F' 'a-f' | /bin/grep -qi "$(printf '%s' "$WARDEN" | tr 'A-F' 'a-f')"; then
   echo "FAIL: the Clock key $WARDEN is one of the Safe's signers." >&2
+  exit 1
+fi
+# IDENTITY, NOT SHAPE. Any contract can answer VERSION, getThreshold and getOwners.
+addrs() { printf '%s' "$1" | tr 'A-F' 'a-f' | /bin/grep -oE '0x[0-9a-f]{40}' | sort -u | tr '\n' ' '; }
+if [ "$(addrs "$SAFE_OWNERS")" != "$(addrs "$SIGNERS")" ]; then
+  echo "FAIL: the Safe's signers are $(addrs "$SAFE_OWNERS")-- not the --signers given, $(addrs "$SIGNERS")" >&2
+  exit 1
+fi
+# The canonical Safe 1.5.0 singletons (Safe, SafeL2), from safe-global's safe-deployments.
+SINGLETON="0x$(cast storage "$OWNER" 0 --rpc-url "$RPC" | tail -c 41 | tr 'A-F' 'a-f')"
+case "$SINGLETON" in
+  0xff51a5898e281db6dfc7855790607438df2ca44b|0xedd160febbd92e350d4d398fb636302fccd67c7e) ;;
+  *) echo "FAIL: the Safe's singleton is $SINGLETON, not a canonical Safe 1.5.0." >&2; exit 1 ;;
+esac
+MODULES="$(cast call "$OWNER" "getModulesPaginated(address,uint256)(address[],address)" 0x0000000000000000000000000000000000000001 10 --rpc-url "$RPC" | head -1)"
+[ "$MODULES" = "[]" ] || { echo "FAIL: the Safe has modules enabled ($MODULES), which can act without its signers." >&2; exit 1; }
+# keccak256("guard_manager.guard.address"), Safe's GuardManager.
+GUARD="$(cast storage "$OWNER" 0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8 --rpc-url "$RPC")"
+[ "$(cast to-dec "$GUARD")" = 0 ] || { echo "FAIL: the Safe has a transaction guard set." >&2; exit 1; }
+# Read from the environment, never from argv, so the key is never on a command line.
+DEPLOYER_ADDRESS="$(cd ../warden && node --input-type=module -e 'import { privateKeyToAccount } from "viem/accounts"; console.log(privateKeyToAccount(process.env.MAINNET_DEPLOYER_KEY).address)')"
+if [ -n "$(addrs "$SAFE_OWNERS" | /bin/grep -i "$(printf '%s' "$DEPLOYER_ADDRESS" | tr 'A-F' 'a-f')" || true)" ]; then
+  echo "FAIL: the deploying key $DEPLOYER_ADDRESS is one of the Safe's signers." >&2
   exit 1
 fi
 
@@ -217,18 +246,40 @@ echo "anchor   $SPLIT_ANCHOR"
 echo "send     ${BROADCAST:-no -- simulate only}"
 echo
 
+# Captured, then judged by its own exit code: never piped into anything.
+DEPLOY_LOG="$(mktemp)"
 forge script script/DeployPlan5.s.sol:DeployPlan5 \
   --sig "run(address)" "$OWNER" \
   --rpc-url "$RPC" \
   $BROADCAST \
-  -vvv
+  -vvv > "$DEPLOY_LOG" 2>&1 && DEPLOY_EXIT=0 || DEPLOY_EXIT=$?
+cat "$DEPLOY_LOG"
+[ "$DEPLOY_EXIT" -eq 0 ] || { echo "FAIL: forge script exited $DEPLOY_EXIT" >&2; exit 1; }
+[ -n "$BROADCAST" ] || exit 0
+
+# READ IT BACK, from the chain. A broadcast that died part way can leave the
+# deploying key the owner with nothing pending.
+TOK="$(/bin/grep -oE "token +0x[0-9a-fA-F]{40}" "$DEPLOY_LOG" | tail -1 | /bin/grep -oE "0x[0-9a-fA-F]{40}")"
+REN="$(/bin/grep -oE "renderer +0x[0-9a-fA-F]{40}" "$DEPLOY_LOG" | tail -1 | /bin/grep -oE "0x[0-9a-fA-F]{40}")"
+[ -n "$TOK" ] && [ -n "$REN" ] || { echo "FAIL: the deploy log names no token or renderer: $DEPLOY_LOG" >&2; exit 1; }
+lc() { printf '%s' "$1" | tr 'A-F' 'a-f'; }
+PENDING_NOW="$(cast call "$TOK" 'pendingOwner()(address)' --rpc-url "$RPC")"
+WARDEN_NOW="$(cast call "$TOK" 'warden()(address)' --rpc-url "$RPC")"
+ANCHOR_NOW="$(cast call "$TOK" 'splitAnchor()(bytes32)' --rpc-url "$RPC")"
+OWNER_NOW="$(cast call "$TOK" 'owner()(address)' --rpc-url "$RPC")"
+readback=0
+[ "$(lc "$PENDING_NOW")" = "$(lc "$OWNER")" ] || { echo "FAIL: pendingOwner is $PENDING_NOW, not the Safe $OWNER" >&2; readback=1; }
+[ "$(lc "$WARDEN_NOW")" = "$(lc "$WARDEN")" ] || { echo "FAIL: warden is $WARDEN_NOW, not $WARDEN" >&2; readback=1; }
+[ "$(lc "$ANCHOR_NOW")" = "$(lc "$SPLIT_ANCHOR")" ] || { echo "FAIL: splitAnchor is $ANCHOR_NOW, not $SPLIT_ANCHOR" >&2; readback=1; }
+echo "read back: token $TOK, renderer $REN, owner $OWNER_NOW (the deploying key), pendingOwner $PENDING_NOW, warden $WARDEN_NOW"
+[ "$readback" -eq 0 ] || exit 1
 
 echo
-echo "Next, in order:"
-echo "  1. bash script/verify-plan7.sh <renderer> <token> $WARDEN 8453"
-echo "  2. cd ../warden && node tools/check-deployed-abi.mjs <token> $RPC"
-echo "  3. cd ../warden && node tools/read-ladder.mjs <token> $RPC"
-echo "  4. bash contracts/script/adopt-deployment.sh --chain 8453 <renderer> <token> <deploy-block>"
-echo "  5. the Safe accepts ownership (DEPLOY.md section 10):"
-echo "     cd ../warden && node tools/safe-tx.mjs accept-ownership --contract <token> --safe $OWNER --rpc $RPC"
+echo "Next, in order. ACCEPTANCE IS FIRST: until it lands, the deploying key owns the contract."
+echo "  1. the Safe accepts ownership (DEPLOY.md section 10), then delete the deploying key:"
+echo "     cd ../warden && node tools/safe-tx.mjs accept-ownership --contract $TOK --safe $OWNER --signers $SIGNERS --rpc $RPC"
+echo "  2. bash script/verify-plan7.sh $REN $TOK $WARDEN 8453"
+echo "  3. cd ../warden && node tools/check-deployed-abi.mjs $TOK $RPC"
+echo "  4. cd ../warden && node tools/read-ladder.mjs $TOK $RPC"
+echo "  5. MRO_OWNER_SAFE=$OWNER bash contracts/script/adopt-deployment.sh --chain 8453 $REN $TOK <deploy-block>"
 echo "  6. warden/DEPLOY.md section 10, in order."

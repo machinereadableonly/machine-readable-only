@@ -12,7 +12,26 @@ export const SAFE_TX_TYPEHASH = "0xbb8310d486368db6bd6f849402fdd73ad53d316b5a4b2
 const ZERO = "0x0000000000000000000000000000000000000000";
 const CHAINS = new Set([8453, 84532]);
 // The versions whose type hashes above were read from source.
-const SAFE_VERSIONS = new Set(["1.4.1", "1.5.0"]);
+const SAFE_VERSIONS = new Set(["1.5.0"]);
+
+/// The canonical Safe 1.5.0 singletons (Safe, SafeL2), from safe-global's
+/// safe-deployments; the same address on Base and Base Sepolia. A proxy whose
+/// singleton is anything else is not a Safe, whatever it answers.
+export const CANONICAL_SINGLETONS = new Set([
+  "0xFf51A5898e281Db6DfC7855790607438dF2ca44b",
+  "0xEdd160fEBBD92E350D4D398fb636302fccd67C7e",
+]);
+/// keccak256("guard_manager.guard.address"), Safe's GuardManager.
+export const GUARD_STORAGE_SLOT = "0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8";
+export const MODULES_SENTINEL = "0x0000000000000000000000000000000000000001";
+
+/// The exact signer set, or why not. Order and case do not matter; membership does.
+export function signerMismatch(actual, expected) {
+  const norm = (list) => [...new Set(list.map((a) => getAddress(a)))].sort();
+  const a = norm(actual);
+  const e = norm(expected);
+  return a.length === e.length && a.every((x, i) => x === e[i]) ? null : `the Safe's signers are ${a.join(", ")}, not ${e.join(", ")}`;
+}
 
 export const eip55 = (value) => {
   if (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value) || getAddress(value) !== value) {
@@ -102,7 +121,7 @@ export function batchFile({ chainId, safe, to, data, name }) {
  * Check the chain, then build the file and the hashes. `reader` is the chain
  * as the tool sees it; see safe-tx.mjs for the live one.
  */
-export async function prepare({ reader, action, args, contract, safe }) {
+export async function prepare({ reader, action, args, contract, safe, signers = null }) {
   const data = encodeAction(action, args);
   const chainId = Number(await reader.chainId());
   if (!CHAINS.has(chainId)) throw new Error(`chain ${chainId} is neither Base (8453) nor Base Sepolia (84532)`);
@@ -114,10 +133,18 @@ export async function prepare({ reader, action, args, contract, safe }) {
     throw new Error(`${safe} does not answer VERSION(), so it is not a Safe`);
   }
   if (!SAFE_VERSIONS.has(version)) throw new Error(`Safe version ${version} is not one whose hash this tool was checked against`);
+  const singleton = getAddress(await reader.singleton());
+  if (!CANONICAL_SINGLETONS.has(singleton)) throw new Error(`${safe}'s singleton is ${singleton}, not a canonical Safe 1.5.0`);
+  const modules = await reader.modules();
+  if (modules.length) throw new Error(`the Safe has modules enabled (${modules.join(", ")}), which can act without its signers`);
+  if (BigInt(await reader.guard()) !== 0n) throw new Error("the Safe has a transaction guard set");
 
   const threshold = await reader.threshold();
   if (threshold < 2n) throw new Error(`the Safe has threshold ${threshold}: one signer could act alone`);
   const owners = (await reader.owners()).map((a) => getAddress(a));
+  if (action === "accept-ownership" && !signers) throw new Error("accept-ownership needs --signers <a,b,c>: the exact set expected to own the contract");
+  const wrongSigners = signers && signerMismatch(owners, signers);
+  if (wrongSigners) throw new Error(wrongSigners);
   const warden = getAddress(await reader.warden());
   if (owners.includes(warden)) throw new Error(`the Clock key ${warden} is one of the Safe's signers`);
   if (action === "set-warden") {

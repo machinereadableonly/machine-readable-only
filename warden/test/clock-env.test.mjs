@@ -19,6 +19,7 @@ const wardenEnv = [
   "TREASURY_ADDRESS=0x2222222222222222222222222222222222222222",
   "MRO_HOUSE_KEY_ID=house-key-thumbprint",
   "CLOCK_CHECK_RPC_URL=https://second.example",
+  "MRO_OWNER_SAFE=0x3333333333333333333333333333333333333333",
   "CHALLENGE_SECRET=not-the-clocks-business",
   "",
 ].join("\n");

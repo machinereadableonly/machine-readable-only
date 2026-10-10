@@ -64,6 +64,19 @@ case "$NEW_BLOCK" in
   ''|*[!0-9]*) echo "FAIL: deploy block '$NEW_BLOCK' is not a plain number" >&2; exit 1 ;;
 esac
 
+# Nothing is published for a mainnet contract the Safe does not own alone.
+if [ "$CHAIN" = 8453 ]; then
+  SAFE="${MRO_OWNER_SAFE:?set MRO_OWNER_SAFE to the Safe that must own the contract}"
+  ADOPT_RPC="${MRO_ADOPT_RPC:-https://mainnet.base.org}"
+  OWNER_NOW="$(cast call "$NEW_TOK" 'owner()(address)' --rpc-url "$ADOPT_RPC")"
+  PENDING_NOW="$(cast call "$NEW_TOK" 'pendingOwner()(address)' --rpc-url "$ADOPT_RPC")"
+  if [ "$(printf '%s' "$OWNER_NOW" | tr 'A-F' 'a-f')" != "$(printf '%s' "$SAFE" | tr 'A-F' 'a-f')" ] \
+     || [ "$PENDING_NOW" != "0x0000000000000000000000000000000000000000" ]; then
+    echo "FAIL: owner is $OWNER_NOW with $PENDING_NOW pending; the Safe $SAFE must accept ownership first" >&2
+    exit 1
+  fi
+fi
+
 # What is published today. The token comes off the served copy and the renderer
 # off the protocol document, because those are the two files an agent reads.
 OLD_TOK=$(/bin/grep -oE '0x[0-9a-fA-F]{40}' "$LLMS" | head -1)

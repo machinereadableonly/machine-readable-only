@@ -303,3 +303,25 @@ export async function verifyDay({ rpcUrl, contract, fetchImpl = fetch, boxDay = 
   }
   return { chainDay, boxDay };
 }
+
+/**
+ * Refuse to start unless the contract's owner is the expected Safe and no
+ * ownership transfer is pending. Until the Safe accepts, whoever holds the
+ * deploy key can take the contract for good, so nothing opens before then.
+ * An unreadable answer refuses too.
+ */
+export async function verifyOwner({ rpcUrl, contract, safe, fetchImpl = fetch }) {
+  const read = async (functionName) => {
+    const result = await rpc(rpcUrl, "eth_call", [{ to: contract, data: encodeFunctionData({ abi: MRO_ABI, functionName }) }, "latest"], fetchImpl);
+    if (result === null) throw new Error(`the contract at ${contract} did not answer ${functionName}(): refusing to start`);
+    return String(decodeFunctionResult({ abi: MRO_ABI, functionName, data: result })).toLowerCase();
+  };
+  const [owner, pending] = [await read("owner"), await read("pendingOwner")];
+  if (owner !== String(safe).toLowerCase()) {
+    throw new Error(`the contract's owner is ${owner}, not the Safe ${safe}: the Safe must accept ownership first (DEPLOY.md section 10)`);
+  }
+  if (BigInt(pending) !== 0n) {
+    throw new Error(`an ownership transfer to ${pending} is pending: refusing to start until it is settled`);
+  }
+  return owner;
+}

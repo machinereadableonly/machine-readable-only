@@ -30,7 +30,7 @@ import { tokenView } from "./mcp/tokenView.mjs";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
 import { makeChainReader } from "./chain/read.mjs";
-import { verifyChainId, verifyDecoder, verifyDay, verifySplitAnchor, treasuryBalance } from "./chain/preflight.mjs";
+import { verifyChainId, verifyDecoder, verifyDay, verifySplitAnchor, verifyOwner, treasuryBalance } from "./chain/preflight.mjs";
 import { DAY_MS } from "./day.mjs";
 import { requeueOrphans, runSolver } from "./solve/queue.mjs";
 import { utcDay } from "./mcp/tools/checkin.mjs";
@@ -228,6 +228,14 @@ async function main() {
   // NO DOOR WITHOUT A SPLIT ANCHOR: every mint carries an answer bit drawn
   // from the key chain the anchor fixes. See chain/preflight.mjs.
   await verifySplitAnchor({ rpcUrl, contract });
+
+  // NO DOOR BEFORE THE SAFE OWNS THE CONTRACT. Required on mainnet.
+  const ownerSafe = process.env.MRO_OWNER_SAFE || null;
+  if (chainId === 8453 && !ownerSafe) throw new Error("MRO_OWNER_SAFE is required on Base mainnet: the Safe that must own the contract");
+  if (ownerSafe) {
+    await verifyOwner({ rpcUrl, contract, safe: ownerSafe });
+    console.error(`warden: the contract is owned by the Safe ${ownerSafe}, nothing pending`);
+  }
 
   // NOT A GATE. The treasury is validated for shape and checksum and nothing
   // else, so a valid-but-wrong address is invisible: settlements to it succeed.

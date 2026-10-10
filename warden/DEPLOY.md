@@ -591,8 +591,8 @@ handling of the real owner key.
 
    ```
    cd ~/projects/machine-readable-only/contracts
-   bash script/deploy-mainnet.sh --warden <the mainnet Clock's address> --owner <the Safe>
-   bash script/deploy-mainnet.sh --warden <the mainnet Clock's address> --owner <the Safe> --broadcast
+   bash script/deploy-mainnet.sh --warden <the mainnet Clock's address> --owner <the Safe> --signers <a,b,c>
+   bash script/deploy-mainnet.sh --warden <the mainnet Clock's address> --owner <the Safe> --signers <a,b,c> --broadcast
    ```
 
    The broadcast's last call offers ownership to the Safe. The deploying key
@@ -604,7 +604,7 @@ handling of the real owner key.
 
    ```
    cd ~/projects/machine-readable-only/warden
-   node tools/safe-tx.mjs accept-ownership --contract <token> --safe <the Safe> --rpc https://mainnet.base.org
+   node tools/safe-tx.mjs accept-ownership --contract <token> --safe <the Safe> --signers <a,b,c> --rpc https://mainnet.base.org
    ```
 
    Import the file it names in the Transaction Builder, compare the hashes on
@@ -1008,6 +1008,13 @@ a receipt, proves a token's key or proves a payment must agree on both, and a
 disagreement holds the row. Set it in the Warden's `.env`; the installer copies
 it. The Clock also refuses a night when the contract's day and the box's day
 are more than one apart, and reveals at most 32 split keys a night.
+
+**`MRO_OWNER_SAFE` is required on Base mainnet**, in the Warden's `.env`: the
+Safe that must own the contract. The Warden and the Clock refuse to start, and
+`adopt-deployment.sh --chain 8453` refuses to publish, unless `owner()` is that
+Safe and `pendingOwner()` is zero -- so the door cannot open while the deploying
+key still owns the contract. `deploy-mainnet.sh` reads the deployment back and
+lists the Safe's acceptance as the first step after it.
 
 **Deploying this change, in order.** Set `MRO_QUESTION_BANK=/etc/mro/bank.json`
 in the Warden's `.env` (the installer copies the bank there, root-owned, from

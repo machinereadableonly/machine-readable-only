@@ -146,3 +146,31 @@ test("the mainnet deploy names its seed and refuses every Sepolia anchor it can 
   assert.match(deploy, /splitAnchor\(\)\(bytes32\)' --rpc-url https:\/\/sepolia\.base\.org/);
   assert.match(deploy, /if \[ -z "\$FORK" \]; then\n\s*echo "FAIL: could not read the Sepolia pair's anchor/, "fails closed on a real run");
 });
+
+test("the mainnet deploy reads the deployment back and puts the Safe's acceptance first", () => {
+  const deploy = read("../../contracts/script/deploy-mainnet.sh");
+  for (const fn of ["pendingOwner()(address)", "warden()(address)", "splitAnchor()(bytes32)"]) assert.ok(deploy.includes(fn), fn);
+  assert.match(deploy, /-vvv > "\$DEPLOY_LOG" 2>&1 && DEPLOY_EXIT=0 \|\| DEPLOY_EXIT=\$\?/, "the exit code is the deploy's own");
+  const next = deploy.slice(deploy.indexOf("Next, in order"));
+  assert.ok(next.indexOf("accept-ownership") < next.indexOf("adopt-deployment"), "acceptance before adoption");
+});
+
+test("nothing runs on mainnet until the Safe alone owns the contract", () => {
+  const adopt = read("../../contracts/script/adopt-deployment.sh");
+  assert.match(adopt, /if \[ "\$CHAIN" = 8453 \]; then\n\s*SAFE="\$\{MRO_OWNER_SAFE:\?/);
+  const warden = read("../src/main.mjs");
+  assert.match(warden, /chainId === 8453 && !ownerSafe\) throw/);
+  assert.match(warden, /await verifyOwner\(/);
+  const clock = read("../src/clock/main.mjs");
+  assert.match(clock, /chainId === 8453 && !ownerSafe\)/);
+  assert.match(clock, /refusing to sign/);
+});
+
+test("the mainnet deploy checks the Safe's identity, not only its shape", () => {
+  const deploy = read("../../contracts/script/deploy-mainnet.sh");
+  assert.match(deploy, /--signers <a,b,c> is required/);
+  assert.match(deploy, /0xff51a5898e281db6dfc7855790607438df2ca44b\|0xedd160febbd92e350d4d398fb636302fccd67c7e\)/);
+  assert.match(deploy, /getModulesPaginated\(address,uint256\)/);
+  assert.match(deploy, /0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8/);
+  assert.match(deploy, /the deploying key \$DEPLOYER_ADDRESS is one of the Safe's signers/);
+});

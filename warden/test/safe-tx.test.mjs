@@ -120,7 +120,8 @@ test("a written file passes the Transaction Builder's import check", () => {
 function chain(over = {}) {
   const state = {
     chainId: 8453, owner: SAFE, pendingOwner: "0x0000000000000000000000000000000000000000",
-    threshold: 2n, owners: SIGNERS, warden: CLOCK, nonce: 3n, simulate: "ok", version: "1.5.0", ...over,
+    threshold: 2n, owners: SIGNERS, warden: CLOCK, nonce: 3n, simulate: "ok", version: "1.5.0",
+    singleton: "0xEdd160fEBBD92E350D4D398fb636302fccd67C7e", modules: [], guard: "0x" + "00".repeat(32), ...over,
   };
   return {
     async chainId() { return state.chainId; },
@@ -130,6 +131,9 @@ function chain(over = {}) {
     async pendingOwner() { return state.pendingOwner; },
     async threshold() { return state.threshold; },
     async owners() { return state.owners; },
+    async singleton() { return state.singleton; },
+    async modules() { return state.modules; },
+    async guard() { return state.guard; },
     async nonce() { return state.nonce; },
     async simulate() { if (state.simulate !== "ok") throw new Error(state.simulate); },
     async safeHash(args) {
@@ -149,9 +153,9 @@ test("a prepared transaction carries the file and all three hashes", async () =>
 
 test("accept-ownership needs the Safe to be the pending owner", async () => {
   const pending = chain({ owner: CLOCK, pendingOwner: SAFE });
-  await prepare({ reader: pending, action: "accept-ownership", args: [], contract: TOKEN, safe: SAFE });
+  await prepare({ reader: pending, action: "accept-ownership", args: [], contract: TOKEN, safe: SAFE, signers: SIGNERS });
   await assert.rejects(
-    prepare({ reader: chain({ owner: CLOCK }), action: "accept-ownership", args: [], contract: TOKEN, safe: SAFE }),
+    prepare({ reader: chain({ owner: CLOCK }), action: "accept-ownership", args: [], contract: TOKEN, safe: SAFE, signers: SIGNERS }),
     /pending owner/,
   );
 });
@@ -223,4 +227,29 @@ test("the remaining owner actions prepare on the same path", async () => {
     const r = await prepare({ reader: chain(), action, args, contract: TOKEN, safe: SAFE });
     assert.equal(r.file.transactions[0].data, encodeAction(action, args));
   }
+});
+
+// IDENTITY, NOT SHAPE: any contract can answer VERSION, getThreshold and getOwners.
+const pausing = (over, extra = {}) => prepare({ reader: chain(over), action: "pause", args: [], contract: TOKEN, safe: SAFE, ...extra });
+
+test("a proxy whose singleton is not a canonical Safe 1.5.0 is refused", async () => {
+  await assert.rejects(pausing({ singleton: "0x" + "9".repeat(40) }), /not a canonical Safe 1\.5\.0/);
+  await pausing({ singleton: "0xFf51A5898e281Db6DfC7855790607438dF2ca44b" });
+});
+
+test("a Safe with a module or a guard is refused", async () => {
+  await assert.rejects(pausing({ modules: ["0x" + "77".repeat(20)] }), /modules enabled/);
+  await assert.rejects(pausing({ guard: "0x" + "00".repeat(12) + "88".repeat(20) }), /guard/);
+});
+
+test("accepting ownership needs the exact signer set, in any order", async () => {
+  const accepting = (signers) => prepare({ reader: chain({ owner: CLOCK, pendingOwner: SAFE }), action: "accept-ownership", args: [], contract: TOKEN, safe: SAFE, signers });
+  await assert.rejects(accepting(null), /needs --signers/);
+  await assert.rejects(accepting(SIGNERS.slice(0, 2)), /signers are/);
+  await assert.rejects(accepting([SIGNERS[0], SIGNERS[1], CLOCK]), /signers are/);
+  await accepting([...SIGNERS].reverse());
+});
+
+test("a Safe version other than 1.5.0 is refused", async () => {
+  await assert.rejects(pausing({ version: "1.4.1" }), /not one whose hash/);
 });

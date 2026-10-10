@@ -48,6 +48,10 @@ const houseKeyId = process.env.MRO_HOUSE_KEY_ID || null;
 /// A second, independent RPC. Every read that settles a row without a receipt,
 /// proves a binding or proves a payment must agree on both. Required on mainnet.
 const checkRpcUrl = process.env.CLOCK_CHECK_RPC_URL || null;
+const ownerSafe = process.env.MRO_OWNER_SAFE || null;
+if (chainId === 8453 && !ownerSafe) {
+  throw new Error("MRO_OWNER_SAFE is required on Base mainnet: the Safe that must own the contract");
+}
 if (chainId === 8453 && !checkRpcUrl) {
   throw new Error("CLOCK_CHECK_RPC_URL is required on Base mainnet: a second RPC, from a different provider than BASE_RPC_URL");
 }
@@ -147,7 +151,12 @@ async function main() {
       `could not read today() from the contract, so the run has no day it can trust: ${safeErrorText(err)}`
     );
   }
-  const boxDay = utcDay();
+  // TEST-ONLY: the fork rehearsal moves the chain's clock forward days at a time.
+  // The installer refuses this variable, so the installed Clock never takes it.
+  const offset = Number(process.env.CLOCK_TEST_BOX_DAY_OFFSET ?? 0);
+  // A malformed value would make the day check below compare against NaN and pass.
+  if (!Number.isInteger(offset)) throw new Error("CLOCK_TEST_BOX_DAY_OFFSET must be a whole number of days");
+  const boxDay = utcDay() + offset;
   // More than a day apart, one of the two is lying or broken, and the RPC's
   // day decides which split keys are revealed: refuse the night.
   if (dayMismatch(today, boxDay)) {
@@ -176,6 +185,16 @@ async function main() {
     bank = loadBank(bankPath());
   } catch (err) {
     console.error(`clock: ${safeErrorText(err)}`);
+  }
+
+  // NOTHING IS SIGNED BEFORE THE SAFE OWNS THE CONTRACT.
+  if (ownerSafe) {
+    const [owner, pending] = await Promise.all(
+      ["owner", "pendingOwner"].map((functionName) => checkClient.readContract({ address: contract, abi: MRO_ABI, functionName })),
+    );
+    if (String(owner).toLowerCase() !== ownerSafe.toLowerCase() || BigInt(pending) !== 0n) {
+      throw new Error(`the contract's owner is ${owner} with ${pending} pending, not the Safe ${ownerSafe} alone: refusing to sign`);
+    }
   }
 
   const ledger = openLedger(LEDGER);

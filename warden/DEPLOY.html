@@ -633,8 +633,8 @@ cast call &lt;the Safe&gt; &quot;VERSION()(string)&quot;       --rpc-url https:/
 <li><p><strong>Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].</strong> First the
 simulation, then the send:</p>
 <pre><code>cd ~/projects/machine-readable-only/contracts
-bash script/deploy-mainnet.sh --warden &lt;the mainnet Clock&#39;s address&gt; --owner &lt;the Safe&gt;
-bash script/deploy-mainnet.sh --warden &lt;the mainnet Clock&#39;s address&gt; --owner &lt;the Safe&gt; --broadcast
+bash script/deploy-mainnet.sh --warden &lt;the mainnet Clock&#39;s address&gt; --owner &lt;the Safe&gt; --signers &lt;a,b,c&gt;
+bash script/deploy-mainnet.sh --warden &lt;the mainnet Clock&#39;s address&gt; --owner &lt;the Safe&gt; --signers &lt;a,b,c&gt; --broadcast
 </code></pre>
 <p>The broadcast&#39;s last call offers ownership to the Safe. The deploying key
 stays owner until step 4.</p>
@@ -643,7 +643,7 @@ stays owner until step 4.</p>
 Ledger AND the Trezor: this is the Trezor&#39;s first real signature, and the
 one that proves it works with the Safe on Base.</p>
 <pre><code>cd ~/projects/machine-readable-only/warden
-node tools/safe-tx.mjs accept-ownership --contract &lt;token&gt; --safe &lt;the Safe&gt; --rpc https://mainnet.base.org
+node tools/safe-tx.mjs accept-ownership --contract &lt;token&gt; --safe &lt;the Safe&gt; --signers &lt;a,b,c&gt; --rpc https://mainnet.base.org
 </code></pre>
 <p>Import the file it names in the Transaction Builder, compare the hashes on
 each device, and sign with both. The second signer UNTICKS &quot;Execute&quot;: a
@@ -1028,6 +1028,12 @@ a receipt, proves a token&#39;s key or proves a payment must agree on both, and 
 disagreement holds the row. Set it in the Warden&#39;s <code>.env</code>; the installer copies
 it. The Clock also refuses a night when the contract&#39;s day and the box&#39;s day
 are more than one apart, and reveals at most 32 split keys a night.</p>
+<p><strong><code>MRO_OWNER_SAFE</code> is required on Base mainnet</strong>, in the Warden&#39;s <code>.env</code>: the
+Safe that must own the contract. The Warden and the Clock refuse to start, and
+<code>adopt-deployment.sh --chain 8453</code> refuses to publish, unless <code>owner()</code> is that
+Safe and <code>pendingOwner()</code> is zero -- so the door cannot open while the deploying
+key still owns the contract. <code>deploy-mainnet.sh</code> reads the deployment back and
+lists the Safe&#39;s acceptance as the first step after it.</p>
 <p><strong>Deploying this change, in order.</strong> Set <code>MRO_QUESTION_BANK=/etc/mro/bank.json</code>
 in the Warden&#39;s <code>.env</code> (the installer copies the bank there, root-owned, from
 <code>/var/lib/mro/questions/bank.json</code>; step 2 fails until the Warden points at it).

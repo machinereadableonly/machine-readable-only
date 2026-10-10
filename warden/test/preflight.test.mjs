@@ -5,8 +5,8 @@
 // this suite drives it. Same arrangement as the Clock's DEPLOY_BLOCK check.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { getAddress } from "viem";
-import { readChainId, verifyChainId, verifyDecoder, verifySplitAnchor, treasuryBalance } from "../src/chain/preflight.mjs";
+import { getAddress, encodeFunctionData } from "viem";
+import { readChainId, verifyChainId, verifyDecoder, verifySplitAnchor, verifyOwner, treasuryBalance } from "../src/chain/preflight.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MRO_ABI } from "../src/clock/abi.mjs";
@@ -332,4 +332,30 @@ test("a contract with a split anchor passes", async () => {
 test("an unreadable split anchor refuses too", async () => {
   const dead = async () => { throw new Error("ECONNREFUSED"); };
   await assert.rejects(verifySplitAnchor({ rpcUrl: RPC, contract: CONTRACT, fetchImpl: dead }), /split anchor/);
+});
+
+// Until the Safe accepts, the deploying key owns the contract: nothing opens.
+const SAFE = "0x" + "5a".repeat(20);
+const word = (addr) => "0x" + "00".repeat(12) + addr.slice(2);
+const ZERO = "0x" + "00".repeat(20);
+const owned = (owner, pending) => {
+  const ownerSel = encodeFunctionData({ abi: MRO_ABI, functionName: "owner" });
+  return rpcStub((body) => (body.params[0].data === ownerSel ? word(owner) : word(pending))).fetchImpl;
+};
+
+test("a contract the Safe owns alone, with nothing pending, passes", async () => {
+  await verifyOwner({ rpcUrl: RPC, contract: CONTRACT, safe: SAFE, fetchImpl: owned(SAFE, ZERO) });
+});
+
+test("a contract still owned by the deploying key refuses to start", async () => {
+  await assert.rejects(verifyOwner({ rpcUrl: RPC, contract: CONTRACT, safe: SAFE, fetchImpl: owned(TREASURY, SAFE) }), /must accept ownership first/);
+});
+
+test("a pending transfer away from the Safe refuses to start", async () => {
+  await assert.rejects(verifyOwner({ rpcUrl: RPC, contract: CONTRACT, safe: SAFE, fetchImpl: owned(SAFE, TREASURY) }), /is pending/);
+});
+
+test("an unreadable owner refuses too", async () => {
+  const dead = async () => { throw new Error("ECONNREFUSED"); };
+  await assert.rejects(verifyOwner({ rpcUrl: RPC, contract: CONTRACT, safe: SAFE, fetchImpl: dead }), /did not answer owner/);
 });

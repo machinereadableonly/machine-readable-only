@@ -26,13 +26,13 @@ export const CLOCK_PATHS = {
 export const WARDEN_BANK = "/etc/mro/bank.json";
 
 const COPIED = ["BASE_RPC_URL", "MRO_CONTRACT_ADDRESS", "MRO_CHAIN_ID", "MRO_DOMAIN", "TREASURY_ADDRESS"];
-const OPTIONAL = ["MAX_GAS_GWEI", "MRO_HOUSE_KEY_ID", "CLOCK_CHECK_RPC_URL", "CLOCK_MAX_MINTS", "CLOCK_MAX_SEEDS", "CLOCK_MAX_MARKS", "CLOCK_MAX_CREDITS"];
+const OPTIONAL = ["MAX_GAS_GWEI", "MRO_HOUSE_KEY_ID", "CLOCK_CHECK_RPC_URL", "MRO_OWNER_SAFE", "CLOCK_MAX_MINTS", "CLOCK_MAX_SEEDS", "CLOCK_MAX_MARKS", "CLOCK_MAX_CREDITS"];
 const KEY = "CLOCK_PRIVATE_KEY";
 // Read by the Clock but never set for it. The two paths default beside
 // STATE_DB_PATH, where the Warden and the cutover look; a copied one would point
 // into the main user's home. The installed Clock counts real days only, and a
 // Warden counting fast ones would disagree with it about which day it is.
-export const REFUSED = ["CLOCK_CURSOR_PATH", "CLOCK_LOCK_PATH", "CLOCK_LEDGER_PATH", "MRO_DAY_SECONDS", "MRO_CLOCK_OFFSET_SECONDS"];
+export const REFUSED = ["CLOCK_CURSOR_PATH", "CLOCK_LOCK_PATH", "CLOCK_LEDGER_PATH", "CLOCK_TEST_BOX_DAY_OFFSET", "MRO_DAY_SECONDS", "MRO_CLOCK_OFFSET_SECONDS"];
 
 /// KEY -> the raw line, so quoting reaches node's --env-file untouched. A key
 /// written twice is refused only if the Clock reads it.
