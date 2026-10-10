@@ -4,8 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { encodeFunctionData, hexToString } from "viem";
 import { MRO_ABI } from "../src/clock/abi.mjs";
-import { runClock } from "../src/clock/run.mjs";
-import { chainKeys, keyIndexFor, answerBit, silentBit } from "../src/clock/split.mjs";
+import { runClock, MAX_KEYS_PER_REVEAL } from "../src/clock/run.mjs";
+import { chainKeys, keyIndexFor, answerBit, silentBit, CHAIN_LENGTH } from "../src/clock/split.mjs";
 import { DEPLOY_BLOCK } from "../src/clock/reconcile.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
@@ -270,4 +270,29 @@ test("a day that somehow holds two questions writes nothing", async () => {
     publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK,
   });
   assert.deepEqual(writer.sent, []);
+});
+
+// A HOSTILE RPC CHOOSES today(). The reveal follows the earlier of its day and
+// the box's, never reaches the seed, and is bounded per night.
+test("an RPC claiming a later day cannot advance the reveal past the box's day", async () => {
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
+  await runClock({ prover: trustingProver(), ...baseArgs(q), today: TODAY + 60, boxDay: TODAY, publicClient: chainWith({ revealed: 5 }), writer, splitKeys: KEYS, bank: BANK });
+  assert.deepEqual(writer.sent[0].args[0], KEYS.slice(6, keyIndexFor(TODAY - 1, ANCHOR_DAY) + 1));
+});
+
+test("one night reveals at most MAX_KEYS_PER_REVEAL keys", async () => {
+  const today = ANCHOR_DAY + 100;
+  const { q, writer } = rigWithOneCredit({ day: today - 1 });
+  await runClock({ prover: trustingProver(), ...baseArgs(q), today, boxDay: today, publicClient: chainWith({ revealed: 0 }), writer, splitKeys: KEYS, bank: BANK });
+  assert.equal(writer.sent[0].args[0].length, MAX_KEYS_PER_REVEAL);
+  assert.deepEqual(writer.sent[0].args[0], KEYS.slice(1, MAX_KEYS_PER_REVEAL + 1));
+});
+
+test("the seed itself is never revealed, however late the day", async () => {
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });
+  const readSplit = async () => ({ anchor: KEYS[0], anchorDay: TODAY - 40_000, revealed: CHAIN_LENGTH - 2 });
+  await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: noChain, readSplit, writer, splitKeys: KEYS, bank: BANK });
+  const keys = writer.sent[0].args[0];
+  assert.deepEqual(keys, [KEYS[CHAIN_LENGTH - 1]]);
+  assert.ok(!keys.includes(KEYS[CHAIN_LENGTH]), "the seed went out");
 });

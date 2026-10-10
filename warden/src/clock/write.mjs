@@ -161,6 +161,15 @@ export function makeWriter({
     }
     gas = padded;
 
+    // The cap gasOk() checked is also the most any transaction may pay per gas.
+    let maxPriorityFeePerGas;
+    try {
+      const tip = await pub.estimateMaxPriorityFeePerGas();
+      maxPriorityFeePerGas = tip < maxGasWei ? tip : maxGasWei;
+    } catch (err) {
+      return { ok: false, reason: "send-failed", detail: shortMessage(err) };
+    }
+
     let hash;
     try {
       hash = await wallet.writeContract({
@@ -173,6 +182,8 @@ export function makeWriter({
         gas,
         nonce,
         dataSuffix,
+        maxFeePerGas: maxGasWei,
+        maxPriorityFeePerGas,
       });
     } catch (err) {
       // The nonce was NOT consumed by a send that never happened, so it is not

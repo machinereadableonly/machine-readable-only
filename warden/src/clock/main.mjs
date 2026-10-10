@@ -22,6 +22,7 @@ import { readCursor, writeCursor, nextCursor, exitCodeFor, runFinishedLine } fro
 import { lockOwner, takeLock, releaseLock } from "./lock.mjs";
 import { MRO_ABI } from "./abi.mjs";
 import { utcDay } from "../mcp/tools/checkin.mjs";
+import { dayMismatch } from "../day.mjs";
 import { safeErrorText } from "./redact.mjs";
 import { chainKeys } from "./split.mjs";
 import { loadSplitSeed, splitSeedPath } from "./splitSeed.mjs";
@@ -136,6 +137,11 @@ async function main() {
     );
   }
   const boxDay = utcDay();
+  // More than a day apart, one of the two is lying or broken, and the RPC's
+  // day decides which split keys are revealed: refuse the night.
+  if (dayMismatch(today, boxDay)) {
+    throw new Error(`the contract says day ${today} and this box says ${boxDay}; refusing to run on either`);
+  }
   if (today !== boxDay) {
     console.error(`clock: WARNING -- the contract says day ${today} and this box says ${boxDay}; using the contract`);
   }
@@ -175,6 +181,7 @@ async function main() {
     contract,
     chainId,
     today,
+    boxDay,
     lastReconciledBlock: readCursor(CURSOR, { chainId, contract, log: console.error }),
     // Saved as each page is applied, so a night that fails half way keeps what
     // it read instead of re-reading it tomorrow on top of a longer backlog.

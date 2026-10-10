@@ -46,6 +46,10 @@ export const CHECKIN_CHUNK = 800;
 /// reads it guards (resting, transfers, rebinds) are one-way in the mirror.
 export const CONFIRMATIONS = 12;
 
+/// The most split keys one run reveals. A night reveals one; after an outage
+/// the backlog clears over a few nights rather than in one call an RPC chose.
+export const MAX_KEYS_PER_REVEAL = 32;
+
 /// A failed step's text, never empty: exitCodeFor fails the run on a truthy
 /// value, so an error with no message must still leave one.
 function failureText(err) {
@@ -226,6 +230,9 @@ export async function runClock({
   splitKeys = null,
   bank = null,
   readSplit = readSplitState,
+  // The box's own day. A key is revealed only once BOTH clocks say its day has
+  // closed, so a lying RPC cannot advance the reveal on its own.
+  boxDay = today,
   // Proves each row before it is written: see prove.mjs. Required, so no
   // caller can run the Clock without it by leaving an argument out.
   prover,
@@ -430,10 +437,16 @@ export async function runClock({
   //     points at the one before, and that pointer is how a verifier finds the
   //     run's writes without scanning the whole chain.
   if (split && (q.pendingMints().length || q.pendingSeeds().length || q.pendingCredits(today - 1).length)) {
-    const through = Math.min(keyIndexFor(today - 1, split.anchorDay), CHAIN_LENGTH);
+    // CHAIN_LENGTH - 1 at most: key CHAIN_LENGTH is the seed itself.
+    const through = Math.min(
+      keyIndexFor(Math.min(today, boxDay) - 1, split.anchorDay),
+      CHAIN_LENGTH - 1,
+      split.revealed + MAX_KEYS_PER_REVEAL,
+    );
     const keys = through > split.revealed ? splitKeys.slice(split.revealed + 1, through + 1) : [];
     const fromDay = split.anchorDay + split.revealed;
-    const asked = q.questionsForDays(fromDay, today - 1);
+    // The questions of exactly the days whose keys go out.
+    const asked = q.questionsForDays(fromDay, split.anchorDay + Math.max(through, split.revealed) - 1);
     if (asked.some((row) => !bankById.has(row.questionId))) {
       stopForSplit("a question issued on a day being revealed is missing from the bank");
     } else if (new Set(asked.map((row) => row.day)).size !== asked.length) {

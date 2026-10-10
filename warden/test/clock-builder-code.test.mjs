@@ -8,7 +8,7 @@
 // a double that only records arguments would agree with either.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createPublicClient, createWalletClient, custom, encodeFunctionData, parseTransaction } from "viem";
+import { createPublicClient, createWalletClient, custom, encodeFunctionData, parseTransaction, parseGwei } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 import { MRO_ABI } from "../src/clock/abi.mjs";
@@ -144,4 +144,13 @@ test("with no code, every call is byte-identical to the plain encoding", async (
   assert.deepEqual(seen.call, [PLAIN]);
   assert.deepEqual(seen.estimate, [PLAIN]);
   assert.equal(parseTransaction(seen.raw[0]).data, PLAIN);
+});
+
+test("every transaction is capped at the operator's gas price", async () => {
+  const { writer, seen } = writerFor(null);
+  await writer.startRun();
+  assert.equal((await writer.send(FN, ARGS)).ok, true);
+  const tx = parseTransaction(seen.raw[0]);
+  assert.equal(tx.maxFeePerGas, parseGwei("0.05"));
+  assert.ok(tx.maxPriorityFeePerGas <= tx.maxFeePerGas);
 });
