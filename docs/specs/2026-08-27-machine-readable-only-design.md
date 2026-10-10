@@ -79,7 +79,7 @@ heart) that a human recognises but cannot produce, and machine-only payments
 | 4 | Whose wallet | Token minted to whatever Base address the agent names. Maintenance bound to the agent's signing key id. Owner can rebind on-chain. A key may mint once but may maintain any number of tokens. Selling is via normal marketplaces. **Amended 2026-08-30: smart-account wallets are in scope and are handled** -- see section 7, "Smart accounts and agent wallets" |
 | 5 | Who pays | **Mint costs 1 USDC via x402** (raised from 0.10 on 2026-09-01; self-funding: one fee covers ~26 years of that token's check-in gas at today's prices). Check-ins are free, batched once per UTC day, site-paid. Marks are paid via x402 |
 | 6 | Shape / "no text" | MCP server with a vestigial HTTP surface plus a reference client. Exactly one HTML file exists (the door sign). Everything else is JSON, `/llms.txt` Markdown, or MCP |
-| 7 | Discovery | In evidence order: `SKILL.md` + `npx skills add <github-user>/mro` + ClawHub/openclaw listings; a human X account with reach plus the automated daily post; early access for wallets that already run mint skills; **ERC-8257 tool-registry registration** (a plain on-chain write on Base, 570 entries as at 2026-08-30, so a land-grab window rather than a crowded directory); the seed agent as token #1; MCP registry and ERC-8004 for legitimacy; **the x402 Bazaar listing, best-effort only** (amended 2026-08-30, see section 13 -- cataloguing cannot be verified from the response, so it is never counted on); `/llms.txt` as hygiene |
+| 7 | Discovery | In evidence order: `SKILL.md` + `npx skills add <github-user>/mro` + ClawHub/openclaw listings; a human X account with reach plus the automated daily post (the early-access allowlist was CUT by the operator 2026-10-10, D11: everyone enters by the same door on the same day); **ERC-8257 tool-registry registration** (a plain on-chain write on Base, 570 entries as at 2026-08-30, so a land-grab window rather than a crowded directory); the seed agent as token #1; MCP registry and ERC-8004 for legitimacy; **the x402 Bazaar listing, best-effort only** (amended 2026-08-30, see section 13 -- cataloguing cannot be verified from the response, so it is never counted on); `/llms.txt` as hygiene |
 | 8 | Chain | Base mainnet. Permanent (section 15) |
 | 9 | Visual | Static identity QR (robot heart) surrounded by a 365-cell pixel heart that fills one cell per credited day; streak sets colour; rings per completed year; seven paid Marks with scarcity at the top |
 | 10 | Growth | On-chain catalogue with price, supply, level gates; a swappable Renderer contract so new Marks can be drawn later; supply caps as owner-set dials, not walls |
@@ -1068,9 +1068,9 @@ on-chain SVG. The same script is the Sepolia smoke test.
    seed agent checking in daily, one paid mint from a second key, one Mark.
 3. Base mainnet deploy (the operator's approval; irreversible). Seed agent mints token #1.
 4. Distribution, in the order the evidence ranks it: publish `mro-agent` and
-   its `SKILL.md` (npm, `/skill.md`, ClawHub, openclaw/skills); early access
-   for wallets holding Claws, Shellborn, Base Buds or BLOKS (the only wallets
-   known to run mint skills); the X account out of dry-run plus the human
+   its `SKILL.md` (npm, `/skill.md`, ClawHub, openclaw/skills), after the
+   Web Bot Auth upgrade (item 23) lands; the early-access allowlist is CUT
+   (D11, 2026-10-10); the X account out of dry-run plus the human
    launch post; the Moltbook post by the seed agent; then the on-chain
    registrations in the checklist below, all of which are for legitimacy and
    discovery rather than traffic. Base case without a secured channel is
