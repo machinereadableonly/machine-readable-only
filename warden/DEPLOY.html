@@ -921,7 +921,7 @@ does not reach it.</p>
 </tr>
 <tr>
 <td>the Warden&#39;s question bank</td>
-<td><code>/var/lib/mro/questions/bank.json</code></td>
+<td><code>/etc/mro/bank.json</code></td>
 <td>root, group <code>mro</code>, 640</td>
 </tr>
 <tr>
@@ -1010,8 +1010,11 @@ or one payment backs one row only. A row that fails any check is not written,
 stays queued, and fails the night with a line naming why. A night with more
 queued rows than a <code>CLOCK_MAX_*</code> ceiling (defaults in <code>src/clock/run.mjs</code>)
 writes nothing.</p>
-<p><strong>Deploying this change, in order.</strong> Restart the Warden first, so that every row
-queued from then on carries its evidence; then re-run step 2. Rows queued
+<p><strong>Deploying this change, in order.</strong> Set <code>MRO_QUESTION_BANK=/etc/mro/bank.json</code>
+in the Warden&#39;s <code>.env</code> (the installer copies the bank there, root-owned, from
+<code>/var/lib/mro/questions/bank.json</code>; step 2 fails until the Warden points at it).
+Run step 2, then restart the Warden, so that every row queued from then on
+carries its evidence. Rows queued
 before the Warden restart have no evidence and are held: on Base Sepolia that
 costs those tokens one day; on mainnet, deploy before the door opens.</p>
 <p>To run the Clock once now, <code>bash warden/tools/run-clock-now.sh</code> starts the

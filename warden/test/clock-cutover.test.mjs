@@ -18,12 +18,12 @@ const assigned = (text, name) => {
 test("the cutover points the Warden at the Clock's own database and bank", () => {
   const state = assigned(cutover, "STATE");
   assert.equal(assigned(cutover, "NEW_DB").replace("$STATE", state), CLOCK_PATHS.stateDb);
-  assert.equal(assigned(cutover, "BANK").replace("$STATE", state), WARDEN_BANK);
+  assert.equal(assigned(cutover, "BANK"), WARDEN_BANK);
 });
 
 test("the installer puts both banks where the Warden and the Clock read them", () => {
-  const dir = assigned(installer, "BANK_DIR").replace("$STATE", assigned(installer, "STATE"));
-  assert.equal(dir, dirname(WARDEN_BANK));
+  assert.equal(assigned(installer, "BANK_DIR"), dirname(WARDEN_BANK));
+  assert.ok(!WARDEN_BANK.startsWith("/var/lib/mro/"), "never in a directory the main user can write");
   assert.equal(dirname(CLOCK_PATHS.bank), assigned(installer, "ETC"));
   assert.match(installer, /"\$ETC\/bank\.json"/);
   assert.equal(dirname(CLOCK_PATHS.ledger), assigned(installer, "LEDGER_DIR"));

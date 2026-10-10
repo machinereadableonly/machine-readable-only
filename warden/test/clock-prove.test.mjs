@@ -262,7 +262,7 @@ test("token 1 is written only for the house key", async () => {
 test("a seed is proven against its parent and recipient as signed", async () => {
   const call = await signedCall(AGENT, "seed", { parentId: 5, to: OWNER });
   const row = { tokenId: 9, parentId: 5, toAddress: OWNER, agentKeyId: call.keyId, qr: QR[9], day: DAY };
-  const { q, prover } = setup();
+  const { q, prover } = setup({ bound: { 5: call.keyId } });
   q.putEvidence("seed", 9, call.evidence);
   assert.equal((await prover.seed(row)).ok, true);
   assert.match((await prover.seed({ ...row, toAddress: STRANGER_ADDRESS })).why, /different recipient/);
@@ -316,7 +316,7 @@ test("the ledger lets a row re-claim its own proofs and refuses them to any othe
 test("a mint or seed recorded on a day other than the one it was signed is refused", async () => {
   const { call, row } = await mintCase();
   const seed = await signedCall(AGENT, "seed", { parentId: 5, to: OWNER });
-  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: nonce(1) }) } });
+  const { q, prover } = setup({ bound: { 5: seed.keyId }, receipts: { [txHash(1)]: settlement({ payNonce: nonce(1) }) } });
   q.putEvidence("mint", 2, call.evidence);
   q.putEvidence("seed", 9, seed.evidence);
   assert.match((await prover.mint({ ...row, day: DAY - 3 })).why, /not the day it was signed/);
@@ -348,4 +348,13 @@ test("a row's evidence is dropped once the row is written, and kept until then",
   q.markCreditWritten(7, DAY);
   assert.equal(q.evidenceFor("credit", `7:${DAY}`), null);
   assert.deepEqual(q.evidenceFor("credit", `7:${DAY + 1}`), { base: "c" });
+});
+
+test("a seed signed by a key the chain does not bind to the parent is refused", async () => {
+  const stranger = await signedCall(STRANGER, "seed", { parentId: 5, to: OWNER });
+  const agent = await signedCall(AGENT, "seed", { parentId: 5, to: OWNER });
+  const { q, prover } = setup({ bound: { 5: agent.keyId } });
+  q.putEvidence("seed", 9, stranger.evidence);
+  const r = await prover.seed({ tokenId: 9, parentId: 5, toAddress: OWNER, agentKeyId: stranger.keyId, qr: QR[9], day: DAY });
+  assert.match(r.why, /not signed by the key the chain binds/);
 });

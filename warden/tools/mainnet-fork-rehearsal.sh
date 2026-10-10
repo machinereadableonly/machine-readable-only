@@ -266,7 +266,13 @@ fi
 # --- 6. the Clock, mainnet mode ------------------------------------------------------
 step "6. the Clock in MAINNET mode against the fork"
 MIRROR="$WORK/clock-mirror.db"
-CLOCK_ENV=(BASE_RPC_URL="$FORK" MRO_CONTRACT_ADDRESS="$TOK" MRO_CHAIN_ID=8453 CLOCK_PRIVATE_KEY="$(testkey 1)" STATE_DB_PATH="$MIRROR" MRO_SPLIT_SEED_FILE="$SPLIT_SEED_FILE")
+# Token 1's seeded key is the house key, so the Clock writes it as token 1.
+HOUSE_KEY="$(cd "$TREE/warden" && node tools/mainnet-fork-clock.mjs key-id --token 1)"
+CLOCK_ENV=(BASE_RPC_URL="$FORK" MRO_CONTRACT_ADDRESS="$TOK" MRO_CHAIN_ID=8453 CLOCK_PRIVATE_KEY="$(testkey 1)" STATE_DB_PATH="$MIRROR" MRO_SPLIT_SEED_FILE="$SPLIT_SEED_FILE"
+  MRO_DOMAIN="$DOMAIN" TREASURY_ADDRESS="$TREASURY" MRO_HOUSE_KEY_ID="$HOUSE_KEY")
+# What every seeded row needs. Each payment is made by a fresh payer the
+# fork funds, never by an anvil test account.
+SEED_ARGS=(--db "$MIRROR" --domain "$DOMAIN" --rpc "$FORK" --treasury "$TREASURY")
 # clock <tree> <log> [NAME=value ...] -- extra settings for that run only.
 clock() {
   local tree="$1" log="$2"
@@ -283,15 +289,17 @@ else
 fi
 
 # 6b. A paid, solved mint for token 1, then the adopted copy's Clock writes it.
+# Each is signed by its own agent key and settled in fork USDC, so the Clock
+# proves it exactly as it would a real one.
 TODAY="$(cast call "$TOK" 'today()(uint32)' --rpc-url "$FORK" | awk '{print $1}')"
-if ( cd "$TREE/warden" && node tools/mainnet-fork-clock.mjs seed-mint --db "$MIRROR" --token 1 \
-     --to "$HOLDER" --day "$TODAY" --domain "$DOMAIN" ) > "$WORK/seed-mint.log" 2>&1; then
-  ok "seeded a paid mint for token 1 on day $TODAY, artwork solved against $DOMAIN"
+if ( cd "$TREE/warden" && node tools/mainnet-fork-clock.mjs seed-mint "${SEED_ARGS[@]}" --token 1 \
+     --to "$HOLDER" ) > "$WORK/seed-mint.log" 2>&1; then
+  ok "seeded a signed, paid mint for token 1 on day $TODAY, artwork solved against $DOMAIN"
 else
   bad "seeding the mint -- see $WORK/seed-mint.log"
 fi
-if ( cd "$TREE/warden" && node tools/mainnet-fork-clock.mjs seed-mint --db "$MIRROR" --token 2 \
-     --to "$DELEGATED" --day "$TODAY" --domain "$DOMAIN" ) > "$WORK/seed-mint2.log" 2>&1; then
+if ( cd "$TREE/warden" && node tools/mainnet-fork-clock.mjs seed-mint "${SEED_ARGS[@]}" --token 2 \
+     --to "$DELEGATED" ) > "$WORK/seed-mint2.log" 2>&1; then
   ok "seeded a paid mint for token 2 to the DELEGATED recipient"
 else
   bad "seeding the delegated mint -- see $WORK/seed-mint2.log"
@@ -321,12 +329,15 @@ else
 fi
 /bin/grep -q "builder code none yet" "$WORK/clock-run1.log" && note "Builder Code still null: every mainnet write would go unattributed (DEPLOY.md section 10)"
 
-# 6c. Two days on, a check-in and a Mark; twelve blocks so the mint reconciles.
-cast rpc evm_increaseTime 172800 --rpc-url "$FORK" >/dev/null
-cast rpc anvil_mine 0xd --rpc-url "$FORK" >/dev/null
-( cd "$TREE/warden" && node tools/mainnet-fork-clock.mjs seed-credit --db "$MIRROR" --token 1 --day $((TODAY + 1)) \
-  && node tools/mainnet-fork-clock.mjs seed-mark --db "$MIRROR" --token 1 --mark 1 ) > "$WORK/seed-2.log" 2>&1 \
+# 6c. A check-in signed on day TODAY+1 and a Mark, then a second day so that
+# day has closed; twelve blocks so the mint reconciles.
+cast rpc evm_increaseTime 86400 --rpc-url "$FORK" >/dev/null
+cast rpc anvil_mine 0x1 --rpc-url "$FORK" >/dev/null
+( cd "$TREE/warden" && node tools/mainnet-fork-clock.mjs seed-credit "${SEED_ARGS[@]}" --token 1 \
+  && node tools/mainnet-fork-clock.mjs seed-mark "${SEED_ARGS[@]}" --token 1 --mark 1 ) > "$WORK/seed-2.log" 2>&1 \
   || bad "seeding the check-in and the Mark -- see $WORK/seed-2.log"
+cast rpc evm_increaseTime 86400 --rpc-url "$FORK" >/dev/null
+cast rpc anvil_mine 0xd --rpc-url "$FORK" >/dev/null
 clock "$TREE" "$WORK/clock-run2.log" MAX_GAS_GWEI=5
 RUN2=$?
 CHECKIN_GAS="$(/bin/grep -oE "batchCheckIn x1 ok, tx 0x[0-9a-f]+, gas [0-9]+" "$WORK/clock-run2.log" | /bin/grep -oE "[0-9]+$")"

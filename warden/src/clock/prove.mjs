@@ -215,6 +215,8 @@ export function makeProver({ q, publicClient, contract, chainId, domain, treasur
       if (!v.ok) return v;
       if (v.keyId !== row.agentKeyId) return refuse("its signed request is from a different key");
       if (Number(v.args.parentId) !== Number(row.parentId)) return refuse("its signed request names a different parent");
+      const wrongKey = await signedBy(row.parentId, v.keyId);
+      if (wrongKey) return refuse(wrongKey);
       if (lower(v.args.to) !== lower(row.toAddress)) return refuse("its signed request names a different recipient");
       if (!inDays(v, row.day)) return refuse("its day is not the day it was signed");
       const badQr = qrProblem(row.qr, { domain, tokenId: row.tokenId });

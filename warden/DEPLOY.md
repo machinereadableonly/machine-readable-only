@@ -908,7 +908,7 @@ does not reach it.
 | its key, RPC url and paths | `/etc/mro-clock/clock.env` | `mro-clock`, 600 |
 | the split seed | `/etc/mro-clock/split-seed` | `mro-clock`, 600 |
 | the mirror, its cursor and lock | `/var/lib/mro/state.db*` | group `mro`, 660 |
-| the Warden's question bank | `/var/lib/mro/questions/bank.json` | root, group `mro`, 640 |
+| the Warden's question bank | `/etc/mro/bank.json` | root, group `mro`, 640 |
 | the Clock's question bank | `/etc/mro-clock/bank.json` | `mro-clock`, 600 |
 | the Clock's ledger | `/var/lib/mro-clock/ledger.db` | `mro-clock`, directory 700 |
 | the log | `/var/log/mro/clock.log` | `mro-clock`, group `mro`, 640, rotated weekly |
@@ -987,8 +987,11 @@ stays queued, and fails the night with a line naming why. A night with more
 queued rows than a `CLOCK_MAX_*` ceiling (defaults in `src/clock/run.mjs`)
 writes nothing.
 
-**Deploying this change, in order.** Restart the Warden first, so that every row
-queued from then on carries its evidence; then re-run step 2. Rows queued
+**Deploying this change, in order.** Set `MRO_QUESTION_BANK=/etc/mro/bank.json`
+in the Warden's `.env` (the installer copies the bank there, root-owned, from
+`/var/lib/mro/questions/bank.json`; step 2 fails until the Warden points at it).
+Run step 2, then restart the Warden, so that every row queued from then on
+carries its evidence. Rows queued
 before the Warden restart have no evidence and are held: on Base Sepolia that
 costs those tokens one day; on mainnet, deploy before the door opens.
 

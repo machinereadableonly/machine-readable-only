@@ -19,8 +19,10 @@ export const CLOCK_PATHS = {
   ledger: "/var/lib/mro-clock/ledger.db",
 };
 
-/// The Warden's copy of the question bank, which the cutover points it at.
-export const WARDEN_BANK = "/var/lib/mro/questions/bank.json";
+/// The Warden's copy of the question bank. In a directory only root can write:
+/// root installs this file, and a path the main user can rename into would let
+/// it point root's writes anywhere.
+export const WARDEN_BANK = "/etc/mro/bank.json";
 
 const COPIED = ["BASE_RPC_URL", "MRO_CONTRACT_ADDRESS", "MRO_CHAIN_ID", "MRO_DOMAIN", "TREASURY_ADDRESS"];
 const OPTIONAL = ["MAX_GAS_GWEI", "MRO_HOUSE_KEY_ID", "CLOCK_MAX_MINTS", "CLOCK_MAX_SEEDS", "CLOCK_MAX_MARKS", "CLOCK_MAX_CREDITS"];

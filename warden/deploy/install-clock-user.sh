@@ -6,9 +6,9 @@
 #
 # Copies the Clock's code and a Node binary to /opt/mro-clock (root-owned), its
 # key, split seed and own copy of the question bank to /etc/mro-clock (readable
-# by mro-clock only), the Warden's copy of the bank to /var/lib/mro/questions
-# (root-owned, read through group mro), makes /var/lib/mro-clock for the
-# Clock's ledger, and installs the system units DISABLED.
+# by mro-clock only), the Warden's copy of the bank to /etc/mro (root-owned,
+# read through group mro), makes /var/lib/mro-clock for the Clock's ledger, and
+# installs the system units DISABLED.
 # cutover-clock-user.sh enables them.
 #
 # Re-run it after every Clock code change, and after changing any Warden .env
@@ -34,7 +34,8 @@ NODE_VERSION=v24.14.1
 OPT=/opt/mro-clock
 ETC=/etc/mro-clock
 STATE=/var/lib/mro
-BANK_DIR="$STATE/questions"
+BANK_DIR=/etc/mro
+OLD_BANK="$STATE/questions/bank.json"
 LEDGER_DIR=/var/lib/mro-clock
 LOG_DIR=/var/log/mro
 UNITS=/etc/systemd/system
@@ -81,7 +82,7 @@ if [ "$DRY" -eq 1 ]; then
     || die "the Clock's env file could not be built from the Warden's .env (above)"
   ok "the Clock's env file builds from the Warden's .env"
   [ -f "$SEED_SRC" ] && ok "split seed found in the home directory" || ok "no split seed in the home directory; the installer needs one there or already in $ETC"
-  [ -f "$BANK_SRC" ] && ok "question bank found in the home directory" || ok "no question bank in the home directory; the installer needs one there or already in $BANK_DIR"
+  [ -f "$BANK_SRC" ] && ok "question bank found in the home directory" || ok "no question bank in the home directory; the installer needs one there, in $OLD_BANK or in $BANK_DIR"
   printf '\nWould install: %s, %s, %s, %s, %s/clock.log, /etc/logrotate.d/mro-clock,\n' "$OPT" "$ETC" "$BANK_DIR" "$LEDGER_DIR" "$LOG_DIR"
   printf '              %s/mro-clock.{service,timer} and mro-clock-alert.service (timer DISABLED)\n' "$UNITS"
   exit 0
@@ -130,24 +131,33 @@ else
 fi
 
 step "3. the question bank: the Warden's copy read through group mro, and the Clock's own"
-install -d -o root -g mro -m 2750 "$BANK_DIR"
+# Both source files sit where the main user can write, so they are READ AS THE
+# MAIN USER: root never follows a link the main user planted, and nothing root
+# alone can read ends up in a file group mro can read.
+read_as_main() { sudo -u "$MAIN_USER" cat "$1"; }
+install -d -o root -g root -m 755 "$BANK_DIR"
+BANK_NEW="$(mktemp "$BANK_DIR/bank.new.XXXXXX")"
+trap 'rm -f "$BANK_NEW"' EXIT
 if [ -f "$BANK_DIR/bank.json" ]; then
-  if [ -f "$BANK_SRC" ] && ! cmp -s "$BANK_SRC" "$BANK_DIR/bank.json"; then
-    die "the home copy of the question bank differs from $BANK_DIR/bank.json, which the Warden reads; make them one file"
-  fi
-  chown root:mro "$BANK_DIR/bank.json"
-  chmod 640 "$BANK_DIR/bank.json"
+  cat "$BANK_DIR/bank.json" > "$BANK_NEW"
   ok "question bank already in $BANK_DIR"
-elif [ -f "$BANK_SRC" ]; then
-  install -o root -g mro -m 640 "$BANK_SRC" "$BANK_DIR/bank.json"
-  ok "question bank copied to $BANK_DIR"
+elif sudo -u "$MAIN_USER" test -f "$OLD_BANK" && read_as_main "$OLD_BANK" > "$BANK_NEW"; then
+  ok "question bank taken from $OLD_BANK"
+elif sudo -u "$MAIN_USER" test -f "$BANK_SRC" && read_as_main "$BANK_SRC" > "$BANK_NEW"; then
+  ok "question bank taken from the home directory"
 else
-  die "no question bank in the home directory or in $BANK_DIR"
+  die "no question bank in $BANK_DIR, $OLD_BANK or the home directory"
 fi
+if sudo -u "$MAIN_USER" test -f "$BANK_SRC" && ! read_as_main "$BANK_SRC" | cmp -s - "$BANK_NEW"; then
+  die "the home copy of the question bank differs from the installed one; make them one file"
+fi
+install -o root -g mro -m 640 "$BANK_NEW" "$BANK_DIR/bank.json"
 # The Clock reveals question text from its own copy, which the main user
 # cannot reach; the two are compared in step 6.
-install -o mro-clock -g mro -m 600 "$BANK_DIR/bank.json" "$ETC/bank.json"
-ok "the Clock's copy of the question bank installed in $ETC"
+install -o mro-clock -g mro -m 600 "$BANK_NEW" "$ETC/bank.json"
+rm -f "$BANK_NEW"
+trap - EXIT
+ok "the Warden's bank in $BANK_DIR and the Clock's own copy in $ETC"
 
 step "3b. the Clock's ledger directory, writable by mro-clock only"
 install -d -o mro-clock -g mro -m 700 "$LEDGER_DIR"
@@ -188,6 +198,11 @@ as mro-clock test -r "$ETC/bank.json" && ok "mro-clock can read its question ban
 cmp -s "$BANK_DIR/bank.json" "$ETC/bank.json" && ok "the Warden's and the Clock's question banks are identical" || bad "the Warden's and the Clock's question banks differ"
 as "$MAIN_USER" test -r "$BANK_DIR/bank.json" && ok "$MAIN_USER can read the Warden's question bank" || bad "$MAIN_USER cannot read $BANK_DIR/bank.json"
 as "$MAIN_USER" test -w "$BANK_DIR/bank.json" && bad "$MAIN_USER CAN change the Warden's question bank" || ok "$MAIN_USER cannot change the Warden's question bank"
+if as "$MAIN_USER" /bin/grep -qx "MRO_QUESTION_BANK=$BANK_DIR/bank.json" "$WARDEN_ENV"; then
+  ok "the Warden reads $BANK_DIR/bank.json"
+else
+  bad "the Warden's settings do not set MRO_QUESTION_BANK=$BANK_DIR/bank.json; set it and restart the Warden"
+fi
 as mro-clock test -w "$LEDGER_DIR" && ok "mro-clock can write its ledger directory" || bad "mro-clock cannot write $LEDGER_DIR"
 as "$MAIN_USER" test -w "$LEDGER_DIR" && bad "$MAIN_USER CAN write the Clock's ledger directory" || ok "$MAIN_USER cannot write the Clock's ledger directory"
 as "$MAIN_USER" test -r "$ETC/clock.env" && bad "$MAIN_USER CAN read $ETC/clock.env" || ok "$MAIN_USER cannot read the Clock's env file"

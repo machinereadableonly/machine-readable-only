@@ -25,7 +25,7 @@ WARDEN="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WARDEN_ENV="$WARDEN/$(printf '.env')"
 STATE=/var/lib/mro
 NEW_DB="$STATE/state.db"
-BANK="$STATE/questions/bank.json"
+BANK=/etc/mro/bank.json
 UNITS=/etc/systemd/system
 
 step() { printf '\n== %s\n' "$1"; }
