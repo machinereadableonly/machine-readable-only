@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
+import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 import {TokenView} from "../src/render/TokenView.sol";
@@ -91,7 +92,7 @@ contract TokenUriGoldenTest is MroTestBase {
     }
 
     function test_tokenUriRevertsForANonexistentToken() public {
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, uint256(999)));
         t.tokenURI(999);
     }
 

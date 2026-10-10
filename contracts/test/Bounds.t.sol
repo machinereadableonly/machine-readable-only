@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {MroTestBase} from "./MroTestBase.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 
@@ -142,7 +143,7 @@ contract BoundsTest is MroTestBase {
         t.setUpgrade(1, _upg(1));
         t.pause();
         vm.prank(WARDEN);
-        vm.expectRevert();
+        vm.expectRevert(Pausable.EnforcedPause.selector);
         t.applyMark(1, 1, 0);
         assertEq(t.marksOf(1), 0, "no mark applied while paused");
 

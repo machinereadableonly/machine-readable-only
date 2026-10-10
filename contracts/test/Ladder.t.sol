@@ -357,9 +357,10 @@ contract LadderTest is MroTestBase {
 
         // And the ceiling holds: every remaining id is now closed by its partner.
         uint8[5] memory closed = [uint8(2), 3, 6, 8, 10];
+        uint8[5] memory by = [uint8(1), 4, 5, 7, 9];
         for (uint256 i = 0; i < closed.length; i++) {
             vm.prank(WARDEN);
-            vm.expectRevert();
+            vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkExcluded.selector, by[i]));
             t.applyMark(1, closed[i], 0);
         }
     }

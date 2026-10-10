@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 import {MroTestBase} from "./MroTestBase.sol";
@@ -146,7 +147,7 @@ contract VouchersTest is MroTestBase {
 
     function test_setVouchersEnabledRevertsForANonOwner() public {
         vm.prank(MALLORY);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
         t.setVouchersEnabled(true);
     }
 

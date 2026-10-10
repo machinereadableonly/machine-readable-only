@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Vm} from "forge-std/Vm.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 import {MroTestBase} from "./MroTestBase.sol";
@@ -54,7 +55,7 @@ contract MachineReadableOnlyTest is MroTestBase {
 
     function test_setRendererRevertsForANonOwner() public {
         vm.prank(MALLORY);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
         t.setRenderer(address(r));
     }
 
@@ -67,7 +68,7 @@ contract MachineReadableOnlyTest is MroTestBase {
 
     function test_setWardenRevertsForANonOwner() public {
         vm.prank(MALLORY);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
         t.setWarden(MALLORY);
     }
 
@@ -80,7 +81,7 @@ contract MachineReadableOnlyTest is MroTestBase {
 
     function test_setSupplyCapRevertsForANonOwner() public {
         vm.prank(MALLORY);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
         t.setSupplyCap(1);
     }
 
@@ -111,7 +112,7 @@ contract MachineReadableOnlyTest is MroTestBase {
 
     function test_setWalletCapRevertsForANonOwner() public {
         vm.prank(MALLORY);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
         t.setWalletCap(1);
     }
 
@@ -124,7 +125,7 @@ contract MachineReadableOnlyTest is MroTestBase {
 
     function test_pauseRevertsForANonOwner() public {
         vm.prank(MALLORY);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
         t.pause();
     }
 
@@ -133,7 +134,7 @@ contract MachineReadableOnlyTest is MroTestBase {
     function test_unpauseRevertsForANonOwner() public {
         t.pause();
         vm.prank(MALLORY);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
         t.unpause();
         // Still paused: the failed call changed nothing.
         assertTrue(t.paused());
@@ -159,7 +160,7 @@ contract MachineReadableOnlyTest is MroTestBase {
 
     function test_sunsetRevertsForANonOwner() public {
         vm.prank(MALLORY);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
         t.sunset();
     }
 
@@ -267,7 +268,7 @@ contract MachineReadableOnlyTest is MroTestBase {
     function test_mintIsBlockedByPause() public {
         t.pause();
         vm.prank(WARDEN);
-        vm.expectRevert();
+        vm.expectRevert(Pausable.EnforcedPause.selector);
         t.mint(1, ALICE, KEY, _code(), _today(), false);
     }
 
@@ -284,5 +285,36 @@ contract MachineReadableOnlyTest is MroTestBase {
         vm.prank(ALICE);
         t.transferFrom(ALICE, MALLORY, 1);
         assertEq(t.ownerOf(1), MALLORY);
+    }
+
+    /// @dev Ownable2Step's own gates. A stranger cannot start a handover, only
+    /// the named pending owner can finish one, and until it does the pending
+    /// owner holds none of the owner's powers.
+    function test_transferOwnershipRevertsForANonOwner() public {
+        vm.prank(MALLORY);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
+        t.transferOwnership(MALLORY);
+    }
+
+    function test_onlyThePendingOwnerCanAcceptOwnership() public {
+        address safe = address(0x5AFE);
+        t.transferOwnership(safe);
+        vm.prank(MALLORY);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
+        t.acceptOwnership();
+
+        vm.prank(safe);
+        t.acceptOwnership();
+        assertEq(t.owner(), safe);
+        assertEq(t.pendingOwner(), address(0));
+    }
+
+    function test_aPendingOwnerHasNoOwnerPowers() public {
+        address safe = address(0x5AFE);
+        t.transferOwnership(safe);
+        vm.prank(safe);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, safe));
+        t.setWarden(safe);
+        assertEq(t.owner(), address(this), "the handover is not complete until it is accepted");
     }
 }

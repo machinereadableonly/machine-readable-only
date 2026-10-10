@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {IERC4906} from "@openzeppelin/contracts/interfaces/IERC4906.sol";
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 import {MroTestBase} from "./MroTestBase.sol";
@@ -110,7 +111,7 @@ contract MarksTest is MroTestBase {
 
     function test_setUpgradeRevertsForANonOwner() public {
         vm.prank(MALLORY);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, MALLORY));
         t.setUpgrade(9, MachineReadableOnly.Upgrade({
             priceUsdc6: 1, maxSupply: 0, sold: 0,
             minLevel: 0, minStreak: 0, requiresWhole: false, active: true,

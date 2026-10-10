@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {IERC4906} from "@openzeppelin/contracts/interfaces/IERC4906.sol";
 
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
 import {Renderer} from "../src/render/Renderer.sol";
 import {MroTestBase} from "./MroTestBase.sol";
@@ -99,7 +100,7 @@ contract CheckInTest is MroTestBase {
         uint32 d = t.today() + 1;
         t.pause();
         vm.prank(WARDEN);
-        vm.expectRevert();
+        vm.expectRevert(Pausable.EnforcedPause.selector);
         t.batchCheckIn(_one(1), _days(d), _noBits(_days(d)), _silent(_days(d)));
         t.unpause();
         t.sunset();
