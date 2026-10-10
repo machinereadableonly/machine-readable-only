@@ -8,7 +8,7 @@ const { names, required } = wardenSettings();
 const full = [
   "MRO_DOMAIN=example.com", "CHALLENGE_SECRET=c", "QUESTION_SECRET=q", "BASE_RPC_URL=https://rpc.example",
   "MRO_CONTRACT_ADDRESS=0x" + "11".repeat(20), "TREASURY_ADDRESS=0x" + "22".repeat(20), "MRO_CHAIN_ID=84532",
-  "X402_FACILITATOR_URL=https://x402.org/facilitator", "STATE_DB_PATH=/home/someone/state.db",
+  "X402_FACILITATOR_URL=https://x402.org/facilitator", "STATE_DB_PATH=/srv/elsewhere/state.db",
   "CLOCK_CHECK_RPC_URL=https://other.example", "GH_TOKEN=not-the-wardens", "MRO_QUESTION_BANK=/tmp/bank.json",
 ].join("\n");
 

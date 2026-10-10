@@ -118,7 +118,7 @@ fi
 if [ -n "$FORK" ]; then
   # A FORK IS LOOPBACK OR IT IS NOT A FORK. Anything else could be a real
   # endpoint, and the test key below must never sign for one.
-  # Anchored: a prefix glob let `http://127.0.0.1:8545@mainnet.base.org` through.
+  # Anchored: a prefix glob let `http://127.0.0.1:8545@<remote-host>` through.
   if ! [[ "$FORK" =~ ^http://(127\.0\.0\.1|localhost):[0-9]+/?$ ]]; then
     echo "FAIL: --fork must be a loopback URL (http://127.0.0.1:<port>), got '$FORK'." >&2
     exit 1
