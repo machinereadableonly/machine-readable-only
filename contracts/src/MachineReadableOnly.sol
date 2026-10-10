@@ -192,9 +192,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
     /// @notice Say, on chain, that the operator is still here. Writes nothing
     /// else.
-    /// @dev Every other `onlyWarden` function needs real work to do, so without
-    /// this `lastWardenDay` would stop advancing when AGENTS go quiet rather
-    /// than only when the operator does. A one-token `batchCheckIn` would
+    /// @dev The Clock only writes on a night with work to do, so without this
+    /// `lastWardenDay` would stop advancing when AGENTS go quiet rather than
+    /// only when the operator does. A one-token `batchCheckIn` would
     /// restamp the clock just as cheaply and is refused on MEANING: it would
     /// write a visit the agent never made.
     ///
@@ -603,10 +603,9 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         return v > type(uint16).max ? type(uint16).max : uint16(v);
     }
 
-    /// @notice The longest run this token has ever completed.
-    /// @dev `bestRun` is only written on the way up, so the live `streak` can
-    /// exceed it by exactly one credit -- the one not yet folded in. Taking the
-    /// larger means the gate never lags the token by a day.
+    /// @notice The longest run this token has ever held.
+    /// @dev Every write of `streak` raises `bestRun` with it, so this is
+    /// `bestRun`; the max only guards that invariant.
     function _effectiveRun(Token storage s) private view returns (uint32) {
         uint32 best = s.bestRun;
         return s.streak > best ? s.streak : best;
@@ -870,7 +869,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         // single day and RETURNED.
         uint32 run = _effectiveRun(s);
         if (run < u.minStreak) revert MarkGate();
-        if (u.requiresWhole && s.level < 365) revert MarkGate();
+        if (u.requiresWhole && s.level < FINISH_LEVEL) revert MarkGate();
 
         if (u.excludes != 0 && held & u.excludes != 0) {
             revert MarkExcluded(_lowestMark(held & u.excludes));
@@ -998,7 +997,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         Token storage p = _tokens[parentId];
         if (p.resting) revert Resting(parentId);
         if (_agentKeyOf[parentId] != expectedKeyId) revert KeyChanged(parentId);
-        if (p.level < 365) revert ParentNotWhole();
+        if (p.level < FINISH_LEVEL) revert ParentNotWhole();
         // Same 32-bit ceiling as mint: seed is the other creation path.
         if (childId > type(uint32).max) revert IdTooLarge(childId);
         if (_ownerOf(childId) != address(0)) revert TokenExists(childId);

@@ -25,7 +25,9 @@ struct TokenView {
     uint24 fellDay;      // the day that run ended
     // ONE WORD, FIVE FIELDS. Bits 1-10 are the Mark ids in Ladder.sol's order
     // (1 Hush, 2 Ache, 3 Static, 4 Beat, 5 Iris bought, 6 Iris earned,
-    // 7 Vessel, 8 Break, 9 Tint, 10 Aura); bit 0 is unused and is not a Mark.
+    // 7 Vessel, 8 Break, 9 Tint, 10 Aura), and bits 11-15 the finisher Marks
+    // (11 Aorta, 12 Chamber, 13 Valve, 14 Atrium, 15 Apex), written by
+    // `_finish`; bit 0 is unused and is not a Mark.
     // Above them the same word carries the choices those Marks came with:
     //   bits 16-23  the Iris shape  (0 target, 1 squircle, 2 leaf)
     //   bits 24-31  the Tint ink    (0 violet, 1 gold)
