@@ -370,6 +370,17 @@ export function renderCases() {
     // Token 1 finishes with Aorta's ink and no place, so no number.
     out.push({ label: `answers ${name}, token 1 finished`, ...base, answers, ordinal: 0, marks: [finisherMark(65)] });
   }
+  // The same band on the 89-module canvas a child's echo ring makes, where the
+  // centring and edge coordinates differ. "dearest" is the pattern
+  // RealTokenGas.t.sol pins as the worst case: every side square lit and
+  // alternate bottom columns.
+  const dearest = words((i) => i < 122 || i >= 244 || ((i - 122) >> 1) % 2 === 0);
+  for (const [name, answers] of [...PATTERNS, ["dearest", dearest]]) {
+    out.push({
+      label: `answers ${name}, child finished 2nd`,
+      ...base, ...child, echo: 365, answers, ordinal: 2, marks: [finisherMark(2)],
+    });
+  }
 
   return out;
 }
