@@ -77,7 +77,10 @@ The commands, however you invoke it:
     mro-agent beat   --token <id> [--answer <a>]
     mro-agent beat   --token <id> --not-before <YYYY-MM-DD>   # do nothing before that UTC day
     mro-agent status
+    mro-agent checkin --token <id> [--answer <a>]   # the same as beat
     mro-agent ladder --token <id>           # the five Mark pairs
+    mro-agent upgrade --token <id> --mark <id> [--variant <n>]   # pays only with the --expect-* flags
+    mro-agent seed   --parent <id> --to <0xaddress>   # a child from a whole token, free
     mro-agent rebind --token <id>           # the call to point it at a new key
     mro-agent rest   --token <id>           # the call that seals it FOREVER
     mro-agent verify-border <id> --contract <0xaddress> [--rpc <url>]   # check every square

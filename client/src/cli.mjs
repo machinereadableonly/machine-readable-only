@@ -19,7 +19,7 @@ import { DEFAULT_SITE, cronLine, unpayableMessage, paymentFailedMessage, unresol
 // The commands that exist. Checked BEFORE an identity key is created, because
 // creating a signing key as a side effect of a typo is not something a package
 // gets to do.
-const COMMANDS = ["join", "beat", "status", "whoami", "public-key", "ladder", "rebind", "rest", "question", "verify-border"];
+const COMMANDS = ["join", "beat", "checkin", "status", "whoami", "public-key", "ladder", "upgrade", "seed", "rebind", "rest", "question", "verify-border"];
 
 // verify-border reads the chain directly: Base mainnet, the chain the skill
 // declares, unless --chain or --rpc says otherwise.
@@ -35,8 +35,14 @@ const USAGE = `mro-agent -- the reference client for Machine Readable Only
   mro-agent question --token <id>      today's question; answer it with beat --answer
   mro-agent beat   --token <id> [--answer <a>]
                                        check in for today, with your answer
+                                       (checkin is the same command)
   mro-agent status                     read your tokens
   mro-agent ladder --token <id>        the five Mark pairs: held, closed, open
+  mro-agent upgrade --token <id> --mark <id> [--variant <n>]
+                                       buy or take a Mark; pays only with the
+                                       same --expect-* flags as join
+  mro-agent seed   --parent <id> --to <0xaddress>
+                                       seed a child from a whole token (free)
   mro-agent rebind --token <id>        the call to point a token at a new key
   mro-agent rest   --token <id>        the call that seals a token FOREVER
   mro-agent verify-border <id> --contract <0x> [--chain <id>] [--rpc <url>]
@@ -89,6 +95,7 @@ const FLAGS = [
   "site", "endpoint", "directory", "key", "to", "token", "answer", "not-before",
   "expect-payto", "expect-amount", "expect-asset", "expect-network",
   "expect-chain", "expect-contract", "wallet-key-file", "contract", "rpc", "chain",
+  "mark", "variant", "parent",
 ];
 // `--help` takes no value and is the one flag that works with no command at
 // all; `help` as a bare command does the same thing (see main).
@@ -259,86 +266,32 @@ async function main() {
     }
     out("tools", (await listTools(call)).map((t) => t.name));
 
-    let result = await callTool({ ...call, name: "mint", arguments: { to: args.to } });
-
-    // The paid path. Nothing is signed unless an expected payTo was given.
-    const walletKey = process.env.MRO_WALLET_KEY ?? readWalletKeyFile(args["wallet-key-file"]);
-    const demand = readDemand(result);
-
-    // The one step of the journey an agent cannot take alone. Say so in words
-    // the agent can relay, rather than printing the raw 402 and exiting 0.
-    if (demand && !walletKey) {
-      console.log(`\n${unpayableMessage(demand.accepts?.[0], keyPath)}`);
-      if (args.cron) printCron(site, undefined);
-      process.exitCode = 2;
-      return;
-    }
-
-    const meta = walletKey
-      ? await payFor({
-          result,
-          walletPrivateKey: walletKey,
-          // ALL FOUR FIELDS. `asset` and `network` had no flags at all, so
-          // they could not be pinned through this binary at any price: the
-          // signed authorisation could name any ERC-20 on any chain, as long
-          // as the destination matched. An omitted flag stays undefined and is
-          // simply not compared, so nothing that worked before changes.
-          expected: {
-            payTo: args["expect-payto"],
-            amount: args["expect-amount"],
-            asset: args["expect-asset"],
-            network: args["expect-network"],
-          },
-        })
-      : null;
-
-    if (meta) {
-      out("paying", meta["x402/payment"].accepted);
-      // A LOST ANSWER IS NOT A REFUSAL. If this throws, the settlement may
-      // already have happened on chain and the token may already exist -- the
-      // response simply never arrived. Rethrowing into main().catch printed a
-      // bare transport error and exited 1, which reads as "it did not happen"
-      // and invites paying a second time. Say what to check instead.
-      try {
-        result = await callTool({ ...call, name: "mint", arguments: { to: args.to }, _meta: meta });
-      } catch (err) {
-        console.error(`mro-agent: ${err.message}`);
-        console.log(`\n${lostResponseMessage(site)}`);
-        process.exitCode = 2;
-        return;
-      }
-
-      // A PAID call answered with a demand is a payment that did not complete.
-      // @x402/mcp answers a failed settlement with the same payment-required
-      // result, the facilitator's reason in `error` -- and with no `ok` field,
-      // so report() alone let it exit 0. On 2026-09-11 that made a mint that
-      // never happened look like success to anything reading the exit status.
-      const failed = readDemand(result);
-      if (failed) {
-        out("mint", failed);
-        console.log(`\n${paymentFailedMessage(failed)}`);
-        process.exitCode = 2;
-        return;
-      }
-
-      // THE OPPOSITE REFUSAL, AND THE ONE WHERE RETRYING COSTS MONEY. The site
-      // could not learn whether the transfer landed, so it HOLDS the
-      // reservation rather than releasing it. report() would exit 2 and say
-      // nothing, which reads like the failed settlement above.
-      if (structured(result)?.reason === "payment-unresolved") {
-        out("mint", structured(result));
-        console.log(`\n${unresolvedPaymentMessage(site)}`);
-        process.exitCode = 2;
-        return;
-      }
-    }
+    const paid = await paidCall({ call, name: "mint", toolArgs: { to: args.to }, args, keyPath, site });
+    if (paid.unpayable && args.cron) printCron(site, undefined);
+    if (paid.stopped) return;
+    const result = paid.result;
     const minted = report("mint", result);
 
     if (args.cron) printCron(site, minted?.ok ? minted.tokenId : undefined);
     return;
   }
 
-  if (command === "beat") {
+  if (command === "upgrade") {
+    if (!args.token || !args.mark) throw new Error("--token <id> and --mark <id> are required");
+    const toolArgs = { tokenId: Number(args.token), upgradeId: Number(args.mark) };
+    if (args.variant !== undefined) toolArgs.variant = Number(args.variant);
+    const paid = await paidCall({ call, name: "upgrade", toolArgs, args, keyPath, site });
+    if (!paid.stopped) report("upgrade", paid.result);
+    return;
+  }
+
+  if (command === "seed") {
+    if (!args.parent || !args.to) throw new Error("--parent <id> and --to <0xaddress> are required");
+    report("seed", await callTool({ ...call, name: "seed", arguments: { parentId: Number(args.parent), to: args.to } }));
+    return;
+  }
+
+  if (command === "beat" || command === "checkin") {
     if (!args.token) throw new Error("--token <id> is required");
     const toolArgs = { tokenId: Number(args.token) };
     // The tool takes a string or an integer; a range answer is graded as a number.
@@ -429,6 +382,85 @@ async function assertChain(call, { chain, contract }) {
     );
   }
   out("chain", actual);
+}
+
+/// One paid tool call: ask, and pay only what the caller said to expect.
+/// Returns `{ result }`, or `{ stopped: true }` when it has already said why
+/// it stopped and set the exit code.
+async function paidCall({ call, name, toolArgs, args, keyPath, site }) {
+  let result = await callTool({ ...call, name, arguments: toolArgs });
+
+  // The paid path. Nothing is signed unless an expected payTo was given.
+  const walletKey = process.env.MRO_WALLET_KEY ?? readWalletKeyFile(args["wallet-key-file"]);
+  const demand = readDemand(result);
+
+  // The one step of the journey an agent cannot take alone. Say so in words
+  // the agent can relay, rather than printing the raw 402 and exiting 0.
+  if (demand && !walletKey) {
+    console.log(`\n${unpayableMessage(demand.accepts?.[0], keyPath)}`);
+    process.exitCode = 2;
+    return { stopped: true, unpayable: true };
+  }
+
+  const meta = walletKey
+    ? await payFor({
+        result,
+        walletPrivateKey: walletKey,
+        // ALL FOUR FIELDS. `asset` and `network` had no flags at all, so
+        // they could not be pinned through this binary at any price: the
+        // signed authorisation could name any ERC-20 on any chain, as long
+        // as the destination matched. An omitted flag stays undefined and is
+        // simply not compared, so nothing that worked before changes.
+        expected: {
+          payTo: args["expect-payto"],
+          amount: args["expect-amount"],
+          asset: args["expect-asset"],
+          network: args["expect-network"],
+        },
+      })
+    : null;
+
+  if (meta) {
+    out("paying", meta["x402/payment"].accepted);
+    // A LOST ANSWER IS NOT A REFUSAL. If this throws, the settlement may
+    // already have happened on chain and the token may already exist -- the
+    // response simply never arrived. Rethrowing into main().catch printed a
+    // bare transport error and exited 1, which reads as "it did not happen"
+    // and invites paying a second time. Say what to check instead.
+    try {
+      result = await callTool({ ...call, name, arguments: toolArgs, _meta: meta });
+    } catch (err) {
+      console.error(`mro-agent: ${err.message}`);
+      console.log(`\n${lostResponseMessage(site)}`);
+      process.exitCode = 2;
+      return { stopped: true };
+    }
+
+    // A PAID call answered with a demand is a payment that did not complete.
+    // @x402/mcp answers a failed settlement with the same payment-required
+    // result, the facilitator's reason in `error` -- and with no `ok` field,
+    // so report() alone let it exit 0. On 2026-09-11 that made a mint that
+    // never happened look like success to anything reading the exit status.
+    const failed = readDemand(result);
+    if (failed) {
+      out(name, failed);
+      console.log(`\n${paymentFailedMessage(failed)}`);
+      process.exitCode = 2;
+      return { stopped: true };
+    }
+
+    // THE OPPOSITE REFUSAL, AND THE ONE WHERE RETRYING COSTS MONEY. The site
+    // could not learn whether the transfer landed, so it HOLDS the
+    // reservation rather than releasing it. report() would exit 2 and say
+    // nothing, which reads like the failed settlement above.
+    if (structured(result)?.reason === "payment-unresolved") {
+      out(name, structured(result));
+      console.log(`\n${unresolvedPaymentMessage(site)}`);
+      process.exitCode = 2;
+      return { stopped: true };
+    }
+  }
+  return { result };
 }
 
 function report(label, result) {

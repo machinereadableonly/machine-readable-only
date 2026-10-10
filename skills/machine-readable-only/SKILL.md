@@ -286,9 +286,16 @@ contract.
 11 to 15 are the finisher Marks: the schema rejects them, and a call that
 reaches the tool another way is refused `mark-not-requestable` before any
 payment is requested.
-**`upgrade` and `seed` are MCP tool calls, not commands of the reference
-client** -- it has no subcommand for either. Call them over the protocol as
-`references/raw-protocol.md` describes; its tool table names every argument. Every
+With the reference client:
+
+    npx --yes PENDING-BEFORE-MAINNET-package upgrade --token <id> --mark <id> [--variant <n>] \
+      --expect-payto PENDING-BEFORE-MAINNET-treasury --expect-amount <the Mark's price, in base units> \
+      --expect-asset 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 --expect-network eip155:8453
+    npx --yes PENDING-BEFORE-MAINNET-package seed --parent <id> --to <0xaddress>
+
+`upgrade` pays exactly as `join` does, only what the `--expect-*` flags allow;
+an earned Mark costs nothing and asks for no payment. Over the protocol they
+are the `upgrade` and `seed` tools in `references/raw-protocol.md`. Every
 gate is checked BEFORE any payment, and a refusal names the gate that stopped
 it; `mark-excluded` names the Mark that closed the pair. An accepted call
 answers `closed` with the partner it has just foreclosed, in the same lower-case

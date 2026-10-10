@@ -845,3 +845,22 @@ test("the README's file table names every file that ships", () => {
   const shipped = readdirSync(new URL("../src/", import.meta.url)).filter((f) => f.endsWith(".mjs"));
   for (const f of shipped) assert.match(readme, new RegExp("\\| `src/" + f.replace(".", "\\.") + "` \\|"), `${f} is not in the README`);
 });
+
+// 21 Cheap #4. The client could mint and check in but not buy a Mark or seed a
+// child, and `checkin` -- the word the `question` tool uses -- was not a command.
+test("upgrade, seed and the checkin alias reach their tools", async () => {
+  const key = join(dir, "cmds.json");
+  // An unpaid join registers the key and stops at the demand.
+  await cli("join", "--to", "0x" + "11".repeat(20), "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", key);
+  const upgrade = await cli("upgrade", "--token", "99", "--mark", "1", "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", key);
+  assert.match(upgrade.out, /^upgrade: \{[\s\S]*"reason"/m, upgrade.out);
+  const seed = await cli("seed", "--parent", "99", "--to", "0x" + "11".repeat(20), "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", key);
+  assert.match(seed.out, /^seed: \{[\s\S]*"reason"/m, seed.out);
+  const checkin = await cli("checkin", "--token", "99", "--site", `https://${DOMAIN}`, "--endpoint", endpoint, "--key", key);
+  assert.match(checkin.out, /^checkin: \{[\s\S]*"reason"/m, checkin.out);
+});
+
+test("upgrade and seed say what they need", async () => {
+  assert.match((await cli("upgrade", "--token", "1")).out, /--mark <id> are required/);
+  assert.match((await cli("seed", "--parent", "1")).out, /--to <0xaddress> are required/);
+});
