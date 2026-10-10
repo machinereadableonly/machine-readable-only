@@ -10,7 +10,7 @@
 // private key and talks to a chain as module-load side effects.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -154,6 +154,25 @@ test("with no boot id on either side, a dead pid is still reclaimed", () => {
     takeLock(path, owner(4242, null), { isAlive: alive });
     takeLock(path, owner(9999, null), { isAlive: dead });
     assert.equal(JSON.parse(readFileSync(path, "utf8")).pid, 9999);
+  } finally {
+    cleanup();
+  }
+});
+
+// 08 Low 8. Two runs find the same dead lock. A reclaims it first; B, still
+// acting on the dead holder it read, must not delete the lock A now holds.
+test("a run that loses the reclaim race leaves the winner's lock in place", () => {
+  const { dir, cleanup } = tempDir();
+  try {
+    const path = join(dir, "run-lock");
+    writeFileSync(path, JSON.stringify(owner(4242, "boot-a")));
+    const winnerReclaims = () => {
+      takeLock(path, owner(1111, "boot-a"), { isAlive: dead });
+      return false;
+    };
+    assert.throws(() => takeLock(path, owner(2222, "boot-a"), { isAlive: winnerReclaims }), /taken by another run/);
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).pid, 1111, "the winner still holds the lock");
+    assert.deepEqual(readdirSync(dir), ["run-lock"], "and nothing is left beside it");
   } finally {
     cleanup();
   }

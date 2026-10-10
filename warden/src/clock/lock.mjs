@@ -13,7 +13,7 @@
 // Kept out of main.mjs so it can be tested at all: no test may import main.mjs,
 // which opens the mirror, reads a private key and talks to a chain as
 // module-load side effects. Same reason cursor.mjs is its own file.
-import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { linkSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 
 const BOOT_ID_PATH = "/proc/sys/kernel/random/boot_id";
 
@@ -87,7 +87,26 @@ export function takeLock(path, owner, { isAlive = processIsAlive } = {}) {
     );
   }
 
-  unlinkSync(path);
+  // MOVED ASIDE, then checked, never deleted blind: another run may have
+  // reclaimed the same dead lock since it was read, and the file at `path` is
+  // then that run's live lock. Anything but the dead holder goes back.
+  const aside = `${path}.reclaim.${owner.pid}`;
+  try {
+    renameSync(path, aside);
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+  const moved = readHolder(aside);
+  if (moved && (moved.pid !== holder.pid || moved.bootId !== holder.bootId)) {
+    try {
+      linkSync(aside, path);
+    } catch {
+      /* a third run already holds it: still not ours */
+    }
+    unlinkSync(aside);
+    throw new Error(`the run lock at ${path} was taken by another run while this one reclaimed it`);
+  }
+  if (moved) unlinkSync(aside);
   try {
     claim(path, owner);
   } catch (err) {
