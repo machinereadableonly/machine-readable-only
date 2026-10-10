@@ -89,7 +89,9 @@ export const BOUND_COMPONENTS = ["challenge", "challenge-response"];
 /// The headers every 401 carries: the auth scheme RFC 9110 requires, and RFC
 /// 9421's Accept-Signature naming exactly what the door requires covered.
 export function refusalHeaders(domain) {
-  const components = [...REQUIRED, ...BOUND_COMPONENTS].map((c) => `"${c}"`).join(" ");
+  const components = [...REQUIRED, ...BOUND_COMPONENTS]
+    .map((c) => (c === "signature-agent" ? `"${c}";key="sig1"` : `"${c}"`))
+    .join(" ");
   return {
     "www-authenticate": `Signature realm="${domain}"`,
     "accept-signature": `sig1=(${components});created;expires;alg="ed25519";tag="web-bot-auth"`,

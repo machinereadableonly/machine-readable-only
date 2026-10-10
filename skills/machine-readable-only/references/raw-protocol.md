@@ -116,7 +116,7 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 |---|---|
 | (none) | you sent no signature at all, so there is nothing to diagnose and the body carries no `reason` key |
 | `signature` | the signature did not verify |
-| `components` | the signature does not cover the required components. This is checked BEFORE the signature itself, so it says nothing about whether the signature would have verified. Or the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable `Signature-Input`, a `signature-agent` covered both plain and with a `key` parameter, or a `key` naming a member the `Signature-Agent` header does not have: check the structure of those two headers before changing what you sign |
+| `components` | the signature does not cover the required components. This is checked BEFORE the signature itself, so it says nothing about whether the signature would have verified. Or the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable `Signature-Input`, a `signature-agent` covered both plain and with a `key` parameter, a `key` naming a member the `Signature-Agent` header does not have, or a `Signature-Agent` dictionary covered whole instead of by its member: check the structure of those two headers before changing what you sign |
 | `expired` | the signature's own `expires` has passed, or the challenge is stale. Carries `serverTime` |
 | `window` | the signature asked to be valid for longer than five minutes, or carried no `expires` at all. Sign a shorter one, with an `expires` |
 | `clock-skew` | your `created` is more than 60s into our future. Carries `serverTime`: re-sign against it |
@@ -274,33 +274,31 @@ every `/mcp` request. Here is an example set; your values will differ in every
 field, and the signature, key id and challenge below are illustrative rather
 than a capture you can replay:
 
-    signature-agent: "https://<domain>"
+    signature-agent: sig1="https://<domain>"
     host: <domain>
     content-digest: sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:
     Signature: sig1=:dlaEbjSJiVOJknv5jiJaTKvqbIyfBkJoQzkrcwUVUnm2ozDmcoUZzRFfDHOrHku+XZzSYyJnQPRWC6NNSM9+Aw==:
-    Signature-Input: sig1=("@authority" "@method" "@path" "signature-agent" "content-digest" "challenge" "challenge-response");created=1788678057;keyid="xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo";alg="ed25519";expires=1788678117;nonce="EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==";tag="web-bot-auth"
+    Signature-Input: sig1=("@authority" "signature-agent";key="sig1" "@method" "@path" "content-digest" "challenge" "challenge-response");created=1788678057;keyid="xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo";alg="ed25519";expires=1788678117;nonce="EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==";tag="web-bot-auth"
     challenge: Py2tTQdqkPZR45S7kHJ1jQLxehSErNpCZfWZslvhXhg.1788678057537.5f273353bb89e3742e619b85513e4e0f4571e221a2c01461c9bcd26a8d02810b
     challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd68ff1
 
 That digest is of the EMPTY string, because the example signs a GET-shaped
 knock with no body. Yours is of the exact bytes you send.
 
-**`Signature-Agent` comes in two forms, and the door accepts both.** The
-example above shows the bare string, `"https://<domain>"`; the reference
-client sends the dictionary. The Web Bot Auth architecture draft (-05) calls
-the bare string legacy and uses a dictionary keyed by the signature label instead:
-`signature-agent: sig1="https://<domain>"`, covered in `Signature-Input` as
-`"signature-agent";key="sig1"`. The door reads the dictionary first, under the
-label of the first signature, and falls back to the bare string; either way it
-counts as covering `signature-agent`. If your library writes the dictionary,
-keep it.
+**`Signature-Agent` is a dictionary keyed by the signature label, and the
+signature covers that MEMBER.** Send `signature-agent: sig1="https://<domain>"`
+and cover it in `Signature-Input` as `"signature-agent";key="sig1"`, as the Web
+Bot Auth protocol draft requires of a signer. Covering the whole dictionary as
+plain `"signature-agent"` is refused `components`. The legacy bare string,
+`"https://<domain>"` covered as plain `"signature-agent"`, is still accepted;
+send the dictionary.
 
 Four rules, all enforced. Breaking one is refused with `components`, `expired`,
 `window`, or -- for a wrong `tag` -- `signature`:
 
 - **The signature must cover at least these components:** `@authority`,
-  `@method`, `@path`, `signature-agent`, `content-digest`, `challenge`,
-  `challenge-response`. The standard mandates only `@authority`; the other six
+  `@method`, `@path`, `signature-agent` (as the keyed member), `content-digest`,
+  `challenge`, `challenge-response`. The standard mandates only `@authority`; the other six
   are this service's own rule.
 
   **The challenge pair is covered, so answer the challenge BEFORE you sign.**

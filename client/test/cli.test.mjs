@@ -866,3 +866,14 @@ test("upgrade and seed say what they need", async () => {
   assert.match((await cli("upgrade", "--token", "1")).out, /--mark <id> are required/);
   assert.match((await cli("seed", "--parent", "1")).out, /--to <0xaddress> are required/);
 });
+
+// 08 Low 13: a pinned mro-agent@<version> must also pin the code it runs.
+test("the package ships a shrinkwrap, and every direct dependency is pinned exactly", async () => {
+  const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.ok(pkg.files.includes("npm-shrinkwrap.json"), "npm ships only what `files` lists");
+  const wrap = JSON.parse(await readFile(new URL("../npm-shrinkwrap.json", import.meta.url), "utf8"));
+  for (const [name, range] of Object.entries(pkg.dependencies)) {
+    assert.match(range, /^\d+\.\d+\.\d+$/, `${name} is pinned exactly, not ${range}`);
+    assert.equal(wrap.packages[`node_modules/${name}`]?.version, range, `${name} in the shrinkwrap`);
+  }
+});

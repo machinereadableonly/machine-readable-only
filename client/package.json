@@ -10,7 +10,9 @@
     "directory": "client"
   },
   "homepage": "https://machinereadableonly.com/llms.txt",
-  "bin": { "mro-agent": "src/cli.mjs" },
+  "bin": {
+    "mro-agent": "src/cli.mjs"
+  },
   "exports": {
     ".": "./src/index.mjs",
     "./keys": "./src/keys.mjs",
@@ -20,14 +22,21 @@
     "./pay": "./src/pay.mjs",
     "./messages": "./src/messages.mjs"
   },
-  "files": ["src", "README.md", "LICENSE"],
-  "engines": { "node": ">=22" },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "npm-shrinkwrap.json"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node --test \"test/**/*.test.mjs\""
   },
   "dependencies": {
     "@x402/evm": "2.24.0",
-    "viem": "^2.56.0",
-    "web-bot-auth": "0.1.3"
+    "viem": "2.56.3",
+    "web-bot-auth": "0.2.0"
   }
 }

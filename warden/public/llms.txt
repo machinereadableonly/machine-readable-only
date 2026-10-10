@@ -122,8 +122,8 @@ token is the only place its returning is kept. So the door admits the thing
 the piece is about.
 
 The mechanism is an RFC 9421 (Web Bot Auth) signature over seven components --
-`@authority`, `@method`, `@path`, `signature-agent`, `content-digest`,
-`challenge` and `challenge-response` -- where the challenge is of the form
+`@authority`, `@method`, `@path`, `signature-agent` (the member keyed by your
+signature label), `content-digest`, `challenge` and `challenge-response` -- where the challenge is of the form
 `nonce.timestamp.hmac` and must be answered within five seconds. The answer
 is `SHA-256(challenge || keyid)` in hex. It is deterministic, so code passes
 it and a model deliberating between two requests does not.

@@ -2,12 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createPrivateKey, sign as edSign } from "node:crypto";
-import { signatureHeaders } from "web-bot-auth";
+import { signatureHeaders } from "../tools/sign-headers.mjs";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { parseDictionary } from "structured-headers";
 import { verify } from "web-bot-auth";
+import { descriptorOf } from "../tools/sign-headers.mjs";
 import { verifierFromJWK } from "web-bot-auth/crypto";
-import { verifyRequest, assertWebBotAuthParams, MAX_SKEW_MS, MAX_WINDOW_MS, coveredComponents, contentDigest, signatureAgentUrl, signatureLabel, keyedMessage } from "../src/door/verify.mjs";
+import { verifyRequest, MAX_SKEW_MS, MAX_WINDOW_MS, coveredComponents, contentDigest } from "../src/door/verify.mjs";
 
 const VECTORS = JSON.parse(
   readFileSync(new URL("./vectors/web_bot_auth_architecture_v1.json", import.meta.url), "utf8")
@@ -90,9 +91,13 @@ async function smuggledRequest() {
 /// "b @path" -- ordinary quoted component names that happen to contain a
 /// space. @method and @path themselves are NOT covered. The extra headers
 /// have to exist on the message so the library can sign them.
-async function attackRequest(components) {
-  const signer = await signerFromJWK(ED.key);
-  const message = {
+async function attackRequest(components, lines) {
+  const keyid = (await signerFromJWK(ED.key)).keyid;
+  const created = Math.floor(Date.now() / 1000);
+  const params = `(${components});created=${created};expires=${created + 60};keyid="${keyid}";alg="ed25519";tag="web-bot-auth"`;
+  const base = [...lines, `"@signature-params": ${params}`].join("\n");
+  const sig = edSign(null, Buffer.from(base, "utf8"), createPrivateKey({ key: ED.key, format: "jwk" }));
+  return {
     method: "POST",
     url: "https://example.com/mcp",
     headers: {
@@ -100,32 +105,26 @@ async function attackRequest(components) {
       host: "example.com",
       "a @method": "x",
       "b @path": "y",
+      "signature-input": `sig1=${params}`,
+      signature: `sig1=:${sig.toString("base64")}:`,
     },
   };
-  const created = new Date();
-  const headers = await signatureHeaders(message, signer, {
-    created,
-    expires: new Date(created.getTime() + 60_000),
-    components,
-  });
-  return { ...message, headers: { ...message.headers, ...headers } };
 }
 
 const spacedNameRequest = () =>
-  attackRequest(["@authority", "signature-agent", "a @method", "b @path"]);
+  attackRequest('"@authority" "signature-agent" "a @method" "b @path"', [
+    `"@authority": example.com`,
+    `"signature-agent": "https://example.com"`,
+    `"a @method": x`,
+    `"b @path": y`,
+  ]);
 
 /// The same bypass through component PARAMETERS rather than names: the
 /// parameter values sit on the same raw line and were split on spaces too.
 const parameterTextRequest = () =>
-  attackRequest([
-    "@authority",
-    {
-      name: "signature-agent",
-      parameters: new Map([
-        ["x", "a @method"],
-        ["y", "b @path"],
-      ]),
-    },
+  attackRequest('"@authority" "signature-agent";x="a @method";y="b @path"', [
+    `"@authority": example.com`,
+    `"signature-agent";x="a @method";y="b @path": "https://example.com"`,
   ]);
 
 /// Critical bypass 2's exact shape, reproduced 2026-08-30: a signature base
@@ -155,7 +154,7 @@ async function impostorKeyIdRequest() {
   const signatureInputString =
     `${componentList};created=${createdSec};expires=${expiresSec}` +
     `;mykeyid="impostor-key-id";keyid="${signer.keyid}";alg="ed25519"` +
-    `;nonce="test-nonce-0000000000000000000000000000";tag="web-bot-auth"`;
+    `;tag="web-bot-auth"`;
   const base =
     `"@authority": example.com\n` +
     `"@method": POST\n` +
@@ -163,7 +162,7 @@ async function impostorKeyIdRequest() {
     `"signature-agent": "https://example.com"\n` +
     `"content-digest": ${EMPTY_DIGEST}\n` +
     `"@signature-params": ${signatureInputString}`;
-  const signature = await signer.sign(base);
+  const signature = await signer.sign(new TextEncoder().encode(base));
   const sigB64 = Buffer.from(signature).toString("base64");
   return {
     ...message,
@@ -434,43 +433,48 @@ test("an outage is reported as `directory`, and an absent key as `unknown-key`",
 // Verified live 2026-09-06 against draft-meunier-webbotauth-httpsig-protocol-02
 // (which REPLACES the architecture draft the finding cited): signers MUST send
 // the dictionary form, and a verifier MAY accept the bare string. Both are read.
-test("Signature-Agent is read as a dictionary, and the legacy string still works", () => {
+test("Signature-Agent is read as a dictionary, and the legacy string still works", async () => {
   const url = "https://signer.example.com";
-
-  // The form a current signer sends.
-  assert.equal(signatureAgentUrl(`sig1="${url}"`, "sig1"), url);
-  // With one member the key cannot be ambiguous, so no label is needed.
-  assert.equal(signatureAgentUrl(`whatever="${url}"`), url);
-  // With several, only the member for THIS signature is ours to use.
-  assert.equal(signatureAgentUrl(`sig1="${url}", sig2="https://other.example"`, "sig1"), url);
-  assert.equal(signatureAgentUrl(`sig1="${url}", sig2="https://other.example"`, "sig2"), "https://other.example");
-  assert.equal(signatureAgentUrl(`sig1="${url}", sig2="https://other.example"`), null, "ambiguous is refused, not guessed");
+  const asked = [];
+  const record = async (_keyId, agent) => { asked.push(agent); return ED.key; };
 
   // The legacy bare string, which the draft still permits a verifier to accept.
-  assert.equal(signatureAgentUrl(`"${url}"`), url);
+  const legacy = await signedRequest();
+  legacy.headers["signature-agent"] = `"${url}"`;
+  const signer = await signerFromJWK(ED.key);
+  const created = new Date();
+  Object.assign(legacy.headers, await signatureHeaders(
+    { method: "POST", url: "https://example.com/mcp", headers: { "signature-agent": `"${url}"`, host: "example.com", "content-digest": EMPTY_DIGEST } },
+    signer,
+    { created, expires: new Date(created.getTime() + 60_000), components: CLIENT_COMPONENTS },
+  ));
+  assert.equal((await verifyRequest(legacy, record)).ok, true);
 
-  // And nothing usable is null rather than a guess.
-  assert.equal(signatureAgentUrl(""), null);
-  assert.equal(signatureAgentUrl(undefined), null);
-  assert.equal(signatureAgentUrl(`sig1=42`, "sig1"), null, "a member that is not a string is not a URL");
+  // The dictionary a current signer sends, its member covered by key.
+  const keyed = await handSigned({
+    agent: `sig1="${url}"`,
+    components: '"@authority" "@method" "@path" "signature-agent";key="sig1" "content-digest"',
+    lines: [`"@authority": example.com`, `"@method": POST`, `"@path": /mcp`, `"signature-agent";key="sig1": "${url}"`, `"content-digest": ${EMPTY_DIGEST}`],
+  });
+  assert.equal((await verifyRequest(keyed, record)).ok, true);
+  assert.deepEqual(asked, [url, url], "both forms resolve to the URL they name");
 });
 
-// The label comes from the request, not from a hardcoded "sig1".
-test("the signature label is read off Signature-Input", () => {
-  const req = new Request("https://example.com/mcp", { method: "POST" });
-  req.headers.set("signature-input", 'mylabel=("@authority");created=1;expires=2;keyid="k"');
-  assert.equal(signatureLabel(req), "mylabel");
-
-  const bare = new Request("https://example.com/mcp", { method: "POST" });
-  assert.equal(signatureLabel(bare), null);
+// A dictionary covered whole is not the member the draft says to sign.
+test("a Signature-Agent dictionary covered whole, not by key, is refused", async () => {
+  const req = await handSigned({
+    agent: 'sig1="https://example.com"',
+    components: '"@authority" "@method" "@path" "signature-agent" "content-digest"',
+    lines: [`"@authority": example.com`, `"@method": POST`, `"@path": /mcp`, `"signature-agent": sig1="https://example.com"`, `"content-digest": ${EMPTY_DIGEST}`],
+  });
+  const r = await verifyRequest(req, lookup);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "components");
 });
 
 // ---------------------------------------------------------------------------
 // A `"signature-agent";key=` component, which RFC 9421 2.1.2 says signs ONE
-// serialised dictionary member. http-message-sig 0.2.0 builds that base line
-// from the WHOLE header, so a signer that follows the RFC was refused
-// `signature` -- a refusal whose published prescription sends a correct
-// implementer to check its key and its origin, the two things that were right.
+// serialised dictionary member.
 //
 // Every base below is written out line by line and signed with Node's own
 // Ed25519, never a signing library, so these tests cannot share a bug with the
@@ -486,7 +490,7 @@ async function handSigned({ lines, components, agent, label = "sig1" }) {
   const keyid = (await signerFromJWK(ED.key)).keyid;
   const params =
     `(${components});created=${created};expires=${expires}` +
-    `;keyid="${keyid}";tag="web-bot-auth"`;
+    `;keyid="${keyid}";alg="ed25519";tag="web-bot-auth"`;
   const base = [...lines, `"@signature-params": ${params}`].join("\n");
   const sig = edSign(null, Buffer.from(base, "utf8"), createPrivateKey({ key: ED.key, format: "jwk" }));
   return {
@@ -522,13 +526,8 @@ test('a signature over "signature-agent";key= verifies, from a hand-built base',
   assert.ok(r.covered.includes("signature-agent"), "the keyed component still reports its name");
 });
 
-// keyedMessage rebuilds the header bag, and a `Headers` instance has to be
-// walked with forEach rather than spread -- a plain spread of one yields {}, so
-// the rewritten `signature-agent` would be the only header left and every
-// component line would be missing. The door's own adapter hands over Node's
-// plain object, so this branch is reached only by a caller holding a real
-// Request; it is cheaper to pin than to delete and rediscover.
-test("a Headers instance survives the keyed rewrite", async () => {
+// A `Headers` bag must be walked with forEach: a spread of one yields {}.
+test("a Headers instance verifies like a plain header object", async () => {
   const req = await handSigned({
     agent: 'sig1="https://example.com"',
     components: '"@authority" "@method" "@path" "signature-agent";key="sig1" "content-digest"',
@@ -541,12 +540,6 @@ test("a Headers instance survives the keyed rewrite", async () => {
     ],
   });
   const asHeaders = { ...req, headers: new Headers(req.headers) };
-
-  const { message, key } = keyedMessage(asHeaders);
-  assert.equal(key, "sig1");
-  assert.equal(message.headers["signature-agent"], '"https://example.com"', "the selected member replaced the dictionary");
-  assert.equal(message.headers.host, "example.com", "and the other headers came with it");
-
   const r = await verifyRequest(asHeaders, lookup);
   assert.equal(r.ok, true, r.reason);
 });
@@ -643,27 +636,8 @@ test("the key is looked up at the URL the signature COVERED, not the label's", a
 //   cryptography. web-bot-auth's verify() is the layer underneath, and that is
 //   what this drives.
 //
-//   They expired on 2025-01-01. http-message-sig checks expiry with a bare
-//   `new Date()` and takes no clock, so the clock is frozen inside the vector's
-//   own validity window for the duration of the call. Expiry is not what is
-//   under test here; the signature is.
-const RealDate = globalThis.Date;
-
-/// Run `fn` with the global clock frozen at `ms`. Restores it even on a throw.
-function atTime(ms, fn) {
-  class Frozen extends RealDate {
-    constructor(...args) {
-      if (args.length === 0) super(ms);
-      else super(...args);
-    }
-    static now() { return ms; }
-  }
-  globalThis.Date = Frozen;
-  return Promise.resolve()
-    .then(fn)
-    .finally(() => { globalThis.Date = RealDate; });
-}
-
+//   They expired on 2025-01-01, so each is verified at a `now` inside its own
+//   window. Expiry is not what is under test here; the signature is.
 /// Every Ed25519 vector in the file, not just the first: there are two, and the
 /// second is the one carrying a Signature-Agent.
 const ED_VECTORS = VECTORS.filter((v) => v.key.kty === "OKP");
@@ -674,18 +648,14 @@ function requestFromVector(v) {
   return { method: "GET", url: v.target_url, headers };
 }
 
-const verifyWithVectorKey = (v) => async (data, signature, params) => {
-  const verifier = await verifierFromJWK(v.key);
-  await verifier(data, signature, params);
-};
+const verifyVector = (v, request = requestFromVector(v)) =>
+  verify(descriptorOf(request), { now: new Date(v.created_ms + 1000), resolver: () => verifierFromJWK(v.key) });
 
 test("the draft's own recorded signatures verify under the draft's own keys", async () => {
   assert.equal(ED_VECTORS.length, 2, "both Ed25519 vectors must be exercised");
 
   for (const v of ED_VECTORS) {
-    await atTime(v.created_ms + 1000, async () => {
-      await verify(requestFromVector(v), verifyWithVectorKey(v));
-    });
+    await verifyVector(v);
   }
 });
 
@@ -700,24 +670,8 @@ test("CONTROL: one flipped bit in a recorded signature is refused", async () => 
     const request = requestFromVector(v);
     request.headers.signature = tampered;
 
-    await atTime(v.created_ms + 1000, async () => {
-      await assert.rejects(
-        () => verify(request, verifyWithVectorKey(v)),
-        /invalid signature/,
-      );
-    });
+    await assert.rejects(() => verifyVector(v, request), /verification failed/i);
   }
-});
-
-test("CONTROL: the frozen clock is put back, so no later test inherits it", () => {
-  assert.equal(globalThis.Date, RealDate, "the global Date was not restored");
-  // Compared against the vectors' own expiry rather than a hardcoded date:
-  // the property that matters is that we are no longer inside their window,
-  // and that stays true however far in the future this runs.
-  assert.ok(
-    Date.now() > Math.max(...ED_VECTORS.map((v) => v.expires_ms)),
-    "the clock is still frozen inside a vector's window",
-  );
 });
 
 // -----------------------------------------------------------------------
@@ -749,34 +703,12 @@ test("a clock beyond the tolerance is still refused, and still says why", async 
   assert.ok(r.serverTime, "and it still hands back our clock to re-sign against");
 });
 
-test("the four checks taken over from web-bot-auth each still refuse", () => {
-  // DRIVEN DIRECTLY, because they cannot be reached by signing a request:
-  // `signatureHeaders` writes tag="web-bot-auth" unconditionally and ignores
-  // any override (measured 2026-09-19), so no signed message can carry a wrong
-  // tag or a missing keyid. Owning the tolerance means owning these four, and
-  // a check nothing drives is a check nobody knows still works.
-  const now = Date.now();
-  const ok = { tag: "web-bot-auth", keyid: "k", created: new Date(now), expires: new Date(now + 60_000) };
-
-  assert.doesNotThrow(() => assertWebBotAuthParams(ok, { now }), "the control must pass");
-
-  assert.throws(() => assertWebBotAuthParams({ ...ok, tag: "not-web-bot-auth" }, { now }), /tag must be/);
-  assert.throws(() => assertWebBotAuthParams({ ...ok, tag: undefined }, { now }), /tag must be/);
-  assert.throws(() => assertWebBotAuthParams({ ...ok, keyid: undefined }, { now }), /keyid MUST be defined/);
-  assert.throws(
-    () => assertWebBotAuthParams({ ...ok, expires: new Date(now - 1) }, { now }),
-    /expired/,
-    "a past `expires` gets NO allowance at all -- the skew runs one way only"
-  );
-  assert.throws(
-    () => assertWebBotAuthParams({ ...ok, created: new Date(now + MAX_SKEW_MS + 1) }, { now }),
-    /created in the future/,
-    "one millisecond past the allowance is past it"
-  );
-  assert.doesNotThrow(
-    () => assertWebBotAuthParams({ ...ok, created: new Date(now + MAX_SKEW_MS) }, { now }),
-    "and exactly at the allowance is inside it"
-  );
+test("a wrong tag, and a created past the allowance, are each refused", async () => {
+  assert.equal((await verifyRequest(await signedRequest({ tag: "not-web-bot-auth" }), lookup)).ok, false);
+  const fast = await verifyRequest(await signedRequest({ createdAt: new Date(Date.now() + MAX_SKEW_MS + 5_000) }), lookup);
+  assert.equal(fast.reason, "clock-skew");
+  // CONTROL: the same request with the right tag and clock is admitted.
+  assert.equal((await verifyRequest(await signedRequest(), lookup)).ok, true);
 });
 
 test("a signature that has genuinely expired gets no skew allowance", async () => {

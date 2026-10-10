@@ -26,7 +26,7 @@ import { createPublicClient, createWalletClient, http, parseAbi, parseSignature,
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 import { getDefaultAsset } from "@x402/evm";
-import { signatureHeaders } from "web-bot-auth";
+import { signatureHeaders } from "./sign-headers.mjs";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";

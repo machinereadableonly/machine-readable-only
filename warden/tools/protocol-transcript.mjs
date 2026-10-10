@@ -15,7 +15,7 @@ import { registrationMessage } from "../src/door/directory.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { signatureHeaders } from "web-bot-auth";
+import { signatureHeaders } from "./sign-headers.mjs";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { contentDigest } from "../src/door/verify.mjs";
 import { createServer } from "../src/server.mjs";

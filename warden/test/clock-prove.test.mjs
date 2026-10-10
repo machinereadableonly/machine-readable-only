@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync } from "node:crypto";
-import { signatureHeaders } from "web-bot-auth";
+import { signatureHeaders } from "../tools/sign-headers.mjs";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { encodeEventTopics, encodeAbiParameters } from "viem";
 import { getDefaultAsset } from "@x402/evm";

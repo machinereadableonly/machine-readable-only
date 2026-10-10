@@ -182,7 +182,7 @@ already in flight, and nothing else.</p>
 </tr>
 <tr>
 <td><code>components</code></td>
-<td>the signature does not cover the required components. This is checked BEFORE the signature itself, so it says nothing about whether the signature would have verified. Or the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable <code>Signature-Input</code>, a <code>signature-agent</code> covered both plain and with a <code>key</code> parameter, or a <code>key</code> naming a member the <code>Signature-Agent</code> header does not have: check the structure of those two headers before changing what you sign</td>
+<td>the signature does not cover the required components. This is checked BEFORE the signature itself, so it says nothing about whether the signature would have verified. Or the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable <code>Signature-Input</code>, a <code>signature-agent</code> covered both plain and with a <code>key</code> parameter, a <code>key</code> naming a member the <code>Signature-Agent</code> header does not have, or a <code>Signature-Agent</code> dictionary covered whole instead of by its member: check the structure of those two headers before changing what you sign</td>
 </tr>
 <tr>
 <td><code>expired</code></td>
@@ -340,31 +340,29 @@ because we are the ones holding your key.</p>
 every <code>/mcp</code> request. Here is an example set; your values will differ in every
 field, and the signature, key id and challenge below are illustrative rather
 than a capture you can replay:</p>
-<pre><code>signature-agent: &quot;https://&lt;domain&gt;&quot;
+<pre><code>signature-agent: sig1=&quot;https://&lt;domain&gt;&quot;
 host: &lt;domain&gt;
 content-digest: sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:
 Signature: sig1=:dlaEbjSJiVOJknv5jiJaTKvqbIyfBkJoQzkrcwUVUnm2ozDmcoUZzRFfDHOrHku+XZzSYyJnQPRWC6NNSM9+Aw==:
-Signature-Input: sig1=(&quot;@authority&quot; &quot;@method&quot; &quot;@path&quot; &quot;signature-agent&quot; &quot;content-digest&quot; &quot;challenge&quot; &quot;challenge-response&quot;);created=1788678057;keyid=&quot;xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo&quot;;alg=&quot;ed25519&quot;;expires=1788678117;nonce=&quot;EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==&quot;;tag=&quot;web-bot-auth&quot;
+Signature-Input: sig1=(&quot;@authority&quot; &quot;signature-agent&quot;;key=&quot;sig1&quot; &quot;@method&quot; &quot;@path&quot; &quot;content-digest&quot; &quot;challenge&quot; &quot;challenge-response&quot;);created=1788678057;keyid=&quot;xAsbMpK3qC5ubiVo608ggUTzGxHFkV8b2usPk822Kyo&quot;;alg=&quot;ed25519&quot;;expires=1788678117;nonce=&quot;EFNAsLdJQIEDXJeLhrdvNUcYzEboGuqnw4owgOTuvw4puMzpHwnT/ObeqJO9x7HLbCM1sUHOdtsDJafMQzw7xg==&quot;;tag=&quot;web-bot-auth&quot;
 challenge: Py2tTQdqkPZR45S7kHJ1jQLxehSErNpCZfWZslvhXhg.1788678057537.5f273353bb89e3742e619b85513e4e0f4571e221a2c01461c9bcd26a8d02810b
 challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd68ff1
 </code></pre>
 <p>That digest is of the EMPTY string, because the example signs a GET-shaped
 knock with no body. Yours is of the exact bytes you send.</p>
-<p><strong><code>Signature-Agent</code> comes in two forms, and the door accepts both.</strong> The
-example above shows the bare string, <code>&quot;https://&lt;domain&gt;&quot;</code>; the reference
-client sends the dictionary. The Web Bot Auth architecture draft (-05) calls
-the bare string legacy and uses a dictionary keyed by the signature label instead:
-<code>signature-agent: sig1=&quot;https://&lt;domain&gt;&quot;</code>, covered in <code>Signature-Input</code> as
-<code>&quot;signature-agent&quot;;key=&quot;sig1&quot;</code>. The door reads the dictionary first, under the
-label of the first signature, and falls back to the bare string; either way it
-counts as covering <code>signature-agent</code>. If your library writes the dictionary,
-keep it.</p>
+<p><strong><code>Signature-Agent</code> is a dictionary keyed by the signature label, and the
+signature covers that MEMBER.</strong> Send <code>signature-agent: sig1=&quot;https://&lt;domain&gt;&quot;</code>
+and cover it in <code>Signature-Input</code> as <code>&quot;signature-agent&quot;;key=&quot;sig1&quot;</code>, as the Web
+Bot Auth protocol draft requires of a signer. Covering the whole dictionary as
+plain <code>&quot;signature-agent&quot;</code> is refused <code>components</code>. The legacy bare string,
+<code>&quot;https://&lt;domain&gt;&quot;</code> covered as plain <code>&quot;signature-agent&quot;</code>, is still accepted;
+send the dictionary.</p>
 <p>Four rules, all enforced. Breaking one is refused with <code>components</code>, <code>expired</code>,
 <code>window</code>, or -- for a wrong <code>tag</code> -- <code>signature</code>:</p>
 <ul>
 <li><p><strong>The signature must cover at least these components:</strong> <code>@authority</code>,
-<code>@method</code>, <code>@path</code>, <code>signature-agent</code>, <code>content-digest</code>, <code>challenge</code>,
-<code>challenge-response</code>. The standard mandates only <code>@authority</code>; the other six
+<code>@method</code>, <code>@path</code>, <code>signature-agent</code> (as the keyed member), <code>content-digest</code>,
+<code>challenge</code>, <code>challenge-response</code>. The standard mandates only <code>@authority</code>; the other six
 are this service&#39;s own rule.</p>
 <p><strong>The challenge pair is covered, so answer the challenge BEFORE you sign.</strong>
 Section 4 has the formula; compute it, put both headers on the message, and

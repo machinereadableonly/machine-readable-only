@@ -75,8 +75,10 @@ export async function verifyEvidence(evidence, { domain, tool }) {
   }
   if ((await keyIdOf(evidence.jwk)) !== keyId) return refuse("its stored key does not hash to the signed key id");
   try {
-    const verify = await verifierFromJWK(evidence.jwk);
-    await verify(evidence.base, Buffer.from(evidence.signature, "base64"), {});
+    const verifier = await verifierFromJWK(evidence.jwk);
+    // Returns false on a bad signature; only a strict true admits.
+    const valid = await verifier.verify(new TextEncoder().encode(evidence.base), Buffer.from(evidence.signature, "base64"));
+    if (valid !== true) return refuse("its stored signature does not verify");
   } catch {
     return refuse("its stored signature does not verify");
   }

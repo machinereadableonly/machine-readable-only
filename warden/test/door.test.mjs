@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
-import { signatureHeaders } from "web-bot-auth";
+import { signatureHeaders } from "../tools/sign-headers.mjs";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { toRequestLike, pinnedUrl, challengeBody, admit, sweepSeen, sweepSpent } from "../src/door/middleware.mjs";
 import { contentDigest, MAX_WINDOW_MS } from "../src/door/verify.mjs";
@@ -135,6 +135,10 @@ async function signedRequest({ extraHeaders = {}, windowMs = 60_000, body = "", 
       "signature-agent": `"https://${DOMAIN}"`,
       host: DOMAIN,
       "content-digest": contentDigest(body),
+      // A covered field must be present to be signed: by default a real
+      // challenge with no answer, which the door refuses as `challenge`.
+      challenge: issueChallenge(SECRET).challenge,
+      "challenge-response": "",
       ...extraHeaders,
     },
   };

@@ -5,7 +5,7 @@
 // done by `web-bot-auth`, the same library the door verifies with, and what
 // this module adds is the four rules the door enforces on top of the standard.
 import { createHash } from "node:crypto";
-import { signatureHeaders } from "web-bot-auth";
+import { sign } from "web-bot-auth";
 import { signerFromJWK } from "web-bot-auth/crypto";
 import { answerChallenge } from "./challenge.mjs";
 
@@ -14,7 +14,8 @@ import { answerChallenge } from "./challenge.mjs";
  *
  * The standard mandates only @authority. The other six are the door's own
  * rule: method and path, signature-agent so the directory a key came from is
- * part of what was signed, content-digest so the signature is bound to the
+ * part of what was signed (covered as the member keyed "sig1", as the draft
+ * requires), content-digest so the signature is bound to the
  * BODY, and the challenge pair so only the key holder can answer it. Sign
  * fewer than these seven and the door answers 401 with reason "components".
  *
@@ -60,10 +61,8 @@ export const WINDOW_MS = 60_000;
  * simply will not verify -- which is the point, and is why this takes the
  * origin explicitly rather than inferring it.
  */
-/// The label web-bot-auth gives the signature it builds. Fixed by the library
-/// (measured, not assumed), and the Signature-Agent dictionary must be keyed
-/// by it -- so it has to be known BEFORE signing, because the header is itself
-/// a covered component.
+/// The signature's label. The Signature-Agent dictionary is keyed by it, so it
+/// is fixed BEFORE signing: the header is itself a covered component.
 export const SIGNATURE_LABEL = "sig1";
 
 export async function signRequest({ privateJwk, origin, signatureAgent, challenge, method = "POST", path = "/mcp", body = "", now = new Date() }) {
@@ -73,31 +72,34 @@ export async function signRequest({ privateJwk, origin, signatureAgent, challeng
     throw new Error("signRequest needs the door's challenge: it is a signed component");
   }
   const signer = await signerFromJWK(privateJwk);
-  const message = {
-    method,
-    url: new URL(path, origin).toString(),
-    headers: {
-      // THE DICTIONARY FORM, keyed by the signature label.
-      // draft-meunier-web-bot-auth-architecture-05 s4.2.1 makes Signature-Agent
-      // a Dictionary and RECOMMENDS the key match the signature label; the bare
-      // string survives only in the appendix's LEGACY EXAMPLES, which say "IF
-      // YOU ARE AN IMPLEMENTER, PLEASE UPDATE TO THE ABOVE". Checked against
-      // the live draft 2026-09-19. This package is the worked example agents
-      // copy, so it sends the current form -- and the door has read both since
-      // 2026-08-30, so nothing depends on the old one.
-      "signature-agent": `${SIGNATURE_LABEL}="${signatureAgent}"`,
-      host: new URL(origin).host,
-      // The EXACT bytes that will be sent. Sign a re-serialised copy of the
-      // same object and the digest will not match what arrives.
-      "content-digest": contentDigest(body),
-      challenge,
-      "challenge-response": answerChallenge(challenge, signer.keyid),
-    },
+  const url = new URL(path, origin).toString();
+  const headers = {
+    // THE DICTIONARY FORM, keyed by the signature label: the draft makes
+    // Signature-Agent a Dictionary and the signature covers that one member.
+    "signature-agent": `${SIGNATURE_LABEL}="${signatureAgent}"`,
+    host: new URL(origin).host,
+    // The EXACT bytes that will be sent. Sign a re-serialised copy of the
+    // same object and the digest will not match what arrives.
+    "content-digest": contentDigest(body),
+    challenge,
+    "challenge-response": answerChallenge(challenge, signer.keyid),
   };
-  const signed = await signatureHeaders(message, signer, {
+  const descriptor = {
+    kind: "request",
+    method,
+    targetUri: url,
+    fields: Object.entries(headers).map(([name, value]) => ({ name, value })),
+  };
+  // web-bot-auth adds @authority and "signature-agent";key="sig1" itself.
+  const signed = await sign(descriptor, {
+    signer,
     created: now,
     expires: new Date(now.getTime() + WINDOW_MS),
-    components: REQUIRED_COMPONENTS,
+    label: SIGNATURE_LABEL,
+    additionalComponents: REQUIRED_COMPONENTS.filter((c) => c !== "@authority" && c !== "signature-agent"),
   });
-  return { headers: { ...message.headers, ...signed }, keyId: signer.keyid };
+  return {
+    headers: { ...headers, Signature: signed.signature, "Signature-Input": signed.signatureInput },
+    keyId: signer.keyid,
+  };
 }

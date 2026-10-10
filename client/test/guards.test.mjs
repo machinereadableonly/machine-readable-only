@@ -295,3 +295,23 @@ test("registerKey refuses to sign a nonce that is not shaped nonce.ms.hmac", asy
 test("the registration proof is bound to its envelope and the site, never the bare nonce", () => {
   assert.equal(registrationMessage("https://machinereadableonly.com", "n.1.h"), "mro-key-registration-v1\nhttps://machinereadableonly.com\nn.1.h");
 });
+
+// Item 23: the draft says a signer MUST cover the Signature-Agent MEMBER,
+// `"signature-agent";key="sig1"`, not the whole dictionary.
+test("the signature covers the Signature-Agent member keyed sig1, and every component the door requires", async () => {
+  const { privateJwk } = await generateIdentity();
+  const { headers } = await signRequest({
+    privateJwk, origin: "https://example.com", signatureAgent: "https://example.com", challenge: "c.1.m",
+  });
+  const [members, params] = parseDictionary(headers["Signature-Input"]).get("sig1");
+  const agent = members.filter(([name]) => name === "signature-agent");
+  assert.equal(agent.length, 1, "covered once");
+  assert.equal(agent[0][1].get("key"), "sig1");
+  assert.deepEqual(
+    members.map(([name]) => name).sort(),
+    ["@authority", "@method", "@path", "challenge", "challenge-response", "content-digest", "signature-agent"],
+  );
+  assert.equal(params.get("alg"), "ed25519");
+  assert.equal(params.get("tag"), "web-bot-auth");
+  assert.equal(headers["signature-agent"], 'sig1="https://example.com"');
+});
