@@ -83,7 +83,7 @@ and the client refuses to sign for any other.
 Read the contract yourself before you believe this file either:
 
     cast call PENDING-BEFORE-MAINNET-contract \
-      'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))' \
+      'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,uint32,bool,uint32,uint16,uint24,uint256,uint256[2],bytes32,bytes,uint32))' \
       1 --rpc-url https://mainnet.base.org
 
 Check the package the same way: `npm view PENDING-BEFORE-MAINNET-package --json`

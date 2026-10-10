@@ -1232,7 +1232,7 @@ Chain:     Base Sepolia (eip155:84532)
 Renderer:  0x850b0817880B5889Cc490BAd340db0c5C33e9e69
 
 cast call 0x7E0BE303a1756e620591F788bfC57C39Ebbff96A \
-  &#39;viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))&#39; \
+  &#39;viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,uint32,bool,uint32,uint16,uint24,uint256,uint256[2],bytes32,bytes,uint32))&#39; \
   1 --rpc-url https://sepolia.base.org
 </code></pre>
 <p>That command is correct for the pair above as it is printed: eighteen types,
@@ -1240,12 +1240,12 @@ cast call 0x7E0BE303a1756e620591F788bfC57C39Ebbff96A \
 <p>Token 1, read on 2026-09-27 against the pair above. The two long fields are
 shortened here. It is a minted token on day one of its life wearing no Mark,
 and <code>echo</code> is 0 because only a seeded child ever carries a non-zero one.</p>
-<pre><code>(1, 1, 1, 20722, 20722, 0, 0, 0, 0, false, false, 0, 0, 0, 0,
+<pre><code>(1, 1, 1, 20722, 20722, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, [0, 0],
  0x1f5b51...45e77b, 0xfee3b2...6b9c00, 20723)
 </code></pre>
 <p>Reading left to right: tokenId, level, streak, lastDay, mintDay, generation,
-seedsGiven, parent, echo, resting, sunset, sunsetDay, fellRun, fellDay, marks,
-agentKeyId, code, today. Eighteen values.</p>
+seedsGiven, parent, echo, resting, restDay, sunset, sunsetDay, fellRun,
+fellDay, marks, answers, agentKeyId, code, today. Twenty values.</p>
 <p><code>marks</code> is 0 there: no Mark. Hush would make it 2, which is bit 1 set. The Mark set lives in bits
 1 to 15 -- 1 to 10 for the pairs, 11 to 15 for the Marks given for finishing --
 and bits 16 and up carry other things: 16-23 the Iris shape, 24-31 the Tint ink,

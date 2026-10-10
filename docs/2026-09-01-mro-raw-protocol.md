@@ -1168,7 +1168,7 @@ about a token, and it does not involve us at all.
     Renderer:  0x850b0817880B5889Cc490BAd340db0c5C33e9e69
 
     cast call 0x7E0BE303a1756e620591F788bfC57C39Ebbff96A \
-      'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,bool,uint32,uint16,uint24,uint256,bytes32,bytes,uint32))' \
+      'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,uint32,bool,uint32,uint16,uint24,uint256,uint256[2],bytes32,bytes,uint32))' \
       1 --rpc-url https://sepolia.base.org
 
 That command is correct for the pair above as it is printed: eighteen types,
@@ -1178,12 +1178,12 @@ Token 1, read on 2026-09-27 against the pair above. The two long fields are
 shortened here. It is a minted token on day one of its life wearing no Mark,
 and `echo` is 0 because only a seeded child ever carries a non-zero one.
 
-    (1, 1, 1, 20722, 20722, 0, 0, 0, 0, false, false, 0, 0, 0, 0,
+    (1, 1, 1, 20722, 20722, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, [0, 0],
      0x1f5b51...45e77b, 0xfee3b2...6b9c00, 20723)
 
 Reading left to right: tokenId, level, streak, lastDay, mintDay, generation,
-seedsGiven, parent, echo, resting, sunset, sunsetDay, fellRun, fellDay, marks,
-agentKeyId, code, today. Eighteen values.
+seedsGiven, parent, echo, resting, restDay, sunset, sunsetDay, fellRun,
+fellDay, marks, answers, agentKeyId, code, today. Twenty values.
 
 `marks` is 0 there: no Mark. Hush would make it 2, which is bit 1 set. The Mark set lives in bits
 1 to 15 -- 1 to 10 for the pairs, 11 to 15 for the Marks given for finishing --
