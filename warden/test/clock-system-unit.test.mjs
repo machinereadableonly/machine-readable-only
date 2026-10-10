@@ -174,3 +174,11 @@ test("the mainnet deploy checks the Safe's identity, not only its shape", () => 
   assert.match(deploy, /0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8/);
   assert.match(deploy, /the deploying key \$DEPLOYER_ADDRESS is one of the Safe's signers/);
 });
+
+test("the configuration checker asks for every setting mainnet requires", () => {
+  const setDomain = read("../deploy/set-domain.sh");
+  assert.match(setDomain, /\^MRO_CHAIN_ID=8453\$/);
+  for (const key of ["MRO_HOUSE_KEY_ID", "MRO_OWNER_SAFE", "CLOCK_CHECK_RPC_URL", "CDP_API_KEY_ID", "CDP_API_KEY_SECRET"]) {
+    assert.ok(setDomain.includes(key), key);
+  }
+});

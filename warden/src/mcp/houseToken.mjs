@@ -19,6 +19,8 @@ export function houseKeyIdFor(env, chainId) {
 
 /// The lowest id a mint by `keyId` may take. With no house key, ids start at 1.
 export function mintIdFloor(next, keyId, houseKeyId) {
-  if (!houseKeyId || keyId === houseKeyId) return next;
+  if (!houseKeyId) return next;
+  // The house key always asks for id 1, however many agents minted first.
+  if (keyId === houseKeyId) return 1;
   return Math.max(next, 2);
 }

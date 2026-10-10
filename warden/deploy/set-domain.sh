@@ -78,6 +78,17 @@ for key in MRO_DOMAIN CHALLENGE_SECRET BASE_RPC_URL MRO_CONTRACT_ADDRESS \
     MISSING=1
   fi
 done
+# Base mainnet requires five more; the Warden or the Clock refuses to start without them.
+if /bin/grep -qE '^MRO_CHAIN_ID=8453$' "$CONF"; then
+  for key in MRO_HOUSE_KEY_ID MRO_OWNER_SAFE CLOCK_CHECK_RPC_URL CDP_API_KEY_ID CDP_API_KEY_SECRET; do
+    if /bin/grep -qE "^${key}=.+" "$CONF"; then
+      printf '  %-24s set (mainnet)\n' "$key"
+    else
+      printf '  %-24s MISSING OR EMPTY (required on mainnet)\n' "$key"
+      MISSING=1
+    fi
+  done
+fi
 
 # The two values that are safe to show because they are public, and that are
 # the ones most likely to be wrong: the domain and the chain.

@@ -110,7 +110,10 @@ Claude can run that `chmod`, and can confirm the file exists and its mode with
 
 The eight, all required: `MRO_DOMAIN`, `CHALLENGE_SECRET`, `BASE_RPC_URL`,
 `MRO_CONTRACT_ADDRESS`, `MRO_CHAIN_ID`, `TREASURY_ADDRESS`,
-`X402_FACILITATOR_URL` and `STATE_DB_PATH`. `PORT` is optional and `ecosystem.config.cjs` supplies it;
+`X402_FACILITATOR_URL` and `STATE_DB_PATH`. On Base mainnet five more are
+required, and `set-domain.sh` checks them when `MRO_CHAIN_ID=8453`:
+`MRO_HOUSE_KEY_ID`, `MRO_OWNER_SAFE`, `CLOCK_CHECK_RPC_URL`, `CDP_API_KEY_ID`
+and `CDP_API_KEY_SECRET` (section 10). `PORT` is optional and `ecosystem.config.cjs` supplies it;
 the bind address is NOT read from the environment at all, it is hardcoded to
 127.0.0.1 in `main.mjs` so no misconfiguration anywhere can expose this port
 directly.
@@ -526,7 +529,10 @@ handling of the real owner key.
 | `X402_FACILITATOR_URL` | the configuration file | `https://api.cdp.coinbase.com/platform/v2/x402` -- the testnet host settles only Base Sepolia |
 | `CDP_API_KEY_ID` / `CDP_API_KEY_SECRET` | the configuration file | the CDP host answers 401 without them; the Warden REFUSES to start if the url is CDP's and these are unset |
 | `DEPLOY_BLOCK[8453]` | `src/clock/reconcile.mjs` | the Clock REFUSES to start without it, before writing anything (proven on the fork). `adopt-deployment.sh --chain 8453` writes it and keeps the Sepolia entry |
-| the mainnet Clock key | a NEW key, passed to `deploy-mainnet.sh --warden` and set as `CLOCK_PRIVATE_KEY` | the contract's warden is fixed at deploy; only `setWarden` corrects it afterwards |
+| the mainnet Clock key | made by `install-clock-user.sh --new-clock-key`, straight into `/etc/mro-clock`, which prints its address for `deploy-mainnet.sh --warden` | the contract's warden is fixed at deploy; only `setWarden` corrects it afterwards. It is never in the Warden's `.env` |
+| `MRO_HOUSE_KEY_ID` | the configuration file | the operator's own agent's key id: it alone is minted as token 1, and the Warden refuses to start without it off Sepolia |
+| `MRO_OWNER_SAFE` | the configuration file | the Safe that must own the contract; the Warden and the Clock refuse to start until it alone does (section 12) |
+| `CLOCK_CHECK_RPC_URL` | the configuration file | a second RPC from a different provider; the Clock refuses to start on mainnet without it (section 12, decision 13) |
 | `BUILDER_CODE` | `src/clock/builder-code.mjs` | Base credits the piece's on-chain activity only through this ERC-8021 suffix, and a write sent without it can never be attributed afterwards. It is SET to the issued code, `bc_dfhlohlh`, and pinned by `test/clock-builder-code.test.mjs`. **Nothing refuses to start without it**, so this row is the check that it survives the cutover; the Clock logs the code on every run |
 | `DEFAULT_RPC` | `client/src/cli.mjs` | `mro-agent verify-border` reads the chain directly and defaults to `https://sepolia.base.org`; left there, the command every agent-facing surface advertises looks up a mainnet address on a Sepolia node and answers `token N does not exist`. Set it to `https://mainnet.base.org` with the cutover |
 | the Clock's gas float | the warden wallet on mainnet | writes are paid in real ETH, not testnet ETH |
@@ -831,7 +837,7 @@ two it was.
    ```
    cd warden
    node tools/mirror-snapshot.mjs ~/backups/state.db.pre-reset.$(date -u +%Y%m%dT%H%M%SZ)
-   node tools/mirror-reset-chain.mjs state.db --yes
+   node tools/mirror-reset-chain.mjs --yes
    ```
 
    It empties `mark_orders`, `credits`, `mints`, `questions` and `tokens`, and

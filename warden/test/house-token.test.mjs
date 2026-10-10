@@ -40,3 +40,16 @@ test("off Base Sepolia the Warden refuses to start without a house key", () => {
   assert.equal(houseKeyIdFor({ MRO_HOUSE_KEY_ID: "abc" }, 8453), "abc");
   assert.equal(houseKeyIdFor({}, 84532), null);
 });
+
+// Agents may mint before the operator's own token does: the house mint must
+// still be token 1, not the next id after theirs.
+test("an agent already holds id 2; the house mint still takes id 1", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  const tool = makeMintTool({ q, chain: openChain(), paid: settleNow, today: () => 100, alert: () => {}, houseKeyId: "house" });
+  const agent = await tool.handler({ to: TO }, { keyId: "agent" });
+  assert.equal(agent.tokenId, 2);
+  const house = await tool.handler({ to: TO }, { keyId: "house" });
+  assert.equal(house.ok, true, house.reason);
+  assert.equal(house.tokenId, 1);
+});

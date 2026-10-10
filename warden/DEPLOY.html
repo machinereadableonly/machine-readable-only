@@ -155,7 +155,10 @@ env-shaped file in git.</p>
 <code>ls -la</code>, but must never display its contents.</p>
 <p>The eight, all required: <code>MRO_DOMAIN</code>, <code>CHALLENGE_SECRET</code>, <code>BASE_RPC_URL</code>,
 <code>MRO_CONTRACT_ADDRESS</code>, <code>MRO_CHAIN_ID</code>, <code>TREASURY_ADDRESS</code>,
-<code>X402_FACILITATOR_URL</code> and <code>STATE_DB_PATH</code>. <code>PORT</code> is optional and <code>ecosystem.config.cjs</code> supplies it;
+<code>X402_FACILITATOR_URL</code> and <code>STATE_DB_PATH</code>. On Base mainnet five more are
+required, and <code>set-domain.sh</code> checks them when <code>MRO_CHAIN_ID=8453</code>:
+<code>MRO_HOUSE_KEY_ID</code>, <code>MRO_OWNER_SAFE</code>, <code>CLOCK_CHECK_RPC_URL</code>, <code>CDP_API_KEY_ID</code>
+and <code>CDP_API_KEY_SECRET</code> (section 10). <code>PORT</code> is optional and <code>ecosystem.config.cjs</code> supplies it;
 the bind address is NOT read from the environment at all, it is hardcoded to
 127.0.0.1 in <code>main.mjs</code> so no misconfiguration anywhere can expose this port
 directly.</p>
@@ -541,8 +544,23 @@ handling of the real owner key.</p>
 </tr>
 <tr>
 <td>the mainnet Clock key</td>
-<td>a NEW key, passed to <code>deploy-mainnet.sh --warden</code> and set as <code>CLOCK_PRIVATE_KEY</code></td>
-<td>the contract&#39;s warden is fixed at deploy; only <code>setWarden</code> corrects it afterwards</td>
+<td>made by <code>install-clock-user.sh --new-clock-key</code>, straight into <code>/etc/mro-clock</code>, which prints its address for <code>deploy-mainnet.sh --warden</code></td>
+<td>the contract&#39;s warden is fixed at deploy; only <code>setWarden</code> corrects it afterwards. It is never in the Warden&#39;s <code>.env</code></td>
+</tr>
+<tr>
+<td><code>MRO_HOUSE_KEY_ID</code></td>
+<td>the configuration file</td>
+<td>the operator&#39;s own agent&#39;s key id: it alone is minted as token 1, and the Warden refuses to start without it off Sepolia</td>
+</tr>
+<tr>
+<td><code>MRO_OWNER_SAFE</code></td>
+<td>the configuration file</td>
+<td>the Safe that must own the contract; the Warden and the Clock refuse to start until it alone does (section 12)</td>
+</tr>
+<tr>
+<td><code>CLOCK_CHECK_RPC_URL</code></td>
+<td>the configuration file</td>
+<td>a second RPC from a different provider; the Clock refuses to start on mainnet without it (section 12, decision 13)</td>
 </tr>
 <tr>
 <td><code>BUILDER_CODE</code></td>
@@ -825,7 +843,7 @@ restart.</p>
 <li><p><strong>Snapshot the mirror, then clear its chain rows.</strong></p>
 <pre><code>cd warden
 node tools/mirror-snapshot.mjs ~/backups/state.db.pre-reset.$(date -u +%Y%m%dT%H%M%SZ)
-node tools/mirror-reset-chain.mjs state.db --yes
+node tools/mirror-reset-chain.mjs --yes
 </code></pre>
 <p>It empties <code>mark_orders</code>, <code>credits</code>, <code>mints</code>, <code>questions</code> and <code>tokens</code>, and
 KEEPS <code>keys</code>, which are door state rather than chain state. Every one of
