@@ -719,10 +719,19 @@ export async function warmUp(paid, price = MINT_PRICE, alert = console.error) {
     await paid.prepare(price, MINT_RESOURCE.tool, MINT_RESOURCE.description);
     return { ready: true, authFailure: false, message: null };
   } catch (err) {
-    const message = err.message ?? String(err);
+    const message = errorChain(err);
     alert(`payment is not ready: ${message}`);
     return { ready: false, authFailure: looksLikeAuthFailure(message), message };
   }
+}
+
+/// An error's message and every `cause` beneath it. @x402/core's initialize()
+/// throws a fixed sentence and keeps the facilitator's real answer -- a 401
+/// included -- on `cause`, so the message alone never names the status.
+export function errorChain(err) {
+  const parts = [];
+  for (let e = err, depth = 0; e && depth < 6; e = e.cause, depth += 1) parts.push(e.message ?? String(e));
+  return parts.join(" <- ");
 }
 
 /// Does this failure look like a CREDENTIAL being refused, rather than a host

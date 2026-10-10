@@ -1283,3 +1283,38 @@ test("two spellings of one authorisation cannot reserve two things", () => {
     /already/i,
   );
 });
+
+// THE LIBRARY'S OWN ERROR, from a real facilitator that answers 401. Its
+// message is a fixed sentence; the status is only on `cause`.
+test("a facilitator answering 401 is a credential failure, read off the library's real error", async () => {
+  const { createServer } = await import("node:http");
+  const { x402ResourceServer, HTTPFacilitatorClient } = await import("@x402/core/server");
+  const { registerExactEvmScheme } = await import("@x402/evm/exact/server");
+  const facilitator = createServer((req, res) => { res.writeHead(401, { "content-type": "application/json" }); res.end('{"error":"unauthorized"}'); });
+  await new Promise((resolve) => facilitator.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${facilitator.address().port}`;
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const paid = makePaymentGateway({
+      facilitatorUrl: "https://example.invalid/",
+      network: "eip155:8453",
+      payTo: "0xdead",
+      // The real initialisation, pointed at the loopback facilitator.
+      build: async () => {
+        const server = registerExactEvmScheme(new x402ResourceServer(new HTTPFacilitatorClient({ url })), { networks: ["eip155:8453"] });
+        await server.initialize();
+        return server;
+      },
+      wrapFactory: fakeWrap(),
+    });
+    const result = await warmUp(paid, "$0.10", () => {});
+    assert.equal(result.ready, false);
+    assert.match(result.message, /^Failed to initialize: .* <- .*\(401\)/, "the chain carries the status");
+    assert.equal(result.authFailure, true);
+    assert.equal(bootDecisionFor({ ...result, chainId: 8453 }), "exit");
+  } finally {
+    console.warn = warn;
+    facilitator.close();
+  }
+});
