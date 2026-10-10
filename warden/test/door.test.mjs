@@ -1329,3 +1329,16 @@ test("an ordinary refusal carries NO serverTime, because time is not its problem
   });
   assert.equal(decision.body.serverTime, undefined);
 });
+
+// 16 Low. The protocol promises `serverTime` on every `expired`, and a stale
+// challenge is the commonest one a slow client meets.
+test("a stale challenge is refused expired, and carries serverTime", async () => {
+  const signer = await signerFromJWK(ED.key);
+  const { challenge } = issueChallenge(SECRET, Date.now() - 10 * 60_000);
+  const req = await signedRequest({
+    extraHeaders: { challenge, "challenge-response": answerFor(challenge, signer.keyid) },
+  });
+  const decision = await admit(req, { secret: SECRET, lookupKey: lookupED, seen: new Set(), spent: new Map(), domain: DOMAIN });
+  assert.equal(decision.body.reason, "expired");
+  assert.equal(typeof decision.body.serverTime, "string");
+});

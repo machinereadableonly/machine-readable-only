@@ -432,7 +432,7 @@ export function answerBandCells({ ordinal = 0, answers = [0n, 0n], level = 0 }, 
   if (level < FIRST_SIDE) return { cells, modules: 0 };
 
   const modules = canvasUnits(canvasCells, size) / unitsFor(size).module;
-  const pad = (modules - DIGIT_SPAN) / 2;
+  const pad = Math.floor((modules - DIGIT_SPAN) / 2);
   const start = Math.floor((modules - ANSWER_COLS) / 2);
   const sides = level >= DAY_CELLS ? 3 : Math.floor(level / FIRST_SIDE);
 

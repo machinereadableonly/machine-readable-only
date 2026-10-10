@@ -175,7 +175,9 @@ export async function admit(req, deps) {
   const answer = headerOf(like, "challenge-response");
   const offered = headerOf(like, "challenge");
   const checked = checkChallenge(secret, offered, answer, verified.keyId, now, seen);
-  if (!checked.ok) return fail(checked.reason);
+  if (!checked.ok) {
+    return fail(checked.reason, checked.reason === "expired" ? { serverTime: new Date(now).toISOString() } : null);
+  }
 
   // THE EVIDENCE, CARRIED FORWARD. `credits.sigHash` is the record of which
   // signed request bought a day, and the door is the only place that ever
