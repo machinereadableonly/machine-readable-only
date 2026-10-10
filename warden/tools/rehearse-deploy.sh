@@ -39,6 +39,7 @@ umask 077
 cat > "$CONF" <<EOF
 MRO_DOMAIN=example.com
 CHALLENGE_SECRET=rehearsal-only-not-a-real-secret
+QUESTION_SECRET=rehearsal-only-question-secret
 BASE_RPC_URL=https://sepolia.base.org
 # Only has to be a well-formed address for startup to pass; override when the
 # deployed contract moves. Nothing here reads the chain.

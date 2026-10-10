@@ -77,7 +77,7 @@ before(async () => {
     bank: BANK,
     q, chain, today: utcDay,
     contract: "0xcontract", chainId: 84532,
-    challengeSecret: SECRET, domain: DOMAIN, llmsTxt: "",
+    challengeSecret: SECRET, questionSecret: SECRET, domain: DOMAIN, llmsTxt: "",
     catalogue: {}, supplyCap: 10_000,
     // THE REAL GATEWAY AND THE REAL WRAPPER, with only the network stubbed
     // (5.I2).

@@ -120,7 +120,7 @@ function startJourney({ catalogue = STUB_CATALOGUE } = {}) {
     contract: CONTRACT,
     chainId: CHAIN_ID,
     llmsTxt: "# machine readable only",
-    challengeSecret: SECRET,
+    challengeSecret: SECRET, questionSecret: SECRET,
     domain: DOMAIN,
     alert: (message) => alerts.push(message),
   });
@@ -128,7 +128,7 @@ function startJourney({ catalogue = STUB_CATALOGUE } = {}) {
   const server = createServer({
     stateDbPath,
     domain: DOMAIN,
-    challengeSecret: SECRET,
+    challengeSecret: SECRET, questionSecret: SECRET,
     // THE SHARED VIEW. The same function the status tool calls.
     tokenView,
     // THE SAME PAIR the MCP handler was given. main.mjs passes one variable to

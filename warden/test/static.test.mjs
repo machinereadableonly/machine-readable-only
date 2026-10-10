@@ -27,7 +27,7 @@ async function start(overrides = {}) {
   const server = createServer({
     stateDbPath: ":memory:",
     domain: "example.com",
-    challengeSecret: "s".repeat(43),
+    challengeSecret: "s".repeat(43), questionSecret: "s".repeat(43),
     tokenView: () => null,
     contract: "0x00000000000000000000000000000000000C0DE0", chainId: 84532,
     mcp: { nodeHandler: (req, res) => { res.writeHead(200); res.end("mcp"); } },

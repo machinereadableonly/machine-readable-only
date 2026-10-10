@@ -5,14 +5,14 @@ import { FINISH_LEVEL } from "../ladder.mjs";
 import { questionFor, publicShape, answerSetSize, answerDeadline, ANSWER_WINDOW_MS } from "../question.mjs";
 import { onChainBy, isMintDay, MINT_DAY_NEXT } from "../nextSteps.mjs";
 
-export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now = Date.now }) {
+export function makeQuestionTool({ q, bank, questionSecret, today = utcDay, now = Date.now }) {
   // Both at construction, like requireChain: a tool built without them would
   // refuse every caller, or key the day's choice on nothing. The SHAPE only --
   // makeMcpHandler and boot run the full assertBankSane, and this factory runs
   // on every MCP call. An empty bank is checked because questionFor would
   // divide by its length.
   if (!Array.isArray(bank) || bank.length === 0) throw new Error("question tool needs a non-empty question bank");
-  if (!challengeSecret) throw new Error("question tool needs the challenge secret");
+  if (!questionSecret) throw new Error("question tool needs the question secret");
   return {
     name: "question",
     config: {
@@ -47,7 +47,7 @@ export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now
         };
       }
 
-      const chosen = questionFor(day, challengeSecret, bank);
+      const chosen = questionFor(day, questionSecret, bank);
       // The FIRST issue wins, so a second look cannot shop for a question the
       // artwork would rather record.
       const issued = q.issueQuestion(tokenId, day, chosen.id, now(), answerSetSize(chosen));

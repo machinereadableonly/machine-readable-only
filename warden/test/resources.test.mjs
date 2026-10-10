@@ -43,7 +43,7 @@ async function call(handler, payload) {
 function handler() {
   return makeMcpHandler({
     bank: BANK,
-    challengeSecret: SECRET,
+    challengeSecret: SECRET, questionSecret: SECRET,
     q: queries(openDb(":memory:")),
     chain: openChain(),
     contract: "0xcontract",

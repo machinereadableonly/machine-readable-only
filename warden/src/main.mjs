@@ -82,6 +82,10 @@ const HOST = "127.0.0.1";
 
 const domain = requireEnv("MRO_DOMAIN");
 const challengeSecret = requireEnv("CHALLENGE_SECRET");
+// Orders the daily questions. Separate so rotating the door's secret does not
+// reshuffle every question still to come.
+const questionSecret = requireEnv("QUESTION_SECRET");
+if (questionSecret === challengeSecret) throw new Error("QUESTION_SECRET must differ from CHALLENGE_SECRET");
 const rpcUrl = requireEnv("BASE_RPC_URL");
 const contract = requireEnv("MRO_CONTRACT_ADDRESS");
 // Where every USDC payment lands. x402's `payTo`.
@@ -383,6 +387,7 @@ async function main() {
     contract,
     chainId,
     challengeSecret,
+    questionSecret,
     domain,
     llmsTxt,
     paid,

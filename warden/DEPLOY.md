@@ -108,7 +108,8 @@ chmod 600 ~/projects/machine-readable-only/warden/.env
 Claude can run that `chmod`, and can confirm the file exists and its mode with
 `ls -la`, but must never display its contents.
 
-The eight, all required: `MRO_DOMAIN`, `CHALLENGE_SECRET`, `BASE_RPC_URL`,
+The nine, all required: `MRO_DOMAIN`, `CHALLENGE_SECRET`, `QUESTION_SECRET`
+(different from `CHALLENGE_SECRET`, and never rotated), `BASE_RPC_URL`,
 `MRO_CONTRACT_ADDRESS`, `MRO_CHAIN_ID`, `TREASURY_ADDRESS`,
 `X402_FACILITATOR_URL` and `STATE_DB_PATH`. On Base mainnet five more are
 required, and `set-domain.sh` checks them when `MRO_CHAIN_ID=8453`:
@@ -607,6 +608,29 @@ handling of the real owner key.
    `X402_FACILITATOR_URL`, the CDP pair, `TREASURY_ADDRESS`, `MRO_HOUSE_KEY_ID`
    and `MRO_OWNER_SAFE`. `MRO_CONTRACT_ADDRESS` still names Sepolia here; step 8
    changes it. The running Warden is untouched until it restarts.
+
+3b. **Make mainnet's split seed and back it up OFFLINE -- [OPERATOR].** The
+   seed draws every answer square for the life of the piece; lose it and
+   every write stops, paid mints included (by design, D8.5). Make it outside
+   `~/.mro-split`:
+
+   ```
+   node ~/projects/machine-readable-only/warden/tools/split-seed.mjs new ~/.mro-mainnet/split-seed
+   ```
+
+   Then back it up the way a wallet recovery phrase is kept:
+   1. show it once in your own terminal (`cat ~/.mro-mainnet/split-seed`) and
+      write the 64 characters on paper, twice;
+   2. check each paper copy by typing it back in, hidden:
+      `node ~/projects/machine-readable-only/warden/tools/split-seed.mjs verify ~/.mro-mainnet/split-seed`
+      must answer `match`;
+   3. keep the two copies in two places, with the hardware wallets' recovery
+      sheets, where the Safe's signers can reach them;
+   4. `clear` the terminal. The seed is never photographed, typed into a
+      password manager in the cloud, emailed or committed.
+
+   Restoring is the reverse: type it into a new mode-600 file and check that
+   `split-seed.mjs anchor <file>` prints the contract's `splitAnchor()`.
 
 4. **Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].** First the
    simulation, then the send:

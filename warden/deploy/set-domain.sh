@@ -67,7 +67,7 @@ echo "Mode is now:    $(stat -c %a "$CONF")"
 echo
 echo "Required configuration -- presence only, no values shown:"
 MISSING=0
-for key in MRO_DOMAIN CHALLENGE_SECRET BASE_RPC_URL MRO_CONTRACT_ADDRESS \
+for key in MRO_DOMAIN CHALLENGE_SECRET QUESTION_SECRET BASE_RPC_URL MRO_CONTRACT_ADDRESS \
            MRO_CHAIN_ID TREASURY_ADDRESS X402_FACILITATOR_URL STATE_DB_PATH; do
   # Set AND non-empty. A key present with an empty value fails at startup just
   # as surely as an absent one, so they are reported the same way.

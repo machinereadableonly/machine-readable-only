@@ -29,7 +29,7 @@ async function startServer(overrides = {}) {
   const config = {
     stateDbPath: ":memory:",
     domain: DOMAIN,
-    challengeSecret: "s".repeat(32),
+    challengeSecret: "s".repeat(32), questionSecret: "s".repeat(32),
     tokenView: () => null,
     mcp: { nodeHandler: (req, res) => { res.writeHead(200); res.end("mcp"); } },
     allowRegistration: () => true,

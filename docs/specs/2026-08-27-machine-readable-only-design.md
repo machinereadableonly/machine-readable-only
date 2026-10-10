@@ -955,6 +955,7 @@ agent's abandonment rather than the operator's.
 | `WARDEN_PRIVATE_KEY` | VPS `.env` (chmod 600, WinSCP-edited, never in the PM2 dump) | mint, check-in, apply marks; holds only gas ETH |
 | `TREASURY_ADDRESS` | VPS `.env` (address only) | receives USDC; no key on the VPS |
 | `CHALLENGE_SECRET` | VPS `.env` | HMAC for stateless challenges |
+| `QUESTION_SECRET` | VPS `.env` | orders the daily questions; separate so a door-secret rotation does not reshuffle them (D10, 2026-10-10) |
 | Contract owner key | PC / hardware wallet | dials, pause, Renderer swap, ownership handover |
 | `SEED_AGENT_JWK`, `SEED_PAY_KEY` | VPS `.env` | the seed agent's signing key and a key holding a few USDC |
 | `CDP_API_KEY`, `X_API_*`, `ALCHEMY_KEY` | VPS `.env` | facilitator, daily post, RPC |

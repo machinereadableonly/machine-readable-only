@@ -153,7 +153,8 @@ env-shaped file in git.</p>
 </code></pre>
 <p>Claude can run that <code>chmod</code>, and can confirm the file exists and its mode with
 <code>ls -la</code>, but must never display its contents.</p>
-<p>The eight, all required: <code>MRO_DOMAIN</code>, <code>CHALLENGE_SECRET</code>, <code>BASE_RPC_URL</code>,
+<p>The nine, all required: <code>MRO_DOMAIN</code>, <code>CHALLENGE_SECRET</code>, <code>QUESTION_SECRET</code>
+(different from <code>CHALLENGE_SECRET</code>, and never rotated), <code>BASE_RPC_URL</code>,
 <code>MRO_CONTRACT_ADDRESS</code>, <code>MRO_CHAIN_ID</code>, <code>TREASURY_ADDRESS</code>,
 <code>X402_FACILITATOR_URL</code> and <code>STATE_DB_PATH</code>. On Base mainnet five more are
 required, and <code>set-domain.sh</code> checks them when <code>MRO_CHAIN_ID=8453</code>:
@@ -663,6 +664,28 @@ known: <code>MRO_CHAIN_ID</code>, <code>BASE_RPC_URL</code>, <code>CLOCK_CHECK_R
 and <code>MRO_OWNER_SAFE</code>. <code>MRO_CONTRACT_ADDRESS</code> still names Sepolia here; step 8
 changes it. The running Warden is untouched until it restarts.</p>
 </li>
+</ol>
+<p>3b. <strong>Make mainnet&#39;s split seed and back it up OFFLINE -- [OPERATOR].</strong> The
+   seed draws every answer square for the life of the piece; lose it and
+   every write stops, paid mints included (by design, D8.5). Make it outside
+   <code>~/.mro-split</code>:</p>
+<pre><code>node ~/projects/machine-readable-only/warden/tools/split-seed.mjs new ~/.mro-mainnet/split-seed
+</code></pre>
+<p>   Then back it up the way a wallet recovery phrase is kept:</p>
+<ol>
+<li>show it once in your own terminal (<code>cat ~/.mro-mainnet/split-seed</code>) and
+write the 64 characters on paper, twice;</li>
+<li>check each paper copy by typing it back in, hidden:
+<code>node ~/projects/machine-readable-only/warden/tools/split-seed.mjs verify ~/.mro-mainnet/split-seed</code>
+must answer <code>match</code>;</li>
+<li>keep the two copies in two places, with the hardware wallets&#39; recovery
+sheets, where the Safe&#39;s signers can reach them;</li>
+<li><code>clear</code> the terminal. The seed is never photographed, typed into a
+password manager in the cloud, emailed or committed.</li>
+</ol>
+<p>   Restoring is the reverse: type it into a new mode-600 file and check that
+   <code>split-seed.mjs anchor &lt;file&gt;</code> prints the contract&#39;s <code>splitAnchor()</code>.</p>
+<ol start="4">
 <li><p><strong>Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].</strong> First the
 simulation, then the send:</p>
 <pre><code>cd ~/projects/machine-readable-only/contracts

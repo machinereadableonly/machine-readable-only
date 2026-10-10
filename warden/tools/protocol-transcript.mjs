@@ -57,7 +57,7 @@ const bank = loadBank(bankPath());
 const mcp = makeMcpHandler({
   bank,
   q, chain, today: utcDay, contract: CONTRACT, chainId: CHAIN_ID,
-  challengeSecret: SECRET, domain: DOMAIN, llmsTxt: "", paid,
+  challengeSecret: SECRET, questionSecret: SECRET, domain: DOMAIN, llmsTxt: "", paid,
   // THE REAL CATALOGUE, exactly as main.mjs boots it. This read `{}` until
   // 2026-09-02, which predated the catalogue being wired at all -- and an empty
   // catalogue does not make the capture silent, it makes it LIE: every `upgrade`
@@ -69,7 +69,7 @@ const mcp = makeMcpHandler({
   catalogue: assertLadderSane(LADDER), supplyCap: 10_000,
 });
 const server = createServer({
-  stateDbPath: join(dir, "mirror.db"), domain: DOMAIN, challengeSecret: SECRET,
+  stateDbPath: join(dir, "mirror.db"), domain: DOMAIN, challengeSecret: SECRET, questionSecret: SECRET,
   tokenView, mcp, allowRegistration: () => true,
   // The same pair the handler got: /t/<id> publishes them, and a capture that
   // used different ones would document a service nobody runs.

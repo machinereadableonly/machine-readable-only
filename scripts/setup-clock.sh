@@ -44,6 +44,7 @@ if [ ! -f "$ENV_FILE" ]; then
   # the 5-second entry challenge -- so it is generated here rather than being
   # a value anyone typed or pasted.
   CHALLENGE="$(openssl rand -base64 32)"
+  QUESTION="$(openssl rand -base64 32)"
 
   cat > "$ENV_FILE" <<ENVEOF
 # The Warden's configuration, for BASE SEPOLIA (testnet).
@@ -59,6 +60,9 @@ MRO_DOMAIN=machinereadableonly.com
 
 # HMAC secret for the stateless entry challenge. Generated above.
 CHALLENGE_SECRET=$CHALLENGE
+
+# Orders the daily questions; separate from the door's secret. Generated above.
+QUESTION_SECRET=$QUESTION
 
 # Read-only Base RPC endpoint. LOAD-BEARING FOR EVERY WRITE: the tools read the
 # contract's own gates (sunset, pause, resting, wallet cap) through it, and the

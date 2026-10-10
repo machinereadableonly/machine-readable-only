@@ -3,6 +3,7 @@
 //
 //   node warden/tools/split-seed.mjs new <path>      make a seed, print its anchor
 //   node warden/tools/split-seed.mjs anchor <path>   print an existing seed's anchor
+//   node warden/tools/split-seed.mjs verify <path>   check a typed-in backup against it
 //
 // It prints ONLY `anchor 0x...`, never the seed. `new` writes mode 0600,
 // refuses a file that already exists, and refuses any path inside this
@@ -11,6 +12,8 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, openSync, writeSync, closeSync, realpathSync, existsSync } from "node:fs";
 import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createInterface } from "node:readline";
+import { Writable } from "node:stream";
 import { chainKeys } from "../src/clock/split.mjs";
 import { loadSplitSeed } from "../src/clock/splitSeed.mjs";
 
@@ -34,7 +37,7 @@ function insideRepo(path) {
 }
 
 const [command, path] = process.argv.slice(2);
-if (!path || (command !== "new" && command !== "anchor")) fail("usage: split-seed.mjs new|anchor <path>");
+if (!path || !["new", "anchor", "verify"].includes(command)) fail("usage: split-seed.mjs new|anchor|verify <path>");
 
 if (command === "new") {
   if (insideRepo(path)) fail("refusing a path inside the repository: keep the seed outside every worktree");
@@ -56,5 +59,23 @@ if (command === "new") {
   } catch (err) {
     fail(err.message);
   }
-  console.log(`anchor ${chainKeys(seed)[0]}`);
+  if (command === "anchor") {
+    console.log(`anchor ${chainKeys(seed)[0]}`);
+  } else {
+    // Typed input is not echoed, so the seed never lands in terminal scrollback.
+    const muted = new Writable({ write: (_chunk, _enc, done) => done() });
+    const rl = createInterface({ input: process.stdin, output: muted, terminal: Boolean(process.stdin.isTTY) });
+    process.stderr.write("Type the backup copy, then Enter (it is not shown): ");
+    rl.once("line", (line) => {
+      rl.close();
+      process.stderr.write("\n");
+      const hex = line.trim().replace(/^0x/i, "").toLowerCase();
+      if ("0x" + hex === seed) {
+        console.log("match: the backup restores this seed");
+      } else {
+        console.log("DIFFERENT: the backup does not match this seed");
+        process.exitCode = 1;
+      }
+    });
+  }
 }

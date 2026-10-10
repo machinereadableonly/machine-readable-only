@@ -21,7 +21,7 @@ function setup({ lastDay = 100, level = 1, keyId = "k1", resting = false } = {})
   if (level !== 1) db.prepare("UPDATE tokens SET level = ? WHERE tokenId = 1").run(level);
   if (resting) q.setResting(1);
   let clock = 1_000_000;
-  const tool = makeQuestionTool({ q, bank: BANK, challengeSecret: "s", today: () => 101, now: () => clock });
+  const tool = makeQuestionTool({ q, bank: BANK, questionSecret: "s", today: () => 101, now: () => clock });
   return { q, tool, tick: (ms) => { clock += ms; } };
 }
 
@@ -69,11 +69,11 @@ test("refusals: unbound, unknown, resting, already credited today, year complete
 // this factory runs on every MCP call.
 test("the tool refuses to be built without a bank or without the secret", () => {
   const q = queries(openDb(":memory:"));
-  assert.throws(() => makeQuestionTool({ q, challengeSecret: "s" }), /non-empty question bank/);
+  assert.throws(() => makeQuestionTool({ q, questionSecret: "s" }), /non-empty question bank/);
   // An empty array is the one a bare Array.isArray check let through, and
   // questionFor would divide by its length.
-  assert.throws(() => makeQuestionTool({ q, bank: [], challengeSecret: "s" }), /non-empty question bank/);
-  assert.throws(() => makeQuestionTool({ q, bank: BANK, challengeSecret: "" }), /challenge secret/);
+  assert.throws(() => makeQuestionTool({ q, bank: [], questionSecret: "s" }), /non-empty question bank/);
+  assert.throws(() => makeQuestionTool({ q, bank: BANK, questionSecret: "" }), /question secret/);
 });
 
 // A bank edited under a question already issued. Substituting today's new
@@ -88,7 +88,7 @@ test("a question already issued but gone from the bank throws rather than substi
   const without = BANK.filter((b) => b.id !== issuedId);
   assert.equal(without.length, BANK.length - 1, "the issued question must really be the one removed");
 
-  const edited = makeQuestionTool({ q, bank: without, challengeSecret: "s", today: () => 101, now: () => 1_000_000 });
+  const edited = makeQuestionTool({ q, bank: without, questionSecret: "s", today: () => 101, now: () => 1_000_000 });
   await assert.rejects(
     () => edited.handler({ tokenId: 1 }, { keyId: "k1" }),
     /issued question is missing from the bank/,
@@ -111,7 +111,7 @@ test("a question asked in the day's last seconds is due before midnight", async 
   const q = queries(db);
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
   const endOfDay = 102 * DAY_MS;
-  const tool = makeQuestionTool({ q, bank: BANK, challengeSecret: "s", today: () => 101, now: () => endOfDay - 10_000 });
+  const tool = makeQuestionTool({ q, bank: BANK, questionSecret: "s", today: () => 101, now: () => endOfDay - 10_000 });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
   assert.equal(r.answerBy, new Date(endOfDay - 1).toISOString());
 });
@@ -120,7 +120,7 @@ test("a question on the mint day is told mint day is day 1, and when it lands", 
   const db = openDb(":memory:");
   const q = queries(db);
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 101, mintDay: 101 });
-  const tool = makeQuestionTool({ q, bank: BANK, challengeSecret: "s", today: () => 101, now: () => 1 });
+  const tool = makeQuestionTool({ q, bank: BANK, questionSecret: "s", today: () => 101, now: () => 1 });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
   assert.equal(r.reason, "already-credited-today");
   assert.match(r.next, /Mint day is day 1/);

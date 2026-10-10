@@ -43,7 +43,7 @@ function freeTools(q) {
     ["challenge", makeChallengeTool({ challengeSecret: "s".repeat(32), domain: "example.com" }), {}],
     ["status", makeStatusTool({ q, chain: openChain() }), {}],
     ["ladder", makeLadderTool({ q, chain: openChain() }), { tokenId: 1 }],
-    ["question", makeQuestionTool({ q, bank: BANK, challengeSecret: SECRET, today: () => 100 }), { tokenId: 1 }],
+    ["question", makeQuestionTool({ q, bank: BANK, challengeSecret: SECRET, questionSecret: SECRET, today: () => 100 }), { tokenId: 1 }],
     ["checkin", makeCheckinTool({ bank: BANK, q, chain: openChain(), today: () => 100 }), { tokenId: 1 }],
     ["rebind", makeRebindTool({ q, contract: CONTRACT }), { tokenId: 1 }],
     ["rest", makeRestTool({ q, contract: CONTRACT }), { tokenId: 1 }],
@@ -91,7 +91,7 @@ test("no tool accepts free-form text, which is what makes the warning unnecessar
 
   const { handler } = makeMcpHandler({
     bank: BANK,
-    challengeSecret: SECRET,
+    challengeSecret: SECRET, questionSecret: SECRET,
     q: queries(openDb(":memory:")), chain: openChain(), contract: "0xc", chainId: 84532,
   });
   const built = envelope({ method: "tools/list", params: {} });
@@ -132,7 +132,7 @@ test("the registry is the ten tools this piece publishes, and the hand-list cove
   const { TOOL_FACTORIES, PAID_TOOLS } = await import("../src/mcp/server.mjs");
   const q = queries(openDb(":memory:"));
 
-  const names = TOOL_FACTORIES.map((make) => make({ q, chain: openChain(), contract: CONTRACT, bank: BANK, challengeSecret: SECRET, domain: "example.com" }).name);
+  const names = TOOL_FACTORIES.map((make) => make({ q, chain: openChain(), contract: CONTRACT, bank: BANK, challengeSecret: SECRET, questionSecret: SECRET, domain: "example.com" }).name);
   assert.equal(names.length, 10, "ten tools; if this changed, the protocol document changed too");
   assert.deepEqual(
     [...names].sort(),

@@ -598,7 +598,7 @@ async function startServer(overrides = {}) {
   const config = {
     stateDbPath: ":memory:",
     domain: DOMAIN,
-    challengeSecret: SECRET,
+    challengeSecret: SECRET, questionSecret: SECRET,
     tokenView: (q, id, links) => (id === 1 ? { tokenId: 1, ...links } : null),
     mcp: { nodeHandler: (req, res) => { res.writeHead(200); res.end("mcp-reached"); } },
     allowRegistration: () => true,
@@ -1058,7 +1058,7 @@ test("createServer refuses to start without an allowRegistration decision", asyn
   assert.throws(() => createServer({
     stateDbPath: ":memory:",
     domain: DOMAIN,
-    challengeSecret: SECRET,
+    challengeSecret: SECRET, questionSecret: SECRET,
     tokenView: () => null,
     mcp: { nodeHandler: () => {} },
   }));

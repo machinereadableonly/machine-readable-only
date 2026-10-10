@@ -96,7 +96,7 @@ before(async () => {
     bank: BANK,
     q, chain: openChain(), today: utcDay,
     contract: "0xcontract", chainId: 84532,
-    challengeSecret: SECRET, domain: DOMAIN, llmsTxt: "",
+    challengeSecret: SECRET, questionSecret: SECRET, domain: DOMAIN, llmsTxt: "",
     catalogue: {}, supplyCap: 10_000,
     // An unpaid call gets the demand. A PAID call gets what @x402/mcp sends
     // when the facilitator cannot settle: createSettlementFailedResult is
