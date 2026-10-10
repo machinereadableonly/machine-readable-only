@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan G -- building the 2026-10-10 rulings</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #d0d0d0;
+      --accent: #c44;
+      --code-bg: #f0eee6;
+      --table-header: #eae6db;
+      --table-alt: #f5f3ed;
+      --link: #1a4d8a;
+      --warn-bg: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 6rem;
+      font-size: 16px;
+    }
+    h1 { font-size: 2.2rem; line-height: 1.2; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+    h2 { font-size: 1.6rem; line-height: 1.25; margin: 2.5rem 0 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; color: #333; }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; color: #444; }
+    p { margin: 0.7rem 0; }
+    ul, ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    li { margin: 0.3rem 0; }
+    a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+    a:hover { border-bottom-style: solid; }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      padding: 0.8rem 1.2rem;
+      color: #5a4a1a;
+    }
+    blockquote p { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.8rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-header); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--table-alt); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    strong { color: #000; }
+    em { color: #333; }
+    @media print { body { max-width: none; padding: 1rem; } }
+  </style>
+</head>
+<body>
+<h1>Plan G -- building the 2026-10-10 rulings</h1>
+<h2>Why</h2>
+<p>The 2026-10-08 review sprint closed everything Claude could fix alone. The
+operator then ruled all 19 open decisions on 2026-10-10. Each ruling either
+changes code that freezes at the mainnet deploy (the token contract, the
+Renderer, the deploy path) or changes what an agent must do before
+<code>mro-agent</code> is published. This plan builds those rulings so the mainnet deploy
+and the npm publish are no longer blocked on code.</p>
+<p>The operator asked for as much as possible without the operator being involved, so the
+plan runs end to end and stops only at the gates listed at the bottom.</p>
+<p>Nothing is pushed and nothing is deployed. Every change lands as a local
+commit on <code>main</code>, gated by all four suites.</p>
+<h2>Phase A -- housekeeping</h2>
+<ol>
+<li><strong>D18:</strong> delete <code>contracts/script/deploy-plan6.sh</code> and <code>verify-plan6.sh</code>
+(ruled), and fix the comment in <code>deploy-plan7.sh</code> that points at them.</li>
+<li><strong>D5:</strong> token 1 starts on opening day + 1. Update DEPLOY.md 9c,
+<code>seed-config-check.sh</code>, <code>install-seed-agent.sh</code> and their tests.</li>
+<li><strong>D13:</strong> <code>CLOCK_CHECK_RPC_URL=https://mainnet.base.org</code> in the mainnet
+steps and the Clock&#39;s settings example.</li>
+<li><strong>D14:</strong> a script that lists the six env backups holding a Clock key by
+NAME and deletes them after a typed confirmation. It never reads a value.
+The operator runs it.</li>
+<li><strong>D10a:</strong> a runbook step for an offline backup of the split seed, stored
+like a wallet recovery phrase, reachable by the Safe signers.</li>
+<li><strong>D10b:</strong> question order gets its own secret, <code>QUESTION_SECRET</code>, required
+at Warden boot (fails loudly when missing). The operator adds one setting.</li>
+<li><strong>D11:</strong> cut the early-access allowlist from the spec; draft a launch plan
+for the operator to edit.</li>
+<li><strong>D19:</strong> draft the five copy items for approval (no copy is changed), and
+scope the <code>yesterday</code> square.</li>
+</ol>
+<h2>Phase B -- contract and Warden rules (PERMANENT bytecode)</h2>
+<ol>
+<li><strong>D8.1:</strong> a per-parent seed limit: a parent seeds at most once per 365
+days since its own mint day, whatever key it is bound to, in addition to
+the per-key budget.</li>
+<li><strong>D8.4:</strong> <code>setSplitAnchor</code> refuses once any token exists.</li>
+<li><strong>D8.2, D8.3, D8.5:</strong> record as intended -- NatSpec plus a test pinning
+each (reveal allowed while paused; a voucher writes no answer; a lost seed
+stops every write, recorded in the Clock&#39;s code comment and test).</li>
+<li><strong>D6:</strong> <code>question</code> and the answer half of <code>checkin</code> record an answer only
+when the chain&#39;s binding matches the caller. A donated check-in is still
+credited; its answer is dropped and the reply says so.</li>
+<li>Gates: <code>forge build --sizes</code> positive margin, the strict-limit anvil
+deploy, <code>RealTokenGas.t.sol</code> re-run and the pins updated from measurement.</li>
+</ol>
+<h2>Phase C -- deploy path and infra (scripts built and dry-run only)</h2>
+<ol>
+<li><strong>D2:</strong> a Ledger signing path in the deploy script, and the Windows PC
+steps (Foundry, the repo, the Ledger) written one at a time.</li>
+<li><strong>D1:</strong> the Warden moves to its own system user running a root-owned copy,
+with the operator&#39;s secrets out of its reach. Installer + cutover script,
+dry-run and tests only. The operator runs one sudo install later.</li>
+</ol>
+<h2>Phase D -- signing and payment (approved installs)</h2>
+<ol>
+<li><strong>D16 / item 23:</strong> <code>web-bot-auth</code> 0.2.0 + <code>http-message-sig</code> 0.3.0 in the
+client and the Warden; signatures cover <code>&quot;signature-agent&quot;;key=&quot;sig1&quot;</code>; the
+door&#39;s <code>keyedMessage</code> workaround removed in the same commit.
+Versions and advisories re-checked live before installing.</li>
+<li><strong>D16 shrinkwrap:</strong> <code>npm-shrinkwrap.json</code> replaces
+<code>client/package-lock.json</code>; <code>viem</code> pinned exactly.</li>
+<li><strong>D17:</strong> the EIP-3009 nonce must equal
+<code>keccak256(keyId, tool, args, salt)</code>; the client sends <code>salt</code>; the
+Warden refuses a nonce that does not recompute. Client, SKILL.md and the
+raw protocol doc together.</li>
+</ol>
+<h2>Phase E -- the Renderer pass (D3, D4, D19 #13-#16)</h2>
+<ol>
+<li>Compiler 0.8.37 (fall back to 0.8.35 only if a size margin goes negative).</li>
+<li>Drop <code>Years</code>; <code>house</code> marker; constant collection image; #13 rung-0
+chroma, #14 ghost frame, #15 Apex&#39;s gold apart from Vessel&#39;s, #16 one
+<code>Mark</code> attribute per Mark; the description rewrite.</li>
+<li>Every visual change and the description wording are rendered into a sheet
+for the operator. <strong>Nothing visual is committed before the operator approves it.</strong>
+The work sits on a branch until then.</li>
+</ol>
+<h2>Where this stops for the operator</h2>
+<ul>
+<li>Approving the Renderer sheet and the description wording (Phase E).</li>
+<li>Approving the copy drafts (Phase A8).</li>
+<li>Running the D14 deletion script; deleting <code>~/.mro-split/seed</code>.</li>
+<li>Adding <code>QUESTION_SECRET</code> to the Warden settings (and the earlier
+<code>MRO_QUESTION_BANK</code>), then the sudo installs.</li>
+<li>The Sepolia redeploy that carries Phase B&#39;s contract changes, and D15&#39;s Safe
+acceptance on THAT pair (one drill on the pair that will stay, rather than
+one on a pair about to be superseded).</li>
+<li>Every push.</li>
+</ul>
+<h2>What cannot be undone</h2>
+<p>Nothing in this plan. The contract changes become permanent only at the
+mainnet deploy, which is a separate operator-approved step.</p>
+</body>
+</html>
