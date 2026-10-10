@@ -65,7 +65,10 @@ export const metaWithPayment = (nonce = nextNonce()) => ({
     x402Version: 2,
     scheme: "exact",
     network: "eip155:84532",
-    payload: { authorization: { nonce }, signature: "0x00" },
+    payload: {
+      authorization: { nonce, validAfter: "0", validBefore: String(Math.floor(Date.now() / 1000) + 300) },
+      signature: "0x00",
+    },
   },
 });
 

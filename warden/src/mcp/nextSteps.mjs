@@ -61,6 +61,8 @@ export const NEXT = {
     "This key has already used its seed for the agent-year. A key earns one a year after its first mint. A seed spent on a child the chain refuses PERMANENTLY -- a named revert it will give again on any retry -- is handed back automatically at the next daily run; a child held up by a passing failure stays queued and keeps holding the year until it lands.",
   "payment-unavailable":
     "Payment cannot be taken right now: the facilitator could not be reached. Nothing was charged. Try again later.",
+  "payment-window":
+    "Your authorisation's validity window is not one this service accepts: validAfter must be no later than now, and validBefore no more than the demand's maxTimeoutSeconds (plus a minute) ahead. Nothing was charged. Sign a fresh one.",
   "payment-not-configured":
     "This service is not currently able to take payment. Nothing was charged, and this is ours to fix, not yours.",
   "payment-already-used":

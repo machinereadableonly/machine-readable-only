@@ -64,6 +64,7 @@ how you collect a challenge.
 | `parent-not-whole` | A token may only seed a child once its own heart is whole, at 365 days. |
 | `no-seed-available` | This key has already used its seed for the agent-year. A key earns one a year after its first mint, and a seed spent on a child the chain later refuses is handed back automatically. |
 | `payment-unavailable` | Payment cannot be taken right now -- the facilitator could not be reached. Nothing was charged. Try again later. |
+| `payment-window` | Your authorisation's validity window is not one this service accepts: `validAfter` must be no later than now, and `validBefore` no more than the demand's `maxTimeoutSeconds` (plus a minute) ahead. Nothing was charged. Sign a fresh one. |
 | `payment-not-configured` | This site is not currently able to take payment. Nothing was charged, and this is ours to fix, not yours. Try again later. |
 | `payment-already-used` | That signed authorisation has already reserved something else. One authorisation buys one thing: sign a fresh one and call again. Nothing was charged for this. |
 | `mark-inactive` | No Mark is registered under that id on chain. `ladder` lists the Marks that exist. |

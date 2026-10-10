@@ -503,7 +503,13 @@ test("a handler is given the nonce that will settle it, and refuses without one"
       x402Version: 2,
       scheme: "exact",
       network: "eip155:84532",
-      payload: { authorization: { nonce: "0x000000000000000000000000000000000000000000000000000000000000FEED" }, signature: "0x00" },
+      payload: {
+        authorization: {
+          nonce: "0x000000000000000000000000000000000000000000000000000000000000FEED",
+          validAfter: "0", validBefore: String(Math.floor(Date.now() / 1000) + 300),
+        },
+        signature: "0x00",
+      },
     },
   };
   let seen;
@@ -593,6 +599,40 @@ test("a payment carrying no EIP-3009 authorisation is refused before the handler
   assert.equal(refused.isError, true, "and isError is what stops it being settled anyway");
   assert.equal(refused.structuredContent.reason, "payment-unavailable");
   assert.equal(refused.structuredContent.detail, "unsupported-authorisation");
+});
+
+// 08 Low 6. The facilitator sets no upper bound on validBefore, so an
+// authorisation could stay spendable for years after a reservation was released.
+const NOW_S = 2_000_000_000;
+const paidAt = (authorization) => {
+  const gateway = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/", network: "eip155:84532", payTo: "0xdead",
+    build: async () => fakeServer(), wrapFactory: fakeWrap(), alert: () => {}, now: () => NOW_S * 1000,
+  });
+  let ran = false;
+  const call = gateway(async () => { ran = true; return { ok: true }; }, "$0.10")({}, {
+    mcpCtx: { mcpReq: { _meta: { "x402/payment": {
+      x402Version: 2, scheme: "exact", network: "eip155:84532",
+      payload: { authorization: { nonce: "0x" + "cd".repeat(32), ...authorization }, signature: "0x00" },
+    } } } },
+  });
+  return call.then((result) => ({ result, ran }));
+};
+
+test("an authorisation valid for longer than the demand allows is refused before the handler runs", async () => {
+  const { result, ran } = await paidAt({ validAfter: "0", validBefore: String(NOW_S + 10 * 365 * 86400) });
+  assert.equal(ran, false);
+  assert.equal(result.isError, true);
+  assert.equal(result.structuredContent.reason, "payment-window");
+});
+
+test("an authorisation not yet valid, or with no deadline, is refused", async () => {
+  assert.equal((await paidAt({ validAfter: String(NOW_S + 600), validBefore: String(NOW_S + 300) })).ran, false);
+  assert.equal((await paidAt({ validAfter: "0" })).ran, false);
+});
+
+test("CONTROL: an authorisation inside the demand's window reaches the handler", async () => {
+  assert.equal((await paidAt({ validAfter: "0", validBefore: String(NOW_S + 300) })).ran, true);
 });
 
 test("warmUp reports readiness and never rejects when the facilitator is down", async () => {

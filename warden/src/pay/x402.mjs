@@ -84,6 +84,7 @@ export function paymentFactsOf(paymentPayload, requirement) {
   const auth = authorizationOf(paymentPayload);
   if (!auth) return null;
   const validBefore = Number(auth.validBefore);
+  const validAfter = Number(auth.validAfter);
   return {
     payNonce: typeof auth.nonce === "string" ? auth.nonce.toLowerCase() : null,
     payer: auth.from ?? null,
@@ -91,8 +92,13 @@ export function paymentFactsOf(paymentPayload, requirement) {
     payTo: requirement?.payTo ?? null,
     amount: requirement?.amount ?? null,
     validBefore: Number.isSafeInteger(validBefore) ? validBefore : null,
+    validAfter: Number.isSafeInteger(validAfter) ? validAfter : null,
   };
 }
+
+/// Seconds an authorisation may outlive the demand's own `maxTimeoutSeconds`,
+/// for a signer whose clock runs a little ahead.
+export const AUTHORISATION_SLACK_SECONDS = 60;
 
 /**
  * WHO SIGNED the authorisation -- which is not necessarily who receives the
@@ -403,6 +409,7 @@ export function makePaymentGateway({
   alert = console.error,
   build = initResourceServer,
   wrapFactory = createPaymentWrapper,
+  now = Date.now,
 }) {
   let serverPromise = null;
   const wrappers = new Map();
@@ -635,6 +642,16 @@ export function makePaymentGateway({
         if (!facts) {
           alert(`${tool}: a verified payment carried no EIP-3009 authorisation, so nothing could be reserved`);
           return { ok: false, reason: "payment-unavailable", detail: "unsupported-authorisation" };
+        }
+        // BOUNDED ON BOTH SIDES. The facilitator checks only a floor on
+        // validBefore, so an authorisation could stay spendable for years after
+        // its reservation was released -- and a held one would fall outside
+        // every window the Clock can search.
+        const nowSeconds = Math.floor(now() / 1000);
+        const life = (requirement?.maxTimeoutSeconds ?? 300) + AUTHORISATION_SLACK_SECONDS;
+        if (facts.validBefore === null || facts.validBefore - nowSeconds > life ||
+            facts.validAfter === null || facts.validAfter > nowSeconds) {
+          return { ok: false, reason: "payment-window", detail: `sign validAfter <= now and validBefore within ${life} s of now` };
         }
         const result = await handler(handlerArgs, { payNonce, payment: facts });
         if (result?.ok) reservedNonce = payNonce;
