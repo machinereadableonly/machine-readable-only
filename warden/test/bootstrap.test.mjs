@@ -21,7 +21,6 @@ import {
   makeAllowRegistration,
   makePaidStub,
   makeSpawnSolve,
-  MAX_TOTAL_KEYS,
   REGISTRATION_MAX_PER_WINDOW,
   REGISTRATION_WINDOW_MS,
   SOLVE_HEAP_ARG,
@@ -85,14 +84,10 @@ test("the window slides: the budget returns once the minute has passed", () => {
   assert.equal(allow("key-a"), true, "one millisecond past the window, the oldest slot is free");
 });
 
-test("the 10,000-key total cap refuses every key, whatever its own budget says", () => {
+test("the limiter never refuses for the registry's size: a full registry evicts instead", () => {
   const clock = fakeClock();
-  const allow = makeAllowRegistration(countingMirror(MAX_TOTAL_KEYS), () => clock.now);
-  assert.equal(allow("a-brand-new-key"), false);
-  // One below the cap, the same key is admitted -- so the refusal above is the
-  // cap and not something else.
-  const under = makeAllowRegistration(countingMirror(MAX_TOTAL_KEYS - 1), () => clock.now);
-  assert.equal(under("a-brand-new-key"), true);
+  const allow = makeAllowRegistration(countingMirror(1_000_000), () => clock.now);
+  assert.equal(allow("a-brand-new-key"), true);
 });
 
 test("the limiter reads the real mirror, and keyCount matches what is stored", () => {
@@ -107,15 +102,6 @@ test("the limiter reads the real mirror, and keyCount matches what is stored", (
   assert.equal(allow("k3"), true);
 });
 
-test("a refused registration is not remembered as a spent slot", () => {
-  const clock = fakeClock();
-  const allow = makeAllowRegistration(countingMirror(MAX_TOTAL_KEYS), () => clock.now);
-  // Refused a hundred times by the total cap. When the cap lifts, the key must
-  // still have its whole minute's budget: a refusal is not a registration.
-  for (let i = 0; i < 100; i++) assert.equal(allow("key-a"), false);
-  const lifted = makeAllowRegistration(countingMirror(0), () => clock.now);
-  for (let i = 0; i < REGISTRATION_MAX_PER_WINDOW; i++) assert.equal(lifted("key-a"), true);
-});
 
 // -- the paid stub ---------------------------------------------------------
 

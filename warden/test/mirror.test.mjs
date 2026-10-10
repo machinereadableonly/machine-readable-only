@@ -163,9 +163,8 @@ test("an older mirror without `finisher` is migrated rather than left broken", (
 // -- forgetting keys that were never used -----------------------------------
 //
 // Registration is free and unauthenticated, so the per-thumbprint limit never
-// binds an attacker using a fresh keypair each time. The only aggregate limit
-// is the 10,000-key ceiling, and reaching it used to close POST /keys forever
-// -- which shuts out precisely the agents that have no domain of their own.
+// binds an attacker using a fresh keypair each time. A full registry evicts the
+// idlest unbound key; a key bound to a token is never pruned or evicted.
 
 const DAY = 24 * 60 * 60 * 1000;
 const keyRow = (id, registeredAt) => ({ keyId: id, jwk: { kty: "OKP", x: id }, directory: null, registeredAt });
@@ -180,16 +179,13 @@ test("a key that registered and never came through the door is forgotten", () =>
   assert.equal(q.keyCount(), 0);
 });
 
-test("a key that HAS been through the door is never forgotten, however old", () => {
+test("a key bound to a token is never forgotten, however idle", () => {
   const { q } = fresh();
   const now = Date.now();
-  q.insertKey(keyRow("used-once", now - 400 * DAY));
-  q.markKeyUsed("used-once", now - 399 * DAY);
-
-  // Well past any window. A used key may be bound to a token on chain, and
-  // that binding is permanent.
+  q.insertKey(keyRow("bound", now - 400 * DAY));
+  q.insertToken({ tokenId: 1, keyId: "bound", owner: "0xabc", lastDay: 1, mintDay: 1 });
   assert.equal(q.pruneUnusedKeys(now), 0);
-  assert.equal(q.getKey("used-once").keyId, "used-once");
+  assert.equal(q.getKey("bound").keyId, "bound");
 });
 
 test("an unused key inside the window is left alone", () => {
@@ -205,7 +201,7 @@ test("the prune clears a flood without touching the agents already in", () => {
   const { q } = fresh();
   const now = Date.now();
   q.insertKey(keyRow("honest", now - 90 * DAY));
-  q.markKeyUsed("honest", now - 89 * DAY);
+  q.insertToken({ tokenId: 1, keyId: "honest", owner: "0xabc", lastDay: 1, mintDay: 1 });
   for (let i = 0; i < 500; i++) q.insertKey(keyRow(`flood-${i}`, now - 31 * DAY));
   assert.equal(q.keyCount(), 501);
 
@@ -227,13 +223,42 @@ test("marking a key used is throttled to one write a day", () => {
   assert.notEqual(q.getKey("busy").lastUsedAt, stamp);
 });
 
-test("a key used at any point survives, even if its last use is ancient", () => {
-  // The rule is "never used", not "used recently". A token bound to this key
-  // on chain outlives any idleness.
+test("an unbound key is forgotten once idle past the window, even if it was used", () => {
   const { q } = fresh();
   const now = Date.now();
   q.insertKey(keyRow("dormant", now - 900 * DAY));
   q.markKeyUsed("dormant", now - 899 * DAY);
+  q.insertKey(keyRow("lively", now - 900 * DAY));
+  q.markKeyUsed("lively", now - DAY);
+  assert.equal(q.pruneUnusedKeys(now - 30 * DAY), 1);
+  assert.equal(q.getKey("dormant"), undefined);
+  assert.equal(q.getKey("lively").keyId, "lively");
+});
+
+test("a full registry evicts the idlest unbound key instead of refusing", () => {
+  const q = queries(openDb(":memory:"), { maxUnboundKeys: 3 });
+  const now = Date.now();
+  q.insertKey(keyRow("bound", now - 50 * DAY));
+  q.insertToken({ tokenId: 1, keyId: "bound", owner: "0xabc", lastDay: 1, mintDay: 1 });
+  q.insertKey(keyRow("old", now - 10 * DAY));
+  q.insertKey(keyRow("used", now - 20 * DAY));
+  q.markKeyUsed("used", now - DAY);
+  q.insertKey(keyRow("new", now - 2 * DAY));
+  assert.equal(q.unboundKeyCount(), 3);
+
+  assert.equal(q.insertKey(keyRow("newest", now)), 1, "one key makes room");
+  assert.equal(q.getKey("old"), undefined, "the idlest unbound key went");
+  for (const id of ["bound", "used", "new", "newest"]) assert.equal(q.getKey(id).keyId, id);
+  assert.equal(q.insertKey(keyRow("newest", now + 1)), 0, "re-registering a held key evicts nothing");
+});
+
+test("re-registering a key keeps when it was last used", () => {
+  const { q } = fresh();
+  const now = Date.now();
+  q.insertKey(keyRow("k", now - 40 * DAY));
+  q.markKeyUsed("k", now - DAY);
+  q.insertKey(keyRow("k", now));
+  assert.equal(q.getKey("k").lastUsedAt, now - DAY);
   assert.equal(q.pruneUnusedKeys(now - 30 * DAY), 0);
 });
 

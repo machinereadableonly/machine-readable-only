@@ -48,7 +48,15 @@ export class PaymentNonceReusedError extends Error {
  */
 export const RESERVATION_TTL_MS = 10 * 60_000;
 
-export function queries(db) {
+/// How many keys may be registered and bound to no token. A registration past
+/// this evicts the longest-idle unbound key rather than being refused, so a
+/// flood of free registrations can never close the door. A key bound to a token
+/// is never counted and never evicted.
+export const MAX_UNBOUND_KEYS = 10_000;
+
+const UNBOUND = "NOT EXISTS (SELECT 1 FROM tokens t WHERE t.keyId = keys.keyId)";
+
+export function queries(db, { maxUnboundKeys = MAX_UNBOUND_KEYS } = {}) {
   const s = {
     putEvidence: db.prepare("INSERT OR REPLACE INTO evidence (kind, ref, json) VALUES (?, ?, ?)"),
     getEvidence: db.prepare("SELECT json FROM evidence WHERE kind = ? AND ref = ?"),
@@ -65,9 +73,16 @@ export function queries(db) {
     getToken: db.prepare("SELECT * FROM tokens WHERE tokenId = ?"),
     tokensForKey: db.prepare("SELECT * FROM tokens WHERE keyId = ?"),
     maxTokenId: db.prepare("SELECT MAX(tokenId) AS maxId FROM tokens"),
+    // An upsert, never REPLACE: REPLACE deletes the row and so forgets lastUsedAt.
     insertKey: db.prepare(
-      "INSERT OR REPLACE INTO keys (keyId, jwk, directory, registeredAt, keyIdHash) " +
-        "VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO keys (keyId, jwk, directory, registeredAt, keyIdHash) VALUES (?, ?, ?, ?, ?) " +
+        "ON CONFLICT (keyId) DO UPDATE SET jwk = excluded.jwk, directory = excluded.directory, " +
+        "registeredAt = excluded.registeredAt, keyIdHash = excluded.keyIdHash"
+    ),
+    unboundKeyCount: db.prepare(`SELECT COUNT(*) AS n FROM keys WHERE ${UNBOUND}`),
+    evictIdlestUnbound: db.prepare(
+      `DELETE FROM keys WHERE keyId IN (SELECT keyId FROM keys WHERE ${UNBOUND} ` +
+        "ORDER BY COALESCE(lastUsedAt, registeredAt) ASC LIMIT ?)"
     ),
     /// Which registered key is this, given only the form the CONTRACT stores?
     /// The hash is one way, so this is the only way back -- and it is why the
@@ -80,10 +95,8 @@ export function queries(db) {
     payNonceClaim: db.prepare("SELECT * FROM pay_nonces WHERE payNonce = ?"),
     /// Written at most once a day per key -- see markKeyUsed.
     touchKey: db.prepare("UPDATE keys SET lastUsedAt = ? WHERE keyId = ? AND (lastUsedAt IS NULL OR lastUsedAt < ?)"),
-    /// Only ever NEVER-USED keys. A key that has been through the door keeps
-    /// its row for good: it may be bound to a token on chain, and that binding
-    /// is permanent.
-    pruneUnusedKeys: db.prepare("DELETE FROM keys WHERE lastUsedAt IS NULL AND registeredAt < ?"),
+    /// Only keys bound to no token, idle since `?`.
+    pruneUnusedKeys: db.prepare(`DELETE FROM keys WHERE ${UNBOUND} AND COALESCE(lastUsedAt, registeredAt) < ?`),
     // NEITHER OF THESE TWO DECIDES ANYTHING ANY MORE, and that is deliberate.
     // Both count off `tokens.keyId`, which reconcile.mjs REWRITES on every
     // `Rebound`, while the contract keeps tenure in per-key mappings `rebind`
@@ -493,33 +506,35 @@ export function queries(db) {
       s.touchKey.run(now, keyId, now - 24 * 60 * 60 * 1000).changes,
 
     /**
-     * Forget keys that registered and never used it.
+     * Forget keys bound to no token that have been idle since `before`.
      *
-     * WHY THIS EXISTS. Registration is free and unauthenticated -- a fresh
-     * Ed25519 keypair costs nothing -- so the per-thumbprint rate limit never
-     * binds an attacker who uses a new key each time. The only aggregate limit
-     * is MAX_TOTAL_KEYS, and reaching it IS the attack: every later
-     * registration is refused forever, which shuts out exactly the agents that
-     * have no domain of their own and no other way in.
-     *
-     * A key that has been through the door is NEVER pruned, whatever its age.
-     * It may be the key a token is bound to on chain, and that binding is
-     * permanent; forgetting it would break the rebind lookup and the
-     * seed budget. Only `lastUsedAt IS NULL` is a candidate.
-     *
-     * Returns how many rows went, so the caller can log a real number.
+     * A key bound to a token is never pruned, whatever its age: forgetting it
+     * would break the rebind lookup. Registration is free, so an idle unbound
+     * key costs its agent one repeat of it. Returns how many rows went.
      */
     pruneUnusedKeys: (before) => s.pruneUnusedKeys.run(before).changes,
-    insertKey: ({ keyId, jwk, directory, registeredAt }) =>
-      s.insertKey.run(
-        keyId,
-        JSON.stringify(jwk),
-        directory ?? null,
-        registeredAt,
-        // Computed HERE, on the way in, so no caller can register a key without
-        // it and leave a Rebound to that key unresolvable later.
-        keyIdToBytes32(keyId)
-      ),
+
+    unboundKeyCount: () => s.unboundKeyCount.get().n,
+
+    /// Register a key, evicting the longest-idle unbound keys first if the
+    /// registry of unbound keys is full. Returns how many were evicted.
+    insertKey({ keyId, jwk, directory, registeredAt }) {
+      return this.transact(() => {
+        let evicted = 0;
+        const over = s.unboundKeyCount.get().n - maxUnboundKeys + 1;
+        if (!s.getKey.get(keyId) && over > 0) evicted = s.evictIdlestUnbound.run(over).changes;
+        s.insertKey.run(
+          keyId,
+          JSON.stringify(jwk),
+          directory ?? null,
+          registeredAt,
+          // Computed HERE, on the way in, so no caller can register a key without
+          // it and leave a Rebound to that key unresolvable later.
+          keyIdToBytes32(keyId)
+        );
+        return evicted;
+      });
+    },
 
     /**
      * The registered key id matching an on-chain bytes32, or null.

@@ -1132,13 +1132,12 @@ test("the key directory carries an ETag and answers a conditional GET with 304",
 test("an admitted request marks its key used, so the prune will not forget it", async () => {
   const path = join(mkdtempSync(join(tmpdir(), "mro-keyuse-")), "state.db");
   const signer = await signerFromJWK(ED.key);
+  const MONTH = 30 * 24 * 60 * 60 * 1000;
 
-  // A registered key that has never been used: exactly a prune candidate.
+  // Registered 31 days ago and never used: a prune candidate until it gets in.
   const setup = queries(openDb(path));
-  setup.insertKey({ keyId: signer.keyid, jwk: ED.key, directory: null, registeredAt: Date.now() });
+  setup.insertKey({ keyId: signer.keyid, jwk: ED.key, directory: null, registeredAt: Date.now() - MONTH - 86_400_000 });
   assert.equal(setup.getKey(signer.keyid).lastUsedAt, null);
-  // Registered just now, so a 30-day cutoff must not reach it yet.
-  assert.equal(setup.pruneUnusedKeys(Date.now() - 30 * 24 * 60 * 60 * 1000), 0, "guard: not yet a candidate");
 
   const { server, base } = await startServer({ stateDbPath: path });
   try {
@@ -1157,7 +1156,7 @@ test("an admitted request marks its key used, so the prune will not forget it", 
 
   const after = queries(openDb(path));
   assert.notEqual(after.getKey(signer.keyid).lastUsedAt, null, "the door did not mark the key used");
-  assert.equal(after.pruneUnusedKeys(Date.now()), 0, "a key that just got in must survive the prune");
+  assert.equal(after.pruneUnusedKeys(Date.now() - MONTH), 0, "a key that just got in must survive the prune");
 });
 
 // -- 14.6: /mcp had no per-caller budget at all --------------------------------
@@ -1207,29 +1206,26 @@ test("an admitted request over its budget is refused 429, and never reaches a to
 // as the other. Nothing is gained by doing that (the door answer is a public
 // function of public inputs, and registration needs the private key), but the
 // two could never have been given different lifetimes while they shared a set.
-test("a registration nonce and a door challenge do not spend each other", async () => {
+test("a registration nonce is not a door challenge, and a door challenge is not a registration nonce", async () => {
   const { server, base } = await startServer();
   try {
-    // Take a nonce from the REGISTRATION endpoint and answer the DOOR with it.
-    const { nonce } = await (await fetch(`${base}/keys/nonce`)).json();
-    const { privateJwk } = await registerFreshKey(base);
-    // The registration nonce IS the challenge here -- that is the point -- so it
-    // is signed as one.
-    const { headers } = await signFor(privateJwk, `https://${DOMAIN}/mcp`, { challenge: nonce });
-    const doorRes = await fetch(`${base}/mcp`, { method: "POST", headers });
-    // It is admitted -- the two really are one format, and that is not the
-    // finding. What matters is what it did NOT consume.
-    assert.equal(doorRes.status, 200, `expected the door to accept a well-formed challenge, got ${doorRes.status}`);
-
-    // That same nonce must still be spendable as a registration nonce: burning
-    // it at the door must not have taken it out of the other mechanism.
+    // A door challenge is free from any unmetered path; it must not register a key.
+    const knock = await fetch(`${base}/mcp`, { method: "POST" });
+    const { challenge } = await knock.json();
     const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-    const proof = edSign(null, Buffer.from(nonce), privateKey).toString("base64url");
+    const proof = edSign(null, Buffer.from(challenge), privateKey).toString("base64url");
     const reg = await fetch(`${base}/keys`, {
       method: "POST",
-      body: JSON.stringify({ jwk: publicKey.export({ format: "jwk" }), nonce, proof }),
+      body: JSON.stringify({ jwk: publicKey.export({ format: "jwk" }), nonce: challenge, proof }),
     });
-    assert.equal((await reg.json()).ok, true, "the two sets must be independent");
+    assert.equal((await reg.json()).ok, false, "a door challenge registered a key");
+
+    // And a registration nonce does not answer the door.
+    const { nonce } = await (await fetch(`${base}/keys/nonce`)).json();
+    const { privateJwk } = await registerFreshKey(base);
+    const { headers } = await signFor(privateJwk, `https://${DOMAIN}/mcp`, { challenge: nonce });
+    const doorRes = await fetch(`${base}/mcp`, { method: "POST", headers });
+    assert.equal(doorRes.status, 401, `a registration nonce answered the door: ${doorRes.status}`);
   } finally {
     server.close();
   }

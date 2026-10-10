@@ -2,6 +2,7 @@
 //
 // This service holds NO private key. It reads the chain and writes a local
 // SQLite file; the chain writes belong to the Clock (Plan 3).
+import { createHmac } from "node:crypto";
 import { createServer as createHttpServer } from "node:http";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
@@ -124,8 +125,10 @@ export function createServer(config) {
   // while they shared a set, and a mechanism that cannot be tuned separately is
   // one that will be tuned wrongly.
   const seen = new Set();
-  // Spent REGISTRATION nonces, from GET /keys/nonce.
+  // Spent REGISTRATION nonces, from GET /keys/nonce. Minted under their own
+  // secret, so a door challenge -- free from any unmetered path -- is not one.
   const seenNonces = new Set();
+  const registrationSecret = createHmac("sha256", config.challengeSecret).update("mro-key-registration-nonce").digest("hex");
   // Spent SIGNATURES, kept apart from spent challenges: a challenge is dead in
   // five seconds, a signature can live five minutes, and one set swept on the
   // shorter schedule would forget signatures while they were still replayable.
@@ -148,18 +151,13 @@ export function createServer(config) {
   setInterval(() => sweepSeen(seenNonces), 10_000).unref();
   setInterval(() => sweepSpent(spent), 30_000).unref();
 
-  // Forget keys that registered and never came through the door. Without this
-  // the 10,000-key ceiling is reached once and the only entrance for an agent
-  // with no domain of its own is shut permanently -- no eviction, no expiry, no
-  // operator route in the code. Hourly is far more often than a 30-day window
-  // needs; it costs one indexed DELETE and means a flood clears on its own
-  // rather than waiting for a restart.
+  // Forget idle keys bound to no token, hourly.
   const prunedDirectory = () => {
     const gone = q.pruneUnusedKeys(Date.now() - UNUSED_KEY_TTL_MS);
     if (gone > 0) {
       // The served directory listed them, so it is now wrong.
       directory.invalidate();
-      console.log(`warden: forgot ${gone} key(s) registered but never used`);
+      console.log(`warden: forgot ${gone} idle key(s) bound to no token`);
     }
   };
   setInterval(prunedDirectory, 60 * 60 * 1000).unref();
@@ -336,7 +334,7 @@ export function createServer(config) {
       // The nonce a POST /keys proof signs. Public by necessity: it is issued
       // BEFORE a caller has any key registered here to sign with.
       if (req.method === "GET" && path === "/keys/nonce") {
-        const { challenge, expires } = issueChallenge(config.challengeSecret);
+        const { challenge, expires } = issueChallenge(registrationSecret);
         return json(res, 200, { nonce: challenge, expires });
       }
 
@@ -386,7 +384,7 @@ export function createServer(config) {
           // The cost is one Set entry per unauthenticated request, bounded by
           // the ten-second sweep.
           (nonce) => {
-            if (!verifyNonceMinted(config.challengeSecret, nonce).ok) return false;
+            if (!verifyNonceMinted(registrationSecret, nonce).ok) return false;
             if (seenNonces.has(nonce)) return false;
             seenNonces.add(nonce);
             return true;

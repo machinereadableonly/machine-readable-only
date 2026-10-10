@@ -247,6 +247,8 @@ CREATE TABLE IF NOT EXISTS questions (
   PRIMARY KEY (tokenId, day)
 );
 CREATE INDEX IF NOT EXISTS questions_day ON questions (day);
+-- Which keys are bound to a token: the key registry's prune and eviction ask it per key.
+CREATE INDEX IF NOT EXISTS tokens_key ON tokens (keyId);
 
 -- The signed request behind each row the Clock signs: the RFC 9421 base the
 -- door verified, the signature over it, the key, and the body (base64). The

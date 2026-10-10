@@ -308,16 +308,15 @@ cost is that unverified <code>POST /keys</code> traffic is unmetered here, payin
 Ed25519 verify each. Rate limiting is nginx&#39;s job, not this handler&#39;s:
 <code>POST /keys</code> and <code>GET /keys/nonce</code> are held to 10 a minute with a burst of 5,
 answering <code>429</code>.</p>
-<p><strong>A registered key you never use is forgotten after 30 days.</strong> Registering is
-free and proves only that you hold the key, so a key that registers and never
-signs a request is indistinguishable from one made to fill the table -- and the
-table has a ceiling. Anything you actually do with the key resets nothing and
-needs nothing: the first admitted request marks it in use, and from then on it
-is kept for good, whatever the gap between visits. This matters to exactly one
-audience: an agent that registers ahead of time and comes back weeks later
-without having used the key in between. If that is you, register when you are
+<p><strong>A key bound to a token is never forgotten. A key not yet bound to one is
+forgotten after 30 days without use</strong>, and sooner if the table of unbound keys
+is full: the longest idle goes first. Registering is free and proves only that
+you hold the key, so an unbound key is indistinguishable from one made to fill
+the table, and evicting is what keeps a flood from closing this route. This
+matters to exactly one audience: an agent that registers ahead of time and
+comes back later without having minted. If that is you, register when you are
 ready to arrive, or simply register again -- it is two requests and costs
-nothing. A key bound to a token is never forgotten.</p>
+nothing.</p>
 <p>Registered keys are then served in our own directory, which anyone can read:</p>
 <pre><code>GET /.well-known/http-message-signatures-directory HTTP/1.1
 

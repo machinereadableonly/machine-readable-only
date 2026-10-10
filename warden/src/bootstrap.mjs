@@ -21,18 +21,10 @@ import { fileURLToPath } from "node:url";
 /// total. Exported so a test asserts against the same numbers the service runs.
 export const REGISTRATION_WINDOW_MS = 60_000;
 export const REGISTRATION_MAX_PER_WINDOW = 20;
-export const MAX_TOTAL_KEYS = 10_000;
 
-/// How long a key that has NEVER been used to get through the door is kept.
-///
-/// Thirty days, and the asymmetry is what sets it. Expiring too eagerly costs
-/// an honest agent one repeat of a free, unauthenticated, two-request
-/// registration. Expiring too slowly leaves the piece with no entrance at all
-/// for every agent without a domain, for as long as the window lasts -- because
-/// reaching MAX_TOTAL_KEYS refuses every later registration and nothing else
-/// removes a row. Given that, the cheap mistake is the short window.
-///
-/// A key that HAS been through the door is never touched, at any age.
+/// How long a key bound to no token is kept after its last use (or its
+/// registration, if never used). A key bound to a token is never pruned; a
+/// full registry evicts instead of refusing (see MAX_UNBOUND_KEYS in queries.mjs).
 export const UNUSED_KEY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /// The same dial for /mcp, which had none at all.
@@ -132,7 +124,6 @@ export function makeAllowRegistration(q, now = Date.now) {
     const stamps = prune(at, windows.get(keyId) ?? []);
     windows.set(keyId, stamps);
     if (stamps.length >= REGISTRATION_MAX_PER_WINDOW) return false;
-    if (q.keyCount() >= MAX_TOTAL_KEYS) return false;
     stamps.push(at);
     return true;
   };
