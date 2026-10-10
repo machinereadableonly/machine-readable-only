@@ -2,7 +2,7 @@
 // Sorting a request into one of four cases.
 import { createHash } from "node:crypto";
 import { issueChallenge, checkChallenge, CHALLENGE_MS } from "./challenge.mjs";
-import { verifyRequest, headerOf, contentDigest, MAX_WINDOW_MS } from "./verify.mjs";
+import { verifyRequest, headerOf, contentDigest, MAX_WINDOW_MS, REQUIRED } from "./verify.mjs";
 
 /**
  * Adapt a Node request to the shape the signature library takes.
@@ -86,6 +86,16 @@ export function challengeBody(challenge, expires, domain, reason, extra = null, 
 /// checked here because they are the door's mechanism, not RFC 9421's.
 export const BOUND_COMPONENTS = ["challenge", "challenge-response"];
 
+/// The headers every 401 carries: the auth scheme RFC 9110 requires, and RFC
+/// 9421's Accept-Signature naming exactly what the door requires covered.
+export function refusalHeaders(domain) {
+  const components = [...REQUIRED, ...BOUND_COMPONENTS].map((c) => `"${c}"`).join(" ");
+  return {
+    "www-authenticate": `Signature realm="${domain}"`,
+    "accept-signature": `sig1=(${components});created;expires;alg="ed25519";tag="web-bot-auth"`,
+  };
+}
+
 /**
  * Decide whether one request gets in.
  *
@@ -107,6 +117,7 @@ export async function admit(req, deps) {
     return {
       ok: false,
       status: 401,
+      headers: refusalHeaders(domain),
       body: challengeBody(challenge, expires, domain, reason, extra, hasProtocol),
     };
   };

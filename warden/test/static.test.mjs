@@ -481,3 +481,23 @@ test("the served llms.txt discloses that token 1 takes no place, and why it can 
   assert.match(llms, /the contract keeps it out of the race/);
   assert.match(llms, /given Aorta, the Mark every finisher after the 64th receives, and takes no place/);
 });
+
+// 16 Low. RFC 9110 requires WWW-Authenticate on a 401, and RFC 9421 5.1's
+// Accept-Signature names the components to cover, so a conforming signer can
+// read them from the header rather than from /protocol.
+test("every 401 names its scheme and the exact components the door requires", async () => {
+  const { parseDictionary } = await import("structured-headers");
+  const { REQUIRED } = await import("../src/door/verify.mjs");
+  const { BOUND_COMPONENTS } = await import("../src/door/middleware.mjs");
+  const { server, base } = await start();
+  try {
+    const res = await fetch(`${base}/mcp`, { method: "POST", body: "{}" });
+    assert.equal(res.status, 401);
+    assert.match(res.headers.get("www-authenticate") ?? "", /^Signature realm="/);
+    const [members, params] = parseDictionary(res.headers.get("accept-signature")).get("sig1");
+    assert.deepEqual(members.map(([name]) => name), [...REQUIRED, ...BOUND_COMPONENTS]);
+    assert.equal(params.get("tag"), "web-bot-auth");
+  } finally {
+    server.close();
+  }
+});

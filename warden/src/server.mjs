@@ -18,9 +18,9 @@ import { tokenLinks } from "./mcp/tokenView.mjs";
 // tokenView and the MCP handler are NOT imported: they belong to Tasks 6 and 7
 // and arrive through config, so this router is runnable the day it is written.
 
-const json = (res, status, body) => {
+const json = (res, status, body, headers = {}) => {
   const text = JSON.stringify(body);
-  res.writeHead(status, { "content-type": "application/json", "content-length": Buffer.byteLength(text) });
+  res.writeHead(status, { ...headers, "content-type": "application/json", "content-length": Buffer.byteLength(text) });
   res.end(text);
 };
 
@@ -447,7 +447,7 @@ export function createServer(config) {
         // Only advertise the protocol document if this Warden actually has it.
         hasProtocol: typeof config.protocolMd === "string",
       });
-      if (!decision.ok) return json(res, decision.status, decision.body);
+      if (!decision.ok) return json(res, decision.status, decision.body, decision.headers);
 
       // This key is in use, so it is never a candidate for the prune above.
       // Throttled to one write a day inside the query itself.
