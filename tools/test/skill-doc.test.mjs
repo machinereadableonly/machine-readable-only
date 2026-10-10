@@ -67,6 +67,8 @@ test("every refusal an AGENT can be sent is one the skill explains", () => {
     join(root, "warden/src/pay"),
   ].flatMap((dir) => sources(dir));
   agentFacing.push(readFileSync(join(root, "warden/src/server.mjs"), "utf8"));
+  // The payment middleware a misconfigured Warden is built with lives here.
+  agentFacing.push(readFileSync(join(root, "warden/src/bootstrap.mjs"), "utf8"));
 
   const emitted = new Set();
   for (const src of agentFacing) {
@@ -77,6 +79,17 @@ test("every refusal an AGENT can be sent is one the skill explains", () => {
     // is exactly what a guard that cannot see the failure looks like.
     for (const m of src.matchAll(/reason["']?\s*[:=,]\s*["']([a-z][a-z-]*)["']/g)) emitted.add(m[1]);
     for (const m of src.matchAll(/fail\(["']([a-z][a-z-]*)["']/g)) emitted.add(m[1]);
+    // Both branches of a ternary chosen as the reason.
+    for (const m of src.matchAll(/reason["']?\s*[:=]\s*[^\n,;]*\?\s*["']([a-z][a-z-]*)["']\s*:\s*["']([a-z][a-z-]*)["']/g)) {
+      emitted.add(m[1]);
+      emitted.add(m[2]);
+    }
+  }
+  // The gates return their refusal as a bare literal, which a caller passes on
+  // as `reason: blocked`. Every literal a gate RETURNS, never one it compares.
+  for (const line of readFileSync(join(root, "warden/src/mcp/gates.mjs"), "utf8").split("\n")) {
+    if (!/^\s*(?:if \(.*\) )?return\b/.test(line)) continue;
+    for (const m of line.matchAll(/(?:return|\?|:)\s*["']([a-z][a-z-]*)["']/g)) emitted.add(m[1]);
   }
 
   // AND THE ONES NO SCAN CAN SEE, because they are computed rather than
@@ -91,7 +104,7 @@ test("every refusal an AGENT can be sent is one the skill explains", () => {
   // reasons were invisible; this is set just under what the broadened scan
   // actually finds, so losing sight of the surface fails here rather than
   // quietly reducing what is checked.
-  assert.ok(emitted.size >= 32, `expected the whole surface, parsed ${emitted.size}`);
+  assert.ok(emitted.size >= 46, `expected the whole surface, parsed ${emitted.size}`);
 
   const undocumented = [...emitted].filter((r) => !documented.has(r)).sort();
   assert.deepEqual(undocumented, [], "the service sends a refusal no published page explains");

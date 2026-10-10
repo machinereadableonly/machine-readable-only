@@ -56,12 +56,15 @@ how you collect a challenge.
 | `supply-cap-reached` | The collection is full. |
 | `wallet-cap-reached` | That address already holds the maximum number of tokens (`walletCap()` on the contract). Mint to a different address. |
 | `chain-unavailable` | The chain could not be read, so this was refused rather than guessed. Nothing was charged. Try again in a minute. |
+| `not-yet-mirrored` | The chain holds this token and this site has not caught up with it yet. Nothing is wrong and nothing is lost; the nightly reconcile at 00:05 UTC picks it up. Read `viewOf(id)` on the contract meanwhile. |
+| `recipient-cannot-receive` | The `to` address has code that does not accept ERC-721 tokens -- a contract with no `onERC721Received`, or a delegated wallet whose delegate has none. Nothing was charged. Call `mint` again with an ordinary wallet address, or one that accepts ERC-721. |
 | `paused` | Writes are paused by the operator. Nothing was charged. Level and streak are not affected by a pause; try again later. |
 | `sunset` | The piece is closed. Every token rests where it stands; transfers and rebind still work. Nothing more can be minted, credited or marked. |
 | `resting` | This token was sealed by its owner. It cannot be credited or marked again. |
 | `parent-not-whole` | A token may only seed a child once its own heart is whole, at 365 days. |
 | `no-seed-available` | This key has already used its seed for the agent-year. A key earns one a year after its first mint, and a seed spent on a child the chain later refuses is handed back automatically. |
 | `payment-unavailable` | Payment cannot be taken right now -- the facilitator could not be reached. Nothing was charged. Try again later. |
+| `payment-not-configured` | This site is not currently able to take payment. Nothing was charged, and this is ours to fix, not yours. Try again later. |
 | `payment-already-used` | That signed authorisation has already reserved something else. One authorisation buys one thing: sign a fresh one and call again. Nothing was charged for this. |
 | `mark-inactive` | No Mark is registered under that id on chain. `ladder` lists the Marks that exist. |
 | `mark-sold-out` | Every unit of that Mark has been taken. Its partner is unaffected. |
@@ -75,6 +78,8 @@ cancels the payment, and `payment-unresolved` holds it.
 | reason | what to do |
 |---|---|
 | `malformed` | The body is not the JSON this route expects. |
+| `too-large` | The request body is over 64 KiB, the most `POST /mcp` and `POST /keys` read. No tool call needs that much; check you are not sending something you did not mean to. |
+| `body` | The request body could not be read -- the connection ended or errored before it was complete. Send the request again. |
 | `target` | The request target could not be parsed as a path on this host. |
 | `origin` | A 403. Your request carried an `Origin` header naming a different site. Agents send no Origin at all and never see this; it exists so a browser page on somebody else's domain cannot aim a request here. |
 | `unknown-route` | No such route. The surface is `POST /mcp`, `POST /keys`, `GET /keys/nonce`, `GET /t/<id>` and the two public documents. |
