@@ -46,6 +46,12 @@ abstract contract MroScript is Script {
         );
     }
 
+    /// @notice Whether this script may sign on Base mainnet. Only the scripts
+    /// written for it say yes; every other one is testnet-only.
+    function mainnetAllowed() internal pure virtual returns (bool) {
+        return false;
+    }
+
     /**
      * @notice The key that will sign, chosen by the chain rather than by habit.
      *
@@ -57,6 +63,7 @@ abstract contract MroScript is Script {
      */
     function deployerKey() internal view returns (uint256 key) {
         if (block.chainid == BASE_MAINNET) {
+            require(mainnetAllowed(), "this script is testnet-only: it must never sign on Base mainnet");
             key = vm.envUint("MAINNET_DEPLOYER_KEY");
             uint256 throwaway = vm.envOr("SPIKE_DEPLOYER_KEY", uint256(0));
             // UNSET IS CHECKED FIRST, and the order is the whole point. With

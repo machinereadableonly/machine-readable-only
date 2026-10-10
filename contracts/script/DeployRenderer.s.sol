@@ -10,6 +10,10 @@ import {Renderer} from "../src/render/Renderer.sol";
 /// @notice Deploy a new Renderer and draw token 1 through it. Pointing the token
 /// at it is the owner's call, made through the Safe: see swap-renderer.sh.
 contract DeployRenderer is MroScript {
+    function mainnetAllowed() internal pure override returns (bool) {
+        return true;
+    }
+
     function run(address token) external returns (Renderer next) {
         // FIRST, before anything is read or sent. See MroScript.
         guardChain();

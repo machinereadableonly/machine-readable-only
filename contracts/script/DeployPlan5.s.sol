@@ -10,6 +10,10 @@ import {Renderer} from "../src/render/Renderer.sol";
 /// @notice Deploy the pair, write the ladder and fix the split anchor, in one broadcast.
 contract DeployPlan5 is MroScript {
     /// @notice Deploy with the deployer as owner. Refused on Base mainnet.
+    function mainnetAllowed() internal pure override returns (bool) {
+        return true;
+    }
+
     function run() external returns (Renderer r, MachineReadableOnly t) {
         return deploy(address(0));
     }
