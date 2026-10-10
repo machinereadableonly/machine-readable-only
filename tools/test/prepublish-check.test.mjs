@@ -160,3 +160,50 @@ test("a leak added and removed inside the pushed range is flagged, and only with
     { file: "notes.md", line: 2, rule: "absolute home path", history: range },
   ]);
 });
+
+// SECRETS. Built at runtime, never written out, so this file is not a finding.
+const FAKE_KEY = "0x" + "ab".repeat(32);
+const ANVIL_0 = "0x" + "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const NAME = ["CLOCK", "PRIVATE", "KEY"].join("_");
+
+test("a private key beside its name is flagged", (t) => {
+  const dir = scratchRepo(t, (root) => {
+    writeFileSync(join(root, "a.sh"), `${NAME}=${FAKE_KEY}\n`);
+    writeFileSync(join(root, "b.mjs"), `const walletKey = "${FAKE_KEY}";\n`);
+    writeFileSync(join(root, "c.sol"), `uint256 constant KEY = ${FAKE_KEY};\n`);
+  });
+  const rules = scanTree(dir).findings.map((f) => `${f.file}:${f.rule}`).sort();
+  assert.deepEqual(rules, ["a.sh:private key", "a.sh:secret assignment", "b.mjs:private key", "c.sol:private key"]);
+});
+
+test("CONTROL: anvil's published keys, hashes and placeholders are not flagged", (t) => {
+  const dir = scratchRepo(t, (root) => {
+    writeFileSync(join(root, "a.sh"), `export ${NAME}=${ANVIL_0}\nKEY=${ANVIL_0}\n`);
+    writeFileSync(join(root, "b.md"), `tx ${FAKE_KEY}\nAgent Key ${FAKE_KEY}\nconst TOKEN1_KEY = "${FAKE_KEY}";\n`);
+    writeFileSync(join(root, "c.example"),
+      `${NAME}=\n${NAME}=0xYOUR_THROWAWAY_PRIVATE_KEY\nCHALLENGE_SECRET=$CHALLENGE\n` +
+      `MAINNET_DEPLOYER_KEY="$(cast wallet private-key)"\nCHALLENGE_SECRET=rehearsal-only-not-a-real-secret\nAPI_KEY=<your-key>\n` +
+      `MNEMONIC="${"test ".repeat(11)}junk"\n`);
+  });
+  assert.deepEqual(scanTree(dir).findings, []);
+});
+
+test("a named secret assigned a real-looking value is flagged", (t) => {
+  const dir = scratchRepo(t, (root) => {
+    writeFileSync(join(root, "env.backup"),
+      "CHALLENGE_SECRET=9f2c1e77d0a4\nCDP_API_KEY_SECRET=abc/def+ghi==\nMNEMONIC=\"word word word\"\n");
+  });
+  assert.deepEqual(scanTree(dir).findings.map((f) => f.line), [1, 2, 3]);
+});
+
+test("the tree scanned is the commit being pushed, not HEAD", (t) => {
+  const dir = scratchRepo(t, (root) => writeFileSync(join(root, "notes.md"), "clean\n"));
+  const git = gitIn(dir);
+  git("checkout", "-q", "-b", "other");
+  writeFileSync(join(dir, "notes.md"), `clean\n${HOME_TARGET}/x\n`);
+  commitAll(dir, "leak on another branch");
+  const pushed = git("rev-parse", "HEAD").toString().trim();
+  git("checkout", "-q", "-");
+  assert.deepEqual(scanTree(dir).findings, [], "HEAD is clean");
+  assert.deepEqual(scanTree(dir, { tree: pushed }).findings.map((f) => f.rule), ["absolute home path"]);
+});

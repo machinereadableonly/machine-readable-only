@@ -7,7 +7,7 @@
 // the repository and is checked separately by ~/scripts/id-scan.mjs, which the
 // pre-push hook runs right after this.
 //
-// Run: node tools/prepublish-check.mjs [range]   e.g. origin/main..HEAD
+// Run: node tools/prepublish-check.mjs [range [commit]]   e.g. origin/main..HEAD HEAD
 // Exit 0 = clean, exit 1 = findings.
 
 import { execFileSync } from "node:child_process";
@@ -63,6 +63,29 @@ function allows(rel, ruleName) {
 // eight findings on every run is a checker that gets ignored -- which is the
 // only way this file can actually fail at its job.
 const SKIP_PREFIX = ["contracts/lib/", "docs/reviews/"];
+
+/// Anvil's ten published test keys, from its well-known mnemonic. They appear
+/// in scripts and tests on purpose and hold nothing.
+const ANVIL_KEYS = new Set([
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+  "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+  "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
+  "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
+  "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
+  "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
+  "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
+  "0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
+  "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
+]);
+
+/// A value that is a shell expansion, a placeholder, or anvil's published
+/// mnemonic or one of its keys, not a secret.
+const notASecret = (value) =>
+  /^["']?\$/.test(value) ||
+  /^["']?(?:test ){11}junk["']?$/.test(value) ||
+  /YOUR_|<[^>]*>|not-a-real|example|placeholder|changeme/i.test(value) ||
+  ANVIL_KEYS.has(value.replace(/^["']|["']$/g, "").toLowerCase());
 
 const RULES = [
   {
@@ -120,6 +143,19 @@ const RULES = [
     // Distinct from the attribution trailer: a link to a conversation.
     re: /claude\.ai\/(?:code|chat)\/|noreply@anthropic\.com/i,
   },
+  {
+    name: "private key",
+    // A bare 64-hex value is everywhere (tx hashes, bytes32), so only one
+    // sitting beside a key-ish word, or assigned to a bare KEY, is read as one.
+    re: /(?:(?:private|secret|deployer|wallet|signer|mnemonic)[^\n]{0,40}?|(?<![A-Za-z0-9_])KEY\s*=\s*["']?)(0x[0-9a-fA-F]{64})(?![0-9a-fA-F])/i,
+    ok: (_, m) => ANVIL_KEYS.has(m[1].toLowerCase()),
+  },
+  {
+    name: "secret assignment",
+    // An environment-file line giving a secret-named setting a value.
+    re: /^\s*(?:export\s+)?[A-Z0-9_]*(?:PRIVATE_KEY|SECRET|DEPLOYER_KEY|API_KEY|MNEMONIC|PASSWORD)[A-Z0-9_]*=(\S.*)$/,
+    ok: (_, m) => notASecret(m[1].trim()),
+  },
 ];
 
 /// Every rule applied to one line of one tracked path. `extra` rides on each
@@ -129,7 +165,7 @@ function scanLine(rel, line, lineNo, findings, extra = {}) {
   for (const rule of RULES) {
     const m = line.match(rule.re);
     if (!m) continue;
-    if (rule.ok && rule.ok(m[0])) continue;
+    if (rule.ok && rule.ok(m[0], m)) continue;
     // THE EXEMPTION IS PER RULE, not per file. `ALLOW.has(rel)` exempted a
     // file from EVERY rule -- so a fixture allowed for its invented home
     // path was also unchecked for real email addresses and for AI
@@ -201,11 +237,14 @@ function scanBlob(rel, content, findings, extra, onLine) {
  * Exported so it can be driven against a scratch repository by a test. The
  * repository is the default, and running this file as a script scans it.
  *
+ * `tree` is the commit whose files are scanned: the one being pushed, which
+ * need not be HEAD.
+ *
  * Returns `{ tracked, findings, pending, unreadable }`.
  */
-export function scanTree(root = REPO_ROOT, { range = null } = {}) {
+export function scanTree(root = REPO_ROOT, { range = null, tree = "HEAD" } = {}) {
   // `mode type sha<TAB>path`, NUL-separated so no path can break the parse.
-  const entries = git(root, ["ls-tree", "-r", "-z", "HEAD"])
+  const entries = git(root, ["ls-tree", "-r", "-z", tree])
     .toString("utf8")
     .split("\0")
     .filter(Boolean)
@@ -278,7 +317,8 @@ export function scanTree(root = REPO_ROOT, { range = null } = {}) {
 function main() {
   // The pre-push hook passes the range being pushed; run by hand, HEAD alone.
   const range = process.argv[2] ?? null;
-  const { tracked, findings, pending, unreadable } = scanTree(REPO_ROOT, { range });
+  const tree = process.argv[3] ?? "HEAD";
+  const { tracked, findings, pending, unreadable } = scanTree(REPO_ROOT, { range, tree });
 
   // Author identity across the whole history. A personal mailbox in an author
   // field is not fixed by editing files -- it needs a history rewrite.

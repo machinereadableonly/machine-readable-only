@@ -36,44 +36,67 @@ fail=0
 # The exit code is the whole signal, so nothing here is piped into a formatter.
 # A pipeline's status is the LAST command's, which let a real finding through
 # on 2026-09-09.
-# The range this push publishes: everything the upstream does not have yet.
-# Compared against the upstream this push is actually updating, not a
-# hardcoded branch. Both guards read it.
-upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)"
-range="${upstream:-origin/main}..HEAD"
-
-echo "pre-push: pattern guard (tools/prepublish-check.mjs $range)"
-if command -v node >/dev/null 2>&1; then
-  # HEAD's committed files and path names, plus every blob in $range: a leak
-  # added and removed inside the push is gone from HEAD but not from history.
-  node tools/prepublish-check.mjs "$range"
-  if [ $? -ne 0 ]; then
-    echo "pre-push: REFUSED -- the pattern guard found something. Read it above."
-    fail=1
-  fi
-else
-  echo "pre-push: REFUSED -- node is not on PATH, so the guard could not run."
-  echo "          A guard that silently does not run is worse than no guard."
-  fail=1
+#
+# WHAT IS PUSHED, from git itself: one stdin line per ref,
+# `<local ref> <local sha> <remote ref> <remote sha>`. `git push origin other`
+# or `HEAD~2:main` publishes commits that are not HEAD, so each pushed commit
+# is scanned as its own tree, over the range the remote does not have yet.
+zero='^0+$'
+pushes=()
+if [ ! -t 0 ]; then
+  while read -r _ local_sha _ remote_sha; do
+    [[ $local_sha =~ $zero ]] && continue   # a deletion publishes nothing
+    if [[ $remote_sha =~ $zero ]] || ! git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+      base=origin/main                       # a new ref, or a remote tip never fetched
+    else
+      base=$remote_sha
+    fi
+    pushes+=("$base..$local_sha $local_sha")
+  done
+fi
+if [ ${#pushes[@]} -eq 0 ]; then
+  # Run by hand: what the upstream does not have yet.
+  upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)"
+  pushes=("${upstream:-origin/main}..HEAD HEAD")
 fi
 
-# The identity scanner is machine-level and may legitimately be absent on
-# another machine. Absent is reported, never skipped silently.
 scanner="$HOME/scripts/id-scan.mjs"
-echo "pre-push: identity scan ($scanner)"
-if [ -f "$scanner" ]; then
-  node "$scanner" "$range"
-  if [ $? -ne 0 ]; then
-    echo "pre-push: REFUSED -- the identity scan found something."
-    echo "          A finding is not always a leak: a commit that DELETES a"
-    echo "          string still shows it in its diff. Check with"
-    echo "          'git grep <string> $upstream' before overriding."
+for push in "${pushes[@]}"; do
+  range="${push% *}"
+  commit="${push#* }"
+
+  echo "pre-push: pattern guard (tools/prepublish-check.mjs $range)"
+  if command -v node >/dev/null 2>&1; then
+    # The pushed commit's files and path names, plus every blob in $range: a
+    # leak added and removed inside the push is gone from the tip, not history.
+    node tools/prepublish-check.mjs "$range" "$commit"
+    if [ $? -ne 0 ]; then
+      echo "pre-push: REFUSED -- the pattern guard found something. Read it above."
+      fail=1
+    fi
+  else
+    echo "pre-push: REFUSED -- node is not on PATH, so the guard could not run."
+    echo "          A guard that silently does not run is worse than no guard."
     fail=1
   fi
-else
-  echo "pre-push: WARNING -- the identity scanner is not installed on this"
-  echo "          machine, so personal VALUES were not checked. Patterns were."
-fi
+
+  # The identity scanner is machine-level and may legitimately be absent on
+  # another machine. Absent is reported, never skipped silently.
+  echo "pre-push: identity scan ($scanner $range)"
+  if [ -f "$scanner" ]; then
+    node "$scanner" "$range"
+    if [ $? -ne 0 ]; then
+      echo "pre-push: REFUSED -- the identity scan found something."
+      echo "          A finding is not always a leak: a commit that DELETES a"
+      echo "          string still shows it in its diff. Check with"
+      echo "          'git grep <string> origin/main' before overriding."
+      fail=1
+    fi
+  else
+    echo "pre-push: WARNING -- the identity scanner is not installed on this"
+    echo "          machine, so personal VALUES were not checked. Patterns were."
+  fi
+done
 
 if [ "$fail" -ne 0 ]; then
   echo
