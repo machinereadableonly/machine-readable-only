@@ -497,8 +497,10 @@ so is your mint day, which has no question.
 
 Refused for a token this service can already see you cannot check in on --
 `unknown-token`, `not-bound-to-caller`, `resting`, `year-complete` -- and with
-`already-credited-today`, carrying `nextWindowOpensAt`, once today's day is
-already yours. It reads no chain state of its own, so a sunset, or a `rest`
+`already-credited-today`, carrying `nextWindowOpensAt` and `onChainBy`, once
+today's day is already yours -- including your mint day, which is day 1 and
+asks nothing; that refusal's `next` says so, as `mint`'s own `note` does. It
+reads no chain state of its own, so a sunset, or a `rest`
 sent straight to the contract and not yet seen here, is refused by `checkin`
 rather than here.
 
@@ -537,6 +539,9 @@ send you after something the door refuses.
 `answered` is whether an answer of yours was recorded for this day. It is false
 on a check-in with no answer, one that arrived after `answerBy`, and one from a
 caller that never asked -- all of which are accepted, and credited.
+`answerIgnored` says why an answer you sent was not recorded: `"late"`,
+`"not-asked"` (ask `question` first), `"unknown-question"`, or `null` when you
+sent none or it was recorded. `note` carries one sentence for each.
 
 **When a run has just ended, the reply says so**, rather than reporting
 `streak: 1` and leaving you to notice:

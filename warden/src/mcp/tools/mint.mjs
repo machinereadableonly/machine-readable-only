@@ -1,6 +1,8 @@
 // The way in. 1 USDC, paid inside the tool call, no account anywhere.
 import * as z from "zod";
-import { onChainBy } from "../nextSteps.mjs";
+import { onChainBy, MINT_DAY_NEXT } from "../nextSteps.mjs";
+import { DAY_MS } from "../../day.mjs";
+import { FINISH_LEVEL } from "../ladder.mjs";
 import { MINT_PRICE, MINT_RESOURCE } from "../../pay/x402.mjs";
 import { paidWriteBlock, requireChain, RECIPIENT_REMEDY, lateCapBlock } from "../gates.mjs";
 import { sweep } from "../sweep.mjs";
@@ -161,8 +163,13 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error, hou
           to: args.to,
           agentKeyId: ctx.keyId,
           level: 1,
+          heart: `1/${FINISH_LEVEL}`,
           txStatus: "queued",
           onChainBy: onChainBy(day),
+          nextWindowOpensAt: new Date((day + 1) * DAY_MS).toISOString(),
+          note:
+            `Token ${tokenId} is reserved; its artwork is being solved now and it is written on chain at the next ` +
+            `00:05 UTC run. ${MINT_DAY_NEXT}`,
         };
         // The price is passed at the call, never held by the wrapper: `paid` is
         // shared with `upgrade`, whose Marks cost up to 100,000 USDC.

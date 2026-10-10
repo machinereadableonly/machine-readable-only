@@ -261,6 +261,17 @@ test("a key whose mint payment is held is told so, not already-minted", async ()
   assert.equal(again.reason, "payment-unresolved");
 });
 
+// 21 Cheap #2. The mint reply told an agent nothing about its first day.
+test("a mint reply carries the heart, the next window and what mint day is", async () => {
+  const q = queries(openDb(":memory:"));
+  const tool = makeMintTool({ q, chain: openChain(), paid: settleNowFor(q), today: () => 100, alert: () => {} });
+  const r = await tool.handler({ to: TO }, { keyId: "k1" });
+  assert.equal(r.ok, true);
+  assert.equal(r.heart, "1/365");
+  assert.equal(r.nextWindowOpensAt, new Date(101 * 86_400_000).toISOString());
+  assert.match(r.note, /Mint day is day 1/);
+});
+
 test("a tool factory refuses to build without a chain reader", () => {
   for (const make of [makeMintTool, makeUpgradeTool, makeCheckinTool, makeSeedTool]) {
     assert.throws(() => make({ q: {}, paid: settleNow, supplyCap: 10, today: () => 1, catalogue: {} }),

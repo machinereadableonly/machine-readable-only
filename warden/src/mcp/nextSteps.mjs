@@ -138,6 +138,14 @@ export const NO_NEXT = new Set([
  * carries a `next` (a tool that wants to say something more specific wins),
  * or when the reason is one that deliberately has none.
  */
+/// For `already-credited-today` on the day a token was minted, where "you
+/// already came back today" would be said to an agent that has only arrived.
+export const MINT_DAY_NEXT =
+  "Mint day is day 1 of the year and carries no question. Your first check-in, and your first question, open at `nextWindowOpensAt`.";
+
+/// True when `day` is the token's mint day and nothing has been credited since.
+export const isMintDay = (token, day) => token.mintDay === day && token.lastDay === day;
+
 export function withNext(value) {
   if (typeof value !== "object" || value === null) return value;
   if (value.ok !== false || typeof value.reason !== "string") return value;

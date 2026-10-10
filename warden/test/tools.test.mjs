@@ -335,7 +335,7 @@ test("CONTROL: the 364th accepted reply still carries both dates", async () => {
 // on the one day the piece exists to record.
 test("an accepted check-in carries exactly the published field set, on both branches", async () => {
   const published = [
-    "accepted", "answered", "creditedDay", "heart", "level", "nextRung", "nextWindowOpensAt",
+    "accepted", "answerIgnored", "answered", "creditedDay", "heart", "level", "nextRung", "nextWindowOpensAt",
     "note", "ok", "onChainBy", "streak", "streakDeadline",
   ];
 
@@ -438,6 +438,8 @@ test("a late answer, valid or not, credits the day as silent", async () => {
   const r = await tool.handler({ tokenId: 1, answer: "rain" }, { keyId: "k1" });
   assert.equal(r.accepted, true);
   assert.equal(r.answered, false);
+  assert.equal(r.answerIgnored, "late");
+  assert.match(r.note, /after answerBy/);
   assert.equal(q.getQuestion(1, 101).answer, null);
 });
 
@@ -447,6 +449,8 @@ test("an answer with no question asked credits the day as silent", async () => {
   const r = await tool.handler({ tokenId: 1, answer: "fog" }, { keyId: "k1" });
   assert.equal(r.accepted, true);
   assert.equal(r.answered, false);
+  assert.equal(r.answerIgnored, "not-asked");
+  assert.match(r.note, /ask `question` first/);
 });
 
 // A bank the operator has edited can lose the question a token was issued, and
@@ -459,7 +463,16 @@ test("an answer to a question the bank no longer holds credits the day as silent
   const r = await tool.handler({ tokenId: 1, answer: "fog" }, { keyId: "k1" });
   assert.equal(r.accepted, true);
   assert.equal(r.answered, false);
+  assert.equal(r.answerIgnored, "unknown-question");
   assert.equal(q.getQuestion(1, 101).answer, null);
+});
+
+test("a check-in that sent no answer reports nothing ignored", async () => {
+  const { q } = withQuestion();
+  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => 5_000 });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.answered, false);
+  assert.equal(r.answerIgnored, null);
 });
 
 // `answered` is read back from the UPDATE, not inferred from having graded an
@@ -489,4 +502,16 @@ test("no answer at all is accepted and says so", async () => {
 test("a tool built without the bank refuses at the wiring, not on a call", () => {
   const { q } = withToken();
   assert.throws(() => makeCheckinTool({ q, chain: noChainRead, today: () => 101 }), /question bank/);
+});
+
+// 21 Cheap #2. Mint sets lastDay to the mint day, so a check-in that day is
+// refused `already-credited-today` -- "you already came back" to an agent that
+// has only just arrived. The refusal says what mint day is instead.
+test("a check-in on the mint day is told mint day is day 1", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 101, mintDay: 101 });
+  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101 });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.reason, "already-credited-today");
+  assert.match(r.next, /Mint day is day 1/);
 });

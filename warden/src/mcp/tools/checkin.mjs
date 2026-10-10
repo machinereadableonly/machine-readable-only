@@ -2,7 +2,7 @@
 import * as z from "zod";
 import { keyIdToBytes32 } from "../keyId.mjs";
 import { chainBlock, tokenBlock, yearCompleteBlock, requireChain } from "../gates.mjs";
-import { onChainBy } from "../nextSteps.mjs";
+import { onChainBy, isMintDay, MINT_DAY_NEXT } from "../nextSteps.mjs";
 import { DAY_MS, utcDay } from "../../day.mjs";
 import { FINISH_LEVEL } from "../ladder.mjs";
 import { answerIndex, answerDeadline, ANSWER_WINDOW_MS, MAX_ANSWER_LENGTH } from "../question.mjs";
@@ -25,6 +25,14 @@ const RUNGS = [3, 7, 30, 100];
 /// value. `heart` is the fact an agent acts on (the year is whole, not merely
 /// closed to it), and no other refusal here echoes the id it was asked about.
 const yearComplete = () => ({ ok: false, accepted: false, reason: "year-complete", heart: `${FINISH_LEVEL}/${FINISH_LEVEL}` });
+
+/// The sentence a reply adds for each reason a sent answer was not recorded.
+const IGNORED_NOTE = {
+  null: "",
+  late: " Your answer arrived after answerBy, so this day is credited without one.",
+  "not-asked": " No question was asked for this token today, so your answer was not recorded: ask `question` first, then check in.",
+  "unknown-question": " Today's question is no longer in the bank, so your answer was not recorded; the day is credited without one.",
+};
 
 export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now }) {
   requireChain(chain, "checkin");
@@ -135,6 +143,7 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
           reason: "already-credited-today",
           nextWindowOpensAt: new Date((token.lastDay + 1) * DAY_MS).toISOString(),
           onChainBy: onChainBy(token.lastDay),
+          ...(isMintDay(token, day) ? { next: MINT_DAY_NEXT } : {}),
         };
       }
 
@@ -156,6 +165,11 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
       const asked = q.getQuestion(tokenId, day);
       const inTime = asked && answer !== undefined && at <= asked.issuedAt + ANSWER_WINDOW_MS;
       let answerIdx = null;
+      // Why a sent answer was not recorded, said in the reply: a silent day
+      // otherwise reads exactly like an answered one.
+      let answerIgnored = null;
+      if (answer !== undefined && !asked) answerIgnored = "not-asked";
+      else if (answer !== undefined && !inTime) answerIgnored = "late";
       if (inTime) {
         // A bank the operator has edited can lose a question already issued.
         // Grading that SILENT rather than invalid matters: `invalid-answer`
@@ -163,6 +177,7 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
         // a day over an edit of ours.
         const entry = bank.find((b) => b.id === asked.questionId);
         answerIdx = entry ? answerIndex(entry, answer) : null;
+        if (!entry) answerIgnored = "unknown-question";
         if (entry && answerIdx === null) {
           return {
             ok: false,
@@ -324,6 +339,7 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
         streak,
         heart: `${Math.min(level, FINISH_LEVEL)}/${FINISH_LEVEL}`,
         answered: recorded,
+        answerIgnored,
         nextWindowOpensAt: finished ? null : new Date((day + 1) * DAY_MS).toISOString(),
         onChainBy: onChainBy(day),
         streakDeadline,
@@ -336,9 +352,9 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
           ? `Day ${level} credited; it is written on chain at 00:05 UTC. Your year is complete: ` +
             `the record is final, and no further day can be credited to this token. Its place in the ` +
             `order tokens finish is written round the border once the chain has recorded it; ` +
-            `\`status\` shows it.` + brokeNote
+            `\`status\` shows it.` + brokeNote + IGNORED_NOTE[answerIgnored]
           : `Day ${level} credited; it is written on chain at 00:05 UTC. Your run is ${streak}. ` +
-            `Check in again before ${streakDeadline} to keep it.` + brokeNote,
+            `Check in again before ${streakDeadline} to keep it.` + brokeNote + IGNORED_NOTE[answerIgnored],
       };
     },
   };

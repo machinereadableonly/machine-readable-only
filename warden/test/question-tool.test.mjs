@@ -115,3 +115,14 @@ test("a question asked in the day's last seconds is due before midnight", async 
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
   assert.equal(r.answerBy, new Date(endOfDay - 1).toISOString());
 });
+
+test("a question on the mint day is told mint day is day 1, and when it lands", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 101, mintDay: 101 });
+  const tool = makeQuestionTool({ q, bank: BANK, challengeSecret: "s", today: () => 101, now: () => 1 });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.reason, "already-credited-today");
+  assert.match(r.next, /Mint day is day 1/);
+  assert.equal(typeof r.onChainBy, "string");
+});

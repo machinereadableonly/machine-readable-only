@@ -3,6 +3,7 @@ import * as z from "zod";
 import { DAY_MS, utcDay } from "../../day.mjs";
 import { FINISH_LEVEL } from "../ladder.mjs";
 import { questionFor, publicShape, answerSetSize, answerDeadline } from "../question.mjs";
+import { onChainBy, isMintDay, MINT_DAY_NEXT } from "../nextSteps.mjs";
 
 export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now = Date.now }) {
   // Both at construction, like requireChain: a tool built without them would
@@ -41,6 +42,8 @@ export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now
           ok: false,
           reason: "already-credited-today",
           nextWindowOpensAt: new Date((token.lastDay + 1) * DAY_MS).toISOString(),
+          onChainBy: onChainBy(token.lastDay),
+          ...(isMintDay(token, day) ? { next: MINT_DAY_NEXT } : {}),
         };
       }
 
