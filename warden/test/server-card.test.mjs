@@ -207,3 +207,60 @@ test("/.well-known/x402 is still NOT served", async () => {
     server.close();
   }
 });
+
+// -- the Server Card extension (SEP-2127, final) -----------------------------
+// Rules read from modelcontextprotocol/ext-server-card's schema.ts and
+// docs/discovery.md on 2026-10-10.
+
+test("GET /mcp/server-card serves a v1 Server Card, public, with the extension's headers", async () => {
+  const { server, base } = await startServer();
+  try {
+    const res = await fetch(`${base}/mcp/server-card`);
+    assert.equal(res.status, 200, "public: not behind the door");
+    assert.equal(res.headers.get("content-type"), "application/mcp-server-card+json");
+    assert.equal(res.headers.get("access-control-allow-origin"), "*");
+    assert.equal(res.headers.get("cache-control"), "public, max-age=3600");
+    const card = await res.json();
+    assert.equal(card.$schema, "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json");
+    assert.equal(card.name, CARD.name);
+    assert.equal(card.version, CARD.version);
+    assert.ok(card.description.length >= 1 && card.description.length <= 100, "the schema's 1-100 characters");
+    assert.match(card.name, /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/);
+    assert.deepEqual(card.remotes, [{ type: "streamable-http", url: CARD.remotes[0].url, supportedProtocolVersions: ["2026-07-28"] }]);
+
+    const etag = res.headers.get("etag");
+    assert.ok(etag, "an ETag");
+    const again = await fetch(`${base}/mcp/server-card`, { headers: { "if-none-match": etag } });
+    assert.equal(again.status, 304, "an unchanged card is not sent twice");
+  } finally {
+    server.close();
+  }
+});
+
+test("the AI Catalog points at the card, and a preflight is answered", async () => {
+  const { server, base } = await startServer();
+  try {
+    const res = await fetch(`${base}/.well-known/ai-catalog.json`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("content-type"), "application/ai-catalog+json");
+    assert.deepEqual(await res.json(), {
+      specVersion: "1.0",
+      entries: [{ identifier: `urn:air:${DOMAIN}:mcp:machine-readable-only`, type: "application/mcp-server-card+json", url: `https://${DOMAIN}/mcp/server-card` }],
+    });
+    const pre = await fetch(`${base}/mcp/server-card`, { method: "OPTIONS" });
+    assert.equal(pre.status, 204);
+    assert.equal(pre.headers.get("access-control-allow-methods"), "GET");
+  } finally {
+    server.close();
+  }
+});
+
+test("with no card configured, both answer 404 rather than reaching the door", async () => {
+  const { server, base } = await startServer({ serverCard: undefined });
+  try {
+    assert.equal((await fetch(`${base}/mcp/server-card`)).status, 404);
+    assert.equal((await fetch(`${base}/.well-known/ai-catalog.json`)).status, 404);
+  } finally {
+    server.close();
+  }
+});

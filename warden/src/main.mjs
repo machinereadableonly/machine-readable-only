@@ -34,6 +34,7 @@ import { makeChainReader } from "./chain/read.mjs";
 import { verifyChainId, verifyDecoder, verifyDay, verifySplitAnchor, verifyOwner, treasuryBalance } from "./chain/preflight.mjs";
 import { DAY_MS } from "./day.mjs";
 import { requeueOrphans, runSolver } from "./solve/queue.mjs";
+import { serverCardFrom } from "./serverCard.mjs";
 import { utcDay } from "./mcp/tools/checkin.mjs";
 
 /**
@@ -369,7 +370,7 @@ async function main() {
   // Parsed here, at boot, so malformed JSON stops the Warden starting instead
   // of reaching an agent as a broken card.
   const serverCard = readFileSync(fileURLToPath(new URL("../../server.json", import.meta.url)), "utf8");
-  JSON.parse(serverCard);
+  if (!serverCardFrom(serverCard)) throw new Error("server.json cannot make an MCP Server Card: it needs name, version, description, repository and remotes");
 
   // The question bank lives OUTSIDE the worktree, because this repository is
   // public and a published bank is a year of answers given away. A missing or

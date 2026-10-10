@@ -3,6 +3,7 @@
 // This service holds NO private key. It reads the chain and writes a local
 // SQLite file; the chain writes belong to the Clock (Plan 3).
 import { createHmac } from "node:crypto";
+import { serverCardFrom, aiCatalogFor, CARD_HEADERS, SERVER_CARD_TYPE, AI_CATALOG_TYPE } from "./serverCard.mjs";
 import { createServer as createHttpServer } from "node:http";
 import { openDb } from "./mirror/db.mjs";
 import { queries } from "./mirror/queries.mjs";
@@ -129,6 +130,9 @@ export function createServer(config) {
   // secret, so a door challenge -- free from any unmetered path -- is not one.
   const seenNonces = new Set();
   const registrationSecret = createHmac("sha256", config.challengeSecret).update("mro-key-registration-nonce").digest("hex");
+  // The Server Card and the catalog pointing at it, built once.
+  const cardDoc = typeof config.serverCard === "string" ? serverCardFrom(config.serverCard) : null;
+  const catalogDoc = cardDoc ? aiCatalogFor(config.domain) : null;
   // Spent SIGNATURES, kept apart from spent challenges: a challenge is dead in
   // five seconds, a signature can live five minutes, and one set swept on the
   // shorter schedule would forget signatures while they were still replayable.
@@ -272,12 +276,9 @@ export function createServer(config) {
       // reads the body of one, and a directory or crawler that indexes cards
       // is exactly the reader that does not.
       //
-      // FOUR PATHS, on purpose. SEP-2127 (MCP Server Cards) was still an OPEN
-      // pull request when this was written and the filename is still moving:
-      // the spec text says `.well-known/mcp/server-cards.json`, plural, while
-      // implementations in the same discussion use the singular. So serve the
-      // three paths agents were MEASURED asking for, plus the spec's plural,
-      // rather than betting on one and being right only by luck.
+      // FOUR PATHS, kept because agents were MEASURED asking for them. The final
+      // Server Card extension puts its card at /mcp/server-card (case 1b-iii);
+      // these serve the registry's server.json.
       //
       // This advertises a capability we HAVE. The rule it must not break is
       // the inverse: /.well-known/x402 stays unanswered while the treasury is
@@ -298,6 +299,27 @@ export function createServer(config) {
           "content-length": Buffer.byteLength(config.serverCard),
         });
         return res.end(config.serverCard);
+      }
+
+      // Case 1b-iii: the Server Card where the final extension puts it, and the
+      // domain's AI Catalog. Public, CORS-open and cacheable, per its discovery doc.
+      if (path === "/mcp/server-card" || path === "/.well-known/ai-catalog.json") {
+        const card = path === "/mcp/server-card";
+        const doc = card ? cardDoc : catalogDoc;
+        if (req.method === "OPTIONS") {
+          res.writeHead(204, CARD_HEADERS);
+          return res.end();
+        }
+        if (reads) {
+          if (!doc) return json(res, 404, { ok: false, reason: "not-found" });
+          const headers = { ...CARD_HEADERS, etag: doc.etag, "content-type": card ? SERVER_CARD_TYPE : AI_CATALOG_TYPE };
+          if (req.headers["if-none-match"] === doc.etag) {
+            res.writeHead(304, headers);
+            return res.end();
+          }
+          res.writeHead(200, { ...headers, "content-length": Buffer.byteLength(doc.body) });
+          return res.end(doc.body);
+        }
       }
 
       // Case 1c: the skill, public and unsigned like the documents above.
