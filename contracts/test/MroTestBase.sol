@@ -127,7 +127,9 @@ abstract contract MroTestBase is Test {
 
     /// @dev The answer pattern `_creditRun` and `_seedFrom` write: 0 none, 1 every
     /// credit a 1, 2 alternate credits, 3 alternate pairs (lit and unlit columns
-    /// along each edge, the most separate runs a band can hold).
+    /// along each edge), 4 every side square lit and alternate bottom columns --
+    /// the most runs: a side draws one run per row whatever its pattern, and
+    /// only the bottom edge gains from alternating.
     uint8 internal _pattern;
 
     function _patternBit(uint32 level) internal view returns (bool) {
@@ -135,6 +137,7 @@ abstract contract MroTestBase is Test {
         if (_pattern == 1) return true;
         if (_pattern == 2) return i % 2 == 0;
         if (_pattern == 3) return (i >> 1) & 1 == 0;
+        if (_pattern == 4) return i < 122 || i >= 244 || ((i - 122) >> 1) & 1 == 0;
         return false;
     }
 

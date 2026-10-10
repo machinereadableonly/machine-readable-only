@@ -95,9 +95,9 @@ contract GasBudgetTest is Test {
     /// elsewhere, because Alchemy is the ONLY third-party metadata consumer
     /// this piece has ever had working -- Basescan ingests none on Base
     /// Sepolia and OpenSea is untested. 24,000 fits version 10 plus the digit
-    /// band: the largest token the shipping contract can produce is 21,009
-    /// bytes (`RealTokenGas.t.sol`), which leaves 2,991 under this limit and
-    /// 8,991 under Alchemy's 30,000.
+    /// band: the largest token the shipping contract can produce is 22,125
+    /// bytes (`RealTokenGas.t.sol`), which leaves 1,875 under this limit and
+    /// 7,875 under Alchemy's 30,000.
     ///
     /// UNTESTED, AND SAY SO: Alchemy's sentence sits among reasons an
     /// HTTP-hosted metadata URL fails to FETCH. This tokenURI is a data URI
@@ -149,7 +149,7 @@ contract GasBudgetTest is Test {
     /// THE PIECE'S ACTUAL WORST CASE IS BIGGER THAN BOTH BANDS AND IS NOT
     /// WATCHED BY THEM. A real token that reaches 365 is given a place in the
     /// same credit, so every finished token carries the digit band, and the
-    /// largest one measures 3,400,263 gas / 21,009 bytes
+    /// largest one measures 3,572,584 gas / 22,125 bytes
     /// (`RealTokenGas.t.sol`). Those are governed by the HARD LIMITS alone --
     /// by `test_theFinishersBandFitsBothHardLimits` here and by
     /// `RealTokenGas.t.sol` there. A band round the banded worst case is worth

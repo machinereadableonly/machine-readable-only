@@ -62,8 +62,8 @@ import {TokenView} from "../src/render/TokenView.sol";
 /// other is the mistake this paragraph exists to stop. Headroom after the rise:
 /// 459,533 gas and 1,838 bytes.
 ///
-/// The current figure, with the answer band: 3,400,263 gas and 21,009 bytes,
-/// leaving 599,737 and 2,991. `WorstCase.sol` holds the pin.
+/// The current figure, with the answer band in its dearest pattern: 3,572,584
+/// gas and 22,125 bytes, leaving 427,416 and 1,875. `WorstCase.sol` holds the pin.
 ///
 /// Every state below is the deepest the SHIPPING CONTRACT can produce.
 contract RealTokenGasTest is MroTestBase {
@@ -216,11 +216,11 @@ contract RealTokenGasTest is MroTestBase {
     /// Every document that says "the dearest token and the largest token are
     /// different tokens" is describing the piece before this branch.
     function test_theWorstCaseRealTokenFitsBothHardLimits() public {
-        // Every answer pattern worth drawing: all ones, alternate credits, and
-        // alternate pairs, which lights alternate columns along each edge.
+        // Every answer pattern worth drawing: all ones, alternate credits,
+        // alternate pairs, and the hybrid that draws the most runs.
         uint256 gasUsed;
         uint256 len;
-        for (uint8 p = 1; p <= 3; ++p) {
+        for (uint8 p = 1; p <= 4; ++p) {
             uint256 snap = vm.snapshotState();
             (uint256 g, uint256 l) = _worstWith(p);
             if (g > gasUsed) gasUsed = g;

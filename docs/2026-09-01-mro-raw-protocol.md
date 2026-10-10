@@ -1239,8 +1239,8 @@ Useful selectors, all verified against the deployment above:
 `tokenURI` returns the image inline. There is no IPFS, no gateway and no
 server in that path. It is also the expensive call: the worst case measured in
 the contract's own test suite (`contracts/test/RealTokenGas.t.sol`) is
-3,400,263 gas, on a seeded child that has finished its year wearing every Mark
-it legally can and a full band of answers. Budget against that rather than
+3,572,584 gas, on a seeded child that has finished its year wearing every Mark
+it legally can and a band of answers in its dearest pattern. Budget against that rather than
 against a founding token, which tops out lower -- a child draws one ring a
 founding token never has. That is a read, so it
 costs you nothing in fees -- but some RPC providers cap the gas an `eth_call`

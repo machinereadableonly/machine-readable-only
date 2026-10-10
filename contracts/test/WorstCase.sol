@@ -19,10 +19,10 @@ pragma solidity ^0.8.30;
 /// worth writing down.
 ///
 /// Measured on a finished child wearing every legal Mark, its echo ring, its
-/// place along the top and a full band of answers. Of the answer patterns
-/// `RealTokenGas.t.sol` measures, every square filled is the largest on both
-/// counts.
+/// place along the top and its answers. Of the answer patterns
+/// `RealTokenGas.t.sol` measures, every side square lit with alternate bottom
+/// columns is the largest on both counts.
 library WorstCase {
-    uint256 internal constant LARGEST_TOKEN_GAS = 3_400_263;
-    uint256 internal constant LARGEST_TOKEN_BYTES = 21_009;
+    uint256 internal constant LARGEST_TOKEN_GAS = 3_572_584;
+    uint256 internal constant LARGEST_TOKEN_BYTES = 22_125;
 }
