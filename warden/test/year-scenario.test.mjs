@@ -162,3 +162,10 @@ test("every `after` dependency is a Mark the same agent orders", () => {
     }
   }
 });
+
+test("two agents that never miss answer the daily question", async () => {
+  const { AGENTS } = await import("../tools/year/scenario.mjs");
+  const answering = AGENTS.filter((a) => a.answers);
+  assert.ok(answering.length >= 2);
+  for (const a of answering) assert.equal(a.misses(a.mintDay + 50), false, `${a.name} must reach 365 to prove the whole band`);
+});

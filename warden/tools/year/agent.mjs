@@ -94,7 +94,8 @@ export function makeAgent({ identityPath, walletKey, site, origin }, deps = {}) 
     register: () => register({ origin, privateJwk: identity.privateJwk }),
     mint,
     upgrade,
-    beat: async (tokenId) => answer(await tool("checkin", { tokenId })),
+    ask: async (tokenId) => answer(await tool("question", { tokenId })),
+    beat: async (tokenId, reply) => answer(await tool("checkin", reply === undefined ? { tokenId } : { tokenId, answer: reply })),
     /// Every token bound to this key, which the Warden reads from the VERIFIED key
     /// id rather than from an argument -- so this asks for nothing and is the only
     /// way back to a token whose mint or seed answer was lost in transit.

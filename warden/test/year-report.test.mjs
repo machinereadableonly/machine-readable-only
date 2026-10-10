@@ -191,3 +191,14 @@ test("a held row's findings are listed, marked HOLD, so a held value can be read
   assert.match(html, /<td>HOLD level: chain 9, expected 10<\/td>/);
   assert.doesNotMatch(html, /No token has ever differed/);
 });
+
+test("an answered check-in and a verified border are paths of their own", () => {
+  const html = renderReport(
+    [{ action: "checkin", ok: true, answered: true, tokenId: 1, chainDay: 3 }],
+    [{ chainDay: 140, agent: "A2", tokenId: 1, milestone: "border-130", decoded: true, exit: 0 }],
+    { tokens: { A2: 1 }, startDay: 1 },
+  );
+  assert.match(html, /<th>A check-in carrying an answer<\/th><td>proven live<\/td>/);
+  assert.match(html, /<th>An answered day verified on chain \(level 130\)<\/th><td>proven live<\/td>/);
+  assert.match(html, /<th>The whole border verified \(level 365\)<\/th><td class="thin">not reached<\/td>/);
+});

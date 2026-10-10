@@ -373,7 +373,7 @@ async function runAgent(spec, ctx) {
 
   let unfinished = null;
   if (plan.checkin && token() !== null) {
-    const args = { ctx, name, token, agent, line, justRebound };
+    const args = { ctx, name, token, agent, line, justRebound, answers: spec.answers === true };
     if (!(await attemptCheckin(args, 1))) {
       unfinished = {
         retry: (attempt) => attemptCheckin(args, attempt),
@@ -515,15 +515,16 @@ async function doMint({ ctx, name, wallet, agent, line }) {
 }
 
 /// One attempt. True when the check-in is settled for today, either way.
-async function attemptCheckin({ ctx, name, token, agent, line, justRebound }, attempt) {
+async function attemptCheckin({ ctx, name, token, agent, line, justRebound, answers }, attempt) {
+  const reply = answers ? await askToday({ token, agent, line, attempt }) : undefined;
   let result;
   try {
-    result = await agent().beat(token());
+    result = await agent().beat(token(), reply);
   } catch (err) {
     result = { ok: false, reason: safeReason(err) };
   }
   const ok = result?.ok === true;
-  line({ action: "checkin", ok, reason: ok ? null : (result?.reason ?? "no-answer"), attempt });
+  line({ action: "checkin", ok, reason: ok ? null : (result?.reason ?? "no-answer"), attempt, ...(reply === undefined ? {} : { answered: true }) });
 
   // The one refusal that is an ENDING rather than a failure: this token's year is
   // over and nothing will ever credit it again. The child's own days end when the
@@ -536,6 +537,21 @@ async function attemptCheckin({ ctx, name, token, agent, line, justRebound }, at
     return true;
   }
   return !shouldRetry(result, attempt, { justRebound });
+}
+
+/// Today's question and a fixed answer to it: the first option, or the lowest
+/// value of a range. Undefined when it could not be asked, which still checks in.
+async function askToday({ token, agent, line, attempt }) {
+  let asked;
+  try {
+    asked = await agent().ask(token());
+  } catch (err) {
+    asked = { ok: false, reason: safeReason(err) };
+  }
+  const ok = asked?.ok === true;
+  line({ action: "question", ok, reason: ok ? null : (asked?.reason ?? "no-answer"), attempt });
+  if (!ok) return undefined;
+  return asked.answers ? asked.answers[0] : asked.range?.min;
 }
 
 async function doMarks(spec, { ctx, name, wallet, token, agent, line }) {

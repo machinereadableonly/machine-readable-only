@@ -22,6 +22,7 @@ import {
   ORIGIN, SITE,
 } from "./runner.mjs";
 import { expected, places, FINISH_LEVEL } from "./tally.mjs";
+import { AGENTS } from "./scenario.mjs";
 
 /// How far into the fast day the pass runs. The Clock writes at +30 s and the
 /// runner acts from +60 s, so by +240 s the day's writes have landed and there
@@ -195,7 +196,11 @@ export function compare({ chain, mirror, tally, mirrorTally = tally, place = nul
  * A full fade is deliberately absent. It is the renderer's ink ladder applied to
  * a run that fell, not a stored field, so no read of a token can show it.
  */
-export function milestones(prev, view) {
+/// The levels at which an answering token's border is verified: the first side
+/// drawn (from 122), and the whole year.
+export const BORDER_LEVELS = [130, FINISH_LEVEL];
+
+export function milestones(prev, view, { answers = false } = {}) {
   if (!prev) return view.generation > 0 ? ["echo"] : [];
   const hit = [];
   for (const rung of STREAK_MILESTONES) {
@@ -204,6 +209,9 @@ export function milestones(prev, view) {
   if (view.streak < prev.streak) hit.push("first-lapse");
   if (prev.level < FINISH_LEVEL && view.level >= FINISH_LEVEL) hit.push("finished");
   if (!prev.resting && view.resting) hit.push("rested");
+  if (answers) {
+    for (const level of BORDER_LEVELS) if (prev.level < level && view.level >= level) hit.push(`border-${level}`);
+  }
   return hit;
 }
 
@@ -250,10 +258,39 @@ export function decodeArgs({ toolsDir: dir, contract, id, rpcUrl, site = SITE })
   };
 }
 
+export const clientDir = () => fileURLToPath(new URL("../../../client/", import.meta.url)).replace(/\/$/, "");
+
+/// The border check for one token: the reference client's own verify-border,
+/// which an agent would run, against the run's chain.
+export function borderArgs({ clientDir: dir, contract, id, rpcUrl, chainId = 84532 }) {
+  return {
+    command: "node",
+    args: [join(dir, "src/cli.mjs"), "verify-border", String(id), "--contract", contract, "--chain", String(chainId), "--rpc", rpcUrl],
+    cwd: dir,
+  };
+}
+
+/// Exit 0 is a border that checks out.
+export function makeBorderChecker({ contract, rpcUrl, dir = clientDir(), spawnImpl = spawn }) {
+  return ({ tokenId }) => runChild(borderArgs({ clientDir: dir, contract, id: tokenId, rpcUrl }), spawnImpl);
+}
+
+function runChild({ command, args, cwd }, spawnImpl) {
+  return new Promise((resolve) => {
+    let said = "";
+    const child = spawnImpl(command, args, { cwd, timeout: DECODE_TIMEOUT_MS });
+    child.stdout?.on("data", (chunk) => { said += chunk; });
+    child.stderr?.on("data", (chunk) => { said += chunk; });
+    // A child that could not even start is a failed check, not a crash.
+    child.on("error", (err) => resolve({ decoded: false, exit: null, said: safeErrorText(err) }));
+    child.on("close", (exit) => resolve({ decoded: exit === 0, exit, said: said.trim().slice(0, 400) }));
+  });
+}
+
 /// One decode at a time: rasterising in parallel is what takes this box down.
 export function makeDecoder({ contract, rpcUrl, dir = toolsDir(), site = SITE, spawnImpl = spawn }) {
   return async ({ tokenId }) => {
-    const { command, args, cwd } = decodeArgs({ toolsDir: dir, contract, id: tokenId, rpcUrl, site });
+    const cmd = decodeArgs({ toolsDir: dir, contract, id: tokenId, rpcUrl, site });
     // The verifier writes out/token-<id>.png by a RELATIVE path and does not make
     // the directory. `tools/out/` is gitignored, so the git-archive export this run
     // works from has no such directory -- and every decode failed on ENOENT, after
@@ -265,15 +302,7 @@ export function makeDecoder({ contract, rpcUrl, dir = toolsDir(), site = SITE, s
       // throw here would end the whole pass and every token still to be read.
       return { decoded: false, exit: null, said: safeErrorText(err) };
     }
-    return new Promise((resolve) => {
-      let said = "";
-      const child = spawnImpl(command, args, { cwd, timeout: DECODE_TIMEOUT_MS });
-      child.stdout?.on("data", (chunk) => { said += chunk; });
-      child.stderr?.on("data", (chunk) => { said += chunk; });
-      // A verifier that could not even start is a failed decode, not a crash.
-      child.on("error", (err) => resolve({ decoded: false, exit: null, said: safeErrorText(err) }));
-      child.on("close", (exit) => resolve({ decoded: exit === 0, exit, said: said.trim().slice(0, 400) }));
-    });
+    return runChild(cmd, spawnImpl);
   };
 }
 
@@ -305,6 +334,7 @@ export async function runPass({
   chain, readMirror, state, readLog, log, memory,
   readClockLog = () => [],
   decode = async () => ({ decoded: null, exit: null }),
+  border = async () => ({ decoded: null, exit: null }),
   sleep = defaultSleep,
 }) {
   const today = await chain.today();
@@ -362,10 +392,12 @@ export async function runPass({
 
     if (!settled.chain || !settled.onChain) continue;
     const fired = prev?.fired ?? new Set();
-    for (const milestone of milestones(prev?.view ?? null, settled.chain)) {
+    const answers = AGENTS.some((a) => a.name === agent && a.answers);
+    for (const milestone of milestones(prev?.view ?? null, settled.chain, { answers })) {
       if (fired.has(milestone)) continue;
       fired.add(milestone);
-      const { decoded, exit, said } = await decode({ tokenId, agent, milestone });
+      const check = milestone.startsWith("border-") ? border : decode;
+      const { decoded, exit, said } = await check({ tokenId, agent, milestone });
       log({ chainDay: today, agent, tokenId, milestone, decoded, exit });
       if (decoded === false) {
         console.error(`CHECKER DECODE FAILED: ${agent} token ${tokenId} at ${milestone} (exit ${exit}) ${said ?? ""}`.trim());
@@ -530,6 +562,7 @@ export async function main({ env = process.env } = {}) {
   const chain = makeChain({ rpcUrl, contract });
   const readMirror = mirrorReader();
   const decode = makeDecoder({ contract, rpcUrl });
+  const border = makeBorderChecker({ contract, rpcUrl });
   const memory = emptyMemory();
 
   for (;;) {
@@ -539,7 +572,7 @@ export async function main({ env = process.env } = {}) {
     try {
       await runPass({
         chain: readersOf(chain), readMirror, state: loadState(paths.state),
-        readLog: () => readJsonl(paths.runnerLog), readClockLog: () => readJsonl(paths.clockLog), log, memory, decode,
+        readLog: () => readJsonl(paths.runnerLog), readClockLog: () => readJsonl(paths.clockLog), log, memory, decode, border,
       });
     } catch (err) {
       log({ chainDay: null, agent: null, tokenId: null, ok: false, findings: [{ field: "pass", chain: safeErrorText(err), severity: "FAIL" }] });

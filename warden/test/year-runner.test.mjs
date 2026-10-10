@@ -47,7 +47,11 @@ function fakeDoor(script = {}) {
     return {
       register: async () => { record("register", {}); return pop("register", { ok: true }); },
       mint: async (to, payTo) => { record("mint", { to, payTo }); return pop("mint", { ok: true, tokenId: nextToken++ }); },
-      beat: async (tokenId) => { record("beat", { tokenId }); return pop("beat", { ok: true, accepted: true }); },
+      beat: async (tokenId, answer) => { record("beat", { tokenId, answer }); return pop("beat", { ok: true, accepted: true }); },
+      ask: async (tokenId) => {
+        record("ask", { tokenId });
+        return pop("ask", { ok: true, day: 9, question: "Fog or thunder?", answers: ["fog", "thunder"] });
+      },
       upgrade: async (tokenId, id, variant, opts = {}) => {
         record("upgrade", { tokenId, id, variant, pay: opts.pay, payTo: opts.expectedPayTo });
         return pop("upgrade", {
@@ -1101,4 +1105,42 @@ test("the checker's entry guard is isEntry, not argv[1]", () => {
   const source = readFileSync(new URL("../tools/year/checker.mjs", import.meta.url), "utf8");
   assert.match(source, /if \(isEntry\(import\.meta\.url\)\)/, "the checker's entry guard is not isEntry");
   assert.ok(!source.includes("process.argv[1]"), "the checker still compares argv[1] itself");
+});
+
+// ------------------------------------------------------------ the question
+
+test("an answering agent asks the question and sends its first option with the check-in", async () => {
+  const state = { ...emptyState(), tokens: { A2: 5 } };
+  const out = await pass({ day: 4, specs: [spec("A2", { answers: true })], state, door: fakeDoor() });
+  assert.deepEqual(callsFor(out.calls, "ask").map((c) => c.tokenId), [5]);
+  assert.deepEqual(callsFor(out.calls, "beat").map((b) => b.answer), ["fog"]);
+  assert.deepEqual(linesFor(out.lines, "question").map((l) => l.ok), [true]);
+  assert.equal(linesFor(out.lines, "checkin")[0].answered, true);
+});
+
+test("a range question is answered with its lowest value", async () => {
+  const state = { ...emptyState(), tokens: { A2: 5 } };
+  const out = await pass({
+    day: 4, specs: [spec("A2", { answers: true })], state,
+    door: fakeDoor({ A2: { ask: { ok: true, day: 9, question: "How many?", range: { min: 2, max: 9 } } } }),
+  });
+  assert.deepEqual(callsFor(out.calls, "beat").map((b) => b.answer), [2]);
+});
+
+test("a question that is refused still checks in, unanswered", async () => {
+  const state = { ...emptyState(), tokens: { A2: 5 } };
+  const out = await pass({
+    day: 4, specs: [spec("A2", { answers: true })], state,
+    door: fakeDoor({ A2: { ask: { ok: false, reason: "chain-unavailable" } } }),
+  });
+  assert.deepEqual(callsFor(out.calls, "beat").map((b) => b.answer), [undefined]);
+  assert.deepEqual(linesFor(out.lines, "question").map((l) => [l.ok, l.reason]), [[false, "chain-unavailable"]]);
+  assert.equal(linesFor(out.lines, "checkin")[0].answered, undefined);
+});
+
+test("CONTROL: an agent that does not answer never asks", async () => {
+  const state = { ...emptyState(), tokens: { A3: 5 } };
+  const out = await pass({ day: 4, specs: [spec("A3", { answers: false })], state, door: fakeDoor() });
+  assert.equal(callsFor(out.calls, "ask").length, 0);
+  assert.deepEqual(callsFor(out.calls, "beat").map((b) => b.answer), [undefined]);
 });

@@ -69,6 +69,7 @@ const seen = (lines, predicate) => (lines.some(predicate) ? "proven live" : "not
 const RUN_PATHS = [
   ["A mint through the real door", (l) => l.action === "mint" && l.ok],
   ["A check-in credited", (l) => l.action === "checkin" && l.ok],
+  ["A check-in carrying an answer", (l) => l.action === "checkin" && l.ok && l.answered === true],
   ["A check-in refused", (l) => l.action === "checkin" && l.ok === false],
   ["Rest: the owner seals a token", (l) => l.action === "rest" && l.ok],
   ["A token transferred to another wallet", (l) => l.action === "transfer" && l.ok],
@@ -87,6 +88,8 @@ const MILESTONE_PATHS = [
   ["finished", "A year completed at 365"],
   ["echo", "A child's echo ring"],
   ["heartbeat", "The Clock's heartbeat on a silent day"],
+  ["border-130", "An answered day verified on chain (level 130)"],
+  ["border-365", "The whole border verified (level 365)"],
 ];
 
 /**

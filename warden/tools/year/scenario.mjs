@@ -15,14 +15,15 @@ const earnedLadder = [
 
 export const AGENTS = [
   { name: "A1", mintDay: 0, misses: never, marks: earnedLadder, seeds: true },
-  { name: "A2", mintDay: 0, misses: never, marks: earnedLadder },
+  // A2 and A6 answer the daily question, so the band and verify-border are proven live.
+  { name: "A2", mintDay: 0, misses: never, marks: earnedLadder, answers: true },
   { name: "A3", mintDay: 0, misses: never, marks: earnedLadder },
   { name: "A4", mintDay: 1, misses: never, marks: [] },
   { name: "A5", mintDay: 2, misses: never, marks: [
       { id: 1, when: { level: 1 } }, { id: 3, when: { level: 30 } },
       { id: 5, when: { level: 100 }, variant: 2 }, { id: 9, when: { level: 100 }, after: 5 },
       { id: 7, when: { level: 365 } } ] },
-  { name: "A6", mintDay: 2, misses: never, marks: earnedLadder },
+  { name: "A6", mintDay: 2, misses: never, marks: earnedLadder, answers: true },
   { name: "A7", mintDay: 2, misses: never, marks: [
       { id: 3, when: { level: 30 } }, { id: 6, when: { run: 100 } }, { id: 10, when: { run: 100 }, after: 6 } ] },
   { name: "A8", mintDay: 3, misses: (d) => (d - 3) % 10 === 0, marks: [] },

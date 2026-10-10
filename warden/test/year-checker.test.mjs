@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 import {
   compare, milestones, heartbeatMilestone, emptyMemory, runPass, tokensOf,
-  daySecondsFrom, decodeArgs, checkerPaths, toBig, markBitsOf,
+  daySecondsFrom, decodeArgs, borderArgs, checkerPaths, toBig, markBitsOf,
   mirrorReader, makeDecoder, readersOf,
   MARK_BITS, REREAD_PAUSE_MS, OFFSET_SECONDS, DECODE_TIMEOUT_MS,
 } from "../tools/year/checker.mjs";
@@ -428,7 +428,7 @@ function fakeChain({ today = 1010, wardenDay = 1010, views = {}, fail = {} } = {
   };
 }
 
-function harness({ chain, mirror = {}, lines = [], clockLines = [], state, memory = emptyMemory(), decode } = {}) {
+function harness({ chain, mirror = {}, lines = [], clockLines = [], state, memory = emptyMemory(), decode, border } = {}) {
   const logged = [];
   const slept = [];
   const decoded = [];
@@ -442,6 +442,7 @@ function harness({ chain, mirror = {}, lines = [], clockLines = [], state, memor
       chain, readMirror: mirrorFor, state, log: (fields) => logged.push(fields),
       readLog: () => lines, readClockLog: () => clockLines, memory, sleep: async (ms) => { slept.push(ms); },
       decode: decode ?? (async (args) => { decoded.push(args); return { decoded: true, exit: 0 }; }),
+      ...(border ? { border } : {}),
     }),
   };
 }
@@ -914,4 +915,37 @@ test("a wrong mint day or a runFloor breach is a FAIL during a gas stop", async 
   const fails = line.findings.filter((f) => f.severity === "FAIL").map((f) => f.field);
   assert.ok(fails.includes("mintDay"), `mintDay must FAIL, got ${fails}`);
   assert.ok(fails.includes("runFloor"), `runFloor must FAIL, got ${fails}`);
+});
+
+test("an answering token crossing level 130 and 365 is a border milestone; others are not", () => {
+  assert.deepEqual(milestones(view({ level: 129 }), view({ level: 130 }), { answers: true }), ["border-130"]);
+  assert.deepEqual(milestones(view({ level: 129 }), view({ level: 130 })), []);
+  assert.deepEqual(milestones(view({ level: 364, streak: 364 }), view({ level: 365, streak: 365 }), { answers: true }), ["finished", "border-365"]);
+});
+
+test("the border check runs the client's verify-border against the run's chain", () => {
+  const cmd = borderArgs({ clientDir: "/client", contract: "0xc0", id: 7, rpcUrl: "http://rpc" });
+  assert.equal(cmd.command, "node");
+  assert.deepEqual(cmd.args, ["/client/src/cli.mjs", "verify-border", "7", "--contract", "0xc0", "--chain", "84532", "--rpc", "http://rpc"]);
+});
+
+test("a border milestone runs the border check, not the QR decode", async () => {
+  const state = { tokens: { A2: 1 } };
+  const memory = emptyMemory();
+  const checked = [];
+  const pass = (count) => {
+    const at = growing(1, count);
+    return harness({
+      chain: fakeChain({ today: at.today, views: { 1: at.chain } }), mirror: { 1: at.mirror },
+      lines: at.lines, state, memory, border: async (args) => { checked.push(args); return { decoded: true, exit: 0 }; },
+    });
+  };
+  await quietly(pass(128).run);
+  const crossed = pass(130);
+  await quietly(crossed.run);
+  const hit = crossed.logged.filter((l) => l.milestone === "border-130");
+  assert.equal(hit.length, 1);
+  assert.equal(hit[0].decoded, true);
+  assert.deepEqual(checked.map((c) => c.milestone), ["border-130"]);
+  assert.equal(crossed.decoded.some((d) => d.milestone === "border-130"), false);
 });

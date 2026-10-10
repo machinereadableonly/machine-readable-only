@@ -301,3 +301,11 @@ test("an identity that is not there is a refusal, not a silently new key", () =>
     /no identity/
   );
 });
+
+test("ask calls the question tool, and beat carries an answer when given one", async () => {
+  const rec = recorder([okResult({ ok: true, answers: ["a", "b"] }), okResult({ ok: true, credited: true })]);
+  const agent = agentWith({ callTool: rec.callTool });
+  await agent.ask(7);
+  await agent.beat(7, "a");
+  assert.deepEqual(rec.calls.map((c) => [c.name, c.arguments]), [["question", { tokenId: 7 }], ["checkin", { tokenId: 7, answer: "a" }]]);
+});
