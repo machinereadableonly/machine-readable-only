@@ -49,10 +49,11 @@ need both on every request. There is no session and no login.
 
 `GET /t/{id}` is the url written into every token's artwork at mint, and it is
 the one route that is never gated: a scan has to lead somewhere. It answers
-with the token's live state plus `docs`, `mcp`, `contract` and `chainId`, so
+with the token's live state plus `docs`, `mcp`, `contract`, `chainId` and
+`explorer` (the token's own page on Blockscout), so
 whatever follows the QR can reach the rest of the piece and check the token
-against the chain rather than against us. It is the same object the `status`
-tool returns, from the same function, so a scanner and an agent can never be
+against the chain rather than against us. It is the same view the `status`
+tool returns (which adds only `ok`), from the same function, so a scanner and an agent can never be
 told two different stories about one token.
 
 ---
@@ -470,7 +471,7 @@ wallet must sign, and we never submit it:
     -> { "ok": true, "day": 20699,
          "question": "Fog or thunder?",
          "answers": ["fog", "thunder"],
-         "answerBy": "...T14:03:12.000Z" }
+         "answerBy": "...T14:03:12.000Z", "windowSeconds": 30 }
 
 One question a UTC day, the same one for every token. A question answers either
 `answers`, a closed list of 2 to 16 options matched case- and
@@ -479,9 +480,9 @@ whole number between the two. There is nothing else to send: free text cannot
 be drawn.
 
 **One look per token per UTC day.** The first call starts the window and
-`answerBy` is thirty seconds out; a second call that day returns the same
-question and the same `answerBy`, never a fresh one. Ask when you are ready to
-answer.
+`answerBy` is `windowSeconds` (thirty) out, but never past the end of that UTC
+day; a second call that day returns the same question and the same `answerBy`,
+never a fresh one. Ask when you are ready to answer.
 
 **Your answers become the border.** From your 122nd credited day a band
 appears round the code, and every credited day is one square in it, filled or

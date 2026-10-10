@@ -80,7 +80,7 @@ test("a token view carries exactly the published field set", async () => {
   const tool = makeStatusTool({
     q,
     chain: openChain(),
-    links: { docs: "https://example.com/llms.txt", mcp: "https://example.com/mcp", contract: "0xc0de", chainId: 84532 },
+    domain: "example.com", contract: "0xc0de", chainId: 84532,
   });
 
   const view = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
@@ -88,7 +88,7 @@ test("a token view carries exactly the published field set", async () => {
   assert.deepEqual(
     Object.keys(view).sort(),
     [
-      "chainId", "children", "contract", "docs", "finisher", "generation", "heart",
+      "chainId", "children", "contract", "docs", "explorer", "finisher", "generation", "heart",
       "lastDay", "late", "level", "marks", "mcp", "nextWindowOpensAt", "ok", "onChainBy",
       "owner", "parentId", "pendingOnChain", "resting", "streak", "streakDeadline",
       "tokenId", "whole",
@@ -111,7 +111,7 @@ test("a FINISHED token's view carries exactly the same published field set", asy
   const tool = makeStatusTool({
     q,
     chain: openChain(),
-    links: { docs: "https://example.com/llms.txt", mcp: "https://example.com/mcp", contract: "0xc0de", chainId: 84532 },
+    domain: "example.com", contract: "0xc0de", chainId: 84532,
   });
 
   const view = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
@@ -127,7 +127,7 @@ test("a FINISHED token's view carries exactly the same published field set", asy
   assert.deepEqual(
     Object.keys(view).sort(),
     [
-      "chainId", "children", "contract", "docs", "finisher", "generation", "heart",
+      "chainId", "children", "contract", "docs", "explorer", "finisher", "generation", "heart",
       "lastDay", "late", "level", "marks", "mcp", "nextWindowOpensAt", "ok", "onChainBy",
       "owner", "parentId", "pendingOnChain", "resting", "streak", "streakDeadline",
       "tokenId", "whole",
@@ -275,4 +275,15 @@ test("status with an id answers ok: true and the token's view", async () => {
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
   assert.equal(r.ok, true);
   assert.equal(r.tokenId, 1);
+});
+
+// 21 Cheap #12. A scan has to lead somewhere the picture can be seen; the
+// contract links were there, a token-level one was not.
+test("a token view links the token's own page on an explorer of its chain", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 7, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  const tool = makeStatusTool({ q, chain: openChain(),
+    domain: "example.com", contract: "0xc0de", chainId: 84532 });
+  const view = await tool.handler({ tokenId: 7 }, { keyId: "k1" });
+  assert.equal(view.explorer, "https://base-sepolia.blockscout.com/token/0xc0de/instance/7");
 });

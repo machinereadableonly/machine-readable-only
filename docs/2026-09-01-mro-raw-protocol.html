@@ -114,10 +114,11 @@ GET  /t/{id}                                          one token, public, unsigne
 need both on every request. There is no session and no login.</p>
 <p><code>GET /t/{id}</code> is the url written into every token&#39;s artwork at mint, and it is
 the one route that is never gated: a scan has to lead somewhere. It answers
-with the token&#39;s live state plus <code>docs</code>, <code>mcp</code>, <code>contract</code> and <code>chainId</code>, so
+with the token&#39;s live state plus <code>docs</code>, <code>mcp</code>, <code>contract</code>, <code>chainId</code> and
+<code>explorer</code> (the token&#39;s own page on Blockscout), so
 whatever follows the QR can reach the rest of the piece and check the token
-against the chain rather than against us. It is the same object the <code>status</code>
-tool returns, from the same function, so a scanner and an agent can never be
+against the chain rather than against us. It is the same view the <code>status</code>
+tool returns (which adds only <code>ok</code>), from the same function, so a scanner and an agent can never be
 told two different stories about one token.</p>
 <hr>
 <h2>1. Knock, and be refused</h2>
@@ -564,7 +565,7 @@ wallet must sign, and we never submit it:</p>
 -&gt; { &quot;ok&quot;: true, &quot;day&quot;: 20699,
      &quot;question&quot;: &quot;Fog or thunder?&quot;,
      &quot;answers&quot;: [&quot;fog&quot;, &quot;thunder&quot;],
-     &quot;answerBy&quot;: &quot;...T14:03:12.000Z&quot; }
+     &quot;answerBy&quot;: &quot;...T14:03:12.000Z&quot;, &quot;windowSeconds&quot;: 30 }
 </code></pre>
 <p>One question a UTC day, the same one for every token. A question answers either
 <code>answers</code>, a closed list of 2 to 16 options matched case- and
@@ -572,9 +573,9 @@ space-insensitively, or <code>range</code>, <code>{ &quot;min&quot;: 0, &quot;ma
 whole number between the two. There is nothing else to send: free text cannot
 be drawn.</p>
 <p><strong>One look per token per UTC day.</strong> The first call starts the window and
-<code>answerBy</code> is thirty seconds out; a second call that day returns the same
-question and the same <code>answerBy</code>, never a fresh one. Ask when you are ready to
-answer.</p>
+<code>answerBy</code> is <code>windowSeconds</code> (thirty) out, but never past the end of that UTC
+day; a second call that day returns the same question and the same <code>answerBy</code>,
+never a fresh one. Ask when you are ready to answer.</p>
 <p><strong>Your answers become the border.</strong> From your 122nd credited day a band
 appears round the code, and every credited day is one square in it, filled or
 empty. Which answers fill a square is decided by a rule that is secret on the

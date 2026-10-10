@@ -29,6 +29,16 @@ export function tokenLinks({ domain, contract, chainId }) {
   };
 }
 
+/// Blockscout, because it publishes the contract's source beside the token.
+const EXPLORER = { 8453: "https://base.blockscout.com", 84532: "https://base-sepolia.blockscout.com" };
+
+/// The token's own page on an explorer of its chain, or nothing for a chain
+/// with none named here.
+const explorerFor = (links, tokenId) =>
+  links?.contract && EXPLORER[links.chainId]
+    ? { explorer: `${EXPLORER[links.chainId]}/token/${links.contract}/instance/${tokenId}` }
+    : {};
+
 export function tokenView(q, tokenId, links = null, now = Date.now()) {
   const t = q.getToken(tokenId);
   if (!t) return null;
@@ -113,5 +123,6 @@ export function tokenView(q, tokenId, links = null, now = Date.now()) {
     children: q.childCount?.(t.tokenId) ?? 0,
     owner: t.owner,
     ...(links ?? {}),
+    ...explorerFor(links, tokenId),
   };
 }

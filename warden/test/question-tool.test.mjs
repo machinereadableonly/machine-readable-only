@@ -126,3 +126,10 @@ test("a question on the mint day is told mint day is day 1, and when it lands", 
   assert.match(r.next, /Mint day is day 1/);
   assert.equal(typeof r.onChainBy, "string");
 });
+
+// 21 Cheap #18. The window's length was stated nowhere an agent reads it.
+test("the question reply states its window in seconds", async () => {
+  const { tool } = setup();
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.windowSeconds, ANSWER_WINDOW_MS / 1000);
+});
