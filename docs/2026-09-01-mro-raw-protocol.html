@@ -182,7 +182,7 @@ already in flight, and nothing else.</p>
 </tr>
 <tr>
 <td><code>components</code></td>
-<td>it verified, but did not cover the required components -- OR the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable <code>Signature-Input</code>, a <code>signature-agent</code> covered both plain and with a <code>key</code> parameter, or a <code>key</code> naming a member the <code>Signature-Agent</code> header does not have: check the structure of those two headers before changing what you sign</td>
+<td>the signature does not cover the required components. This is checked BEFORE the signature itself, so it says nothing about whether the signature would have verified. Or the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable <code>Signature-Input</code>, a <code>signature-agent</code> covered both plain and with a <code>key</code> parameter, or a <code>key</code> naming a member the <code>Signature-Agent</code> header does not have: check the structure of those two headers before changing what you sign</td>
 </tr>
 <tr>
 <td><code>expired</code></td>
@@ -267,7 +267,8 @@ one agent cannot act as another.</p>
 hour. Nothing is registered and we store nothing.</p>
 <p>The fetch is guarded, and the guard will refuse some legitimate-looking setups:
 HTTPS only, port 443 only, no credentials in the URL, no redirects followed,
-64 KB cap, 3 second timeout, and the resolved address must be publicly
+64 KB cap, a 2 second idle timeout inside a 3 second deadline, no bare IP
+address as the host, and the resolved address must be publicly
 routable. Every DNS answer is checked, not just the first.</p>
 <h3>2b. You do not have a domain</h3>
 <p>Register the key with us. Two requests.</p>
@@ -350,15 +351,16 @@ challenge-response: 2919608e1a5b74ad009f824a77a8adf85bf62a978d7304de9ab884bf9bd6
 <p>That digest is of the EMPTY string, because the example signs a GET-shaped
 knock with no body. Yours is of the exact bytes you send.</p>
 <p><strong><code>Signature-Agent</code> comes in two forms, and the door accepts both.</strong> The
-example above shows the bare string, <code>&quot;https://&lt;domain&gt;&quot;</code>, which is what the
-reference client sends today. The Web Bot Auth architecture draft (-05) calls
-that form legacy and uses a dictionary keyed by the signature label instead:
+example above shows the bare string, <code>&quot;https://&lt;domain&gt;&quot;</code>; the reference
+client sends the dictionary. The Web Bot Auth architecture draft (-05) calls
+the bare string legacy and uses a dictionary keyed by the signature label instead:
 <code>signature-agent: sig1=&quot;https://&lt;domain&gt;&quot;</code>, covered in <code>Signature-Input</code> as
 <code>&quot;signature-agent&quot;;key=&quot;sig1&quot;</code>. The door reads the dictionary first, under the
 label of the first signature, and falls back to the bare string; either way it
 counts as covering <code>signature-agent</code>. If your library writes the dictionary,
 keep it.</p>
-<p>Four rules, all enforced, all refused with <code>components</code> or <code>expired</code> if broken:</p>
+<p>Four rules, all enforced. Breaking one is refused with <code>components</code>, <code>expired</code>,
+<code>window</code>, or -- for a wrong <code>tag</code> -- <code>signature</code>:</p>
 <ul>
 <li><p><strong>The signature must cover at least these components:</strong> <code>@authority</code>,
 <code>@method</code>, <code>@path</code>, <code>signature-agent</code>, <code>content-digest</code>, <code>challenge</code>,

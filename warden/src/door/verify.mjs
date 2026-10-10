@@ -128,71 +128,6 @@ const WEB_BOT_AUTH_TAG = "web-bot-auth";
 export const REQUIRED = ["@authority", "@method", "@path", "signature-agent", "content-digest"];
 
 /**
- * The component list a signature ACTUALLY covered.
- *
- * PARSED, never string-matched. Two bypasses were measured here on 2026-08-30
- * and both came from treating this structured field as text:
- *
- *  1. Searching the whole base for `"@path"` was satisfied by a COVERED header
- *     whose VALUE contained that text, leaving the real path unsigned. The same
- *     headers then replayed at DELETE /admin-evil.
- *  2. Splitting the parameters line on spaces was satisfied by a quoted
- *     component NAME containing a space -- `"a @method"` splits into `a` and
- *     `@method` -- with the same replay available. Component PARAMETERS
- *     carrying the text did it too.
- *
- * An RFC 8941 parser has none of those seams: `"a @method"` stays one member,
- * so it is simply not `@method`. Read from the base's own @signature-params
- * line (with lastIndexOf, so text forged earlier cannot win) because that line
- * belongs to the signature that was actually verified -- the Signature-Input
- * header may carry several.
- *
- * Returns null on anything unparseable, and the caller refuses on null.
- *
- * Exported so the non-string guard can be tested directly. Through a whole
- * request it is unreachable -- upstream rejects a non-string component before
- * this code runs -- and a test that could only reach it through upstream would
- * be proving upstream's check, not this one.
- */
-/**
- * The URL a `Signature-Agent` header names, whichever encoding it uses.
- *
- * 3.M1. THIS ACCEPTED ONLY THE LEGACY FORM, and the legacy form is the one the
- * draft now tells signers not to send. web-bot-auth 0.1.3 treats the header as
- * opaque -- it only checks presence -- so the encoding decision is entirely
- * ours, and an agent following the current specification could not get in at
- * all. Worse, it was refused `unknown-key`, which points a correct implementer
- * at its thumbprint: the one thing that was not wrong.
- *
- * VERIFIED LIVE 2026-09-06, and the report this came from was one draft behind:
- * draft-meunier-web-bot-auth-architecture-05 is marked "Replaced by
- * draft-meunier-webbotauth-httpsig-protocol", whose -02 (August 2026) says
- *
- *   "`Signature-Agent` is a Dictionary Structured Header ... Its member values
- *    MUST be String Items that contain a [URI], whose scheme MUST be `https`."
- *
- * and, of the bare string,
- *
- *   "A verifier MAY accept that form ... Signers MUST send the dictionary
- *    form."
- *
- * So both are read, and neither is guessed at: the dictionary is parsed with
- * the same RFC 8941 parser the component list uses, because every bypass this
- * door has had came from treating a structured field as text.
- *
- * Returns the URL string, or null when the header is absent or unusable. The
- * caller refuses on null.
- */
-/**
- * The label of the first signature in `Signature-Input` -- `sig1` in
- * `sig1=("@authority" ...)`.
- *
- * It is the key a dictionary `Signature-Agent` is expected to use, so it is
- * read from the request rather than assumed to be "sig1". Null when the header
- * is missing or will not parse, in which case a single-member dictionary is
- * still unambiguous and anything else is refused.
- */
-/**
  * Why a refused signature was refused, when the reason is its TIMESTAMPS.
  *
  * WHY THIS IS NEEDED. web-bot-auth throws for created-in-the-future, for a
@@ -245,6 +180,9 @@ export function timeReason(request, now = Date.now()) {
   return null;
 }
 
+/// The label of the first signature in `Signature-Input` (`sig1` in
+/// `sig1=(...)`), read from the request rather than assumed. Null when the
+/// header is missing or will not parse.
 export function signatureLabel(request) {
   const input = headerOf(request, "signature-input");
   if (typeof input !== "string") return null;
@@ -256,6 +194,15 @@ export function signatureLabel(request) {
   }
 }
 
+/**
+ * The URL a `Signature-Agent` header names, in either encoding: the
+ * dictionary keyed by the signature label, or the legacy bare string. Parsed
+ * with the RFC 8941 parser, never sliced as text.
+ *
+ * Null when the header is absent or unusable. That does NOT refuse: with no
+ * agent named, the key is looked up in this site's own directory (see
+ * makeLookup), and must still be registered there and verify.
+ */
 export function signatureAgentUrl(value, label = null) {
   if (typeof value !== "string" || value.trim() === "") return null;
 
@@ -280,6 +227,14 @@ export function signatureAgentUrl(value, label = null) {
   return bare === "" ? null : bare;
 }
 
+/**
+ * The component list a signature actually covered, PARSED from the base's own
+ * `@signature-params` line (lastIndexOf, so text forged earlier cannot win).
+ * String-matching it was bypassed twice: a covered header whose value held
+ * `"@path"`, and a quoted name containing a space. Null on anything
+ * unparseable, and the caller refuses on null. Exported so the non-string
+ * guard can be tested directly; upstream rejects that case first.
+ */
 export function coveredComponents(base) {
   const marker = '"@signature-params": ';
   const at = base.lastIndexOf(marker);

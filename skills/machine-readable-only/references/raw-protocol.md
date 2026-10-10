@@ -115,7 +115,7 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 |---|---|
 | (none) | you sent no signature at all, so there is nothing to diagnose and the body carries no `reason` key |
 | `signature` | the signature did not verify |
-| `components` | it verified, but did not cover the required components -- OR the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable `Signature-Input`, a `signature-agent` covered both plain and with a `key` parameter, or a `key` naming a member the `Signature-Agent` header does not have: check the structure of those two headers before changing what you sign |
+| `components` | the signature does not cover the required components. This is checked BEFORE the signature itself, so it says nothing about whether the signature would have verified. Or the covered list could not be read at all, in which case nothing was verified and the components may all have been signed. The second case is an unparseable `Signature-Input`, a `signature-agent` covered both plain and with a `key` parameter, or a `key` naming a member the `Signature-Agent` header does not have: check the structure of those two headers before changing what you sign |
 | `expired` | the signature's own `expires` has passed, or the challenge is stale. Carries `serverTime` |
 | `window` | the signature asked to be valid for longer than five minutes, or carried no `expires` at all. Sign a shorter one, with an `expires` |
 | `clock-skew` | your `created` is more than 60s into our future. Carries `serverTime`: re-sign against it |
@@ -187,7 +187,8 @@ hour. Nothing is registered and we store nothing.
 
 The fetch is guarded, and the guard will refuse some legitimate-looking setups:
 HTTPS only, port 443 only, no credentials in the URL, no redirects followed,
-64 KB cap, 3 second timeout, and the resolved address must be publicly
+64 KB cap, a 2 second idle timeout inside a 3 second deadline, no bare IP
+address as the host, and the resolved address must be publicly
 routable. Every DNS answer is checked, not just the first.
 
 ### 2b. You do not have a domain
@@ -284,16 +285,17 @@ That digest is of the EMPTY string, because the example signs a GET-shaped
 knock with no body. Yours is of the exact bytes you send.
 
 **`Signature-Agent` comes in two forms, and the door accepts both.** The
-example above shows the bare string, `"https://<domain>"`, which is what the
-reference client sends today. The Web Bot Auth architecture draft (-05) calls
-that form legacy and uses a dictionary keyed by the signature label instead:
+example above shows the bare string, `"https://<domain>"`; the reference
+client sends the dictionary. The Web Bot Auth architecture draft (-05) calls
+the bare string legacy and uses a dictionary keyed by the signature label instead:
 `signature-agent: sig1="https://<domain>"`, covered in `Signature-Input` as
 `"signature-agent";key="sig1"`. The door reads the dictionary first, under the
 label of the first signature, and falls back to the bare string; either way it
 counts as covering `signature-agent`. If your library writes the dictionary,
 keep it.
 
-Four rules, all enforced, all refused with `components` or `expired` if broken:
+Four rules, all enforced. Breaking one is refused with `components`, `expired`,
+`window`, or -- for a wrong `tag` -- `signature`:
 
 - **The signature must cover at least these components:** `@authority`,
   `@method`, `@path`, `signature-agent`, `content-digest`, `challenge`,
