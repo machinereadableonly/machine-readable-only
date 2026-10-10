@@ -112,6 +112,9 @@ const server = createServer({
   tokenView,
   mcp,
   allowRegistration: () => true,
+  // createServer refuses to start without them; /t/<id> publishes them.
+  contract: CONTRACT,
+  chainId: CHAIN_ID,
 });
 const base = await new Promise((resolve) =>
   server.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${server.address().port}`))
