@@ -43,7 +43,7 @@ test("a real token with a missing, empty, rehearsal or malformed day may NOT sta
     if (day !== null) lines.push(`MRO_SEED_NOT_BEFORE=${day}`);
     const r = await check(lines);
     assert.equal(r.code, 1, `${JSON.stringify(day)}: ${r.out}`);
-    assert.match(r.out, /FAIL .*opening day \+ 2/);
+    assert.match(r.out, /FAIL .*opening day \+ 1/);
   }
 });
 

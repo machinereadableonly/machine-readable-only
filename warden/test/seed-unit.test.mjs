@@ -21,7 +21,7 @@ test("the schema ships the guard empty, so an unset day fails the unit", () => {
 
 test("the installer writes a rehearsal day and refuses it for a real token", () => {
   assert.match(installer, /^REHEARSAL_NOT_BEFORE=2000-01-01$/m);
-  assert.match(installer, /opening day \+ 2/);
+  assert.match(installer, /opening day \+ 1/);
 });
 
 // A missing log cannot say whether the run checked in or waited, so a

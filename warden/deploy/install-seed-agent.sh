@@ -246,7 +246,7 @@ if [ "$fail" = 0 ]; then
     echo ""
     echo "What is left, and it is the operator's call, not this script's:"
     echo "  1. mint token #1 from a wallet you control (real funds on mainnet)"
-    echo "  2. put its id and the opening day + 2 in $ENV_FILE"
+    echo "  2. put its id and the opening day + 1 in $ENV_FILE"
     echo "  3. systemctl --user enable --now mro-seed.timer"
     echo "  4. re-run this script; step 7 then checks the REAL check-in instead"
     echo "See the deploy-day section of warden/DEPLOY.md for the ordered version."

@@ -31,7 +31,7 @@ elif [ "$TOKEN" = "$REHEARSAL_TOKEN" ]; then
         bad "MRO_SEED_NOT_BEFORE is '$DAY' for the rehearsal token: expected $REHEARSAL_NOT_BEFORE"
     fi
 elif [ "$DAY" = "$REHEARSAL_NOT_BEFORE" ] || ! real_day "$DAY"; then
-    bad "MRO_SEED_NOT_BEFORE is '$DAY' for real token $TOKEN: set it to opening day + 2 (DEPLOY.md 9c)"
+    bad "MRO_SEED_NOT_BEFORE is '$DAY' for real token $TOKEN: set it to opening day + 1 (DEPLOY.md 9c)"
 else
     ok "token $TOKEN checks in from $DAY (UTC)"
 fi
