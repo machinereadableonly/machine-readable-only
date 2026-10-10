@@ -88,7 +88,7 @@ test("a token view carries exactly the published field set", async () => {
   assert.deepEqual(
     Object.keys(view).sort(),
     [
-      "chainId", "children", "contract", "docs", "explorer", "finisher", "generation", "heart",
+      "border", "chainId", "children", "contract", "docs", "explorer", "finisher", "generation", "heart",
       "lastDay", "late", "level", "marks", "mcp", "nextWindowOpensAt", "ok", "onChainBy",
       "owner", "parentId", "pendingOnChain", "resting", "streak", "streakDeadline",
       "tokenId", "whole",
@@ -127,7 +127,7 @@ test("a FINISHED token's view carries exactly the same published field set", asy
   assert.deepEqual(
     Object.keys(view).sort(),
     [
-      "chainId", "children", "contract", "docs", "explorer", "finisher", "generation", "heart",
+      "border", "chainId", "children", "contract", "docs", "explorer", "finisher", "generation", "heart",
       "lastDay", "late", "level", "marks", "mcp", "nextWindowOpensAt", "ok", "onChainBy",
       "owner", "parentId", "pendingOnChain", "resting", "streak", "streakDeadline",
       "tokenId", "whole",
@@ -286,4 +286,18 @@ test("a token view links the token's own page on an explorer of its chain", asyn
     domain: "example.com", contract: "0xc0de", chainId: 84532 });
   const view = await tool.handler({ tokenId: 7 }, { keyId: "k1" });
   assert.equal(view.explorer, "https://base-sepolia.blockscout.com/token/0xc0de/instance/7");
+});
+
+// 21 Cheap #1. A silent day read like an answered one everywhere but the art.
+test("a token view says how many of its days were answered, and where the border starts", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  q.creditDay(1, 103, 4, 4);
+  for (const day of [101, 102, 103]) q.issueQuestion(1, day, "t-two", day);
+  q.recordAnswer(1, 101, 0, 101);
+  q.recordAnswer(1, 103, 1, 103);
+  const tool = makeStatusTool({ q, chain: openChain(), domain: "example.com", contract: "0xc0de", chainId: 84532 });
+  const view = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.deepEqual(view.border, { answered: 2, silent: 2, drawnFrom: 122 });
 });

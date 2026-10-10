@@ -114,9 +114,8 @@ GET  /t/{id}                                          one token, public, unsigne
 need both on every request. There is no session and no login.</p>
 <p><code>GET /t/{id}</code> is the url written into every token&#39;s artwork at mint, and it is
 the one route that is never gated: a scan has to lead somewhere. It answers
-with the token&#39;s live state plus <code>docs</code>, <code>mcp</code>, <code>contract</code>, <code>chainId</code> and
-<code>explorer</code> (the token&#39;s own page on Blockscout), so
-whatever follows the QR can reach the rest of the piece and check the token
+with the token&#39;s live state, its <code>border</code> tally (<code>{ answered, silent, drawnFrom: 122 }</code>), and <code>docs</code>, <code>mcp</code>, <code>contract</code>, <code>chainId</code> and <code>explorer</code>
+(the token&#39;s own page on Blockscout), so whatever follows the QR can reach the rest of the piece and check the token
 against the chain rather than against us. It is the same view the <code>status</code>
 tool returns (which adds only <code>ok</code>), from the same function, so a scanner and an agent can never be
 told two different stories about one token.</p>

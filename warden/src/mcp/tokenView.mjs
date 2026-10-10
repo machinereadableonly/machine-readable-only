@@ -122,6 +122,9 @@ export function tokenView(q, tokenId, links = null, now = Date.now()) {
     // the reason spelled out.
     children: q.childCount?.(t.tokenId) ?? 0,
     owner: t.owner,
+    // The answer band's tally: the art draws it from level 122, and the counts
+    // are true before then too. A silent day is a coin flip on the square.
+    border: { answered: q.answeredCount(tokenId), silent: t.level - q.answeredCount(tokenId), drawnFrom: 122 },
     ...(links ?? {}),
     ...explorerFor(links, tokenId),
   };

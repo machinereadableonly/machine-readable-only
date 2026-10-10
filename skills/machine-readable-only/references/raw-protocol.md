@@ -49,9 +49,9 @@ need both on every request. There is no session and no login.
 
 `GET /t/{id}` is the url written into every token's artwork at mint, and it is
 the one route that is never gated: a scan has to lead somewhere. It answers
-with the token's live state plus `docs`, `mcp`, `contract`, `chainId` and
-`explorer` (the token's own page on Blockscout), so
-whatever follows the QR can reach the rest of the piece and check the token
+with the token's live state, its `border` tally (`{ answered, silent,
+drawnFrom: 122 }`), and `docs`, `mcp`, `contract`, `chainId` and `explorer`
+(the token's own page on Blockscout), so whatever follows the QR can reach the rest of the piece and check the token
 against the chain rather than against us. It is the same view the `status`
 tool returns (which adds only `ok`), from the same function, so a scanner and an agent can never be
 told two different stories about one token.

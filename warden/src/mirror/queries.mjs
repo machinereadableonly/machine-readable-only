@@ -421,6 +421,7 @@ export function queries(db, { maxUnboundKeys = MAX_UNBOUND_KEYS } = {}) {
         "COALESCE((SELECT questionId FROM questions WHERE day = ? ORDER BY issuedAt ASC, tokenId ASC LIMIT 1), ?), ?, ?)"
     ),
     getQuestion: db.prepare("SELECT * FROM questions WHERE tokenId = ? AND day = ?"),
+    answeredCount: db.prepare("SELECT COUNT(*) AS n FROM questions WHERE tokenId = ? AND answeredAt IS NOT NULL"),
     issuedQuestionIds: db.prepare("SELECT DISTINCT questionId FROM questions"),
     // `answeredAt IS NULL`, never `answer IS NULL`: a silent day legitimately
     // stores a null answer, and the first answer recorded must win in SQL
@@ -1201,6 +1202,9 @@ export function queries(db, { maxUnboundKeys = MAX_UNBOUND_KEYS } = {}) {
     ///
     /// Returns the run result, because a row already answered takes nothing and
     /// only `changes` tells the caller whether its answer was the one stored.
+    /// Days with an answer recorded. Only a credit records one, so this never
+    /// counts an uncredited day.
+    answeredCount: (tokenId) => s.answeredCount.get(tokenId).n,
     recordAnswer: (tokenId, day, answer, answeredAt) =>
       s.recordAnswer.run(answer, answeredAt, tokenId, day),
 
