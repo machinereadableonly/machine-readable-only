@@ -529,7 +529,7 @@ handling of the real owner key.
 | `X402_FACILITATOR_URL` | the configuration file | `https://api.cdp.coinbase.com/platform/v2/x402` -- the testnet host settles only Base Sepolia |
 | `CDP_API_KEY_ID` / `CDP_API_KEY_SECRET` | the configuration file | the CDP host answers 401 without them; the Warden REFUSES to start if the url is CDP's and these are unset |
 | `DEPLOY_BLOCK[8453]` | `src/clock/reconcile.mjs` | the Clock REFUSES to start without it, before writing anything (proven on the fork). `adopt-deployment.sh --chain 8453` writes it and keeps the Sepolia entry |
-| the mainnet Clock key | made by `install-clock-user.sh --new-clock-key`, straight into `/etc/mro-clock`, which prints its address for `deploy-mainnet.sh --warden` | the contract's warden is fixed at deploy; only `setWarden` corrects it afterwards. It is never in the Warden's `.env` |
+| the mainnet Clock key | made by the installer straight into `/etc/mro-clock` (`--rotate-clock-key`, replacing the Sepolia one; step 3), which prints its address for `deploy-mainnet.sh --warden` | the contract's warden is fixed at deploy; only `setWarden` corrects it afterwards. It is never in the Warden's `.env` |
 | `MRO_HOUSE_KEY_ID` | the configuration file | the operator's own agent's key id: it alone is minted as token 1, and the Warden refuses to start without it off Sepolia |
 | `MRO_OWNER_SAFE` | the configuration file | the Safe that must own the contract; the Warden and the Clock refuse to start until it alone does (section 12) |
 | `CLOCK_CHECK_RPC_URL` | the configuration file | a second RPC from a different provider; the Clock refuses to start on mainnet without it (section 12, decision 13) |
@@ -584,29 +584,46 @@ handling of the real owner key.
    app.safe.global, on Base: a new Safe with three signers (the Ledger, the
    Trezor, the Rabby spare) and a threshold of 2. Enable no modules, no
    recovery and no spending limits: each is a second way in. It is also the
-   treasury. Check it from the chain, not the website:
+   treasury. Write the three signer addresses down from the devices
+   themselves; every later step that hands the Safe anything compares against
+   that list (`--signers a,b,c`), and refuses a Safe whose signers, singleton,
+   modules or guard are not what they should be.
+
+3. **Stop the Sepolia Clock and make the mainnet Clock key -- [OPERATOR, sudo].**
+   The deploy needs the new Clock's address, and the key is made straight into
+   `/etc/mro-clock`, never in the Warden's settings:
 
    ```
-   cast call <the Safe> "getThreshold()(uint256)" --rpc-url https://mainnet.base.org   # 2
-   cast call <the Safe> "getOwners()(address[])"  --rpc-url https://mainnet.base.org   # the three
-   cast call <the Safe> "VERSION()(string)"       --rpc-url https://mainnet.base.org   # 1.5.0
+   sudo systemctl stop mro-clock.timer
+   cd ~/projects/machine-readable-only
+   sudo bash warden/deploy/install-clock-user.sh --rotate-clock-key --commit "$(git rev-parse HEAD)"
    ```
 
-3. **Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].** First the
+   It prints only the new key's address. Before running it, set in the
+   Warden's settings every mainnet value from the table above that is already
+   known: `MRO_CHAIN_ID`, `BASE_RPC_URL`, `CLOCK_CHECK_RPC_URL`,
+   `X402_FACILITATOR_URL`, the CDP pair, `TREASURY_ADDRESS`, `MRO_HOUSE_KEY_ID`
+   and `MRO_OWNER_SAFE`. `MRO_CONTRACT_ADDRESS` still names Sepolia here; step 8
+   changes it. The running Warden is untouched until it restarts.
+
+4. **Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].** First the
    simulation, then the send:
 
    ```
    cd ~/projects/machine-readable-only/contracts
-   bash script/deploy-mainnet.sh --warden <the mainnet Clock's address> --owner <the Safe> --signers <a,b,c>
-   bash script/deploy-mainnet.sh --warden <the mainnet Clock's address> --owner <the Safe> --signers <a,b,c> --broadcast
+   MRO_SPLIT_SEED_FILE=<mainnet's own seed> bash script/deploy-mainnet.sh --warden <step 3's address> --owner <the Safe> --signers <a,b,c>
+   MRO_SPLIT_SEED_FILE=<mainnet's own seed> bash script/deploy-mainnet.sh --warden <step 3's address> --owner <the Safe> --signers <a,b,c> --broadcast
    ```
 
-   The broadcast's last call offers ownership to the Safe. The deploying key
-   stays owner until step 4.
+   It checks the Safe's identity, refuses a Sepolia seed, gates on
+   `test/ContractSize.t.sol` and the ABI pin, broadcasts, then READS THE
+   DEPLOYMENT BACK -- pending owner, warden, anchor -- and stops if any is
+   wrong. It prints the token and renderer. The deploying key owns the
+   contract until step 5; whoever holds it before then can take the contract
+   for good (decision D2).
 
-4. **The Safe accepts ownership -- [OPERATOR, two signers].** Sign it with the
-   Ledger AND the Trezor: this is the Trezor's first real signature, and the
-   one that proves it works with the Safe on Base.
+5. **The Safe accepts ownership, FIRST -- [OPERATOR, two signers].** Sign it with
+   the Ledger AND the Trezor:
 
    ```
    cd ~/projects/machine-readable-only/warden
@@ -616,113 +633,123 @@ handling of the real owner key.
    Import the file it names in the Transaction Builder, compare the hashes on
    each device, and sign with both. The second signer UNTICKS "Execute": a
    signer who executes approves by sending, and its device shows no hash. Then
-   execute from any connected owner that holds ETH. Then `cast call <token> "owner()(address)"`
-   must print the Safe. Until it does, the deploying key is still the owner.
+   execute from any connected owner that holds ETH. Then
+   `cast call <token> "owner()(address)"` must print the Safe and
+   `cast call <token> "pendingOwner()(address)"` the zero address. **Then
+   delete the deploying key** (`MAINNET_DEPLOYER_KEY` in `contracts/.env`,
+   WinSCP). Nothing later opens before this: the Warden, the Clock and the
+   adoption all refuse a contract the Safe does not own alone.
 
-   It states chain 8453, refuses any `--warden` or `--owner` that is not
-   EIP-55 and an owner with no code, signs with `MAINNET_DEPLOYER_KEY`
-   (`MroScript` refuses the throwaway spike key), gates on `test/ContractSize.t.sol` and the
-   ABI pin, and prints the renderer and token. Rehearsed on the fork with
-   `--fork`; the real run differs only in the RPC and the key.
-
-5. **Verify the source on both explorers, then read it back, against mainnet:**
+6. **Verify the source on both explorers, then read it back, against mainnet:**
 
    ```
-   bash script/verify-plan7.sh <renderer> <token> <the mainnet Clock's address> 8453
+   bash script/verify-plan7.sh <renderer> <token> <step 3's address> 8453
    cd ../warden
    node tools/check-deployed-abi.mjs <token> https://mainnet.base.org
    node tools/read-ladder.mjs <token> https://mainnet.base.org
    ```
 
-6. **Adopt it, which also records the deploy block:**
+7. **Snapshot, then clear the Sepolia rows out of the mirror -- [OPERATOR].** The
+   live mirror holds Sepolia's tokens, mints, credits, Marks, questions and
+   signed requests; left in place, a returning agent is refused
+   `already-minted` and the mainnet token 1 inherits Sepolia's question.
+   Registered keys are kept. With the Warden stopped, from a shell in group
+   `mro`:
 
    ```
-   bash contracts/script/adopt-deployment.sh --chain 8453 <renderer> <token> <deploy-block>
+   pm2 stop mro-warden
+   cd ~/projects/machine-readable-only/warden
+   sg mro -c 'node tools/mirror-snapshot.mjs ~/backups/state.db.pre-mainnet.$(date -u +%Y%m%dT%H%M%SZ)'
+   sg mro -c 'node tools/mirror-reset-chain.mjs --yes'
+   ```
+
+   Both act on the Warden's own `STATE_DB_PATH` and refuse a relative path.
+
+8. **Adopt it, change the contract address, rehearse the start, restart:**
+
+   ```
+   cd ~/projects/machine-readable-only
+   MRO_OWNER_SAFE=<the Safe> bash contracts/script/adopt-deployment.sh --chain 8453 <renderer> <token> <deploy-block>
    ```
 
    The deploy block is the block of the FIRST deploy transaction (forge's
-   `broadcast/DeployPlan5.s.sol/8453/run-latest.json`). Until it is recorded the
-   Clock refuses to run at all -- proven on the fork -- which is deliberate: the
-   alternative was doing every write and then failing on the last step, every
-   night, with the mirror never learning about a `rest`, a transfer or a rebind.
-
-7. **Change the settings together, rehearse the start, then restart.** The
-   operator sets the rows in the table above in the Warden's settings file (and
-   the Clock's key) via WinSCP. Then, before PM2 sees them:
+   `broadcast/DeployPlan5.s.sol/8453/run-latest.json`); until it is recorded the
+   Clock refuses to run at all. Adopt refuses unless the Safe alone owns the
+   contract. Then set `MRO_CONTRACT_ADDRESS=<token>` in the Warden's settings
+   (WinSCP) and check them:
 
    ```
-   bash warden/tools/rehearse-start.sh
+   bash warden/deploy/set-domain.sh machinereadableonly.com   # presence of every required value, mainnet's five included
+   bash warden/tools/rehearse-start.sh                          # must print payment ready (eip155:8453 ...)
    ```
 
-   It now runs the Warden with the same IPv4 flags PM2 uses, and must print
-   `payment ready (eip155:8453 via https://api.cdp.coinbase.com/...)`. Then
-   `pm2 restart mro-warden`, section 9's checks, and the same boot line in the
-   log -- on a non-Sepolia chain the Warden EXITS rather than running on with
-   payment unavailable, and it refuses a placeholder treasury outright (both
-   proven on the fork). Bitmaps need nothing: they are solved at mint from
-   `MRO_DOMAIN`.
+   Then re-install the Clock so it takes the new address, check the installed
+   copy agrees, and start both:
 
-8. **Mint token #1 and start the seed agent -- [OPERATOR GATE, real funds].**
-   This is C4.5, and it is the last step because it is the one that cannot be
-   undone: token #1 is minted once, and the first 72 hours happen once.
+   ```
+   sudo bash warden/deploy/install-clock-user.sh --commit "$(git rev-parse HEAD)"
+   bash warden/deploy/install-clock-user.sh --dry-run          # the Clock's settings build from the Warden's
+   pm2 restart mro-warden
+   sudo systemctl start mro-clock.timer
+   ```
 
-   Mint it from a wallet the operator controls, using the client's own path so the token
-   is bound to the seed agent's key from the first block:
+   Section 9's checks follow. On a non-Sepolia chain the Warden EXITS rather
+   than running on with payment unavailable, refuses a placeholder treasury,
+   and refuses to start until the Safe owns the contract alone.
+
+9. **Mint token #1 BEFORE the door is announced -- [OPERATOR GATE, real funds].**
+   This is C4.5, and it is the last step because it cannot be undone: token #1
+   is the house token and only `MRO_HOUSE_KEY_ID` may be it, however many
+   agents arrive first -- but it should be first, so it is minted before
+   anything is announced. Mint it from a wallet the operator controls, with the
+   seed agent's key, so the token is bound to it from the first block:
 
    ```
    cd ~/projects/machine-readable-only/client
-   MRO_WALLET_KEY=<the funding wallet's key> node src/cli.mjs join \
+   node src/cli.mjs join \
      --to <the address that should OWN token #1> \
      --key ~/.mro/seed-identity.jwk.json \
-     --expect-payto <the treasury from step 10's table> \
-     --expect-amount 1000000
+     --wallet-key-file <a file holding the funding wallet's key, mode 600> \
+     --expect-payto <the treasury, from your own records> \
+     --expect-amount 1000000 \
+     --expect-asset 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 \
+     --expect-network eip155:8453 \
+     --expect-chain 8453 \
+     --expect-contract <token>
    ```
 
-   `--expect-payto` is REQUIRED for the client to pay at all -- `assertExpected`
-   throws without it, because a destination the site alone asserts is not a
-   destination worth signing for. `--expect-amount` is optional but compared
-   when given, so pass it: 1000000 is 1 USDC in base units. The client also
-   refuses any scheme other than `exact`, which is the one that means a single
-   transfer with no standing allowance.
+   The key goes in a file, never on the command line, where every process on
+   the box can read it. Every `--expect-*` is checked before anything is
+   signed: the treasury and the amount (1 USDC in base units) are required to
+   pay at all, and the asset is Base mainnet's USDC. Take the treasury from
+   somewhere other than the site -- a value checked against the server that
+   quoted it is not a check. The client also refuses any scheme other than
+   `exact`.
 
-   **`--to` MUST BE ABLE TO RECEIVE AN ERC-721, and since 2026-09-16 the
-   Warden enforces it.** `receiverBlock` checks the recipient BEFORE any
-   payment demand: one with code that does not answer `onERC721Received` is
-   refused `recipient-cannot-receive` with a remedy line, and nothing is
-   charged. On the contract this branch builds, `mint` uses `_mint` and makes
-   no callback, so the chain itself would deliver -- into an address that has
-   declared it cannot move the token. The gate is what stops that.
-
-   Use a plain wallet (no code) or one known to implement `onERC721Received`;
-   `cast code <address>` returning `0x` means no code. **The gate covers the
-   mint TOOL only.** A row seeded straight into the mirror bypasses it -- which
-   is exactly how the fork rehearsal creates the failing case -- so any path
-   that does not go through `mint` still needs this checked by hand.
-
-   **Take the treasury address from somewhere other than the site**, which is
-   what SKILL.md tells every other agent to do. If the value you check against
-   came from the same server that quoted it, it is not a check.
+   **`--to` MUST BE ABLE TO RECEIVE AN ERC-721.** The Warden refuses one with
+   code that does not answer `onERC721Received` before any payment demand
+   (`recipient-cannot-receive`). Use a plain wallet (`cast code <address>`
+   returns `0x`) or one known to implement it.
 
    Then follow section 9c's three deploy-day steps, and **let it run for 48
    hours before anything is announced** -- that window is C4.6, the OpenSea
    check, and it needs a token that already exists.
 
-7. **Confirm Base attributes the first mainnet Clock write.** After the first
-   00:05 UTC run on mainnet (the one that mints token #1), take a transaction
-   hash from section 9a's log and check its calldata ends with the issued
-   suffix:
+10. **Confirm Base attributes the first mainnet Clock write.** After the first
+    00:05 UTC run on mainnet (the one that mints token #1), take a transaction
+    hash from section 9a's log and check its calldata ends with the issued
+    suffix:
 
-   ```
-   cast tx <hash> input --rpc-url https://mainnet.base.org | tail -c 59
-   ```
+    ```
+    cast tx <hash> input --rpc-url https://mainnet.base.org | tail -c 59
+    ```
 
-   It must print `62635f6466686c6f686c680b0080218021802180218021802180218021`
-   (`bc_dfhlohlh`, length `0b`, schema `00`, the `8021` marker). Then enter the
-   same hash in Base's Builder Code Validation tool, linked from
-   <https://docs.base.org/specifications/builder-codes/overview>, and press
-   Check Attribution. The suffix check proves the bytes; only Base's tool
-   proves Base credits them. A write sent without attribution can never be
-   attributed afterwards, so do this on the first night, not later.
+    It must print `62635f6466686c6f686c680b0080218021802180218021802180218021`
+    (`bc_dfhlohlh`, length `0b`, schema `00`, the `8021` marker). Then enter the
+    same hash in Base's Builder Code Validation tool, linked from
+    <https://docs.base.org/specifications/builder-codes/overview>, and press
+    Check Attribution. A write sent without attribution can never be attributed
+    afterwards, so do this on the first night, not later.
 
 ---
 
