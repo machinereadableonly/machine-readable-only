@@ -177,7 +177,18 @@ async function main() {
       console.log(`square ${sq.level}  day ${sq.day ?? "?"}  ${sq.status}${sq.expected === null ? "" : `  expected ${sq.expected} chain ${sq.actual}`}`);
     }
     for (const p of r.problems) console.log(`problem: ${p}`);
-    console.log(r.ok ? `token ${tokenId}: every square checks out` : `token ${tokenId}: the border does NOT check out`);
+    if (r.incomplete) {
+      // Not an accusation: the scan could not find every credit, so no square was graded.
+      console.log(`token ${tokenId}: not every credit was found, so the border could not be checked. Nothing is shown to be wrong; try again with an RPC that serves older logs.`);
+      process.exitCode = 3;
+      return;
+    }
+    // As DigitBand draws it: a whole side of 122 squares at a time, all 365 when finished.
+    const level = r.squares.length;
+    const drawn = Math.min(level, (level >= 365 ? 3 : Math.floor(level / 122)) * 122);
+    console.log(r.ok
+      ? `token ${tokenId}: every square checks out (${drawn} of 365 drawn${drawn === 0 ? "; the band starts at level 122" : ""})`
+      : `token ${tokenId}: the border does NOT check out`);
     if (!r.ok) process.exitCode = 1;
     return;
   }

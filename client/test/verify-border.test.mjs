@@ -208,6 +208,7 @@ test("one unfound credit never accuses another square of being wrong", async () 
   assert.equal(r.ok, false);
   assert.ok(!r.squares.some((s) => s.status === "wrong"), JSON.stringify(r.squares.map((s) => s.status)));
   assert.match(r.problems.join("\n"), /found 5 credits for a token at level 6/);
+  assert.equal(r.incomplete, true, "not finding a credit is not a wrong square");
 });
 
 test("a run that wrote moments ago is scanned only up to the chain's head", async () => {

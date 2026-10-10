@@ -148,6 +148,7 @@ export async function verifyBorder({ publicClient, contract, tokenId, maxRunBloc
     const days = credits.map((c) => c.day).join(", ") || "none";
     return {
       ok: false,
+      incomplete: true,
       squares: Array.from({ length: level }, (_, i) => ({
         level: i + 1, day: null, expected: null, actual: bitOf(words, i), status: "missing",
       })),
