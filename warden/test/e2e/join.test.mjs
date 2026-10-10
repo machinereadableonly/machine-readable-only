@@ -473,7 +473,10 @@ test("the whole join: register, refused, admitted, mint, check in, and scanned",
 
       // Whole objects, not just the three fields: any future field must be
       // told the same way to both audiences.
-      assert.deepEqual(view, reported);
+      // The same view; the tool answer adds only the `ok` every tool carries.
+      const { ok, ...reportedView } = reported;
+      assert.equal(ok, true);
+      assert.deepEqual(view, reportedView);
 
       // An unknown token is a 404 to a scanner, never a 200 with an empty body.
       const miss = await fetch(`${base}/t/${tokenId + 999}`);

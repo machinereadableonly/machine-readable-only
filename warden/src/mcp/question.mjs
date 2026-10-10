@@ -7,10 +7,16 @@ import { readFileSync } from "node:fs";
 import { createHmac } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { DAY_MS } from "../day.mjs";
 
 /// How long an issued question stays answerable. Far wider than a real agent
 /// needs; a constant, so changing it needs no redeploy.
 export const ANSWER_WINDOW_MS = 30_000;
+
+/// The answer deadline: the window, but never past the end of the UTC day the
+/// question was asked, because an answer after midnight is a check-in for a
+/// day with no question.
+export const answerDeadline = (issuedAt, day) => Math.min(issuedAt + ANSWER_WINDOW_MS, (day + 1) * DAY_MS - 1);
 
 /// The longest answer `checkin` accepts. The bank is checked against it too:
 /// an option longer than this could never be answered.

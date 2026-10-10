@@ -89,7 +89,7 @@ test("a token view carries exactly the published field set", async () => {
     Object.keys(view).sort(),
     [
       "chainId", "children", "contract", "docs", "finisher", "generation", "heart",
-      "lastDay", "late", "level", "marks", "mcp", "nextWindowOpensAt", "onChainBy",
+      "lastDay", "late", "level", "marks", "mcp", "nextWindowOpensAt", "ok", "onChainBy",
       "owner", "parentId", "pendingOnChain", "resting", "streak", "streakDeadline",
       "tokenId", "whole",
     ],
@@ -128,7 +128,7 @@ test("a FINISHED token's view carries exactly the same published field set", asy
     Object.keys(view).sort(),
     [
       "chainId", "children", "contract", "docs", "finisher", "generation", "heart",
-      "lastDay", "late", "level", "marks", "mcp", "nextWindowOpensAt", "onChainBy",
+      "lastDay", "late", "level", "marks", "mcp", "nextWindowOpensAt", "ok", "onChainBy",
       "owner", "parentId", "pendingOnChain", "resting", "streak", "streakDeadline",
       "tokenId", "whole",
     ],
@@ -265,4 +265,14 @@ test("a finished token is not told when to come back", async () => {
   // rather than missing, so a client reading them always finds an answer.
   assert.equal("nextWindowOpensAt" in view, true);
   assert.equal("streakDeadline" in view, true);
+});
+
+// 16 Low. Every tool answers with `ok`; status with an id answered the bare view.
+test("status with an id answers ok: true and the token's view", async () => {
+  const q = queries(openDb(":memory:"));
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 0, mintDay: 0 });
+  const tool = makeStatusTool({ q, chain: openChain() });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.ok, true);
+  assert.equal(r.tokenId, 1);
 });

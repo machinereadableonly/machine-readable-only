@@ -79,6 +79,7 @@ test("an unexpected throw from a tool handler never leaks its message to the cal
   assert.ok(!bodyText.includes(secretMessage), "the raw error message must not reach the caller");
   assert.ok(!bodyText.includes("/home/secret/state.db"), "the leaked path must not reach the caller");
   assert.ok(bodyText.includes('"reason":"internal"'), "the caller should see the generic internal refusal");
+  assert.ok(bodyText.includes('"next":'), "and its next step, like every other refusal");
 });
 
 test("CONTROL: a tool that returns normally still delivers its real structured result unchanged", async () => {

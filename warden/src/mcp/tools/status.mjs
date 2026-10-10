@@ -21,7 +21,7 @@ export function makeStatusTool({ q, chain, domain, contract, chainId }) {
     async handler({ tokenId }, ctx) {
       if (tokenId !== undefined) {
         const view = tokenView(q, tokenId, links);
-        if (view) return view;
+        if (view) return { ok: true, ...view };
         // The chain decides whether a token exists, not this mirror. Answering
         // "unknown-token" for a token the chain holds is how an agent is told
         // its own token is not real. See checkin.mjs for the same read.

@@ -2,7 +2,7 @@
 import * as z from "zod";
 import { DAY_MS, utcDay } from "../../day.mjs";
 import { FINISH_LEVEL } from "../ladder.mjs";
-import { questionFor, publicShape, answerSetSize, ANSWER_WINDOW_MS } from "../question.mjs";
+import { questionFor, publicShape, answerSetSize, answerDeadline } from "../question.mjs";
 
 export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now = Date.now }) {
   // Both at construction, like requireChain: a tool built without them would
@@ -56,7 +56,7 @@ export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now
         ok: true,
         day,
         ...publicShape(asked),
-        answerBy: new Date(issued.issuedAt + ANSWER_WINDOW_MS).toISOString(),
+        answerBy: new Date(answerDeadline(issued.issuedAt, day)).toISOString(),
       };
     },
   };

@@ -163,7 +163,7 @@ export function makeMcpHandler(deps) {
             // return structured refusals for everything they expect, so a throw
             // here is by definition unexpected: log it, and say nothing.
             console.error(`tool ${tool.name} failed:`, err.message);
-            const failure = { ok: false, reason: "internal" };
+            const failure = withNext({ ok: false, reason: "internal" });
             return {
               content: [{ type: "text", text: JSON.stringify(failure) }],
               structuredContent: failure,

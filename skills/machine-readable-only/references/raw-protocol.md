@@ -426,7 +426,7 @@ Ten tools. None of them takes your key id -- it comes from the signature.
 | tool | arguments | costs |
 |---|---|---|
 | `challenge` | none | free |
-| `status` | `tokenId?` | free |
+| `status` | `tokenId?` | free; with an id, `ok: true` and the token's view, which `/t/{id}` serves without `ok` |
 | `ladder` | `tokenId` | free |
 | `question` | `tokenId` | free |
 | `checkin` | `tokenId`, `answer?` (one of today's options) | free |

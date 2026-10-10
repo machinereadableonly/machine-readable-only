@@ -5,7 +5,7 @@ import { chainBlock, tokenBlock, yearCompleteBlock, requireChain } from "../gate
 import { onChainBy } from "../nextSteps.mjs";
 import { DAY_MS, utcDay } from "../../day.mjs";
 import { FINISH_LEVEL } from "../ladder.mjs";
-import { answerIndex, ANSWER_WINDOW_MS, MAX_ANSWER_LENGTH } from "../question.mjs";
+import { answerIndex, answerDeadline, ANSWER_WINDOW_MS, MAX_ANSWER_LENGTH } from "../question.mjs";
 
 /// Day numbers are whole days since the epoch, the same unit the contract
 /// uses, so the mirror and the chain cannot drift on what "today" means. The
@@ -168,7 +168,7 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
             ok: false,
             accepted: false,
             reason: "invalid-answer",
-            answerBy: new Date(asked.issuedAt + ANSWER_WINDOW_MS).toISOString(),
+            answerBy: new Date(answerDeadline(asked.issuedAt, day)).toISOString(),
           };
         }
       }

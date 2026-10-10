@@ -102,3 +102,16 @@ test("an issued question records how many answers it offered", async () => {
   const asked = BANK.find((b) => b.id === row.questionId);
   assert.equal(row.n, asked.answers ? asked.answers.length : asked.range.max - asked.range.min + 1);
 });
+
+// 16 Low. An answer arriving after midnight is a check-in for the NEXT day,
+// which has no question, so a window running past the day's end promised time
+// that did not exist. answerBy never passes the end of the day it was asked.
+test("a question asked in the day's last seconds is due before midnight", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
+  const endOfDay = 102 * DAY_MS;
+  const tool = makeQuestionTool({ q, bank: BANK, challengeSecret: "s", today: () => 101, now: () => endOfDay - 10_000 });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.answerBy, new Date(endOfDay - 1).toISOString());
+});
