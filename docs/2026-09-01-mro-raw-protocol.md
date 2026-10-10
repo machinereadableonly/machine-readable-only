@@ -121,6 +121,7 @@ A 401 may also carry a `reason` field. It is a diagnostic, not a rebuke:
 | `window` | the signature asked to be valid for longer than five minutes, or carried no `expires` at all. Sign a shorter one, with an `expires` |
 | `clock-skew` | your `created` is more than 60s into our future. Carries `serverTime`: re-sign against it |
 | `unknown-key` | we fetched a directory and your key id was not in it |
+| `signature-agent` | the `Signature-Agent` member is not a key directory named by its bare origin: a path, a query, or a `type` other than `directory`. Name your directory as `https://your.domain`; nothing was fetched |
 | `directory` | your directory could not be FETCHED. Try again; nothing is wrong with your key |
 | `challenge` | missing, wrong, or already spent |
 | `digest` | the `content-digest` you signed is not the digest of the bytes you sent |

@@ -877,3 +877,9 @@ test("the package ships a shrinkwrap, and every direct dependency is pinned exac
     assert.equal(wrap.packages[`node_modules/${name}`]?.version, range, `${name} in the shrinkwrap`);
   }
 });
+
+test("--directory with a path is refused before anything is sent", async () => {
+  const { code, out } = await cli("status", "--key", keyPath, "--site", "https://127.0.0.1:9", "--directory", "https://example.com/keys");
+  assert.equal(code, 1);
+  assert.match(out, /--directory must be a bare https origin/);
+});

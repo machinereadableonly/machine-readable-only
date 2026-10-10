@@ -123,7 +123,7 @@ export const NO_NEXT = new Set([
   // `serverTime` to correct against. `refusals.md` and the client's
   // DOOR_REASONS carry the sentences. `origin` is never seen by an agent at
   // all: agents send no Origin header.
-  "clock-skew", "window", "origin",
+  "clock-skew", "window", "origin", "signature-agent",
   // Routing and malformed input: not tool refusals.
   "target", "unknown-route", "malformed", "not-found", "not-built-yet",
   // Clock-internal. These are written to the mirror and read by the operator;

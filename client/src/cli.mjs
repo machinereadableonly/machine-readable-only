@@ -224,6 +224,14 @@ async function main() {
   // endpoint defaults to site. See door.mjs for why they must be separable.
   const site = args.site ?? DEFAULT_SITE;
   const origin = args.endpoint ?? site;
+  // The door accepts a directory named by its bare origin only (draft 5.2.1).
+  if (args.directory !== undefined) {
+    let u = null;
+    try { u = new URL(args.directory); } catch {}
+    if (!u || u.protocol !== "https:" || u.pathname !== "/" || u.search || u.hash || u.username || ![u.origin, `${u.origin}/`].includes(args.directory)) {
+      throw new Error(`--directory must be a bare https origin such as https://your.domain, not ${args.directory}`);
+    }
+  }
 
   const { identity, created } = await ensureIdentity(keyPath);
   if (created) {

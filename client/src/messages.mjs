@@ -188,6 +188,8 @@ export const DOOR_REASONS = {
     "the signature did not verify. The key in use is not the one the site knows, or the request was altered in transit.",
   components:
     "the site requires a signature over components this client does send, so this is a version mismatch. Update mro-agent.",
+  "signature-agent":
+    "the Signature-Agent member must name a key directory by its bare origin (https://your.domain, no path), with no type or type=directory. Pass --directory as an origin.",
   directory:
     "the site could not fetch the key directory. Theirs if you registered with them, yours if you host one. Try again.",
   digest:

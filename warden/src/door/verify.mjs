@@ -163,6 +163,13 @@ export async function verifyRequest(request, lookupKey, { now = Date.now() } = {
       clockSkew: MAX_SKEW_MS / 1000,
       now: new Date(now),
       async resolver(candidate) {
+        // Draft 5.2.1: a directory member is a bare origin, and an unsupported
+        // type is never inferred from its URL. Refused before anything is fetched.
+        const agent = candidate.signatureAgent;
+        if (agent && (agent.type !== "directory" || !isOrigin(agent.uri))) {
+          reason = "signature-agent";
+          throw new Error("Signature-Agent is not a directory origin");
+        }
         try {
           jwk = await lookupKey(candidate.keyid, candidate.signatureAgent?.uri ?? null);
         } catch {
@@ -224,6 +231,17 @@ export async function verifyRequest(request, lookupKey, { now = Date.now() } = {
     covered: verified.components.map((c) => c.name),
     evidence: { base: baseText, signature: Buffer.from(verified.signature).toString("base64"), jwk },
   };
+}
+
+/// `https://host` or `https://host/`: no path, query, fragment or credentials.
+function isOrigin(uri) {
+  try {
+    const u = new URL(uri);
+    return u.pathname === "/" && !u.search && !u.hash && !u.username && !u.password
+      && (uri === u.origin || uri === `${u.origin}/`);
+  } catch {
+    return false;
+  }
 }
 
 /// One header, whatever case it was written in.

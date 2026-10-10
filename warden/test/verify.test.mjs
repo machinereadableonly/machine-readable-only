@@ -730,3 +730,32 @@ test("a params line carrying a second list is refused, not read as its first", (
   assert.notEqual(coveredComponents('"@signature-params": ' + seven), null, "CONTROL: one list is read");
   assert.equal(coveredComponents('"@signature-params": ' + seven + ', sig1=("@authority");created=1'), null);
 });
+
+// draft-ietf-webbotauth-httpsig-protocol-00 5.2.1: a `directory` member MUST be
+// an origin, and a verifier MUST NOT infer a mechanism from a type it does not
+// support. Both are refused, by a reason that says what to send.
+const agentMember = (value) => handSigned({
+  agent: value,
+  components: '"@authority" "@method" "@path" "signature-agent";key="sig1" "content-digest"',
+  lines: [`"@authority": example.com`, `"@method": POST`, `"@path": /mcp`,
+    `"signature-agent";key="sig1": ${value.slice("sig1=".length)}`, `"content-digest": ${EMPTY_DIGEST}`],
+});
+
+test("a directory Signature-Agent with a path is refused, not fetched at its origin", async () => {
+  let asked = false;
+  const r = await verifyRequest(await agentMember('sig1="https://example.com/keys/mine"'), async () => { asked = true; return ED.key; });
+  assert.equal(r.reason, "signature-agent");
+  assert.equal(asked, false, "nothing is fetched for a member the draft says to ignore");
+});
+
+test("a Signature-Agent type this door does not support is refused, not inferred", async () => {
+  const r = await verifyRequest(await agentMember('sig1="https://example.com/jwks.json";type=jwks_uri'), lookup);
+  assert.equal(r.reason, "signature-agent");
+});
+
+test("CONTROL: a directory member that is an origin, with or without a trailing slash, verifies", async () => {
+  for (const v of ['sig1="https://example.com"', 'sig1="https://example.com/"', 'sig1="https://example.com";type=directory']) {
+    const r = await verifyRequest(await agentMember(v), lookup);
+    assert.equal(r.ok, true, `${v}: ${r.reason}`);
+  }
+});
