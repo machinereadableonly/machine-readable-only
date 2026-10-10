@@ -299,3 +299,12 @@ test("reconcile events for tokens the mirror does not hold fail the run", () => 
   assert.equal(exitCodeFor({ reconciled: { applied: { skipped: 2 } } }), 1);
   assert.equal(exitCodeFor({ reconciled: { applied: { skipped: 0 } } }), 0);
 });
+
+// 16 Low. A run that read nothing reports `to` as the head it could see, which
+// a lagging replica puts BELOW the saved cursor. Writing it moved the cursor
+// back and re-read (and re-alerted) blocks already applied.
+test("the cursor never moves backwards", () => {
+  assert.equal(nextCursor({ reconciled: { from: 501n, to: 450n } }, 500n), null);
+  assert.equal(nextCursor({ reconciled: { from: 501n, to: 600n } }, 500n), 600n);
+  assert.equal(nextCursor({ reconciled: { from: 1n, to: 500n } }, null), 500n, "no saved cursor: any block is forward");
+});

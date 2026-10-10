@@ -223,7 +223,7 @@ async function main() {
   // nextCursor, which owns that rule and is tested on its own. The pages above
   // have usually written it already; this is what moves it on a night with no
   // page to read.
-  const advanceTo = nextCursor(summary);
+  const advanceTo = nextCursor(summary, readCursor(CURSOR, { chainId, contract, log: console.error }));
   if (advanceTo !== null) writeCursor(CURSOR, advanceTo, { chainId, contract });
 
   console.log(runFinishedLine(summary, Date.now() - started));

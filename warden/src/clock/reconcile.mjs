@@ -48,8 +48,8 @@ export const MAX_LOG_SPAN = 1_000n;
 export const DEPLOY_BLOCK = { 84532: 47_847_201n };
 
 /// The highest Mark id the CONTRACT will accept, from MachineReadableOnly.sol's
-/// own `MAX_MARK_ID`. Ids 11-15 are unwritten today (Plan 6 reserved them), so
-/// this is deliberately the chain's bound and not the catalogue's ten.
+/// own `MAX_MARK_ID`: ids 11-15 are the finisher Marks `_finish` writes, so
+/// this is the chain's bound and not the catalogue's ten.
 const MAX_MARK_ID = 15;
 
 /// The lowest of the five finisher Marks, from MachineReadableOnly's own

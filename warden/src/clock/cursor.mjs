@@ -123,9 +123,12 @@ export function writeCursor(path, block, { chainId = null, contract = null } = {
  *
  * @returns the block to write, or null to leave the cursor where it is
  */
-export function nextCursor(summary) {
+export function nextCursor(summary, current = null) {
   const to = summary?.reconciled?.to;
-  return to === undefined ? null : to;
+  if (to === undefined || to === null) return null;
+  // Never backwards: a lagging replica's head can sit below the saved cursor.
+  if (current !== null && current !== undefined && BigInt(to) < BigInt(current)) return null;
+  return to;
 }
 
 /**
@@ -197,7 +200,7 @@ export function runFinishedLine(summary, ms) {
     `${summary.minted.length} minted, ${summary.seeded.length} seeded, ` +
     `${summary.revealedKeys} split keys revealed, ${summary.credited.length} credited, ` +
     `${summary.healed.length} healed, ${summary.marks.length} marks, ` +
-    `${summary.dropped.length} dropped, ${summary.stuck.length} stuck, ` +
+    `${summary.dropped.length} dropped, ${summary.stuck.length} stuck, ${summary.stuckMints?.length ?? 0} mints stuck, ` +
     // Both seed counts are named in full, because a bare number next to
     // "dropped" would read as the credit kind. A returned seed is a year
     // handed back; a stuck one is a year still held.

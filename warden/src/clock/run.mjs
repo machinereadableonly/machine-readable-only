@@ -1,14 +1,11 @@
 // One Clock run. Everything the piece owes the chain for a closed day.
 //
-// ORDER MATTERS AND IS NOT ARBITRARY: mints, then SEEDS, then check-ins, then
-// Marks. A check-in for a token that has not been minted reverts NoSuchToken,
-// and a Mark on it reverts the same way, so both creation routes go first and a
-// token created this morning can be credited in the same run. Seeds sit beside
-// mints rather than after the check-ins because they are the other way a token
-// comes into existence, not a thing done to one that already exists.
-//
-// FOUR WRITE PASSES, not the three this header claimed until 2026-09-07: the
-// seed pass (`3b`) was added with lineage and nothing here said so.
+// ORDER MATTERS AND IS NOT ARBITRARY: the split-key reveal, then mints, then
+// seeds, then check-ins, then Marks, then a heartbeat if the night wrote
+// nothing. A check-in or a Mark for a token not yet minted reverts
+// NoSuchToken, so both creation routes go first and a token created this
+// morning can be credited in the same run. The reveal goes first: each one
+// points at the one before, which is how a verifier finds a run's writes (1c).
 //
 // A RUN MUST BE SAFE TO EXECUTE TWICE. Nothing here decides what to do from a
 // clock or a counter; every write is chosen by reading rows the previous run
@@ -96,15 +93,20 @@ const STAYS_QUEUED = new Set(["attempts-exhausted", "not-accounted-on-chain", "l
  * forever, because batchCheckIn refuses `day <= lastDay` and a missed day can
  * never be backfilled.
  */
-export async function chainLastDay({ publicClient, contract, tokenId }) {
+export async function chainLastDay(args) {
+  const view = await chainView(args);
+  return view == null ? null : Number(view.lastDay);
+}
+
+/// One token's `viewOf`, or null on any failure.
+async function chainView({ publicClient, contract, tokenId }) {
   try {
-    const view = await publicClient.readContract({
+    return await publicClient.readContract({
       address: contract,
       abi: MRO_ABI,
       functionName: "viewOf",
       args: [BigInt(tokenId)],
     });
-    return Number(view.lastDay);
   } catch {
     return null;
   }
@@ -118,18 +120,9 @@ export async function chainLastDay({ publicClient, contract, tokenId }) {
  * are dropped. Null on ANY failure, which the caller treats as "could not ask"
  * and answers by dropping the one entry that is refused whatever the chain holds.
  */
-export async function chainLevel({ publicClient, contract, tokenId }) {
-  try {
-    const view = await publicClient.readContract({
-      address: contract,
-      abi: MRO_ABI,
-      functionName: "viewOf",
-      args: [BigInt(tokenId)],
-    });
-    return Number(view.level);
-  } catch {
-    return null;
-  }
+export async function chainLevel(args) {
+  const view = await chainView(args);
+  return view == null ? null : Number(view.level);
 }
 
 /**
@@ -140,19 +133,11 @@ export async function chainLevel({ publicClient, contract, tokenId }) {
  * struct this code does not understand -- must not be written over the mirror
  * in pieces.
  */
-export async function chainRunOf({ publicClient, contract, tokenId }) {
-  try {
-    const view = await publicClient.readContract({
-      address: contract,
-      abi: MRO_ABI,
-      functionName: "viewOf",
-      args: [BigInt(tokenId)],
-    });
-    const run = { level: Number(view.level), streak: Number(view.streak), lastDay: Number(view.lastDay) };
-    return Object.values(run).every((n) => Number.isInteger(n)) ? run : null;
-  } catch {
-    return null;
-  }
+export async function chainRunOf(args) {
+  const view = await chainView(args);
+  if (view == null) return null;
+  const run = { level: Number(view.level), streak: Number(view.streak), lastDay: Number(view.lastDay) };
+  return Object.values(run).every((n) => Number.isInteger(n)) ? run : null;
 }
 
 export async function mintIsOnChain({ publicClient, contract, mint }) {
@@ -257,6 +242,7 @@ export async function runClock({
     dropped: [],
     marks: [],
     stuck: [],
+    stuckMints: [],
     /// Children this run created on chain, by child id.
     seeded: [],
     /// Children the chain refused for good, and whose rows this run DELETED.
@@ -578,7 +564,6 @@ export async function runClock({
           ? `clock: token ${mint.tokenId} is held on chain by a DIFFERENT token, so this PAID mint cannot land under that id and needs a human`
           : `clock: token ${mint.tokenId} exists on chain but could not be identified, so this PAID mint is left queued rather than closed on a guess`
       );
-      summary.stuckMints = summary.stuckMints ?? [];
       summary.stuckMints.push(mint.tokenId);
       continue;
     }
@@ -590,7 +575,6 @@ export async function runClock({
     // never closed, and counted so the run fails.
     if (result.errorName === "StaleDay" || result.errorName === "BeforeDeploy") {
       alert(`clock: mint ${mint.tokenId} was paid on day ${mint.day}, which the chain now refuses as ${result.errorName} -- this PAID mint can never land and needs a human`);
-      summary.stuckMints = summary.stuckMints ?? [];
       summary.stuckMints.push(mint.tokenId);
       continue;
     }
