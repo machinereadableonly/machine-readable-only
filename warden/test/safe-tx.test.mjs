@@ -253,3 +253,17 @@ test("accepting ownership needs the exact signer set, in any order", async () =>
 test("a Safe version other than 1.5.0 is refused", async () => {
   await assert.rejects(pausing({ version: "1.4.1" }), /not one whose hash/);
 });
+
+// 16 Low. The Safe identity lives in two places, the deploy script and this
+// library; they drifted once (the script accepted a 1.4.1 VERSION). Kept equal.
+test("deploy-mainnet.sh accepts exactly the singletons and version this library does", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { CANONICAL_SINGLETONS } = await import("../tools/safe-tx-lib.mjs");
+  const script = readFileSync(new URL("../../contracts/script/deploy-mainnet.sh", import.meta.url), "utf8");
+  const line = script.split("\n").find((l) => /^\s*0x[0-9a-f]{40}\|0x[0-9a-f]{40}\) ;;/.test(l));
+  assert.ok(line, "the singleton case line is where it was");
+  const inScript = line.match(/0x[0-9a-f]{40}/g).sort();
+  assert.deepEqual(inScript, [...CANONICAL_SINGLETONS].map((a) => a.toLowerCase()).sort());
+  assert.match(script, /^\s*'"1\.5\.0"'\) ;;$/m);
+  assert.doesNotMatch(script, /1\.4\.1/);
+});

@@ -72,7 +72,7 @@ BASE_RPC_URL=https://sepolia.base.org
 # It held 0xfA6D76270e... until 2026-09-19 -- a pair superseded twice over, so
 # this script provisioned a fresh Warden onto a dead contract and nothing
 # caught it. A second hardcoded copy of that address is exactly the thing that
-# goes stale: `warden/deploy/set-contract-address.sh` is the only writer of it,
+# goes stale: `warden/tools/set-contract-address.sh` is the only writer of it,
 # and the value belongs to whichever pair is actually adopted. Pass it in:
 #
 #     MRO_CONTRACT_ADDRESS=0x... bash scripts/setup-clock.sh
@@ -109,11 +109,10 @@ bash "$PROJECT/scripts/make-clock-key.sh"
 
 echo ""
 echo "----------------------------------------------------------------"
-echo "Two values in that file are PLACEHOLDERS you may want to change:"
+echo "One value in that file is a PLACEHOLDER you will change before mainnet:"
 echo ""
-echo "  MRO_DOMAIN        example.com  (no real domain yet)"
 echo "  TREASURY_ADDRESS  0x...dEaD    (no real treasury yet)"
 echo ""
-echo "Both are safe on Base Sepolia. The Warden refuses to start with that"
-echo "treasury on any other chain, so neither can reach mainnet by accident."
+echo "It is safe on Base Sepolia. The Warden refuses to start with that"
+echo "treasury on any other chain, so it cannot reach mainnet by accident."
 echo "Edit them in WinSCP whenever you have the real values."

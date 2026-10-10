@@ -97,8 +97,8 @@ pays for, and a node will execute around 50M for one `eth_call`. The 2,000,000
 was set at roughly the Uniswap V3 line from a survey where Anonymice runs at
 24M and Terraforms at 28M, and what it bought was compatibility with strict
 providers -- real, unmeasurable, and the reason the new figure moves only to 3M.
-**THE BYTE LIMIT DID NOT MOVE**, because bytes are what every viewer downloads
-and 20,000 is never threatened. See `GasBudget.t.sol` for the full reasoning.
+The byte limit moved separately, 20,000 to 24,000 on 2026-09-22 (above). See
+`GasBudget.t.sol` for the full reasoning.
 
 **ONE WORST CASE since the digit band (2026-09-23): a finished CHILD.** The
 dearest token and the largest token are the same token, pinned in

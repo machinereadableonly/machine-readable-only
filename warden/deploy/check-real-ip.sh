@@ -41,7 +41,7 @@
 set -uo pipefail
 
 LOG=/var/log/nginx/access.log
-DOMAIN=machinereadableonly.com
+DOMAIN="${MRO_DEPLOY_DOMAIN:-machinereadableonly.com}"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "ERROR: the nginx access log is root:adm 640, so this needs sudo." >&2

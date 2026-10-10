@@ -25,6 +25,13 @@ if [[ ! "$ADDR" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
   echo "FAIL: pass one 0x-prefixed 20-byte address. Got '${ADDR}'." >&2
   exit 2
 fi
+# EIP-55, as adopt-deployment.sh requires: a mistyped address is published to
+# agents at mro://contract.
+export PATH="$HOME/.foundry/bin:$PATH"
+if [ "$ADDR" != "$(cast to-check-sum-address "$ADDR")" ]; then
+  echo "FAIL: $ADDR is not in EIP-55 checksummed form; it is $(cast to-check-sum-address "$ADDR")" >&2
+  exit 2
+fi
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ENV_FILE=".env"

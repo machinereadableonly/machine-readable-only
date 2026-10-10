@@ -133,8 +133,8 @@ fi
 # Any contract has code; only the Safe can ever accept. safe-tx.mjs makes the same checks.
 SAFE_VERSION="$(cast call "$OWNER" "VERSION()(string)" --rpc-url "$RPC" 2>/dev/null || true)"
 case "$SAFE_VERSION" in
-  '"1.4.1"' | '"1.5.0"') ;;
-  *) echo "FAIL: --owner $OWNER does not answer VERSION() as a Safe 1.4.1 or 1.5.0 (got '${SAFE_VERSION:-nothing}')." >&2; exit 1 ;;
+  '"1.5.0"') ;;
+  *) echo "FAIL: --owner $OWNER does not answer VERSION() as a Safe 1.5.0 (got '${SAFE_VERSION:-nothing}')." >&2; exit 1 ;;
 esac
 SAFE_THRESHOLD="$(cast call "$OWNER" "getThreshold()(uint256)" --rpc-url "$RPC")"
 if [ "$SAFE_THRESHOLD" -lt 2 ]; then
@@ -153,6 +153,7 @@ if [ "$(addrs "$SAFE_OWNERS")" != "$(addrs "$SIGNERS")" ]; then
   exit 1
 fi
 # The canonical Safe 1.5.0 singletons (Safe, SafeL2), from safe-global's safe-deployments.
+# The same pair as warden/tools/safe-tx-lib.mjs; test/safe-tx.test.mjs keeps them equal.
 SINGLETON="0x$(cast storage "$OWNER" 0 --rpc-url "$RPC" | tail -c 41 | tr 'A-F' 'a-f')"
 case "$SINGLETON" in
   0xff51a5898e281db6dfc7855790607438df2ca44b|0xedd160febbd92e350d4d398fb636302fccd67c7e) ;;

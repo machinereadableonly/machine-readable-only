@@ -18,11 +18,18 @@
 # box is registering the seed agent's public key at the door -- free, the same
 # path every other agent takes, and forgotten after 30 days if unused.
 #
-# Safe to re-run: it never overwrites an existing identity or config.
+# Safe to re-run: it never overwrites an existing identity or config, and it
+# never makes one unless told to: a new key cannot credit a token minted under
+# the old one, so a missing identity on a box with a token is a restore, not a
+# fresh start.
 #
-#     bash warden/deploy/install-seed-agent.sh
+#     bash warden/deploy/install-seed-agent.sh --new-identity   # first install only
+#     bash warden/deploy/install-seed-agent.sh                  # every later run
 
 set -euo pipefail
+
+NEW_IDENTITY=0
+[ "${1:-}" = "--new-identity" ] && NEW_IDENTITY=1
 
 REPO_WARDEN="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$REPO_WARDEN/.." && pwd)"
@@ -80,8 +87,12 @@ mkdir -p "$MRO_DIR"
 chmod 700 "$MRO_DIR"
 if [ -f "$IDENTITY" ]; then
     ok "identity already exists; left untouched"
+elif [ "$NEW_IDENTITY" -eq 1 ]; then
+    ok "no identity yet; creating one (--new-identity)"
 else
-    ok "no identity yet; creating one"
+    echo "FAIL: no identity at $IDENTITY. If the seed token already exists, restore that file from its backup:" >&2
+    echo "      a new key cannot credit it. On a first install only, re-run with --new-identity." >&2
+    exit 1
 fi
 # Created through the client's OWN code, not a reimplementation of it, so the
 # key format cannot drift from what the client expects to load.

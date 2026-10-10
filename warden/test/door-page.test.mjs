@@ -51,6 +51,17 @@ test("it links the LIVE contract on an explorer that publishes the source", () =
   assert.deepEqual(others, [], "the page names an address that is not the live contract");
 });
 
+// 16 Low. adopt-deployment.sh rewrote addresses only, so a mainnet adoption
+// left both explorer links on the Sepolia hosts, which show nothing.
+test("the explorer links are on the hosts of the chain the contract is deployed on", async () => {
+  const { DEPLOY_BLOCK } = await import("../src/clock/reconcile.mjs");
+  const mainnet = 8453 in DEPLOY_BLOCK;
+  assert.equal(html.includes("https://sepolia.basescan.org/"), !mainnet);
+  assert.equal(html.includes("https://base-sepolia.blockscout.com/"), !mainnet);
+  assert.equal(html.includes("https://basescan.org/"), mainnet);
+  assert.equal(html.includes("https://base.blockscout.com/"), mainnet);
+});
+
 test("llms.txt names the rehearsal treasury", () => {
   assert.match(llms, /treasury[\s\S]{0,200}0x000000000000000000000000000000000000dEaD/i);
 });

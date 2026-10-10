@@ -37,8 +37,8 @@
 
 set -euo pipefail
 
-VHOST=/etc/nginx/sites-available/machinereadableonly.com
-DOMAIN=machinereadableonly.com
+DOMAIN="${MRO_DEPLOY_DOMAIN:-machinereadableonly.com}"
+VHOST="/etc/nginx/sites-available/${DOMAIN}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP="${VHOST}.bak-${STAMP}"
 

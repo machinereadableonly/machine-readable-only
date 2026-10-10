@@ -446,10 +446,12 @@ tokens that never change, the daily post has no subject, and the proof that the
 Clock's 00:05 write landed is read off a log by hand. It is C4.5.
 
 ```
-bash warden/deploy/install-seed-agent.sh
+bash warden/deploy/install-seed-agent.sh --new-identity   # the first install only
 ```
 
-No root, and it spends nothing. It creates a signing identity outside the
+Every later run leaves out `--new-identity`: without it a missing identity
+stops the installer, because a new key cannot credit a token minted under the
+old one. No root, and it spends nothing. It creates a signing identity outside the
 worktree, registers that key at the door (free, self-expiring after 30 days if
 unused), writes `~/.mro/seed.env` and the rotation config, installs the unit and
 timer, and then proves the machinery works.

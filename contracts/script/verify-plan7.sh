@@ -23,12 +23,11 @@ case "$CHAIN" in
   *) echo "chain $CHAIN is neither Base Sepolia (84532) nor Base mainnet (8453)" >&2; exit 2 ;;
 esac
 
-set -a
-# shellcheck disable=SC1090
-. "${ENV_FILE:-./.env}"
-set +a
-
-KEY="${BASESCAN_API_KEY:-${ETHERSCAN_API_KEY:-}}"
+# Only the two keys this needs are read; the rest of the file never enters this
+# process or the verifier's.
+read_var() { /bin/grep "^$1=" "${ENV_FILE:-./.env}" | head -1 | cut -d= -f2- | tr -d '"'"'" || true; }
+KEY="$(read_var BASESCAN_API_KEY)"
+[ -n "$KEY" ] || KEY="$(read_var ETHERSCAN_API_KEY)"
 if [ -z "$KEY" ]; then
   echo "No BASESCAN_API_KEY or ETHERSCAN_API_KEY in the environment file."
   echo "Verification needs one; the deployment itself is unaffected."

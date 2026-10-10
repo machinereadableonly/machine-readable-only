@@ -2,8 +2,11 @@
 # Deploy a new Renderer and prepare the Safe transaction that points the token
 # at it. The deploy needs no owner power; setRenderer is the Safe's to sign.
 #
-#   bash contracts/script/swap-renderer.sh <token> <safe> <chain-id>              # simulate only
-#   bash contracts/script/swap-renderer.sh <token> <safe> <chain-id> --broadcast  # deploy, then prepare
+#   EXPECTED_CHAIN_ID=<id> bash contracts/script/swap-renderer.sh <token> <safe> <chain-id>              # simulate only
+#   EXPECTED_CHAIN_ID=<id> bash contracts/script/swap-renderer.sh <token> <safe> <chain-id> --broadcast  # deploy, then prepare
+#
+# The chain is stated TWICE, as every broadcasting script requires: once as the
+# argument and once as EXPECTED_CHAIN_ID, and the two must agree.
 #
 # chain-id is 84532 (Base Sepolia) or 8453 (Base mainnet, real funds: operator
 # approval). A broadcast deploys, VERIFIES the source, and only then prints the
@@ -15,6 +18,7 @@
 #      -- the token did not move, so its deploy block does not either.
 set -euo pipefail
 
+STATED_CHAIN="${EXPECTED_CHAIN_ID:-}"
 TOKEN="${1:?token address}"
 SAFE="${2:?the Safe that owns the token}"
 CHAIN="${3:?chain id: 84532 (Base Sepolia) or 8453 (Base mainnet)}"
@@ -24,6 +28,10 @@ if [ "${4:-}" = "--broadcast" ]; then
 elif [ -n "${4:-}" ]; then
   echo "FAIL: unrecognised argument '$4'. Pass --broadcast to send, or nothing to simulate." >&2
   exit 1
+fi
+if [ "$STATED_CHAIN" != "$CHAIN" ]; then
+  echo "FAIL: state the chain twice and alike: EXPECTED_CHAIN_ID=$CHAIN bash $0 ... (got '${STATED_CHAIN}')" >&2
+  exit 2
 fi
 case "$CHAIN" in
   84532) RPC=https://sepolia.base.org ;;

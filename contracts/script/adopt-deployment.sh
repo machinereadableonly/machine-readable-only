@@ -171,6 +171,12 @@ if [ "$REWRITE" = yes ]; then
   done
 fi
 
+# The door page's explorer HOSTS follow the chain, not only its addresses.
+if [ "$CHAIN" = 8453 ]; then
+  sed -i 's|https://sepolia\.basescan\.org/|https://basescan.org/|g; s|https://base-sepolia\.blockscout\.com/|https://base.blockscout.com/|g' warden/public/door.html
+  echo "  warden/public/door.html: explorer links moved to the Base mainnet hosts"
+fi
+
 # WHAT IS ACTUALLY TRUE ON DISK, checked rather than assumed. A partial run that
 # rewrote some files and died leaves the rest carrying the old address, and the
 # loop above cannot see that on a re-run because OLD_TOK is read from a file it
