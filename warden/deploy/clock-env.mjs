@@ -8,6 +8,7 @@
 import { readFileSync, writeFileSync, renameSync, existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 export const CLOCK_PATHS = {
   stateDb: "/var/lib/mro/state.db",
@@ -52,7 +53,13 @@ function usable(map, name) {
   return entry !== undefined && !entry.empty;
 }
 
-export function buildClockEnv({ wardenEnvText, existingClockEnvText = "" }) {
+/**
+ * The Clock's key lives in clock.env and nowhere else. It is never taken from
+ * the Warden's .env, which the main user can write: a key there is refused.
+ * `newKey` is a freshly generated key for a first install; `existingUnreadable`
+ * lets a dry run, which cannot read clock.env, assume the key is kept.
+ */
+export function buildClockEnv({ wardenEnvText, existingClockEnvText = "", newKey = null, rotate = false, existingUnreadable = false }) {
   const warden = linesByKey(wardenEnvText, "the Warden's .env");
   const existing = linesByKey(existingClockEnvText, "the existing clock.env");
   const out = ["# Written by install-clock-user.sh. Re-run it after changing the Warden's .env."];
@@ -72,14 +79,20 @@ export function buildClockEnv({ wardenEnvText, existingClockEnvText = "" }) {
     report.push(`${name.padEnd(22)} set, from the Warden's .env`);
   }
 
-  if (usable(warden, KEY)) {
-    out.push(warden.get(KEY).line);
-    report.push(`${KEY.padEnd(22)} set, from the Warden's .env`);
-  } else if (usable(existing, KEY)) {
+  if (warden.has(KEY)) {
+    throw new Error(`${KEY} is in the Warden's .env; the Clock's key lives only in clock.env. Remove the line and re-run`);
+  }
+  if (usable(existing, KEY) && !(newKey && rotate)) {
+    if (newKey) throw new Error(`clock.env already holds ${KEY}; replacing it is a rotation (--rotate-key, DEPLOY.md 9b)`);
     out.push(existing.get(KEY).line);
     report.push(`${KEY.padEnd(22)} set, kept from the existing clock.env`);
+  } else if (newKey) {
+    out.push(`${KEY}=${newKey}`);
+    report.push(`${KEY.padEnd(22)} set, newly generated`);
+  } else if (existingUnreadable) {
+    report.push(`${KEY.padEnd(22)} not checked: the existing clock.env is not readable here`);
   } else {
-    throw new Error(`${KEY} is in neither the Warden's .env nor an existing clock.env`);
+    throw new Error(`${KEY} is not in an existing clock.env; pass --new-key for a first install`);
   }
 
   out.push(`STATE_DB_PATH=${CLOCK_PATHS.stateDb}`);
@@ -91,7 +104,10 @@ export function buildClockEnv({ wardenEnvText, existingClockEnvText = "" }) {
 
 function main() {
   const { values } = parseArgs({
-    options: { "warden-env": { type: "string" }, out: { type: "string" }, check: { type: "boolean" } },
+    options: {
+      "warden-env": { type: "string" }, out: { type: "string" }, check: { type: "boolean" },
+      "new-key": { type: "boolean" }, "rotate-key": { type: "boolean" },
+    },
   });
   const src = values["warden-env"];
   const dest = values.out;
@@ -99,12 +115,20 @@ function main() {
   // --check builds the file and writes nothing; dest may be unreadable to a
   // non-root caller, which only means its key cannot be the fallback.
   let existing = "";
+  let existingUnreadable = false;
   try {
     existing = existsSync(dest) ? readFileSync(dest, "utf8") : "";
   } catch (err) {
     if (!values.check) throw err;
+    existingUnreadable = true;
   }
-  const { text, report } = buildClockEnv({ wardenEnvText: readFileSync(src, "utf8"), existingClockEnvText: existing });
+  // Generated here, printed as an address only.
+  const rotate = Boolean(values["rotate-key"]);
+  const newKey = (values["new-key"] || rotate) && !values.check ? generatePrivateKey() : null;
+  const { text, report } = buildClockEnv({
+    wardenEnvText: readFileSync(src, "utf8"), existingClockEnvText: existing, newKey, rotate, existingUnreadable,
+  });
+  if (newKey) report.push(`the new Clock key's address is ${privateKeyToAccount(newKey).address}`);
   if (values.check) {
     for (const line of report) console.log(`   ${line}`);
     return;

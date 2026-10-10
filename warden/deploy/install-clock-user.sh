@@ -15,17 +15,25 @@
 # key the Clock copies (see deploy/clock-env.mjs). Needs create-clock-user.sh
 # first. Prints no secret. It replaces /opt/mro-clock and keeps the one copy
 # before it as /opt/mro-clock.prev.
+#
+# The Clock's key lives only in /etc/mro-clock/clock.env: --new-clock-key makes
+# it on a first install, --rotate-clock-key replaces it (DEPLOY.md 9b). It
+# refuses while a copy of the key or the split seed remains in the main user's
+# files.
 set -euo pipefail
 
 DRY=0
 NOTIFY=""
 REPLACE_SEED=0
+KEY_FLAG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1; shift ;;
     --notify) NOTIFY="${2:?--notify needs a path}"; shift 2 ;;
     --replace-seed) REPLACE_SEED=1; shift ;;
-    *) echo "usage: sudo bash install-clock-user.sh [--notify <path>] [--replace-seed] | --dry-run" >&2; exit 2 ;;
+    --new-clock-key) KEY_FLAG=--new-key; shift ;;
+    --rotate-clock-key) KEY_FLAG=--rotate-key; shift ;;
+    *) echo "usage: sudo bash install-clock-user.sh [--notify <path>] [--replace-seed] [--new-clock-key | --rotate-clock-key] | --dry-run" >&2; exit 2 ;;
   esac
 done
 
@@ -76,6 +84,12 @@ ok "node $NODE_VERSION, warden/node_modules, the Warden's .env"
 case "$NOTIFY" in *[[:space:]\|\&%\\]*) die "the notify path may not contain whitespace, |, &, % or \\" ;; esac
 [ -x "$NOTIFY" ] || die "no executable alert script at $NOTIFY (pass --notify <path>)"
 ok "alert script $NOTIFY"
+# Run as the main user: directly in a dry run, which already is it.
+as_main() { if [ "$(id -un)" = "$MAIN_USER" ]; then "$@"; else sudo -u "$MAIN_USER" "$@"; fi; }
+# Searched as the main user, whose files these are; names only, never content.
+LEFT="$(as_main /bin/grep -rlE '^CLOCK_PRIVATE_KEY=.' "$MAIN_HOME/.mro-env-backups" "$MAIN_HOME/backups" 2>/dev/null || true)"
+[ -z "$LEFT" ] || die "a copy of the Clock key remains in: $(echo $LEFT); remove it (the key lives only in /etc/mro-clock)"
+ok "no copy of the Clock key in the env backups"
 
 if [ "$DRY" -eq 1 ]; then
   "$NODE" "$WARDEN/deploy/clock-env.mjs" --warden-env "$WARDEN_ENV" --out "$ETC/clock.env" --check \
@@ -90,9 +104,12 @@ fi
 
 [ ! -e "$STATE/state.db.run-lock" ] || die "a Clock run lock exists in $STATE: a run is in progress or died; check the log"
 # The lock only sees a run already going; step 1 swaps the code a timer run
-# could be about to load.
-NOW="$(date -u +%H%M)"
-{ [ "$NOW" -ge 0030 ] && [ "$NOW" -lt 2345 ]; } || die "it is $(date -u +%H:%M) UTC; run between 00:30 and 23:45 so the nightly run cannot start mid-install"
+# could be about to load. With the timer stopped (DEPLOY.md 9b) no run can start.
+if systemctl is-active --quiet mro-clock.timer; then
+  NOW="$(date -u +%H%M)"
+  { [ "$NOW" -ge 0030 ] && [ "$NOW" -lt 2345 ]; } || die "it is $(date -u +%H:%M) UTC; run between 00:30 and 23:45 so the nightly run cannot start mid-install, or stop the timer first"
+  [ "$KEY_FLAG" != --rotate-key ] || die "stop the Clock timer before rotating its key (DEPLOY.md 9b, step 1)"
+fi
 
 step "1. the code, owned by root"
 STAGE="$(mktemp -d "$OPT.new.XXXXXX")"
@@ -103,29 +120,39 @@ cp -a "$WARDEN/node_modules/." "$STAGE/warden/node_modules/"
 install -m 755 "$NODE" "$STAGE/bin/node"
 chown -R root:root "$STAGE"
 chmod -R u+rwX,go+rX,go-w "$STAGE"
+# Disarmed BEFORE the swap: the trap must never delete the tree just moved into place.
+trap - EXIT
 if [ -d "$OPT" ]; then
   rm -rf "$OPT.prev"
   mv "$OPT" "$OPT.prev"
 fi
-mv "$STAGE" "$OPT"
-trap - EXIT
+if ! mv "$STAGE" "$OPT"; then
+  [ -d "$OPT.prev" ] && mv "$OPT.prev" "$OPT"
+  rm -rf "$STAGE"
+  die "could not move the new code into $OPT; the previous code is back in place"
+fi
 ok "$OPT from commit $(sudo -u "$MAIN_USER" git -C "$WARDEN" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 step "2. the key and the split seed, readable by mro-clock only"
 install -d -o mro-clock -g mro -m 700 "$ETC"
-"$NODE" "$WARDEN/deploy/clock-env.mjs" --warden-env "$WARDEN_ENV" --out "$ETC/clock.env"
+"$NODE" "$WARDEN/deploy/clock-env.mjs" --warden-env "$WARDEN_ENV" --out "$ETC/clock.env" $KEY_FLAG
 chown mro-clock:mro "$ETC/clock.env"
 chmod 600 "$ETC/clock.env"
-if [ -f "$SEED_SRC" ]; then
-  # Every day's key derives from the seed, so a stale home copy must never
-  # replace the live one on a routine re-install.
-  if [ -f "$ETC/split-seed" ] && ! cmp -s "$SEED_SRC" "$ETC/split-seed" && [ "$REPLACE_SEED" -eq 0 ]; then
-    die "the split seed in the home directory differs from the installed one; remove one, or pass --replace-seed after a redeploy"
+# The home copy is taken once -- on a first install, or with --replace-seed after
+# a redeploy -- and is refused on any other run: it is the one secret that
+# gives away every future day's answer rule. Read as the main user, so root
+# never follows a link planted there.
+if as_main test -e "$SEED_SRC"; then
+  if [ -f "$ETC/split-seed" ] && [ "$REPLACE_SEED" -eq 0 ]; then
+    die "a copy of the split seed remains at $SEED_SRC; the installed one is in $ETC. Remove the home copy (or pass --replace-seed after a redeploy)"
   fi
-  install -o mro-clock -g mro -m 600 "$SEED_SRC" "$ETC/split-seed"
-  ok "split seed installed"
+  SEED_NEW="$(mktemp "$ETC/split-seed.new.XXXXXX")"
+  as_main cat "$SEED_SRC" > "$SEED_NEW"
+  install -o mro-clock -g mro -m 600 "$SEED_NEW" "$ETC/split-seed"
+  rm -f "$SEED_NEW"
+  ok "split seed installed. NOW remove $SEED_SRC: the next install refuses while it exists"
 elif [ -f "$ETC/split-seed" ]; then
-  ok "split seed already installed; no home copy to take"
+  ok "split seed installed; no home copy"
 else
   die "no split seed in the home directory or in $ETC"
 fi

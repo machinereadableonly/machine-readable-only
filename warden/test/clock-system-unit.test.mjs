@@ -67,8 +67,37 @@ test("its log is the one logrotate rotates, and rotation keeps the file", () => 
   assert.doesNotMatch(rotate, /^\s*su\s/m, "mro-clock cannot create files in the 2750 log directory");
 });
 
-test("a differing split seed is refused unless replacing it is asked for", () => {
-  assert.match(installer, /! cmp -s "\$SEED_SRC" "\$ETC\/split-seed" && \[ "\$REPLACE_SEED" -eq 0 \]; then\n\s*die /);
+test("a home copy of the split seed is refused once one is installed, unless replacing it is asked for", () => {
+  assert.match(installer, /if as_main test -e "\$SEED_SRC"; then\n\s*if \[ -f "\$ETC\/split-seed" \] && \[ "\$REPLACE_SEED" -eq 0 \]; then\n\s*die /);
+  assert.match(installer, /as_main cat "\$SEED_SRC" > "\$SEED_NEW"/, "read as the main user, never followed by root");
+});
+
+test("a copy of the Clock key left in an env backup stops the install, dry run included", () => {
+  const scan = installer.indexOf("^CLOCK_PRIVATE_KEY=.");
+  assert.ok(scan !== -1 && scan < installer.indexOf('if [ "$DRY" -eq 1 ]; then\n  "$NODE"'), "checked before the dry run returns");
+  assert.match(installer, /\.mro-env-backups" "\$MAIN_HOME\/backups"/);
+});
+
+test("the key reaches clock-env.mjs only as a flag, never from the Warden's file", () => {
+  assert.match(installer, /--out "\$ETC\/clock\.env" \$KEY_FLAG\n/);
+  assert.match(installer, /--rotate-clock-key\) KEY_FLAG=--rotate-key/);
+});
+
+test("the time window applies only while the timer can start a run", () => {
+  assert.match(installer, /if systemctl is-active --quiet mro-clock\.timer; then\n\s*NOW=/);
+});
+
+test("the cleanup trap is disarmed before the code swap, and a failed swap restores the old code", () => {
+  const disarm = installer.indexOf("trap - EXIT");
+  const swap = installer.indexOf('mv "$OPT" "$OPT.prev"');
+  assert.ok(disarm !== -1 && disarm < swap);
+  assert.match(installer, /if ! mv "\$STAGE" "\$OPT"; then\n\s*\[ -d "\$OPT\.prev" \] && mv "\$OPT\.prev" "\$OPT"/);
+});
+
+test("run-clock-now runs only the system unit", () => {
+  const now = read("../tools/run-clock-now.sh");
+  assert.doesNotMatch(now, /node /);
+  assert.match(now, /exec sudo systemctl start mro-clock\.service/);
 });
 
 test("the logrotate check reads error lines, since --debug exits 0 on them", () => {

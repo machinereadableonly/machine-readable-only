@@ -20,15 +20,19 @@ const wardenEnv = [
   "MRO_HOUSE_KEY_ID=house-key-thumbprint",
   "CLOCK_CHECK_RPC_URL=https://second.example",
   "CHALLENGE_SECRET=not-the-clocks-business",
-  `CLOCK_PRIVATE_KEY=${KEY}`,
   "",
 ].join("\n");
+// The Clock's key lives in its own file and nowhere else.
+const clockEnv = `CLOCK_PRIVATE_KEY=${KEY}\n`;
+const build = (extra = "", opts = {}) =>
+  buildClockEnv({ wardenEnvText: wardenEnv + extra, existingClockEnvText: clockEnv, ...opts });
 
 const lines = (text) => text.split("\n").filter(Boolean);
 const leaks = (s) => s.includes(KEY) || s.includes("sentinel-api-key");
+const script = new URL("../deploy/clock-env.mjs", import.meta.url).pathname;
 
 test("copies only the Clock's keys, verbatim, and sets the fixed paths", () => {
-  const { text } = buildClockEnv({ wardenEnvText: wardenEnv });
+  const { text } = build();
   const out = lines(text).filter((l) => !l.startsWith("#"));
   assert.ok(out.includes(`BASE_RPC_URL="${RPC}"`), "quoting survives");
   assert.ok(out.includes("MRO_CONTRACT_ADDRESS=0x1111111111111111111111111111111111111111"));
@@ -46,63 +50,61 @@ test("copies only the Clock's keys, verbatim, and sets the fixed paths", () => {
 });
 
 test("MAX_GAS_GWEI is copied when set and left out when not", () => {
-  assert.ok(!buildClockEnv({ wardenEnvText: wardenEnv }).text.includes("MAX_GAS_GWEI"));
-  const { text } = buildClockEnv({ wardenEnvText: wardenEnv + "MAX_GAS_GWEI=0.1\n" });
-  assert.ok(lines(text).includes("MAX_GAS_GWEI=0.1"));
+  assert.ok(!build().text.includes("MAX_GAS_GWEI"));
+  assert.ok(lines(build("MAX_GAS_GWEI=0.1\n").text).includes("MAX_GAS_GWEI=0.1"));
 });
 
-// After the cutover the operator removes the key from the Warden's file, and
-// the installer must still be re-runnable after every Clock code change.
-test("the key falls back to the existing clock.env once the Warden's file drops it", () => {
-  const without = wardenEnv.replace(/^CLOCK_PRIVATE_KEY=.*\n/m, "");
-  const { text, report } = buildClockEnv({
-    wardenEnvText: without,
-    existingClockEnvText: `CLOCK_PRIVATE_KEY=${KEY}\n`,
-  });
+test("the key is kept from the existing clock.env", () => {
+  const { text, report } = build();
   assert.ok(lines(text).includes(`CLOCK_PRIVATE_KEY=${KEY}`));
   assert.match(report.join("\n"), /CLOCK_PRIVATE_KEY\s+set, kept from the existing clock\.env/);
 });
 
-test("the Warden's file wins over the existing clock.env, so a rotated key lands", () => {
-  const { text } = buildClockEnv({
-    wardenEnvText: wardenEnv,
-    existingClockEnvText: "CLOCK_PRIVATE_KEY=0xold\n",
-  });
-  assert.ok(lines(text).includes(`CLOCK_PRIVATE_KEY=${KEY}`));
-  assert.ok(!text.includes("0xold"));
+// The main user can write the Warden's file, so a key there is a key planted.
+test("a key in the Warden's file is refused, never copied", () => {
+  assert.throws(() => build(`CLOCK_PRIVATE_KEY=0x${"cd".repeat(32)}\n`), /CLOCK_PRIVATE_KEY is in the Warden's/);
+  assert.throws(() => build("CLOCK_PRIVATE_KEY=\n"), /CLOCK_PRIVATE_KEY is in the Warden's/, "even an empty line");
+});
+
+test("a first install generates the key; a later one never replaces it", () => {
+  const fresh = `0x${"ef".repeat(32)}`;
+  const { text, report } = buildClockEnv({ wardenEnvText: wardenEnv, newKey: fresh });
+  assert.ok(lines(text).includes(`CLOCK_PRIVATE_KEY=${fresh}`));
+  assert.match(report.join("\n"), /newly generated/);
+  assert.throws(() => build("", { newKey: fresh }), /already holds/);
 });
 
 test("no key anywhere is refused", () => {
-  const without = wardenEnv.replace(/^CLOCK_PRIVATE_KEY=.*\n/m, "");
-  assert.throws(() => buildClockEnv({ wardenEnvText: without }), /CLOCK_PRIVATE_KEY/);
+  assert.throws(() => buildClockEnv({ wardenEnvText: wardenEnv }), /--new-key/);
+});
+
+test("a dry run that cannot read clock.env does not fail on the key", () => {
+  const { report } = buildClockEnv({ wardenEnvText: wardenEnv, existingUnreadable: true });
+  assert.match(report.join("\n"), /not checked/);
 });
 
 test("an empty value counts as missing", () => {
   const empty = wardenEnv.replace(/^MRO_CHAIN_ID=.*$/m, "MRO_CHAIN_ID=");
-  assert.throws(() => buildClockEnv({ wardenEnvText: empty }), /MRO_CHAIN_ID/);
+  assert.throws(() => buildClockEnv({ wardenEnvText: empty, existingClockEnvText: clockEnv }), /MRO_CHAIN_ID/);
 });
 
 test("a key written twice is refused rather than guessed at", () => {
-  assert.throws(
-    () => buildClockEnv({ wardenEnvText: wardenEnv + "MRO_CHAIN_ID=8453\n" }),
-    /MRO_CHAIN_ID.*more than once/
-  );
+  assert.throws(() => build("MRO_CHAIN_ID=8453\n"), /MRO_CHAIN_ID.*more than once/);
 });
 
 test("a key the Clock does not read may repeat", () => {
-  const { text } = buildClockEnv({ wardenEnvText: wardenEnv + "CLOCK_ADDRESS=0x1\nCLOCK_ADDRESS=0x2\n" });
-  assert.ok(!text.includes("CLOCK_ADDRESS"));
+  assert.ok(!build("CLOCK_ADDRESS=0x1\nCLOCK_ADDRESS=0x2\n").text.includes("CLOCK_ADDRESS"));
 });
 
 test("neither the report nor any refusal carries a value", () => {
-  const { report } = buildClockEnv({ wardenEnvText: wardenEnv });
-  assert.ok(!leaks(report.join("\n")));
-  const twice = wardenEnv + `CLOCK_PRIVATE_KEY=${KEY}\n`;
-  try {
-    buildClockEnv({ wardenEnvText: twice });
-    assert.fail("expected a refusal");
-  } catch (err) {
-    assert.ok(!leaks(err.message));
+  assert.ok(!leaks(build().report.join("\n")));
+  for (const extra of [`CLOCK_PRIVATE_KEY=${KEY}\n`, "MRO_CHAIN_ID=8453\n"]) {
+    try {
+      build(extra);
+      assert.fail("expected a refusal");
+    } catch (err) {
+      assert.ok(!leaks(err.message));
+    }
   }
 });
 
@@ -112,7 +114,7 @@ test("every variable the Clock requires is one the builder writes", () => {
   const main = readFileSync(new URL("../src/clock/main.mjs", import.meta.url), "utf8");
   const required = [...main.matchAll(/requireEnv\("([A-Z0-9_]+)"\)/g)].map((m) => m[1]);
   assert.ok(required.length >= 5);
-  const { text } = buildClockEnv({ wardenEnvText: wardenEnv });
+  const { text } = build();
   for (const name of required) assert.match(text, new RegExp(`^${name}=.`, "m"), name);
 });
 
@@ -130,16 +132,14 @@ test("every variable the Clock's code reads is written or refused", () => {
     }
   }
   assert.ok(read.has("MAX_GAS_GWEI") && read.has("MRO_DAY_SECONDS") && read.has("MRO_SPLIT_SEED_FILE"), "the scan sees the Clock");
-  const { text } = buildClockEnv({ wardenEnvText: wardenEnv + "MAX_GAS_GWEI=0.1\n" });
+  const { text } = build("MAX_GAS_GWEI=0.1\n");
   for (const name of read) {
     assert.ok(new RegExp(`^${name}=.`, "m").test(text) || REFUSED.includes(name), `${name} is read but neither written nor refused`);
   }
 });
 
 test("a variable the installed Clock never takes is refused, not dropped", () => {
-  for (const name of REFUSED) {
-    assert.throws(() => buildClockEnv({ wardenEnvText: wardenEnv + `${name}=1\n` }), new RegExp(name));
-  }
+  for (const name of REFUSED) assert.throws(() => build(`${name}=1\n`), new RegExp(name));
 });
 
 test("clock.env.example lists exactly the keys the builder writes", () => {
@@ -147,49 +147,50 @@ test("clock.env.example lists exactly the keys the builder writes", () => {
     new Set(lines(text).map((l) => /^#?([A-Z][A-Z0-9_]*)=/.exec(l)?.[1]).filter(Boolean));
   const example = readFileSync(new URL("../deploy/clock.env.example", import.meta.url), "utf8");
   const optional = ["MAX_GAS_GWEI=0.1", "CLOCK_MAX_MINTS=1", "CLOCK_MAX_SEEDS=1", "CLOCK_MAX_MARKS=1", "CLOCK_MAX_CREDITS=1"];
-  const { text } = buildClockEnv({ wardenEnvText: wardenEnv + optional.join("\n") + "\n" });
+  const { text } = build(optional.join("\n") + "\n");
   assert.deepEqual([...names(example)].sort(), [...names(text)].sort());
   for (const [, path] of Object.entries(CLOCK_PATHS)) assert.ok(example.includes(path), path);
 });
 
-test("the command writes the file mode 600 and prints no value", () => {
+function files() {
   const dir = mkdtempSync(join(tmpdir(), "clock-env-"));
   const src = join(dir, "warden.env");
-  const out = join(dir, "clock.env");
   writeFileSync(src, wardenEnv, { mode: 0o600 });
-  const script = new URL("../deploy/clock-env.mjs", import.meta.url).pathname;
-  const r = spawnSync(process.execPath, [script, "--warden-env", src, "--out", out], { encoding: "utf8" });
+  return { dir, src, out: join(dir, "clock.env") };
+}
+const run = (...args) => spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
+
+test("the command keeps the existing key, writes mode 600, and prints no value", () => {
+  const { src, out } = files();
+  writeFileSync(out, clockEnv, { mode: 0o600 });
+  const r = run("--warden-env", src, "--out", out);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(statSync(out).mode & 0o777, 0o600);
   assert.ok(readFileSync(out, "utf8").includes(`CLOCK_PRIVATE_KEY=${KEY}`));
   assert.ok(!leaks(r.stdout + r.stderr));
 });
 
-test("--check reports the keys and writes nothing", () => {
-  const dir = mkdtempSync(join(tmpdir(), "clock-env-"));
-  const src = join(dir, "warden.env");
-  const out = join(dir, "clock.env");
-  writeFileSync(src, wardenEnv, { mode: 0o600 });
-  const script = new URL("../deploy/clock-env.mjs", import.meta.url).pathname;
-  const r = spawnSync(process.execPath, [script, "--warden-env", src, "--out", out, "--check"], { encoding: "utf8" });
+test("--new-key generates a key on a first install and prints only its address", () => {
+  const { src, out } = files();
+  const r = run("--warden-env", src, "--out", out, "--new-key");
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /CLOCK_PRIVATE_KEY\s+set/);
-  assert.deepEqual(readdirSync(dir), ["warden.env"]);
-  assert.ok(!leaks(r.stdout + r.stderr));
-  writeFileSync(src, wardenEnv + "MRO_DAY_SECONDS=60\n", { mode: 0o600 });
-  const refused = spawnSync(process.execPath, [script, "--warden-env", src, "--out", out, "--check"], { encoding: "utf8" });
-  assert.equal(refused.status, 1);
-  assert.match(refused.stderr, /MRO_DAY_SECONDS/);
+  const key = /^CLOCK_PRIVATE_KEY=(0x[0-9a-f]{64})$/m.exec(readFileSync(out, "utf8"))?.[1];
+  assert.ok(key, "a key was written");
+  assert.match(r.stdout, /address is 0x[0-9a-fA-F]{40}/);
+  assert.ok(!r.stdout.includes(key.slice(2)), "the key itself is never printed");
+  assert.equal(run("--warden-env", src, "--out", out, "--new-key").status, 1, "never replaces it");
 });
 
-test("the command reads an existing clock.env at --out when it is there", () => {
-  const dir = mkdtempSync(join(tmpdir(), "clock-env-"));
-  const src = join(dir, "warden.env");
-  const out = join(dir, "clock.env");
-  writeFileSync(src, wardenEnv.replace(/^CLOCK_PRIVATE_KEY=.*\n/m, ""), { mode: 0o600 });
-  writeFileSync(out, `CLOCK_PRIVATE_KEY=${KEY}\n`, { mode: 0o600 });
-  const script = new URL("../deploy/clock-env.mjs", import.meta.url).pathname;
-  const r = spawnSync(process.execPath, [script, "--warden-env", src, "--out", out], { encoding: "utf8" });
+test("--check reports the keys and writes nothing", () => {
+  const { dir, src, out } = files();
+  writeFileSync(out, clockEnv, { mode: 0o600 });
+  const r = run("--warden-env", src, "--out", out, "--check");
   assert.equal(r.status, 0, r.stderr);
-  assert.ok(readFileSync(out, "utf8").includes(`CLOCK_PRIVATE_KEY=${KEY}`));
+  assert.match(r.stdout, /CLOCK_PRIVATE_KEY\s+set/);
+  assert.deepEqual(readdirSync(dir).sort(), ["clock.env", "warden.env"]);
+  assert.ok(!leaks(r.stdout + r.stderr));
+  writeFileSync(src, wardenEnv + "MRO_DAY_SECONDS=60\n", { mode: 0o600 });
+  const refused = run("--warden-env", src, "--out", out, "--check");
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /MRO_DAY_SECONDS/);
 });

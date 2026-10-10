@@ -395,12 +395,10 @@ emergency; allow 10 to 20 minutes for a real one.</p>
 #    (Before section 12&#39;s cutover: systemctl --user, no sudo.)
 sudo systemctl stop mro-clock.timer mro-clock.service
 
-# 2. Generate a replacement into the Warden&#39;s .env. Prints only the public
-#    address. It REFUSES to overwrite, so move any CLOCK_PRIVATE_KEY and
-#    CLOCK_ADDRESS lines out of that file first (WinSCP). Then copy the new
-#    key into the Clock&#39;s own file (section 12, step 2).
-bash ~/projects/machine-readable-only/scripts/make-clock-key.sh
-sudo bash ~/projects/machine-readable-only/warden/deploy/install-clock-user.sh
+# 2. Generate the replacement straight into the Clock&#39;s own file. Prints
+#    only the new public address; the key never touches the main user&#39;s
+#    files. It refuses while the timer is still active.
+sudo bash ~/projects/machine-readable-only/warden/deploy/install-clock-user.sh --rotate-clock-key
 
 # 3. Point the contract at the new address. The OWNER is the 2-of-3 Safe,
 #    so this prepares a Safe transaction; nothing is sent here.
@@ -423,8 +421,7 @@ node tools/safe-tx.mjs set-warden &lt;the new address&gt; \
 # 4. Confirm the chain agrees, from the chain and not from a log.
 cast call &lt;contract&gt; &quot;warden()(address)&quot; --rpc-url &lt;rpc&gt;
 
-# 5. Fund the new address with gas, then start the timer again, and
-#    remove the key line from the Warden&#39;s .env once more.
+# 5. Fund the new address with gas, then start the timer again.
 sudo systemctl start mro-clock.timer
 </code></pre>
 <p><strong>Then lower <code>supplyCap</code></strong> (<code>node tools/safe-tx.mjs set-supply-cap &lt;n&gt; ...</code>,
@@ -432,8 +429,8 @@ signed the same way). It is an owner call, needs no redeploy, and it is
 the only thing that bounds the damage of the NEXT leak. A cap of 10,000 set on
 day one is 10,000 free mints sitting behind one key; set it near actual demand
 and raise it deliberately as the collection fills.</p>
-<p><strong>The split seed sits beside the Clock key</strong> (<code>~/.mro-split/seed</code>, or
-<code>MRO_SPLIT_SEED_FILE</code>). It cannot be rotated: the anchor is set once. A leaked
+<p><strong>The split seed sits beside the Clock key</strong> (<code>/etc/mro-clock/split-seed</code>;
+the installer refuses while a home copy remains). It cannot be rotated: the anchor is set once. A leaked
 seed takes no money and writes nothing, but it publishes every future day&#39;s
 answer rule, so agents could choose answers for their squares. The squares
 stay verifiable; they stop being unchosen.</p>
@@ -956,7 +953,8 @@ and sends a push with <code>~/scripts/notify.sh</code>.</p>
 <li><p><strong>Install</strong> (re-runnable; the timer is installed disabled):</p>
 <pre><code>sudo bash warden/deploy/install-clock-user.sh
 </code></pre>
-<p>Between 00:30 and 23:45 UTC: it swaps the code a nightly run loads. It ends
+<p>Between 00:30 and 23:45 UTC while the timer is active: it swaps the code a
+nightly run loads. It ends
 with PASS, or names the step that failed. <code>--dry-run</code> checks the
 preconditions as the main user, builds the Clock&#39;s env file without writing
 it, and changes nothing. It refuses to replace
@@ -993,9 +991,16 @@ so a merged fix does nothing until then. The same applies when the Warden&#39;s
 <code>.env</code> changes any key the installer copies into <code>clock.env</code> (a redeploy does):
 <code>BASE_RPC_URL</code>, <code>MRO_CONTRACT_ADDRESS</code>, <code>MRO_CHAIN_ID</code>, <code>MRO_DOMAIN</code> and
 <code>TREASURY_ADDRESS</code> always, and <code>MAX_GAS_GWEI</code>, <code>MRO_HOUSE_KEY_ID</code> and the four
-<code>CLOCK_MAX_*</code> ceilings when set. The key itself is copied from the Warden&#39;s
-<code>.env</code> when it is there and kept from the existing <code>clock.env</code> when it is not.
-It refuses a Warden <code>.env</code> that sets <code>CLOCK_CURSOR_PATH</code>, <code>CLOCK_LOCK_PATH</code>,
+<code>CLOCK_MAX_*</code> ceilings when set.</p>
+<p><strong>The Clock&#39;s key and split seed live only in <code>/etc/mro-clock</code>.</strong> The key is
+never copied from the Warden&#39;s <code>.env</code>, and a <code>CLOCK_PRIVATE_KEY</code> line there
+stops the install: a first install makes the key with <code>--new-clock-key</code>
+(printing only its address), a leak is answered with <code>--rotate-clock-key</code>
+(section 9b), and every other run keeps the existing one. The home copy of the
+split seed is taken once -- a first install, or <code>--replace-seed</code> after a
+redeploy -- and any later run refuses while it still exists. So does a
+<code>CLOCK_PRIVATE_KEY</code> line in any file under <code>~/.mro-env-backups</code> or <code>~/backups</code>.</p>
+<p>It refuses a Warden <code>.env</code> that sets <code>CLOCK_CURSOR_PATH</code>, <code>CLOCK_LOCK_PATH</code>,
 <code>CLOCK_LEDGER_PATH</code>, <code>MRO_DAY_SECONDS</code> or <code>MRO_CLOCK_OFFSET_SECONDS</code>: the
 installed Clock never takes them, and the Warden would disagree with it.</p>
 <h3>The Clock proves every row before it signs it</h3>

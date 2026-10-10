@@ -8,21 +8,13 @@
 # by design: every write is chosen from rows still queued, check-ins only for
 # days that have closed, and the Clock's own lock refuses a concurrent run.
 #
-# After the cutover (DEPLOY.md section 12) the Clock is the system unit run as
-# mro-clock, with its own env file and log, so this starts that unit. Before
-# it, the Clock is the main user's, and this runs it the way that user unit
-# did, minus its sandboxing and logrotate pre-step. Prints no configuration.
+# The Clock runs only as the system unit, as mro-clock with its own env file
+# (DEPLOY.md section 12). There is no fallback that runs it as the main user.
 set -euo pipefail
 
-if [ "$(systemctl is-enabled mro-clock.timer 2>/dev/null || true)" = enabled ]; then
-  echo "clock: starting mro-clock.service; the run logs to /var/log/mro/clock.log"
-  exec sudo systemctl start mro-clock.service
+if ! systemctl cat mro-clock.service >/dev/null 2>&1; then
+  echo "clock: mro-clock.service is not installed; see DEPLOY.md section 12" >&2
+  exit 1
 fi
-
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
-# shellcheck source=/dev/null
-. "$HOME/.nvm/nvm.sh" >/dev/null
-
-LOG="$HOME/logs/mro-clock.log"
-echo "clock: manual run requested $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$LOG"
-node --env-file=.env src/clock/main.mjs >> "$LOG" 2>&1
+echo "clock: starting mro-clock.service; the run logs to /var/log/mro/clock.log"
+exec sudo systemctl start mro-clock.service
