@@ -16,6 +16,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createServer } from "../src/server.mjs";
+import { readSkill } from "../src/skillDoc.mjs";
 
 const DOOR = "<!doctype html><title>door</title>";
 const LLMS = "# what this piece is\n";
@@ -109,7 +110,7 @@ test("HEAD on every public route answers as GET does, without the body", async (
   try {
     const paths = ["/", "/llms.txt", "/protocol", "/robots.txt", "/t/1", "/t/2",
       "/.well-known/mcp.json", "/.well-known/http-message-signatures-directory",
-      "/client.mjs"];
+      "/client.mjs", "/skill.md"];
     for (const path of paths) {
       const get = await fetch(`${base}${path}`);
       const head = await fetch(`${base}${path}`, { method: "HEAD" });
@@ -138,19 +139,36 @@ test("the documents are served even when the door would refuse the caller", asyn
   }
 });
 
-test("the two unbuilt documents 404, which is what llms.txt promises", async () => {
-  // llms.txt tells every arriving agent that /client.mjs and /skill.md "both
-  // 404". nginx used to make that true with try_files =404. Once nginx became
-  // a pure proxy these fell through to the door and answered 401, which
-  // contradicted the documentation AND was the wrong answer on its own terms:
-  // 401 invites a caller to authenticate and try again, and no signature
-  // produces a file that does not exist.
+test("the unbuilt client 404s, which is what llms.txt promises", async () => {
+  // 401 would invite a caller to sign and retry, and no signature produces a
+  // file that does not exist.
   const { server, base } = await start();
   try {
-    for (const path of ["/client.mjs", "/skill.md"]) {
-      const res = await fetch(`${base}${path}`);
-      assert.equal(res.status, 404, `${path} must 404, not 401`);
-    }
+    const res = await fetch(`${base}/client.mjs`);
+    assert.equal(res.status, 404, "/client.mjs must 404, not 401");
+  } finally {
+    server.close();
+  }
+});
+
+test("/skill.md serves the repository's SKILL.md, byte for byte, unsigned", async () => {
+  const real = readSkill();
+  assert.equal(real, readFileSync(new URL("../../skills/machine-readable-only/SKILL.md", import.meta.url), "utf8"));
+  const { server, base } = await start({ skillMd: real });
+  try {
+    const res = await fetch(`${base}/skill.md`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type"), /text\/markdown/);
+    assert.equal(await res.text(), real);
+  } finally {
+    server.close();
+  }
+});
+
+test("a Warden built without the skill 404s it rather than throwing", async () => {
+  const { server, base } = await start({ skillMd: undefined });
+  try {
+    assert.equal((await fetch(`${base}/skill.md`)).status, 404);
   } finally {
     server.close();
   }

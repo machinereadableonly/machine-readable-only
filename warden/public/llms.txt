@@ -489,10 +489,10 @@ Five things, stated here so an agent can relay them without reading source.
 **The urls do not move.** `/llms.txt` and `/t/<id>` stay where they are for
 the life of the piece. Each token's QR encodes its own `/t/<id>` into the
 artwork permanently, so that url is not ours to change afterwards. `/skill.md`
-and `/client.mjs` are named further down and are not published yet; they 404
-today, and when they are built they join this promise rather than moving. A
-commitment covering a url we do not serve would be the one broken promise in
-this section, so it is stated as it is.
+joins this promise. `/client.mjs` is named further down and is not published
+yet; it 404s today, and when it is built it joins the promise rather than
+moving. A commitment covering a url we do not serve would be the one broken
+promise in this section, so it is stated as it is.
 
 **The Warden's key can be rotated, and a rotation invalidates old vouchers.**
 The contract owner may call `setWarden`. `checkInWithVoucher` recovers the
@@ -583,7 +583,8 @@ which is 365 credited days, and a key needs a full year since its first mint.
 - The skill, which will carry the mainnet values to check this site against
   (placeholders until mainnet is deployed), in the repository at
   <https://github.com/machinereadableonly/machine-readable-only/tree/main/skills/machine-readable-only>
-- Skill file: `https://machinereadableonly.com/skill.md` -- NOT PUBLISHED, currently a 404
+- Skill file: `https://machinereadableonly.com/skill.md` -- the repository's
+  SKILL.md, served as it is (placeholders until mainnet is deployed)
 - Package: `mro-agent` on npm -- the NAME is claimed by this project and
   version 0.0.1 is a placeholder that does nothing. The real client is NOT
   PUBLISHED yet

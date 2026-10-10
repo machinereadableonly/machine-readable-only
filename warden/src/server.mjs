@@ -300,15 +300,21 @@ export function createServer(config) {
         return res.end(config.serverCard);
       }
 
-      // Case 1c: the two documents llms.txt names and tells agents are not
-      // built yet. It says both "404", so they must actually 404 -- while
-      // nginx served the static routes with try_files that was true for free,
-      // and it stopped being true the moment this process took the routes
-      // over. 401 would also be the wrong answer on its own terms: it invites
-      // a caller to sign and retry, and no signature produces a file that does
-      // not exist. Only these two named paths are answered this way; anything
-      // else unknown stays gated, so the door is not a map of what exists.
-      if (reads && (path === "/client.mjs" || path === "/skill.md")) {
+      // Case 1c: the skill, public and unsigned like the documents above.
+      if (reads && path === "/skill.md") {
+        if (typeof config.skillMd !== "string") return json(res, 404, { ok: false, reason: "not-found" });
+        res.writeHead(200, {
+          "content-type": "text/markdown; charset=utf-8",
+          "content-length": Buffer.byteLength(config.skillMd),
+        });
+        return res.end(config.skillMd);
+      }
+
+      // Case 1d: the client, which llms.txt names and says is not built yet,
+      // so it must actually 404. 401 would invite a caller to sign and retry,
+      // and no signature produces a file that does not exist. Anything else
+      // unknown stays gated, so the door is not a map of what exists.
+      if (reads && path === "/client.mjs") {
         return json(res, 404, { ok: false, reason: "not-built-yet" });
       }
 

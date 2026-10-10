@@ -19,6 +19,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getAddress } from "viem";
 import { createServer } from "./server.mjs";
+import { readSkill } from "./skillDoc.mjs";
 import { houseKeyIdFor } from "./mcp/houseToken.mjs";
 import { makeAllowRegistration, makeAllowToolCall, makeSpawnSolve } from "./bootstrap.mjs";
 import { makePaymentGateway, warmUp, bootDecisionFor } from "./pay/x402.mjs";
@@ -356,6 +357,7 @@ async function main() {
     fileURLToPath(new URL("../../docs/2026-09-01-mro-raw-protocol.md", import.meta.url)),
     "utf8"
   );
+  const skillMd = readSkill();
   // The MCP discovery card, read from the REPOSITORY ROOT rather than copied
   // into public/. It is the same document that would be published to the
   // official MCP registry, and a second copy on disk is a second thing to keep
@@ -423,6 +425,7 @@ async function main() {
     // rather than by any test: no test loads main.mjs, and the unit tests call
     // createServer directly with a correct config.
     protocolMd,
+    skillMd,
     // The two public documents. Read once at startup, like llmsTxt above, so
     // serving them costs no disk read per request. nginx proxies these
     // through rather than serving them itself -- see the note in server.mjs.
