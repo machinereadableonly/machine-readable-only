@@ -71,3 +71,26 @@ test("every outgoing connection is pinned to IPv4, with both flags", () => {
   assert.ok(app.node_args.includes("--dns-result-order=ipv4first"), JSON.stringify(app.node_args));
   assert.ok(app.node_args.includes("--no-network-family-autoselection"), JSON.stringify(app.node_args));
 });
+
+// 08 Low 11. Every setting the Warden reads must come from --env-file, never
+// from whoever ran `pm2 start`. Derived from the source, so a new setting that
+// the list does not cover fails here rather than in production.
+test("every setting the Warden reads is dropped from the inherited shell", async () => {
+  const { readFileSync, readdirSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const src = new URL("../src/", import.meta.url).pathname;
+  const files = readdirSync(src, { recursive: true }).filter((f) => f.endsWith(".mjs")).map((f) => join(src, f));
+  const read = new Set();
+  for (const f of files) {
+    for (const m of readFileSync(f, "utf8").matchAll(/\benv\s*(?:\.\s*([A-Z][A-Z0-9_]+)|\[\s*["']([A-Z][A-Z0-9_]+)["']\s*\])/g)) {
+      read.add(m[1] ?? m[2]);
+    }
+  }
+  const main = readFileSync(join(src, "main.mjs"), "utf8");
+  for (const m of main.matchAll(/\b\w+\(\s*["']([A-Z][A-Z0-9_]{2,})["']/g)) if (!m[1].startsWith("SIG")) read.add(m[1]);
+  // PM2's own env block sets these two for the process.
+  read.delete("PORT");
+  read.delete("NODE_ENV");
+  assert.ok(read.has("STATE_DB_PATH") && read.has("MRO_DOMAIN"), "the scan sees the Warden's settings");
+  assert.deepEqual([...read].filter(survives).sort(), []);
+});

@@ -87,7 +87,15 @@ module.exports = {
       // its name IS the access) and personal mailbox (DEFAULT_TO_ADDRESS).
       // Nothing in this repository reads either. `_ADDRESS` drops the whole
       // family; the Warden's own addresses come from --env-file, untouched.
-      filter_env: ["TOKEN", "SECRET", "_KEY", "PASSWORD", "CDP_", "CLOUDFLARE", "NTFY_", "_ADDRESS"],
+      //
+      // AND THE WARDEN'S OWN SETTINGS, so --env-file is always their authority:
+      // a shell exporting another project's STATE_DB_PATH or MRO_DOMAIN would
+      // otherwise beat the file. test/ecosystem.test.mjs derives the names the
+      // Warden reads from its source and requires every one to be dropped.
+      filter_env: [
+        "TOKEN", "SECRET", "_KEY", "PASSWORD", "CDP_", "CLOUDFLARE", "NTFY_", "_ADDRESS",
+        "MRO_", "X402_", "STATE_DB", "_RPC_URL", "CLOCK_", "MAX_GAS", "NODE_OPTIONS", "MNEMONIC", "_PAT", "WEBHOOK",
+      ],
       exec_mode: "fork",
       instances: 1,
       max_memory_restart: "512M",
