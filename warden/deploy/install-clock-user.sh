@@ -144,12 +144,16 @@ if ! mv "$STAGE" "$OPT"; then
 fi
 ok "$OPT from commit $COMMIT, node $NODE_VERSION from nodejs.org"
 
-step "2. the key and the split seed, readable by mro-clock only"
-install -d -o mro-clock -g mro -m 700 "$ETC"
+step "2. the key and the split seed, readable by mro-clock only, owned by root"
+# Group mro-clock holds only the Clock: group mro is shared with the main user.
+# Root owns the files, so the Clock can read its key but never rewrite it.
+getent group mro-clock >/dev/null || groupadd --system mro-clock
+id -nG mro-clock | tr ' ' '\n' | /bin/grep -qx mro-clock || usermod -aG mro-clock mro-clock
+install -d -o root -g mro-clock -m 750 "$ETC"
 # From the root-owned tree, with its own node: root runs no code the main user can write.
 "$OPT/bin/node" "$OPT/warden/deploy/clock-env.mjs" --warden-env "$WARDEN_ENV" --out "$ETC/clock.env" $KEY_FLAG
-chown mro-clock:mro "$ETC/clock.env"
-chmod 600 "$ETC/clock.env"
+chown root:mro-clock "$ETC/clock.env"
+chmod 640 "$ETC/clock.env"
 # The home copy is taken once -- on a first install, or with --replace-seed after
 # a redeploy -- and is refused on any other run: it is the one secret that
 # gives away every future day's answer rule. Read as the main user, so root
@@ -160,10 +164,12 @@ if as_main test -e "$SEED_SRC"; then
   fi
   SEED_NEW="$(mktemp "$ETC/split-seed.new.XXXXXX")"
   as_main cat "$SEED_SRC" > "$SEED_NEW"
-  install -o mro-clock -g mro -m 600 "$SEED_NEW" "$ETC/split-seed"
+  install -o root -g mro-clock -m 640 "$SEED_NEW" "$ETC/split-seed"
   rm -f "$SEED_NEW"
   ok "split seed installed. NOW remove $SEED_SRC: the next install refuses while it exists"
 elif [ -f "$ETC/split-seed" ]; then
+  chown root:mro-clock "$ETC/split-seed"
+  chmod 640 "$ETC/split-seed"
   ok "split seed installed; no home copy"
 else
   die "no split seed in the home directory or in $ETC"
@@ -204,7 +210,7 @@ fi
 install -o root -g mro -m 640 "$BANK_NEW" "$BANK_DIR/bank.json"
 # The Clock reveals question text from its own copy, which the main user
 # cannot reach; the two are compared in step 6.
-install -o mro-clock -g mro -m 600 "$BANK_NEW" "$ETC/bank.json"
+install -o root -g mro-clock -m 640 "$BANK_NEW" "$ETC/bank.json"
 rm -f "$BANK_NEW"
 trap - EXIT
 ok "the Warden's bank in $BANK_DIR and the Clock's own copy in $ETC"

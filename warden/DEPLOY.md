@@ -936,11 +936,11 @@ does not reach it.
 | What | Where | Owner and mode |
 |---|---|---|
 | the Clock's code and its Node | `/opt/mro-clock` | root, not writable by anyone else |
-| its key, RPC url and paths | `/etc/mro-clock/clock.env` | `mro-clock`, 600 |
-| the split seed | `/etc/mro-clock/split-seed` | `mro-clock`, 600 |
+| its key, RPC url and paths | `/etc/mro-clock/clock.env` | root, group `mro-clock`, 640 |
+| the split seed | `/etc/mro-clock/split-seed` | root, group `mro-clock`, 640 |
 | the mirror, its cursor and lock | `/var/lib/mro/state.db*` | group `mro`, 660 |
 | the Warden's question bank | `/etc/mro/bank.json` | root, group `mro`, 640 |
-| the Clock's question bank | `/etc/mro-clock/bank.json` | `mro-clock`, 600 |
+| the Clock's question bank | `/etc/mro-clock/bank.json` | root, group `mro-clock`, 640 |
 | the Clock's ledger | `/var/lib/mro-clock/ledger.db` | `mro-clock`, directory 700 |
 | the log | `/var/log/mro/clock.log` | `mro-clock`, group `mro`, 640, rotated weekly |
 | the units | `/etc/systemd/system/mro-clock.{service,timer}`, `mro-clock-alert.service` | root |

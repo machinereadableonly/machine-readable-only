@@ -25,6 +25,8 @@ fi
 getent group mro >/dev/null || groupadd --system mro
 id mro-clock >/dev/null 2>&1 || useradd --system --gid mro --home-dir "$STATE_DIR" \
   --no-create-home --shell /usr/sbin/nologin mro-clock
+getent group mro-clock >/dev/null || groupadd --system mro-clock
+id -nG mro-clock | tr ' ' '\n' | /bin/grep -qx mro-clock || usermod -aG mro-clock mro-clock
 id -nG "$MAIN_USER" | tr ' ' '\n' | /bin/grep -qx mro || usermod -aG mro "$MAIN_USER"
 install -d -o root -g mro -m 2770 "$STATE_DIR"
 install -d -o root -g mro -m 2770 "$STATE_DIR/spike"

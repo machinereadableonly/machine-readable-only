@@ -11,6 +11,8 @@ Type=oneshot
 # Installed by deploy/install-clock-user.sh; see DEPLOY.md section 12.
 User=mro-clock
 Group=mro
+# Reads its key, seed and bank through this group; root owns them.
+SupplementaryGroups=mro-clock
 WorkingDirectory=/opt/mro-clock/warden
 # --env-file, not EnvironmentFile=, so the key never appears in `systemctl show`.
 ExecStart=/opt/mro-clock/bin/node --env-file=/etc/mro-clock/clock.env src/clock/main.mjs
