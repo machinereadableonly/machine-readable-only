@@ -37,7 +37,7 @@ set +a
 
 # THE CHAIN, STATED. 84532 is Base Sepolia. Base mainnet is 8453 and is not
 # something this script may be pointed at by editing one number: the mainnet
-# path needs MAINNET_DEPLOYER_KEY and the operator's explicit approval, every time.
+# path is deploy-mainnet.sh, signed by the Ledger, with the operator's approval every time.
 export EXPECTED_CHAIN_ID=84532
 # The Clock's signer, unchanged since Plan 3. Proven separate from the owner on
 # chain in both directions.

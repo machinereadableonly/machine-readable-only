@@ -686,18 +686,42 @@ password manager in the cloud, emailed or committed.</li>
 <p>   Restoring is the reverse: type it into a new mode-600 file and check that
    <code>split-seed.mjs anchor &lt;file&gt;</code> prints the contract&#39;s <code>splitAnchor()</code>.</p>
 <ol start="4">
-<li><p><strong>Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].</strong> First the
-simulation, then the send:</p>
+<li><p><strong>Deploy from the Ledger -- [OPERATOR APPROVAL REQUIRED, real funds,
+permanent].</strong> The deploying key is the Ledger, on the Windows PC (D2), on
+its OWN account <code>m/44&#39;/60&#39;/1&#39;/0/0</code> -- never the Ledger account that signs for
+the Safe; the script refuses a deployer that is a Safe signer. No mainnet
+key is ever kept in a file. Two halves, so the split seed never leaves the
+VPS:</p>
+<p><strong>4a. Once, on the PC</strong> (each a separate step for the operator):</p>
+<ol>
+<li>Install Git for Windows; its &quot;Git Bash&quot; is the terminal for everything
+below (Foundry does not support PowerShell or Command Prompt).</li>
+<li>In Git Bash: <code>curl -L https://foundry.paradigm.xyz | bash</code>, open a new
+Git Bash, then <code>foundryup --install v1.7.1</code>. <code>forge --version</code> must say 1.7.1.</li>
+<li><code>git clone https://github.com/machinereadableonly/machine-readable-only.git</code>
+(the libraries are committed; nothing else to install).</li>
+<li>On the Ledger: install the Ethereum app, and in its Settings turn on
+<strong>Blind signing</strong> -- a contract deployment is arbitrary data the app
+otherwise refuses.</li>
+<li>With the Ledger plugged in, unlocked and the Ethereum app open:
+<code>cast wallet address --ledger --mnemonic-derivation-path &quot;m/44&#39;/60&#39;/1&#39;/0/0&quot;</code>.
+That address is the DEPLOYER. Send it a little ETH on Base (the deploy
+is about 15 transactions).</li>
+</ol>
+<p><strong>4b. On the VPS -- every check, nothing sent:</strong></p>
 <pre><code>cd ~/projects/machine-readable-only/contracts
-MRO_SPLIT_SEED_FILE=&lt;mainnet&#39;s own seed&gt; bash script/deploy-mainnet.sh --warden &lt;step 3&#39;s address&gt; --owner &lt;the Safe&gt; --signers &lt;a,b,c&gt;
-MRO_SPLIT_SEED_FILE=&lt;mainnet&#39;s own seed&gt; bash script/deploy-mainnet.sh --warden &lt;step 3&#39;s address&gt; --owner &lt;the Safe&gt; --signers &lt;a,b,c&gt; --broadcast
+MRO_SPLIT_SEED_FILE=&lt;mainnet&#39;s own seed&gt; bash script/deploy-mainnet.sh --prepare --deployer &lt;4a.5&#39;s address&gt; --warden &lt;step 3&#39;s address&gt; --owner &lt;the Safe&gt; --signers &lt;a,b,c&gt;
 </code></pre>
-<p>It checks the Safe&#39;s identity, refuses a Sepolia seed, gates on
-<code>test/ContractSize.t.sol</code> and the ABI pin, broadcasts, then READS THE
-DEPLOYMENT BACK -- pending owner, warden, anchor -- and stops if any is
-wrong. It prints the token and renderer. The deploying key owns the
-contract until step 5; whoever holds it before then can take the contract
-for good (decision D2).</p>
+<p>It checks the Safe&#39;s identity and that the deployer is not one of its
+signers, refuses a Sepolia seed, gates on <code>test/ContractSize.t.sol</code> and the
+ABI pin, and prints ONE command for the PC carrying the anchor and the
+commit. The commit must be pushed before the PC can fetch it.</p>
+<p><strong>4c. On the PC, in Git Bash, in <code>contracts/</code>:</strong> <code>git fetch &amp;&amp; git checkout &lt;the commit&gt;</code>, then run the printed command -- first as printed (a
+simulation), then again with <code>--broadcast</code> added. Approve each transaction
+on the Ledger. It re-checks the Safe and the sizes, broadcasts, then READS
+THE DEPLOYMENT BACK -- pending owner, warden, anchor -- and stops if any is
+wrong. It prints the token and renderer. The Ledger&#39;s deploying account owns
+the contract until step 5.</p>
 </li>
 <li><p><strong>The Safe accepts ownership, FIRST -- [OPERATOR, two signers].</strong> Sign it with
 the Ledger AND the Trezor:</p>
@@ -709,9 +733,8 @@ each device, and sign with both. The second signer UNTICKS &quot;Execute&quot;: 
 signer who executes approves by sending, and its device shows no hash. Then
 execute from any connected owner that holds ETH. Then
 <code>cast call &lt;token&gt; &quot;owner()(address)&quot;</code> must print the Safe and
-<code>cast call &lt;token&gt; &quot;pendingOwner()(address)&quot;</code> the zero address. <strong>Then
-delete the deploying key</strong> (<code>MAINNET_DEPLOYER_KEY</code> in <code>contracts/.env</code>,
-WinSCP). Nothing later opens before this: the Warden, the Clock and the
+<code>cast call &lt;token&gt; &quot;pendingOwner()(address)&quot;</code> the zero address. The
+Ledger&#39;s deploying account then owns nothing. Nothing later opens before this: the Warden, the Clock and the
 adoption all refuse a contract the Safe does not own alone.</p>
 </li>
 <li><p><strong>Verify the source on both explorers, then read it back, against mainnet:</strong></p>

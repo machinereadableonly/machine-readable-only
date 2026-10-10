@@ -42,12 +42,12 @@ contract DeployPlan5 is MroScript {
             require(owner != warden, "the owner must not be the warden");
         }
         // A bare startBroadcast() has no sender, and forge refuses it only after the simulation passes.
-        uint256 key = deployerKey();
+        (address deployerAddress, uint256 key) = deployer();
         // The Warden signs no owner call and the owner signs no Warden call.
-        require(warden != vm.addr(key), "WARDEN_ADDRESS must not be the deployer");
+        require(warden != deployerAddress, "WARDEN_ADDRESS must not be the deployer");
         // Set in the same broadcast so no deployed contract is ever without its anchor.
         bytes32 anchor = requireAnchor(vm.envOr("SPLIT_ANCHOR", bytes32(0)));
-        vm.startBroadcast(key);
+        startBroadcastAs(deployerAddress, key);
         r = new Renderer();
         t = new MachineReadableOnly(address(r), warden);
         MachineReadableOnly.Upgrade[16] memory u = Ladder.all();

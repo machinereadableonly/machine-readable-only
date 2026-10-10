@@ -632,21 +632,47 @@ handling of the real owner key.
    Restoring is the reverse: type it into a new mode-600 file and check that
    `split-seed.mjs anchor <file>` prints the contract's `splitAnchor()`.
 
-4. **Deploy -- [OPERATOR APPROVAL REQUIRED, real funds, permanent].** First the
-   simulation, then the send:
+4. **Deploy from the Ledger -- [OPERATOR APPROVAL REQUIRED, real funds,
+   permanent].** The deploying key is the Ledger, on the Windows PC (D2), on
+   its OWN account `m/44'/60'/1'/0/0` -- never the Ledger account that signs for
+   the Safe; the script refuses a deployer that is a Safe signer. No mainnet
+   key is ever kept in a file. Two halves, so the split seed never leaves the
+   VPS:
+
+   **4a. Once, on the PC** (each a separate step for the operator):
+   1. Install Git for Windows; its "Git Bash" is the terminal for everything
+      below (Foundry does not support PowerShell or Command Prompt).
+   2. In Git Bash: `curl -L https://foundry.paradigm.xyz | bash`, open a new
+      Git Bash, then `foundryup --install v1.7.1`. `forge --version` must say 1.7.1.
+   3. `git clone https://github.com/machinereadableonly/machine-readable-only.git`
+      (the libraries are committed; nothing else to install).
+   4. On the Ledger: install the Ethereum app, and in its Settings turn on
+      **Blind signing** -- a contract deployment is arbitrary data the app
+      otherwise refuses.
+   5. With the Ledger plugged in, unlocked and the Ethereum app open:
+      `cast wallet address --ledger --mnemonic-derivation-path "m/44'/60'/1'/0/0"`.
+      That address is the DEPLOYER. Send it a little ETH on Base (the deploy
+      is about 15 transactions).
+
+   **4b. On the VPS -- every check, nothing sent:**
 
    ```
    cd ~/projects/machine-readable-only/contracts
-   MRO_SPLIT_SEED_FILE=<mainnet's own seed> bash script/deploy-mainnet.sh --warden <step 3's address> --owner <the Safe> --signers <a,b,c>
-   MRO_SPLIT_SEED_FILE=<mainnet's own seed> bash script/deploy-mainnet.sh --warden <step 3's address> --owner <the Safe> --signers <a,b,c> --broadcast
+   MRO_SPLIT_SEED_FILE=<mainnet's own seed> bash script/deploy-mainnet.sh --prepare --deployer <4a.5's address> --warden <step 3's address> --owner <the Safe> --signers <a,b,c>
    ```
 
-   It checks the Safe's identity, refuses a Sepolia seed, gates on
-   `test/ContractSize.t.sol` and the ABI pin, broadcasts, then READS THE
-   DEPLOYMENT BACK -- pending owner, warden, anchor -- and stops if any is
-   wrong. It prints the token and renderer. The deploying key owns the
-   contract until step 5; whoever holds it before then can take the contract
-   for good (decision D2).
+   It checks the Safe's identity and that the deployer is not one of its
+   signers, refuses a Sepolia seed, gates on `test/ContractSize.t.sol` and the
+   ABI pin, and prints ONE command for the PC carrying the anchor and the
+   commit. The commit must be pushed before the PC can fetch it.
+
+   **4c. On the PC, in Git Bash, in `contracts/`:** `git fetch && git checkout
+   <the commit>`, then run the printed command -- first as printed (a
+   simulation), then again with `--broadcast` added. Approve each transaction
+   on the Ledger. It re-checks the Safe and the sizes, broadcasts, then READS
+   THE DEPLOYMENT BACK -- pending owner, warden, anchor -- and stops if any is
+   wrong. It prints the token and renderer. The Ledger's deploying account owns
+   the contract until step 5.
 
 5. **The Safe accepts ownership, FIRST -- [OPERATOR, two signers].** Sign it with
    the Ledger AND the Trezor:
@@ -661,9 +687,8 @@ handling of the real owner key.
    signer who executes approves by sending, and its device shows no hash. Then
    execute from any connected owner that holds ETH. Then
    `cast call <token> "owner()(address)"` must print the Safe and
-   `cast call <token> "pendingOwner()(address)"` the zero address. **Then
-   delete the deploying key** (`MAINNET_DEPLOYER_KEY` in `contracts/.env`,
-   WinSCP). Nothing later opens before this: the Warden, the Clock and the
+   `cast call <token> "pendingOwner()(address)"` the zero address. The
+   Ledger's deploying account then owns nothing. Nothing later opens before this: the Warden, the Clock and the
    adoption all refuse a contract the Safe does not own alone.
 
 6. **Verify the source on both explorers, then read it back, against mainnet:**

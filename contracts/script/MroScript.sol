@@ -81,4 +81,30 @@ abstract contract MroScript is Script {
             key = vm.envUint("SPIKE_DEPLOYER_KEY");
         }
     }
+
+    /// @notice Who signs: on Base mainnet a hardware wallet when
+    /// MAINNET_DEPLOYER_ADDRESS is set (`key` 0; forge --ledger signs for it),
+    /// otherwise the key from `deployerKey`.
+    function deployer() internal view returns (address who, uint256 key) {
+        address hardware = vm.envOr("MAINNET_DEPLOYER_ADDRESS", address(0));
+        if (block.chainid == BASE_MAINNET && hardware != address(0)) {
+            return hardwareDeployer(hardware, vm.envOr("MAINNET_DEPLOYER_KEY", uint256(0)));
+        }
+        key = deployerKey();
+        who = vm.addr(key);
+    }
+
+    /// @notice The hardware-wallet case of `deployer`, refusing a key set beside it.
+    function hardwareDeployer(address hardware, uint256 strayKey) internal view returns (address, uint256) {
+        require(mainnetAllowed(), "this script is testnet-only: it must never sign on Base mainnet");
+        require(strayKey == 0, "set MAINNET_DEPLOYER_ADDRESS or MAINNET_DEPLOYER_KEY, not both");
+        console.log("signing with the hardware wallet", hardware);
+        return (hardware, 0);
+    }
+
+    /// @notice Start the broadcast as `deployer` returned it.
+    function startBroadcastAs(address who, uint256 key) internal {
+        if (key == 0) vm.startBroadcast(who);
+        else vm.startBroadcast(key);
+    }
 }

@@ -5,30 +5,27 @@
 # This is the deploy that CANNOT BE UNDONE (Hard Rule 1) and that spends real
 # funds (Hard Rule 2): the operator approves every broadcast, every time.
 #
-#   bash script/deploy-mainnet.sh --warden <address> --owner <safe>               # simulate
-#   bash script/deploy-mainnet.sh --warden <address> --owner <safe> --broadcast   # SEND. Operator approval.
+# The deploying key is a LEDGER on the operator's Windows PC (D2), in two halves,
+# so the split seed never leaves the VPS:
+#
+#   VPS: bash script/deploy-mainnet.sh --prepare --deployer <ledger address> --warden <address> --owner <safe> --signers <a,b,c>
+#   PC:  the command --prepare prints: the same flags plus --ledger --anchor <a> --commit <sha>,
+#        first without --broadcast (simulate), then with it. SEND = operator approval.
 #
 # REHEARSAL ONLY, against a local anvil fork of Base mainnet:
 #
 #   bash script/deploy-mainnet.sh --warden <address> --owner <safe> --fork http://127.0.0.1:<port> --broadcast
 #
-# WHY THIS FILE EXISTS. Until 2026-09-15 the only deploy wrapper was
-# deploy-plan7.sh, which hard-codes Base Sepolia -- chain, RPC and the Sepolia
-# Clock's address. DeployPlan5.s.sol under it has always handled mainnet
-# (MroScript's guardChain, and a MAINNET_DEPLOYER_KEY that refuses the
-# throwaway key), but nothing called it for mainnet, so the cutover's most
-# important step had no script at all. It runs the SAME Solidity script, for
-# the reason deploy-plan7.sh gives: the script that has been run before is the
-# script that runs again.
+# It runs DeployPlan5.s.sol, the script every Sepolia deploy ran.
 #
 # --warden IS REQUIRED AND HAS NO DEFAULT. It is the mainnet Clock's signer,
 # written into the constructor. Only setWarden can correct a wrong value
 # afterwards, and the mainnet Clock is a new key chosen at cutover, not the
 # Sepolia one.
 #
-# --owner IS REQUIRED: the 2-of-3 Safe. MAINNET_DEPLOYER_KEY signs the deploy
-# and offers ownership to the Safe as the broadcast's last call; it stays owner
-# only until the Safe calls acceptOwnership (warden/tools/safe-tx.mjs).
+# --owner IS REQUIRED: the 2-of-3 Safe. The Ledger's deploying account signs the
+# deploy and offers ownership to the Safe as the broadcast's last call; it stays
+# owner only until the Safe calls acceptOwnership (warden/tools/safe-tx.mjs).
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -42,8 +39,20 @@ OWNER=""
 SIGNERS=""
 FORK=""
 BROADCAST=""
+PREPARE=""
+LEDGER=""
+DEPLOYER=""
+ANCHOR=""
+COMMIT=""
+HD_PATH=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --prepare) PREPARE=1; shift ;;
+    --ledger) LEDGER=1; shift ;;
+    --deployer) DEPLOYER="${2:?--deployer needs the Ledger address}"; shift 2 ;;
+    --anchor) ANCHOR="${2:?--anchor needs the split anchor --prepare printed}"; shift 2 ;;
+    --commit) COMMIT="${2:?--commit needs the sha --prepare printed}"; shift 2 ;;
+    --hd-path) HD_PATH="${2:?--hd-path needs the deploying account path}"; shift 2 ;;
     --warden) WARDEN="${2:?--warden needs an address}"; shift 2 ;;
     --owner) OWNER="${2:?--owner needs the Safe address}"; shift 2 ;;
     --signers) SIGNERS="${2:?--signers needs the signer addresses, comma-separated}"; shift 2 ;;
@@ -53,6 +62,34 @@ while [ "$#" -gt 0 ]; do
     *) echo "FAIL: unrecognised argument '$1'." >&2; exit 1 ;;
   esac
 done
+
+# Real mainnet is --prepare (VPS) then --ledger (PC); only a fork may use a key in a file.
+if [ -n "$FORK" ] && { [ -n "$PREPARE" ] || [ -n "$LEDGER" ]; }; then
+  echo "FAIL: --fork rehearses with a test key; it takes neither --prepare nor --ledger." >&2; exit 1
+fi
+if [ -z "$FORK" ] && [ -z "$PREPARE" ] && [ -z "$LEDGER" ]; then
+  echo "FAIL: a real mainnet deploy is --prepare on the VPS, then --ledger on the PC (DEPLOY.md section 10)." >&2; exit 1
+fi
+if [ -n "$PREPARE" ] && [ -n "$LEDGER" ]; then
+  echo "FAIL: --prepare and --ledger are the two halves; run one at a time." >&2; exit 1
+fi
+if [ -n "$PREPARE" ] && [ -n "$BROADCAST" ]; then
+  echo "FAIL: --prepare sends nothing; --broadcast belongs to the --ledger half." >&2; exit 1
+fi
+if [ -n "$PREPARE$LEDGER" ]; then
+  if [ -z "$DEPLOYER" ] || [ "$DEPLOYER" != "$(cast to-check-sum-address "$DEPLOYER")" ]; then
+    echo "FAIL: --deployer must be the Ledger's address in EIP-55 form (cast wallet address --ledger)." >&2; exit 1
+  fi
+fi
+if [ -n "$LEDGER" ]; then
+  [[ "$ANCHOR" =~ ^0x[0-9a-fA-F]{64}$ ]] || { echo "FAIL: --anchor must be the 0x... value --prepare printed." >&2; exit 1; }
+  [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "FAIL: --commit must be the 40-character sha --prepare printed." >&2; exit 1; }
+  # Its own account, never the Ledger account that signs for the Safe (checked below).
+  HD_RE="^m(/[0-9]+'?)+\$"
+  [[ "$HD_PATH" =~ $HD_RE ]] || { echo "FAIL: --hd-path must be the deploying account's path, e.g. \"m/44'/60'/1'/0/0\"." >&2; exit 1; }
+  [ "$(git rev-parse HEAD)" = "$COMMIT" ] || { echo "FAIL: this checkout is not at $COMMIT; git fetch && git checkout $COMMIT" >&2; exit 1; }
+  [ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "FAIL: this checkout has uncommitted changes." >&2; exit 1; }
+fi
 
 if [ -z "$WARDEN" ]; then
   echo "FAIL: --warden <address> is required -- the mainnet Clock's signer, written into the constructor." >&2
@@ -104,16 +141,11 @@ if [ -n "$FORK" ]; then
   unset SPIKE_DEPLOYER_KEY
   MODE="REHEARSAL on a local fork"
 else
-  set -a
-  # shellcheck disable=SC1091
-  . ./.env
-  set +a
-  if [ -z "${MAINNET_DEPLOYER_KEY:-}" ]; then
-    echo "FAIL: MAINNET_DEPLOYER_KEY is not set in contracts/.env (the operator adds it via WinSCP)." >&2
-    exit 1
-  fi
+  # No key in any file: the Ledger signs, on the PC.
+  unset MAINNET_DEPLOYER_KEY SPIKE_DEPLOYER_KEY
   RPC="https://mainnet.base.org"
-  MODE="BASE MAINNET -- permanent"
+  if [ -n "$PREPARE" ]; then MODE="PREPARE for BASE MAINNET -- checks only, sends nothing"
+  else MODE="BASE MAINNET from the Ledger -- permanent"; export MAINNET_DEPLOYER_ADDRESS="$DEPLOYER"; fi
 fi
 
 # THE CHAIN, STATED, and checked against the endpoint before anything is built.
@@ -164,8 +196,12 @@ MODULES="$(cast call "$OWNER" "getModulesPaginated(address,uint256)(address[],ad
 # keccak256("guard_manager.guard.address"), Safe's GuardManager.
 GUARD="$(cast storage "$OWNER" 0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8 --rpc-url "$RPC")"
 [ "$(cast to-dec "$GUARD")" = 0 ] || { echo "FAIL: the Safe has a transaction guard set." >&2; exit 1; }
-# Read from the environment, never from argv, so the key is never on a command line.
-DEPLOYER_ADDRESS="$(cd ../warden && node --input-type=module -e 'import { privateKeyToAccount } from "viem/accounts"; console.log(privateKeyToAccount(process.env.MAINNET_DEPLOYER_KEY).address)')"
+if [ -n "$FORK" ]; then
+  # Read from the environment, never from argv, so the key is never on a command line.
+  DEPLOYER_ADDRESS="$(cd ../warden && node --input-type=module -e 'import { privateKeyToAccount } from "viem/accounts"; console.log(privateKeyToAccount(process.env.MAINNET_DEPLOYER_KEY).address)')"
+else
+  DEPLOYER_ADDRESS="$DEPLOYER"
+fi
 if [ -n "$(addrs "$SAFE_OWNERS" | /bin/grep -i "$(printf '%s' "$DEPLOYER_ADDRESS" | tr 'A-F' 'a-f')" || true)" ]; then
   echo "FAIL: the deploying key $DEPLOYER_ADDRESS is one of the Safe's signers." >&2
   exit 1
@@ -188,15 +224,22 @@ fi
 
 # The ABI pin, BEFORE the deploy, for deploy-plan7.sh's reason: drift found
 # afterwards is drift found with a permanent address already on chain.
-# shellcheck source=/dev/null
-. "$HOME/.nvm/nvm.sh" >/dev/null 2>&1 || true
-echo "pinning warden/src/clock/abi.mjs against the freshly compiled artifact"
-( cd ../warden && node --test test/abi.test.mjs )
+if [ -z "$LEDGER" ]; then
+  # shellcheck source=/dev/null
+  . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1 || true
+  echo "pinning warden/src/clock/abi.mjs against the freshly compiled artifact"
+  ( cd ../warden && node --test test/abi.test.mjs )
+else
+  echo "ABI pin: run by --prepare at commit $COMMIT, which this checkout matches"
+fi
 
 # The anchor comes from the split seed and is set, once and for ever, inside the deploy's
 # broadcast. A seed whose keys Sepolia has already revealed would make every early mainnet
 # day's answer rule public, so the seed is named explicitly and checked against every
 # Sepolia anchor this box knows (DEPLOY.md section 10).
+if [ -n "$LEDGER" ]; then
+  SPLIT_ANCHOR="$ANCHOR"
+else
 SEED_FILE="${MRO_SPLIT_SEED_FILE:-}"
 if [ -z "$SEED_FILE" ]; then
   echo "FAIL: set MRO_SPLIT_SEED_FILE to this deployment's own seed (never the Sepolia one)." >&2
@@ -224,6 +267,7 @@ for other in "$HOME"/.mro-split/seed*; do
     exit 1
   fi
 done
+fi
 # The live Sepolia pair, named once in CLAUDE.md (adopt-deployment.sh keeps it there).
 SEPOLIA_TOKEN="${MRO_SEPOLIA_CONTRACT:-$(sed -n 's/^ *MachineReadableOnly  *\(0x[0-9a-fA-F]\{40\}\).*/\1/p' ../CLAUDE.md | head -1)}"
 SEPOLIA_ANCHOR="$(cast call "$SEPOLIA_TOKEN" 'splitAnchor()(bytes32)' --rpc-url https://sepolia.base.org 2>/dev/null || true)"
@@ -234,7 +278,7 @@ if [ -z "$SEPOLIA_ANCHOR" ]; then
   fi
   echo "note: the Sepolia anchor could not be read; a fork rehearsal goes on without that check" >&2
 elif [ "$(echo "$SEPOLIA_ANCHOR" | tr 'A-F' 'a-f')" = "$(echo "$SPLIT_ANCHOR" | tr 'A-F' 'a-f')" ]; then
-  echo "FAIL: $SEED_FILE is the live Sepolia pair's seed ($SEPOLIA_TOKEN)." >&2
+  echo "FAIL: anchor $SPLIT_ANCHOR is the live Sepolia pair's ($SEPOLIA_TOKEN)." >&2
   exit 1
 fi
 export SPLIT_ANCHOR
@@ -245,8 +289,18 @@ echo "chain    $ACTUAL  (expected $EXPECTED_CHAIN_ID)"
 echo "warden   $WARDEN_ADDRESS"
 echo "owner    $OWNER  (Safe $SAFE_VERSION, $SAFE_THRESHOLD of $(printf '%s' "$SAFE_OWNERS" | /bin/grep -o '0x[0-9a-fA-F]\{40\}' | wc -l); pending until it accepts)"
 echo "anchor   $SPLIT_ANCHOR"
+echo "deployer $DEPLOYER_ADDRESS"
 echo "send     ${BROADCAST:-no -- simulate only}"
 echo
+
+if [ -n "$PREPARE" ]; then
+  echo "PREPARED. Every check above passed at commit $(git rev-parse HEAD)."
+  echo "On the PC, in Git Bash, in contracts/ of a clean checkout at that commit, with the Ledger"
+  echo "unlocked and its Ethereum app open -- first to simulate, then again with --broadcast:"
+  echo
+  echo "  bash script/deploy-mainnet.sh --ledger --hd-path \"m/44'/60'/1'/0/0\" --deployer $DEPLOYER --warden $WARDEN --owner $OWNER --signers $SIGNERS --anchor $SPLIT_ANCHOR --commit $(git rev-parse HEAD)"
+  exit 0
+fi
 
 # Captured, then judged by its own exit code: never piped into anything.
 DEPLOY_LOG="$(mktemp)"
@@ -254,6 +308,7 @@ forge script script/DeployPlan5.s.sol:DeployPlan5 \
   --sig "run(address)" "$OWNER" \
   --rpc-url "$RPC" \
   $BROADCAST ${BROADCAST:+--slow} \
+  ${LEDGER:+--ledger --mnemonic-derivation-paths "$HD_PATH" --sender "$DEPLOYER"} \
   -vvv > "$DEPLOY_LOG" 2>&1 && DEPLOY_EXIT=0 || DEPLOY_EXIT=$?
 cat "$DEPLOY_LOG"
 [ "$DEPLOY_EXIT" -eq 0 ] || { echo "FAIL: forge script exited $DEPLOY_EXIT" >&2; exit 1; }
@@ -278,7 +333,7 @@ echo "read back: token $TOK, renderer $REN, owner $OWNER_NOW (the deploying key)
 
 echo
 echo "Next, in order. ACCEPTANCE IS FIRST: until it lands, the deploying key owns the contract."
-echo "  1. the Safe accepts ownership (DEPLOY.md section 10), then delete the deploying key:"
+echo "  1. the Safe accepts ownership (DEPLOY.md section 10); the deploying account then owns nothing:"
 echo "     cd ../warden && node tools/safe-tx.mjs accept-ownership --contract $TOK --safe $OWNER --signers $SIGNERS --rpc $RPC"
 echo "  2. bash script/verify-plan7.sh $REN $TOK $WARDEN 8453"
 echo "  3. cd ../warden && node tools/check-deployed-abi.mjs $TOK $RPC"
