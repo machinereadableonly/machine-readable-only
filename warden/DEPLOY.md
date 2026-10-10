@@ -480,7 +480,7 @@ breaking streak looked healthy to every supervisor watching it.
 ### On deploy day, after the mint
 
 1. in `~/.mro/seed.env`, put token #1's id as `MRO_SEED_TOKEN` and the door's
-   opening day plus 2 as `MRO_SEED_NOT_BEFORE` (`YYYY-MM-DD`, UTC). No place
+   opening day plus 1 as `MRO_SEED_NOT_BEFORE` (`YYYY-MM-DD`, UTC). No place
    rides on it -- the contract gives token #1 Aorta and no place (spec 10n) --
    but it keeps the project's own token from leading the run in the first days
 2. `systemctl --user enable --now mro-seed.timer`
@@ -534,7 +534,7 @@ handling of the real owner key.
 | the mainnet Clock key | made by the installer straight into `/etc/mro-clock` (`--rotate-clock-key`, replacing the Sepolia one; step 3), which prints its address for `deploy-mainnet.sh --warden` | the contract's warden is fixed at deploy; only `setWarden` corrects it afterwards. It is never in the Warden's `.env` |
 | `MRO_HOUSE_KEY_ID` | the configuration file | the operator's own agent's key id: it alone is minted as token 1, and the Warden refuses to start without it off Sepolia |
 | `MRO_OWNER_SAFE` | the configuration file | the Safe that must own the contract; the Warden and the Clock refuse to start until it alone does (section 12) |
-| `CLOCK_CHECK_RPC_URL` | the configuration file | a second RPC from a different provider; the Clock refuses to start on mainnet without it (section 12, decision 13) |
+| `CLOCK_CHECK_RPC_URL` | the configuration file | a second RPC from a different provider; the Clock refuses to start on mainnet without it (section 12). Mainnet value: `https://mainnet.base.org` |
 | `BUILDER_CODE` | `src/clock/builder-code.mjs` | Base credits the piece's on-chain activity only through this ERC-8021 suffix, and a write sent without it can never be attributed afterwards. It is SET to the issued code, `bc_dfhlohlh`, and pinned by `test/clock-builder-code.test.mjs`. **Nothing refuses to start without it**, so this row is the check that it survives the cutover; the Clock logs the code on every run |
 | `verify-border`'s chain | `client/src/cli.mjs` | it defaults to Base mainnet (8453) and its public RPC, the chain SKILL.md declares, refuses an RPC serving any other chain, and prints the contract, chain and RPC host it reads. Sepolia checks pass `--chain 84532` |
 | the Clock's gas float | the warden wallet on mainnet | writes are paid in real ETH, not testnet ETH |
@@ -1040,8 +1040,10 @@ writes nothing.
 **A second RPC (`CLOCK_CHECK_RPC_URL`) is required on Base mainnet**, from a
 different provider than `BASE_RPC_URL`: every read that settles a row without
 a receipt, proves a token's key or proves a payment must agree on both, and a
-disagreement holds the row. Set it in the Warden's `.env`; the installer copies
-it. The Clock also refuses a night when the contract's day and the box's day
+disagreement holds the row. On mainnet it is `https://mainnet.base.org`, Base's
+free public endpoint beside the paid primary; it answers a handful of reads a
+night, so its rate limit does not bind. Set it in the Warden's `.env`; the
+installer copies it. The Clock also refuses a night when the contract's day and the box's day
 are more than one apart, and reveals at most 32 split keys a night.
 
 **`MRO_OWNER_SAFE` is required on Base mainnet**, in the Warden's `.env`: the

@@ -473,7 +473,7 @@ breaking streak looked healthy to every supervisor watching it.</p>
 <h3>On deploy day, after the mint</h3>
 <ol>
 <li>in <code>~/.mro/seed.env</code>, put token #1&#39;s id as <code>MRO_SEED_TOKEN</code> and the door&#39;s
-opening day plus 2 as <code>MRO_SEED_NOT_BEFORE</code> (<code>YYYY-MM-DD</code>, UTC). No place
+opening day plus 1 as <code>MRO_SEED_NOT_BEFORE</code> (<code>YYYY-MM-DD</code>, UTC). No place
 rides on it -- the contract gives token #1 Aorta and no place (spec 10n) --
 but it keeps the project&#39;s own token from leading the run in the first days</li>
 <li><code>systemctl --user enable --now mro-seed.timer</code></li>
@@ -562,7 +562,7 @@ handling of the real owner key.</p>
 <tr>
 <td><code>CLOCK_CHECK_RPC_URL</code></td>
 <td>the configuration file</td>
-<td>a second RPC from a different provider; the Clock refuses to start on mainnet without it (section 12, decision 13)</td>
+<td>a second RPC from a different provider; the Clock refuses to start on mainnet without it (section 12). Mainnet value: <code>https://mainnet.base.org</code></td>
 </tr>
 <tr>
 <td><code>BUILDER_CODE</code></td>
@@ -1069,8 +1069,10 @@ writes nothing.</p>
 <p><strong>A second RPC (<code>CLOCK_CHECK_RPC_URL</code>) is required on Base mainnet</strong>, from a
 different provider than <code>BASE_RPC_URL</code>: every read that settles a row without
 a receipt, proves a token&#39;s key or proves a payment must agree on both, and a
-disagreement holds the row. Set it in the Warden&#39;s <code>.env</code>; the installer copies
-it. The Clock also refuses a night when the contract&#39;s day and the box&#39;s day
+disagreement holds the row. On mainnet it is <code>https://mainnet.base.org</code>, Base&#39;s
+free public endpoint beside the paid primary; it answers a handful of reads a
+night, so its rate limit does not bind. Set it in the Warden&#39;s <code>.env</code>; the
+installer copies it. The Clock also refuses a night when the contract&#39;s day and the box&#39;s day
 are more than one apart, and reveals at most 32 split keys a night.</p>
 <p><strong><code>MRO_OWNER_SAFE</code> is required on Base mainnet</strong>, in the Warden&#39;s <code>.env</code>: the
 Safe that must own the contract. The Warden and the Clock refuse to start, and
