@@ -184,7 +184,7 @@ test("an unsigned knock returns a live challenge, and the answer is reproducible
 
 test("a registered key is admitted, and can list the tools", async () => {
   const { privateJwk, keyId } = await generateIdentity();
-  const registered = await registerKey({ origin, privateJwk });
+  const registered = await registerKey({ origin, site: `https://${DOMAIN}`, privateJwk });
   assert.equal(registered, keyId, "the site must derive the same key id we did");
 
   const tools = await listTools({ origin, site: `https://${DOMAIN}`, privateJwk });
@@ -194,7 +194,7 @@ test("a registered key is admitted, and can list the tools", async () => {
 
 test("a free tool answers, and reads the caller's identity from the signature", async () => {
   const { privateJwk } = await generateIdentity();
-  await registerKey({ origin, privateJwk });
+  await registerKey({ origin, site: `https://${DOMAIN}`, privateJwk });
 
   const result = await callTool({ origin, site: `https://${DOMAIN}`, privateJwk, name: "status", arguments: {} });
   const body = structured(result);
@@ -209,7 +209,7 @@ test("a free tool answers, and reads the caller's identity from the signature", 
 // accept anything.
 test("a wrong answer inside the window is refused, and the right one credits the day", async () => {
   const { privateJwk, keyId } = await generateIdentity();
-  await registerKey({ origin, privateJwk });
+  await registerKey({ origin, site: `https://${DOMAIN}`, privateJwk });
   const tokenId = 701;
   const day = utcDay();
   q.insertToken({ tokenId, keyId, owner: "0x" + "a1".repeat(20), lastDay: day - 1, mintDay: day - 1 });
@@ -244,7 +244,7 @@ test("an unsigned request is refused at the door", async () => {
 
 test("a paid tool returns a demand the client can read", async () => {
   const { privateJwk } = await generateIdentity();
-  await registerKey({ origin, privateJwk });
+  await registerKey({ origin, site: `https://${DOMAIN}`, privateJwk });
 
   const result = await callTool({ origin, site: `https://${DOMAIN}`, privateJwk, name: "mint", arguments: { to: "0x" + "a1".repeat(20) } });
   const demand = readDemand(result);
@@ -379,7 +379,7 @@ test("the client's content-digest is byte-identical to the door's", async () => 
 // two reasons a fresh challenge can actually fix.
 test("a challenge that went stale in flight is retried once, and then succeeds", async () => {
   const { privateJwk } = await generateIdentity();
-  await registerKey({ origin, privateJwk });
+  await registerKey({ origin, site: `https://${DOMAIN}`, privateJwk });
 
   let injected = 0;
   const flaky = async (url, init) => {
@@ -400,7 +400,7 @@ test("a challenge that went stale in flight is retried once, and then succeeds",
 
 test("a refusal a retry cannot fix is not retried", async () => {
   const { privateJwk } = await generateIdentity();
-  await registerKey({ origin, privateJwk });
+  await registerKey({ origin, site: `https://${DOMAIN}`, privateJwk });
 
   let attempts = 0;
   const always401 = async (url, init) => {

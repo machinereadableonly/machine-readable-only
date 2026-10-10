@@ -18,15 +18,23 @@ import { publicFromPrivate } from "./keys.mjs";
  * /.well-known/http-message-signatures-directory and pass your own origin as
  * the signature agent. Nothing is registered and the site stores nothing.
  */
-export async function registerKey({ origin, privateJwk, fetchImpl = fetch }) {
+/// What a registration proof signs; warden/src/door/directory.mjs builds the same.
+export const registrationMessage = (origin, nonce) => `mro-key-registration-v1\n${origin}\n${nonce}`;
+
+/// A site's nonce is `nonce.unix-ms.hmac`. Anything else is not signed: a
+/// hostile site could hand over the bytes of a request it wants signed.
+const NONCE_SHAPE = /^[A-Za-z0-9_-]{43}\.\d{13}\.[0-9a-f]{64}$/;
+
+/// `site` is the public origin the proof is bound to; `origin` is where the
+/// requests go, the same split every signed request makes.
+export async function registerKey({ origin, site = origin, privateJwk, fetchImpl = fetch }) {
   const nonceRes = await fetchImpl(new URL("/keys/nonce", origin));
   if (!nonceRes.ok) throw new Error(`nonce request failed: ${nonceRes.status}`);
   const { nonce } = await nonceRes.json();
+  if (typeof nonce !== "string" || !NONCE_SHAPE.test(nonce)) throw new Error("the site's nonce is not shaped nonce.ms.hmac; refusing to sign it");
 
-  // The nonce's own ASCII bytes, signed raw. Not hashed first, and not
-  // wrapped in any envelope -- the server verifies exactly these bytes.
   const key = createPrivateKey({ key: privateJwk, format: "jwk" });
-  const proof = edSign(null, Buffer.from(nonce, "utf8"), key).toString("base64url");
+  const proof = edSign(null, Buffer.from(registrationMessage(new URL(site).origin, nonce), "utf8"), key).toString("base64url");
 
   const res = await fetchImpl(new URL("/keys", origin), {
     method: "POST",

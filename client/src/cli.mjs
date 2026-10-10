@@ -218,7 +218,7 @@ async function main() {
     } else {
       // Registration is idempotent from the caller's side -- an already-known
       // key simply registers again -- so this is safe to re-run.
-      await registerKey({ origin, privateJwk: identity.privateJwk });
+      await registerKey({ origin, site, privateJwk: identity.privateJwk });
       out("registered with", site);
     }
     out("tools", (await listTools(call)).map((t) => t.name));

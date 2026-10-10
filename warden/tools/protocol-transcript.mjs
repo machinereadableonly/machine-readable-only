@@ -11,6 +11,7 @@
 // Base Sepolia RPC. It moves no money -- the mint call it makes is deliberately
 // UNPAID, and what it captures is the refusal.
 import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
+import { registrationMessage } from "../src/door/directory.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -90,7 +91,7 @@ const nonceBody = await nonceRes.json();
 show("2. GET /keys/nonce -> " + nonceRes.status, nonceBody);
 
 const jwk = publicKey.export({ format: "jwk" });
-const proof = edSign(null, Buffer.from(nonceBody.nonce), privateKey).toString("base64url");
+const proof = edSign(null, Buffer.from(registrationMessage(`https://${DOMAIN}`, nonceBody.nonce)), privateKey).toString("base64url");
 const regBody = { jwk, nonce: nonceBody.nonce, proof };
 show("3. POST /keys request body", regBody);
 const reg = await fetch(`${base}/keys`, { method: "POST", body: JSON.stringify(regBody) });

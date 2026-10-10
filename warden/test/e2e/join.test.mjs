@@ -19,6 +19,7 @@
 // The solve is ten seconds and half a gigabyte; it has no place in a suite
 // that has to stay a few seconds long.
 import { test } from "node:test";
+import { registrationMessage } from "../../src/door/directory.mjs";
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -182,7 +183,7 @@ async function registerKey(base) {
   assert.equal(nonceRes.status, 200);
   const { nonce } = await nonceRes.json();
 
-  const proof = edSign(null, Buffer.from(nonce), privateKey).toString("base64url");
+  const proof = edSign(null, Buffer.from(registrationMessage(`https://${DOMAIN}`, nonce)), privateKey).toString("base64url");
   const res = await fetch(`${base}/keys`, {
     method: "POST",
     body: JSON.stringify({ jwk: publicJwk, nonce, proof }),

@@ -388,7 +388,8 @@ export function createServer(config) {
             if (seenNonces.has(nonce)) return false;
             seenNonces.add(nonce);
             return true;
-          }
+          },
+          `https://${config.domain}`,
         );
         if (result.ok) {
           // The table changed, so the remembered copy is stale. Nothing is

@@ -1,4 +1,6 @@
 import { test } from "node:test";
+import { registrationMessage } from "../src/door/directory.mjs";
+const ORIGIN = "https://example.com";
 import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
@@ -235,7 +237,7 @@ import { registerRoute } from "../src/door/directory.mjs";
 
 /// A caller proves possession by signing a nonce this server issued.
 async function proofFor(nonce, privateKey) {
-  const sig = await crypto.subtle.sign("Ed25519", privateKey, new TextEncoder().encode(nonce));
+  const sig = await crypto.subtle.sign("Ed25519", privateKey, new TextEncoder().encode(registrationMessage(ORIGIN, nonce)));
   return Buffer.from(sig).toString("base64url");
 }
 
@@ -254,8 +256,8 @@ test("a nonce the caller invented is refused, and nothing is stored", async () =
     q,
     { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) },
     () => true,
-    () => false                                   // this server did not mint it
-  );
+    () => false,                                  // this server did not mint it
+    ORIGIN);
   assert.equal(r.ok, false);
   assert.equal(r.reason, "nonce");
   assert.equal(q.allKeys().length, 0, "nothing may be stored on a bad nonce");
@@ -272,8 +274,8 @@ test("a captured registration cannot be replayed", async () => {
   const spent = new Set();
   const checkNonce = (n) => (spent.has(n) ? false : (spent.add(n), true));
 
-  assert.equal((await registerRoute(q, body, () => true, checkNonce)).ok, true);
-  const replay = await registerRoute(q, body, () => true, checkNonce);
+  assert.equal((await registerRoute(q, body, () => true, checkNonce, ORIGIN)).ok, true);
+  const replay = await registerRoute(q, body, () => true, checkNonce, ORIGIN);
   assert.equal(replay.ok, false);
   assert.equal(replay.reason, "nonce");
   assert.equal(q.allKeys().length, 1, "the replay must not rewrite the stored row");
@@ -451,7 +453,7 @@ test("a registration with a valid proof of possession is accepted", async () => 
   const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
   const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
   const nonce = "server-issued-nonce";
-  const r = await registerRoute(q, { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) }, () => true, alwaysFreshNonce);
+  const r = await registerRoute(q, { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) }, () => true, alwaysFreshNonce, ORIGIN);
   assert.equal(r.ok, true);
   assert.ok(q.getKey(r.keyId));
 });
@@ -460,7 +462,7 @@ test("a registration with no proof is refused", async () => {
   const q = queries(openDb(":memory:"));
   const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
   const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
-  const r = await registerRoute(q, { jwk, nonce: "server-issued-nonce", proof: "" }, () => true);
+  const r = await registerRoute(q, { jwk, nonce: "server-issued-nonce", proof: "" }, () => true, () => true, ORIGIN);
   assert.equal(r.ok, false);
   assert.equal(r.reason, "proof");
   assert.equal(q.allKeys().length, 0, "nothing may be stored on a failed proof");
@@ -474,8 +476,7 @@ test("a proof over a different nonce is refused", async () => {
     q,
     { jwk, nonce: "server-issued-nonce", proof: await proofFor("some-other-nonce", pair.privateKey) },
     () => true,
-    alwaysFreshNonce
-  );
+    alwaysFreshNonce, ORIGIN);
   assert.equal(r.ok, false);
   assert.equal(r.reason, "proof");
 });
@@ -489,8 +490,7 @@ test("a registration is refused when the rate limit says so", async () => {
     q,
     { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) },
     () => false,
-    alwaysFreshNonce
-  );
+    alwaysFreshNonce, ORIGIN);
   assert.equal(r.ok, false);
   assert.equal(r.reason, "rate-limited");
   assert.equal(q.allKeys().length, 0, "a rate-limited registration must not be stored");
@@ -528,7 +528,7 @@ test("a malformed registration never reaches the rate limiter", async () => {
     // The fourth shape is a well-formed request with a nonce this server did
     // not mint, which is refused at the nonce check.
     const nonceCheck = i % 5 === 3 ? () => false : checkNonce;
-    const r = await registerRoute(q, shape, allow, nonceCheck);
+    const r = await registerRoute(q, shape, allow, nonceCheck, ORIGIN);
     assert.equal(r.ok, false);
   }
 
@@ -553,8 +553,7 @@ test("the budget is charged to the derived thumbprint, so one key cannot lock ou
       q,
       { jwk, nonce, proof: await proofFor(nonce, pair.privateKey) },
       (keyId) => { charged.push(keyId); return true; },
-      checkNonce
-    );
+      checkNonce, ORIGIN);
     assert.equal(r.ok, true);
     assert.equal(charged[i], r.keyId, "the budget key must be the stored key id");
   }
@@ -755,4 +754,18 @@ test("subdomains of one domain cannot hold every directory slot", async () => {
     dialled.some((u) => u.includes("honest.test")),
     "an honest third-party host must still be looked up"
   );
+});
+
+// A proof over the bare nonce -- the old wire format -- signs bytes that could
+// equally be a request; it is no longer accepted.
+test("a proof over the bare nonce, without the registration envelope, is refused", async () => {
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const nonce = "server-issued-nonce";
+  const bare = Buffer.from(await crypto.subtle.sign("Ed25519", pair.privateKey, new TextEncoder().encode(nonce))).toString("base64url");
+  const r = await registerRoute(q, { jwk, nonce, proof: bare }, () => true, () => true, ORIGIN);
+  assert.equal(r.reason, "proof");
+  const elsewhere = Buffer.from(await crypto.subtle.sign("Ed25519", pair.privateKey, new TextEncoder().encode(registrationMessage("https://other.example", nonce)))).toString("base64url");
+  assert.equal((await registerRoute(q, { jwk, nonce, proof: elsewhere }, () => true, () => true, ORIGIN)).reason, "proof", "a proof for another site");
 });

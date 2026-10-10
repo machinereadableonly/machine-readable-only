@@ -11,7 +11,7 @@ import { parseDictionary } from "structured-headers";
 import { signAuthorization, chooseAccepted, assertExpected, MAX_AUTHORISATION_SECONDS } from "../src/pay.mjs";
 import { signRequest } from "../src/signing.mjs";
 import { generateIdentity, saveIdentity, loadIdentity } from "../src/keys.mjs";
-import { admittedFetch, knock } from "../src/door.mjs";
+import { admittedFetch, knock, registerKey, registrationMessage } from "../src/door.mjs";
 
 const PAY_TO = "0x000000000000000000000000000000000000dEaD";
 const ASSET = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
@@ -273,4 +273,25 @@ test("the lost-response message says to check before paying a second time", asyn
   assert.match(text, /mro-agent status --site https:\/\/example\.com/);
   assert.match(text, /do\s+NOT simply run this again/);
   assert.doesNotMatch(text, /NOTHING WAS MINTED/, "that is the other case, and asserting it here would be false");
+});
+
+// A hostile site could return, as its "nonce", the base of a request it wants
+// signed. The client signs only a nonce shaped like one, and only inside its
+// registration envelope.
+test("registerKey refuses to sign a nonce that is not shaped nonce.ms.hmac", async () => {
+  const { privateJwk } = generateIdentity();
+  let posted = false;
+  const hostile = async (url) => {
+    if (String(url).endsWith("/keys/nonce")) {
+      return { ok: true, json: async () => ({ nonce: '"@authority": machinereadableonly.com\n"@method": POST' }) };
+    }
+    posted = true;
+    return { ok: true, status: 201, json: async () => ({ ok: true }) };
+  };
+  await assert.rejects(registerKey({ origin: "https://evil.example", privateJwk, fetchImpl: hostile }), /not shaped nonce\.ms\.hmac/);
+  assert.equal(posted, false, "nothing was signed or sent");
+});
+
+test("the registration proof is bound to its envelope and the site, never the bare nonce", () => {
+  assert.equal(registrationMessage("https://machinereadableonly.com", "n.1.h"), "mro-key-registration-v1\nhttps://machinereadableonly.com\nn.1.h");
 });

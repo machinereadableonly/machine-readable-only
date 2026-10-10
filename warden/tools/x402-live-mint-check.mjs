@@ -16,6 +16,7 @@
 //
 //   node tools/x402-live-mint-check.mjs
 import assert from "node:assert/strict";
+import { registrationMessage } from "../src/door/directory.mjs";
 import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -119,7 +120,7 @@ const base = await new Promise((resolve) =>
 async function registerKey() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const { nonce } = await (await fetch(`${base}/keys/nonce`)).json();
-  const proof = edSign(null, Buffer.from(nonce), privateKey).toString("base64url");
+  const proof = edSign(null, Buffer.from(registrationMessage(`https://${DOMAIN}`, nonce)), privateKey).toString("base64url");
   const res = await fetch(`${base}/keys`, {
     method: "POST",
     body: JSON.stringify({ jwk: publicKey.export({ format: "jwk" }), nonce, proof }),

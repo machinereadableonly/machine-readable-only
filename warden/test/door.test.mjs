@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { registrationMessage } from "../src/door/directory.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
@@ -646,7 +647,7 @@ async function registerFreshKey(base) {
   const privateJwk = privateKey.export({ format: "jwk" });
   const nonceRes = await fetch(`${base}/keys/nonce`);
   const { nonce } = await nonceRes.json();
-  const proof = edSign(null, Buffer.from(nonce), privateKey).toString("base64url");
+  const proof = edSign(null, Buffer.from(registrationMessage(`https://${DOMAIN}`, nonce)), privateKey).toString("base64url");
   const regRes = await fetch(`${base}/keys`, { method: "POST", body: JSON.stringify({ jwk: publicJwk, nonce, proof }) });
   assert.equal((await regRes.json()).ok, true);
   return { privateJwk };
@@ -791,7 +792,7 @@ test("a signed and answered request to an unmatched path gets 404", async () => 
 
     const nonceRes = await fetch(`${base}/keys/nonce`);
     const { nonce } = await nonceRes.json();
-    const proof = edSign(null, Buffer.from(nonce), privateKey).toString("base64url");
+    const proof = edSign(null, Buffer.from(registrationMessage(`https://${DOMAIN}`, nonce)), privateKey).toString("base64url");
     await fetch(`${base}/keys`, { method: "POST", body: JSON.stringify({ jwk: publicJwk, nonce, proof }) });
 
     const challengeRes = await fetch(`${base}/nowhere`, { method: "POST" });
@@ -838,7 +839,7 @@ test("GET /keys/nonce is public and POST /keys registers a key with a fresh proo
 
     const { publicKey, privateKey } = generateKeyPairSync("ed25519");
     const jwk = publicKey.export({ format: "jwk" });
-    const proof = edSign(null, Buffer.from(nonce), privateKey).toString("base64url");
+    const proof = edSign(null, Buffer.from(registrationMessage(`https://${DOMAIN}`, nonce)), privateKey).toString("base64url");
 
     const regRes = await fetch(`${base}/keys`, {
       method: "POST",
@@ -850,7 +851,7 @@ test("GET /keys/nonce is public and POST /keys registers a key with a fresh proo
     assert.equal(typeof body.keyId, "string");
 
     // The same nonce cannot register twice: it was already spent above.
-    const replayProof = edSign(null, Buffer.from(nonce), privateKey).toString("base64url");
+    const replayProof = edSign(null, Buffer.from(registrationMessage(`https://${DOMAIN}`, nonce)), privateKey).toString("base64url");
     const replay = await fetch(`${base}/keys`, {
       method: "POST",
       body: JSON.stringify({ jwk, nonce, proof: replayProof }),
@@ -875,7 +876,7 @@ test("a fully signed and answered POST /mcp reaches the mcp handler", async () =
 
     const nonceRes = await fetch(`${base}/keys/nonce`);
     const { nonce } = await nonceRes.json();
-    const proof = edSign(null, Buffer.from(nonce), privateKey).toString("base64url");
+    const proof = edSign(null, Buffer.from(registrationMessage(`https://${DOMAIN}`, nonce)), privateKey).toString("base64url");
     const regRes = await fetch(`${base}/keys`, {
       method: "POST",
       body: JSON.stringify({ jwk: publicJwk, nonce, proof }),

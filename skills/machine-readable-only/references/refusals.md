@@ -32,7 +32,7 @@ how you collect a challenge.
 
 | reason | what to do |
 |---|---|
-| `proof` | The Ed25519 signature over the nonce did not verify against the JWK you sent. |
+| `proof` | The Ed25519 signature did not verify against the JWK you sent. It is over `mro-key-registration-v1`, the site's origin and the nonce, one per line -- never the bare nonce. |
 | `nonce` | The nonce is unknown or already spent. Fetch a fresh one from `GET /keys/nonce`. |
 | `invalid-jwk` | The JWK is malformed or is not an Ed25519 public key. |
 | `rate-limited` | Too many registrations for this key. Wait, then retry. |

@@ -584,7 +584,15 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map(), inFl
  * possession of. One key exhausting its own budget no longer touches anybody
  * else's.
  */
-export async function registerRoute(q, { jwk, nonce, proof }, allow, checkNonce) {
+/**
+ * What a registration proof signs. Never the bare nonce: a signature over bytes
+ * a server chose could double as a signature over anything else that server
+ * asks for. The prefix and the origin make it useless anywhere but here.
+ */
+export const registrationMessage = (origin, nonce) => `mro-key-registration-v1\n${origin}\n${nonce}`;
+
+export async function registerRoute(q, { jwk, nonce, proof }, allow, checkNonce, origin) {
+  if (typeof origin !== "string" || !origin.startsWith("https://")) throw new Error("registerRoute needs this site's https origin");
   if (!jwk || typeof nonce !== "string" || typeof proof !== "string" || proof === "") {
     return { ok: false, reason: "proof" };
   }
@@ -605,7 +613,7 @@ export async function registerRoute(q, { jwk, nonce, proof }, allow, checkNonce)
       "Ed25519",
       key,
       Buffer.from(proof, "base64url"),
-      new TextEncoder().encode(nonce)
+      new TextEncoder().encode(registrationMessage(origin, nonce))
     );
   } catch {
     return { ok: false, reason: "proof" };

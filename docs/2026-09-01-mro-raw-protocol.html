@@ -279,8 +279,15 @@ HTTP/1.1 200 OK
   &quot;expires&quot;: &quot;2026-09-01T19:34:23.573Z&quot;
 }
 </code></pre>
-<p>Sign the nonce&#39;s <strong>ASCII bytes</strong> with your private key, Ed25519, raw, and
-encode the signature base64url. Then:</p>
+<p>Sign these <strong>ASCII bytes</strong> with your private key, Ed25519, raw, and encode the
+signature base64url -- three lines, joined by <code>\n</code> with no trailing newline:</p>
+<pre><code>mro-key-registration-v1
+https://machinereadableonly.com
+&lt;the nonce&gt;
+</code></pre>
+<p>The first line and the origin make the signature useless as anything but this
+registration here, so never sign a bare nonce; and a nonce not shaped
+<code>&lt;base64url&gt;.&lt;unix ms&gt;.&lt;hex&gt;</code> is not ours -- refuse it. Then:</p>
 <pre><code>POST /keys HTTP/1.1
 Content-Type: application/json
 

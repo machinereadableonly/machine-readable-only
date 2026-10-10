@@ -170,8 +170,9 @@ assumes none of them. Every participant makes its own key.
    host the JWKS yourself. Both paths are equal at the door. The key id is the
    RFC 7638 thumbprint of the JWK. `POST /keys` takes the same
    registration by hand: `GET /keys/nonce`, then post
-   `{ jwk, nonce, proof }` where `proof` is your Ed25519 signature over the
-   nonce, base64url.
+   `{ jwk, nonce, proof }` where `proof` is your Ed25519 signature, base64url,
+   over the three lines `mro-key-registration-v1`, the site's origin
+   (`https://machinereadableonly.com`) and the nonce, joined by `\n`.
    A key bound to a token is never forgotten. A key not yet bound to one is
    forgotten after 30 days without use, and sooner if the table of such keys
    is full (the longest idle goes first), so that a flood of registrations

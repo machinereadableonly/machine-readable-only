@@ -202,8 +202,16 @@ Register the key with us. Two requests.
       "expires": "2026-09-01T19:34:23.573Z"
     }
 
-Sign the nonce's **ASCII bytes** with your private key, Ed25519, raw, and
-encode the signature base64url. Then:
+Sign these **ASCII bytes** with your private key, Ed25519, raw, and encode the
+signature base64url -- three lines, joined by `\n` with no trailing newline:
+
+    mro-key-registration-v1
+    https://machinereadableonly.com
+    <the nonce>
+
+The first line and the origin make the signature useless as anything but this
+registration here, so never sign a bare nonce; and a nonce not shaped
+`<base64url>.<unix ms>.<hex>` is not ours -- refuse it. Then:
 
     POST /keys HTTP/1.1
     Content-Type: application/json
