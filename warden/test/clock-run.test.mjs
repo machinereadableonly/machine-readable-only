@@ -642,7 +642,8 @@ test("MarkAlreadyApplied catches the mirror up instead of failing the order", as
   queueMark(q, db, { upgradeId: 4 });
   const alerts = [];
   const writer = refusingWriter("MarkAlreadyApplied");
-  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), writer: passingReveal(writer), alert: (m) => alerts.push(m) });
+  const wears = { readContract: async () => ({ marks: 1n << 4n }) };
+  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), checkClient: wears, writer: passingReveal(writer), alert: (m) => alerts.push(m) });
 
   assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "written");
   assert.equal(q.getToken(1).marks, 1 << 4, "the mirror's mask caught up");
@@ -1426,4 +1427,14 @@ test("two queued rows paid by one authorisation, in any letter case, are both he
   assert.equal(writer.sent.filter((s) => s.functionName === "mint").length, 0);
   assert.deepEqual(summary.unproven.map((u) => u.ref).sort(), [1, 2]);
   assert.equal(exitCodeFor(summary), 1);
+});
+
+test("MarkAlreadyApplied that the chain does not confirm leaves the order queued", async () => {
+  const { db, q } = mirror();
+  queueMark(q, db, { upgradeId: 4 });
+  const alerts = [];
+  const bare = { readContract: async () => ({ marks: 0n }) };
+  await runClock({ prover: trustingProver(), ...baseArgs(q), checkClient: bare, writer: passingReveal(refusingWriter("MarkAlreadyApplied")), alert: (m) => alerts.push(m) });
+  assert.equal(db.prepare("SELECT status FROM mark_orders WHERE tokenId = 1").get().status, "queued");
+  assert.ok(alerts.some((a) => /did not confirm/.test(a)));
 });

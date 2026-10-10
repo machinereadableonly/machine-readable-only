@@ -269,7 +269,9 @@ MIRROR="$WORK/clock-mirror.db"
 # Token 1's seeded key is the house key, so the Clock writes it as token 1.
 HOUSE_KEY="$(cd "$TREE/warden" && node tools/mainnet-fork-clock.mjs key-id --token 1)"
 CLOCK_ENV=(BASE_RPC_URL="$FORK" MRO_CONTRACT_ADDRESS="$TOK" MRO_CHAIN_ID=8453 CLOCK_PRIVATE_KEY="$(testkey 1)" STATE_DB_PATH="$MIRROR" MRO_SPLIT_SEED_FILE="$SPLIT_SEED_FILE"
-  MRO_DOMAIN="$DOMAIN" TREASURY_ADDRESS="$TREASURY" MRO_HOUSE_KEY_ID="$HOUSE_KEY")
+  MRO_DOMAIN="$DOMAIN" TREASURY_ADDRESS="$TREASURY" MRO_HOUSE_KEY_ID="$HOUSE_KEY"
+  # Mainnet requires a second RPC; the fork is the only chain here, so it is both.
+  CLOCK_CHECK_RPC_URL="$FORK")
 # What every seeded row needs. Each payment is made by a fresh payer the
 # fork funds, never by an anvil test account.
 SEED_ARGS=(--db "$MIRROR" --domain "$DOMAIN" --rpc "$FORK" --treasury "$TREASURY")

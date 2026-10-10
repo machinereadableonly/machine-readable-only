@@ -18,6 +18,7 @@ const wardenEnv = [
   "MRO_CHAIN_ID=84532",
   "TREASURY_ADDRESS=0x2222222222222222222222222222222222222222",
   "MRO_HOUSE_KEY_ID=house-key-thumbprint",
+  "CLOCK_CHECK_RPC_URL=https://second.example",
   "CHALLENGE_SECRET=not-the-clocks-business",
   `CLOCK_PRIVATE_KEY=${KEY}`,
   "",

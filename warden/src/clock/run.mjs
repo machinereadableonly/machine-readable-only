@@ -194,6 +194,16 @@ export async function seedIsOnChain({ publicClient, contract, seed }) {
   }
 }
 
+/// Does the token wear this Mark on chain? False when the chain cannot be read.
+export async function markIsOnChain({ publicClient, contract, tokenId, upgradeId }) {
+  try {
+    const view = await publicClient.readContract({ address: contract, abi: MRO_ABI, functionName: "viewOf", args: [BigInt(tokenId)] });
+    return (BigInt(view.marks) & (1n << BigInt(upgradeId))) !== 0n;
+  } catch {
+    return false;
+  }
+}
+
 /// The contract's split state: its anchor, the anchor's day, and how many keys are out.
 export async function readSplitState({ publicClient, contract }) {
   const read = (functionName) => publicClient.readContract({ address: contract, abi: MRO_ABI, functionName });
@@ -213,6 +223,9 @@ export async function runClock({
   q,
   writer,
   publicClient,
+  // Reads that settle a row without a receipt. main.mjs passes one that needs
+  // two independent RPCs to agree (agree.mjs).
+  checkClient = publicClient,
   contract,
   chainId,
   today,
@@ -538,7 +551,7 @@ export async function runClock({
     // id somebody else owns, so the row is left alone for a human. Assuming
     // the benign cause is how a paid mint disappears silently.
     if (result.errorName === "TokenExists") {
-      const mine = await mintIsOnChain({ publicClient, contract, mint });
+      const mine = await mintIsOnChain({ publicClient: checkClient, contract, mint });
       if (mine === true) {
         q.markMintWritten(mint.tokenId);
         prover.written(mint.tokenId);
@@ -615,7 +628,7 @@ export async function runClock({
 
   // `levelOf` keeps a token's finishing credit when the chain refuses a later
   // one for it: see trimPastTheFinish in batch.mjs.
-  const levelOf = (tokenId) => chainLevel({ publicClient, contract, tokenId });
+  const levelOf = (tokenId) => chainLevel({ publicClient: checkClient, contract, tokenId });
 
   // Nothing is sent once a write phase has aborted: NotWarden, Sunset and
   // EnforcedPause refuse `seed` for exactly the reasons they refuse `mint`.
@@ -657,7 +670,7 @@ export async function runClock({
     //
     // If the chain cannot be read, that is NEITHER answer, and the row waits.
     if (result.errorName === "TokenExists") {
-      const mine = await seedIsOnChain({ publicClient, contract, seed: s });
+      const mine = await seedIsOnChain({ publicClient: checkClient, contract, seed: s });
       if (mine === true) {
         q.markSeedWritten(s.tokenId);
         prover.written(s.tokenId);
@@ -714,7 +727,7 @@ export async function runClock({
   // that asks it. A failed read returns null, which the heal path treats as
   // "could not ask" rather than "not on chain".
   const lastDayOf = async (tokenId) => {
-    const life = await chainLastDay({ publicClient, contract, tokenId });
+    const life = await chainLastDay({ publicClient: checkClient, contract, tokenId });
     return life;
   };
 
@@ -723,7 +736,7 @@ export async function runClock({
   // a day nobody sent being healed as written the moment a later day lands.
   // Null when the level cannot be read, which is "could not ask" as ever.
   const healRoomOf = async (tokenId) => {
-    const level = await chainLevel({ publicClient, contract, tokenId });
+    const level = await chainLevel({ publicClient: checkClient, contract, tokenId });
     if (!Number.isInteger(level)) return null;
     return level - 1 - q.writtenCreditCount(tokenId);
   };
@@ -855,7 +868,7 @@ export async function runClock({
       // streak and lastDay when it accepted the check-in; the chain has just
       // refused it, so those three are wrong until something writes the
       // chain's own numbers over them. A read that fails changes nothing.
-      const run = await chainRunOf({ publicClient, contract, tokenId: drop.entry.tokenId });
+      const run = await chainRunOf({ publicClient: checkClient, contract, tokenId: drop.entry.tokenId });
       if (run) q.correctFromChain(drop.entry.tokenId, run);
       else log(`clock: token ${drop.entry.tokenId} could not be re-read, so the mirror still overstates it`);
     }
@@ -925,6 +938,11 @@ export async function runClock({
     // agent has what it paid for, so it moves to written -- which also sets the
     // mirror's mask -- rather than to failed.
     if (result.errorName === "MarkAlreadyApplied") {
+      // The refusal came from the RPC's simulation; the chain must confirm it.
+      if (!(await markIsOnChain({ publicClient: checkClient, contract, tokenId: order.tokenId, upgradeId: order.upgradeId }))) {
+        alert(`clock: mark ${order.upgradeId} on token ${order.tokenId} was refused as already applied, which the chain did not confirm; it stays queued`);
+        continue;
+      }
       q.markOrderWritten(order.tokenId, order.upgradeId);
       alert(`clock: mark ${order.upgradeId} was already on token ${order.tokenId}; the mirror was behind and is now caught up`);
       continue;

@@ -987,6 +987,13 @@ stays queued, and fails the night with a line naming why. A night with more
 queued rows than a `CLOCK_MAX_*` ceiling (defaults in `src/clock/run.mjs`)
 writes nothing.
 
+**A second RPC (`CLOCK_CHECK_RPC_URL`) is required on Base mainnet**, from a
+different provider than `BASE_RPC_URL`: every read that settles a row without
+a receipt, proves a token's key or proves a payment must agree on both, and a
+disagreement holds the row. Set it in the Warden's `.env`; the installer copies
+it. The Clock also refuses a night when the contract's day and the box's day
+are more than one apart, and reveals at most 32 split keys a night.
+
 **Deploying this change, in order.** Set `MRO_QUESTION_BANK=/etc/mro/bank.json`
 in the Warden's `.env` (the installer copies the bank there, root-owned, from
 `/var/lib/mro/questions/bank.json`; step 2 fails until the Warden points at it).

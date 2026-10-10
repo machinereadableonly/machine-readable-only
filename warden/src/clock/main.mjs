@@ -16,6 +16,7 @@ import { queries } from "../mirror/queries.mjs";
 import { makeWriter, chainFor } from "./write.mjs";
 import { runClock, DEFAULT_CEILINGS } from "./run.mjs";
 import { makeProver } from "./prove.mjs";
+import { agreeingClient } from "./agree.mjs";
 import { openLedger } from "./ledger.mjs";
 import { DEPLOY_BLOCK } from "./reconcile.mjs";
 import { readCursor, writeCursor, nextCursor, exitCodeFor, runFinishedLine } from "./cursor.mjs";
@@ -44,6 +45,12 @@ const chainId = Number(requireEnv("MRO_CHAIN_ID"));
 const domain = requireEnv("MRO_DOMAIN");
 const treasury = requireEnv("TREASURY_ADDRESS");
 const houseKeyId = process.env.MRO_HOUSE_KEY_ID || null;
+/// A second, independent RPC. Every read that settles a row without a receipt,
+/// proves a binding or proves a payment must agree on both. Required on mainnet.
+const checkRpcUrl = process.env.CLOCK_CHECK_RPC_URL || null;
+if (chainId === 8453 && !checkRpcUrl) {
+  throw new Error("CLOCK_CHECK_RPC_URL is required on Base mainnet: a second RPC, from a different provider than BASE_RPC_URL");
+}
 /// Where the Clock records which proofs it has spent. Must be writable by the
 /// Clock alone: the installed Clock keeps it in /var/lib/mro-clock.
 const LEDGER = process.env.CLOCK_LEDGER_PATH ?? `${stateDbPath}.clock-ledger`;
@@ -112,6 +119,10 @@ async function main() {
   const chain = chainFor(chainId);
   const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
   const writer = makeWriter({ rpcUrl, contract, chainId, privateKey, maxGasGwei, publicClient });
+  const checkClient = agreeingClient(
+    publicClient,
+    checkRpcUrl && createPublicClient({ chain, transport: http(checkRpcUrl) }),
+  );
 
   // 15.10. THE DAY COMES FROM THE CONTRACT, not from this box.
   //
@@ -168,7 +179,7 @@ async function main() {
   }
 
   const ledger = openLedger(LEDGER);
-  const prover = makeProver({ q, publicClient, contract, chainId, domain, treasury, houseKeyId, ledger, bank });
+  const prover = makeProver({ q, publicClient: checkClient, contract, chainId, domain, treasury, houseKeyId, ledger, bank });
 
   const summary = await runClock({
     q,
@@ -178,6 +189,7 @@ async function main() {
     bank,
     writer,
     publicClient,
+    checkClient,
     contract,
     chainId,
     today,

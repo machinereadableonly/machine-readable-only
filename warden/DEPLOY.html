@@ -1010,6 +1010,12 @@ or one payment backs one row only. A row that fails any check is not written,
 stays queued, and fails the night with a line naming why. A night with more
 queued rows than a <code>CLOCK_MAX_*</code> ceiling (defaults in <code>src/clock/run.mjs</code>)
 writes nothing.</p>
+<p><strong>A second RPC (<code>CLOCK_CHECK_RPC_URL</code>) is required on Base mainnet</strong>, from a
+different provider than <code>BASE_RPC_URL</code>: every read that settles a row without
+a receipt, proves a token&#39;s key or proves a payment must agree on both, and a
+disagreement holds the row. Set it in the Warden&#39;s <code>.env</code>; the installer copies
+it. The Clock also refuses a night when the contract&#39;s day and the box&#39;s day
+are more than one apart, and reveals at most 32 split keys a night.</p>
 <p><strong>Deploying this change, in order.</strong> Set <code>MRO_QUESTION_BANK=/etc/mro/bank.json</code>
 in the Warden&#39;s <code>.env</code> (the installer copies the bank there, root-owned, from
 <code>/var/lib/mro/questions/bank.json</code>; step 2 fails until the Warden points at it).

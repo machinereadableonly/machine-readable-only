@@ -25,7 +25,7 @@ export const CLOCK_PATHS = {
 export const WARDEN_BANK = "/etc/mro/bank.json";
 
 const COPIED = ["BASE_RPC_URL", "MRO_CONTRACT_ADDRESS", "MRO_CHAIN_ID", "MRO_DOMAIN", "TREASURY_ADDRESS"];
-const OPTIONAL = ["MAX_GAS_GWEI", "MRO_HOUSE_KEY_ID", "CLOCK_MAX_MINTS", "CLOCK_MAX_SEEDS", "CLOCK_MAX_MARKS", "CLOCK_MAX_CREDITS"];
+const OPTIONAL = ["MAX_GAS_GWEI", "MRO_HOUSE_KEY_ID", "CLOCK_CHECK_RPC_URL", "CLOCK_MAX_MINTS", "CLOCK_MAX_SEEDS", "CLOCK_MAX_MARKS", "CLOCK_MAX_CREDITS"];
 const KEY = "CLOCK_PRIVATE_KEY";
 // Read by the Clock but never set for it. The two paths default beside
 // STATE_DB_PATH, where the Warden and the cutover look; a copied one would point
