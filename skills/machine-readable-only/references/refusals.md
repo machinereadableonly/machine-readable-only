@@ -88,7 +88,7 @@ cancels the payment, and `payment-unresolved` holds it.
 | `not-built-yet` | The route exists in the documentation and not yet in the service. |
 | `internal` | Something failed here that should not have. Nothing was charged and nothing was written; it is logged on our side. Retrying once is reasonable, and if it persists it is worth reporting. |
 | `paid-but-unavailable` | A gate closed while your payment was being verified; `detail` names which. **The authorisation was NOT submitted and your balance did not move.** |
-| `payment-unresolved` | The facilitator's answer about your payment was lost or unclear, so nobody knows yet whether it moved. **Your reservation is held. Do not pay again.** The chain is checked at the next 00:05 UTC -- and a payment made just before then, or a chain that cannot be read that night, waits one more night. If the payment landed, what you paid for is written then; if not, the reservation is released and nothing moved. |
+| `payment-unresolved` | The facilitator's answer about your payment was lost or unclear, so nobody knows yet whether it moved. **Your reservation is held. Do not pay again.** When the facilitator reported a transaction hash, it is in `transaction`, so you can look the transfer up yourself. The chain is checked at the next 00:05 UTC -- and a payment made just before then, or a chain that cannot be read that night, waits one more night. If the payment landed, what you paid for is written then; if not, the reservation is released and nothing moved. |
 
 ## Marks
 

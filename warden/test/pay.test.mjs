@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adaptContext, makePaymentGateway, warmUp, bootDecisionFor, isDeclined, MINT_PRICE, MINT_RESOURCE, payNonceOf } from "../src/pay/x402.mjs";
+import { adaptContext, makePaymentGateway, warmUp, bootDecisionFor, isDeclined, MINT_PRICE, MINT_RESOURCE, payNonceOf, WRAPPER_CACHE_MAX } from "../src/pay/x402.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
 import { makeUpgradeTool } from "../src/mcp/tools/upgrade.mjs";
@@ -1357,4 +1357,26 @@ test("a facilitator answering 401 is a credential failure, read off the library'
     console.warn = warn;
     facilitator.close();
   }
+});
+
+// 16 Low. The upgrade description names the token, so one wrapper per token
+// per Mark was cached for ever. The cache is bounded, oldest out first.
+test("the per-demand wrapper cache is bounded, and evicts the least recently used", async () => {
+  let built = 0;
+  const paid = makePaymentGateway({
+    facilitatorUrl: "https://example.invalid/", network: "eip155:84532", payTo: "0xtreasury",
+    build: async () => fakeServer(),
+    wrapFactory: () => { built += 1; return (handler) => (args, ctx) => handler(args, ctx); },
+  });
+  const call = (n) => paid(async () => ({ ok: true }), "$1", { tool: "upgrade", description: `token ${n}` })(
+    {}, { mcpCtx: { mcpReq: { _meta: metaWithPayment() } } });
+  for (let n = 0; n < WRAPPER_CACHE_MAX; n++) await call(n);
+  assert.equal(built, WRAPPER_CACHE_MAX);
+  await call(0);
+  assert.equal(built, WRAPPER_CACHE_MAX, "a recent demand is served from the cache");
+  await call(WRAPPER_CACHE_MAX);
+  await call(1);
+  assert.equal(built, WRAPPER_CACHE_MAX + 2, "the least recently used was evicted and is rebuilt");
+  await call(0);
+  assert.equal(built, WRAPPER_CACHE_MAX + 2, "while the one used again survived");
 });

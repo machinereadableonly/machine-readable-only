@@ -100,6 +100,10 @@ export function paymentFactsOf(paymentPayload, requirement) {
 /// for a signer whose clock runs a little ahead.
 export const AUTHORISATION_SLACK_SECONDS = 60;
 
+/// Payment wrappers kept, least recently used out first. A Mark's demand names
+/// its token, so without a bound there is one entry per token per Mark for ever.
+export const WRAPPER_CACHE_MAX = 256;
+
 /**
  * WHO SIGNED the authorisation -- which is not necessarily who receives the
  * token, and not the treasury either.
@@ -312,10 +316,13 @@ function payRefusal(value) {
  * that can debit an agent twice for a transfer that may already be mined. The
  * reservation is HELD, so the answer has to say so.
  */
-export function unresolvedRefusal(tool) {
+/// `transaction` is the hash the facilitator reported, when it reported one, so
+/// the payer can look the transfer up rather than wait a night to learn of it.
+export function unresolvedRefusal(tool, transaction = null) {
   return payRefusal({
     ok: false,
     reason: "payment-unresolved",
+    ...(/^0x[0-9a-fA-F]{64}$/.test(transaction ?? "") ? { transaction } : {}),
     ...(tool === "upgrade" ? { next: UNRESOLVED_MARK_NEXT } : {}),
   });
 }
@@ -487,7 +494,7 @@ export function makePaymentGateway({
           // hash on two paths, and releasing those is how an agent is debited
           // for a token it does not get.
           const kind = isDeclined(settlement) ? "declined" : "unresolved";
-          outcomes.set(payNonce, { ...where, kind, detail: settlement?.errorReason ?? null });
+          outcomes.set(payNonce, { ...where, kind, detail: settlement?.errorReason ?? null, transaction: settlement?.transaction ?? null });
         }
         return settlement;
       } catch (err) {
@@ -496,7 +503,7 @@ export function makePaymentGateway({
         // one is. Every other throw -- a timeout, a dropped response, a proxy
         // page -- may follow a mined transfer, and stays unknown.
         const kind = err?.name === "SettleError" && isDeclined(err) ? "declined" : "unresolved";
-        if (payNonce) outcomes.set(payNonce, { ...where, kind, detail: err?.errorReason ?? err?.message ?? null });
+        if (payNonce) outcomes.set(payNonce, { ...where, kind, detail: err?.errorReason ?? err?.message ?? null, transaction: err?.transaction ?? null });
         throw err;
       }
     };
@@ -520,7 +527,11 @@ export function makePaymentGateway({
   async function wrapperFor(price, tool = "paid_tool", description = undefined) {
     const key = JSON.stringify([tool, price, description]);
     const cached = wrappers.get(key);
-    if (cached) return cached;
+    if (cached) {
+      wrappers.delete(key);
+      wrappers.set(key, cached);
+      return cached;
+    }
     const server = await resourceServer();
     const accepts = await server.buildPaymentRequirements({
       scheme: "exact",
@@ -576,6 +587,7 @@ export function makePaymentGateway({
     // ours rather than the payer's.
     const built = { wrap, requirement: accepts[0] };
     wrappers.set(key, built);
+    if (wrappers.size > WRAPPER_CACHE_MAX) wrappers.delete(wrappers.keys().next().value);
     return built;
   }
 
@@ -710,7 +722,7 @@ export function makePaymentGateway({
         // Both paths answer the same way. The library's result says the call
         // failed; the reservation is held, and a hold that could not be written
         // is still not a release.
-        return unresolvedRefusal(tool);
+        return unresolvedRefusal(tool, outcome?.transaction);
       }
       return result;
     };

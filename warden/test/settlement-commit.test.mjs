@@ -364,6 +364,13 @@ test("an allowlisted refusal that nonetheless carries a transaction hash is held
   // distinction: a released reservation invites the one retry that can debit a
   // payer twice for a transfer that is already on chain.
   assert.equal(result.structuredContent.reason, "payment-unresolved");
+  assert.equal(result.structuredContent.transaction, SETTLE_TX, "and given the hash to look up itself");
+});
+
+test("CONTROL: an unresolved answer with no hash carries none", async () => {
+  const { result } = await mintPaying({ settle: "unknown-4xx" });
+  assert.equal(result.structuredContent.reason, "payment-unresolved");
+  assert.equal("transaction" in result.structuredContent, false);
 });
 
 // THE OTHER FAILURE PATH, AND IT IS NOT THE SAME FAILURE. A facilitator that
