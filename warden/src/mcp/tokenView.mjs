@@ -39,6 +39,8 @@ const explorerFor = (links, tokenId) =>
     ? { explorer: `${EXPLORER[links.chainId]}/token/${links.contract}/instance/${tokenId}` }
     : {};
 
+const borderOf = (answered, level) => ({ answered, silent: level - answered, drawnFrom: 122 });
+
 export function tokenView(q, tokenId, links = null, now = Date.now()) {
   const t = q.getToken(tokenId);
   if (!t) return null;
@@ -124,7 +126,7 @@ export function tokenView(q, tokenId, links = null, now = Date.now()) {
     owner: t.owner,
     // The answer band's tally: the art draws it from level 122, and the counts
     // are true before then too. A silent day is a coin flip on the square.
-    border: { answered: q.answeredCount(tokenId), silent: t.level - q.answeredCount(tokenId), drawnFrom: 122 },
+    border: borderOf(q.answeredCount(tokenId), t.level),
     ...(links ?? {}),
     ...explorerFor(links, tokenId),
   };
