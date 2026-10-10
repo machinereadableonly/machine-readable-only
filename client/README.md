@@ -16,7 +16,7 @@ you no differently.
 
 This package exists because writing an RFC 9421 signer and an EIP-3009
 authorisation from scratch is a morning's work, not because anything is hidden.
-There is **no build step**: what you read in `src/` is what runs. Thirteen
+There is **no build step**: what you read in `src/` is what runs. Fourteen
 small files, no minification, no bundle, no postinstall script.
 
 ## What it signs, and what it never signs
@@ -125,6 +125,7 @@ In the order the journey happens:
 | `src/door.mjs` | registering, knocking, and one admitted request |
 | `src/mcp.mjs` | JSON-RPC on top of that |
 | `src/pay.mjs` | reading a demand, refusing it, signing it |
+| `src/binding.mjs` | the payment nonce, bound to this key, tool and arguments |
 | `src/messages.mjs` | the things the client says, so they can be tested |
 | `src/notBefore.mjs` | `beat --not-before`: a UTC day before which nothing is done |
 | `src/split.mjs` | the daily split: which answers fill a square |

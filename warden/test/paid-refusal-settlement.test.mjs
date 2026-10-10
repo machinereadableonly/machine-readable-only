@@ -114,13 +114,13 @@ function gatewayAgainst(facilitatorUrl) {
  * `wrapWith` receives the fake's url and returns the wrapped handler to drive,
  * so a test can go through our gateway or straight at @x402/mcp's wrapper.
  */
-async function callAndPay(wrapWith) {
+async function callAndPay(wrapWith, { binding = { keyId: "k-test", tool: "mint", args: {} }, callerKey = "k-test", editMeta = (m) => m } = {}) {
   const fac = await fakeFacilitator();
   try {
     const wrapped = await wrapWith(fac.url);
 
     // First call: no payment, so this is the demand.
-    const demand = await wrapped({}, { mcpCtx: { mcpReq: { _meta: undefined } } });
+    const demand = await wrapped({}, { keyId: callerKey, mcpCtx: { mcpReq: { _meta: undefined } } });
     const meta = await payFor({
       result: demand,
       // `amount` is required by assertExpected since 2026-09-18 (a
@@ -130,11 +130,12 @@ async function callAndPay(wrapWith) {
       // A throwaway key holding nothing: this facilitator never submits what
       // it signs.
       walletPrivateKey: generatePrivateKey(),
+      binding,
     });
     assert.ok(meta, "the first call must produce a payment demand the client can read");
 
     // Second call: the same call again, now carrying the authorisation.
-    const result = await wrapped({}, { mcpCtx: { mcpReq: { _meta: meta } } });
+    const result = await wrapped({}, { keyId: callerKey, mcpCtx: { mcpReq: { _meta: editMeta(meta) } } });
     return { result, settled: fac.settled(), verified: fac.verified() };
   } finally {
     await fac.close();
@@ -193,4 +194,36 @@ test("the same refusal WITHOUT isError is settled by @x402/mcp: this is what is 
     return (args, ctx) => raw(args, { _meta: ctx.mcpCtx.mcpReq._meta });
   });
   assert.equal(settled, 1, "a plain { ok: false } carries no isError, so x402 takes the money");
+});
+
+// D17: an authorisation seen in transit cannot pay for anyone else's call.
+// Each is refused BEFORE settlement, so the payer's money never moves.
+const reasonOf = (r) => r?.structuredContent?.reason ?? JSON.parse(r?.content?.[0]?.text ?? "{}").reason;
+
+test("a payment bound to another key is refused payment-binding, and nothing settles", async () => {
+  const { result, settled } = await callAndPay(throughGateway(async () => ({ ok: true, tokenId: 3 })), {
+    binding: { keyId: "k-victim", tool: "mint", args: {} },
+    callerKey: "k-thief",
+  });
+  assert.equal(reasonOf(result), "payment-binding");
+  assert.equal(settled, 0);
+});
+
+test("a payment bound to other arguments or another tool is refused, and nothing settles", async () => {
+  for (const binding of [
+    { keyId: "k-test", tool: "mint", args: { to: "0x" + "11".repeat(20) } },
+    { keyId: "k-test", tool: "upgrade", args: {} },
+  ]) {
+    const { result, settled } = await callAndPay(throughGateway(async () => ({ ok: true, tokenId: 3 })), { binding });
+    assert.equal(reasonOf(result), "payment-binding", JSON.stringify(binding));
+    assert.equal(settled, 0);
+  }
+});
+
+test("a payment with its salt removed is refused, and nothing settles", async () => {
+  const { result, settled } = await callAndPay(throughGateway(async () => ({ ok: true, tokenId: 3 })), {
+    editMeta: ({ ["mro/pay-salt"]: _salt, ...rest }) => rest,
+  });
+  assert.equal(reasonOf(result), "payment-binding");
+  assert.equal(settled, 0);
 });

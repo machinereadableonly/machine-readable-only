@@ -12,6 +12,7 @@
 import { randomBytes } from "node:crypto";
 import { privateKeyToAccount } from "viem/accounts";
 import { authorizationTypes } from "@x402/evm";
+import { bindPayment, PAY_SALT_META } from "./binding.mjs";
 
 /// Where an x402 payment authorisation travels on an MCP call.
 export const PAYMENT_META_KEY = "x402/payment";
@@ -141,7 +142,7 @@ export function assertExpected(accepted, expected) {
  * authorisation can be used at all, so a signature that leaks after the fact
  * is already dead. The default follows the demand's own maxTimeoutSeconds.
  */
-export async function signAuthorization({ accepted, walletPrivateKey, now = Math.floor(Date.now() / 1000) }) {
+export async function signAuthorization({ accepted, walletPrivateKey, nonce = `0x${randomBytes(32).toString("hex")}`, now = Math.floor(Date.now() / 1000) }) {
   const account = privateKeyToAccount(walletPrivateKey);
   // THE WINDOW IS NOT THE SITE'S TO CHOOSE. `maxTimeoutSeconds` arrives in the
   // demand, and until 2026-09-18 it was used verbatim -- so a site that asked
@@ -165,7 +166,8 @@ export async function signAuthorization({ accepted, walletPrivateKey, now = Math
     // chain cannot make a fresh authorisation invalid on arrival.
     validAfter: BigInt(now - 60),
     validBefore: BigInt(now + window),
-    nonce: `0x${randomBytes(32).toString("hex")}`,
+    // The binding nonce (binding.mjs) on a real call; random when unbound.
+    nonce,
   };
 
   const signature = await account.signTypedData({
@@ -198,8 +200,9 @@ export async function signAuthorization({ accepted, walletPrivateKey, now = Math
  *
  * Attach this to `params._meta` and repeat the same call.
  */
-export function paymentMeta({ demand, accepted, payload }) {
+export function paymentMeta({ demand, accepted, payload, salt = null }) {
   return {
+    ...(salt ? { [PAY_SALT_META]: salt } : {}),
     [PAYMENT_META_KEY]: {
       x402Version: demand.x402Version ?? 2,
       resource: demand.resource,
@@ -216,11 +219,13 @@ export function paymentMeta({ demand, accepted, payload }) {
  * Returns null when there was nothing to pay for, so a caller can use this on
  * any tool result without asking first.
  */
-export async function payFor({ result, expected, walletPrivateKey }) {
+export async function payFor({ result, expected, walletPrivateKey, binding }) {
   const demand = readDemand(result);
   if (!demand) return null;
-
   const accepted = assertExpected(chooseAccepted(demand.accepts, expected), expected);
-  const payload = await signAuthorization({ accepted, walletPrivateKey });
-  return paymentMeta({ demand, accepted, payload });
+  // The site refuses a payment not bound to the key, tool and arguments it pays for.
+  if (!binding?.keyId || !binding?.tool || !binding?.args) throw new Error("payFor needs the call it pays for: { keyId, tool, args }");
+  const { salt, nonce } = bindPayment(binding);
+  const payload = await signAuthorization({ accepted, walletPrivateKey, nonce });
+  return paymentMeta({ demand, accepted, payload, salt });
 }

@@ -65,6 +65,7 @@ how you collect a challenge.
 | `no-seed-available` | This key has already used its seed for the agent-year. A key earns one a year after its first mint, and a seed spent on a child the chain later refuses is handed back automatically. |
 | `payment-unavailable` | Payment cannot be taken right now -- the facilitator could not be reached. Nothing was charged. Try again later. |
 | `payment-window` | Your authorisation's validity window is not one this service accepts: `validAfter` must be no later than now, and `validBefore` no more than the demand's `maxTimeoutSeconds` (plus a minute) ahead. Nothing was charged. Sign a fresh one. |
+| `payment-binding` | The payment authorisation's nonce is not bound to this call. Sign the EIP-3009 nonce as keccak256 of `mro-pay-v1`, your key id, the tool, the arguments as sorted compact JSON and a salt, joined by a vertical bar, and send the salt as `_meta["mro/pay-salt"]` (section 6 of the protocol). Nothing was reserved or settled; sign a fresh, bound authorisation and call again. |
 | `payment-not-configured` | This site is not currently able to take payment. Nothing was charged, and this is ours to fix, not yours. Try again later. |
 | `payment-already-used` | That signed authorisation has already reserved something else. One authorisation buys one thing: sign a fresh one and call again. Nothing was charged for this. |
 | `mark-inactive` | No Mark is registered under that id on chain. `ladder` lists the Marks that exist. |

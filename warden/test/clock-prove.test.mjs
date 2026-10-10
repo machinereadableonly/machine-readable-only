@@ -19,6 +19,8 @@ import { makeProver, priceUnits } from "../src/clock/prove.mjs";
 import { openLedger } from "../src/clock/ledger.mjs";
 import { AUTHORIZATION_USED, TRANSFER } from "../src/clock/unresolved.mjs";
 import { readFileSync } from "node:fs";
+import { bindingNonce } from "../src/pay/binding.mjs";
+import { keyIdOf } from "../src/door/directory.mjs";
 
 /// Plain version-10 QR codes for https://example.com/t/<id>#, and one real solved QArt bitmap for id 7.
 const QR = JSON.parse(readFileSync(new URL("./fixtures/qr-examples.json", import.meta.url), "utf8"));
@@ -72,7 +74,8 @@ async function signedCall(key, tool, args, { meta = null, domain = DOMAIN } = {}
   return { evidence: decision.evidence, keyId: decision.keyId };
 }
 
-const payment = (nonce, value = "1000000", to = TREASURY) => ({
+const payment = (nonce, value = "1000000", to = TREASURY, salt = null) => ({
+  ...(salt ? { "mro/pay-salt": salt } : {}),
   "x402/payment": {
     x402Version: 2,
     scheme: "exact",
@@ -85,6 +88,10 @@ const payment = (nonce, value = "1000000", to = TREASURY) => ({
 });
 
 const nonce = (n) => `0x${n.toString(16).padStart(64, "0")}`;
+/// The binding nonce (D17) for one call, with salt n.
+const bound = async (n, key, tool, args) => bindingNonce({ keyId: await keyIdOf(key.pub), tool, args, salt: nonce(n) });
+/// The bound nonce of mintCase's default call.
+const minted = (n) => bound(n, AGENT, "mint", { to: OWNER });
 const txHash = (n) => `0x${(0xabc000 + n).toString(16).padStart(64, "0")}`;
 
 /// A settlement receipt: AuthorizationUsed, then the Transfer it caused.
@@ -190,23 +197,24 @@ test("a stored signature that does not verify is refused", async () => {
 // --- mints
 
 async function mintCase({ n = 1, tokenId = 2, key = AGENT, to = OWNER, value = "1000000", payTo = TREASURY } = {}) {
-  const call = await signedCall(key, "mint", { to }, { meta: payment(nonce(n), value, payTo) });
+  const payNonce = await bound(n, key, "mint", { to });
+  const call = await signedCall(key, "mint", { to }, { meta: payment(payNonce, value, payTo, nonce(n)) });
   return {
     call,
-    row: { tokenId, toAddress: to, keyId: call.keyId, agentKeyId: call.keyId, qr: QR[tokenId], payNonce: nonce(n), paymentTx: txHash(n), day: DAY },
+    row: { tokenId, toAddress: to, keyId: call.keyId, agentKeyId: call.keyId, qr: QR[tokenId], payNonce, paymentTx: txHash(n), day: DAY },
   };
 }
 
 test("a paid mint is proven from its own settlement receipt", async () => {
   const { call, row } = await mintCase();
-  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: nonce(1) }) } });
+  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: await minted(1) }) } });
   q.putEvidence("mint", 2, call.evidence);
   assert.deepEqual(await prover.mint(row), { ok: true });
 });
 
 test("a mint whose recipient was changed after signing is refused", async () => {
   const { call, row } = await mintCase();
-  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: nonce(1) }) } });
+  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: await minted(1) }) } });
   q.putEvidence("mint", 2, call.evidence);
   assert.match((await prover.mint({ ...row, toAddress: STRANGER_ADDRESS })).why, /different recipient/);
 });
@@ -215,16 +223,27 @@ const STRANGER_ADDRESS = "0x5555555555555555555555555555555555555555";
 test("a mint whose recorded transaction paid someone else, or paid less, is refused", async () => {
   const { call, row } = await mintCase();
   for (const receipt of [
-    settlement({ payNonce: nonce(1), to: STRANGER_ADDRESS }),
-    settlement({ payNonce: nonce(1), value: 1n }),
+    settlement({ payNonce: await minted(1), to: STRANGER_ADDRESS }),
+    settlement({ payNonce: await minted(1), value: 1n }),
     settlement({ payNonce: nonce(9) }),
-    { ...settlement({ payNonce: nonce(1) }), status: "reverted" },
+    { ...settlement({ payNonce: await minted(1) }), status: "reverted" },
   ]) {
     const { q, prover } = setup({ receipts: { [txHash(1)]: receipt } });
     q.putEvidence("mint", 2, call.evidence);
     const r = await prover.mint(row);
     assert.equal(r.ok, false, JSON.stringify(receipt.logs?.[1]));
   }
+});
+
+// D17: the authorisation must be bound to the signed request's own key, tool
+// and arguments, so a payment re-attached to another request is refused.
+test("a mint paid with an authorisation bound to another call is refused", async () => {
+  const stranger = await bound(1, STRANGER, "mint", { to: OWNER });
+  const call = await signedCall(AGENT, "mint", { to: OWNER }, { meta: payment(stranger, "1000000", TREASURY, nonce(1)) });
+  const row = { tokenId: 2, toAddress: OWNER, keyId: call.keyId, agentKeyId: call.keyId, qr: QR[2], payNonce: stranger, paymentTx: txHash(1), day: DAY };
+  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: stranger }) } });
+  q.putEvidence("mint", 2, call.evidence);
+  assert.match((await prover.mint(row)).why, /not bound to this key, tool and arguments/);
 });
 
 test("a mint the agent signed a cheaper or misdirected payment for is refused before the receipt is read", async () => {
@@ -238,7 +257,7 @@ test("a mint the agent signed a cheaper or misdirected payment for is refused be
 
 test("one signed, paid mint cannot be written twice under two ids", async () => {
   const { call, row } = await mintCase();
-  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: nonce(1) }) } });
+  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: await minted(1) }) } });
   q.putEvidence("mint", 2, call.evidence);
   q.putEvidence("mint", 3, call.evidence);
   assert.equal((await prover.mint(row)).ok, true);
@@ -251,7 +270,7 @@ test("one signed, paid mint cannot be written twice under two ids", async () => 
 test("token 1 is written only for the house key", async () => {
   const { call, row } = await mintCase({ tokenId: 1 });
   for (const [houseKeyId, ok] of [[null, false], ["someone-else", false], [call.keyId, true]]) {
-    const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: nonce(1) }) }, houseKeyId });
+    const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: await minted(1) }) }, houseKeyId });
     q.putEvidence("mint", 1, call.evidence);
     assert.equal((await prover.mint(row)).ok, ok, `house key ${houseKeyId}`);
   }
@@ -272,20 +291,21 @@ test("a seed is proven against its parent and recipient as signed", async () => 
 // --- Marks
 
 test("a bought Mark is proven against its own price, and refused at another", async () => {
-  const vessel = await signedCall(AGENT, "upgrade", { tokenId: 7, upgradeId: 7 }, { meta: payment(nonce(2), "1250000000") });
-  const cheap = await signedCall(AGENT, "upgrade", { tokenId: 7, upgradeId: 7 }, { meta: payment(nonce(3), "1000000") });
-  const row = (n) => ({ tokenId: 7, upgradeId: 7, variant: 0, payNonce: nonce(n), paymentTx: txHash(n) });
+  const markNonce = (n) => bound(n, AGENT, "upgrade", { tokenId: 7, upgradeId: 7 });
+  const vessel = await signedCall(AGENT, "upgrade", { tokenId: 7, upgradeId: 7 }, { meta: payment(await markNonce(2), "1250000000", TREASURY, nonce(2)) });
+  const cheap = await signedCall(AGENT, "upgrade", { tokenId: 7, upgradeId: 7 }, { meta: payment(await markNonce(3), "1000000", TREASURY, nonce(3)) });
+  const row = async (n) => ({ tokenId: 7, upgradeId: 7, variant: 0, payNonce: await markNonce(n), paymentTx: txHash(n) });
   const { q, prover } = setup({
     bound: { 7: vessel.keyId },
     receipts: {
-      [txHash(2)]: settlement({ payNonce: nonce(2), value: priceUnits("$1250.00") }),
-      [txHash(3)]: settlement({ payNonce: nonce(3), value: 1_000_000n }),
+      [txHash(2)]: settlement({ payNonce: await markNonce(2), value: priceUnits("$1250.00") }),
+      [txHash(3)]: settlement({ payNonce: await markNonce(3), value: 1_000_000n }),
     },
   });
   q.putEvidence("mark", "7:7", cheap.evidence);
-  assert.match((await prover.mark(row(3))).why, /not 1250000000 units/);
+  assert.match((await prover.mark(await row(3))).why, /not 1250000000 units/);
   q.putEvidence("mark", "7:7", vessel.evidence);
-  assert.deepEqual(await prover.mark(row(2)), { ok: true });
+  assert.deepEqual(await prover.mark(await row(2)), { ok: true });
 });
 
 test("an earned Mark needs no payment but must be signed by the token's key", async () => {
@@ -316,7 +336,7 @@ test("the ledger lets a row re-claim its own proofs and refuses them to any othe
 test("a mint or seed recorded on a day other than the one it was signed is refused", async () => {
   const { call, row } = await mintCase();
   const seed = await signedCall(AGENT, "seed", { parentId: 5, to: OWNER });
-  const { q, prover } = setup({ bound: { 5: seed.keyId }, receipts: { [txHash(1)]: settlement({ payNonce: nonce(1) }) } });
+  const { q, prover } = setup({ bound: { 5: seed.keyId }, receipts: { [txHash(1)]: settlement({ payNonce: await minted(1) }) } });
   q.putEvidence("mint", 2, call.evidence);
   q.putEvidence("seed", 9, seed.evidence);
   assert.match((await prover.mint({ ...row, day: DAY - 3 })).why, /not the day it was signed/);
@@ -325,7 +345,7 @@ test("a mint or seed recorded on a day other than the one it was signed is refus
 
 test("a mint whose artwork points anywhere but its own token is refused", async () => {
   const { call, row } = await mintCase();
-  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: nonce(1) }) } });
+  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: await minted(1) }) } });
   q.putEvidence("mint", 2, call.evidence);
   assert.match((await prover.mint({ ...row, qr: QR[3] })).why, /points at https:\/\/example\.com\/t\/3, not https:\/\/example\.com\/t\/2/);
   assert.match((await prover.mint({ ...row, qr: "00".repeat(407) })).why, /does not decode/);
@@ -334,7 +354,7 @@ test("a mint whose artwork points anywhere but its own token is refused", async 
 
 test("a real solved artwork is read as the token it names", async () => {
   const { call, row } = await mintCase({ tokenId: 7 });
-  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: nonce(1) }) } });
+  const { q, prover } = setup({ receipts: { [txHash(1)]: settlement({ payNonce: await minted(1) }) } });
   q.putEvidence("mint", 7, call.evidence);
   assert.deepEqual(await prover.mint({ ...row, qr: QART_7 }), { ok: true });
 });

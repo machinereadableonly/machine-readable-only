@@ -33,6 +33,7 @@ import { queries } from "../src/mirror/queries.mjs";
 import { contentDigest } from "../src/door/verify.mjs";
 import { keyIdOf } from "../src/door/directory.mjs";
 import { LADDER } from "../src/mcp/ladder.mjs";
+import { bindingNonce, PAY_SALT_META } from "../src/pay/binding.mjs";
 import { robustSolveFor } from "../../tools/robust-solve.mjs";
 import { packModules } from "../../tools/qart.mjs";
 
@@ -81,7 +82,7 @@ async function evidenceFor(id, tool, toolArgs, meta = null) {
   });
   const inner = await signerFromJWK(jwk);
   let base = null;
-  const signer = { ...inner, keyid: inner.keyid, alg: inner.alg, sign: async (data) => { base = data; return inner.sign(data); } };
+  const signer = { ...inner, sign: async (data) => { base = Buffer.from(data).toString("utf8"); return inner.sign(data); } };
   const message = {
     method: "POST",
     url: `https://${domain}/mcp`,
@@ -113,7 +114,8 @@ const USDC_ABI = parseAbi([
 ]);
 
 /// Pay `units` of USDC to the treasury on the fork, the way a facilitator settles x402.
-async function settleOnFork(units) {
+/// A USDC authorisation settled on the fork, its nonce bound (D17) to the call it pays for.
+async function settleOnFork(units, { id, tool, args: toolArgs }) {
   const usdc = getDefaultAsset("eip155:8453").asset;
   // A fresh payer every time: anvil's public test accounts carry EIP-7702
   // delegations on Base mainnet, and USDC checks a delegated account's
@@ -131,7 +133,8 @@ async function settleOnFork(units) {
   await wait(await wallet.writeContract({ account: masterMinter, address: usdc, abi: USDC_ABI, functionName: "configureMinter", args: [payer.address, units] }));
   await wait(await wallet.writeContract({ account: payer, address: usdc, abi: USDC_ABI, functionName: "mint", args: [payer.address, units] }));
 
-  const nonce = `0x${randomBytes(32).toString("hex")}`;
+  const salt = `0x${randomBytes(32).toString("hex")}`;
+  const nonce = bindingNonce({ keyId: await keyIdOf(keyFor(id).pub), tool, args: toolArgs, salt });
   const validBefore = BigInt((await forkNow()) + 3600);
   const signature = await payer.signTypedData({
     domain: { name: await read("name"), version: await read("version"), chainId: 8453, verifyingContract: usdc },
@@ -151,6 +154,7 @@ async function settleOnFork(units) {
   }));
   if (receipt.status !== "success") throw new Error("the fork refused the USDC settlement");
   const meta = {
+    [PAY_SALT_META]: salt,
     "x402/payment": {
       x402Version: 2, scheme: "exact", network: "eip155:8453",
       payload: {
@@ -168,7 +172,7 @@ async function settleOnFork(units) {
 if (command === "seed-mint") {
   const to = need("to");
   const day = await forkDay();
-  const paid = await settleOnFork(1_000_000n);
+  const paid = await settleOnFork(1_000_000n, { id: tokenId, tool: "mint", args: { to } });
   const { evidence, keyId } = await evidenceFor(tokenId, "mint", { to }, paid.meta);
   q.transact(() => {
     q.insertMint({ tokenId, toAddress: to, keyId, payNonce: paid.nonce });
@@ -199,7 +203,7 @@ if (command === "seed-mint") {
   const mark = Number(need("mark"));
   const toolArgs = { tokenId, upgradeId: mark, variant: 0 };
   if (LADDER[mark]?.route === "bought") {
-    const paid = await settleOnFork(BigInt(LADDER[mark].priceUsdc6));
+    const paid = await settleOnFork(BigInt(LADDER[mark].priceUsdc6), { id: tokenId, tool: "upgrade", args: toolArgs });
     const { evidence } = await evidenceFor(tokenId, "upgrade", toolArgs, paid.meta);
     if (!q.reserveMarkPaid(tokenId, mark, 0, paid.nonce, Date.now(), evidence)) throw new Error(`mark ${mark} was not reserved for token ${tokenId}`);
     if (q.settleByNonce(paid.nonce, paid.txHash)?.kind !== "mark") throw new Error(`settlement did not promote mark ${mark}`);

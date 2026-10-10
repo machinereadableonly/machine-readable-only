@@ -7,7 +7,7 @@
 // than editing your crontab, because a package that edits your scheduler
 // because you ran it once is not a package that deserved to be run.
 import { statSync, readFileSync } from "node:fs";
-import { ensureIdentity, loadIdentity, defaultKeyPath, publicFromPrivate } from "./keys.mjs";
+import { ensureIdentity, loadIdentity, defaultKeyPath, publicFromPrivate, keyIdOf } from "./keys.mjs";
 import { registerKey } from "./door.mjs";
 import { listTools, callTool, structured } from "./mcp.mjs";
 import { payFor, readDemand } from "./pay.mjs";
@@ -406,6 +406,8 @@ async function paidCall({ call, name, toolArgs, args, keyPath, site }) {
     ? await payFor({
         result,
         walletPrivateKey: walletKey,
+        // The nonce commits to this key, tool and arguments, so it buys only this call.
+        binding: { keyId: await keyIdOf(call.privateJwk), tool: name, args: toolArgs },
         // ALL FOUR FIELDS. `asset` and `network` had no flags at all, so
         // they could not be pinned through this binary at any price: the
         // signed authorisation could name any ERC-20 on any chain, as long

@@ -309,9 +309,13 @@ test("a matching demand is signed as EIP-3009 typed data, and recovers to our ad
     result: { isError: true, structuredContent: DEMAND, content: [] },
     expected: { payTo: TREASURY, amount: "1000000", asset: USDC, network: "eip155:84532" },
     walletPrivateKey: WALLET_KEY,
+    binding: { keyId: "k-journey", tool: "mint", args: { to: TREASURY } },
   });
 
   const { signature, authorization } = meta["x402/payment"].payload;
+  // D17: the nonce is the binding of this key, tool and arguments under the salt sent beside it.
+  const { bindingNonce } = await import("../../warden/src/pay/binding.mjs");
+  assert.equal(authorization.nonce, bindingNonce({ keyId: "k-journey", tool: "mint", args: { to: TREASURY }, salt: meta["mro/pay-salt"] }));
   assert.equal(authorization.from, account.address);
   assert.equal(authorization.to, TREASURY);
   assert.equal(authorization.value, "1000000");
@@ -336,6 +340,13 @@ test("a matching demand is signed as EIP-3009 typed data, and recovers to our ad
     signature,
   });
   assert.equal(valid, true, "the authorisation must verify against the signer's own address");
+});
+
+test("REFUSES to sign a payment not bound to the call it pays for", async () => {
+  await assert.rejects(
+    () => payFor({ result: { isError: true, structuredContent: DEMAND, content: [] }, expected: { payTo: TREASURY, amount: "1000000" }, walletPrivateKey: WALLET_KEY }),
+    /needs the call it pays for/,
+  );
 });
 
 test("nothing is signed when there is nothing to pay for", async () => {

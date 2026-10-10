@@ -16,6 +16,7 @@ import { keyIdToBytes32 } from "../mcp/keyId.mjs";
 import { LADDER } from "../mcp/ladder.mjs";
 import { answerIndex } from "../mcp/question.mjs";
 import { MINT_PRICE, authorizationOf } from "../pay/x402.mjs";
+import { bindingProblem } from "../pay/binding.mjs";
 import { DAY_MS } from "../day.mjs";
 import { AUTHORIZATION_USED, TRANSFER } from "./unresolved.mjs";
 import { MRO_ABI } from "./abi.mjs";
@@ -186,6 +187,9 @@ export function makeProver({ q, publicClient, contract, chainId, domain, treasur
     if (lower(auth.to) !== lower(treasury)) return refuse("its signed payment is not to the treasury");
     if (BigInt(auth.value ?? -1) !== price) return refuse(`its signed payment is not ${price} units`);
     if (lower(auth.nonce) !== lower(row.payNonce)) return refuse("its signed payment is not the one recorded for it");
+    if (bindingProblem({ nonce: auth.nonce, keyId: v.keyId, tool, args: v.args, meta: v.meta })) {
+      return refuse("its signed payment is not bound to this key, tool and arguments");
+    }
     return provePayment({ publicClient, txHash: row.paymentTx, auth, asset, treasury, units: price });
   }
 

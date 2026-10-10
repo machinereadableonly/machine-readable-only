@@ -203,6 +203,7 @@ test("every agent-facing surface says the answers become the border, and how to 
     assert.match(flat, /placed lowest token id first|placed by lowest token id/, `${name}: the same-day order`);
     assert.doesNotMatch(flat, /beat --not-before/, `${name}: the old client-side promise is gone`);
     assert.match(flat, /A day with no answer is a coin flip, and so is your mint day, which has no question\./, `${name}: the coin flips`);
-    assert.doesNotMatch(flat, /keccak|floor\(n \/ 2\)/i, `${name}: the rule itself is never stated`);
+    // The split rule's own forms; keccak itself is named by the payment binding.
+    assert.doesNotMatch(flat, /keccak256\(k\[|"split"|"silent", ?tokenId|floor\(n \/ 2\)/i, `${name}: the rule itself is never stated`);
   }
 });

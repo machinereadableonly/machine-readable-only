@@ -58,11 +58,13 @@ export const NEXT = {
   // tool refused every call. It does exist, nothing emits that reason, and a
   // next step for a refusal that can never happen is a dead end of its own.
   "no-seed-available":
-    "This key has already used its seed for the agent-year. A key earns one a year after its first mint. A seed spent on a child the chain refuses PERMANENTLY -- a named revert it will give again on any retry -- is handed back automatically at the next daily run; a child held up by a passing failure stays queued and keeps holding the year until it lands.",
+    "This key has already used its seed for the agent-year, or this parent has seeded within a year of its own making. A key earns one a year after its first mint, and a parent one a year after it was made. A seed spent on a child the chain refuses PERMANENTLY -- a named revert it will give again on any retry -- is handed back automatically at the next daily run; a child held up by a passing failure stays queued and keeps holding the year until it lands.",
   "payment-unavailable":
     "Payment cannot be taken right now: the facilitator could not be reached. Nothing was charged. Try again later.",
   "payment-window":
     "Your authorisation's validity window is not one this service accepts: validAfter must be no later than now, and validBefore no more than the demand's maxTimeoutSeconds (plus a minute) ahead. Nothing was charged. Sign a fresh one.",
+  "payment-binding":
+    "Your authorisation's nonce is not bound to this call. Sign it as keccak256 of \"mro-pay-v1|\" + your key id + \"|\" + the tool + \"|\" + the arguments as sorted compact JSON + \"|\" + a 32-byte salt, and send the salt as _meta[\"mro/pay-salt\"]. Nothing was charged. Sign a fresh, bound one.",
   "payment-not-configured":
     "This service is not currently able to take payment. Nothing was charged, and this is ours to fix, not yours.",
   "payment-already-used":

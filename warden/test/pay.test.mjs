@@ -497,28 +497,18 @@ test("a handler is given the nonce that will settle it, and refuses without one"
     alert: () => {},
   });
 
-  // The real EIP-3009 envelope shape, as @x402/mcp's own extractor reads it.
-  const meta = {
-    "x402/payment": {
-      x402Version: 2,
-      scheme: "exact",
-      network: "eip155:84532",
-      payload: {
-        authorization: {
-          nonce: "0x000000000000000000000000000000000000000000000000000000000000FEED",
-          validAfter: "0", validBefore: String(Math.floor(Date.now() / 1000) + 300),
-        },
-        signature: "0x00",
-      },
-    },
-  };
+  // The real EIP-3009 envelope shape, as @x402/mcp's own extractor reads it,
+  // its bound nonce sent in upper case.
+  const meta = metaWithPayment();
+  const bound = meta["x402/payment"].payload.authorization.nonce;
+  meta["x402/payment"].payload.authorization.nonce = "0x" + bound.slice(2).toUpperCase();
   let seen;
   const ran = await paid(async (_args, p) => { seen = p; return { ok: true }; }, "$0.10")(
     {},
     { mcpCtx: { mcpReq: { _meta: meta } } }
   );
   assert.equal(ran.structuredContent.ok, true);
-  assert.equal(seen.payNonce, "0x000000000000000000000000000000000000000000000000000000000000feed", "one spelling: lower case");
+  assert.equal(seen.payNonce, bound, "one spelling: lower case");
 
   // And with no payment in the context at all, the handler must never run.
   let handlerRan = false;
@@ -611,10 +601,11 @@ const paidAt = (authorization) => {
   });
   let ran = false;
   const call = gateway(async () => { ran = true; return { ok: true }; }, "$0.10")({}, {
-    mcpCtx: { mcpReq: { _meta: { "x402/payment": {
-      x402Version: 2, scheme: "exact", network: "eip155:84532",
-      payload: { authorization: { nonce: "0x" + "cd".repeat(32), ...authorization }, signature: "0x00" },
-    } } } },
+    mcpCtx: { mcpReq: { _meta: (() => {
+      const meta = metaWithPayment();
+      Object.assign(meta["x402/payment"].payload.authorization, { validBefore: undefined, ...authorization });
+      return meta;
+    })() } },
   });
   return call.then((result) => ({ result, ran }));
 };

@@ -15,6 +15,7 @@ import { createPaymentWrapper, extractPaymentFromMeta } from "@x402/mcp";
 import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
 import { withNext, UNRESOLVED_MARK_NEXT } from "../mcp/nextSteps.mjs";
+import { bindingProblem } from "./binding.mjs";
 
 /// What a mint costs. One place, because the tool's own description quotes it.
 export const MINT_PRICE = "$1.00";
@@ -665,6 +666,10 @@ export function makePaymentGateway({
             facts.validAfter === null || facts.validAfter > nowSeconds) {
           return { ok: false, reason: "payment-window", detail: `sign validAfter <= now and validBefore within ${life} s of now` };
         }
+        // D17: the nonce must commit to this key, tool and arguments, so an
+        // authorisation seen in transit cannot pay for anyone else's call.
+        const unbound = bindingProblem({ nonce: payNonce, keyId: ctx.keyId, tool, args: signedArgs(ctx, handlerArgs), meta: x402Ctx?.meta });
+        if (unbound) return { ok: false, reason: "payment-binding", detail: unbound };
         const result = await handler(handlerArgs, { payNonce, payment: facts });
         if (result?.ok) reservedNonce = payNonce;
         return result;
@@ -733,6 +738,17 @@ export function makePaymentGateway({
   // second return value so `paid` stays the same shape the tools already call.
   paid.prepare = wrapperFor;
   return paid;
+}
+
+/// The arguments exactly as the caller signed them, which is what the binding
+/// covers: the parsed copy can differ (a schema drops unknown keys).
+function signedArgs(ctx, parsed) {
+  try {
+    const body = JSON.parse(Buffer.from(ctx?.evidence?.body ?? "", "base64").toString("utf8"));
+    return body?.params?.arguments ?? {};
+  } catch {
+    return parsed;
+  }
 }
 
 /**

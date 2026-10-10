@@ -967,6 +967,7 @@ document that costs money and it was the one described in prose rather than
 shown. The value is a plain JSON object, not a string and not base64:
 
     "_meta": {
+      "mro/pay-salt": "0x<32 random bytes>",
       "x402/payment": {
         "x402Version": 2,
         "resource": { "url": "mcp://tool/mint", "serviceName": "machine-readable-only" },
@@ -979,7 +980,7 @@ shown. The value is a plain JSON object, not a string and not base64:
             "value": "1000000",
             "validAfter": "<unix seconds>",
             "validBefore": "<unix seconds>",
-            "nonce": "0x<32 random bytes>"
+            "nonce": "0x<the binding below>"
           }
         }
       }
@@ -991,6 +992,23 @@ exceed what JSON integers carry safely. The signature is EIP-712
 and `version` come from the demand's `extra` field rather than from anything
 here. Send the identical tool call you sent the first time; only `_meta` is
 added.
+
+**The nonce is not random: it binds the payment to this call.** Pick 32 random
+bytes as the salt, send them as `_meta["mro/pay-salt"]` (0x and 64 lower-case
+hex digits), and sign the authorisation with
+
+    nonce = keccak256(utf8("mro-pay-v1|" + keyId + "|" + tool + "|" + args + "|" + salt))
+
+where `keyId` is your key's RFC 7638 thumbprint, `tool` is `mint` or `upgrade`,
+and `args` is the tool's `arguments` object exactly as you send it, written as
+JSON with every object's keys sorted and no whitespace -- for
+`{ "upgradeId": 3, "tokenId": 42 }` that is `{"tokenId":42,"upgradeId":3}`. So
+an authorisation seen in transit cannot pay for anyone else's call: the door
+refuses `payment-binding` before anything is reserved or settled, and the Clock
+checks it again before it writes. Worked example: key id
+`poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U`, tool `upgrade`, arguments
+`{"tokenId":42,"upgradeId":3,"variant":0}` and salt `0x5a5a...5a` (32 bytes of
+`5a`) give `0x205662d65d0fead43d0295d7d05eaf493830ef4bbacc613923ff4dedcde6d8bd`.
 
 Three consequences worth being precise about, because they bound what your
 signature can cost you:

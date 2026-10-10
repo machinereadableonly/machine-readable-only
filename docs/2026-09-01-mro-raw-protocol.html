@@ -1050,6 +1050,7 @@ the key <code>x402/payment</code>. The receipt comes back in the response <code>
 document that costs money and it was the one described in prose rather than
 shown. The value is a plain JSON object, not a string and not base64:</p>
 <pre><code>&quot;_meta&quot;: {
+  &quot;mro/pay-salt&quot;: &quot;0x&lt;32 random bytes&gt;&quot;,
   &quot;x402/payment&quot;: {
     &quot;x402Version&quot;: 2,
     &quot;resource&quot;: { &quot;url&quot;: &quot;mcp://tool/mint&quot;, &quot;serviceName&quot;: &quot;machine-readable-only&quot; },
@@ -1062,7 +1063,7 @@ shown. The value is a plain JSON object, not a string and not base64:</p>
         &quot;value&quot;: &quot;1000000&quot;,
         &quot;validAfter&quot;: &quot;&lt;unix seconds&gt;&quot;,
         &quot;validBefore&quot;: &quot;&lt;unix seconds&gt;&quot;,
-        &quot;nonce&quot;: &quot;0x&lt;32 random bytes&gt;&quot;
+        &quot;nonce&quot;: &quot;0x&lt;the binding below&gt;&quot;
       }
     }
   }
@@ -1074,6 +1075,21 @@ exceed what JSON integers carry safely. The signature is EIP-712
 and <code>version</code> come from the demand&#39;s <code>extra</code> field rather than from anything
 here. Send the identical tool call you sent the first time; only <code>_meta</code> is
 added.</p>
+<p><strong>The nonce is not random: it binds the payment to this call.</strong> Pick 32 random
+bytes as the salt, send them as <code>_meta[&quot;mro/pay-salt&quot;]</code> (0x and 64 lower-case
+hex digits), and sign the authorisation with</p>
+<pre><code>nonce = keccak256(utf8(&quot;mro-pay-v1|&quot; + keyId + &quot;|&quot; + tool + &quot;|&quot; + args + &quot;|&quot; + salt))
+</code></pre>
+<p>where <code>keyId</code> is your key&#39;s RFC 7638 thumbprint, <code>tool</code> is <code>mint</code> or <code>upgrade</code>,
+and <code>args</code> is the tool&#39;s <code>arguments</code> object exactly as you send it, written as
+JSON with every object&#39;s keys sorted and no whitespace -- for
+<code>{ &quot;upgradeId&quot;: 3, &quot;tokenId&quot;: 42 }</code> that is <code>{&quot;tokenId&quot;:42,&quot;upgradeId&quot;:3}</code>. So
+an authorisation seen in transit cannot pay for anyone else&#39;s call: the door
+refuses <code>payment-binding</code> before anything is reserved or settled, and the Clock
+checks it again before it writes. Worked example: key id
+<code>poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U</code>, tool <code>upgrade</code>, arguments
+<code>{&quot;tokenId&quot;:42,&quot;upgradeId&quot;:3,&quot;variant&quot;:0}</code> and salt <code>0x5a5a...5a</code> (32 bytes of
+<code>5a</code>) give <code>0x205662d65d0fead43d0295d7d05eaf493830ef4bbacc613923ff4dedcde6d8bd</code>.</p>
 <p>Three consequences worth being precise about, because they bound what your
 signature can cost you:</p>
 <ul>

@@ -14,6 +14,7 @@
 // What the real gateway does, and what these must therefore do: call the
 // handler as `handler(args, { payNonce })`, with a nonce unique to the call.
 
+import { bindingNonce, PAY_SALT_META } from "../src/pay/binding.mjs";
 let n = 0;
 
 /// A fresh payment nonce. Unique per call, because that is what lets two
@@ -60,17 +61,28 @@ export const settleNowFor = (q) => (fn) => async (args, ctx) => {
 /// A `_meta` carrying a payment the gateway can read a nonce out of -- the real
 /// EIP-3009 envelope shape, as @x402/mcp's own extractor parses it. For tests
 /// that drive makePaymentGateway directly rather than through a tool.
-export const metaWithPayment = (nonce = nextNonce()) => ({
-  "x402/payment": {
-    x402Version: 2,
-    scheme: "exact",
-    network: "eip155:84532",
-    payload: {
-      authorization: { nonce, validAfter: "0", validBefore: String(Math.floor(Date.now() / 1000) + 300) },
-      signature: "0x00",
+///
+/// With no `nonce` it is BOUND (D17) to `binding` -- by default the caller and
+/// tool a bare test gateway sees (both undefined) and no arguments. An explicit
+/// nonce is sent as given, unbound, for tests of a malformed one.
+export const metaWithPayment = (nonce = null, { keyId, tool, args = {} } = {}) => {
+  const salt = nextNonce();
+  return {
+    ...(nonce === null ? { [PAY_SALT_META]: salt } : {}),
+    "x402/payment": {
+      x402Version: 2,
+      scheme: "exact",
+      network: "eip155:84532",
+      payload: {
+        authorization: {
+          nonce: nonce ?? bindingNonce({ keyId, tool, args, salt }),
+          validAfter: "0", validBefore: String(Math.floor(Date.now() / 1000) + 300),
+        },
+        signature: "0x00",
+      },
     },
-  },
-});
+  };
+};
 
 /**
  * A REAL x402 resource server whose FACILITATOR is fake.

@@ -235,6 +235,7 @@ async function mintPaying({ settle }) {
       // demand under test, so this stays a settlement test.
       expected: { payTo: PAY_TO, amount: readDemand(demand).accepts[0].amount },
       walletPrivateKey,
+      binding: { keyId: KEY_ID, tool: "mint", args: { to: TO } },
     });
     assert.ok(meta, "the first call must produce a payment demand the client can read");
 
@@ -440,6 +441,7 @@ async function upgradePaying({ settle }) {
       // demand under test, so this stays a settlement test.
       expected: { payTo: PAY_TO, amount: readDemand(demand).accepts[0].amount },
       walletPrivateKey: generatePrivateKey(),
+      binding: { keyId: KEY_ID, tool: "upgrade", args },
     });
     assert.ok(meta, "the first call must produce a payment demand");
     const result = await tool.handler(args, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: meta } } });
@@ -611,7 +613,7 @@ test("when even the hold fails, the answer is still unresolved, never released",
     const tool = makeMintTool({ q, chain: openChain(), paid: gateway, supplyCap: 100, today: () => 20_700, alert: () => {} });
     const demand = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: undefined } } });
     const meta = await payFor({ result: demand, expected: { payTo: PAY_TO, amount: readDemand(demand).accepts[0].amount },
-      walletPrivateKey: generatePrivateKey() });
+      walletPrivateKey: generatePrivateKey(), binding: { keyId: KEY_ID, tool: "mint", args: { to: TO } } });
     const result = await tool.handler({ to: TO }, { keyId: KEY_ID, mcpCtx: { mcpReq: { _meta: meta } } });
     assert.equal(result.structuredContent.reason, "payment-unresolved");
   } finally {

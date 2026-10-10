@@ -46,6 +46,7 @@ export function makeAgent({ identityPath, walletKey, site, origin }, deps = {}) 
       result: first,
       walletPrivateKey: walletKey,
       expected: { payTo: expectedPayTo, amount: MINT_AMOUNT },
+      binding: { keyId: identity.keyId, tool: "mint", args: { to } },
     });
     const second = await tool("mint", { to }, meta);
     // A paid call answered with another demand is a settlement that failed;
@@ -78,6 +79,7 @@ export function makeAgent({ identityPath, walletKey, site, origin }, deps = {}) 
       result: first,
       walletPrivateKey: walletKey,
       expected: { payTo: expectedPayTo, amount: expectedAmount ?? markAmount(upgradeId) },
+      binding: { keyId: identity.keyId, tool: "upgrade", args },
     });
     const second = await tool("upgrade", args, meta);
     // A second demand means THIS call's payment was not accepted. Whether the
