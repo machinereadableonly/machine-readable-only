@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { mkdtempSync, mkdirSync, chmodSync, writeFileSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -194,4 +194,23 @@ test("--check reports the keys and writes nothing", () => {
   const refused = run("--warden-env", src, "--out", out, "--check");
   assert.equal(refused.status, 1);
   assert.match(refused.stderr, /MRO_DAY_SECONDS/);
+});
+
+// /etc/mro-clock is closed to the operator, so existsSync() on the file inside
+// it answers false, as if no key had ever been installed.
+test("--check run by a user who cannot open the output's directory reports the key unchecked", () => {
+  const { dir, src } = files();
+  const closed = join(dir, "closed");
+  mkdirSync(closed);
+  const out = join(closed, "clock.env");
+  writeFileSync(out, clockEnv, { mode: 0o600 });
+  chmodSync(closed, 0o000);
+  try {
+    const r = run("--warden-env", src, "--out", out, "--check");
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /CLOCK_PRIVATE_KEY\s+not checked/);
+    assert.notEqual(run("--warden-env", src, "--out", out).status, 0, "a real run still refuses");
+  } finally {
+    chmodSync(closed, 0o700);
+  }
 });

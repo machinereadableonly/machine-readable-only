@@ -5,7 +5,7 @@
 // Run by install-clock-user.sh as root. Prints key names only, never a value:
 // the file carries the Clock's private key and the RPC url, which is where a
 // managed provider keeps its api key.
-import { readFileSync, writeFileSync, renameSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
@@ -113,14 +113,17 @@ function main() {
   const dest = values.out;
   if (!src || !dest) throw new Error("usage: clock-env.mjs --warden-env <path> --out <path> [--check]");
   // --check builds the file and writes nothing; dest may be unreadable to a
-  // non-root caller, which only means its key cannot be the fallback.
+  // non-root caller, which only means its key cannot be the fallback. Not
+  // existsSync: it answers false when the directory itself is closed.
   let existing = "";
   let existingUnreadable = false;
   try {
-    existing = existsSync(dest) ? readFileSync(dest, "utf8") : "";
+    existing = readFileSync(dest, "utf8");
   } catch (err) {
-    if (!values.check) throw err;
-    existingUnreadable = true;
+    if (err.code !== "ENOENT") {
+      if (!values.check) throw err;
+      existingUnreadable = true;
+    }
   }
   // Generated here, printed as an address only.
   const rotate = Boolean(values["rotate-key"]);
