@@ -7,18 +7,8 @@
 #   bash script/deploy-plan7.sh             # simulate only
 #   bash script/deploy-plan7.sh --broadcast # actually send
 #
-# WHAT PLAN 7 CHANGED, AND WHY THIS DEPLOY IS STILL THE SAME THREE STEPS.
-# Lineage added `echo` to TokenView, `echoOf(uint256)` to read it alone, and the
-# write inside `seed`. It added no constructor argument, no owner dial and no
-# new post-deploy step, so the deployment itself is what it was for Plan 5 and
-# Plan 6: Renderer, then MachineReadableOnly(renderer, warden), then the ten
-# Mark records.
-#
-# SO THIS RUNS DeployPlan5.s.sol, exactly as deploy-plan6.sh does, and for the
-# same reason: the script that has been run before is the script that runs
-# again. A copy under a new name would be a second thing to keep in step and
-# would have never been executed -- which is precisely how DeployPlan5.s.sol
-# came to fail on its first real run, after the simulation passed.
+# Runs DeployPlan5.s.sol on purpose: Plan 7 added no constructor argument and
+# no post-deploy step, and the script that has run before is the one to re-run.
 #
 # EXPECTED_CHAIN_ID and WARDEN_ADDRESS are supplied HERE rather than added to the
 # environment file: the chain guard exists so the operator states the chain for
