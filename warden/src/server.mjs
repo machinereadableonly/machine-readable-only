@@ -427,9 +427,8 @@ export function createServer(config) {
         return;
       }
 
-      // ORIGIN, BEFORE THE DOOR. The SDK's own `allowedOrigins` is deprecated
-      // in favour of exactly this -- "Use external middleware for origin
-      // validation instead" -- and we are the middleware.
+      // ORIGIN, BEFORE THE DOOR, so a refused Origin never reaches the
+      // signature check. The SDK's `allowedOrigins` would only run after it.
       //
       // AN AGENT SENDS NO ORIGIN, so this is invisible to every real caller:
       // absent means allowed. It refuses only a caller that names a DIFFERENT

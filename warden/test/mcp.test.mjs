@@ -510,3 +510,19 @@ test("a malformed bank cannot reach a tool: the handler refuses at construction"
   assert.throws(() => makeMcpHandler({ ...deps, bank: [] }), /question bank is empty/);
   assert.throws(() => makeMcpHandler({ ...deps, bank: [{ id: "x" }] }), /printable ASCII/);
 });
+
+// The 2026-07-28 transport: a modern-only server MUST reject a request without
+// the MCP-Protocol-Version header (SDK 2.1.0 onward). CONTROL: the same call
+// with the header is served.
+test("a request without MCP-Protocol-Version is refused 400, and with it is served", async () => {
+  const { handler } = makeMcpHandler({
+    bank: BANK, challengeSecret: SECRET, questionSecret: SECRET,
+    q: queries(openDb(":memory:")), chain: openChain(), contract: "0xcontract",
+  });
+  const { raw, headers } = envelope({ method: "tools/list" });
+  const { ["mcp-protocol-version"]: _dropped, ...without } = headers;
+  const bare = await handler.fetch(new Request("https://example.com/mcp", { method: "POST", headers: without, body: raw }), { authInfo: { extra: { keyId: "k" } } });
+  assert.equal(bare.status, 400);
+  const ok = await handler.fetch(new Request("https://example.com/mcp", { method: "POST", headers, body: raw }), { authInfo: { extra: { keyId: "k" } } });
+  assert.equal(ok.status, 200);
+});
