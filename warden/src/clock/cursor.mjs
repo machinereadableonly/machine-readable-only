@@ -177,6 +177,12 @@ export function exitCodeFor(summary) {
   if (summary.sweepFailed) return 1;
   if (summary.resolveFailed) return 1;
   if ((summary.unproven?.length ?? 0) > 0) return 1;
+  if ((summary.unaccounted?.length ?? 0) > 0) return 1;
+  // Alerts share the log file, so these page nobody unless the run fails.
+  if (summary.heartbeat?.sent === false) return 1;
+  const stale = summary.stale;
+  if (stale && stale.credits.length + stale.mints.length + stale.markOrders.length > 0) return 1;
+  if ((summary.reconciled?.applied?.skipped ?? 0) > 0) return 1;
   return 0;
 }
 

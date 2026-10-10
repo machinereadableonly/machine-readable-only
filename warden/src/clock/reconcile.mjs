@@ -73,7 +73,7 @@ const AORTA = 11;
  * `message` is deliberately NOT read: viem puts the request url in it, and this
  * decision is made in a process that logs what it decides.
  */
-function refusedTheRange(err) {
+export function refusedTheRange(err) {
   const said = `${err?.details ?? ""} ${err?.shortMessage ?? ""}`;
   return /\brange\b|too many results|block limit/i.test(said);
 }

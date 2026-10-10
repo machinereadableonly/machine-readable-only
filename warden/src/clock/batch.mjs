@@ -480,7 +480,9 @@ export async function writeCheckInChunk(
 async function writeInHalves(writer, entries, opts, sofar) {
   const half = Math.ceil(entries.length / 2);
   const first = await writeCheckInChunk(writer, entries.slice(0, half), opts);
-  const halves = first.aborted
+  // A half that stopped judged nothing more; sending the other half could land
+  // a later day above an earlier one left unsent.
+  const halves = first.aborted || first.stop
     ? [first]
     : [first, await writeCheckInChunk(writer, entries.slice(half), opts)];
   const last = halves.at(-1);

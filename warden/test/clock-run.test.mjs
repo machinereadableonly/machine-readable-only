@@ -1449,3 +1449,24 @@ test("reconcile reads events through the two-RPC check", async () => {
   await runClock({ prover: trustingProver(), ...baseArgs(q), checkClient, writer: passingReveal(okWriter()) });
   assert.ok(asked.length > 0, "reconcile went around the check");
 });
+
+// A broadcast whose receipt never came holds the nonce: every send behind it
+// waits out its own receipt timeout, and the unit's limit kills the run.
+test("a receipt that never arrives stops the mint, seed and Mark passes", async () => {
+  const { db, q } = mirror();
+  queueMint(q, db, 1);
+  queueMint(q, db, 2);
+  queueMark(q, db, { tokenId: 3, upgradeId: 4 });
+  const sent = [];
+  const writer = okWriter({
+    async send(functionName, args) {
+      sent.push(functionName);
+      return functionName === "mint" ? { ok: false, reason: "receipt-unknown", hash: "0xabc" } : { ok: true, hash: "0x1" };
+    },
+  });
+  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), writer: passingReveal(writer) });
+  assert.equal(sent.filter((f) => f === "mint").length, 1, "nothing is sent behind an unmined transaction");
+  assert.equal(sent.includes("applyMark"), false);
+  assert.equal(summary.aborted, "receipt-unknown");
+  assert.equal(exitCodeFor(summary), 1);
+});

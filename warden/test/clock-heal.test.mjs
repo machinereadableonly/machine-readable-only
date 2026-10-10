@@ -250,6 +250,7 @@ test("a receipt that never arrives aborts without writing or dropping anything",
 
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
+import { exitCodeFor } from "../src/clock/cursor.mjs";
 import { runClock } from "../src/clock/run.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
 import { passingReveal, splitArgs } from "./split-rig.mjs";
@@ -435,6 +436,9 @@ test("a queued day the chain's level cannot account for stays queued", async () 
     alerts.some((a) => a.includes("not-accounted-on-chain")),
     `the skipped day must be reported, got: ${alerts.join(" | ")}`,
   );
+  // Refused every night and fixed by nothing, so the night fails until a human looks.
+  assert.deepEqual(summary.unaccounted.map((e) => e.day), [TODAY - 3]);
+  assert.equal(exitCodeFor(summary), 1);
 });
 
 // A heal rebuilds `remaining` from survivors, so the packed bits and answer

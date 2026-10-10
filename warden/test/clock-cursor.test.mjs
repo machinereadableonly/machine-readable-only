@@ -281,3 +281,21 @@ test("stopping on gas is a success, because tomorrow writes the same rows", () =
     0,
   );
 });
+
+// Alerts and logs share one file, and only a failed exit pages anyone. The
+// outcomes the run describes as needing a human must fail it.
+test("a refused heartbeat fails the run", () => {
+  assert.equal(exitCodeFor({ heartbeat: { due: true, gap: 40, sent: false, error: "EnforcedPause" } }), 1);
+  assert.equal(exitCodeFor({ heartbeat: { due: true, gap: 40 } }), 0, "CONTROL: a heartbeat sent does not");
+  assert.equal(exitCodeFor({ heartbeat: { due: false, why: "already-stamped" } }), 0);
+});
+
+test("rows that have stopped fixing themselves fail the run", () => {
+  assert.equal(exitCodeFor({ stale: { credits: [], mints: [{ tokenId: 1 }], markOrders: [] } }), 1);
+  assert.equal(exitCodeFor({ stale: { credits: [], mints: [], markOrders: [] } }), 0);
+});
+
+test("reconcile events for tokens the mirror does not hold fail the run", () => {
+  assert.equal(exitCodeFor({ reconciled: { applied: { skipped: 2 } } }), 1);
+  assert.equal(exitCodeFor({ reconciled: { applied: { skipped: 0 } } }), 0);
+});

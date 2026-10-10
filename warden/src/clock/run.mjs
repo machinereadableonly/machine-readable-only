@@ -311,6 +311,19 @@ export async function runClock({
     /// Rows the Clock could not prove and did not write: { kind, ref, why }.
     /// They stay queued, and the run fails while any remain.
     unproven: [],
+    /// Credits the chain refuses as already credited while its level does not
+    /// account for them: refused every night and fixed by nothing, so they fail
+    /// the run until a human looks.
+    unaccounted: [],
+  };
+  // A broadcast whose receipt never came may still land, and it holds the
+  // nonce: anything sent behind it waits out its own receipt timeout. Stop the
+  // writes; the next run reads what landed.
+  const unknownReceipt = (result, what) => {
+    if (result.reason !== "receipt-unknown") return false;
+    alert(`clock: ${what} was broadcast (${result.hash}) and its receipt never arrived; nothing more is sent tonight`);
+    summary.aborted = "receipt-unknown";
+    return true;
   };
   const unproven = (kind, ref, why) => {
     summary.unproven.push({ kind, ref, why });
@@ -540,6 +553,7 @@ export async function runClock({
       summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
       continue;
     }
+    if (unknownReceipt(result, `mint ${mint.tokenId}`)) break;
     // TokenExists has TWO causes and they need opposite handling.
     //
     // If the token on chain IS this mint -- same owner, same agent key -- then
@@ -655,6 +669,7 @@ export async function runClock({
       summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
       continue;
     }
+    if (unknownReceipt(result, `seed ${s.tokenId}`)) break;
 
     // TokenExists is read exactly as the mint pass reads it, and one branch
     // reaches the opposite conclusion.
@@ -830,6 +845,7 @@ export async function runClock({
       // of them offered to the chain. Condemning those reports a lost day as
       // decided, and marking them written hides it entirely.
       if (STAYS_QUEUED.has(drop.reason)) {
+        if (drop.reason === "not-accounted-on-chain") summary.unaccounted.push(drop.entry);
         alert(`clock: token ${drop.entry.tokenId} day ${drop.entry.day} was not written (${drop.reason}) and stays queued`);
         continue;
       }
@@ -934,6 +950,7 @@ export async function runClock({
       summary.lastBlock = result.receipt?.blockNumber ?? summary.lastBlock;
       continue;
     }
+    if (unknownReceipt(result, `applyMark ${order.upgradeId} on ${order.tokenId}`)) break;
     // The chain already has this Mark and the mirror was behind. Same shape as
     // TokenExists above: the row is settled whatever this run thinks, and the
     // agent has what it paid for, so it moves to written -- which also sets the
@@ -1063,9 +1080,8 @@ export async function runClock({
         if (result.ok) {
           log(`clock: heartbeat sent after ${decision.gap} quiet day(s), tx ${result.hash}, gas ${result.gasUsed}`);
         } else {
-          // Not fatal to the run: nothing else depends on it today, and the
-          // margin below ABSENCE_DAYS is months wide. It is alerted because a
-          // heartbeat that keeps failing IS the path to losing the piece.
+          // Nothing else tonight depends on it, but the run fails: a heartbeat
+          // that keeps failing IS the path to losing the piece.
           summary.heartbeat = { ...decision, sent: false, error: result.errorName ?? result.reason };
           alert(
             `clock: the heartbeat was refused (${result.errorName ?? result.reason}) after ${decision.gap} quiet day(s) -- ` +

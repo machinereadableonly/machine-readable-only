@@ -628,3 +628,20 @@ test("a check-in with no bit or answer byte is refused before anything is sent",
   }
   assert.equal(writer.calls.length, 0);
 });
+
+// A first half that stopped leaves the rest unsent: a later entry that landed
+// could put an earlier, unsent day permanently below the chain's lastDay.
+test("after a half that stopped, the other half is not sent", async () => {
+  const sent = [];
+  const writer = {
+    async send(fn, args) {
+      const ids = unpackIds(args[0]);
+      sent.push(ids);
+      return ids.length > 1 ? { ok: false, reason: "gas-estimate-too-large" } : { ok: true, hash: "0x1" };
+    },
+  };
+  const r = await writeCheckInChunk(writer, [entry(1, 100), entry(2, 100), entry(3, 100)], { maxAttempts: 2 });
+  assert.equal(r.stop, "attempts-exhausted");
+  assert.deepEqual(r.written, [], "nothing after the stop was written");
+  assert.ok(!sent.some((ids) => ids.length === 1 && ids[0] === 3), "token 3 was sent after the stop");
+});

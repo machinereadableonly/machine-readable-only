@@ -31,6 +31,7 @@
  * chain with, is left exactly as it is and reported, which fails the run.
  */
 import { safeErrorText } from "./redact.mjs";
+import { refusedTheRange } from "./reconcile.mjs";
 
 /// The two EIP-3009 events, hand-written rather than imported: this is not our
 /// contract, and the full USDC ABI would be several hundred entries to carry
@@ -118,14 +119,23 @@ export function searchWindow(row, headBlock) {
   return { from, to };
 }
 
-/// Every matching log in a window, asked for in spans the public node accepts.
+/// Every matching log in a window, asked for in spans the public node accepts,
+/// and in halves of them when it has lowered its cap since MAX_LOG_SPAN was set.
 async function logsIn(publicClient, params, { from, to }) {
   const found = [];
-  for (let start = from; start <= to; start += MAX_LOG_SPAN) {
-    const end = Math.min(to, start + MAX_LOG_SPAN - 1);
-    found.push(
-      ...(await publicClient.getLogs({ ...params, fromBlock: BigInt(start), toBlock: BigInt(end) }))
-    );
+  let width = MAX_LOG_SPAN;
+  for (let start = from; start <= to; ) {
+    const end = Math.min(to, start + width - 1);
+    try {
+      found.push(
+        ...(await publicClient.getLogs({ ...params, fromBlock: BigInt(start), toBlock: BigInt(end) }))
+      );
+    } catch (err) {
+      if (width <= 1 || !refusedTheRange(err)) throw err;
+      width = Math.max(1, Math.floor(width / 2));
+      continue;
+    }
+    start = end + 1;
   }
   return found;
 }

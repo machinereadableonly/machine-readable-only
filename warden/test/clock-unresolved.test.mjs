@@ -570,3 +570,25 @@ test("a transaction already paying for another row cannot pay for a held one too
   assert.deepEqual(summary.unresolvedPayments, [1]);
   assert.ok(said.some((m) => /already pays for another row/.test(m)));
 });
+
+test("a node that has lowered its log range is asked again in narrower spans", async () => {
+  const { db, q } = heldMint();
+  const ranges = [];
+  const chain = chainWith({ logs: settlementLogs(), ranges });
+  const answer = chain.getLogs.bind(chain);
+  chain.getLogs = async (params) => {
+    if (Number(params.toBlock) - Number(params.fromBlock) + 1 > 100) {
+      const err = new Error("rpc refused");
+      err.details = "eth_getLogs is limited to a 100 range";
+      throw err;
+    }
+    return answer(params);
+  };
+
+  const summary = await run(q, chain);
+
+  assert.ok(ranges.length > 2, "the window was read in several narrow pages");
+  assert.deepEqual(summary.resolvedPaid, [1], "the payment is still found");
+  assert.equal(db.prepare("SELECT status FROM mints WHERE tokenId = 1").get().status, "queued");
+  for (const r of ranges) assert.ok(r.to - r.from + 1 <= 100);
+});
