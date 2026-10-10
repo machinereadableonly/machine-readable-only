@@ -548,11 +548,12 @@ test("a key's own retry sweeps its own orphaned reservation", async () => {
       "the caller's own orphan is moved by its own call"
     );
     assert.match(said.join(" "), /HELD for the Clock to resolve/);
-    // AND IT IS STILL REFUSED, which is the correct answer rather than a
-    // regression: the money is in doubt, so selling this key a second token
-    // would be the loss the hold exists to prevent. The Clock frees it tonight.
+    // AND IT IS STILL REFUSED: the money is in doubt, so selling this key a
+    // second token would be the loss the hold exists to prevent. It is told
+    // the payment is held, which carries "do not pay again", not
+    // `already-minted`.
     assert.equal(again.ok, false);
-    assert.equal(again.reason, "already-minted");
+    assert.equal(again.reason, "payment-unresolved");
   } finally {
     await fac.close();
   }

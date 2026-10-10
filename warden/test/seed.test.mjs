@@ -411,3 +411,24 @@ test("a refused seed writes no mirror row, whichever gate refused it", async () 
     assert.equal(q.seedsSpent("k1"), 0, `${reason}: a refusal must not burn the agent-year's seed`);
   }
 });
+
+// 16 Low. The budget gate read the chain, then `freeIdFrom` awaited, then the
+// row went in: a second call from the same key could reserve in that gap, and
+// both would pass. The mirror is re-checked against the room the gate read,
+// with no await between that check and the insert.
+test("a seed reserved by a concurrent call during the id lookup is not reserved twice", async () => {
+  const { db, q } = fresh();
+  q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xparent-owner", lastDay: 0, mintDay: 0 });
+  setLevelAndStatus(db, 1, 365, "queued");
+  const chain = openChain({
+    freeIdFrom: async (from) => {
+      q.insertSeed({ childId: 50, parentId: 1, toAddress: "0x5555555555555555555555555555555555555555", keyId: "k1", lastDay: 365, mintDay: 365 });
+      return from === 50 ? 51 : from;
+    },
+  });
+  const tool = makeSeedTool({ q, chain, today: () => 365 });
+  const r = await tool.handler({ parentId: 1, to: "0x6666666666666666666666666666666666666666" }, { keyId: "k1" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "no-seed-available");
+  assert.equal(q.seedsSpent("k1"), 1, "only the concurrent call's seed is reserved");
+});

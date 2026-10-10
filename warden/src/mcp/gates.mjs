@@ -99,9 +99,10 @@ export async function yearCompleteBlock(chain, tokenId, prefetched) {
  * chain's figure with nothing subtracted, which is the over-issue this exists
  * to prevent.
  */
-export async function walletCapBlock(chain, q, to) {
+export async function walletCapBlock(chain, q, to, seen = null) {
   const room = await chain.walletRoomFor(to);
   if (room === null) return "chain-unavailable";
+  if (seen) seen.wallet = { room, to };
   return room - q.unwrittenCreationsTo(to) > 0 ? null : "wallet-cap-reached";
 }
 
@@ -121,9 +122,10 @@ export async function walletCapBlock(chain, q, to) {
  * slot would otherwise be sold as many times as agents asked for it inside one
  * Clock interval. Every one of them but the first pays and gets a revert.
  */
-export async function supplyBlock(chain, q) {
+export async function supplyBlock(chain, q, seen = null) {
   const room = await chain.supplyRoom();
   if (room === null) return "chain-unavailable";
+  if (seen) seen.supply = room;
   return room - q.unwrittenCreations() > 0 ? null : "supply-cap-reached";
 }
 
@@ -151,9 +153,10 @@ export async function supplyBlock(chain, q) {
  * chain's figure with nothing subtracted, which is the over-issue this exists
  * to prevent.
  */
-export async function seedBudgetBlock(chain, q, parentId, keyId) {
+export async function seedBudgetBlock(chain, q, parentId, keyId, seen = null) {
   const onChain = await chain.seedsAvailable(parentId);
   if (onChain === null) return "chain-unavailable";
+  if (seen) seen.seeds = { room: onChain, keyId };
   return onChain - q.unwrittenSeeds(keyId) > 0 ? null : "no-seed-available";
 }
 
@@ -199,12 +202,12 @@ export const RECIPIENT_REMEDY =
  * The reads run concurrently because they are independent, and the first reason
  * in gate order wins so the answer is stable rather than a race.
  */
-export async function paidWriteBlock(chain, { tokenId, to, q, mints = false } = {}) {
+export async function paidWriteBlock(chain, { tokenId, to, q, mints = false, seen = null } = {}) {
   const [contractState, token, wallet, supply, receiver] = await Promise.all([
     chainBlock(chain),
     tokenId === undefined ? null : tokenBlock(chain, tokenId, q),
-    to === undefined ? null : walletCapBlock(chain, q, to),
-    mints ? supplyBlock(chain, q) : null,
+    to === undefined ? null : walletCapBlock(chain, q, to, seen),
+    mints ? supplyBlock(chain, q, seen) : null,
     // Keyed off `to` like the wallet cap, and for the same reason: a write
     // with no recipient has nothing to deliver to. `upgrade` never asks.
     to === undefined ? null : receiverBlock(chain, to),
@@ -256,4 +259,19 @@ export function requireChain(chain, toolName) {
     }
   }
   return chain;
+}
+
+/**
+ * The cap gates again, against the chain rooms they read, with nothing awaited.
+ *
+ * Call it immediately before the insert. A gate's mirror count is read after
+ * its own chain await, and any await between that and the insert lets a
+ * concurrent call reserve the same slot; this re-reads only the mirror, so no
+ * await separates it from the write.
+ */
+export function lateCapBlock(q, seen) {
+  if (seen?.seeds && seen.seeds.room - q.unwrittenSeeds(seen.seeds.keyId) <= 0) return "no-seed-available";
+  if (seen?.wallet && seen.wallet.room - q.unwrittenCreationsTo(seen.wallet.to) <= 0) return "wallet-cap-reached";
+  if (seen?.supply !== undefined && seen.supply - q.unwrittenCreations() <= 0) return "supply-cap-reached";
+  return null;
 }

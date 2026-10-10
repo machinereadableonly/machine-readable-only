@@ -229,6 +229,38 @@ test("and neither can the collection's", async () => {
   assert.equal(second.reason, "supply-cap-reached");
 });
 
+// 16 Low. Two paid mints racing for the last slot both passed the post-payment
+// gate, then awaited the id lookup, then both inserted. The mirror is now
+// re-checked against the room the gate read, with no await before the insert.
+test("two concurrent mints cannot both reserve the collection's last slot", async () => {
+  const q = queries(openDb(":memory:"));
+  const chain = openChain({
+    walletRoomFor: async () => 100,
+    supplyRoom: async () => 1,
+    freeIdFrom: async (from) => { await new Promise((r) => setTimeout(r, 5)); return from; },
+  });
+  const tool = makeMintTool({ q, chain, paid: settleNowFor(q), today: () => 100, alert: () => {} });
+  const results = await Promise.all([
+    tool.handler({ to: TO }, { keyId: "k1" }),
+    tool.handler({ to: "0x" + "22".repeat(20) }, { keyId: "k2" }),
+  ]);
+  assert.equal(results.filter((r) => r.ok).length, 1, JSON.stringify(results));
+  assert.equal(results.find((r) => !r.ok).detail, "supply-cap-reached");
+  assert.equal(q.tokenCount(), 1);
+});
+
+// 16 Low. A key whose only row is a held payment was told "already-minted";
+// the agent that most needs "do not pay again" got a different word.
+test("a key whose mint payment is held is told so, not already-minted", async () => {
+  const db = openDb(":memory:");
+  const q = queries(db);
+  const tool = makeMintTool({ q, chain: openChain(), paid: settleNowFor(q), today: () => 100, alert: () => {} });
+  assert.equal((await tool.handler({ to: TO }, { keyId: "k1" })).ok, true);
+  db.exec("UPDATE mints SET status = 'payment-unresolved'");
+  const again = await tool.handler({ to: TO }, { keyId: "k1" });
+  assert.equal(again.reason, "payment-unresolved");
+});
+
 test("a tool factory refuses to build without a chain reader", () => {
   for (const make of [makeMintTool, makeUpgradeTool, makeCheckinTool, makeSeedTool]) {
     assert.throws(() => make({ q: {}, paid: settleNow, supplyCap: 10, today: () => 1, catalogue: {} }),

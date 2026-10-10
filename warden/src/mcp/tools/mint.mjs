@@ -2,7 +2,7 @@
 import * as z from "zod";
 import { onChainBy } from "../nextSteps.mjs";
 import { MINT_PRICE, MINT_RESOURCE } from "../../pay/x402.mjs";
-import { paidWriteBlock, requireChain, RECIPIENT_REMEDY } from "../gates.mjs";
+import { paidWriteBlock, requireChain, RECIPIENT_REMEDY, lateCapBlock } from "../gates.mjs";
 import { sweep } from "../sweep.mjs";
 import { PaymentNonceReusedError } from "../../mirror/queries.mjs";
 import { mintIdFloor } from "../houseToken.mjs";
@@ -24,14 +24,13 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error, hou
     },
 
     async handler(args, ctx) {
-      // BEFORE `hasMinted`, which counts any row for the key including one
-      // whose settlement answer never arrived. Run afterwards, it could never
-      // be reached by the very key it was there to unstick: that key was
-      // refused `already-minted` and waited on some stranger's paid call.
+      // FIRST, so the status of this key's row is current when it is read
+      // below: the sweep holds an expired reservation as payment-unresolved.
       sweep(q, "mint", alert);
 
-      // Both gates come before payment. Charging for a mint that cannot happen
-      // is the worst failure this tool has.
+      // Both come before payment. A held payment is not a mint: that key is
+      // told its payment is held, and not to pay again.
+      if (q.hasHeldMint(ctx.keyId)) return { ok: false, reason: "payment-unresolved" };
       if (q.hasMinted(ctx.keyId)) return { ok: false, reason: "already-minted" };
 
       // THE CONTRACT'S OWN GATES, read from the chain. Sunset, pause, the
@@ -79,7 +78,8 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error, hou
         // re-read is the only thing between a paid-for mint and a token the
         // contract would refuse to write. `seed` takes slots from the same
         // count, so this is not only a race between two mints.
-        const stillBlocked = await paidWriteBlock(chain, { to: args.to, q, mints: true });
+        const seen = {};
+        const stillBlocked = await paidWriteBlock(chain, { to: args.to, q, mints: true, seen });
         if (stillBlocked) {
           alert(`mint refused for key ${ctx.keyId} after payment was verified: the chain now refuses it: ${stillBlocked}`);
           return { ok: false, reason: "paid-but-unavailable", detail: stillBlocked };
@@ -103,6 +103,11 @@ export function makeMintTool({ q, chain, paid, today, alert = console.error, hou
         // decides.
         const reservedBlock = await chain.blockNumber();
         const day = today();
+        const late = lateCapBlock(q, seen);
+        if (late) {
+          alert(`mint refused for key ${ctx.keyId} after payment was verified: a concurrent reservation took the last room: ${late}`);
+          return { ok: false, reason: "paid-but-unavailable", detail: late };
+        }
         try {
           // The two rows are ONE FACT: a token with no mint record holds a
           // supply-cap slot no mint will ever claim, and a mint with no token

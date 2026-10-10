@@ -311,6 +311,7 @@ export function queries(db, { maxUnboundKeys = MAX_UNBOUND_KEYS } = {}) {
     // writes into tokens.marks.
     markHolders: db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE (marks & ?) <> 0"),
     hasMinted: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE keyId = ?"),
+    heldMintFor: db.prepare("SELECT COUNT(*) AS n FROM mints WHERE keyId = ? AND status = 'payment-unresolved'"),
 
     // --- the Clock's statements. Everything below is written by Plan 3 only;
     // the Warden queues rows and never marks one written.
@@ -992,6 +993,7 @@ export function queries(db, { maxUnboundKeys = MAX_UNBOUND_KEYS } = {}) {
     /// meaningful beside how much of it is gone.
     markHolders: (markId) => s.markHolders.get(1 << markId).n,
     hasMinted: (keyId) => s.hasMinted.get(keyId).n > 0,
+    hasHeldMint: (keyId) => s.heldMintFor.get(keyId).n > 0,
 
     // --- the Clock's surface ------------------------------------------------
 

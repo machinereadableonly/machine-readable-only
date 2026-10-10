@@ -1,7 +1,7 @@
 // Lineage. One seed per agent-year, free, and the child is bound to the caller.
 import * as z from "zod";
 import {
-  chainBlock, tokenBlock, walletCapBlock, requireChain, bindingBlock, supplyBlock, seedBudgetBlock,
+  chainBlock, tokenBlock, walletCapBlock, requireChain, bindingBlock, supplyBlock, seedBudgetBlock, lateCapBlock,
 } from "../gates.mjs";
 import { keyIdToBytes32 } from "../keyId.mjs";
 import { onChainBy } from "../nextSteps.mjs";
@@ -100,13 +100,14 @@ export function makeSeedTool({ q, chain, today, alert = console.error }) {
       // keyed on the CALLER's key; those are the same key only once
       // bindingBlock has said so. Ahead of it the two halves could describe
       // different agents.
+      const seen = {};
       const blocked =
         (await chainBlock(chain)) ??
         (await tokenBlock(chain, parentId, q)) ??
         (await bindingBlock(chain, parentId, ctx.keyId, keyIdToBytes32)) ??
-        (await seedBudgetBlock(chain, q, parentId, ctx.keyId)) ??
-        (await walletCapBlock(chain, q, to)) ??
-        (await supplyBlock(chain, q));
+        (await seedBudgetBlock(chain, q, parentId, ctx.keyId, seen)) ??
+        (await walletCapBlock(chain, q, to, seen)) ??
+        (await supplyBlock(chain, q, seen));
       if (blocked) return { ok: false, reason: blocked };
 
       // EVERY GATE PASSES. RESERVE THE CHILD AND LET THE CLOCK WRITE IT.
@@ -140,6 +141,8 @@ export function makeSeedTool({ q, chain, today, alert = console.error }) {
       // agent-year back. A child whose bitmap never solves is reported and
       // never dropped, because returning a year is a decision, not a sweep.
       const day = today();
+      const late = lateCapBlock(q, seen);
+      if (late) return { ok: false, reason: late };
       try {
         q.insertSeed({
           childId: tokenId,
