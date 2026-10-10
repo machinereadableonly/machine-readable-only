@@ -214,4 +214,22 @@ contract FinishLineTest is MroTestBase {
         assertEq(uint32(t.marksOf(2) >> ORDINAL_SHIFT), 1, "the token finished");
         assertEq((t.marksOf(2) >> 32) & 0xFFFFFFFF, (before >> 32) & 0xFFFFFFFF);
     }
+
+    /// @dev Places follow the order of the batch, not the token ids: the Clock
+    /// sorts, the contract does not. Listed 3 then 2, 3 takes first place.
+    function test_placesFollowTheBatchOrderNotTheIds() public {
+        _mintMore(2);
+        _growTo(2, 364);
+        _growTo(3, 364);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        uint32[] memory ids = new uint32[](2);
+        ids[0] = 3; ids[1] = 2;
+        uint32[] memory ds = new uint32[](2);
+        ds[0] = d; ds[1] = d;
+        vm.prank(WARDEN);
+        t.batchCheckIn(_packed(ids), ds, _noBits(ds), _silent(ds));
+        assertEq(uint32(t.marksOf(3) >> ORDINAL_SHIFT), 1, "listed first, placed first");
+        assertEq(uint32(t.marksOf(2) >> ORDINAL_SHIFT), 2);
+    }
 }

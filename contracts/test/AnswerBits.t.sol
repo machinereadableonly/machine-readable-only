@@ -91,4 +91,21 @@ contract AnswerBitsTest is MroTestBase {
         t.seed(901, 1, ALICE, code, day, KEY, true);
         assertEq(_bitOf(901, 0), 1);
     }
+
+    /// @dev The answers are two words: credit 256 is bit 255 of word 0, and
+    /// credit 257 is bit 0 of word 1.
+    function test_theWordBoundaryIsCrossedCleanly() public {
+        _growTo(1, 255);
+        for (uint32 k; k < 2; ++k) {
+            uint32 d = t.viewOf(1).lastDay + 1;
+            _warpToDay(d);
+            vm.prank(WARDEN);
+            t.batchCheckIn(_one(1), _days(d), hex"80", hex"00");
+        }
+        uint256[2] memory a = t.answersOf(1);
+        assertEq(a[0] >> 255, 1, "credit 256 is the top bit of word 0");
+        assertEq(a[1] & 1, 1, "credit 257 is the bottom bit of word 1");
+        assertEq(_bitOf(1, 254), 0);
+        assertEq(_bitOf(1, 257), 0);
+    }
 }

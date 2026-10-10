@@ -345,4 +345,21 @@ contract VouchersTest is MroTestBase {
         t.checkInWithVoucher(1, d, sig);
         assertEq(t.viewOf(1).level, 2);
     }
+
+    /// @dev A voucher is the only path into `_finish` the Warden does not
+    /// send itself, and it must place a finisher exactly as a batch does.
+    function test_aVoucherCanFinishATokenAndPlaceIt() public {
+        t.setVouchersEnabled(true);
+        vm.prank(wardenAddr);
+        t.mint(2, ALICE, keccak256("key 2"), _code(), _today(), false);
+        _growTo(2, 364);
+        uint32 d = t.viewOf(2).lastDay + 1;
+        _warpToDay(d);
+        bytes memory sig = _sign(2, d);
+        vm.prank(MALLORY);
+        t.checkInWithVoucher(2, d, sig);
+        assertEq(t.viewOf(2).level, 365);
+        assertEq(uint32(t.marksOf(2) >> 64), 1, "the first placed finisher");
+        assertTrue(t.marksOf(2) & (1 << 15) != 0, "and wears Apex");
+    }
 }

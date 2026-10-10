@@ -18,7 +18,7 @@ optimizer = true
 optimizer_runs = 200
 # The IR pipeline is not a preference here, it is the gas budget. Measured on
 # CodeRenderer.paths with an identical source: legacy 1,201,275 gas, via-ir
-# 693,747. The whole tokenURI has 2,000,000 to spend, so the 507,528 the IR
+# 693,747. The whole tokenURI has 4,000,000 to spend, so the 507,528 the IR
 # pipeline gives back is the difference between a working image and a re-plan.
 via_ir = true
 fs_permissions = [{ access = "read", path = "./out" }]

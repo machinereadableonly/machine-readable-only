@@ -208,9 +208,9 @@ contract MarksTest is MroTestBase {
         t.setUpgrade(16, u);
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.MarkIdOutOfRange.selector, uint8(0)));
         t.setUpgrade(0, u);
-        // Both sides of the bound: 10 is the highest legal id and must succeed.
-        t.setUpgrade(10, u);
-        assertTrue(t.upgradeOf(10).active);
+        // Both sides of the bound: 15 is the highest legal id and must succeed.
+        t.setUpgrade(15, u);
+        assertTrue(t.upgradeOf(15).active);
     }
 
     function test_theVariantBoundIsProvokedOnBothSides() public {

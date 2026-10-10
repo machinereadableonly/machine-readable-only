@@ -159,8 +159,8 @@ contract BoundsTest is MroTestBase {
 
     /// @dev `sold` is owned by applyMark. Taking it from calldata meant an
     /// owner editing a price had to re-supply the current count by hand, and
-    /// getting it wrong silently re-opened a sold-out Mark. Scarcity -- Halo
-    /// x1000, Crown x100, Singularity x10 -- is a stated product property.
+    /// getting it wrong silently re-opened a sold-out Mark. A capped Mark --
+    /// the finisher places, Apex x1 among them -- is a stated product property.
     function test_editingAnUpgradePreservesSold() public {
         MachineReadableOnly.Upgrade memory u = _upg(1);
         u.maxSupply = 1;
