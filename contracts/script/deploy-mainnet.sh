@@ -81,10 +81,11 @@ fi
 if [ -n "$FORK" ]; then
   # A FORK IS LOOPBACK OR IT IS NOT A FORK. Anything else could be a real
   # endpoint, and the test key below must never sign for one.
-  case "$FORK" in
-    http://127.0.0.1:[0-9]*|http://localhost:[0-9]*) ;;
-    *) echo "FAIL: --fork must be a loopback URL (http://127.0.0.1:<port>), got '$FORK'." >&2; exit 1 ;;
-  esac
+  # Anchored: a prefix glob let `http://127.0.0.1:8545@mainnet.base.org` through.
+  if ! [[ "$FORK" =~ ^http://(127\.0\.0\.1|localhost):[0-9]+/?$ ]]; then
+    echo "FAIL: --fork must be a loopback URL (http://127.0.0.1:<port>), got '$FORK'." >&2
+    exit 1
+  fi
   # NOT INSIDE THE REPOSITORY. forge writes a broadcast log to
   # broadcast/DeployPlan5.s.sol/8453/ -- ignored by git, but a file that reads
   # exactly like a real mainnet deploy record. A rehearsal must run from an
@@ -251,7 +252,7 @@ DEPLOY_LOG="$(mktemp)"
 forge script script/DeployPlan5.s.sol:DeployPlan5 \
   --sig "run(address)" "$OWNER" \
   --rpc-url "$RPC" \
-  $BROADCAST \
+  $BROADCAST ${BROADCAST:+--slow} \
   -vvv > "$DEPLOY_LOG" 2>&1 && DEPLOY_EXIT=0 || DEPLOY_EXIT=$?
 cat "$DEPLOY_LOG"
 [ "$DEPLOY_EXIT" -eq 0 ] || { echo "FAIL: forge script exited $DEPLOY_EXIT" >&2; exit 1; }
