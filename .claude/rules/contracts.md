@@ -21,6 +21,13 @@ still passes every test. base-200's SeasonFactory hit 42,923 bytes and passed 17
 tests and 3 reviews. Factories that `new` their children inline are the classic
 trap -- prefer clone/proxy (EIP-1167).
 
+## Toolchain
+
+- **Stay on Foundry 1.7.1 through the mainnet deploy.** Foundry 1.8 runs tests
+  in isolate mode by default, which moves gas figures and the `WorstCase.sol`
+  pin with no code change. Before any bump, set `isolate = false` and confirm
+  the pins are unchanged.
+
 ## Testing
 
 - **Every owner / emergency / admin function gets an explicit test**, and every
