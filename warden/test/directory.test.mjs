@@ -4,7 +4,7 @@ const ORIGIN = "https://example.com";
 import assert from "node:assert/strict";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
-import { registerKey, guardedFetchDirectory, renderDirectory, isBlockedAddress, makeLookup, makeDirectoryCache } from "../src/door/directory.mjs";
+import { registerKey, guardedFetchDirectory, renderDirectory, isBlockedAddress, makeLookup, makeDirectoryCache, keyIdOf, DirectoryUnavailableError } from "../src/door/directory.mjs";
 import { issueChallenge, verifyNonceMinted, CHALLENGE_MS } from "../src/door/challenge.mjs";
 import { jwkToKeyID } from "web-bot-auth";
 
@@ -310,8 +310,9 @@ test("the directory cache is bounded and remembers failures", async () => {
   const q = queries(openDb(":memory:"));
   let fetches = 0;
   const cache = new Map();
+  const failures = new Map();
   const lookup = makeLookup(q, async () => { fetches += 1; throw new Error("unreachable"); },
-    "warden.example.com", cache);
+    "warden.example.com", cache, new Map(), Date.now, failures);
 
   // A failing directory is fetched once, not once per request: otherwise every
   // unauthenticated call becomes an outbound request the caller aims.
@@ -324,7 +325,47 @@ test("the directory cache is bounded and remembers failures", async () => {
   for (let i = 0; i < 400; i++) {
     await lookup("k", `"https://host${i}.example.com/"`).catch(() => {});
   }
-  assert.ok(cache.size <= 256, `cache grew to ${cache.size}`);
+  assert.ok(failures.size <= 256, `failures grew to ${failures.size}`);
+  assert.equal(cache.size, 0, "a failure is never stored as a success");
+});
+
+test("a flood of failing directories cannot evict one that works", async () => {
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const keyId = await keyIdOf(jwk);
+  const lookup = makeLookup(q, async (url) => {
+    if (url.startsWith("https://good.example.com/")) return { keys: [jwk] };
+    throw new Error("unreachable");
+  }, "warden.example.com");
+  assert.ok(await lookup(keyId, '"https://good.example.com/"'));
+  for (let i = 0; i < 400; i++) await lookup("k", `"https://flood${i}.example.org/"`).catch(() => {});
+  assert.ok(await lookup(keyId, '"https://good.example.com/"'), "the working directory is still answered");
+});
+
+test("a directory on a bare IP address is refused without a fetch", async () => {
+  const q = queries(openDb(":memory:"));
+  let fetches = 0;
+  const lookup = makeLookup(q, async () => { fetches += 1; return { keys: [] }; }, "warden.example.com");
+  await assert.rejects(lookup("k", '"https://203.0.113.7/"'), DirectoryUnavailableError);
+  await assert.rejects(lookup("k", '"https://[2001:db8::1]/"'), DirectoryUnavailableError);
+  assert.equal(fetches, 0);
+});
+
+test("when a refetch fails, the last good directory is served", async () => {
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const keyId = await keyIdOf(jwk);
+  let now = 0;
+  let up = true;
+  const lookup = makeLookup(q, async () => { if (!up) throw new Error("down"); return { keys: [jwk] }; },
+    "warden.example.com", new Map(), new Map(), () => now);
+  assert.ok(await lookup(keyId, '"https://agent.example.com/"'));
+  up = false;
+  now += 2 * 3_600_000;
+  assert.ok(await lookup(keyId, '"https://agent.example.com/"'), "served from the last good answer");
+  assert.ok(await lookup(keyId, '"https://agent.example.com/"'), "and again while the failure is remembered");
 });
 
 // 13.5. `reason: "directory"` was unreachable through the real lookup, because

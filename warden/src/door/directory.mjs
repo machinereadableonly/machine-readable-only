@@ -18,8 +18,8 @@ const MAX_BODY = 64 * 1024;
 /// Node's `timeout` option is IDLE time, not elapsed time: a host that sends
 /// one byte a second is never idle, so it never fires. FETCH_DEADLINE_MS is the
 /// wall clock, and it is what stops a trickling host holding its slot below.
-const FETCH_TIMEOUT_MS = 3000;
-const FETCH_DEADLINE_MS = 10_000;
+const FETCH_TIMEOUT_MS = 2000;
+const FETCH_DEADLINE_MS = 3000;
 
 /**
  * Expand an IPv6 literal to its 16 bytes, or null if it is not one.
@@ -469,7 +469,10 @@ export class DirectoryUnavailableError extends Error {
   }
 }
 
-export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map(), inFlight = new Map(), clock = Date.now) {
+/// `cache` holds successes and `failures` holds failures, apart, so a flood of
+/// unreachable hosts -- which needs no valid signature to cause -- can never
+/// evict a directory that works.
+export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map(), inFlight = new Map(), clock = Date.now, failures = new Map()) {
   return async function lookupKey(keyId, signatureAgent) {
     const agent = typeof signatureAgent === "string" ? signatureAgent.replace(/^"|"$/g, "") : null;
 
@@ -492,7 +495,13 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map(), inFl
     }
 
     const url = new URL("/.well-known/http-message-signatures-directory", agent).toString();
-    const hit = cache.get(url);
+    // A directory on a bare IP address is refused before it costs a fetch slot
+    // or a cache entry: every literal is a fresh "site" to the per-site limit.
+    // As `directory`, never as an unknown key, which sends an agent to
+    // re-derive a thumbprint that was right.
+    if (isIP(new URL(agent).hostname.replace(/^\[|\]$/g, "")) !== 0) throw new DirectoryUnavailableError(url);
+    const good = cache.get(url);
+    const bad = failures.get(url);
     const now = clock();
 
     // A cached SUCCESS is trusted for an hour -- the deliberate revocation
@@ -500,15 +509,15 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map(), inFl
     // is trusted for seconds, and backs off; see the two constants above for
     // why those are different numbers.
     let jwks;
-    if (hit && now - hit.at < (hit.failed ? hit.ttl : SUCCESS_TTL_MS)) {
-      // A REMEMBERED FAILURE IS "COULD NOT FETCH", NOT "NO SUCH KEY". Returning
-      // null here told an honest agent its key id was wrong during an outage --
-      // and the protocol document's own table sends it to re-derive its RFC
-      // 7638 thumbprint, which that document already warns is the trap that
-      // "produces a wrong key id silently". So it throws, and the door answers
-      // `directory`: ours, not yours, try again.
-      if (hit.failed) throw new DirectoryUnavailableError(url);
-      jwks = hit.jwks;
+    if (good && now - good.at < SUCCESS_TTL_MS) {
+      jwks = good.jwks;
+    } else if (bad && now - bad.at < bad.ttl) {
+      // A REMEMBERED FAILURE IS "COULD NOT FETCH", NOT "NO SUCH KEY": the door
+      // answers `directory`, ours, not yours, try again -- unless the last good
+      // answer is still in hand, which is served rather than locking out a key
+      // that worked an hour ago.
+      if (!good) throw new DirectoryUnavailableError(url);
+      jwks = good.jwks;
     } else {
       // ONE FETCH PER URL, however many callers want it. The cache was written
       // only when a fetch SETTLED, so N concurrent requests naming one host all
@@ -536,17 +545,18 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map(), inFl
       }
       try {
         jwks = await pending;
+        failures.delete(url);
+        rememberDirectory(cache, url, { jwks, at: now });
       } catch (err) {
         // Failures are remembered, briefly. Without that, every unauthenticated
         // request naming an unreachable directory becomes one outbound request,
         // which is a timing-observable prober pointed wherever the caller likes.
         // With an hour of it, one request was a lockout.
-        const previous = hit?.failed ? hit.ttl : 0;
-        const ttl = Math.min(previous ? previous * 2 : FAILURE_TTL_MS, FAILURE_TTL_CEILING_MS);
-        rememberDirectory(cache, url, { failed: true, at: now, ttl });
-        throw new DirectoryUnavailableError(url, err);
+        const ttl = Math.min(bad ? bad.ttl * 2 : FAILURE_TTL_MS, FAILURE_TTL_CEILING_MS);
+        rememberDirectory(failures, url, { at: now, ttl });
+        if (!good) throw new DirectoryUnavailableError(url, err);
+        jwks = good.jwks;
       }
-      rememberDirectory(cache, url, { jwks, at: now });
     }
 
     for (const jwk of jwks?.keys ?? []) {
