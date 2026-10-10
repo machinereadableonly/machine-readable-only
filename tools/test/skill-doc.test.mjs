@@ -183,7 +183,8 @@ test("every agent-facing surface says the answers become the border, and how to 
     assert.match(flat, /From your 122nd credited day a band appears round the code/, `${name}: when the band appears`);
     assert.match(flat, /secret on the day, the same for every token, and different every day/, `${name}: the rule's three properties`);
     assert.match(flat, /The next night the rule for that day is published on chain/, `${name}: when it is published`);
-    assert.match(flat, /verify-border <tokenId> --contract <address>/, `${name}: the verifier`);
+    // SKILL.md carries the marker the prepublish guard counts until the address is real.
+    assert.match(flat, /verify-border <tokenId> --contract (<address>|PENDING-BEFORE-MAINNET-contract)/, `${name}: the verifier`);
     assert.match(flat, /The whole year's rules were fixed before the door opened/, `${name}: the commitment`);
     assert.match(flat, /when token 1 finishes it is given Aorta, the Mark every finisher after the 64th receives, and takes no place/, `${name}: token 1`);
     assert.match(flat, /placed lowest token id first|placed by lowest token id/, `${name}: the same-day order`);
