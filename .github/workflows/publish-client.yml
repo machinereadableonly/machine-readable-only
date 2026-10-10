@@ -43,45 +43,79 @@ on:
         type: boolean
         default: true
 
-# id-token: write is what lets GitHub mint the OIDC credential npm exchanges
-# for publish rights. Without it the publish step fails as unauthenticated.
+# Nothing gets id-token by default. Only the stage job below can mint the
+# credential npm exchanges for publish rights, and it runs no dependency's
+# install script and none of the tests.
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  publish:
+  check:
     runs-on: ubuntu-latest
     # Never publish from a fork. A fork's OIDC claims would not match the
     # trusted publisher anyway, but failing here says why in one line.
     if: github.repository == 'machinereadableonly/machine-readable-only'
-
     steps:
       - name: Check out the full history
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The identity guard reads `git log --all`, so a shallow clone would
           # let it pass without having seen most of the history.
           fetch-depth: 0
 
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          # A restored cache can put a stale dependency into the tarball.
+          package-manager-cache: false
+
+      - name: Check the tracked tree for identity leaks
+        # The same guard the pre-push hook runs. A published tarball is
+        # permanent in a way a pushed commit is not.
+        run: node tools/prepublish-check.mjs
+
+      - name: Install the client's dependencies
+        working-directory: client
+        run: npm ci --ignore-scripts
+
+      - name: Install the Warden's dependencies too
+        # The client's tests stand the REAL Warden up in-process and assert the
+        # client and the door agree byte for byte, so they need its
+        # dependencies, which the client does not declare and should not.
+        working-directory: warden
+        run: npm ci --ignore-scripts
+
+      - name: Run the client's tests
+        working-directory: client
+        run: npm test
+
+  stage:
+    needs: check
+    runs-on: ubuntu-latest
+    if: github.repository == 'machinereadableonly/machine-readable-only'
+    # id-token: write is what lets GitHub mint the OIDC credential npm
+    # exchanges for publish rights. Granted to this job only.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
-          # npm's own guidance for release builds: a restored cache can put a
-          # stale dependency into the tarball that no commit accounts for.
           package-manager-cache: false
 
-      - name: Use an npm new enough to stage over OIDC
-        # Trusted publishing needs npm 11.5.1 or later and STAGED publishing
-        # needs 11.15.0 or later, with Node 22.14 or higher. The runner is on
-        # Node 24 and this installs the current npm, but the floors are
-        # ASSERTED rather than assumed: a runner image change that quietly
-        # moved npm backwards would otherwise surface as an unexplained
-        # registry refusal.
+      - name: Use a pinned npm new enough to stage over OIDC
+        # Trusted publishing needs npm 11.5.1+, STAGED publishing 11.15.0+, and
+        # Node 22.14+. Pinned rather than @latest so a new npm release cannot
+        # change what runs with the publish credential.
         run: |
-          npm install -g npm@latest
+          npm install -g npm@11.21.0
           node --version
           npm --version
           node -e '
@@ -91,43 +125,10 @@ jobs:
               process.exit(1);
             }
           '
-          npm --version | node -e '
-            const v = require("fs").readFileSync(0, "utf8").trim();
-            const [maj, min] = v.split(".").map(Number);
-            if (maj < 11 || (maj === 11 && min < 15)) {
-              console.error(`FAIL: staged publishing needs npm 11.15.0+, got ${v}`);
-              process.exit(1);
-            }
-            console.log(`npm ${v} is new enough to stage`);
-          '
 
-      - name: Check the tracked tree for identity leaks
-        # The same guard the pre-push hook runs. A published tarball is
-        # permanent in a way a pushed commit is not.
-        run: node tools/prepublish-check.mjs
-
-      - name: Install the client's dependencies
+      - name: Install the client's dependencies, running nothing
         working-directory: client
-        run: npm ci
-
-      - name: Install the Warden's dependencies too
-        # THE CLIENT'S TESTS ARE NOT SELF-CONTAINED, and that is deliberate.
-        # cli.test.mjs and journey.test.mjs stand the REAL Warden up in-process
-        # and assert, among other things, that the client's content-digest is
-        # byte-identical to the door's. A pair of implementations that must
-        # agree is worth far more than either tested alone.
-        #
-        # The cost is that running them needs the Warden's dependencies, not
-        # just the client's. On a developer's box both are always installed, so
-        # this was invisible until CI ran the client's tests on their own and
-        # they failed on a missing `http-message-sig` -- a Warden dependency
-        # the client does not declare and should not.
-        working-directory: warden
-        run: npm ci
-
-      - name: Run the client's tests
-        working-directory: client
-        run: npm test
+        run: npm ci --ignore-scripts
 
       - name: Refuse a version that is already published
         working-directory: client
