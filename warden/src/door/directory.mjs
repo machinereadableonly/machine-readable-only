@@ -560,8 +560,11 @@ export function makeLookup(q, fetchDirectory, ourDomain, cache = new Map(), inFl
     }
 
     for (const jwk of jwks?.keys ?? []) {
+      // A key served with its private part is published, so anyone can sign
+      // as it; it answers for nothing. Only the public members go onward.
+      if (!jwk || jwk.d !== undefined || jwk.kty !== "OKP" || jwk.crv !== "Ed25519" || typeof jwk.x !== "string") continue;
       const id = await jwkToKeyID(jwk, async (b) => crypto.subtle.digest("SHA-256", b), (u) => Buffer.from(u).toString("base64url"));
-      if (id === keyId) return jwk;
+      if (id === keyId) return { kty: jwk.kty, crv: jwk.crv, x: jwk.x };
     }
     return null;
   };

@@ -825,3 +825,16 @@ test("--not-before on any command but beat is refused", async () => {
     assert.match(out, /--not-before belongs on beat/);
   }
 });
+
+// 08 Low 16. `--directory` needs a JWKS the agent hosts, and the identity file
+// holds both halves of the key. This prints the public half only.
+test("public-key prints a JWKS with the public half and nothing else", async () => {
+  const path = join(dir, "pub.json");
+  await cli("public-key", "--key", path);
+  const { code, out } = await cli("public-key", "--key", path);
+  assert.equal(code, 0);
+  const jwks = JSON.parse(out);
+  assert.equal(jwks.keys.length, 1);
+  assert.deepEqual(Object.keys(jwks.keys[0]).sort(), ["crv", "kty", "x"]);
+  assert.equal(jwks.keys[0].d, undefined);
+});

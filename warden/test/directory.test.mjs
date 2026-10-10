@@ -810,3 +810,23 @@ test("a proof over the bare nonce, without the registration envelope, is refused
   const elsewhere = Buffer.from(await crypto.subtle.sign("Ed25519", pair.privateKey, new TextEncoder().encode(registrationMessage("https://other.example", nonce)))).toString("base64url");
   assert.equal((await registerRoute(q, { jwk, nonce, proof: elsewhere }, () => true, () => true, ORIGIN)).reason, "proof", "a proof for another site");
 });
+
+// 08 Low 16. A directory serving a key's PRIVATE half has published it: anyone
+// can sign as that key, so it does not answer for the key id.
+test("a fetched key carrying its private part is never used", async () => {
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const priv = await crypto.subtle.exportKey("jwk", pair.privateKey);
+  const keyId = await keyIdOf(priv);
+  const lookup = makeLookup(q, async () => ({ keys: [priv] }), "warden.example.com");
+  assert.equal(await lookup(keyId, '"https://agent.example.com/"'), null);
+});
+
+test("CONTROL: a fetched public key is returned as its three public members", async () => {
+  const q = queries(openDb(":memory:"));
+  const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+  const pub = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const keyId = await keyIdOf(pub);
+  const lookup = makeLookup(q, async () => ({ keys: [{ ...pub, extra: "x".repeat(10) }] }), "warden.example.com");
+  assert.deepEqual(await lookup(keyId, '"https://agent.example.com/"'), { kty: "OKP", crv: "Ed25519", x: pub.x });
+});

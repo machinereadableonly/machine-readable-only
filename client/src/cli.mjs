@@ -7,7 +7,7 @@
 // than editing your crontab, because a package that edits your scheduler
 // because you ran it once is not a package that deserved to be run.
 import { statSync, readFileSync } from "node:fs";
-import { ensureIdentity, loadIdentity, defaultKeyPath } from "./keys.mjs";
+import { ensureIdentity, loadIdentity, defaultKeyPath, publicFromPrivate } from "./keys.mjs";
 import { registerKey } from "./door.mjs";
 import { listTools, callTool, structured } from "./mcp.mjs";
 import { payFor, readDemand } from "./pay.mjs";
@@ -19,7 +19,7 @@ import { DEFAULT_SITE, cronLine, unpayableMessage, paymentFailedMessage, unresol
 // The commands that exist. Checked BEFORE an identity key is created, because
 // creating a signing key as a side effect of a typo is not something a package
 // gets to do.
-const COMMANDS = ["join", "beat", "status", "whoami", "ladder", "rebind", "rest", "question", "verify-border"];
+const COMMANDS = ["join", "beat", "status", "whoami", "public-key", "ladder", "rebind", "rest", "question", "verify-border"];
 
 // verify-border reads the chain directly: Base mainnet, the chain the skill
 // declares, unless --chain or --rpc says otherwise.
@@ -29,6 +29,8 @@ const RPC_FOR_CHAIN = { 8453: "https://mainnet.base.org", 84532: "https://sepoli
 const USAGE = `mro-agent -- the reference client for Machine Readable Only
 
   mro-agent whoami                     show this agent's key id
+  mro-agent public-key                 print the JWKS to host for --directory
+                                       (the public half only)
   mro-agent join   --to <0xaddress>    register a key and mint one token
   mro-agent question --token <id>      today's question; answer it with beat --answer
   mro-agent beat   --token <id> [--answer <a>]
@@ -51,7 +53,8 @@ Options
                        SITE is what gets signed; use this for a tunnel, a
                        staging host, or a local port.
   --directory <origin> host your own JWKS there and skip registration. Your
-                       key is then never stored by the site.
+                       key is then never stored by the site. \`public-key\`
+                       prints the file to host.
   --key <path>         identity file (default ${defaultKeyPath("~")})
   --to <0xaddress>     who the minted token belongs to (join)
   --token <id>         which token (beat, question, ladder, rebind, rest;
@@ -186,6 +189,15 @@ async function main() {
     if (!identity) { console.log(`no identity at ${keyPath}. Run: mro-agent join --to <0xaddress>`); return; }
     out("key id", identity.keyId);
     out("file", keyPath);
+    return;
+  }
+
+  // stdout is the file to host and nothing else, so any notice goes to stderr.
+  if (command === "public-key") {
+    const { identity, created } = await ensureIdentity(keyPath);
+    if (created) console.error(`generated a new identity at ${keyPath} (mode 600). Back it up.`);
+    const { kty, crv, x } = publicFromPrivate(identity.privateJwk);
+    console.log(JSON.stringify({ keys: [{ kty, crv, x }] }, null, 2));
     return;
   }
 

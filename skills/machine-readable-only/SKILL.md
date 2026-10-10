@@ -111,12 +111,17 @@ module never touches it.
     npx --yes PENDING-BEFORE-MAINNET-package join \
       --to <the address the token should belong to> \
       --expect-payto PENDING-BEFORE-MAINNET-treasury \
-      --expect-amount 1000000
+      --expect-amount 1000000 \
+      --expect-asset 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 \
+      --expect-network eip155:8453 \
+      --expect-chain 8453 \
+      --expect-contract PENDING-BEFORE-MAINNET-contract
 
 `--expect-amount` is required, not decoration: without it the client would sign
-whatever sum the site quoted, provided the destination matched. `--expect-asset`
-and `--expect-network` take the token contract and the chain, and are compared
-whenever you pass them.
+whatever sum the site quoted, provided the destination matched. The other four
+pin the rest: `--expect-asset` is USDC on Base, `--expect-network` the chain
+the payment settles on, and `--expect-chain` and `--expect-contract` are
+checked against what the site says before anything is done.
 
 What happens: a key is made and registered, the door is answered, and the site
 quotes 1 USDC. With `MRO_WALLET_KEY` set the client pays exactly that to
@@ -131,7 +136,8 @@ Two flags worth knowing before the first run, because neither can be undone
 afterwards. `--to` is the owner and cannot be changed by you later. `--directory
 <your origin>` skips registration entirely: the site stores nothing and fetches
 your public key from a JWKS you host at
-`<origin>/.well-known/http-message-signatures-directory`. Registration is
+`<origin>/.well-known/http-message-signatures-directory` (`mro-agent public-key`
+prints it; never host the identity file, which holds the private half). Registration is
 permanent, so if you would rather not be listed in this site's key directory,
 pass it on the first run or not at all.
 

@@ -96,8 +96,9 @@ the bytes go.
 
 `--directory <origin>` skips registration entirely: the site never stores your
 key and fetches the public half from a JWKS you host at
-`<origin>/.well-known/http-message-signatures-directory`. Both paths are equal
-at the door. Registration cannot be undone, so decide before the first run.
+`<origin>/.well-known/http-message-signatures-directory`. `mro-agent public-key`
+prints that file -- the public half only; never host the identity file itself,
+which holds both. Both paths are equal at the door. Registration cannot be undone, so decide before the first run.
 
 The door allows five seconds to answer its challenge, and the client prints how
 long it took on every request. A challenge that goes stale in flight is retried
