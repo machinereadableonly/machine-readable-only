@@ -164,6 +164,15 @@ test("no seed: nothing is written", async () => {
   assert.ok(said.some((m) => /split seed/.test(m)));
 });
 
+// Recorded as intended (D8.5): a lost seed holds paid mints too, not only
+// credits. The mint carries its day's bit, which only the seed can draw.
+test("no seed: a paid mint is held, not written", async () => {
+  const { q, writer } = rigWithOneMint({ day: TODAY - 1, tokenId: 7 });
+  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: null, bank: BANK });
+  assert.equal(summary.aborted, "split");
+  assert.ok(!writer.sent.some((s) => s.functionName === "mint"));
+});
+
 test("a seed that does not hash to the chain's anchor writes nothing, and names no key", async () => {
   const said = [];
   const { q, writer } = rigWithOneCredit({ day: TODAY - 1 });

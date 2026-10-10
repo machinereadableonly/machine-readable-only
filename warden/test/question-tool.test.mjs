@@ -11,17 +11,18 @@ import { queries } from "../src/mirror/queries.mjs";
 import { makeQuestionTool } from "../src/mcp/tools/question.mjs";
 import { ANSWER_WINDOW_MS } from "../src/mcp/question.mjs";
 import { DAY_MS } from "../src/day.mjs";
+import { openChain } from "./chain-stub.mjs";
 
 const BANK = JSON.parse(readFileSync(new URL("./fixtures/question-bank.json", import.meta.url), "utf8"));
 
-function setup({ lastDay = 100, level = 1, keyId = "k1", resting = false } = {}) {
+function setup({ lastDay = 100, level = 1, keyId = "k1", resting = false, chain = openChain() } = {}) {
   const db = openDb(":memory:");
   const q = queries(db);
   q.insertToken({ tokenId: 1, keyId, owner: "0xabc", lastDay, mintDay: 100 });
   if (level !== 1) db.prepare("UPDATE tokens SET level = ? WHERE tokenId = 1").run(level);
   if (resting) q.setResting(1);
   let clock = 1_000_000;
-  const tool = makeQuestionTool({ q, bank: BANK, questionSecret: "s", today: () => 101, now: () => clock });
+  const tool = makeQuestionTool({ q, chain, bank: BANK, questionSecret: "s", today: () => 101, now: () => clock });
   return { q, tool, tick: (ms) => { clock += ms; } };
 }
 
@@ -44,7 +45,7 @@ test("a second look the same day is the same question and the same window", asyn
 });
 
 test("refusals: unbound, unknown, resting, already credited today, year complete", async () => {
-  assert.equal((await setup({ keyId: "other" }).tool.handler({ tokenId: 1 }, { keyId: "k1" })).reason, "not-bound-to-caller");
+  assert.equal((await setup({ chain: openChain({ boundTo: "other" }) }).tool.handler({ tokenId: 1 }, { keyId: "k1" })).reason, "not-bound-to-caller");
   assert.equal((await setup().tool.handler({ tokenId: 9 }, { keyId: "k1" })).reason, "unknown-token");
   assert.equal((await setup({ level: 365 }).tool.handler({ tokenId: 1 }, { keyId: "k1" })).reason, "year-complete");
 
@@ -69,11 +70,11 @@ test("refusals: unbound, unknown, resting, already credited today, year complete
 // this factory runs on every MCP call.
 test("the tool refuses to be built without a bank or without the secret", () => {
   const q = queries(openDb(":memory:"));
-  assert.throws(() => makeQuestionTool({ q, questionSecret: "s" }), /non-empty question bank/);
+  assert.throws(() => makeQuestionTool({ q, chain: openChain(), questionSecret: "s" }), /non-empty question bank/);
   // An empty array is the one a bare Array.isArray check let through, and
   // questionFor would divide by its length.
-  assert.throws(() => makeQuestionTool({ q, bank: [], questionSecret: "s" }), /non-empty question bank/);
-  assert.throws(() => makeQuestionTool({ q, bank: BANK, questionSecret: "" }), /question secret/);
+  assert.throws(() => makeQuestionTool({ q, chain: openChain(), bank: [], questionSecret: "s" }), /non-empty question bank/);
+  assert.throws(() => makeQuestionTool({ q, chain: openChain(), bank: BANK, questionSecret: "" }), /question secret/);
 });
 
 // A bank edited under a question already issued. Substituting today's new
@@ -88,7 +89,7 @@ test("a question already issued but gone from the bank throws rather than substi
   const without = BANK.filter((b) => b.id !== issuedId);
   assert.equal(without.length, BANK.length - 1, "the issued question must really be the one removed");
 
-  const edited = makeQuestionTool({ q, bank: without, questionSecret: "s", today: () => 101, now: () => 1_000_000 });
+  const edited = makeQuestionTool({ q, chain: openChain(), bank: without, questionSecret: "s", today: () => 101, now: () => 1_000_000 });
   await assert.rejects(
     () => edited.handler({ tokenId: 1 }, { keyId: "k1" }),
     /issued question is missing from the bank/,
@@ -111,7 +112,7 @@ test("a question asked in the day's last seconds is due before midnight", async 
   const q = queries(db);
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 100, mintDay: 100 });
   const endOfDay = 102 * DAY_MS;
-  const tool = makeQuestionTool({ q, bank: BANK, questionSecret: "s", today: () => 101, now: () => endOfDay - 10_000 });
+  const tool = makeQuestionTool({ q, chain: openChain(), bank: BANK, questionSecret: "s", today: () => 101, now: () => endOfDay - 10_000 });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
   assert.equal(r.answerBy, new Date(endOfDay - 1).toISOString());
 });
@@ -120,7 +121,7 @@ test("a question on the mint day is told mint day is day 1, and when it lands", 
   const db = openDb(":memory:");
   const q = queries(db);
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 101, mintDay: 101 });
-  const tool = makeQuestionTool({ q, bank: BANK, questionSecret: "s", today: () => 101, now: () => 1 });
+  const tool = makeQuestionTool({ q, chain: openChain(), bank: BANK, questionSecret: "s", today: () => 101, now: () => 1 });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
   assert.equal(r.reason, "already-credited-today");
   assert.match(r.next, /Mint day is day 1/);
@@ -132,4 +133,36 @@ test("the question reply states its window in seconds", async () => {
   const { tool } = setup();
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
   assert.equal(r.windowSeconds, ANSWER_WINDOW_MS / 1000);
+});
+
+// D6: the CHAIN's binding decides who may see the day's question, so a key the
+// token was rebound away from cannot spend its look or answer for it.
+test("a key the chain no longer binds is refused, even while the mirror still names it", async () => {
+  const { q, tool } = setup({ keyId: "k1", chain: openChain({ boundTo: "k2" }) });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.reason, "not-bound-to-caller");
+  assert.equal(q.getQuestion(1, 101), undefined, "no look is spent");
+});
+
+test("a key the chain binds is served before the mirror has caught up", async () => {
+  const { tool } = setup({ keyId: "k1", chain: openChain({ boundTo: "k2" }) });
+  assert.equal((await tool.handler({ tokenId: 1 }, { keyId: "k2" })).ok, true);
+});
+
+test("an unreadable binding refuses chain-unavailable and spends no look", async () => {
+  const { q, tool } = setup({ chain: openChain({ boundKeyOf: async () => null }) });
+  const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  assert.equal(r.reason, "chain-unavailable");
+  assert.equal(q.getQuestion(1, 101), undefined);
+});
+
+test("a refusal the mirror can answer costs no chain read", async () => {
+  const poisoned = openChain({ boundKeyOf: async () => { throw new Error("no chain read on a mirror refusal"); } });
+  assert.equal((await setup({ resting: true, chain: poisoned }).tool.handler({ tokenId: 1 }, { keyId: "k1" })).reason, "resting");
+  assert.equal((await setup({ lastDay: 101, chain: poisoned }).tool.handler({ tokenId: 1 }, { keyId: "k1" })).reason, "already-credited-today");
+});
+
+test("a tool built without a chain reader fails at construction", () => {
+  const q = queries(openDb(":memory:"));
+  assert.throws(() => makeQuestionTool({ q, bank: BANK, questionSecret: "s" }), /boundKeyOf/);
 });

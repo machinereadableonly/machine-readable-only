@@ -22,6 +22,7 @@ import { openDb } from "../../warden/src/mirror/db.mjs";
 import { queries } from "../../warden/src/mirror/queries.mjs";
 import { utcDay } from "../../warden/src/mcp/tools/checkin.mjs";
 import { openChain } from "../../warden/test/chain-stub.mjs";
+import { keyIdToBytes32 } from "../../warden/src/mcp/keyId.mjs";
 import { adaptContext, unresolvedRefusal } from "../../warden/src/pay/x402.mjs";
 import { loadIdentity } from "../src/keys.mjs";
 import { VERSION, PUBLISHED, cronLine, invocation, unpayableMessage, doorMessage, DOOR_REASONS } from "../src/messages.mjs";
@@ -94,7 +95,8 @@ before(async () => {
 
   const mcp = makeMcpHandler({
     bank: BANK,
-    q, chain: openChain(), today: utcDay,
+    // Bound on chain to whatever key the mirror holds, as a settled chain would be.
+    q, chain: openChain({ boundKeyOf: async (id) => (q.getToken(id) ? keyIdToBytes32(q.getToken(id).keyId) : null) }), today: utcDay,
     contract: "0xcontract", chainId: 84532,
     challengeSecret: SECRET, questionSecret: SECRET, domain: DOMAIN, llmsTxt: "",
     catalogue: {}, supplyCap: 10_000,

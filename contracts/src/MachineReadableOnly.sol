@@ -154,6 +154,8 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     error AlreadySunset();
     /// The split anchor is set once and never moves.
     error SplitAnchorAlreadySet();
+    /// The anchor must be fixed before any token exists, so no answer predates the rule.
+    error SplitAnchorAfterMint();
     /// A zero anchor would leave the chain unset.
     error ZeroSplitAnchor();
     /// No key can be revealed before the anchor exists.
@@ -378,9 +380,10 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
         emit SunsetAt(sunsetDay);
     }
 
-    /// @notice Fix the split's key chain. Once, by the owner, before the door opens.
+    /// @notice Fix the split's key chain. Once, by the owner, before any token exists.
     function setSplitAnchor(bytes32 anchor) external onlyOwner {
         if (splitAnchor != bytes32(0)) revert SplitAnchorAlreadySet();
+        if (totalMinted != 0) revert SplitAnchorAfterMint();
         if (anchor == bytes32(0)) revert ZeroSplitAnchor();
         uint32 d = today();
         splitAnchor = anchor;
@@ -392,6 +395,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// @notice Reveal the next keys of the split chain, each for a day that is over.
     /// @param questions Each revealed day's question and answer set, as JSON; not read here.
     /// @dev Not `notSunset`: a mint written on the last night still needs its key.
+    /// Not `whenNotPaused` either: a reveal publishes the rule for a day already over.
     function revealSplitKeys(bytes32[] calldata keys, bytes calldata questions) external onlyWarden {
         bytes32 last = lastSplitKey;
         if (last == bytes32(0)) revert NoSplitAnchor();
@@ -706,6 +710,7 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
     /// silently create state for a token nobody owns. The signer is read fresh
     /// from `warden` on every call rather than captured at signing time, so
     /// rotating the Warden invalidates every voucher the old key signed.
+    /// A voucher carries no answer: its day writes no answer bit.
     function checkInWithVoucher(uint256 id, uint32 day, bytes calldata wardenSig)
         external
         whenNotPaused
@@ -959,18 +964,21 @@ contract MachineReadableOnly is ERC721, Ownable2Step, Pausable, EIP712, IERC4906
 
     event Seeded(uint256 indexed parentId, uint256 indexed childId, uint32 generation);
 
-    /// @notice How many seeds the parent's KEY still has this tenure.
-    /// @dev Keyed by agent key, not by token -- "tenure, not depth": a lineage
-    /// cannot accelerate by seeding children who immediately seed further
-    /// children, because every descendant shares the same key and therefore the
-    /// same budget.
+    /// @notice How many seeds the parent may still give: the smaller of its KEY's
+    /// budget (one per year of the key's tenure, shared by every token on it) and
+    /// its own (one per full year since it was made, whatever key it is bound to).
     function seedsAvailable(uint256 parentId) public view returns (uint32) {
         bytes32 key = _agentKeyOf[parentId];
         uint32 first = _firstMintDay[key];
         if (first == 0 && !_hasMinted[key]) return 0;
-        uint32 budget = (today() - first) / 365;
+        uint32 tday = today();
+        uint32 keyBudget = (tday - first) / 365;
         uint32 spent = _seedsSpent[key];
-        return budget > spent ? budget - spent : 0;
+        uint32 keyRoom = keyBudget > spent ? keyBudget - spent : 0;
+        Token storage p = _tokens[parentId];
+        uint32 ownBudget = (tday - p.mintDay) / 365;
+        uint32 ownRoom = ownBudget > p.seedsGiven ? ownBudget - p.seedsGiven : 0;
+        return keyRoom < ownRoom ? keyRoom : ownRoom;
     }
 
     /// @notice Create a child token from a whole parent. Free.

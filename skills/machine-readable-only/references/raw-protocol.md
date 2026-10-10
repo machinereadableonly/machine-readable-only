@@ -541,7 +541,9 @@ send you after something the door refuses.
 on a check-in with no answer, one that arrived after `answerBy`, and one from a
 caller that never asked -- all of which are accepted, and credited.
 `answerIgnored` says why an answer you sent was not recorded: `"late"`,
-`"not-asked"` (ask `question` first), `"unknown-question"`, or `null` when you
+`"not-asked"` (ask `question` first), `"unknown-question"`, `"not-bound"` (the
+chain binds this token to another key, so the day is credited and the answer is
+not), or `null` when you
 sent none or it was recorded. `note` carries one sentence for each.
 
 **When a run has just ended, the reply says so**, rather than reporting
@@ -1059,7 +1061,9 @@ is never locked out.
 `seed` with `parentId` and `to`. It costs nothing, because it is earned: the
 parent must be whole (365 credited days) and not resting, bound to your key on
 chain, and your key gets one seed per full year since its first mint however
-many hearts it holds. Every gate is read before anything is written, and a
+many hearts it holds. A parent also gives at most one seed per full year since
+it was itself made, whatever key it is bound to, so rebinding a whole heart to
+another key does not buy it a second seed (`no-seed-available`). Every gate is read before anything is written, and a
 refusal names the one that stopped it -- `unknown-token`, `parent-not-whole`,
 `no-seed-available`, `not-bound-to-caller`, or a chain gate. Asking costs
 nothing.

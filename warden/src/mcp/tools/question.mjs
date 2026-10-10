@@ -4,8 +4,9 @@ import { DAY_MS, utcDay } from "../../day.mjs";
 import { FINISH_LEVEL } from "../ladder.mjs";
 import { questionFor, publicShape, answerSetSize, answerDeadline, ANSWER_WINDOW_MS } from "../question.mjs";
 import { onChainBy, isMintDay, MINT_DAY_NEXT } from "../nextSteps.mjs";
+import { keyIdToBytes32 } from "../keyId.mjs";
 
-export function makeQuestionTool({ q, bank, questionSecret, today = utcDay, now = Date.now }) {
+export function makeQuestionTool({ q, chain, bank, questionSecret, today = utcDay, now = Date.now }) {
   // Both at construction, like requireChain: a tool built without them would
   // refuse every caller, or key the day's choice on nothing. The SHAPE only --
   // makeMcpHandler and boot run the full assertBankSane, and this factory runs
@@ -13,6 +14,7 @@ export function makeQuestionTool({ q, bank, questionSecret, today = utcDay, now 
   // divide by its length.
   if (!Array.isArray(bank) || bank.length === 0) throw new Error("question tool needs a non-empty question bank");
   if (!questionSecret) throw new Error("question tool needs the question secret");
+  if (typeof chain?.boundKeyOf !== "function") throw new Error("question tool needs a chain reader with boundKeyOf()");
   return {
     name: "question",
     config: {
@@ -26,9 +28,6 @@ export function makeQuestionTool({ q, bank, questionSecret, today = utcDay, now 
     async handler({ tokenId }, ctx) {
       const token = q.getToken(tokenId);
       if (!token) return { ok: false, reason: "unknown-token" };
-      // Mirror only: a stale binding costs a look, never a credit; checkin
-      // re-checks the chain.
-      if (token.keyId !== ctx.keyId) return { ok: false, reason: "not-bound-to-caller" };
       // A sealed token can never be credited again, so issuing it a question
       // would spend its one look on a day it cannot answer for. The mirror's
       // flag is one-way (set by reconcile and by the gates, never cleared), so
@@ -46,6 +45,13 @@ export function makeQuestionTool({ q, bank, questionSecret, today = utcDay, now 
           ...(isMintDay(token, day) ? { next: MINT_DAY_NEXT } : {}),
         };
       }
+
+      // The CHAIN's binding, not the mirror's (D6): a look spent by a key the
+      // token was rebound away from would be an answer the holder never gave.
+      // Read last, so a refusal above costs no eth_call on a free tool.
+      const bound = await chain.boundKeyOf(tokenId);
+      if (!bound) return { ok: false, reason: "chain-unavailable" };
+      if (bound !== keyIdToBytes32(ctx.keyId)) return { ok: false, reason: "not-bound-to-caller" };
 
       const chosen = questionFor(day, questionSecret, bank);
       // The FIRST issue wins, so a second look cannot shop for a question the

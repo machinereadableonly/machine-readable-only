@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {MachineReadableOnly} from "../src/MachineReadableOnly.sol";
+import {Renderer} from "../src/render/Renderer.sol";
 import {MroTestBase} from "./MroTestBase.sol";
 
 /// @notice The split's key chain: fixed by an anchor before opening, walked
@@ -10,9 +11,31 @@ import {MroTestBase} from "./MroTestBase.sol";
 contract SplitKeysTest is MroTestBase {
     bytes32[] internal k;
 
+    /// The anchor is set before any token exists (D8.4), so no token is minted here.
     function setUp() public {
-        _deployAndMintOne();
+        r = new Renderer();
+        t = new MachineReadableOnly(address(r), WARDEN);
+        vm.warp(86_400 * 1000 + 1);
         k = _splitChain(keccak256("test split seed"), 40);
+    }
+
+    function test_theAnchorIsRefusedOnceATokenExists() public {
+        vm.prank(WARDEN);
+        t.mint(1, ALICE, KEY, _code(), _today(), false);
+        vm.expectRevert(MachineReadableOnly.SplitAnchorAfterMint.selector);
+        t.setSplitAnchor(k[0]);
+    }
+
+    /// Recorded as intended (D8.2): a pause stops writes to tokens, not the
+    /// publishing of a rule for a day that is already over.
+    function test_aRevealWhilePausedIsAllowed() public {
+        t.setSplitAnchor(k[0]);
+        _warpToDay(_today() + 2);
+        t.pause();
+        bytes32[] memory one = _keys(1, 1);
+        vm.prank(WARDEN);
+        t.revealSplitKeys(one, "");
+        assertEq(t.splitKeysRevealed(), 1);
     }
 
     function _keys(uint256 from, uint256 count) internal view returns (bytes32[] memory out) {

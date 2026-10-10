@@ -532,8 +532,9 @@ licence.
 
 A whole heart may seed a child token. It is free, because it is earned. The
 rate is one seed per key per full year since that key's first mint, however
-many hearts the key holds, so the collection grows only from persistence and
-cannot compound. The child is a new token in the same collection, bound to the
+many hearts the key holds, and one seed per heart per full year since that heart
+was made, whatever key it is bound to, so the collection grows only from
+persistence and cannot compound. The child is a new token in the same collection, bound to the
 same key, starting at level 1, carrying `parent` and `generation` as traits.
 
 The child also carries an **Echo**: the number of days its line had already run

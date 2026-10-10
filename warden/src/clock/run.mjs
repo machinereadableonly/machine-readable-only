@@ -394,6 +394,7 @@ export async function runClock({
       stopForSplit(`the contract's split anchor could not be read (${safeErrorText(err)})`);
     }
     if (state) {
+      // Intended (D8.5): every write carries a bit only the seed can draw, paid mints included.
       if (!splitKeys) stopForSplit("no usable split seed is loaded");
       else if (state.anchor === ZERO_WORD) stopForSplit("the contract has no split anchor yet");
       else if (state.anchor !== splitKeys[0]) stopForSplit("the split seed does not hash to the contract's split anchor");

@@ -77,6 +77,22 @@ contract VouchersTest is MroTestBase {
         assertEq(t.viewOf(1).streak, 2);
     }
 
+    /// Recorded as intended (D8.3): a voucher carries no answer, so its day
+    /// writes no answer bit and is drawn as an unfilled square.
+    function test_aVoucherCreditWritesNoAnswerBit() public {
+        t.setVouchersEnabled(true);
+        uint32 d = t.today() + 1;
+        _warpToDay(d);
+        bytes memory sig = _sign(1, d);
+        uint256[2] memory before = t.answersOf(1);
+        t.checkInWithVoucher(1, d, sig);
+        assertEq(t.viewOf(1).level, 2);
+        uint256[2] memory afterwards = t.answersOf(1);
+        assertEq(afterwards[0], before[0]);
+        assertEq(afterwards[1], before[1]);
+        assertEq((afterwards[0] >> 1) & 1, 0, "credit 2's bit is unset");
+    }
+
     function test_aVoucherSignedByTheWrongKeyIsRejected() public {
         t.setVouchersEnabled(true);
         uint32 d = t.today() + 1;

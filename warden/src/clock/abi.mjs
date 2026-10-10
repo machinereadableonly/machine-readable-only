@@ -2315,6 +2315,11 @@ export const MRO_ABI = [
   },
   {
     "type": "error",
+    "name": "SplitAnchorAfterMint",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "SplitAnchorAlreadySet",
     "inputs": []
   },

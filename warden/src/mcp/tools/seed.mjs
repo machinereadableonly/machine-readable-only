@@ -13,7 +13,7 @@ export function makeSeedTool({ q, chain, today, alert = console.error }) {
     name: "seed",
     config: {
       title: "Seed a child token",
-      description: "Costs nothing. Requires a whole, resting-free parent bound to your key, and an unspent seed for this agent-year.",
+      description: "Costs nothing. Requires a whole, resting-free parent bound to your key, an unspent seed for this agent-year, and a parent that has not seeded in the past year.",
       inputSchema: z.object({
         parentId: z.number().int().positive().describe("A whole, unsealed token bound to your key."),
         to: z.string().regex(/^0x[0-9a-fA-F]{40}$/, "expected a 20-byte address").describe("The Base address that will OWN the token: your operator's wallet, usually. Your signing key grows the token; this address owns it and can sell, rebind or seal it."),

@@ -184,6 +184,8 @@ contract LifecycleTest is MroTestBase {
         // Mallory owns token 3 and points it at the victim's key. No proof asked.
         vm.prank(MALLORY);
         t.rebind(3, victimKey);
+        assertEq(t.seedsAvailable(3), 0, "token 3's own first year is not over (D8.1)");
+        _warpToDay(t.today() + 1);
         assertEq(t.seedsAvailable(3), 1, "token 3 now draws on the victim's budget");
 
         // The Warden verified Mallory's own key before the rebind landed.
@@ -193,7 +195,7 @@ contract LifecycleTest is MroTestBase {
         vm.expectRevert(abi.encodeWithSelector(MachineReadableOnly.KeyChanged.selector, uint256(3)));
         t.seed(77, 3, MALLORY, code, day, freshKey, false);
 
-        assertEq(t.seedsAvailable(2), 1, "the victim's earned seed is untouched");
+        assertEq(t.seedsAvailable(2), 2, "the victim's earned seeds are untouched");
     }
 
     function test_seedRequiresAWholeParent() public {

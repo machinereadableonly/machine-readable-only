@@ -149,6 +149,12 @@ export async function supplyBlock(chain, q, seen = null) {
  * unwritten reservation cannot itself have been rebound, because `rebind` is a
  * call on a token the chain already holds.
  *
+ * The chain's figure is the smaller of the key's room and the parent's own.
+ * Subtracting the key's reservations alone still never over-issues: any
+ * unwritten seed of this parent carries its current key, and one carrying an
+ * older key reverts KeyChanged. Its one cost is a key seeding from two parents
+ * in one day, refused until the first is written.
+ *
  * `q` is required rather than optional: a caller that forgot it would get the
  * chain's figure with nothing subtracted, which is the over-issue this exists
  * to prevent.

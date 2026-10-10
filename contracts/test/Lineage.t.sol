@@ -165,6 +165,8 @@ contract LineageTest is MroTestBase {
         // And once the child is whole in its own right, that is still true:
         // spending the child's seed spends the parent's.
         _growTo(child, 365);
+        // A full year since the child was made, so its own limit is not what binds (D8.1).
+        _warpToDay(t.viewOf(child).mintDay + 365);
         uint32 before = t.seedsAvailable(1);
         assertEq(t.seedsAvailable(child), before, "still one budget, not two");
         assertGt(before, 0, "the key has earned a seed by now, or this proves nothing");

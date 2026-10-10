@@ -43,7 +43,7 @@ function freeTools(q) {
     ["challenge", makeChallengeTool({ challengeSecret: "s".repeat(32), domain: "example.com" }), {}],
     ["status", makeStatusTool({ q, chain: openChain() }), {}],
     ["ladder", makeLadderTool({ q, chain: openChain() }), { tokenId: 1 }],
-    ["question", makeQuestionTool({ q, bank: BANK, challengeSecret: SECRET, questionSecret: SECRET, today: () => 100 }), { tokenId: 1 }],
+    ["question", makeQuestionTool({ q, chain: openChain(), bank: BANK, questionSecret: SECRET, today: () => 100 }), { tokenId: 1 }],
     ["checkin", makeCheckinTool({ bank: BANK, q, chain: openChain(), today: () => 100 }), { tokenId: 1 }],
     ["rebind", makeRebindTool({ q, contract: CONTRACT }), { tokenId: 1 }],
     ["rest", makeRestTool({ q, contract: CONTRACT }), { tokenId: 1 }],

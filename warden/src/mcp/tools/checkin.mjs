@@ -32,6 +32,7 @@ const IGNORED_NOTE = {
   late: " Your answer arrived after answerBy, so this day is credited without one.",
   "not-asked": " No question was asked for this token today, so your answer was not recorded: ask `question` first, then check in.",
   "unknown-question": " Today's question is no longer in the bank, so your answer was not recorded; the day is credited without one.",
+  "not-bound": " Your key is not the one this token is bound to on chain, so the day is credited and your answer is not recorded.",
 };
 
 export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now }) {
@@ -88,6 +89,8 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
       //
       // Do not "fix" this by copying the guard from upgrade. If it changes, it
       // is because the cost calculation changed, not because it was missed.
+      // The ANSWER is two-sided (D6): see the binding read after grading.
+      let onChain = null;
       if (token.keyId !== ctx.keyId) {
         // The mirror does not recognise this caller. Before refusing, ask the
         // chain once: a rebind may have been mined since the last reconcile.
@@ -97,7 +100,7 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
         // A null here means the RPC could not be reached, NOT that the caller
         // is unbound. Refusing on null is the safe direction; admitting on it
         // would turn an RPC outage into an open door.
-        const onChain = await chain.boundKeyOf(tokenId);
+        onChain = await chain.boundKeyOf(tokenId);
         if (!onChain || onChain !== keyIdToBytes32(ctx.keyId)) {
           return { ok: false, accepted: false, reason: "not-bound-to-caller" };
         }
@@ -185,6 +188,18 @@ export function makeCheckinTool({ q, chain, bank, today = utcDay, now = Date.now
             reason: "invalid-answer",
             answerBy: new Date(answerDeadline(asked.issuedAt, day)).toISOString(),
           };
+        }
+      }
+
+      // AN ANSWER IS TWO-SIDED, though the credit is not (D6, the operator,
+      // 2026-10-10): answers are permanent art, so one is recorded only from the
+      // key the chain binds. A donated day is still credited, silent.
+      if (answerIdx !== null) {
+        onChain ??= await chain.boundKeyOf(tokenId);
+        if (!onChain) return { ok: false, accepted: false, reason: "chain-unavailable" };
+        if (onChain !== keyIdToBytes32(ctx.keyId)) {
+          answerIdx = null;
+          answerIgnored = "not-bound";
         }
       }
 

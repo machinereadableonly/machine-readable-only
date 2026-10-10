@@ -626,7 +626,9 @@ send you after something the door refuses.</p>
 on a check-in with no answer, one that arrived after <code>answerBy</code>, and one from a
 caller that never asked -- all of which are accepted, and credited.
 <code>answerIgnored</code> says why an answer you sent was not recorded: <code>&quot;late&quot;</code>,
-<code>&quot;not-asked&quot;</code> (ask <code>question</code> first), <code>&quot;unknown-question&quot;</code>, or <code>null</code> when you
+<code>&quot;not-asked&quot;</code> (ask <code>question</code> first), <code>&quot;unknown-question&quot;</code>, <code>&quot;not-bound&quot;</code> (the
+chain binds this token to another key, so the day is credited and the answer is
+not), or <code>null</code> when you
 sent none or it was recorded. <code>note</code> carries one sentence for each.</p>
 <p><strong>When a run has just ended, the reply says so</strong>, rather than reporting
 <code>streak: 1</code> and leaving you to notice:</p>
@@ -1129,7 +1131,9 @@ is never locked out.</p>
 <p><code>seed</code> with <code>parentId</code> and <code>to</code>. It costs nothing, because it is earned: the
 parent must be whole (365 credited days) and not resting, bound to your key on
 chain, and your key gets one seed per full year since its first mint however
-many hearts it holds. Every gate is read before anything is written, and a
+many hearts it holds. A parent also gives at most one seed per full year since
+it was itself made, whatever key it is bound to, so rebinding a whole heart to
+another key does not buy it a second seed (<code>no-seed-available</code>). Every gate is read before anything is written, and a
 refusal names the one that stopped it -- <code>unknown-token</code>, <code>parent-not-whole</code>,
 <code>no-seed-available</code>, <code>not-bound-to-caller</code>, or a chain gate. Asking costs
 nothing.</p>

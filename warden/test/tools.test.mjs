@@ -398,7 +398,7 @@ function withQuestion({ issuedAt = 1_000 } = {}) {
 
 test("an answer inside the window is recorded with the credit", async () => {
   const { q } = withQuestion();
-  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => 5_000 });
+  const tool = makeCheckinTool({ q, chain: openChain(), bank: BANK, today: () => 101, now: () => 5_000 });
   const r = await tool.handler({ tokenId: 1, answer: "Thunder" }, { keyId: "k1" });
   assert.equal(r.accepted, true);
   assert.equal(r.answered, true);
@@ -413,7 +413,7 @@ test("the time the answer is stamped with is the time it was judged against", as
   const { q } = withQuestion();
   const deadline = 1_000 + ANSWER_WINDOW_MS;
   let reading = deadline;
-  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => reading++ });
+  const tool = makeCheckinTool({ q, chain: openChain(), bank: BANK, today: () => 101, now: () => reading++ });
   const r = await tool.handler({ tokenId: 1, answer: "Thunder" }, { keyId: "k1" });
   assert.equal(r.answered, true, "the last millisecond of the window is in time");
   assert.equal(q.getQuestion(1, 101).answeredAt, deadline);
@@ -421,7 +421,7 @@ test("the time the answer is stamped with is the time it was judged against", as
 
 test("an answer outside the set, in time, is refused and NOT credited", async () => {
   const { db, q } = withQuestion();
-  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => 5_000 });
+  const tool = makeCheckinTool({ q, chain: openChain(), bank: BANK, today: () => 101, now: () => 5_000 });
   const r = await tool.handler({ tokenId: 1, answer: "rain" }, { keyId: "k1" });
   assert.equal(r.ok, false);
   assert.equal(r.reason, "invalid-answer");
@@ -434,7 +434,7 @@ test("an answer outside the set, in time, is refused and NOT credited", async ()
 test("a late answer, valid or not, credits the day as silent", async () => {
   const { q } = withQuestion();
   const late = 1_000 + ANSWER_WINDOW_MS + 1;
-  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => late });
+  const tool = makeCheckinTool({ q, chain: openChain(), bank: BANK, today: () => 101, now: () => late });
   const r = await tool.handler({ tokenId: 1, answer: "rain" }, { keyId: "k1" });
   assert.equal(r.accepted, true);
   assert.equal(r.answered, false);
@@ -445,7 +445,7 @@ test("a late answer, valid or not, credits the day as silent", async () => {
 
 test("an answer with no question asked credits the day as silent", async () => {
   const { q } = withToken();
-  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => 5_000 });
+  const tool = makeCheckinTool({ q, chain: openChain(), bank: BANK, today: () => 101, now: () => 5_000 });
   const r = await tool.handler({ tokenId: 1, answer: "fog" }, { keyId: "k1" });
   assert.equal(r.accepted, true);
   assert.equal(r.answered, false);
@@ -459,7 +459,7 @@ test("an answer with no question asked credits the day as silent", async () => {
 test("an answer to a question the bank no longer holds credits the day as silent", async () => {
   const { q } = withToken();
   q.issueQuestion(1, 101, "t-gone", 1_000);
-  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => 5_000 });
+  const tool = makeCheckinTool({ q, chain: openChain(), bank: BANK, today: () => 101, now: () => 5_000 });
   const r = await tool.handler({ tokenId: 1, answer: "fog" }, { keyId: "k1" });
   assert.equal(r.accepted, true);
   assert.equal(r.answered, false);
@@ -482,7 +482,7 @@ test("an answer a row already holds is reported unanswered and never overwritten
   const { q } = withQuestion();
   assert.equal(q.recordAnswer(1, 101, 0, 2_000).changes, 1, "the row must start answered");
 
-  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => 5_000 });
+  const tool = makeCheckinTool({ q, chain: openChain(), bank: BANK, today: () => 101, now: () => 5_000 });
   const r = await tool.handler({ tokenId: 1, answer: "Thunder" }, { keyId: "k1" });
   assert.equal(r.accepted, true, "the day is still credited: an answer never costs it");
   assert.equal(r.answered, false);
@@ -494,14 +494,14 @@ test("an answer a row already holds is reported unanswered and never overwritten
 
 test("no answer at all is accepted and says so", async () => {
   const { q } = withQuestion();
-  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101, now: () => 5_000 });
+  const tool = makeCheckinTool({ q, chain: openChain(), bank: BANK, today: () => 101, now: () => 5_000 });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
   assert.equal(r.answered, false);
 });
 
 test("a tool built without the bank refuses at the wiring, not on a call", () => {
   const { q } = withToken();
-  assert.throws(() => makeCheckinTool({ q, chain: noChainRead, today: () => 101 }), /question bank/);
+  assert.throws(() => makeCheckinTool({ q, chain: openChain(), today: () => 101 }), /question bank/);
 });
 
 // 21 Cheap #2. Mint sets lastDay to the mint day, so a check-in that day is
@@ -510,8 +510,29 @@ test("a tool built without the bank refuses at the wiring, not on a call", () =>
 test("a check-in on the mint day is told mint day is day 1", async () => {
   const q = queries(openDb(":memory:"));
   q.insertToken({ tokenId: 1, keyId: "k1", owner: "0xabc", lastDay: 101, mintDay: 101 });
-  const tool = makeCheckinTool({ q, chain: noChainRead, bank: BANK, today: () => 101 });
+  const tool = makeCheckinTool({ q, chain: openChain(), bank: BANK, today: () => 101 });
   const r = await tool.handler({ tokenId: 1 }, { keyId: "k1" });
   assert.equal(r.reason, "already-credited-today");
   assert.match(r.next, /Mint day is day 1/);
+});
+
+// D6: the credit is one-sided, the answer is not. A key the token was rebound
+// away from still donates the day, but its answer is not recorded.
+test("an answer from a key the chain no longer binds credits the day without it", async () => {
+  const { q } = withQuestion();
+  const tool = makeCheckinTool({ q, chain: openChain({ boundTo: "k2" }), bank: BANK, today: () => 101, now: () => 5_000 });
+  const r = await tool.handler({ tokenId: 1, answer: "Thunder" }, { keyId: "k1" });
+  assert.equal(r.accepted, true);
+  assert.equal(r.answered, false);
+  assert.equal(r.answerIgnored, "not-bound");
+  assert.match(r.note, /not the one this token is bound to on chain/);
+  assert.equal(q.getQuestion(1, 101).answer, null);
+});
+
+test("an answer whose binding cannot be read is refused chain-unavailable, not credited", async () => {
+  const { db, q } = withQuestion();
+  const tool = makeCheckinTool({ q, chain: openChain({ boundKeyOf: async () => null }), bank: BANK, today: () => 101, now: () => 5_000 });
+  const r = await tool.handler({ tokenId: 1, answer: "Thunder" }, { keyId: "k1" });
+  assert.equal(r.reason, "chain-unavailable");
+  assert.equal(creditsFor(db, 1).length, 0);
 });

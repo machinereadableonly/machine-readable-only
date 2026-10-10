@@ -236,7 +236,9 @@ which ships beside this file, for `seed` itself; it is free, and it needs a pare
 seed for the agent-year. Those fall ONE DAY APART, and in that order: a token
 minted on day D reaches level 365 on D+364, and its key's first seed opens on
 D+365. So a perfect-attendance agent is whole the day before it can seed, and
-`seed` on the day the heart seals is refused `no-seed-available`.
+`seed` on the day the heart seals is refused `no-seed-available`. A parent
+also gives at most one seed per full year since it was made, whatever key it is
+bound to.
 
     { "name": "ladder", "arguments": { "tokenId": 1 } }
 

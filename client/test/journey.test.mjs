@@ -25,6 +25,7 @@ import { openDb } from "../../warden/src/mirror/db.mjs";
 import { queries } from "../../warden/src/mirror/queries.mjs";
 import { utcDay } from "../../warden/src/mcp/tools/checkin.mjs";
 import { openChain } from "../../warden/test/chain-stub.mjs";
+import { keyIdToBytes32 } from "../../warden/src/mcp/keyId.mjs";
 
 import { generateIdentity, ensureIdentity, loadIdentity } from "../src/keys.mjs";
 import { signRequest, REQUIRED_COMPONENTS } from "../src/signing.mjs";
@@ -71,7 +72,8 @@ before(async () => {
   // The site's OWN chain stub, not one written here. A hand-rolled stub was
   // missing lifecycleOf() and turned every tool call into a 500, which looked
   // exactly like a client bug for as long as it took to read the server log.
-  const chain = openChain();
+  // Bound on chain to whatever key the mirror holds, as a settled chain would be.
+  const chain = openChain({ boundKeyOf: async (id) => (q.getToken(id) ? keyIdToBytes32(q.getToken(id).keyId) : null) });
 
   const mcp = makeMcpHandler({
     bank: BANK,
