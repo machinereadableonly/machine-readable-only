@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # Install the Clock as its own system user (Plan E, task 11).
 #
-#   sudo bash warden/deploy/install-clock-user.sh [--notify <path>]
+#   sudo bash warden/deploy/install-clock-user.sh --commit <sha> [--notify <path>]
 #   bash warden/deploy/install-clock-user.sh --dry-run
 #
-# Copies the Clock's code and a Node binary to /opt/mro-clock (root-owned), its
+# Builds the Clock's code at <sha> into /opt/mro-clock (root-owned) with
+# build-clock-tree.sh -- a git bundle checked against its hashes, a Node checked
+# against its published SHA-256, `npm ci --ignore-scripts` -- and from then on
+# runs only that root-owned code. The checkout must be at <sha> and clean, so
+# the installer being run is the committed one. Copies its
 # key, split seed and own copy of the question bank to /etc/mro-clock (readable
 # by mro-clock only), the Warden's copy of the bank to /etc/mro (root-owned,
 # read through group mro), makes /var/lib/mro-clock for the Clock's ledger, and
@@ -26,6 +30,7 @@ DRY=0
 NOTIFY=""
 REPLACE_SEED=0
 KEY_FLAG=""
+COMMIT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1; shift ;;
@@ -33,11 +38,13 @@ while [ $# -gt 0 ]; do
     --replace-seed) REPLACE_SEED=1; shift ;;
     --new-clock-key) KEY_FLAG=--new-key; shift ;;
     --rotate-clock-key) KEY_FLAG=--rotate-key; shift ;;
-    *) echo "usage: sudo bash install-clock-user.sh [--notify <path>] [--replace-seed] [--new-clock-key | --rotate-clock-key] | --dry-run" >&2; exit 2 ;;
+    --commit) COMMIT="${2:?--commit needs a sha}"; shift 2 ;;
+    *) echo "usage: sudo bash install-clock-user.sh --commit <sha> [--notify <path>] [--replace-seed] [--new-clock-key | --rotate-clock-key] | --dry-run" >&2; exit 2 ;;
   esac
 done
 
 WARDEN="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$WARDEN/.." && pwd)"
 NODE_VERSION=v24.14.1
 OPT=/opt/mro-clock
 ETC=/etc/mro-clock
@@ -75,10 +82,8 @@ id mro-clock >/dev/null 2>&1 || die "no user mro-clock: run deploy/create-clock-
 id -nG "$MAIN_USER" | tr ' ' '\n' | /bin/grep -qx mro || die "$MAIN_USER is not in group mro"
 [ "$(stat -c '%a %U:%G' "$STATE")" = "2770 root:mro" ] || die "$STATE is not 2770 root:mro"
 ok "group mro, user mro-clock, $MAIN_USER in mro, $STATE 2770 root:mro"
-[ -x "$NODE" ] || die "no node $NODE_VERSION at $NODE"
-[ -d "$WARDEN/node_modules" ] || die "no $WARDEN/node_modules: run npm ci in warden/"
 [ -f "$WARDEN_ENV" ] || die "no Warden .env in $WARDEN"
-ok "node $NODE_VERSION, warden/node_modules, the Warden's .env"
+ok "the Warden's .env"
 # It is substituted into a unit file by sed: % is a systemd specifier, and
 # | & \ are sed's own.
 case "$NOTIFY" in *[[:space:]\|\&%\\]*) die "the notify path may not contain whitespace, |, &, % or \\" ;; esac
@@ -92,6 +97,8 @@ LEFT="$(as_main /bin/grep -rlE '^CLOCK_PRIVATE_KEY=.' "$MAIN_HOME/.mro-env-backu
 ok "no copy of the Clock key in the env backups"
 
 if [ "$DRY" -eq 1 ]; then
+  # The dry run is the main user's own, so it may use the main user's node.
+  [ -x "$NODE" ] && [ -d "$WARDEN/node_modules" ] || die "no node $NODE_VERSION at $NODE, or no warden/node_modules"
   "$NODE" "$WARDEN/deploy/clock-env.mjs" --warden-env "$WARDEN_ENV" --out "$ETC/clock.env" --check \
     || die "the Clock's env file could not be built from the Warden's .env (above)"
   ok "the Clock's env file builds from the Warden's .env"
@@ -101,6 +108,12 @@ if [ "$DRY" -eq 1 ]; then
   printf '              %s/mro-clock.{service,timer} and mro-clock-alert.service (timer DISABLED)\n' "$UNITS"
   exit 0
 fi
+
+# The scripts root is running must be the committed ones at <sha>.
+[[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "pass --commit <the full 40-character sha you reviewed>"
+[ "$(as_main /usr/bin/git -C "$REPO" rev-parse HEAD)" = "$COMMIT" ] || die "the checkout is not at $COMMIT"
+[ -z "$(as_main /usr/bin/git -C "$REPO" status --porcelain --untracked-files=no)" ] || die "the checkout has uncommitted changes"
+ok "the checkout is clean at $COMMIT"
 
 [ ! -e "$STATE/state.db.run-lock" ] || die "a Clock run lock exists in $STATE: a run is in progress or died; check the log"
 # The lock only sees a run already going; step 1 swaps the code a timer run
@@ -112,12 +125,10 @@ if systemctl is-active --quiet mro-clock.timer; then
 fi
 
 step "1. the code, owned by root"
-STAGE="$(mktemp -d "$OPT.new.XXXXXX")"
+STAGE="$OPT.new.$$"
 trap 'rm -rf "$STAGE"' EXIT
-mkdir -p "$STAGE/warden/node_modules" "$STAGE/bin"
-cp -a "$WARDEN/src" "$WARDEN/package.json" "$STAGE/warden/"
-cp -a "$WARDEN/node_modules/." "$STAGE/warden/node_modules/"
-install -m 755 "$NODE" "$STAGE/bin/node"
+bash "$WARDEN/deploy/build-clock-tree.sh" "$REPO" "$COMMIT" "$STAGE" "$NODE_VERSION" "sudo -u $MAIN_USER" \
+  || die "the code could not be built (above)"
 chown -R root:root "$STAGE"
 chmod -R u+rwX,go+rX,go-w "$STAGE"
 # Disarmed BEFORE the swap: the trap must never delete the tree just moved into place.
@@ -131,11 +142,12 @@ if ! mv "$STAGE" "$OPT"; then
   rm -rf "$STAGE"
   die "could not move the new code into $OPT; the previous code is back in place"
 fi
-ok "$OPT from commit $(sudo -u "$MAIN_USER" git -C "$WARDEN" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+ok "$OPT from commit $COMMIT, node $NODE_VERSION from nodejs.org"
 
 step "2. the key and the split seed, readable by mro-clock only"
 install -d -o mro-clock -g mro -m 700 "$ETC"
-"$NODE" "$WARDEN/deploy/clock-env.mjs" --warden-env "$WARDEN_ENV" --out "$ETC/clock.env" $KEY_FLAG
+# From the root-owned tree, with its own node: root runs no code the main user can write.
+"$OPT/bin/node" "$OPT/warden/deploy/clock-env.mjs" --warden-env "$WARDEN_ENV" --out "$ETC/clock.env" $KEY_FLAG
 chown mro-clock:mro "$ETC/clock.env"
 chmod 600 "$ETC/clock.env"
 # The home copy is taken once -- on a first install, or with --replace-seed after
@@ -194,7 +206,7 @@ ok "$LEDGER_DIR"
 step "4. the log"
 install -d -o root -g mro -m 2750 "$LOG_DIR"
 [ -f "$LOG_DIR/clock.log" ] || install -o mro-clock -g mro -m 640 /dev/null "$LOG_DIR/clock.log"
-install -m 644 "$WARDEN/deploy/mro-clock.logrotate" /etc/logrotate.d/mro-clock
+install -m 644 "$OPT/warden/deploy/mro-clock.logrotate" /etc/logrotate.d/mro-clock
 # --debug exits 0 even on unknown directives, so its error lines are the check.
 ROTATE_CHECK="$(logrotate --debug /etc/logrotate.d/mro-clock 2>&1 || true)"
 if /bin/grep -q '^error:' <<<"$ROTATE_CHECK"; then
@@ -204,10 +216,10 @@ else
 fi
 
 step "5. the units, installed DISABLED"
-install -m 644 "$WARDEN/deploy/mro-clock.system.service" "$UNITS/mro-clock.service"
-install -m 644 "$WARDEN/deploy/mro-clock.system.timer" "$UNITS/mro-clock.timer"
+install -m 644 "$OPT/warden/deploy/mro-clock.system.service" "$UNITS/mro-clock.service"
+install -m 644 "$OPT/warden/deploy/mro-clock.system.timer" "$UNITS/mro-clock.timer"
 sed -e "s|@MAIN_USER@|$MAIN_USER|" -e "s|@NOTIFY@|$NOTIFY|" \
-  "$WARDEN/deploy/mro-clock-alert.service.in" > "$UNITS/mro-clock-alert.service"
+  "$OPT/warden/deploy/mro-clock-alert.service.in" > "$UNITS/mro-clock-alert.service"
 chmod 644 "$UNITS/mro-clock-alert.service"
 systemctl daemon-reload
 if systemd-analyze verify "$UNITS/mro-clock.service" "$UNITS/mro-clock.timer" "$UNITS/mro-clock-alert.service"; then

@@ -74,7 +74,7 @@ test("a home copy of the split seed is refused once one is installed, unless rep
 
 test("a copy of the Clock key left in an env backup stops the install, dry run included", () => {
   const scan = installer.indexOf("^CLOCK_PRIVATE_KEY=.");
-  assert.ok(scan !== -1 && scan < installer.indexOf('if [ "$DRY" -eq 1 ]; then\n  "$NODE"'), "checked before the dry run returns");
+  assert.ok(scan !== -1 && scan < installer.indexOf('if [ "$DRY" -eq 1 ]; then\n  # The dry run'), "checked before the dry run returns");
   assert.match(installer, /\.mro-env-backups" "\$MAIN_HOME\/backups"/);
 });
 
@@ -114,4 +114,24 @@ test("no tracked unit names a user's home", () => {
 
 test("the installer installs the timer DISABLED", () => {
   assert.doesNotMatch(installer, /systemctl\s+(enable|start)\b[^\n]*mro-clock\.timer/);
+});
+
+// Root runs only root-owned code built from a reviewed commit.
+test("the installed tree is built from a named commit, and root runs nothing from the checkout after it", () => {
+  assert.match(installer, /\[\[ "\$COMMIT" =~ \^\[0-9a-f\]\{40\}\$ \]\]/);
+  assert.match(installer, /status --porcelain --untracked-files=no\)" \] \|\| die "the checkout has uncommitted changes"/);
+  assert.match(installer, /bash "\$WARDEN\/deploy\/build-clock-tree\.sh" "\$REPO" "\$COMMIT" "\$STAGE"/);
+  const afterSwap = installer.slice(installer.indexOf('if ! mv "$STAGE" "$OPT"'));
+  assert.doesNotMatch(afterSwap, /"\$NODE"|"\$WARDEN\/deploy/, "after the swap, every script and unit comes from /opt");
+  assert.match(afterSwap, /"\$OPT\/bin\/node" "\$OPT\/warden\/deploy\/clock-env\.mjs"/);
+  assert.doesNotMatch(installer, /cp -a "\$WARDEN\/node_modules/, "node_modules is never copied from the checkout");
+});
+
+test("the tree builder checks the commit, Node's checksum and every link, and runs no install script", () => {
+  const builder = read("../deploy/build-clock-tree.sh");
+  assert.match(builder, /bundle create .* HEAD/);
+  assert.match(builder, /checkout --quiet "\$COMMIT"/);
+  assert.match(builder, /sha256sum -c --quiet -/);
+  assert.match(builder, /npm ci --ignore-scripts --omit=dev/);
+  assert.match(builder, /a symlink leads out of the tree/);
 });

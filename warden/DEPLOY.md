@@ -392,7 +392,8 @@ emergency; allow 10 to 20 minutes for a real one.
     # 2. Generate the replacement straight into the Clock's own file. Prints
     #    only the new public address; the key never touches the main user's
     #    files. It refuses while the timer is still active.
-    sudo bash ~/projects/machine-readable-only/warden/deploy/install-clock-user.sh --rotate-clock-key
+    cd ~/projects/machine-readable-only
+    sudo bash warden/deploy/install-clock-user.sh --rotate-clock-key --commit "$(git rev-parse HEAD)"
 
     # 3. Point the contract at the new address. The OWNER is the 2-of-3 Safe,
     #    so this prepares a Safe transaction; nothing is sent here.
@@ -922,7 +923,14 @@ and sends a push with `~/scripts/notify.sh`.
 
 2. **Install** (re-runnable; the timer is installed disabled):
 
-       sudo bash warden/deploy/install-clock-user.sh
+       sudo bash warden/deploy/install-clock-user.sh --commit "$(git rev-parse HEAD)"
+
+   The checkout must be clean and at that commit, which should be the one you
+   reviewed. The installer builds `/opt/mro-clock` from it with
+   `deploy/build-clock-tree.sh`: the code through a git bundle checked against
+   its hashes, Node from nodejs.org checked against its published SHA-256, and
+   dependencies by `npm ci --ignore-scripts`. After that, root runs only the
+   copy in `/opt`.
 
    Between 00:30 and 23:45 UTC while the timer is active: it swaps the code a
    nightly run loads. It ends
