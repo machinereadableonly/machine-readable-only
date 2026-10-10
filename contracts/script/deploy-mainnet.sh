@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Deploy the pair to BASE MAINNET (chain 8453), write the Marks and set the split
-# anchor, read from the split seed (MRO_SPLIT_SEED_FILE, default ~/.mro-split/seed).
+# anchor, read from the split seed MRO_SPLIT_SEED_FILE (required; never a Sepolia seed).
 # This is the deploy that CANNOT BE UNDONE (Hard Rule 1) and that spends real
 # funds (Hard Rule 2): the operator approves every broadcast, every time.
 #
@@ -162,21 +162,48 @@ fi
 echo "pinning warden/src/clock/abi.mjs against the freshly compiled artifact"
 ( cd ../warden && node --test test/abi.test.mjs )
 
-# The anchor comes from the split seed and is set inside the deploy's broadcast. The mainnet
-# seed is its own, never the Sepolia one (DEPLOY.md section 10). A fork rehearsal must name a
-# throwaway seed explicitly, so the real one never anchors a fork.
-if [ -n "$FORK" ] && [ -z "${MRO_SPLIT_SEED_FILE:-}" ]; then
-  echo "FAIL: --fork needs MRO_SPLIT_SEED_FILE pointing at a throwaway seed." >&2
+# The anchor comes from the split seed and is set, once and for ever, inside the deploy's
+# broadcast. A seed whose keys Sepolia has already revealed would make every early mainnet
+# day's answer rule public, so the seed is named explicitly and checked against every
+# Sepolia anchor this box knows (DEPLOY.md section 10).
+SEED_FILE="${MRO_SPLIT_SEED_FILE:-}"
+if [ -z "$SEED_FILE" ]; then
+  echo "FAIL: set MRO_SPLIT_SEED_FILE to this deployment's own seed (never the Sepolia one)." >&2
+  echo "      Make one with: node ../warden/tools/split-seed.mjs new <path outside ~/.mro-split>" >&2
   exit 1
 fi
-SEED_FILE="${MRO_SPLIT_SEED_FILE:-$HOME/.mro-split/seed}"
 if [ ! -f "$SEED_FILE" ]; then
-  echo "FAIL: no split seed. Make one first: node ../warden/tools/split-seed.mjs new $SEED_FILE" >&2
+  echo "FAIL: no split seed at $SEED_FILE. Make one: node ../warden/tools/split-seed.mjs new $SEED_FILE" >&2
   exit 1
 fi
-SPLIT_ANCHOR=$(node ../warden/tools/split-seed.mjs anchor "$SEED_FILE" | sed -n 's/^anchor //p')
+anchor_of() { node ../warden/tools/split-seed.mjs anchor "$1" | sed -n 's/^anchor //p'; }
+SPLIT_ANCHOR=$(anchor_of "$SEED_FILE")
 if [ -z "$SPLIT_ANCHOR" ]; then
   echo "FAIL: could not read an anchor from $SEED_FILE" >&2
+  exit 1
+fi
+SEPOLIA_DIR="$(realpath -m "$HOME/.mro-split")"
+case "$(realpath -m "$SEED_FILE")" in
+  "$SEPOLIA_DIR"/*) echo "FAIL: $SEED_FILE is in the Sepolia seed's directory; keep this deployment's seed elsewhere." >&2; exit 1 ;;
+esac
+for other in "$HOME"/.mro-split/seed*; do
+  [ -f "$other" ] || continue
+  if [ "$(anchor_of "$other")" = "$SPLIT_ANCHOR" ]; then
+    echo "FAIL: $SEED_FILE has the same anchor as $other, a Sepolia seed." >&2
+    exit 1
+  fi
+done
+# The live Sepolia pair, named once in CLAUDE.md (adopt-deployment.sh keeps it there).
+SEPOLIA_TOKEN="${MRO_SEPOLIA_CONTRACT:-$(sed -n 's/^ *MachineReadableOnly  *\(0x[0-9a-fA-F]\{40\}\).*/\1/p' ../CLAUDE.md | head -1)}"
+SEPOLIA_ANCHOR="$(cast call "$SEPOLIA_TOKEN" 'splitAnchor()(bytes32)' --rpc-url https://sepolia.base.org 2>/dev/null || true)"
+if [ -z "$SEPOLIA_ANCHOR" ]; then
+  if [ -z "$FORK" ]; then
+    echo "FAIL: could not read the Sepolia pair's anchor (${SEPOLIA_TOKEN:-no address}); set MRO_SEPOLIA_CONTRACT and retry." >&2
+    exit 1
+  fi
+  echo "note: the Sepolia anchor could not be read; a fork rehearsal goes on without that check" >&2
+elif [ "$(echo "$SEPOLIA_ANCHOR" | tr 'A-F' 'a-f')" = "$(echo "$SPLIT_ANCHOR" | tr 'A-F' 'a-f')" ]; then
+  echo "FAIL: $SEED_FILE is the live Sepolia pair's seed ($SEPOLIA_TOKEN)." >&2
   exit 1
 fi
 export SPLIT_ANCHOR

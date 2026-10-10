@@ -535,7 +535,7 @@ handling of the real owner key.
 | "It will be ready soon" | `public/door.html` | delete it the day the piece opens |
 | `MRO_SEED_TOKEN` | `~/.mro/seed.env` | it holds a rehearsal id that does not exist; the seed agent beats nothing until it is the real one |
 | `MRO_SEED_NOT_BEFORE` | `~/.mro/seed.env` | it holds the rehearsal day `2000-01-01`; left there, token #1 checks in from its mint and races ahead of every opening-day agent. The installer refuses it once the token is real |
-| the split seed | `~/.mro-split/seed` | it is the SEPOLIA chain's seed. Move it aside (never delete it while the testnet pair is in use) and make a new one with `split-seed.mjs new` before `deploy-mainnet.sh`, which reads it and sets its anchor in the deploy |
+| the split seed | `MRO_SPLIT_SEED_FILE`, required | `~/.mro-split/seed` is the SEPOLIA chain's seed. Make mainnet's own with `split-seed.mjs new <path outside ~/.mro-split>` and pass that path; `deploy-mainnet.sh` sets its anchor in the deploy and refuses a seed inside `~/.mro-split`, one with the anchor of any `~/.mro-split/seed*`, and one with the live Sepolia pair's anchor |
 
 ### Before the cutover, in this order
 

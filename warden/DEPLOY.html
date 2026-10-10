@@ -586,8 +586,8 @@ handling of the real owner key.</p>
 </tr>
 <tr>
 <td>the split seed</td>
-<td><code>~/.mro-split/seed</code></td>
-<td>it is the SEPOLIA chain&#39;s seed. Move it aside (never delete it while the testnet pair is in use) and make a new one with <code>split-seed.mjs new</code> before <code>deploy-mainnet.sh</code>, which reads it and sets its anchor in the deploy</td>
+<td><code>MRO_SPLIT_SEED_FILE</code>, required</td>
+<td><code>~/.mro-split/seed</code> is the SEPOLIA chain&#39;s seed. Make mainnet&#39;s own with <code>split-seed.mjs new &lt;path outside ~/.mro-split&gt;</code> and pass that path; <code>deploy-mainnet.sh</code> sets its anchor in the deploy and refuses a seed inside <code>~/.mro-split</code>, one with the anchor of any <code>~/.mro-split/seed*</code>, and one with the live Sepolia pair&#39;s anchor</td>
 </tr>
 </tbody></table>
 <h3>Before the cutover, in this order</h3>

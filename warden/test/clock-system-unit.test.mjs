@@ -135,3 +135,14 @@ test("the tree builder checks the commit, Node's checksum and every link, and ru
   assert.match(builder, /npm ci --ignore-scripts --omit=dev/);
   assert.match(builder, /a symlink leads out of the tree/);
 });
+
+// The mainnet anchor is set once, for ever: a Sepolia seed would publish every
+// early day's answer rule. The behaviour is rehearsed by running the block.
+test("the mainnet deploy names its seed and refuses every Sepolia anchor it can find", () => {
+  const deploy = read("../../contracts/script/deploy-mainnet.sh");
+  assert.doesNotMatch(deploy, /MRO_SPLIT_SEED_FILE:-\$HOME/, "no default seed path");
+  assert.match(deploy, /is in the Sepolia seed's directory/);
+  assert.match(deploy, /for other in "\$HOME"\/\.mro-split\/seed\*/);
+  assert.match(deploy, /splitAnchor\(\)\(bytes32\)' --rpc-url https:\/\/sepolia\.base\.org/);
+  assert.match(deploy, /if \[ -z "\$FORK" \]; then\n\s*echo "FAIL: could not read the Sepolia pair's anchor/, "fails closed on a real run");
+});
