@@ -7,6 +7,8 @@ import {Renderer} from "../src/render/Renderer.sol";
 import {CodeRenderer} from "../src/render/CodeRenderer.sol";
 import {FrameRenderer} from "../src/render/FrameRenderer.sol";
 import {HeartMask} from "../src/render/HeartMask.sol";
+import {DigitBand} from "../src/render/DigitBand.sol";
+import {MarkRenderer} from "../src/render/MarkRenderer.sol";
 import {TokenView} from "../src/render/TokenView.sol";
 import {WorstCase} from "./WorstCase.sol";
 import {Base64} from "solady/src/utils/Base64.sol";
@@ -41,6 +43,18 @@ contract CodeHarness {
     }
 }
 
+contract BandHarness {
+    function path(TokenView memory v) external pure returns (string memory) {
+        return DigitBand.path(
+            MarkRenderer.ordinal(v.marks),
+            v.answers,
+            v.level,
+            FrameRenderer.canvas(FrameRenderer.rings(v.level, v.echo)),
+            MarkRenderer.finisherInk(v.marks)
+        );
+    }
+}
+
 contract FrameHarness {
     function paths(TokenView memory v, string memory colour, string memory ghostFill)
         external
@@ -55,6 +69,7 @@ contract GasProfileTest is Test {
     Renderer r;
     CodeHarness code;
     FrameHarness frame;
+    BandHarness band;
 
     string constant HEART = "#c8102e";
     string constant NOISE = "#767676";
@@ -85,25 +100,30 @@ contract GasProfileTest is Test {
         r = new Renderer();
         code = new CodeHarness();
         frame = new FrameHarness();
+        band = new BandHarness();
     }
 
-    /// @dev The dearest token as RealTokenGas.t.sol defines it: a child on the
-    /// day before the heart seals, wearing every Mark that is legal below a
-    /// whole heart. Built here as a plain view rather than through the token,
-    /// so the profile measures rendering and not storage reads.
+    /// @dev The dearest token as RealTokenGas.t.sol pins it: a finished child
+    /// in second place, wearing every legal Mark (Hush, Beat, the leaf Iris,
+    /// Vessel, Tint), with its answers in the dearest pattern -- every side
+    /// square lit, alternate bottom columns. Built here as a plain view rather
+    /// than through the token, so the profile measures rendering and not
+    /// storage reads.
     function _dearest() internal pure returns (TokenView memory v) {
         v.tokenId = 30;
-        v.level = 364;
-        v.streak = 364;
+        v.level = 365;
+        v.streak = 365;
         v.lastDay = 1000;
         v.mintDay = 636;
         v.generation = 1;
-        v.parent = 1;
-        v.echo = 3650;
+        v.parent = 2;
+        v.echo = 365;
         v.today = 1000;
-        // Hush, Beat, the bought Iris and Tint: the four a day-364 token can
-        // wear, since both sides of pair 4 need a whole heart.
-        v.marks = (1 << 1) | (1 << 4) | (1 << 5) | (1 << 9);
+        v.marks = (1 << 1) | (1 << 4) | (1 << 5) | (1 << 7) | (1 << 9) | (1 << 14) | (uint256(2) << 16)
+            | (uint256(2) << 64);
+        for (uint256 i; i < 365; ++i) {
+            if (i < 122 || i >= 244 || ((i - 122) >> 1) & 1 == 0) v.answers[i >> 8] |= uint256(1) << (i & 255);
+        }
         v.code = _bitmap();
     }
 
@@ -164,6 +184,10 @@ contract GasProfileTest is Test {
         string memory framePaths = frame.paths(v, HEART, GHOST);
         uint256 frameGas = g0 - gasleft();
 
+        g0 = gasleft();
+        string memory bandPath = band.path(v);
+        uint256 bandGas = g0 - gasleft();
+
         console.log("the dearest token, rendered from a view already in memory");
         console.log("  tokenURI total gas ", total);
         console.log("  tokenURI bytes     ", bytes(uri).length);
@@ -176,9 +200,11 @@ contract GasProfileTest is Test {
         console.log("  code path bytes    ", bytes(codePaths).length);
         console.log("  frame paths (harness)                      ", frameGas);
         console.log("  frame path bytes   ", bytes(framePaths).length);
+        console.log("  band path (harness)                        ", bandGas);
+        console.log("  band path bytes    ", bytes(bandPath).length);
         console.log("");
-        uint256 parts = codeGas + frameGas;
-        console.log("  code + frame       ", parts);
+        uint256 parts = codeGas + frameGas + bandGas;
+        console.log("  code + frame + band", parts);
         if (svgOnly > parts) console.log("  everything else in svg()                   ", svgOnly - parts);
 
         assertGt(total, 0, "a measurement of zero means the profile is not running");

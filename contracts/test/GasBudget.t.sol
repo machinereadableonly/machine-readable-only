@@ -38,9 +38,8 @@ contract GasBudgetTest is Test {
     /// digit band measured at 584,708. The first raise was sized from a
     /// component estimate; this one is sized from the built thing.
     ///
-    /// The BYTE limit did not move with it. Bytes are what protect the decode
-    /// and what a marketplace actually fetches, so 20,000 stands until a
-    /// decode sweep says otherwise.
+    /// The BYTE limit moved separately, 20,000 to 24,000 on 2026-09-22, on
+    /// measurement; see BYTE_LIMIT below.
     ///
     /// The 2,000,000 was set on 2026-08-27 at roughly the Uniswap V3 line
     /// (1.98M), from a survey of on-chain NFTs: Loot 572k, OnChainMonkey 836k,
@@ -99,14 +98,13 @@ contract GasBudgetTest is Test {
     /// bytes (`RealTokenGas.t.sol`), which leaves 1,875 under this limit and
     /// 7,875 under Alchemy's 30,000.
     ///
-    /// UNTESTED, AND SAY SO: Alchemy's sentence sits among reasons an
-    /// HTTP-hosted metadata URL fails to FETCH. This tokenURI is a data URI
-    /// and nothing is fetched, so whether the cap applies to inline metadata
-    /// has never been measured. tools/alchemy-nft.mjs exists to measure it and
-    /// MUST be run against a real token before the mainnet mint.
+    /// TESTED 2026-09-22: a throwaway Sepolia spike served a 22,492-character
+    /// data-URI tokenURI and Alchemy ingested and rasterised it, so the 30,000
+    /// cap is the external ceiling that applies. See .claude/rules/contracts.md.
     ///
     /// Gas is not the constraint: Base's own guidance puts the practical
-    /// tokenURI ceiling near 300M read gas and this token spends 3.54M.
+    /// tokenURI ceiling near 300M read gas; RealTokenGas.t.sol measures the
+    /// shipping worst case.
     uint256 constant BYTE_LIMIT = 24_000;
     uint256 constant GAS_TARGET = 1_000_000;
     uint256 constant BYTE_TARGET = 5_000;
@@ -334,9 +332,10 @@ contract GasBudgetTest is Test {
     /// STAGES with each other -- day one against day 200 against the day before
     /// the heart seals -- and a band would add a constant 4,636 bytes to the
     /// tail of the list and tell nobody anything. Read them as the picture
-    /// WITHOUT the band. What a finished token really costs is measured in
-    /// `test_theFinishersBandFitsBothHardLimits` below, and on the shipping
-    /// contract in `RealTokenGas.t.sol`.
+    /// WITHOUT the band. What a finished token really costs is measured on the
+    /// shipping contract in `RealTokenGas.t.sol`;
+    /// `test_theFinishersBandFitsBothHardLimits` below prices the place digits
+    /// alone, because the spike writes no answers.
     function test_theWholeLadderStaysInsideTheHardLimit() public {
         _place(1, 1, 1, 1000, false, 0);
         _place(2, 200, 45, 1000, false, 0);

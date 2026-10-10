@@ -100,10 +100,10 @@ providers -- real, unmeasurable, and the reason the new figure moves only to 3M.
 **THE BYTE LIMIT DID NOT MOVE**, because bytes are what every viewer downloads
 and 20,000 is never threatened. See `GasBudget.t.sol` for the full reasoning.
 
-**THERE IS NO SINGLE WORST CASE, and both worst cases are CHILDREN since Plan 7.**
-The dearest token and the largest token are DIFFERENT TOKENS, and pairing one's
-gas with the other's bytes is a number describing nothing. `GasBudget.t.sol`
-prints each headroom against its own worst case.
+**ONE WORST CASE since the digit band (2026-09-23): a finished CHILD.** The
+dearest token and the largest token are the same token, pinned in
+`contracts/test/WorstCase.sol`. `GasBudget.t.sol` prints headroom per life
+stage on the spike, which compares stages and is not that figure.
 
 **TWO FILES MEASURE THIS, and only one of them measures the contract that
 ships.** `GasBudget.t.sol` sweeps twelve life stages on `MROSpikeToken`, whose
