@@ -209,3 +209,18 @@ test("the lock this process takes records its own start time", () => {
   assert.equal(me.pid, process.pid);
   assert.match(String(me.start), /^\d+$/);
 });
+
+// FAIL CLOSED. A start time that cannot be read (another user's process under
+// hidepid, a transient /proc error) is unknown, not different: a live pid then
+// still holds the lock.
+test("an unreadable start time never reclaims a live lock", () => {
+  const { dir, cleanup } = tempDir();
+  try {
+    const path = join(dir, "run-lock");
+    writeFileSync(path, JSON.stringify({ pid: 4242, bootId: "boot-a", start: "100" }));
+    assert.throws(() => takeLock(path, owner(9999, "boot-a"), { isAlive: alive, startOf: () => null }), /another clock run/);
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).pid, 4242);
+  } finally {
+    cleanup();
+  }
+});

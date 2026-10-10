@@ -92,7 +92,9 @@ export function takeLock(path, owner, { isAlive = processIsAlive, startOf = proc
     );
   }
   const rebooted = holder.bootId && owner.bootId && holder.bootId !== owner.bootId;
-  const reused = holder.start != null && startOf(holder.pid) !== holder.start;
+  // A start time that cannot be read is unknown, not different: fail closed.
+  const now = holder.start != null ? startOf(holder.pid) : null;
+  const reused = now != null && now !== holder.start;
   if (!rebooted && !reused && isAlive(holder.pid)) {
     throw new Error(
       `another clock run (pid ${holder.pid}) holds ${path}. Only one may write at a time: ` +
