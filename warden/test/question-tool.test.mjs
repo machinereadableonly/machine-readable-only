@@ -94,3 +94,11 @@ test("a question already issued but gone from the bank throws rather than substi
     /issued question is missing from the bank/,
   );
 });
+
+test("an issued question records how many answers it offered", async () => {
+  const { q, tool } = setup();
+  await tool.handler({ tokenId: 1 }, { keyId: "k1" });
+  const row = q.getQuestion(1, 101);
+  const asked = BANK.find((b) => b.id === row.questionId);
+  assert.equal(row.n, asked.answers ? asked.answers.length : asked.range.max - asked.range.min + 1);
+});

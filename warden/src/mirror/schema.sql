@@ -244,6 +244,7 @@ CREATE TABLE IF NOT EXISTS questions (
   issuedAt   INTEGER NOT NULL,
   answer     INTEGER,
   answeredAt INTEGER,
+  n          INTEGER,           -- how many answers the question offered when it was asked
   PRIMARY KEY (tokenId, day)
 );
 CREATE INDEX IF NOT EXISTS questions_day ON questions (day);

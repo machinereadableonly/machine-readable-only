@@ -2,7 +2,7 @@
 import * as z from "zod";
 import { DAY_MS, utcDay } from "../../day.mjs";
 import { FINISH_LEVEL } from "../ladder.mjs";
-import { questionFor, publicShape, ANSWER_WINDOW_MS } from "../question.mjs";
+import { questionFor, publicShape, answerSetSize, ANSWER_WINDOW_MS } from "../question.mjs";
 
 export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now = Date.now }) {
   // Both at construction, like requireChain: a tool built without them would
@@ -47,7 +47,7 @@ export function makeQuestionTool({ q, bank, challengeSecret, today = utcDay, now
       const chosen = questionFor(day, challengeSecret, bank);
       // The FIRST issue wins, so a second look cannot shop for a question the
       // artwork would rather record.
-      const issued = q.issueQuestion(tokenId, day, chosen.id, now());
+      const issued = q.issueQuestion(tokenId, day, chosen.id, now(), answerSetSize(chosen));
       const asked = bank.find((b) => b.id === issued.questionId);
       // Showing any other question would let checkin grade an answer against
       // one the agent never saw, so refuse rather than substitute.

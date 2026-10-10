@@ -107,6 +107,23 @@ export function assertIssuedQuestionsPresent(q, bank) {
   return bank;
 }
 
+/// How many answers a question offers: its options, or every integer in its range.
+export const answerSetSize = (q) => (q.answers ? q.answers.length : q.range.max - q.range.min + 1);
+
+/**
+ * Why `next` is not an append to `previous`, or null. The bank is append-only:
+ * every question already in it stays exactly as it was, in place, because an
+ * edited question -- an option added, a range widened -- changes which recorded
+ * answers fill a square on a day already answered. New questions go at the end.
+ */
+export function appendOnlyProblem(previous, next) {
+  if (next.length < previous.length) return `${previous.length - next.length} question(s) were removed`;
+  for (let i = 0; i < previous.length; i += 1) {
+    if (JSON.stringify(previous[i]) !== JSON.stringify(next[i])) return `entry ${i} changed; existing questions may not change`;
+  }
+  return null;
+}
+
 /// Keyed by the Warden's secret so the day's question cannot be read in advance.
 /// An absent key is a valid HMAC key and would make the whole year's order
 /// public knowledge, so refuse one rather than defaulting it.

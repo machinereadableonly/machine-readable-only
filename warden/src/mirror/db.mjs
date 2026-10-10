@@ -120,6 +120,9 @@ export function migrate(db) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN reservedBlock INTEGER`);
   }
 
+  const questionCols = new Set(db.prepare("PRAGMA table_info(questions)").all().map((c) => c.name));
+  if (!questionCols.has("n")) db.exec("ALTER TABLE questions ADD COLUMN n INTEGER");
+
   // Payment nonces in one spelling. pay_nonces keeps any old upper-case twin of
   // a lower-case row: rows there are never deleted and never read by value.
   // Read first, so an ordinary open takes no write lock.

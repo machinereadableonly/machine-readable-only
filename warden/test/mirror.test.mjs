@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { openDb, migrate } from "../src/mirror/db.mjs";
 import { queries, PaymentNonceReusedError } from "../src/mirror/queries.mjs";
 import { seedPaidMint } from "./mirror-seed.mjs";
@@ -541,4 +542,16 @@ test("an existing upper-case payment nonce is lower-cased when the mirror opens"
   assert.equal(db.prepare("SELECT payNonce FROM mints").get().payNonce, upper.toLowerCase());
   assert.equal(db.prepare("SELECT payNonce FROM pay_nonces").get().payNonce, upper.toLowerCase());
   db.close();
+});
+
+test("an older mirror's questions table gains the answer-count column", () => {
+  const dir = mkdtempSync(join(tmpdir(), "mro-qn-"));
+  const path = join(dir, "state.db");
+  const old = new DatabaseSync(path);
+  old.exec("CREATE TABLE questions (tokenId INTEGER NOT NULL, day INTEGER NOT NULL, questionId TEXT NOT NULL, issuedAt INTEGER NOT NULL, answer INTEGER, answeredAt INTEGER, PRIMARY KEY (tokenId, day))");
+  old.close();
+  const db = openDb(path);
+  assert.ok(db.prepare("PRAGMA table_info(questions)").all().some((c) => c.name === "n"));
+  db.close();
+  rmSync(dir, { recursive: true, force: true });
 });

@@ -18,7 +18,7 @@
 // question nobody has been issued can still be edited freely.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { loadBank, bankPath, MAX_ANSWER_LENGTH, KEBAB_ID } from "../src/mcp/question.mjs";
+import { loadBank, bankPath, MAX_ANSWER_LENGTH, KEBAB_ID, appendOnlyProblem } from "../src/mcp/question.mjs";
 
 /// The two refusals that carry no id worth looking up: a missing or repeated
 /// one, and one the shape rule rejects.
@@ -74,6 +74,15 @@ function main() {
     // path carries the home directory.
     console.error(`question bank REFUSED: ${namedByPosition(err.message, entriesIn(path))}`);
     process.exit(1);
+  }
+  // --against <the bank in service>: the new one must only add to it.
+  const against = process.argv.indexOf("--against");
+  if (against !== -1) {
+    const problem = appendOnlyProblem(entriesIn(process.argv[against + 1]), bank);
+    if (problem) {
+      console.error(`question bank REFUSED: ${problem}`);
+      process.exit(1);
+    }
   }
 
   const lists = bank.filter((q) => q.answers);

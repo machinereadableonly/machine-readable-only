@@ -71,7 +71,7 @@ const baseArgs = (q) => ({
 });
 
 /// A written token 1 with one queued credit on `day`, optionally answered.
-function rigWithOneCredit({ day, answer = null, questionId = null }) {
+function rigWithOneCredit({ day, answer = null, questionId = null, n = null }) {
   const db = openDb(":memory:");
   const q = queries(db);
   seedPaidMint(q, { tokenId: 1, toAddress: "0x" + "11".repeat(20), keyId: "k1" });
@@ -80,7 +80,7 @@ function rigWithOneCredit({ day, answer = null, questionId = null }) {
   db.exec("UPDATE tokens SET status = 'written' WHERE tokenId = 1");
   q.insertCredit(1, day, "sig");
   if (questionId) {
-    q.issueQuestion(1, day, questionId, 1);
+    q.issueQuestion(1, day, questionId, 1, n);
     if (answer !== null) q.recordAnswer(1, day, answer, 2);
   }
   return { q, writer: writerRefusing() };
@@ -295,4 +295,22 @@ test("the seed itself is never revealed, however late the day", async () => {
   const keys = writer.sent[0].args[0];
   assert.deepEqual(keys, [KEYS[CHAIN_LENGTH - 1]]);
   assert.ok(!keys.includes(KEYS[CHAIN_LENGTH]), "the seed went out");
+});
+
+test("a queued credit whose question now offers a different number of answers writes nothing", async () => {
+  // Asked when "fog-or-thunder" offered three answers; the bank now offers two.
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1, questionId: "fog-or-thunder", answer: 1, n: 3 });
+  const alerts = [];
+  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith(), writer,
+    splitKeys: KEYS, bank: BANK, alert: (m) => alerts.push(m) });
+  assert.equal(summary.aborted, "split");
+  assert.equal(writer.sent.length, 0);
+  assert.ok(alerts.some((a) => /different number of answers from when it was asked/.test(a)));
+});
+
+test("CONTROL: the same credit with the answer count it was asked with is written", async () => {
+  const { q, writer } = rigWithOneCredit({ day: TODAY - 1, questionId: "fog-or-thunder", answer: 1, n: 2 });
+  const summary = await runClock({ prover: trustingProver(), ...baseArgs(q), publicClient: chainWith(), writer, splitKeys: KEYS, bank: BANK });
+  assert.equal(summary.aborted, null);
+  assert.deepEqual(writer.sent.map((x) => x.functionName), ["revealSplitKeys", "batchCheckIn"]);
 });

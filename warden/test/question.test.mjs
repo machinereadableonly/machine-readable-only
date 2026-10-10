@@ -7,6 +7,8 @@ import { join } from "node:path";
 import {
   assertBankSane, assertIssuedQuestionsPresent, bankPath, loadBank,
   questionFor, answerIndex, publicShape,
+  appendOnlyProblem,
+  answerSetSize,
 } from "../src/mcp/question.mjs";
 import { openDb } from "../src/mirror/db.mjs";
 import { queries } from "../src/mirror/queries.mjs";
@@ -213,4 +215,17 @@ test("boot refuses when a question already issued is gone from the bank", () => 
     }
   );
   assert.throws(() => assertIssuedQuestionsPresent(q, []), /missing 2 questions/);
+});
+
+// THE BANK IS APPEND-ONLY. An option added to a question already asked would
+// change which recorded answers fill a square.
+test("a bank may only add questions at the end", () => {
+  const a = { id: "a", text: "A?", answers: ["x", "y"] };
+  const b = { id: "b", text: "B?", range: { min: 0, max: 9 } };
+  assert.equal(appendOnlyProblem([a], [a, b]), null);
+  assert.match(appendOnlyProblem([a], [{ ...a, answers: ["x", "y", "z"] }]), /entry 0 changed/);
+  assert.match(appendOnlyProblem([a, b], [b, a]), /entry 0 changed/, "no reordering");
+  assert.match(appendOnlyProblem([a, b], [a]), /removed/);
+  assert.equal(answerSetSize(a), 2);
+  assert.equal(answerSetSize(b), 10);
 });

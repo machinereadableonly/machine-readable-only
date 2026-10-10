@@ -350,7 +350,7 @@ export function queries(db, { maxUnboundKeys = MAX_UNBOUND_KEYS } = {}) {
     // With the day's question and answer, if one was issued: the Clock draws
     // the answer bit from them.
     pendingCredits: db.prepare(
-      "SELECT c.tokenId, c.day, qn.questionId, qn.answer FROM credits c " +
+      "SELECT c.tokenId, c.day, qn.questionId, qn.answer, qn.n FROM credits c " +
         "LEFT JOIN questions qn ON qn.tokenId = c.tokenId AND qn.day = c.day " +
         "WHERE c.status = 'queued' AND c.day <= ? ORDER BY c.day ASC, c.tokenId ASC"
     ),
@@ -416,8 +416,8 @@ export function queries(db, { maxUnboundKeys = MAX_UNBOUND_KEYS } = {}) {
     // The day's FIRST question is every token's question that day, whatever the
     // bank now picks: a bank edit and a restart mid-day must not split a day.
     issueQuestion: db.prepare(
-      "INSERT OR IGNORE INTO questions (tokenId, day, questionId, issuedAt) VALUES (?, ?, " +
-        "COALESCE((SELECT questionId FROM questions WHERE day = ? ORDER BY issuedAt ASC, tokenId ASC LIMIT 1), ?), ?)"
+      "INSERT OR IGNORE INTO questions (tokenId, day, questionId, issuedAt, n) VALUES (?, ?, " +
+        "COALESCE((SELECT questionId FROM questions WHERE day = ? ORDER BY issuedAt ASC, tokenId ASC LIMIT 1), ?), ?, ?)"
     ),
     getQuestion: db.prepare("SELECT * FROM questions WHERE tokenId = ? AND day = ?"),
     issuedQuestionIds: db.prepare("SELECT DISTINCT questionId FROM questions"),
@@ -1181,8 +1181,8 @@ export function queries(db, { maxUnboundKeys = MAX_UNBOUND_KEYS } = {}) {
     /// question. An agent that asked twice must not be able to shop for an
     /// easier question, and the day's answer is drawn into the artwork against
     /// the question that was issued.
-    issueQuestion(tokenId, day, questionId, issuedAt) {
-      s.issueQuestion.run(tokenId, day, day, questionId, issuedAt);
+    issueQuestion(tokenId, day, questionId, issuedAt, n = null) {
+      s.issueQuestion.run(tokenId, day, day, questionId, issuedAt, n);
       const row = s.getQuestion.get(tokenId, day);
       return { questionId: row.questionId, issuedAt: row.issuedAt };
     },

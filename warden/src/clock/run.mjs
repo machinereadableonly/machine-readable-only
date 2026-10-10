@@ -23,6 +23,7 @@ import { sweep } from "../mcp/sweep.mjs";
 import { resolveUnresolvedPayments } from "./unresolved.mjs";
 import { safeErrorText } from "./redact.mjs";
 import { stringToHex } from "viem";
+import { answerSetSize } from "../mcp/question.mjs";
 import { CHAIN_LENGTH, keyIndexFor, answerBit, silentBit } from "./split.mjs";
 
 /// How many check-ins go in one batchCheckIn. MEASURED against a real node's
@@ -215,9 +216,6 @@ export async function readSplitState({ publicClient, contract }) {
 
 const ZERO_WORD = "0x" + "00".repeat(32);
 
-/// How many answers a question offers: its options, or every integer in its range.
-const answerSetSize = (question) =>
-  question.answers ? question.answers.length : question.range.max - question.range.min + 1;
 
 export async function runClock({
   q,
@@ -402,6 +400,9 @@ export async function runClock({
       else if (state.anchor !== splitKeys[0]) stopForSplit("the split seed does not hash to the contract's split anchor");
       else if (q.pendingCredits(today - 1).some((c) => c.questionId !== null && !bankById.has(c.questionId))) {
         stopForSplit("a queued credit's question is missing from the bank");
+      } else if (q.pendingCredits(today - 1).some((c) => c.n !== null && c.n !== undefined && c.questionId !== null &&
+          answerSetSize(bankById.get(c.questionId)) !== c.n)) {
+        stopForSplit("a queued credit's question offers a different number of answers from when it was asked");
       } else if (q.pendingCredits(today - 1).some((c) => c.answer !== null &&
           !(Number.isInteger(c.answer) && c.answer >= 0 && c.answer < answerSetSize(bankById.get(c.questionId))))) {
         // The bank's answer set changed under a recorded index: grading it would be a guess.

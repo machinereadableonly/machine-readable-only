@@ -177,18 +177,29 @@ read_as_main() { sudo -u "$MAIN_USER" cat "$1"; }
 install -d -o root -g root -m 755 "$BANK_DIR"
 BANK_NEW="$(mktemp "$BANK_DIR/bank.new.XXXXXX")"
 trap 'rm -f "$BANK_NEW"' EXIT
-if [ -f "$BANK_DIR/bank.json" ]; then
+# The home copy is the source of an update; the one in service is the floor.
+if sudo -u "$MAIN_USER" test -f "$BANK_SRC" && read_as_main "$BANK_SRC" > "$BANK_NEW"; then
+  ok "question bank taken from the home directory"
+elif [ -f "$BANK_DIR/bank.json" ]; then
   cat "$BANK_DIR/bank.json" > "$BANK_NEW"
   ok "question bank already in $BANK_DIR"
 elif sudo -u "$MAIN_USER" test -f "$OLD_BANK" && read_as_main "$OLD_BANK" > "$BANK_NEW"; then
   ok "question bank taken from $OLD_BANK"
-elif sudo -u "$MAIN_USER" test -f "$BANK_SRC" && read_as_main "$BANK_SRC" > "$BANK_NEW"; then
-  ok "question bank taken from the home directory"
 else
-  die "no question bank in $BANK_DIR, $OLD_BANK or the home directory"
+  die "no question bank in the home directory, $BANK_DIR or $OLD_BANK"
 fi
-if sudo -u "$MAIN_USER" test -f "$BANK_SRC" && ! read_as_main "$BANK_SRC" | cmp -s - "$BANK_NEW"; then
-  die "the home copy of the question bank differs from the installed one; make them one file"
+# APPEND-ONLY, checked by the root-owned code: a question already asked may never
+# change, or recorded answers would fill different squares.
+if [ -f "$BANK_DIR/bank.json" ] && ! cmp -s "$BANK_DIR/bank.json" "$BANK_NEW"; then
+  "$OPT/bin/node" --input-type=module -e '
+    import { readFileSync } from "node:fs";
+    const { appendOnlyProblem } = await import(process.argv[1]);
+    const read = (p) => JSON.parse(readFileSync(p, "utf8"));
+    const problem = appendOnlyProblem(read(process.argv[2]), read(process.argv[3]));
+    if (problem) { console.error(problem); process.exit(1); }' \
+    "$OPT/warden/src/mcp/question.mjs" "$BANK_DIR/bank.json" "$BANK_NEW" \
+    || die "the new question bank is not an append to the one in service (above)"
+  ok "the new question bank only adds questions"
 fi
 install -o root -g mro -m 640 "$BANK_NEW" "$BANK_DIR/bank.json"
 # The Clock reveals question text from its own copy, which the main user
