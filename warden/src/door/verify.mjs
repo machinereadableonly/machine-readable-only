@@ -24,7 +24,7 @@
 // the exact version web-bot-auth itself resolves.
 import { verify as httpsigVerify } from "http-message-sig";
 import { verifierFromJWK } from "web-bot-auth/crypto";
-import { parseDictionary, serializeItem } from "structured-headers";
+import { parseDictionary, parseList, serializeItem } from "structured-headers";
 import { createHash } from "node:crypto";
 
 /**
@@ -285,9 +285,12 @@ export function coveredComponents(base) {
   const at = base.lastIndexOf(marker);
   if (at === -1) return null;
   try {
-    // parseDictionary wants `label=value`; the label is discarded.
-    const entry = parseDictionary("sig=" + base.slice(at + marker.length));
-    const [members] = entry.get("sig");
+    // EXACTLY ONE inner list. The line is the raw text after the label's `=`,
+    // so a repeated label leaves a second list behind it, and that one is the
+    // list the base was built from.
+    const parsed = parseList(base.slice(at + marker.length));
+    if (parsed.length !== 1) return null;
+    const [members] = parsed[0];
     if (!Array.isArray(members)) return null;
     // Only genuine strings count. A structured-headers Token or DisplayString
     // stringifies back to its plain text, so String() would read %"@method" as

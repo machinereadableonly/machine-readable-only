@@ -788,3 +788,13 @@ test("CONTROL: an ordinary signature, no skew at all, is still admitted", async 
   const r = await verifyRequest(await signedRequest(), lookup);
   assert.equal(r.ok, true);
 });
+
+// 08 Low 4. A repeated Signature-Input label: the parser keeps the LAST list
+// and builds the base from it, while the base's params line is the raw text
+// after the first `=` -- the first list and everything after it. Reading that
+// line as a dictionary, the first list looked covered while the second was signed.
+test("a params line carrying a second list is refused, not read as its first", () => {
+  const seven = '("@authority" "@method" "@path" "signature-agent" "content-digest" "challenge" "challenge-response");created=1';
+  assert.notEqual(coveredComponents('"@signature-params": ' + seven), null, "CONTROL: one list is read");
+  assert.equal(coveredComponents('"@signature-params": ' + seven + ', sig1=("@authority");created=1'), null);
+});
