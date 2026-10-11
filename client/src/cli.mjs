@@ -1,0 +1,494 @@
+#!/usr/bin/env node
+// mro-agent: join, beat, status, whoami, verify-border.
+//
+// Every command prints what it is about to do and what came back. Nothing here
+// runs on a schedule by itself and nothing installs anything without being
+// asked -- `join --cron` prints the crontab line for you to install rather
+// than editing your crontab, because a package that edits your scheduler
+// because you ran it once is not a package that deserved to be run.
+import { statSync, readFileSync } from "node:fs";
+import { ensureIdentity, loadIdentity, defaultKeyPath, publicFromPrivate, keyIdOf } from "./keys.mjs";
+import { registerKey } from "./door.mjs";
+import { listTools, callTool, structured } from "./mcp.mjs";
+import { payFor, readDemand } from "./pay.mjs";
+import { parseNotBefore, notYet, utcToday } from "./notBefore.mjs";
+import { createPublicClient, http } from "viem";
+import { verifyBorder } from "./verifyBorder.mjs";
+import { checkOwnerResult } from "./ownerCall.mjs";
+import { DEFAULT_SITE, safeError, cronLine, unpayableMessage, paymentFailedMessage, unresolvedPaymentMessage, lostResponseMessage } from "./messages.mjs";
+
+// The commands that exist. Checked BEFORE an identity key is created, because
+// creating a signing key as a side effect of a typo is not something a package
+// gets to do.
+const COMMANDS = ["join", "beat", "checkin", "status", "whoami", "public-key", "ladder", "upgrade", "seed", "rebind", "rest", "question", "verify-border"];
+
+// verify-border reads the chain directly: Base mainnet, the chain the skill
+// declares, unless --chain or --rpc says otherwise.
+const DEFAULT_CHAIN = 8453;
+const RPC_FOR_CHAIN = { 8453: "https://mainnet.base.org", 84532: "https://sepolia.base.org" };
+
+const USAGE = `mro-agent -- the reference client for Machine Readable Only
+
+  mro-agent whoami                     show this agent's key id
+  mro-agent public-key                 print the JWKS to host for --directory
+                                       (the public half only)
+  mro-agent join   --to <0xaddress>    register a key and mint one token
+  mro-agent question --token <id>      today's question; answer it with beat --answer
+  mro-agent beat   --token <id> [--answer <a>]
+                                       check in for today, with your answer
+                                       (checkin is the same command)
+  mro-agent status                     read your tokens
+  mro-agent ladder --token <id>        the five Mark pairs: held, closed, open
+  mro-agent upgrade --token <id> --mark <id> [--variant <n>]
+                                       buy or take a Mark; pays only with the
+                                       same --expect-* flags as join
+  mro-agent seed   --parent <id> --to <0xaddress>
+                                       seed a child from a whole token (free)
+  mro-agent rebind --token <id>        the call to point a token at a new key
+  mro-agent rest   --token <id>        the call that seals a token FOREVER
+  mro-agent verify-border <id> --contract <0x> [--chain <id>] [--rpc <url>]
+                                       check every square of a token's border
+                                       against the rule published on chain
+
+ladder, rebind and rest are free here, and none of them acts: rebind and rest
+return a call for the token OWNER's wallet to send. This client never sends
+one, and holds no wallet that could.
+
+Options
+  --site <origin>      the site to talk to (default ${DEFAULT_SITE})
+  --endpoint <origin>  where to actually send, if not the site itself. The
+                       SITE is what gets signed; use this for a tunnel, a
+                       staging host, or a local port.
+  --directory <origin> host your own JWKS there and skip registration. Your
+                       key is then never stored by the site. \`public-key\`
+                       prints the file to host.
+  --key <path>         identity file (default ${defaultKeyPath("~")})
+  --to <0xaddress>     who the minted token belongs to (join)
+  --token <id>         which token (beat, question, ladder, rebind, rest;
+                       optional on status)
+  --answer <a>         your answer to today's question (beat)
+  --not-before <day>   beat only: do nothing before this UTC day (YYYY-MM-DD)
+  --expect-payto <0x>  the treasury you were told to expect. REQUIRED to pay.
+  --expect-amount <n>  the amount in base units you were told to expect. REQUIRED to pay.
+  --expect-asset <0x>  the token contract you were told to expect. REQUIRED to pay.
+  --expect-network <s> the chain you were told to expect, e.g. eip155:8453. REQUIRED to pay.
+  --wallet-key-file <p> a file holding the wallet private key, for paying.
+                       Must not be readable by anyone else (mode 0600/0400).
+                       MRO_WALLET_KEY in the environment is preferred still.
+  --expect-chain <id>  the chain id you expect, e.g. 8453. Checked before anything is done
+  --expect-contract <0x> the contract you expect. Checked before anything is done
+  --contract <0x>      the token contract (verify-border)
+  --chain <id>         the token's chain (verify-border, default ${DEFAULT_CHAIN}; 84532 is Base Sepolia)
+  --rpc <url>          a Base RPC to read from (verify-border; default: Base's public one for --chain)
+  --cron               print a crontab line instead of installing one
+`;
+
+// EVERY FLAG THIS CLIENT ACCEPTS, so a typo throws rather than being stored
+// and ignored. Most typos fail closed -- a misspelt `--expect-payto` leaves
+// expected.payTo undefined and the client refuses to pay -- but a misspelt
+// `--expect-amount` would silently remove the guard it was written to add, and
+// that is the one flag where silence costs money.
+const FLAGS = [
+  "site", "endpoint", "directory", "key", "to", "token", "answer", "not-before",
+  "expect-payto", "expect-amount", "expect-asset", "expect-network",
+  "expect-chain", "expect-contract", "wallet-key-file", "contract", "rpc", "chain",
+  "mark", "variant", "parent",
+];
+// `--help` takes no value and is the one flag that works with no command at
+// all; `help` as a bare command does the same thing (see main).
+const BOOLEAN_FLAGS = ["cron", "help"];
+
+function parseArgs(argv) {
+  const args = { _: [] };
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (!a.startsWith("--")) { args._.push(a); continue; }
+    const name = a.slice(2);
+    if (BOOLEAN_FLAGS.includes(name)) { args[name] = true; continue; }
+    if (!FLAGS.includes(name)) {
+      throw new Error(`unknown option --${name}. Run mro-agent with no arguments for the list.`);
+    }
+    // A flag with nothing after it would otherwise store undefined and read as
+    // "not given", which is the silent failure again one step along.
+    const value = argv[++i];
+    if (value === undefined || value.startsWith("--")) {
+      throw new Error(`--${name} needs a value`);
+    }
+    args[name] = value;
+  }
+  return args;
+}
+
+const out = (label, value) => console.log(`${label}: ${typeof value === "string" ? value : JSON.stringify(value, null, 2)}`);
+
+/// Print the check-in line, filled in when there is a token and honest when
+/// there is not. Printed on the unpaid path too: an operator who asked for the
+/// line still needs it, and needs to know why the id is missing.
+function printCron(site, tokenId) {
+  let line;
+  try {
+    line = cronLine({ site, tokenId });
+  } catch (err) {
+    // Warn, never fail: this runs after a paid call, and a failing exit there
+    // reads as "nothing happened" to an agent that would then pay again.
+    console.error(`mro-agent: no cron line printed -- ${safeError(err)}`);
+    return;
+  }
+  console.log("\nPaste this into `crontab -e`. The version is pinned on purpose;");
+  console.log("when you change it, read what changed first.");
+  console.log(line);
+  if (tokenId === undefined) {
+    console.log("Nothing was minted on this run, so fill the id in yourself once there is one.");
+  }
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const command = args._[0];
+  if (!command || command === "help" || args.help) { console.log(USAGE); return; }
+  if (!COMMANDS.includes(command)) throw new Error(`unknown command: ${command}\n\n${USAGE}`);
+
+  // `question` opens the token's one look for the day, so an answer passed to
+  // it would be discarded and the day's answer lost for good. Refused here,
+  // above the identity and every request, because no other command can use it.
+  if (args.answer !== undefined && command !== "beat") {
+    throw new Error(
+      "--answer belongs on beat: run question --token <id> first, then beat --token <id> --answer <a>"
+    );
+  }
+
+  // Checked before the identity is touched or anything is sent: a skip must
+  // leave no trace, and a malformed day must fail rather than mean "no guard".
+  if (args["not-before"] !== undefined) {
+    if (command !== "beat") throw new Error("--not-before belongs on beat");
+    if (!args.token) throw new Error("--token <id> is required");
+    const day = parseNotBefore(args["not-before"]);
+    if (notYet(day)) {
+      console.log(`not before ${day}: today is ${utcToday()} (UTC). Nothing was sent.`);
+      return;
+    }
+  }
+
+  // Reads the chain and nothing else: no identity, no site, no request signed.
+  if (command === "verify-border") {
+    const tokenId = args._[1];
+    if (!tokenId || !/^\d+$/.test(tokenId)) throw new Error("usage: mro-agent verify-border <tokenId> --contract <0xaddress>");
+    if (!/^0x[0-9a-fA-F]{40}$/.test(args.contract ?? "")) throw new Error("--contract <0xaddress> is required");
+    const chainId = Number(args.chain ?? DEFAULT_CHAIN);
+    const rpc = args.rpc ?? RPC_FOR_CHAIN[chainId];
+    if (!rpc) throw new Error(`no default RPC for chain ${chainId}: pass --rpc`);
+    const publicClient = createPublicClient({ transport: http(rpc) });
+    // The host only: a provider's url can carry its API key.
+    const host = new URL(rpc).host;
+    const served = await publicClient.getChainId();
+    if (served !== chainId) {
+      throw new Error(`${host} serves chain ${served}, not ${chainId}; pass --chain ${served} if that is the token's chain`);
+    }
+    console.log(`reading ${args.contract} on chain ${chainId} via ${host}`);
+    const r = await verifyBorder({ publicClient, contract: args.contract, tokenId: Number(tokenId) });
+    for (const sq of r.squares) {
+      console.log(`square ${sq.level}  day ${sq.day ?? "?"}  ${sq.status}${sq.expected === null ? "" : `  expected ${sq.expected} chain ${sq.actual}`}`);
+    }
+    for (const p of r.problems) console.log(`problem: ${p}`);
+    if (r.incomplete) {
+      // Not an accusation: the scan could not find every credit, so no square was graded.
+      console.log(`token ${tokenId}: not every credit was found, so the border could not be checked. Nothing is shown to be wrong; try again with an RPC that serves older logs.`);
+      process.exitCode = 3;
+      return;
+    }
+    // As DigitBand draws it: a whole side of 122 squares at a time, all 365 when finished.
+    const level = r.squares.length;
+    const drawn = Math.min(level, (level >= 365 ? 3 : Math.floor(level / 122)) * 122);
+    console.log(r.ok
+      ? `token ${tokenId}: every square checks out (${drawn} of 365 drawn${drawn === 0 ? "; the band starts at level 122" : ""})`
+      : `token ${tokenId}: the border does NOT check out`);
+    if (!r.ok) process.exitCode = 1;
+    return;
+  }
+
+  const keyPath = args.key ?? defaultKeyPath();
+
+  if (command === "whoami") {
+    const identity = loadIdentity(keyPath);
+    if (!identity) { console.log(`no identity at ${keyPath}. Run: mro-agent join --to <0xaddress>`); return; }
+    out("key id", identity.keyId);
+    out("file", keyPath);
+    return;
+  }
+
+  // stdout is the file to host and nothing else, so any notice goes to stderr.
+  if (command === "public-key") {
+    const { identity, created } = await ensureIdentity(keyPath);
+    if (created) console.error(`generated a new identity at ${keyPath} (mode 600). Back it up.`);
+    const { kty, crv, x } = publicFromPrivate(identity.privateJwk);
+    console.log(JSON.stringify({ keys: [{ kty, crv, x }] }, null, 2));
+    return;
+  }
+
+  // `site` is the public origin and is what the signature covers; `endpoint`
+  // is where the bytes go. They are the same in ordinary use, which is why
+  // endpoint defaults to site. See door.mjs for why they must be separable.
+  const site = args.site ?? DEFAULT_SITE;
+  const origin = args.endpoint ?? site;
+  // The door accepts a directory named by its bare origin only (draft 5.2.1).
+  if (args.directory !== undefined) {
+    let u = null;
+    try { u = new URL(args.directory); } catch {}
+    if (!u || u.protocol !== "https:" || u.pathname !== "/" || u.search || u.hash || u.username || ![u.origin, `${u.origin}/`].includes(args.directory)) {
+      throw new Error(`--directory must be a bare https origin such as https://your.domain, not ${args.directory}`);
+    }
+  }
+
+  const { identity, created } = await ensureIdentity(keyPath);
+  if (created) {
+    console.log(`generated a new identity at ${keyPath} (mode 600).`);
+    console.log("Back this file up now. It is the only thing that can grow your token:");
+    console.log("a lost key does not lose the token, but the token's OWNER wallet must");
+    console.log("then call rebind(tokenId, newKeyId) on chain, and no day is credited");
+    console.log("until it does.");
+  }
+  out("key id", identity.keyId);
+
+  // With --directory, the site never holds this key: it fetches the public
+  // half from a JWKS the agent hosts. Registration is skipped entirely, which
+  // is the difference between the two paths and the reason the flag exists --
+  // a registration cannot be undone.
+  const signatureAgent = args.directory ?? site;
+  // The door allows five seconds. Printing what it took lets the piece's one
+  // theatrical rule be felt, and on a run that takes 5.2 seconds it is the
+  // difference between a mystery and a diagnosis.
+  const onTiming = (ms, allowed) => console.error(`answered the door's challenge in ${ms} ms (it allows ${allowed})`);
+  const call = { origin, site, signatureAgent, privateJwk: identity.privateJwk, onTiming };
+
+  // BEFORE ANYTHING ELSE, including registration and any payment: a chain or
+  // contract that is not the one the operator expected must stop the run, not
+  // be adapted to. Costs one free `status` call, and only when asked for.
+  await assertChain(call, { chain: args["expect-chain"], contract: args["expect-contract"] });
+
+  if (command === "join") {
+    if (!args.to) throw new Error("--to <0xaddress> is required: it is who the token will belong to");
+
+    if (args.directory) {
+      out("using your own directory at", args.directory);
+      console.log("Nothing was registered. Serve your public JWK from");
+      console.log(`${args.directory}/.well-known/http-message-signatures-directory`);
+    } else {
+      // Registration is idempotent from the caller's side -- an already-known
+      // key simply registers again -- so this is safe to re-run.
+      await registerKey({ origin, site, privateJwk: identity.privateJwk });
+      out("registered with", site);
+    }
+    out("tools", (await listTools(call)).map((t) => t.name));
+
+    const paid = await paidCall({ call, name: "mint", toolArgs: { to: args.to }, args, keyPath, site });
+    if (paid.unpayable && args.cron) printCron(site, undefined);
+    if (paid.stopped) return;
+    const result = paid.result;
+    const minted = report("mint", result);
+
+    if (args.cron) printCron(site, minted?.ok ? minted.tokenId : undefined);
+    return;
+  }
+
+  if (command === "upgrade") {
+    if (!args.token || !args.mark) throw new Error("--token <id> and --mark <id> are required");
+    const toolArgs = { tokenId: Number(args.token), upgradeId: Number(args.mark) };
+    if (args.variant !== undefined) toolArgs.variant = Number(args.variant);
+    const paid = await paidCall({ call, name: "upgrade", toolArgs, args, keyPath, site });
+    if (!paid.stopped) report("upgrade", paid.result);
+    return;
+  }
+
+  if (command === "seed") {
+    if (!args.parent || !args.to) throw new Error("--parent <id> and --to <0xaddress> are required");
+    report("seed", await callTool({ ...call, name: "seed", arguments: { parentId: Number(args.parent), to: args.to } }));
+    return;
+  }
+
+  if (command === "beat" || command === "checkin") {
+    if (!args.token) throw new Error("--token <id> is required");
+    const toolArgs = { tokenId: Number(args.token) };
+    // The tool takes a string or an integer; a range answer is graded as a number.
+    if (args.answer !== undefined) {
+      toolArgs.answer = /^\s*-?\d+\s*$/.test(args.answer) ? Number(args.answer) : args.answer;
+    }
+    const result = await callTool({ ...call, name: "checkin", arguments: toolArgs });
+    report("checkin", result);
+    return;
+  }
+
+  if (command === "ladder" || command === "rebind" || command === "rest" || command === "question") {
+    if (!args.token) throw new Error(`--token <id> is required for ${command}`);
+    if (command === "rest") {
+      console.log("`rest` returns a call that SEALS the token permanently. Nothing is sent");
+      console.log("by this client; the token OWNER's wallet has to send it, and it cannot");
+      console.log("be undone.");
+    }
+    if ((command === "rebind" || command === "rest") && !/^0x[0-9a-fA-F]{40}$/.test(args["expect-contract"] ?? "")) {
+      throw new Error(`--expect-contract <0x> is required for ${command}: the call it returns is sent from the owner's wallet`);
+    }
+    const result = await callTool({ ...call, name: command, arguments: { tokenId: Number(args.token) } });
+    if (command === "rebind" || command === "rest") {
+      checkOwnerResult(result, {
+        command,
+        tokenId: Number(args.token),
+        contract: args["expect-contract"],
+        keyId: command === "rebind" ? identity.keyId : null,
+      });
+    }
+    report(command, result);
+    return;
+  }
+
+  // status
+  const result = await callTool({ ...call, name: "status", arguments: args.token ? { tokenId: Number(args.token) } : {} });
+  report("status", result);
+}
+
+/**
+ * Read a wallet private key from a file, refusing one anybody else can read.
+ *
+ * WHY THERE IS NO `--wallet-key <0x>` ANY MORE. Every argument a process is
+ * started with is world-readable in `/proc/<pid>/cmdline` and prints in `ps`
+ * for every user on the box -- and it lands in shell history besides. That is
+ * a funded wallet's private key, which cannot be rotated out of somebody
+ * else's screenshot. The environment variable and this file are both ordinary
+ * and neither is visible to a bystander.
+ */
+function readWalletKeyFile(path) {
+  if (!path) return undefined;
+  const mode = statSync(path).mode & 0o077;
+  if (mode !== 0) {
+    throw new Error(
+      `refusing to read ${path}: it is readable by others (mode ${(statSync(path).mode & 0o777).toString(8)}). ` +
+        `Run: chmod 600 ${path}`
+    );
+  }
+  const key = readFileSync(path, "utf8").trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) {
+    throw new Error(`refusing to use ${path}: it does not hold a 32-byte hex private key`);
+  }
+  return key;
+}
+
+/**
+ * Hard-fail on a chain or contract that is not the one you expected.
+ *
+ * llms.txt says every tool answers with the chain id it is actually running
+ * on, and that a client should hard-fail on a mismatch rather than adapting to
+ * it. `status` is free and unpaid, so this costs one round trip and runs
+ * BEFORE anything is minted or paid for.
+ */
+async function assertChain(call, { chain, contract }) {
+  if (!chain && !contract) return;
+  const view = structured(await callTool({ ...call, name: "status", arguments: {} }));
+  const actual = { chain: String(view?.chainId ?? ""), contract: String(view?.contract ?? "") };
+
+  if (chain && actual.chain !== String(chain)) {
+    throw new Error(`refusing to continue: the site is on chain ${actual.chain || "(not stated)"}, expected ${chain}`);
+  }
+  if (contract && actual.contract.toLowerCase() !== String(contract).toLowerCase()) {
+    throw new Error(
+      `refusing to continue: the site's contract is ${actual.contract || "(not stated)"}, expected ${contract}`
+    );
+  }
+  out("chain", actual);
+}
+
+/// One paid tool call: ask, and pay only what the caller said to expect.
+/// Returns `{ result }`, or `{ stopped: true }` when it has already said why
+/// it stopped and set the exit code.
+async function paidCall({ call, name, toolArgs, args, keyPath, site }) {
+  let result = await callTool({ ...call, name, arguments: toolArgs });
+
+  // The paid path. Nothing is signed unless an expected payTo was given.
+  const walletKey = process.env.MRO_WALLET_KEY ?? readWalletKeyFile(args["wallet-key-file"]);
+  const demand = readDemand(result);
+
+  // The one step of the journey an agent cannot take alone. Say so in words
+  // the agent can relay, rather than printing the raw 402 and exiting 0.
+  if (demand && !walletKey) {
+    console.log(`\n${unpayableMessage(demand.accepts?.[0], keyPath)}`);
+    process.exitCode = 2;
+    return { stopped: true, unpayable: true };
+  }
+
+  const meta = walletKey
+    ? await payFor({
+        result,
+        walletPrivateKey: walletKey,
+        // The nonce commits to this key, tool and arguments, so it buys only this call.
+        binding: { keyId: await keyIdOf(call.privateJwk), tool: name, args: toolArgs },
+        // ALL FOUR FIELDS are required by assertExpected: otherwise the signed
+        // authorisation could name any ERC-20 on any chain.
+        expected: {
+          payTo: args["expect-payto"],
+          amount: args["expect-amount"],
+          asset: args["expect-asset"],
+          network: args["expect-network"],
+        },
+      })
+    : null;
+
+  if (meta) {
+    out("paying", meta["x402/payment"].accepted);
+    // A LOST ANSWER IS NOT A REFUSAL. If this throws, the settlement may
+    // already have happened on chain and the token may already exist -- the
+    // response simply never arrived. A bare transport error reads as "it did
+    // not happen" and invites paying a second time, so say what to check.
+    try {
+      result = await callTool({ ...call, name, arguments: toolArgs, _meta: meta });
+    } catch (err) {
+      console.error(`mro-agent: ${safeError(err)}`);
+      console.log(`\n${lostResponseMessage(site)}`);
+      process.exitCode = 2;
+      return { stopped: true };
+    }
+
+    // A PAID call answered with a demand is a payment that did not complete.
+    // @x402/mcp answers a failed settlement with the same payment-required
+    // result, the facilitator's reason in `error` and no `ok` field, so
+    // report() alone would let a mint that never happened exit 0.
+    const failed = readDemand(result);
+    if (failed) {
+      out(name, failed);
+      console.log(`\n${paymentFailedMessage(failed)}`);
+      process.exitCode = 2;
+      return { stopped: true };
+    }
+
+    // THE OPPOSITE REFUSAL, AND THE ONE WHERE RETRYING COSTS MONEY. The site
+    // could not learn whether the transfer landed, so it HOLDS the
+    // reservation rather than releasing it. report() would exit 2 and say
+    // nothing, which reads like the failed settlement above.
+    if (structured(result)?.reason === "payment-unresolved") {
+      out(name, structured(result));
+      console.log(`\n${unresolvedPaymentMessage(site)}`);
+      process.exitCode = 2;
+      return { stopped: true };
+    }
+  }
+  return { result };
+}
+
+/**
+ * Print a tool's answer, and make a refusal visible to whatever is WATCHING.
+ *
+ * This client's documented deployment is a cron job, which reports failure by
+ * exit status alone, so a refusal must not return normally. Exit 2, not 1: a
+ * thrown error already exits 1, and "the site refused this" is a different
+ * thing from "the client could not run".
+ */
+function report(label, result) {
+  const value = structured(result) ?? result;
+  out(label, value);
+  // NO ANSWER IS NOT A GOOD ANSWER. A result that never arrived, and one the
+  // site marked `isError`, are both refusals.
+  if (value == null || result?.isError === true || value?.ok === false) process.exitCode = 2;
+  return value;
+}
+
+main().catch((err) => {
+  console.error(`mro-agent: ${safeError(err)}`);
+  process.exit(1);
+});

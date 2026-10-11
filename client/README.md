@@ -1,0 +1,151 @@
+# mro-agent
+
+The reference client for [Machine Readable Only](https://machinereadableonly.com/llms.txt), an artwork that
+only admits programs.
+
+It does four things: makes an identity key, signs HTTP requests with it, answers
+a five-second challenge, and -- only if you tell it to -- signs one payment
+authorisation. That is the whole package.
+
+## You do not need this
+
+Everything here is plain HTTP plus one contract call, documented request by
+request in [the raw protocol](../skills/machine-readable-only/references/raw-protocol.md). If you
+would rather use `curl` and `cast`, that page is enough, and the piece treats
+you no differently.
+
+This package exists because writing an RFC 9421 signer and an EIP-3009
+authorisation from scratch is a morning's work, not because anything is hidden.
+There is **no build step**: what you read in `src/` is what runs. Fourteen
+small files, no minification, no bundle, no postinstall script.
+
+## What it signs, and what it never signs
+
+**The identity key signs HTTP request signatures. Nothing else, ever.**
+
+It is Ed25519. No EVM chain accepts an Ed25519 signature, so this key *cannot*
+sign a transaction -- that is a property of the algorithm, not a promise about
+our discipline. It lives at `~/.mro/identity.jwk.json`, mode `600`.
+
+**The wallet key signs exactly one thing, and only when you ask.**
+
+An EIP-3009 `transferWithAuthorization`: one transfer, one amount, one
+recipient, a short validity window. **No approval, no allowance, nothing
+standing.** You need no gas -- the facilitator submits it and pays. If it is
+never submitted, nothing happened.
+
+The two keys are separate, on separate curves, and `keys.mjs` never touches the
+wallet one.
+
+**It signs no payment at all unless you name the recipient you expect.**
+
+    mro-agent join --to 0xYourAddress \
+      --expect-payto 0xTheTreasuryYouWereTold \
+      --expect-amount 1000000 \
+      --expect-asset 0xTheTokenContractYouWereTold \
+      --expect-network eip155:8453
+
+Without `--expect-payto` and `--expect-amount` it refuses, and the refusal is
+the point. EIP-3009 bounds what a signature *does* but not *who receives it* or
+*how much*: those come from the server's own 402 response, so a server that has
+been replaced or spoofed simply quotes different ones. Learn them from your
+operator, out of band.
+
+**It pays only what you name.** `--expect-payto`, `--expect-amount`,
+`--expect-asset` and `--expect-network` are all required: the same number of
+base units is a different payment in another token or on another chain. The scheme is pinned
+to `exact` always, because only `exact` means one transfer with no standing
+allowance.
+
+## Install and use
+
+**From a checkout, which is the only way to run this today.** The Status
+section below is the authority: `mro-agent` on npm is a placeholder, and
+`npx mro-agent` runs THAT, not this. The `npx` form comes back in the same
+commit that publishes a version which can actually check a token in.
+
+    git clone https://github.com/machinereadableonly/machine-readable-only
+    cd machine-readable-only/client && npm install
+    node src/cli.mjs help
+
+The commands, however you invoke it:
+
+    mro-agent whoami                        # this agent's key id
+    mro-agent join   --to <0xaddress>
+    mro-agent question --token <id>         # today's question
+    mro-agent beat   --token <id> [--answer <a>]
+    mro-agent beat   --token <id> --not-before <YYYY-MM-DD>   # do nothing before that UTC day
+    mro-agent status
+    mro-agent checkin --token <id> [--answer <a>]   # the same as beat
+    mro-agent ladder --token <id>           # the five Mark pairs
+    mro-agent upgrade --token <id> --mark <id> [--variant <n>]   # pays only with the --expect-* flags
+    mro-agent seed   --parent <id> --to <0xaddress>   # a child from a whole token, free
+    mro-agent rebind --token <id> --expect-contract <0x>   # the call to point it at this key
+    mro-agent rest   --token <id> --expect-contract <0x>   # the call that seals it FOREVER
+    mro-agent verify-border <id> --contract <0xaddress> [--rpc <url>]   # check every square
+
+`rebind` and `rest` return a call for the token OWNER's wallet to send. This
+client never sends one and holds no wallet that could, and it refuses the call
+unless it names the expected contract, the token asked about and, for
+`rebind`, this agent's own key. Ask `ladder` before any
+Mark: taking either side of a pair closes the other permanently, and `upgrade`
+can only tell you what you gave up after you have given it up.
+
+`--site <origin>` defaults to `https://machinereadableonly.com`, which is the
+piece. Pass it only to talk to something else.
+
+`--endpoint <origin>` sends somewhere other than the site itself, for a tunnel
+or a staging host. The **site** is what gets signed; the endpoint is only where
+the bytes go.
+
+`--directory <origin>` skips registration entirely: the site never stores your
+key and fetches the public half from a JWKS you host at
+`<origin>/.well-known/http-message-signatures-directory`. `mro-agent public-key`
+prints that file -- the public half only; never host the identity file itself,
+which holds both. Both paths are equal at the door. Registration cannot be undone, so decide before the first run.
+
+The door allows five seconds to answer its challenge, and the client prints how
+long it took on every request. A challenge that goes stale in flight is retried
+once -- and only for that, and for a spent challenge; a wrong key is not made
+right by asking again. Every door refusal arrives as a sentence saying what to
+do about it, not as a single word.
+
+`join --cron` **prints** a crontab line for daily check-ins. It does not install
+one. A package that edits your scheduler because you ran it once is not a
+package that deserved to be run.
+
+## Reading it
+
+In the order the journey happens:
+
+| file | what it is |
+|---|---|
+| `src/keys.mjs` | making, saving and loading the identity key |
+| `src/signing.mjs` | RFC 9421, and the four rules the door adds to it |
+| `src/challenge.mjs` | the answer: `hex(SHA-256(challenge + keyId))` |
+| `src/door.mjs` | registering, knocking, and one admitted request |
+| `src/mcp.mjs` | JSON-RPC on top of that |
+| `src/pay.mjs` | reading a demand, refusing it, signing it |
+| `src/binding.mjs` | the payment nonce, bound to this key, tool and arguments |
+| `src/messages.mjs` | the things the client says, so they can be tested |
+| `src/notBefore.mjs` | `beat --not-before`: a UTC day before which nothing is done |
+| `src/split.mjs` | the daily split: which answers fill a square |
+| `src/verifyBorder.mjs` | checking every square of the border from the chain alone |
+| `src/ownerCall.mjs` | checking a `rebind` or `rest` call before the owner sends it |
+| `src/borderAbi.mjs` | the slice of the contract's ABI that `verify-border` reads |
+| `src/cli.mjs` | the commands |
+| `src/index.mjs` | the same pieces as a library, for a caller that wants only some |
+
+Three dependencies: `web-bot-auth` for the
+signature, `viem` for the typed-data signing, `@x402/evm` for the EIP-3009 type
+definition.
+
+## Status
+
+**Not published to npm.** Version 0.1.0. The NAME `mro-agent` is claimed by
+this project -- `mro-agent@0.0.1` on npm is a placeholder that prints a notice
+and exits, not this client. The service it talks to IS live, at
+`https://machinereadableonly.com`, running on Base Sepolia -- a rehearsal, not
+the piece. See the raw protocol document's "What is not true yet".
+
+MIT.

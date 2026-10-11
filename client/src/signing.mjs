@@ -1,0 +1,101 @@
+// RFC 9421 request signing, Web Bot Auth profile.
+//
+// Thin on purpose: the signing is done by `web-bot-auth`, the same library the
+// door verifies with, and what this module adds is the rules the door enforces
+// on top of the standard.
+import { createHash } from "node:crypto";
+import { sign } from "web-bot-auth";
+import { signerFromJWK } from "web-bot-auth/crypto";
+import { answerChallenge } from "./challenge.mjs";
+
+/**
+ * The components the door requires a signature to cover.
+ *
+ * The standard mandates only @authority. The other six are the door's own
+ * rule: method and path, signature-agent so the directory a key came from is
+ * part of what was signed (covered as the member keyed "sig1", as the draft
+ * requires), content-digest so the signature is bound to the
+ * BODY, and the challenge pair so only the key holder can answer it. Sign
+ * fewer than these seven and the door answers 401 with reason "components".
+ *
+ * CONTENT-DIGEST AND THE CHALLENGE PAIR ARE THE TWO THAT MATTER. Every call
+ * goes to POST /mcp, so method and path are the same for every tool and
+ * separate none of them. Without the digest, anyone who captures your
+ * Signature headers can send any tool call they like as you until the
+ * signature expires -- and one key may mint only once, ever. Without the
+ * challenge pair, a relayer holding your signature can answer the challenge
+ * itself: the answer is a pure function of a free challenge and your public
+ * key id. The answer must therefore be computed BEFORE signing.
+ */
+export const REQUIRED_COMPONENTS = [
+  "@authority", "@method", "@path", "signature-agent", "content-digest", "challenge", "challenge-response",
+];
+
+/**
+ * The RFC 9530 `Content-Digest` for a body: `sha-256=:<base64>:`.
+ *
+ * Must produce byte-identical output to the door's own `contentDigest`, or
+ * every request is refused with reason "digest".
+ */
+export function contentDigest(body) {
+  const bytes = Buffer.isBuffer(body) ? body : Buffer.from(body ?? "", "utf8");
+  return `sha-256=:${createHash("sha256").update(bytes).digest("base64")}:`;
+}
+
+/// The door refuses a signature whose validity window is longer than five
+/// minutes. One minute is plenty for a request that is about to be sent.
+export const WINDOW_MS = 60_000;
+
+/// The signature's label. The Signature-Agent dictionary is keyed by it, so it
+/// is fixed BEFORE signing: the header is itself a covered component.
+export const SIGNATURE_LABEL = "sig1";
+
+/**
+ * Build the headers for one signed request.
+ *
+ * `signatureAgent` names the directory holding your public key: your own
+ * domain when you host a JWKS, or the site's origin when you registered with
+ * it. It is sent quoted, as the standard's structured-field syntax requires.
+ *
+ * What gets signed is the PUBLIC https URL, never the local address the
+ * request is dialled at, because the door pins @authority to its configured
+ * domain and not to the Host header. Hence the explicit origin here.
+ */
+export async function signRequest({ privateJwk, origin, signatureAgent, challenge, method = "POST", path = "/mcp", body = "", now = new Date() }) {
+  // An empty string is refused with the absent case: it signs a pair the door
+  // cannot check, so the request is built only to be turned away.
+  if (typeof challenge !== "string" || challenge === "") {
+    throw new Error("signRequest needs the door's challenge: it is a signed component");
+  }
+  const signer = await signerFromJWK(privateJwk);
+  const url = new URL(path, origin).toString();
+  const headers = {
+    // THE DICTIONARY FORM, keyed by the signature label: the draft makes
+    // Signature-Agent a Dictionary and the signature covers that one member.
+    "signature-agent": `${SIGNATURE_LABEL}="${signatureAgent}"`,
+    host: new URL(origin).host,
+    // The EXACT bytes that will be sent. Sign a re-serialised copy of the
+    // same object and the digest will not match what arrives.
+    "content-digest": contentDigest(body),
+    challenge,
+    "challenge-response": answerChallenge(challenge, signer.keyid),
+  };
+  const descriptor = {
+    kind: "request",
+    method,
+    targetUri: url,
+    fields: Object.entries(headers).map(([name, value]) => ({ name, value })),
+  };
+  // web-bot-auth adds @authority and "signature-agent";key="sig1" itself.
+  const signed = await sign(descriptor, {
+    signer,
+    created: now,
+    expires: new Date(now.getTime() + WINDOW_MS),
+    label: SIGNATURE_LABEL,
+    additionalComponents: REQUIRED_COMPONENTS.filter((c) => c !== "@authority" && c !== "signature-agent"),
+  });
+  return {
+    headers: { ...headers, Signature: signed.signature, "Signature-Input": signed.signatureInput },
+    keyId: signer.keyid,
+  };
+}

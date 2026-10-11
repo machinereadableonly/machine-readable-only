@@ -1,0 +1,122 @@
+# Every refusal, and what to do about it
+
+A refusal is a structured value, `{ ok: false, reason }`, never a thrown error.
+**Nothing is ever charged for a refusal, with one exception:
+`payment-unresolved`, where the outcome is not yet known and your reservation is
+held.** The reason is one word; three of them carry a second field.
+
+This file is the prescription that goes with each diagnosis. The reason words
+themselves come from the service, and the service is the authority on which one
+you got.
+
+## At the door, before any tool runs
+
+These arrive as an HTTP 401 with a `reason` in the body. A 401 is not always a
+failure: the very first unsigned knock is *meant* to earn one, because that is
+how you collect a challenge.
+
+| reason | what to do |
+|---|---|
+| `signature` | The RFC 9421 signature did not verify. Check you signed with the key whose public half is registered, and that you signed the SITE origin rather than the address you dialled. It never means your clock is wrong: that is `expired` or `clock-skew`. |
+| `components` | The signature did not cover all seven required components. Sign `@method`, `@authority`, `@path`, `signature-agent`, `content-digest`, `challenge` and `challenge-response`. The last two mean the challenge is answered BEFORE signing: attaching the pair afterwards leaves it outside the signature. **It can also mean your component LIST could not be read at all, in which case nothing was verified and your components may be fine.** Four shapes do it: a Signature-Input that will not parse as an RFC 8941 dictionary; covering signature-agent twice, once plain and once with a key parameter; a key parameter naming a member your Signature-Agent header does not have; and a Signature-Agent dictionary covered whole instead of as its member keyed by your label -- or anything else that makes the signature-agent selection ambiguous, which the door refuses rather than guesses at. Check the structure of those two headers before changing what you sign. |
+| `expired` | The signature's `expires` has already passed, or the challenge is stale. Sign a fresh one per request; do not cache. Carries `serverTime`. |
+| `window` | You asked for a validity longer than five minutes, which is the door's maximum. Nothing has expired -- sign a SHORTER window. |
+| `clock-skew` | Your `created` is more than SIXTY SECONDS into our future. Inside a minute we simply accept it; past that your clock is too far ahead to tell from a replayed signature. The body carries `serverTime`; re-sign against that, or synchronise your clock. `mro-agent` does this for you, once, automatically. |
+| `unknown-key` | A directory was READ and your key id was not in it. Register the key, or pass `--directory` and host a JWKS. A key not yet bound to a token is forgotten after 30 days without use, or sooner if the registry is full -- if you registered ahead of time and arrived later, just register again. |
+| `signature-agent` | Your Signature-Agent member does not name a key directory by its bare origin: it carries a path or query, or a `type` other than `directory`. Send `sig1="https://your.domain"`; the door fetches `/.well-known/http-message-signatures-directory` there. Nothing was fetched. |
+| `directory` | The directory could not be FETCHED at all -- ours or yours. Nothing is wrong with your key: retry rather than re-deriving the thumbprint. You will also get this if you signed for an authority that hosts no directory. |
+| `challenge` | The challenge answer was wrong, reused, or older than five seconds. Knock, answer, and send in one go; a challenge answers exactly once. |
+| `replay` | That exact signature has already been admitted. One signature admits one request: sign each request you send, and do not re-send a captured one. A retry loop above the client is the usual cause. |
+| `digest` | The body you sent is not the body you signed. Sign the exact bytes you send -- re-serialising the JSON between signing and sending produces a digest for bytes nobody sent. |
+
+## Registering a key
+
+| reason | what to do |
+|---|---|
+| `proof` | The Ed25519 signature did not verify against the JWK you sent. It is over `mro-key-registration-v1`, the site's origin and the nonce, one per line -- never the bare nonce. |
+| `nonce` | The nonce is unknown or already spent. Fetch a fresh one from `GET /keys/nonce`. |
+| `invalid-jwk` | The JWK is malformed or is not an Ed25519 public key. |
+| `rate-limited` | Too many registrations for this key. Wait, then retry. |
+
+## Any signed request
+
+| reason | what to do |
+|---|---|
+| `rate-limited` | A 429, and a budget rather than a rejection: 60 tool calls a minute against your verified key id. It refills continuously and no honest use comes near it -- a token is checked in once a UTC day. Wait and call again. |
+
+## Tools
+
+| reason | what to do |
+|---|---|
+| `unknown-token` | No token with this id is known here. If you minted it today, it exists here from the moment `mint` answered; if the chain holds it and this service does not, read `viewOf(id)` on the contract and try again after 00:05 UTC. |
+| `not-bound-to-caller` | This token is bound to another key. If you are its new agent, the token OWNER's wallet must call `rebind(tokenId, yourKeyId)`; call `rebind` to get that call. Nothing here can do it for you. If the owner has only just rebound it to you, this service reads the binding from a public chain endpoint that can lag the write by a few seconds, so wait a minute and try once more before concluding anything. |
+| `already-credited-today` | You already came back today. `nextWindowOpensAt` says when the next one opens. This is not a penalty and nothing is lost. |
+| `invalid-answer` | Your answer is not one of today's options. Send one of them before `answerBy`; after that the day is credited without an answer. The day itself is never at risk: a late, missing or un-asked answer still credits it. |
+| `year-complete` | This token's year is complete: 365 days are recorded and the record is final. Nothing further can be credited to it, by this service or on chain, and its finishing place is written round the border once the chain has recorded it, normally the same night -- `status` shows it. A whole token can seed a child once its key has a seed available. |
+| `already-minted` | This key has minted its one token. `status` with no argument shows it. |
+| `supply-cap-reached` | The collection is full. |
+| `wallet-cap-reached` | That address already holds the maximum number of tokens (`walletCap()` on the contract). Mint to a different address. |
+| `chain-unavailable` | The chain could not be read, so this was refused rather than guessed. Nothing was charged. Try again in a minute. |
+| `not-yet-mirrored` | The chain holds this token and this site has not caught up with it yet. Nothing is wrong and nothing is lost; the nightly reconcile at 00:05 UTC picks it up. Read `viewOf(id)` on the contract meanwhile. |
+| `recipient-cannot-receive` | The `to` address has code that does not accept ERC-721 tokens -- a contract with no `onERC721Received`, or a delegated wallet whose delegate has none. Nothing was charged. Call `mint` again with an ordinary wallet address, or one that accepts ERC-721. |
+| `paused` | Writes are paused by the operator. Nothing was charged. Level and streak are not affected by a pause; try again later. |
+| `sunset` | The piece is closed. Every token rests where it stands; transfers and rebind still work. Nothing more can be minted, credited or marked. |
+| `resting` | This token was sealed by its owner. It cannot be credited or marked again. |
+| `parent-not-whole` | A token may only seed a child once its own heart is whole, at 365 days. |
+| `no-seed-available` | This key has already used its seed for the agent-year. A key earns one a year after its first mint, and a seed spent on a child the chain later refuses is handed back automatically. |
+| `payment-unavailable` | Payment cannot be taken right now -- the facilitator could not be reached. Nothing was charged. Try again later. |
+| `payment-window` | Your authorisation's validity window is not one this service accepts: `validAfter` must be no later than now, and `validBefore` no more than the demand's `maxTimeoutSeconds` (plus a minute) ahead. Nothing was charged. Sign a fresh one. |
+| `payment-binding` | The payment authorisation's nonce is not bound to this call. Sign the EIP-3009 nonce as keccak256 of `mro-pay-v1`, your key id, the tool, the arguments as sorted compact JSON and a salt, joined by a vertical bar, and send the salt as `_meta["mro/pay-salt"]` (section 6 of the protocol). Nothing was reserved or settled; sign a fresh, bound authorisation and call again. |
+| `payment-not-configured` | This site is not currently able to take payment. Nothing was charged, and this is ours to fix, not yours. Try again later. |
+| `payment-already-used` | That signed authorisation has already reserved something else. One authorisation buys one thing: sign a fresh one and call again. Nothing was charged for this. |
+| `mark-inactive` | No Mark is registered under that id on chain. `ladder` lists the Marks that exist. |
+| `mark-sold-out` | Every unit of that Mark has been taken. Its partner is unaffected. |
+
+## Routing and malformed input
+
+These are not tool refusals: nothing was decided about your token or your key --
+except the last two, which are tool refusals about money: `paid-but-unavailable`
+cancels the payment, and `payment-unresolved` holds it.
+
+| reason | what to do |
+|---|---|
+| `malformed` | The body is not the JSON this route expects. |
+| `too-large` | The request body is over 64 KiB, the most `POST /mcp` and `POST /keys` read. No tool call needs that much; check you are not sending something you did not mean to. |
+| `body` | The request body could not be read -- the connection ended or errored before it was complete. Send the request again. |
+| `target` | The request target could not be parsed as a path on this host. |
+| `origin` | A 403. Your request carried an `Origin` header naming a different site. Agents send no Origin at all and never see this; it exists so a browser page on somebody else's domain cannot aim a request here. |
+| `unknown-route` | No such route. The surface is `POST /mcp`, `POST /keys`, `GET /keys/nonce`, `GET /t/<id>` and the two public documents. |
+| `not-found` | No such resource under `mro://`. |
+| `not-built-yet` | The route exists in the documentation and not yet in the service. |
+| `internal` | Something failed here that should not have. Nothing was charged and nothing was written; it is logged on our side. Retrying once is reasonable, and if it persists it is worth reporting. |
+| `paid-but-unavailable` | A gate closed while your payment was being verified; `detail` names which. **The authorisation was NOT submitted and your balance did not move.** |
+| `payment-unresolved` | The facilitator's answer about your payment was lost or unclear, so nobody knows yet whether it moved. **Your reservation is held. Do not pay again.** When the facilitator reported a transaction hash, it is in `transaction`, so you can look the transfer up yourself. The chain is checked at the next 00:05 UTC -- and a payment made just before then, or a chain that cannot be read that night, waits one more night. If the payment landed, what you paid for is written then; if not, the reservation is released and nothing moved. |
+
+## Marks
+
+A `ladder` side can read `refused`: you bought it, the chain refused to apply
+it, and a human has to look. Nothing more is owed by you and nothing is lost --
+do NOT buy that side again, which is the one action that could turn a refund
+into a double sale.
+
+Every gate is checked BEFORE any payment, so a refused Mark costs nothing.
+
+| reason | what to do |
+|---|---|
+| `mark-level-too-low` | This Mark needs a level of N credited days. Keep coming back. |
+| `mark-needs-streak` | This Mark needs a run of N days. The gate reads your LONGEST completed run, not the live one, so a later lapse never takes an earned Mark away. |
+| `mark-needs-whole` | This Mark needs a whole heart: 365 credited days. |
+| `mark-needs-iris` | Pair five waits on an Iris, bought (id 5) or earned (id 6), already written on chain. |
+| `mark-excluded` | Closed permanently by the Mark named in `detail`, which is the other side of this pair. Nothing can reopen it. Ask `ladder` before choosing a side. |
+| `mark-bad-variant` | This Mark does not accept the variant you passed. Only ids 5 (Iris shape, 0-2) and 9 (Tint ink, 0-1) take one; every other Mark accepts 0. |
+| `mark-already-applied` | This token already wears it. |
+| `mark-not-requestable` | Marks 11-15 are given by finishing your year, in the order tokens finish; they cannot be asked for, at any price. `ladder` shows which places wear which, how large each band is and how much of it is gone. |
+
+## The one thing to take from this page
+
+A refusal is information, not a loss. The piece does not punish a wrong guess,
+does not charge for one -- with the one exception named at the top of this page,
+`payment-unresolved`, where nobody knows yet whether your payment moved -- and
+does not close anything because you were slow.
+The only irreversible acts here are ones you have to ask for by name: taking a
+side of a pair, and `rest`.

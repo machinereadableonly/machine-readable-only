@@ -1,0 +1,188 @@
+# Publishes the reference client, mro-agent, to npm.
+#
+# WHY THIS EXISTS: the client is the product -- built-in MCP clients cannot
+# sign, so `npx mro-agent` is how an agent actually arrives. Publishing it from
+# CI rather than a laptop does two things. It keeps a personal handle off the
+# package, which is the reason an npm organisation was considered and then
+# dropped as unnecessary. And it produces a provenance attestation, which is
+# npm's cryptographic record of which workflow, in which repository, at which
+# commit, built the tarball an agent is about to run.
+#
+# HOW IT AUTHENTICATES: npm trusted publishing, over OIDC. There is no npm
+# token anywhere -- not in the repository, not in Actions secrets, not on the
+# runner. GitHub mints a short-lived credential scoped to this one workflow,
+# and npm accepts it only if the package's Trusted Publisher settings name this
+# repository and this filename. Renaming this file breaks publishing until the
+# setting on npmjs.com is updated to match.
+#
+# HOW IT RUNS: manually, and it STAGES rather than publishes. The trusted
+# publisher on npm is configured stage-only, so a direct `npm publish` from
+# here would be REFUSED by the registry -- that is deliberate, and it is the
+# real guard. Nothing this workflow can do makes a version public.
+#
+# A staged version sits in npm's queue until a maintainer approves it with
+# `npm stage approve <stage-id>`, or on npmjs.com, and that approval demands
+# two-factor authentication. So the thing that makes `mro-agent` public is a
+# person holding a second factor, not a checkbox in a CI file.
+#
+# Discard a staged version with `npm stage reject <stage-id>`; list them with
+# `npm stage list mro-agent`.
+
+name: publish-client
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: build and check, stage nothing. Untick to stage for approval."
+        type: boolean
+        default: true
+
+# Nothing gets id-token by default. Only the stage job below can mint the
+# credential npm exchanges for publish rights, and it runs no dependency's
+# install script and none of the tests.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # Never publish from a fork. A fork's OIDC claims would not match the
+    # trusted publisher anyway, but failing here says why in one line.
+    if: github.repository == 'machinereadableonly/machine-readable-only' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          # A restored cache can put a stale dependency into the tarball.
+          package-manager-cache: false
+
+      - name: Install the client's dependencies
+        working-directory: client
+        run: npm ci --ignore-scripts
+      - name: Every source file parses
+        working-directory: client
+        run: for f in src/*.mjs; do node --check "$f"; done
+
+  stage:
+    needs: check
+    runs-on: ubuntu-latest
+    if: github.repository == 'machinereadableonly/machine-readable-only' && github.ref == 'refs/heads/main'
+    # id-token: write is what lets GitHub mint the OIDC credential npm
+    # exchanges for publish rights. Granted to this job only.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Use a pinned npm new enough to stage over OIDC
+        # Trusted publishing needs npm 11.5.1+, STAGED publishing 11.15.0+, and
+        # Node 22.14+. Pinned rather than @latest so a new npm release cannot
+        # change what runs with the publish credential.
+        run: |
+          npm install -g npm@11.21.0
+          node --version
+          npm --version
+          node -e '
+            const [maj, min] = process.versions.node.split(".").map(Number);
+            if (maj < 22 || (maj === 22 && min < 14)) {
+              console.error(`FAIL: staged publishing needs Node 22.14+, got ${process.versions.node}`);
+              process.exit(1);
+            }
+          '
+
+      - name: Install the client's dependencies, running nothing
+        working-directory: client
+        run: npm ci --ignore-scripts
+
+      - name: Refuse a version that is already published
+        working-directory: client
+        # npm would reject a duplicate anyway, but only after the tarball had
+        # been built and uploaded. This says so in one readable line instead.
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "About to publish mro-agent@${version}"
+          if npm view "mro-agent@${version}" version > /dev/null 2>&1; then
+            echo "mro-agent@${version} is already on the registry."
+            echo "Bump the version in client/package.json first."
+            exit 1
+          fi
+          echo "Version ${version} is free."
+
+      - name: What npm has to authenticate with
+        # A DIAGNOSTIC, not a guard. `npm stage publish` failed E401 on the
+        # first real run -- "your authentication token seems to be invalid" --
+        # and that one message covers two completely different faults: the
+        # runner never minted an OIDC token, or it minted one and npm refused
+        # the exchange because no trusted publisher matched. Those need
+        # opposite fixes, so the run log should say which rather than leaving
+        # it to be guessed at.
+        #
+        # PRESENCE ONLY, NEVER THE VALUE. ACTIONS_ID_TOKEN_REQUEST_URL and its
+        # companion token are credentials: the url carries a run-scoped
+        # identifier and the token mints JWTs. Printing either into a public
+        # repository's run log would be a real leak, and an earlier draft of
+        # this step did exactly that before a hook refused it.
+        #
+        # npm does NOT validate a trusted publisher when it is saved -- its own
+        # docs say so -- so a mismatch can only ever surface here. That is why
+        # the repository and workflow ref are printed: they are precisely the
+        # values npm matches against, and both are public facts about this run.
+        run: |
+          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "OIDC: the runner CAN mint an id token (id-token: write is in effect)"
+          else
+            echo "OIDC: NO id token available -- permissions are wrong, not npm"
+          fi
+          echo "repository:   $GITHUB_REPOSITORY"
+          echo "workflow ref: $GITHUB_WORKFLOW_REF"
+          echo "npm version:  $(npm --version)"
+          echo
+          echo "npm must have a trusted publisher matching, exactly:"
+          echo "  org/user:  ${GITHUB_REPOSITORY%%/*}"
+          echo "  repo:      ${GITHUB_REPOSITORY##*/}"
+          echo "  workflow:  publish-client.yml"
+          echo "  environment: (blank)"
+
+      - name: Stage (dry run -- nothing leaves the runner)
+        if: ${{ inputs.dry_run }}
+        working-directory: client
+        run: npm stage publish --dry-run
+
+      - name: Stage for approval
+        if: ${{ !inputs.dry_run }}
+        working-directory: client
+        # No --provenance flag: trusted publishing attaches the attestation on
+        # its own, and passing the flag with no token is an error.
+        #
+        # This does NOT make the version public. It puts it in npm's staging
+        # queue, where it waits for `npm stage approve <stage-id>` and a second
+        # factor.
+        run: npm stage publish
+
+      - name: Say what is waiting, and how to discard it
+        if: ${{ !inputs.dry_run && success() }}
+        working-directory: client
+        # The run log is where someone looks after triggering this, so the next
+        # two commands belong there rather than in a document they would have
+        # to go and find.
+        run: |
+          echo "Staged, NOT published. Nothing is public yet."
+          echo
+          npm stage list mro-agent || true
+          echo
+          echo "To make it public:  npm stage approve <stage-id>   (asks for 2FA)"
+          echo "To discard it:      npm stage reject  <stage-id>"
