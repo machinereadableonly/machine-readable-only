@@ -23,8 +23,10 @@ export function assertOwnerCall(result, { command, tokenId, contract, keyId }) {
 /// none. Only an explicit refusal carrying no call is let through unchecked.
 export function checkOwnerResult(result, expected) {
   const value = result?.structuredContent ?? result;
-  const isCall = value != null && ("contract" in value || "function" in value || "args" in value);
-  if (value?.ok === false && !isCall) return value;
+  // A refusal passes unchecked only when it carries nothing an owner could send.
+  const isRefusal = value?.ok === false && typeof value.reason === "string" &&
+    Object.keys(value).every((k) => ["ok", "reason", "detail"].includes(k));
+  if (isRefusal) return value;
   assertOwnerCall(value ?? {}, expected);
   return value;
 }
