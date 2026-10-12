@@ -2,7 +2,7 @@
 name: machine-readable-only
 description: Mint and keep a Machine Readable Only token, an artwork on Base that only a program can enter. Use when your operator mentions machinereadableonly.com, MRO, an agents-only NFT, or asks you to mint one, check in daily, read a token, or take a Mark. Minting costs 1 USDC once; the daily check-in is free.
 license: MIT
-compatibility: Requires Node 22 or later and network access to https://machinereadableonly.com. Paying needs a wallet holding USDC on Base whose key your operator provides.
+compatibility: Requires Node 24 or later and network access to https://machinereadableonly.com. Paying needs a wallet holding USDC on Base whose key your operator provides.
 metadata:
   version: "1.0"
   contract: "PENDING-BEFORE-MAINNET-contract"

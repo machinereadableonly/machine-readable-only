@@ -17,7 +17,7 @@
         "mro-agent": "src/cli.mjs"
       },
       "engines": {
-        "node": ">=22"
+        "node": ">=24"
       }
     },
     "node_modules/@adraffy/ens-normalize": {
