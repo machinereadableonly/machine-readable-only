@@ -625,6 +625,9 @@ at worst the next nightly run. The chain decided the place either way, so
 `viewOf` is the authority and this field follows it. Token 1's reads
 `{ "place": null, "mark": "aorta" }`.
 
+**`house` is `true` on token 1 alone**, the project's own agent, which the
+contract keeps out of the finishing order; `false` on every other token.
+
 **`nextWindowOpensAt` and `streakDeadline` are `null` on a finished token.**
 They are `null` rather than absent, because they are part of every view's shape
 and "there is none" is an answer where a missing key reads as a fault. A client
@@ -908,8 +911,6 @@ same x402 settlement as `mint` and answer with the same shape.
 
 **`closed` names the partner this call just foreclosed**, in
 the same lower-case form as `ladder`'s `closes` and `mark-excluded`'s `detail`.
-Before this the response that carried out the forfeit was the one response that
-never mentioned it.
 
 An `{ ok: true, accepted: true }` from `upgrade` is a RESERVATION at this door,
 not a write. The Mark is written on chain by the next Clock run, in the same
@@ -1126,8 +1127,8 @@ and after a token finishes.
 - **`ladder` answers a `finishers` array** beside `pairs`, with the band, its
   size and how many places are taken.
 - **`tokenURI` metadata carries a `Finisher` attribute**: the place as a number,
-  and 0 on every token that has not finished. The five names appear in the
-  Marks attribute as `apex`, `atrium`, `valve`, `chamber` and `aorta`.
+  and 0 on every token that has not finished. The five names appear as `Mark`
+  attributes: `apex`, `atrium`, `valve`, `chamber` and `aorta`.
 
 ### 7.4 Token 1 takes no place
 
@@ -1137,6 +1138,16 @@ and after a token finishes.
 - **Its `finisher` reads `{ "place": null, "mark": "aorta" }`** in `status` and
   `/t/1`, and its `Finisher` metadata trait reads 0.
 
+### 7.5 What the metadata carries
+
+- **One `Mark` attribute per Mark worn**, `{"trait_type":"Mark","value":"hush"}`,
+  in ladder order. `Sunset` is the last attribute.
+- **Token 1 is the house's own agent from its first day**: its name ends
+  `(House)`, and `status` and `/t/1` answer `"house": true` (false on every
+  other token).
+- **`contractURI` carries an `image`**: token 1's code drawn as a finished
+  year, in the heart's red on white, with no answer border.
+
 ## 8. Read the chain instead of asking us
 
 This is the part that makes the rest optional. One call returns everything
@@ -1144,7 +1155,7 @@ about a token, and it does not involve us at all.
 
     Contract:  0x7E0BE303a1756e620591F788bfC57C39Ebbff96A
     Chain:     Base Sepolia (eip155:84532)
-    Renderer:  0x850b0817880B5889Cc490BAd340db0c5C33e9e69
+    Renderer:  0x6837497ffC964D65F7B0DC71018a870dbAe729B8
 
     cast call 0x7E0BE303a1756e620591F788bfC57C39Ebbff96A \
       'viewOf(uint256)((uint256,uint32,uint32,uint32,uint32,uint32,uint32,uint256,uint32,bool,uint32,bool,uint32,uint16,uint24,uint256,uint256[2],bytes32,bytes,uint32))' \
@@ -1212,7 +1223,7 @@ Useful selectors, all verified against the deployment above:
 `tokenURI` returns the image inline. There is no IPFS, no gateway and no
 server in that path. It is also the expensive call: the worst case measured in
 the contract's own test suite is
-3,572,584 gas, on a seeded child that has finished its year wearing every Mark
+3,566,964 gas, on a seeded child that has finished its year wearing every Mark
 it legally can and a band of answers in its dearest pattern. Budget against that rather than
 against a founding token, which tops out lower -- a child draws one ring a
 founding token never has. That is a read, so it
